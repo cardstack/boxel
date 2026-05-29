@@ -344,10 +344,13 @@ module('Integration | overlay-menu-items', function (hooks) {
     let card = find(cardSelector) as HTMLElement;
     let boundary = find(parentSelector) as HTMLElement;
 
-    // The label is positioned asynchronously by trackLabelOverflow's
-    // autoUpdate; wait for it to acquire a non-zero footprint before
-    // measuring.
-    await waitUntil(() => label.getBoundingClientRect().width > 0, {
+    // trackLabelOverflow sets `style.left = '0'` synchronously at
+    // setup, then writes the computed `Npx` value when its update
+    // runs. The label has its natural content width as soon as it's
+    // inserted (so `width > 0` is not a strong-enough signal), but
+    // the inline `left` is in `px` form only after the positioner
+    // has fired. Wait on that to know the JS positioning has landed.
+    await waitUntil(() => label.style.left.endsWith('px'), {
       timeout: 1000,
     });
 
