@@ -283,6 +283,9 @@ async function startRealmProcess(
         `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
         `--realmServerPort=${testWorkerPortSet.realmServerPort}`,
         `--prerenderURL=${testWorkerPrerenderURL}`,
+        // Worker fixture owns the compat proxy across per-test
+        // serve-realm restarts; the child must not bind that port.
+        '--no-compat-proxy',
       ],
       {
         cwd: packageRoot,

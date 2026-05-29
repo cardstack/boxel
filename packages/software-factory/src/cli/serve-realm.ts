@@ -59,6 +59,10 @@ function parseCliNumber(name: string): number | undefined {
   return parsed;
 }
 
+function parseCliBool(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
 interface SerializableRealmConfig {
   dir: string;
   path: string;
@@ -159,12 +163,15 @@ async function main(): Promise<void> {
     realmServerPort: parseCliNumber('realmServerPort'),
     compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
     prerenderURL: parseCliArg('prerenderURL'),
-    // The Playwright worker process owns the compat proxy for the whole
-    // testWorker lifetime (so the stable compat-realm-server port stays
-    // bound across per-test serve-realm spawns) and calls `setTargetPort`
-    // itself after reading the realm-server port out of this child's
-    // metadata file. This child must not bind that port.
-    noCompatProxy: true,
+    // When the Playwright fixture spawns this child, the worker process
+    // owns the compat proxy for the testWorker's whole lifetime (so the
+    // stable compat-realm-server port stays bound across per-test
+    // serve-realm spawns) and calls `setTargetPort` itself after reading
+    // the realm-server port out of this child's metadata file. In that
+    // mode the child must not bind the compat port — the fixture passes
+    // `--no-compat-proxy`. Standalone `pnpm serve:realm` omits the flag
+    // and gets the in-stack proxy.
+    noCompatProxy: parseCliBool('no-compat-proxy'),
   });
 
   let payload = {
