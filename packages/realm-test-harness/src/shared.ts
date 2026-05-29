@@ -79,6 +79,12 @@ export interface FactoryRealmOptions {
   realmServerPort?: number;
   /** Explicit prerender URL to reuse instead of starting a new prerender. */
   prerenderURL?: string;
+  /** When true, skip creating an in-stack compat proxy — the caller owns
+   *  it externally (typically a Playwright worker fixture that keeps the
+   *  proxy alive across per-test serve-realm spawns) and calls
+   *  `setTargetPort` itself after reading the realm-server port from this
+   *  child's metadata file. */
+  noCompatProxy?: boolean;
 }
 
 export interface FactoryRealmTemplate {

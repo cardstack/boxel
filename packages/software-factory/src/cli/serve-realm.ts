@@ -159,6 +159,12 @@ async function main(): Promise<void> {
     realmServerPort: parseCliNumber('realmServerPort'),
     compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
     prerenderURL: parseCliArg('prerenderURL'),
+    // The Playwright worker process owns the compat proxy for the whole
+    // testWorker lifetime (so the stable compat-realm-server port stays
+    // bound across per-test serve-realm spawns) and calls `setTargetPort`
+    // itself after reading the realm-server port out of this child's
+    // metadata file. This child must not bind that port.
+    noCompatProxy: true,
   });
 
   let payload = {

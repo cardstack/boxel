@@ -176,7 +176,7 @@ module('Unit | loader prefetch', function (hooks) {
   });
 
   test('prefetch surfaces dependency failures when dependency import is requested', async function (assert) {
-    assert.expect(5);
+    assert.expect(4);
 
     let mainURL = `${testRealmURL}prefetch/broken-main.js`;
     let depURL = `${testRealmURL}prefetch/broken-dep.js`;
@@ -197,8 +197,12 @@ module('Unit | loader prefetch', function (hooks) {
 
       if (url === depURL || url === trimmedDepURL) {
         depFetchAttempted = true;
-        // Simulate network failure for the dependency. Loader._fetch will catch and
-        // convert this into a failing Response, which becomes a CardError.
+        // Simulate a transport-level failure for the dependency (the fetch
+        // never reaches a server). Loader._fetch catches this and returns a
+        // synthetic 500 tagged as a transient transport failure, so the
+        // module is not cached as `broken` — inability to reach the server
+        // isn't a deterministic property of the module, and the next import
+        // should retry rather than replay a cached error.
         throw new Error('boom from dep');
       }
       return originalFetch.call(testLoader, input, init);
@@ -217,23 +221,18 @@ module('Unit | loader prefetch', function (hooks) {
         'importing parent surfaces dependency failure with correct URL',
       );
 
-      // @ts-expect-error TS2341: we explicitly reach into the loader to confirm the broken dependency bookkeeping.
+      // @ts-expect-error TS2341: we explicitly reach into the loader to confirm the new contract — transport-level failures must not be cached.
       let depModule = testLoader.getModule(depURL);
       assert.strictEqual(
-        (depModule as any)?.state,
-        'broken',
-        'broken dependency recorded',
-      );
-      assert.strictEqual(
-        (depModule as any)?.exception.id,
-        trimmedDepURL,
-        'broken dependency error corresponds to dependency URL',
+        depModule,
+        undefined,
+        'transport-level dependency failure leaves no cached module entry',
       );
 
       await assert.rejects(
         testLoader.import(depURL),
         (e: any) => e.id === trimmedDepURL,
-        'importing dependency directly surfaces failure',
+        'importing dependency directly re-fetches and surfaces failure',
       );
     } finally {
       (testLoader as any).fetchImplementation = originalFetch;
