@@ -3,20 +3,31 @@ import type {
   RealmIdentifier,
   RealmResourceIdentifier,
 } from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
 
 interface LocalOptions {
   preserveQuerystring?: boolean;
 }
+
+// Structural subset of VirtualNetwork that RealmPaths needs. Declared
+// locally so paths.ts doesn't take a direct import edge on virtual-network
+// (which would transitively pull base-realm URL imports into consumers
+// that only need URL-handling, like @cardstack/boxel-cli).
+interface RealmPathsVirtualNetwork {
+  toURL(rri: string): URL;
+}
+
 export class RealmPaths {
   readonly url: string;
-  private virtualNetwork: VirtualNetwork | undefined;
+  private virtualNetwork: RealmPathsVirtualNetwork | undefined;
 
-  constructor(realmURL: URL, virtualNetwork?: VirtualNetwork);
-  constructor(realmId: RealmIdentifier, virtualNetwork?: VirtualNetwork);
+  constructor(realmURL: URL, virtualNetwork?: RealmPathsVirtualNetwork);
+  constructor(
+    realmId: RealmIdentifier,
+    virtualNetwork?: RealmPathsVirtualNetwork,
+  );
   constructor(
     realmURLOrId: URL | RealmIdentifier,
-    virtualNetwork?: VirtualNetwork,
+    virtualNetwork?: RealmPathsVirtualNetwork,
   ) {
     if (realmURLOrId instanceof URL) {
       this.url = ensureTrailingSlash(decodeURI(realmURLOrId.href));
