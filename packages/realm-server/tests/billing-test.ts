@@ -85,6 +85,7 @@ function buildDailyCreditGrantTaskArgs(dbAdapter: PgAdapter): TaskArgs {
     indexWriter: {} as TaskArgs['indexWriter'],
     prerenderer: {} as TaskArgs['prerenderer'],
     definitionLookup: {} as TaskArgs['definitionLookup'],
+    virtualNetwork: {} as TaskArgs['virtualNetwork'],
     log: logger('test-daily-credit-grant'),
     matrixURL: 'http://matrix.invalid',
     getReader: () => {

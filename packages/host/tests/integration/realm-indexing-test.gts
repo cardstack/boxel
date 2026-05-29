@@ -20,7 +20,6 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
 import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
 
 import {
@@ -52,7 +51,6 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
-let onError: (event: Event) => void;
 
 function unwrap(html: string): string {
   return html
@@ -83,23 +81,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    onError = function (event: Event) {
-      let localIndexer = getService('local-indexer');
-      windowErrorHandler({
-        event,
-        setStatusToUnusable() {
-          localIndexer.prerenderStatus = 'unusable';
-        },
-        setError(error) {
-          localIndexer.renderError = error;
-        },
-      });
-    };
-    window.addEventListener('boxel-render-error', onError);
-  });
-
-  hooks.afterEach(function (this: RenderingTestContext) {
-    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
@@ -5050,28 +5031,6 @@ posts/please-ignore-me.json
       );
       assert.ok(card, 'instance exists');
     }
-  });
-
-  test('search index ignores .realm.json file', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        '.realm.json': `{ name: 'Example Workspace' }`,
-        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      },
-    });
-
-    let indexer = realm.realmIndexQueryEngine;
-    let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
-    assert.ok(card, 'instance exists');
-    let instance = await indexer.cardDocument(
-      new URL(`${testRealmURL}.realm.json`),
-    );
-    assert.strictEqual(
-      instance,
-      undefined,
-      'instance does not exist because file is ignored',
-    );
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {

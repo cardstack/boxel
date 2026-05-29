@@ -32,6 +32,7 @@ import {
   setupOperatorModeStateCleanup,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -81,7 +82,7 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
       }),
     );

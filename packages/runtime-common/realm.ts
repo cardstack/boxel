@@ -1,6 +1,5 @@
 import { Deferred } from './deferred';
 import {
-  resolveCardReference,
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -65,7 +64,9 @@ import {
   query,
   param,
   dbExpression,
+  dbAdapterQuerier,
   isValidPrerenderedHtmlFormat,
+  type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -231,12 +232,9 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// Fields owned by the RealmConfig card instance at /realm.json. Anything
-// not in this set falls through to the legacy `.realm.json` sidecar
-// catch-all (which is itself on the way out — see CS-11131). hostHome
-// is no longer here: CS-10055 unified it into hostRoutingRules under
-// `path: "/"`, so a hostHome PATCH is just an attempted write to an
-// unrecognized key.
+// Fields owned by the RealmConfig card instance at /realm.json. A PATCH
+// /_config attribute outside this set and outside REALM_CONFIG_METADATA_-
+// PROPERTIES is rejected — unrecognized keys have no storage target.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
@@ -246,7 +244,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
-// upsertRealmMetadata rather than the sidecar.
+// upsertRealmMetadata.
 const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
 
 export interface FileRef {
@@ -696,11 +694,6 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
-  // [readiness-diag] — opt-in logger, off in production, enabled in CI
-  // host tests via `readiness-diag=debug` in HOST_TEST_LOG_LEVELS.
-  // Remove this field together with the [readiness-diag] call sites
-  // once the CI readiness-check timeout flake is rooted out.
-  #readinessDiag = logger('readiness-diag');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -776,6 +769,7 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
+  #virtualNetwork: VirtualNetwork;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so a /_config PATCH (or any other path that nulls
@@ -799,6 +793,10 @@ export class Realm {
 
   get realmServerURL(): string {
     return this.#realmServerURL;
+  }
+
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
   }
 
   constructor(
@@ -842,6 +840,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
     this.#queue = queue;
+    this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
@@ -859,35 +858,39 @@ export class Realm {
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
-    let _fetch = fetcher(virtualNetwork.fetch, [
-      // when we run cards directly in node we do so under the authority of the
-      // realm server so that we can assume the user that owns this realm. this
-      // logic will eventually go away after we refactor to running cards only
-      // in headless chrome.
-      async (req, next) => {
-        if (!owner) {
-          owner = await this.getRealmOwnerUserId();
-        }
-        req.headers.set('X-Boxel-Assume-User', owner);
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      async (request, next) => {
-        if (!this.paths.inRealm(rri(request.url))) {
-          return next(request);
-        }
-        return await this.internalHandle(request, true);
-      },
-      authorizationMiddleware(
-        // ditto with above, we run cards under the authority of the realm
-        // server so that we can assume user that owns this realm. refactor this
-        // back to using the realm's own matrix client after running cards in
-        // headless chrome lands.
-        new RealmAuthDataSource(this.#matrixClient, () => _fetch),
-      ),
-    ]);
+    let _fetch = fetcher(
+      virtualNetwork.fetch,
+      [
+        // when we run cards directly in node we do so under the authority of the
+        // realm server so that we can assume the user that owns this realm. this
+        // logic will eventually go away after we refactor to running cards only
+        // in headless chrome.
+        async (req, next) => {
+          if (!owner) {
+            owner = await this.getRealmOwnerUserId();
+          }
+          req.headers.set('X-Boxel-Assume-User', owner);
+          return next(req);
+        },
+        async (req, next) => {
+          return (await maybeHandleScopedCSSRequest(req)) || next(req);
+        },
+        async (request, next) => {
+          if (!this.paths.inRealm(rri(request.url))) {
+            return next(request);
+          }
+          return await this.internalHandle(request, true);
+        },
+        authorizationMiddleware(
+          // ditto with above, we run cards under the authority of the realm
+          // server so that we can assume user that owns this realm. refactor this
+          // back to using the realm's own matrix client after running cards in
+          // headless chrome lands.
+          new RealmAuthDataSource(this.#matrixClient, () => _fetch),
+        ),
+      ],
+      virtualNetwork,
+    );
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);
@@ -1077,19 +1080,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
-    // [readiness-diag] — entry / fulfillment markers. The per-realm
-    // startup heartbeat lives in #startup so that wait-on's 0.5–2s
-    // probe cadence doesn't multiply heartbeat intervals (~300 of them
-    // accumulating across a 10-minute hang) on a single Deferred.
-    let waitStart = Date.now();
-    this.#readinessDiag.debug(
-      `readiness check requested for realm ${this.url}`,
-    );
     await this.#startedUp.promise;
-    let totalElapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
-    this.#readinessDiag.debug(
-      `readiness check fulfilled for realm ${this.url} (waited ${totalElapsed}s)`,
-    );
 
     return createResponse({
       body: null,
@@ -1886,11 +1877,7 @@ export class Realm {
     }
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
-      if (
-        [...addedFiles, ...updatedFiles].some(
-          (f) => f === '.realm.json' || f === 'realm.json',
-        )
-      ) {
+      if ([...addedFiles, ...updatedFiles].some((f) => f === 'realm.json')) {
         this.invalidateCachedRealmInfo();
       }
       this.broadcastRealmEvent({
@@ -2478,109 +2465,54 @@ export class Realm {
   async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
-    // [readiness-diag] — every `this.#readinessDiag.debug(...)` line in
-    // this method is a temporary phase marker for the CI readiness-check
-    // timeout flake. The whole logger is opt-in (off in production, on
-    // in CI host tests via HOST_TEST_LOG_LEVELS). Remove the call sites
-    // together with the `#readinessDiag` field once root cause is found.
-    this.#readinessDiag.debug(`startup begin for realm ${this.url}`);
-    // [readiness-diag] — one heartbeat per realm-lifetime, not per
-    // readiness-probe (wait-on polls every 0.5–2s; a per-request
-    // heartbeat would multiply to hundreds of concurrent intervals).
-    // Cleared in the finally below so a startup that fails or throws
-    // doesn't leak the timer past the lifetime of this method.
-    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
-      () => {
-        let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        this.#readinessDiag.debug(
-          `startup still pending for realm ${this.url} (elapsed=${elapsed}s)`,
-        );
-      },
-      15_000,
-    );
-    if (
-      heartbeat &&
-      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
-        'function'
-    ) {
-      (heartbeat as unknown as { unref: () => void }).unref();
-    }
-    try {
-      if (this.#copiedFromRealm) {
-        this.#readinessDiag.debug(
-          `startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
-        );
-        await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-        this.#readinessDiag.debug(
-          `startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-        );
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
+        realmURL: this.url,
+      });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      if (isNewIndex || this.#fullIndexOnStartup) {
+        if (this.#fullIndexOnStartup) {
+          // CS-11245: bootstrap realms (kind='bootstrap': base,
+          // catalog, skills, …) full-index on every realm-server
+          // boot. On a rolling deploy the worker that picks up the
+          // resulting from-scratch-index job fans HTTP source reads
+          // through the LB, which can route to a still-warm
+          // pre-deploy peer whose `#sourceCache` was populated from
+          // pre-rsync bytes. `getSourceOrRedirect` would return those
+          // stale bytes and the reindex would persist them into
+          // `boxel_index.pristine_doc` plus sticky `error_doc` rows
+          // that survive past fleet stabilization (see CS-11245 for
+          // the originating incident). Broadcast a per-realm
+          // NOTIFY so every peer drops its entries for this URL and
+          // the next read falls through to `/persistent/` (EFS,
+          // already brought up to date by this container's
+          // `setup:<realm>-in-deployment` rsync at PID 1). The local
+          // clear is a no-op on a freshly booted container; the
+          // broadcast is what does the work. Skipped on the
+          // `isNewIndex` branch — that branch fires for first-ever
+          // mounts (e.g., brand-new publish), where peer caches for
+          // a never-before-seen URL are empty by construction.
+          await this.clearLocalSourceCachesAndBroadcast();
+        }
+        let priority =
+          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+        let promise = this.#realmIndexUpdater.fullIndex(priority);
+        if (isNewIndex) {
+          // we only await the full indexing at boot if this is a brand new index
+          await promise;
+        }
+        // not sure how useful this event is--nothing is currently listening for
+        // it, and it may happen during or after the full index...
         this.broadcastRealmEvent({
           eventName: 'index',
-          indexType: 'copy',
-          sourceRealmURL: this.#copiedFromRealm.href,
+          indexType: 'full',
           realmURL: this.url,
         });
-      } else {
-        let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-        this.#readinessDiag.debug(
-          `startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
-        );
-        if (isNewIndex || this.#fullIndexOnStartup) {
-          if (this.#fullIndexOnStartup) {
-            // CS-11245: bootstrap realms (kind='bootstrap': base,
-            // catalog, skills, …) full-index on every realm-server
-            // boot. On a rolling deploy the worker that picks up the
-            // resulting from-scratch-index job fans HTTP source reads
-            // through the LB, which can route to a still-warm
-            // pre-deploy peer whose `#sourceCache` was populated from
-            // pre-rsync bytes. `getSourceOrRedirect` would return those
-            // stale bytes and the reindex would persist them into
-            // `boxel_index.pristine_doc` plus sticky `error_doc` rows
-            // that survive past fleet stabilization (see CS-11245 for
-            // the originating incident). Broadcast a per-realm
-            // NOTIFY so every peer drops its entries for this URL and
-            // the next read falls through to `/persistent/` (EFS,
-            // already brought up to date by this container's
-            // `setup:<realm>-in-deployment` rsync at PID 1). The local
-            // clear is a no-op on a freshly booted container; the
-            // broadcast is what does the work. Skipped on the
-            // `isNewIndex` branch — that branch fires for first-ever
-            // mounts (e.g., brand-new publish), where peer caches for
-            // a never-before-seen URL are empty by construction.
-            await this.clearLocalSourceCachesAndBroadcast();
-          }
-          let priority =
-            opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-          let promise = this.#realmIndexUpdater.fullIndex(priority);
-          if (isNewIndex) {
-            // we only await the full indexing at boot if this is a brand new index
-            this.#readinessDiag.debug(
-              `startup awaiting fullIndex (new index) for realm ${this.url}`,
-            );
-            await promise;
-            this.#readinessDiag.debug(
-              `startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-            );
-          } else {
-            this.#readinessDiag.debug(
-              `startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
-            );
-          }
-          // not sure how useful this event is--nothing is currently listening for
-          // it, and it may happen during or after the full index...
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'full',
-            realmURL: this.url,
-          });
-        }
-      }
-      this.#readinessDiag.debug(
-        `startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
-      );
-    } finally {
-      if (heartbeat !== undefined) {
-        clearInterval(heartbeat);
       }
     }
 
@@ -3085,22 +3017,30 @@ export class Realm {
     }
 
     let coalesceKey = `transpile|${this.url}|${canonicalPath}`;
-    let attempt = await coordinator.tryAcquireAndRun(coalesceKey, async () => {
-      // Winner path: a peer may have written between our miss and our
-      // lock acquisition; re-read so we don't redo their work AND
-      // refresh our captured generation in case a tombstone landed.
-      let recheck = await this.#readTranspileCacheRow(canonicalPath);
-      if (recheck?.result) {
-        return recheck.result;
-      }
-      let result = await this.#materializeAndTranspile(fileRef, etag);
-      await this.#writeTranspileCacheRow(
-        canonicalPath,
-        result,
-        recheck?.generation ?? 0,
-      );
-      return result;
-    });
+    let attempt = await coordinator.tryAcquireAndRun(
+      coalesceKey,
+      async (querier) => {
+        // Winner path: a peer may have written between our miss and our
+        // lock acquisition; re-read so we don't redo their work AND
+        // refresh our captured generation in case a tombstone landed.
+        // Run the re-read and the persist on the coordinator's pinned
+        // querier so this whole coordinated transpile holds exactly one
+        // pool connection — the lock connection — rather than pinning it
+        // and then checking out more for these queries.
+        let recheck = await this.#readTranspileCacheRow(canonicalPath, querier);
+        if (recheck?.result) {
+          return recheck.result;
+        }
+        let result = await this.#materializeAndTranspile(fileRef, etag);
+        await this.#writeTranspileCacheRow(
+          canonicalPath,
+          result,
+          recheck?.generation ?? 0,
+          querier,
+        );
+        return result;
+      },
+    );
     if (attempt.acquired) {
       return attempt.result;
     }
@@ -3127,14 +3067,20 @@ export class Realm {
     return result;
   }
 
-  async #readTranspileCacheRow(canonicalPath: string): Promise<
+  async #readTranspileCacheRow(
+    canonicalPath: string,
+    // When provided (winner path), reads run on the coordinator's pinned
+    // lock connection; otherwise they fall back to the shared pool.
+    querier?: Querier,
+  ): Promise<
     | {
         result?: ModuleTranspileResult;
         generation: number;
       }
     | undefined
   > {
-    let rows = (await query(this.#dbAdapter, [
+    let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    let rows = (await runQuery([
       'SELECT body, headers, dependency_keys, generation',
       'FROM',
       MODULE_TRANSPILE_CACHE_TABLE,
@@ -3209,8 +3155,27 @@ export class Realm {
     canonicalPath: string,
     result: ModuleTranspileResult,
     capturedGeneration: number,
+    // When provided (winner path), the UPSERT runs on the coordinator's
+    // pinned lock connection — so it commits with the lock + NOTIFY and
+    // doesn't check out a second pool client. Otherwise it falls back to
+    // the shared pool, autocommitting on its own connection.
+    querier?: Querier,
   ): Promise<void> {
+    let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    // On the pinned-querier path this UPSERT runs inside the
+    // coordinator's lock transaction. L2 persistence is best-effort, but
+    // a pg error here would abort that transaction and break the
+    // coordinator's following pg_notify + COMMIT — failing a request that
+    // could otherwise serve the already-transpiled bytes. Wrap the write
+    // in a savepoint so a failure rolls back just this statement and
+    // leaves the enclosing transaction usable. On the shared adapter each
+    // query autocommits on its own connection, so no savepoint is needed.
+    let inLockTransaction = querier != null;
+    const savepoint = 'transpile_cache_write';
     try {
+      if (inLockTransaction) {
+        await runQuery([`SAVEPOINT ${savepoint}`]);
+      }
       // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
       // if the row's current generation is still <= capturedGeneration.
       // If an invalidate has tombstoned-and-bumped the row past that
@@ -3220,7 +3185,7 @@ export class Realm {
       // that case the WHERE 0 <= 0 still allows a no-op same-gen
       // overwrite which is benign because the bytes are deterministic
       // for the same source.
-      await query(this.#dbAdapter, [
+      await runQuery([
         'INSERT INTO',
         MODULE_TRANSPILE_CACHE_TABLE,
         '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
@@ -3252,11 +3217,25 @@ export class Realm {
         'created_at = EXCLUDED.created_at',
         `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
       ]);
+      if (inLockTransaction) {
+        await runQuery([`RELEASE SAVEPOINT ${savepoint}`]);
+      }
     } catch (err: unknown) {
       // L2 persistence is best-effort. A transient pg failure must not
       // break the response the caller is about to serve — they already
       // have the bytes in memory. Log and move on; the next reader will
       // re-try the write.
+      if (inLockTransaction) {
+        // Roll back just the failed write so the coordinator's enclosing
+        // lock transaction stays usable for its pg_notify + COMMIT.
+        try {
+          await runQuery([`ROLLBACK TO SAVEPOINT ${savepoint}`]);
+        } catch (rollbackErr: unknown) {
+          this.#log.warn(
+            `ROLLBACK TO SAVEPOINT after ${MODULE_TRANSPILE_CACHE_TABLE} write failure failed for ${this.url}${canonicalPath}: ${String(rollbackErr)}`,
+          );
+        }
+      }
       this.#log.warn(
         `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
       );
@@ -4007,7 +3986,10 @@ export class Realm {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+    let fileDefCodeRef = resolveFileDefCodeRef(
+      new URL(fileURL),
+      this.#virtualNetwork,
+    );
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
@@ -4080,7 +4062,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : resolveFileDefCodeRef(new URL(fileURL)));
+        : resolveFileDefCodeRef(new URL(fileURL), this.#virtualNetwork));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {
@@ -4394,8 +4376,12 @@ export class Realm {
 
       if (
         originalClone.meta?.adoptsFrom &&
-        internalKeyFor(patch.meta.adoptsFrom, url) !==
-          internalKeyFor(originalClone.meta.adoptsFrom, url)
+        internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
+          internalKeyFor(
+            originalClone.meta.adoptsFrom,
+            url,
+            this.#virtualNetwork,
+          )
       ) {
         return badRequest({
           message: `Cannot change card instance type to ${JSON.stringify(
@@ -4512,10 +4498,7 @@ export class Realm {
           });
           visitModuleDeps(resource, (moduleURL, setModuleURL) => {
             setModuleURL(
-              resolveCardReference(
-                moduleURL,
-                instanceURL,
-              ) as RealmResourceIdentifier,
+              this.#virtualNetwork.resolveRRI(moduleURL, rri(instanceURL)),
             );
           });
         }
@@ -4659,7 +4642,7 @@ export class Realm {
     // say "not foreign" and the guard would silently fail to fire.
     let resolved: string;
     try {
-      resolved = resolveCardReference(dep, undefined);
+      resolved = this.#virtualNetwork.toURL(dep).href;
     } catch {
       // Bare specifier with no matching prefix mapping. `loadLinks`
       // can't fetch it, so it's not a request-time mutation source —
@@ -6297,8 +6280,8 @@ export class Realm {
   // realm's `lastPublishedAt` map (which feeds into `RealmInfo` and
   // therefore the card+json ETag's hash) is computed from
   // `realm_registry` rows where `source_url = this.url`; publishing
-  // X' from X bumps that map but doesn't otherwise touch X's
-  // `.realm.json` or `realm_metadata`, so without this hook a 304
+  // X' from X bumps that map but doesn't otherwise touch the
+  // RealmConfig card or `realm_metadata`, so without this hook a 304
   // would be served against the *pre-publish* hash forever.
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
@@ -6306,10 +6289,7 @@ export class Realm {
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let localPath: LocalPath = this.paths.local(fileURL);
-    let [realmConfig, lastPublishedAt, metadata] = await Promise.all([
-      this.readFileAsText(localPath, undefined),
+    let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
       this.getRealmMetadata(),
     ]);
@@ -6317,41 +6297,16 @@ export class Realm {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
-      showAsCatalog: null,
+      showAsCatalog: metadata.showAsCatalog,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
         this.#matrixClient.matrixURL.href,
       ),
-      publishable: null,
+      publishable: metadata.publishable,
       lastPublishedAt,
       includePrerenderedDefaultRealmIndex: null,
     };
-
-    if (realmConfig) {
-      try {
-        let realmConfigJson = JSON.parse(realmConfig.content);
-        realmInfo.name = realmConfigJson.name ?? realmInfo.name;
-        realmInfo.backgroundURL =
-          realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.realmUserId = ensureFullMatrixUserId(
-          realmConfigJson.realmUserId ??
-            (this.#matrixClient.getUserId()! || this.#matrixClient.username),
-          this.#matrixClient.matrixURL.href,
-        );
-        realmInfo.lastPublishedAt =
-          realmConfigJson.lastPublishedAt || realmInfo.lastPublishedAt;
-      } catch (e) {
-        this.#log.warn(`failed to parse realm config: ${e}`);
-      }
-    }
-
-    // showAsCatalog and publishable live in realm_metadata after CS-10053.
-    // The sidecar-parse block above intentionally does not read them; the
-    // DB is the only source.
-    realmInfo.showAsCatalog = metadata.showAsCatalog;
-    realmInfo.publishable = metadata.publishable;
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
     // file is the source of truth — patchRealmConfig writes it, publish
@@ -6395,11 +6350,13 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // Opt-in field: only an explicit `true` is meaningful (every
+        // consumer checks `=== true`). An unset BooleanField serializes
+        // as `false` once the card is indexed, so collapse anything but
+        // `true` to null — /_info then reports the same "not opted in"
+        // value whether or not the card has been indexed yet.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6433,11 +6390,10 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // See the disk-overlay note above: collapse non-`true` to null so
+        // an unset field (which indexes as `false`) doesn't flip /_info.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6524,21 +6480,27 @@ export class Realm {
 
     let cardAttrs: Record<string, unknown> = {};
     let metadataAttrs: Record<string, unknown> = {};
-    let sidecarAttrs: Record<string, unknown> = {};
+    let unknownKeys: string[] = [];
     for (let [key, value] of Object.entries(attributes)) {
       if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
         cardAttrs[key] = value;
       } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
         metadataAttrs[key] = value;
       } else {
-        sidecarAttrs[key] = value;
+        unknownKeys.push(key);
       }
     }
+    if (unknownKeys.length > 0) {
+      return badRequest({
+        message: `Unknown realm config attribute(s): ${unknownKeys.join(', ')}`,
+        requestContext,
+      });
+    }
 
-    // Read and validate BOTH files before writing anything. A mixed PATCH
-    // like { name, publishable } touches the card, the realm_metadata
-    // table, and possibly the sidecar; we don't want a malformed sidecar
-    // to surface 500 *after* the card has already been mutated.
+    // Read and validate the card before writing anything. A mixed PATCH
+    // like { name, publishable } touches the card and the realm_metadata
+    // table; we don't want a malformed card to surface 500 *after* the
+    // metadata has already been mutated.
     let cardPath: LocalPath | undefined;
     let cardDoc:
       | {
@@ -6626,44 +6588,8 @@ export class Realm {
       }
     }
 
-    let realmConfigPath: LocalPath | undefined;
-    let realmConfig: Record<string, unknown> | undefined;
-    if (Object.keys(sidecarAttrs).length > 0) {
-      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
-      realmConfig = {};
-      let existingConfig = await this.readFileAsText(
-        realmConfigPath,
-        undefined,
-      );
-      if (existingConfig?.content) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(existingConfig.content);
-        } catch (e: any) {
-          return systemError({
-            requestContext,
-            message: `Unable to parse existing realm config: ${e.message}`,
-          });
-        }
-        if (!isPlainObject(parsed)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config is not a JSON object`,
-          });
-        }
-        realmConfig = parsed as Record<string, unknown>;
-      }
-      Object.assign(realmConfig!, sidecarAttrs);
-    }
-
     if (cardPath !== undefined && cardDoc !== undefined) {
       await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
-    }
-    if (realmConfigPath !== undefined && realmConfig !== undefined) {
-      await this.write(
-        realmConfigPath,
-        JSON.stringify(realmConfig, null, 2) + '\n',
-      );
     }
     if (Object.keys(metadataAttrs).length > 0) {
       await this.upsertRealmMetadata({
@@ -6736,6 +6662,7 @@ export class Realm {
       definition,
       relativeTo,
       definitionLookup: this.#definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
     });
   }
 

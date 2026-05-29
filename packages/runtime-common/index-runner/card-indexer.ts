@@ -20,6 +20,7 @@ import {
   serializableError,
 } from '../error';
 import { unresolveResourceInstanceURLs } from '../url';
+import type { VirtualNetwork } from '../virtual-network';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import { canonicalURL } from './dependency-url';
@@ -41,6 +42,7 @@ export interface CardIndexerOptions {
   // response; persisted onto `boxel_index.timing_diagnostics`.
   timingDiagnostics?: TimingDiagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
+  virtualNetwork: VirtualNetwork;
   updateEntry(
     instanceURL: URL,
     entry: InstanceEntry | InstanceErrorIndexEntry,
@@ -61,6 +63,7 @@ export async function performCardIndexing({
   precomputedRenderResult,
   timingDiagnostics,
   dependencyResolver,
+  virtualNetwork,
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
@@ -83,7 +86,7 @@ export async function performCardIndexing({
       // Convert instance URLs (id, relationship links/data) from resolved HTTP
       // URLs to registered prefix form (e.g. @cardstack/catalog/...) so that
       // stored card data is portable across environments.
-      unresolveResourceInstanceURLs(serialized.data);
+      unresolveResourceInstanceURLs(serialized.data, virtualNetwork);
     }
   } catch (err: unknown) {
     uncaughtError = uncaughtError ?? (err as Error);
@@ -145,12 +148,12 @@ export async function performCardIndexing({
     renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
     let runtimeErrorDeps = renderResult?.deps ?? [];
     let metaModuleDeps = modulesConsumedInMeta(resource.meta).map((m) =>
-      canonicalURL(m, instanceURL.href),
+      canonicalURL(m, instanceURL.href, virtualNetwork),
     );
     let errorIdDep =
       renderError.error.id &&
       renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ? [canonicalURL(renderError.error.id, instanceURL.href)]
+        ? [canonicalURL(renderError.error.id, instanceURL.href, virtualNetwork)]
         : undefined;
 
     let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(

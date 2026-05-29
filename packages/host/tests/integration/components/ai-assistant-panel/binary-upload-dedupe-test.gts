@@ -23,6 +23,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -116,7 +117,7 @@ module(
           'test-image.png': MINIMAL_PNG,
           'test-image-copy.png': MINIMAL_PNG,
           'other-image.png': DIFFERENT_BINARY,
-          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
       });
     });

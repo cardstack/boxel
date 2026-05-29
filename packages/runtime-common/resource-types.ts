@@ -1,10 +1,10 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, moduleFrom } from './code-ref';
-import { resolveCardReference } from './card-reference-resolver';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
 } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import type { Query } from './query';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
@@ -164,6 +164,7 @@ export {
 export function extractRelationshipIds(
   relationship: Relationship,
   baseUrl: string | URL,
+  virtualNetwork: VirtualNetwork,
 ): RealmResourceIdentifier[] {
   let ids: RealmResourceIdentifier[] = [];
   let data = relationship.data;
@@ -172,7 +173,8 @@ export function extractRelationshipIds(
   }
   let resolveId = (id: string): RealmResourceIdentifier => {
     try {
-      return resolveCardReference(id, baseUrl) as RealmResourceIdentifier;
+      return virtualNetwork.resolveURL(id, baseUrl)
+        .href as RealmResourceIdentifier;
     } catch {
       return id as RealmResourceIdentifier;
     }

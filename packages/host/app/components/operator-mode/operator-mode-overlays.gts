@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
+import { autoUpdate } from '@floating-ui/dom';
+import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
 
@@ -63,6 +65,16 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
 
+// The label's outward growth should be bounded by the visible frame
+// of the operator-mode stack item — that's the box that defines the
+// "page" the card is rendered on, and it keeps the label out of the
+// chrome around it (sidebar, dialog title bar). Within that frame
+// the label is free to extend across sibling cards / columns when
+// the hovered card is near an edge.
+function findAdornLabelBoundary(cardEl: HTMLElement): HTMLElement | null {
+  return cardEl.closest<HTMLElement>('.stack-item-content');
+}
+
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
   @service declare private store: StoreService;
@@ -104,11 +116,16 @@ export default class OperatorModeOverlays extends Overlays {
             style={{renderedCard.overlayZIndexStyle}}
             ...attributes
           >
-            {{! Type-label tab — hover only, anchored top-left, overflows when long }}
+            {{! Type-label tab — hover only. trackLabelOverflow
+                positions the label inline so it stays inside the
+                containing card's footprint, flipping below the card
+                when there isn't room above and truncating with an
+                ellipsis when there isn't room sideways. }}
             {{#if isHovered}}
               <div
                 class='adorn-label'
                 data-test-overlay-label
+                {{this.trackLabelOverflow renderedCard.element}}
                 {{on 'mouseenter' this.cancelHoverClear}}
                 {{on 'mouseleave' this.scheduleHoverClear}}
               >
@@ -123,33 +140,42 @@ export default class OperatorModeOverlays extends Overlays {
                 <span class='adorn-label-text'>
                   {{this.getCardTypeName cardDefOrId renderedCard}}
                 </span>
-                <BoxelDropdown
-                  @registerAPI={{this.registerDropdownAPI renderedCard}}
-                  @onClose={{this.handleMenuClose}}
-                >
-                  <:trigger as |bindings|>
-                    <IconButton
-                      @icon={{DotsVertical}}
-                      class='adorn-label-menu'
-                      aria-label='Options'
-                      data-test-overlay-more-options
-                      {{bindings}}
-                      {{on
-                        'click'
-                        (fn this.handleMenuTriggerClick renderedCard)
-                      }}
-                    />
-                  </:trigger>
-                  <:content as |dd|>
-                    <Menu
-                      @closeMenu={{dd.close}}
-                      @items={{this.getMenuItemsForCard
-                        cardDefOrId
-                        renderedCard
-                      }}
-                    />
-                  </:content>
-                </BoxelDropdown>
+                {{! Wrap BoxelDropdown so the trigger and its
+                    portal-origin element count as a single flex item
+                    of the label. Otherwise the label grows by one
+                    flex-gap as soon as the menu opens (the open-state
+                    wormhole-origin becomes a flex item where the
+                    closed-state placeholder was display none), and
+                    the label would shift on every menu open/close. }}
+                <span class='adorn-label-dropdown'>
+                  <BoxelDropdown
+                    @registerAPI={{this.registerDropdownAPI renderedCard}}
+                    @onClose={{this.handleMenuClose}}
+                  >
+                    <:trigger as |bindings|>
+                      <IconButton
+                        @icon={{DotsVertical}}
+                        class='adorn-label-menu'
+                        aria-label='Options'
+                        data-test-overlay-more-options
+                        {{bindings}}
+                        {{on
+                          'click'
+                          (fn this.handleMenuTriggerClick renderedCard)
+                        }}
+                      />
+                    </:trigger>
+                    <:content as |dd|>
+                      <Menu
+                        @closeMenu={{dd.close}}
+                        @items={{this.getMenuItemsForCard
+                          cardDefOrId
+                          renderedCard
+                        }}
+                      />
+                    </:content>
+                  </BoxelDropdown>
+                </span>
               </div>
             {{/if}}
 
@@ -233,19 +259,23 @@ export default class OperatorModeOverlays extends Overlays {
         box-shadow: 0 0 0 4px var(--adorn-accent);
       }
 
-      /* Type-label tab — flag shape with sloped right edge, anchored above
-         the card's top-left corner so its left edge aligns with the 4px
-         selection stroke. */
+      /* Type-label tab — flag shape with sloped right edge. The
+         `top` and `left` are written inline by trackLabelOverflow,
+         relative to the actions-overlay offset parent (which velcro
+         keeps aligned with the card). Absolute (not fixed) so the
+         positioning is naturally interpreted in the overlay's local
+         coordinate space — fixed would be sensitive to any
+         transformed ancestor (e.g. the test runner's `#ember-testing`
+         scale wrapper) creating a different containing block. The
+         flag shape is defined entirely by clip-path so it can mirror
+         vertically when the label flips below the card. */
       .adorn-label {
         position: absolute;
-        bottom: calc(100% + 2px);
-        left: -4px;
-        right: auto;
-        top: auto;
+        top: 0;
+        left: 0;
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        max-width: max-content;
         padding: 3px 12px 3px 7px;
         background: var(--adorn-accent-light);
         color: #0a2e1c;
@@ -253,11 +283,19 @@ export default class OperatorModeOverlays extends Overlays {
         letter-spacing: 0.5px;
         text-transform: uppercase;
         white-space: nowrap;
+        overflow: hidden;
         border-radius: 5px 0 0 5px;
         clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 100%, 0 100%);
         pointer-events: auto;
         z-index: 1;
         filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.2));
+      }
+      /* When the label flips below the card, mirror the clip-path
+         vertically so the slope still points toward the card (now
+         upward from the bottom-right corner). The rounded corners
+         stay on the left side either way. */
+      .adorn-label[data-side='bottom'] {
+        clip-path: polygon(0 100%, calc(100% - 13px) 100%, 100% 0, 0 0);
       }
       .actions-overlay.selected .adorn-label {
         background: var(--adorn-accent);
@@ -269,8 +307,24 @@ export default class OperatorModeOverlays extends Overlays {
         color: #0a2e1c;
       }
       .adorn-label-text {
+        /* `min-width: 0` lets the flex item shrink below its
+           min-content size when the label is capped by floating-ui's
+           `size` middleware; without it, text-overflow:ellipsis can't
+           kick in. */
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      /* BoxelDropdown wrapper. Inline-flex so the trigger and the
+         portal-origin element (which appears beside the trigger when
+         the menu is open) live inside their own flex container
+         instead of being two direct flex items of the label. Without
+         this wrapper, the label's natural width grows by one
+         flex-gap as soon as the menu opens, shifting the label
+         on click. */
+      .adorn-label-dropdown {
+        display: inline-flex;
+        align-items: center;
       }
       .adorn-label-menu {
         width: 18px;
@@ -359,6 +413,142 @@ export default class OperatorModeOverlays extends Overlays {
     // needs to bridge that gap without the chrome dismissing itself.
     return 100;
   }
+
+  // Positions the type-label tab manually inside the containing
+  // card's footprint, so its slope stays anchored to the hovered
+  // card and long type-names get truncated with an ellipsis when
+  // they would otherwise spill into the chrome around the
+  // containing card.
+  //
+  // Behavior:
+  // - While the natural label width fits the card's interior (card
+  //   width minus the top-right corner radius plus 4px stroke
+  //   bleed), the label is anchored top-left at the card; otherwise
+  //   it pins its right edge to the corner-radius point and grows
+  //   leftward. (4px hysteresis keeps sub-pixel wobble from
+  //   flipping the placement decision.)
+  // - If there isn't room above the card inside the boundary, the
+  //   label flips below; a [data-side] attribute drives the CSS
+  //   that mirrors the clip-path vertically so the slope still
+  //   points toward the card.
+  // - The label's max-width is capped to the space available
+  //   between the anchored edge and the boundary; CSS
+  //   text-overflow:ellipsis truncates the type-name rather than
+  //   letting the label spill outside the containing card.
+  //
+  // The boundary is the closest enclosing rendered-card wrapper
+  // (`[data-boxel-card-id]`) — i.e. the card this card is embedded
+  // in. Top-level cards fall back to the operator-mode stack item's
+  // content area.
+  //
+  // Floating-ui's `autoUpdate` only triggers the re-fire on scroll,
+  // resize, and ancestor mutations; the placement math is direct
+  // because floating-ui's flip + shift + size middleware aren't a
+  // clean fit for the right-anchored-with-truncation pattern.
+  private trackLabelOverflow = modifier(
+    (label: HTMLElement, [cardEl]: [HTMLElement | undefined]) => {
+      if (!cardEl) {
+        return undefined;
+      }
+      let boundary = findAdornLabelBoundary(cardEl);
+      if (!boundary) {
+        return undefined;
+      }
+
+      label.style.position = 'absolute';
+      label.style.top = '0';
+      label.style.left = '0';
+
+      let update = () => {
+        label.style.maxWidth = 'none';
+        let labelWidth = label.scrollWidth;
+        let labelHeight = label.offsetHeight;
+
+        let cardRect = cardEl.getBoundingClientRect();
+        let boundaryRect = boundary.getBoundingClientRect();
+        let radius =
+          parseFloat(window.getComputedStyle(cardEl).borderTopRightRadius) || 0;
+        let availableWithinCard = cardRect.width - radius + 4;
+        let wasOverflowing = label.hasAttribute('data-overflow');
+        let shouldOverflow = wasOverflowing
+          ? !(labelWidth + 4 < availableWithinCard)
+          : labelWidth > availableWithinCard;
+        if (shouldOverflow) {
+          label.setAttribute('data-overflow', '');
+        } else {
+          label.removeAttribute('data-overflow');
+        }
+
+        let spaceAbove = cardRect.top - boundaryRect.top;
+        let spaceBelow = boundaryRect.bottom - cardRect.bottom;
+        let side: 'top' | 'bottom' =
+          spaceAbove >= labelHeight + 2 || spaceAbove >= spaceBelow
+            ? 'top'
+            : 'bottom';
+        label.setAttribute('data-side', side);
+
+        let anchorLeftX: number;
+        if (shouldOverflow) {
+          let anchorRightX = cardRect.right - (radius - 4);
+          let unclampedLeft = anchorRightX - labelWidth;
+          let boundaryLeftLimit = boundaryRect.left + 4;
+          if (unclampedLeft >= boundaryLeftLimit) {
+            // Natural width fits inside the boundary — use
+            // max-content so the browser sizes to the true intrinsic
+            // width (scrollWidth is integer-rounded, so writing it
+            // back as `max-width: Npx` would shave a sub-pixel
+            // remainder and trip text-overflow:ellipsis even though
+            // there's room to spare).
+            anchorLeftX = unclampedLeft;
+            label.style.maxWidth = 'max-content';
+          } else {
+            // Label can't fit inside the boundary at natural width;
+            // clamp the un-anchored edge and let the ellipsis show.
+            anchorLeftX = boundaryLeftLimit;
+            let width = Math.max(0, anchorRightX - anchorLeftX);
+            label.style.maxWidth = width + 'px';
+          }
+        } else {
+          anchorLeftX = cardRect.left - 4;
+          label.style.maxWidth = 'max-content';
+        }
+        let anchorTopY =
+          side === 'top' ? cardRect.top - labelHeight - 2 : cardRect.bottom + 2;
+
+        // The label's anchor positions (anchorLeftX, anchorTopY) are
+        // in viewport coordinates. With `position: absolute`, the
+        // inline `left`/`top` write to the offset-parent's local
+        // coordinate space — which can be scaled relative to the
+        // viewport (e.g. `#ember-testing` applies `scale(0.5)` in
+        // the test runner). Read the offset parent's rect vs its
+        // unscaled `offsetWidth/offsetHeight` to recover the scale
+        // factors, then convert the viewport anchor into the offset
+        // parent's local space.
+        let offsetParent = label.offsetParent as HTMLElement | null;
+        let parentRect = offsetParent
+          ? offsetParent.getBoundingClientRect()
+          : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+        let scaleX =
+          offsetParent && offsetParent.offsetWidth > 0
+            ? parentRect.width / offsetParent.offsetWidth
+            : 1;
+        let scaleY =
+          offsetParent && offsetParent.offsetHeight > 0
+            ? parentRect.height / offsetParent.offsetHeight
+            : 1;
+        if (!Number.isFinite(scaleX) || scaleX === 0) {
+          scaleX = 1;
+        }
+        if (!Number.isFinite(scaleY) || scaleY === 0) {
+          scaleY = 1;
+        }
+        label.style.left = (anchorLeftX - parentRect.left) / scaleX + 'px';
+        label.style.top = (anchorTopY - parentRect.top) / scaleY + 'px';
+      };
+
+      return autoUpdate(cardEl, label, update);
+    },
+  );
 
   protected override shouldDelayHoverClear(): boolean {
     return this.openDropdownCount > 0;

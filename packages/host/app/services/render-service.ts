@@ -11,12 +11,11 @@ import voidMap from '@simple-dom/void-map';
 
 import { tokenize } from 'simple-html-tokenizer';
 
-import type { RealmPaths } from '@cardstack/runtime-common';
+import type { RealmPaths, VirtualNetwork } from '@cardstack/runtime-common';
 import {
   isLocalId,
   loadCardDocument,
   loadFileMetaDocument,
-  resolveCardReference,
   type CardError,
   type CodeRef,
   type RuntimeDependencyTrackingContext,
@@ -55,6 +54,7 @@ export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
   #fileMetaInstances = new Map<string, FileDef>();
   #fetch: typeof globalThis.fetch;
+  #virtualNetwork: VirtualNetwork;
   #inFlight: Promise<unknown>[] = [];
   #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
@@ -63,32 +63,33 @@ export class CardStoreWithErrors implements CardStore {
     Promise<SingleFileMetaDocument | CardError>
   > = new Map();
 
-  constructor(fetch: typeof globalThis.fetch) {
+  constructor(fetch: typeof globalThis.fetch, virtualNetwork: VirtualNetwork) {
     this.#fetch = fetch;
+    this.#virtualNetwork = virtualNetwork;
   }
 
   getCard(id: string): CardDef | undefined {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#cards.get(id);
   }
   getFileMeta(id: string): FileDef | undefined {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#fileMetaInstances.get(id);
   }
   setCard(id: string, instance: CardDef): void {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     this.#cards.set(id, instance);
   }
   setFileMeta(id: string, instance: FileDef): void {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     this.#fileMetaInstances.set(id, instance);
   }
   setCardNonTracked(id: string, instance: CardDef) {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#cards.set(id, instance);
   }
   setFileMetaNonTracked(id: string, instance: FileDef) {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
@@ -99,13 +100,13 @@ export class CardStoreWithErrors implements CardStore {
     url: string,
     _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
-    url = normalizeCardStoreURL(url);
+    url = this.normalizeURL(url);
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadCardDocument(this.#fetch, url);
+      promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
       this.#cardDocsInFlight.set(url, promise);
       return await promise;
     } finally {
@@ -117,18 +118,32 @@ export class CardStoreWithErrors implements CardStore {
     url: string,
     _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
-    url = normalizeCardStoreURL(url);
+    url = this.normalizeURL(url);
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadFileMetaDocument(this.#fetch, url);
+      promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
       this.#fileMetaDocsInFlight.set(url, promise);
       return await promise;
     } finally {
       this.#fileMetaDocsInFlight.delete(url);
     }
+  }
+
+  private normalizeKey(id: string): string {
+    return this.normalizeURL(id).replace(/\.json$/, '');
+  }
+
+  private normalizeURL(id: string): string {
+    let key = id.replace(/\.json$/, '');
+    // Local IDs pass through; remote IDs canonicalize to URL form via the
+    // VN so prefix-form and URL-form lookups share a cache key. `vn.toURL`
+    // also consults the deprecated global registry, so prefixes registered
+    // via `registerCardReferencePrefix` (without a VN) resolve to the same
+    // canonical URL.
+    return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
   }
 
   trackLoad(load: Promise<unknown>) {
@@ -151,15 +166,6 @@ export class CardStoreWithErrors implements CardStore {
       errors: undefined,
     } as any;
   }
-}
-
-function normalizeCardStoreKey(id: string): string {
-  return normalizeCardStoreURL(id).replace(/\.json$/, '');
-}
-
-function normalizeCardStoreURL(id: string): string {
-  let key = id.replace(/\.json$/, '');
-  return isLocalId(key) ? id : resolveCardReference(id, undefined);
 }
 
 export interface RenderCardParams {

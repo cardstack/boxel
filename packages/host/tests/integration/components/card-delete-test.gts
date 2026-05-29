@@ -21,6 +21,7 @@ import {
   setupOnSave,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -171,12 +172,12 @@ module('Integration | card-delete', function (hooks) {
             },
           },
         },
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace 1',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
       },
     }));
   });
@@ -213,7 +214,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -437,13 +438,13 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -501,7 +502,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     assert
       .dom(
@@ -554,7 +555,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -617,7 +618,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');

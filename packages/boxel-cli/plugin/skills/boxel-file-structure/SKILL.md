@@ -25,7 +25,7 @@ Example: https://app.boxel.ai/sarah/pet-rescue/animals/dog.gts
 
 ```
 workspace/
-├── .realm.json           # Workspace config
+├── realm.json            # Workspace config (RealmConfig card)
 ├── index.json            # Workspace index
 ├── cards-grid.json       # Default cards grid
 ├── blog-post.gts         # Card definition (kebab-case)

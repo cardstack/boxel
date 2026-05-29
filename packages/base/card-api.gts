@@ -93,6 +93,7 @@ import {
   resolveCardReference,
   rri,
   type RealmResourceIdentifier,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -469,6 +470,11 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
+  // The VirtualNetwork that owns this store's realm mappings, used for
+  // prefix/RRI resolution during (de)serialization. Optional so test doubles
+  // don't need to implement it; resolution sites fall back to the deprecated
+  // module-level resolver when it's absent.
+  virtualNetwork?: VirtualNetwork;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -1402,7 +1408,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveCardReference(reference, relativeTo);
+    let href = resolveRef(store, reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1949,7 +1955,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveCardReference(reference, relativeTo);
+        let normalizedReference = resolveRef(store, reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2383,7 +2389,11 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
-        return resolveCardReference(maybeRelativeReference, value[relativeTo]);
+        return resolveRef(
+          getStore(value),
+          maybeRelativeReference,
+          value[relativeTo],
+        );
       }
       return Object.fromEntries(
         Object.entries(
@@ -2406,7 +2416,8 @@ export class BaseDef {
           if (isNonPresentLink(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = resolveCardReference(
+              normalizedId = resolveRef(
+                getStore(value),
                 normalizedId,
                 value[relativeTo],
               );
@@ -3378,13 +3389,10 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = resolveCardReference(
-    link,
-    instance.id ?? instance[relativeTo],
-  );
+  let store = getStore(instance);
+  let reference = resolveRef(store, link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
-  let store = getStore(instance);
   if (promise) {
     store.trackLoad(promise);
     return;
@@ -3450,7 +3458,8 @@ function lazilyLoadLink(
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = resolveCardReference(
+          let notLoadedRef = resolveRef(
+            store,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3553,18 +3562,6 @@ function lazilyLoadLink(
         notifySubscribers(instance, field.name, sentinel);
         notifyCardTracking(instance);
       }
-
-      let payload = JSON.stringify({
-        type: 'error',
-        error: payloadError,
-      });
-      // We use a custom event for render errors--otherwise QUnit will report a "global error"
-      // when we use a promise rejection to signal to the prerender that there was an error
-      // even though everything is working as designed. QUnit is very noisy about these errors...
-      const event = new CustomEvent('boxel-render-error', {
-        detail: { reason: payload },
-      });
-      globalThis.dispatchEvent(event);
     } finally {
       deferred.fulfill();
       inflightLoads.delete(key);
@@ -4512,6 +4509,29 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
+// The VirtualNetwork associated with an instance's store, for prefix/RRI
+// resolution outside this module. Returns undefined when the store can't
+// supply one, so callers fall back to the deprecated module-level resolver.
+export function virtualNetworkFor(
+  instance: BaseDef,
+): VirtualNetwork | undefined {
+  return getStore(instance).virtualNetwork;
+}
+
+// Resolve a (possibly prefix-form or relative) reference to an absolute URL
+// string through the store's VirtualNetwork when available, falling back to
+// the deprecated module-level resolver when it's absent.
+function resolveRef(
+  store: CardStore | undefined,
+  reference: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+): string {
+  let vn = store?.virtualNetwork;
+  return vn
+    ? vn.resolveURL(reference, relativeTo).href
+    : resolveCardReference(reference, relativeTo);
+}
+
 function myLoader(): Loader {
   // we know this code is always loaded by an instance of our Loader, which sets
   // import.meta.loader.
@@ -4528,6 +4548,10 @@ class FallbackCardStore implements CardStore {
   #fileMetaInstances: Map<string, FileDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
+
+  get virtualNetwork(): VirtualNetwork | undefined {
+    return myLoader().getVirtualNetwork();
+  }
 
   getCard(id: string) {
     id = id.replace(/\.json$/, '');
@@ -4587,7 +4611,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url);
+    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }
@@ -4597,7 +4621,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url);
+    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }

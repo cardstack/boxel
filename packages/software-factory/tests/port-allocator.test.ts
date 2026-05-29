@@ -168,7 +168,11 @@ module('port-allocator', function () {
   test('release + reacquire round-trip keeps ownership', async function (assert) {
     let reservation = await allocateTestWorkerPortSet(0);
     try {
-      let port = reservation.compatRealmServerPort;
+      // releaseRealmServerPorts only releases the realm-server holder
+      // now — the compat holder is released once by the worker fixture
+      // (the worker-scoped proxy takes over the port for the rest of
+      // the worker's lifetime) and there is no matching reacquire.
+      let port = reservation.realmServerPort;
       assert.true(await isListeningOn(port), 'port is held initially');
 
       await reservation.releaseRealmServerPorts();

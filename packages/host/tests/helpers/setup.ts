@@ -1,7 +1,10 @@
 /* eslint-disable @cardstack/host/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
-import { settled } from '@ember/test-helpers';
+import { getSettledState, settled } from '@ember/test-helpers';
+
+import { getPendingWaiterState } from '@ember/test-waiters';
+import type { TestWaiterDebugInfo } from '@ember/test-waiters';
 
 import {
   setupApplicationTest as emberSetupApplicationTest,
@@ -271,8 +274,79 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
       recent.length
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
+      summarizeSettledState(),
     ].join('\n'),
   );
+}
+
+// A silent QUnit timeout (e.g. a `waitFor`/`settled` that never resolves)
+// usually shows no in-flight fetches — the awaited `settled()` is blocked on
+// something other than the network. Snapshot Ember's settledness metrics and,
+// when a test waiter is the culprit, name it (with any captured begin-async
+// origin) so the next timeout points at the stuck gate instead of being opaque.
+function summarizeSettledState(): string {
+  try {
+    let state = getSettledState();
+    let metrics = [
+      `hasRunLoop=${state.hasRunLoop}`,
+      `hasPendingTimers=${state.hasPendingTimers}`,
+      `hasPendingWaiters=${state.hasPendingWaiters}`,
+      `hasPendingRequests=${state.hasPendingRequests}`,
+      `isRenderPending=${state.isRenderPending}`,
+      `pendingRequestCount=${state.pendingRequestCount}`,
+    ].join(' ');
+    let lines = [`settled state: ${metrics}`];
+    if (state.hasPendingWaiters) {
+      let { pending, waiters } = getPendingWaiterState();
+      let names = Object.keys(waiters);
+      lines.push(
+        names.length
+          ? `pending test waiters (${pending}):\n  ${names
+              .map((name) => describePendingWaiter(name, waiters[name]))
+              .join('\n  ')}`
+          : `pending test waiters (${pending}): <none reported>`,
+      );
+    }
+    return lines.join('\n');
+  } catch (error) {
+    // Diagnostics must never mask the original failure.
+    return `settled state: <unavailable: ${formatErrorForLog(error)}>`;
+  }
+}
+
+// `debugInfo` is `true` when stack capture is disabled, otherwise one entry per
+// still-open `beginAsync` token. Each entry's `label`/`stack` points at the
+// call site that opened the waiter and never closed it.
+function describePendingWaiter(
+  name: string,
+  debugInfo: TestWaiterDebugInfo[] | true,
+): string {
+  if (debugInfo === true || debugInfo.length === 0) {
+    return name;
+  }
+  let origins = debugInfo
+    .map((info) => info.label ?? firstMeaningfulFrame(info.stack))
+    .filter((origin): origin is string => Boolean(origin));
+  return origins.length
+    ? `${name} (${debugInfo.length}): ${origins.join(' | ')}`
+    : `${name} (${debugInfo.length})`;
+}
+
+// Pull the first stack frame that isn't internal test-waiter/framework noise so
+// the logged origin lands on the app code that opened the waiter.
+function firstMeaningfulFrame(stack: string | undefined): string | undefined {
+  if (!stack) return undefined;
+  let frames = stack
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let frame = frames.find(
+    (line) =>
+      line.startsWith('at ') &&
+      !line.includes('test-waiters') &&
+      !line.includes('buildWaiter'),
+  );
+  return frame ?? frames[0];
 }
 
 function formatRejectionReason(reason: unknown): string {

@@ -28,6 +28,7 @@ import {
   type TestContextWithSave,
   withCachedRealmSetup,
   cardDefFieldCount,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -427,12 +428,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           'z18.json': '{}',
           'z19.json': '{}',
           'zzz/zzz/file.json': '{}',
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
         },
       });
     });

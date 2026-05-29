@@ -4,12 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  Loader,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-} from '@cardstack/runtime-common';
+import { baseRealm, Loader } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -242,18 +237,19 @@ module('Unit | loader', function (hooks) {
   // getConsumedModules passed these directly to new URL() which throws
   // TypeError: Invalid URL. The fix uses resolveCardReference() first.
   test('can determine consumed modules using prefix-form module identifier', async function (assert) {
-    // Card-reference prefixes are global state — without the finally clause
-    // this registration leaks into later modules in the same shard, causing
-    // skill uploads to canonicalize sourceUrls to @test-loader/... and
-    // breaking strict URL matches in tests that consume them.
-    registerCardReferencePrefix('@test-loader/', testRealmURL);
+    // Realm-prefix mappings live on the per-app VirtualNetwork — without
+    // the finally clause this registration leaks into later tests,
+    // causing skill uploads to canonicalize sourceUrls to @test-loader/...
+    // and breaking strict URL matches in tests that consume them.
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test-loader/', testRealmURL);
     try {
       // Import the module using its regular URL so it's in the loader cache
       await loader.import(`${testRealmURL}f`);
 
       // Now call getConsumedModules with the prefix-form identifier.
-      // Without the fix, this throws TypeError: Invalid URL because
-      // new URL('@test-loader/f') is not a valid URL.
+      // Without VN-aware resolution this throws TypeError: Invalid URL
+      // because new URL('@test-loader/f') is not a valid URL.
       let consumed = await loader.getConsumedModules(`@test-loader/f`);
       assert.deepEqual(
         consumed,
@@ -261,7 +257,7 @@ module('Unit | loader', function (hooks) {
         'consumed modules resolved correctly from prefix-form identifier',
       );
     } finally {
-      unregisterCardReferencePrefix('@test-loader/');
+      virtualNetwork.removeRealmMapping('@test-loader/');
     }
   });
 

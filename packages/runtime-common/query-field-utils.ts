@@ -1,5 +1,6 @@
 import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref';
 import { cardIdToURL } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import type { FieldDefinition } from './definitions';
 import type {
   FileMetaResource,
@@ -40,6 +41,7 @@ export interface NormalizeQueryDefinitionParams {
   resolvePathValue: (path: string) => any;
   resource?: LooseCardResource | FileMetaResource;
   relativeTo?: URL;
+  virtualNetwork?: VirtualNetwork;
 }
 
 export interface NormalizedQueryDefinitionResult {
@@ -56,6 +58,7 @@ export function normalizeQueryDefinition({
   resolvePathValue,
   resource,
   relativeTo,
+  virtualNetwork,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
   let workingQuery: QueryWithInterpolations = JSON.parse(
     JSON.stringify(queryDefinition),
@@ -232,7 +235,12 @@ export function normalizeQueryDefinition({
   let resolvedRealm = resolveRealm(specifiedRealm);
 
   let relativeToURL =
-    relativeTo ?? (resource?.id ? cardIdToURL(resource.id) : realmURL);
+    relativeTo ??
+    (resource?.id
+      ? virtualNetwork
+        ? virtualNetwork.toURL(resource.id)
+        : cardIdToURL(resource.id)
+      : realmURL);
   let targetRef = codeRefWithAbsoluteIdentifier(
     fieldDefinition.fieldOrCard,
     relativeToURL,

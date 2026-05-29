@@ -21,6 +21,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -96,11 +97,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
             name: 'Charlie',
             species: 'Bird',
           }),
-          '.realm.json': {
-            name: 'Test Realm',
-            backgroundURL: null,
-            iconURL: null,
-          },
+          'realm.json': realmConfigCardJSON({ name: 'Test Realm' }),
         },
       });
     });
@@ -285,6 +282,63 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Deselect All"]')
       .exists('Deselect All option is available');
+  });
+
+  test('Select All does not load a card instance for every selected card', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await waitFor('[data-test-cards-grid-item]');
+
+    let cards = findAll('[data-test-cards-grid-item]');
+    let totalCardCount = cards.length;
+    assert.ok(totalCardCount >= 3, 'Multiple cards are available');
+
+    // Enter selection mode with a single card, then count store.get calls
+    // made specifically by the Select All action. Selecting cards must not
+    // materialize an instance per card — that eager loading is what froze the
+    // UI for seconds on large grids.
+    await selectCard('Pet/1');
+
+    let store = getService('store');
+    let originalGet = store.get;
+    let getCallCount = 0;
+    (store as any).get = function (...args: unknown[]) {
+      getCallCount += 1;
+      return (originalGet as any).apply(store, args);
+    };
+
+    try {
+      await click('.utility-menu-trigger');
+      let countBeforeSelectAll = getCallCount;
+      await click('[data-test-boxel-menu-item-text="Select All"]');
+      await waitUntil(() =>
+        document
+          .querySelector('.utility-menu-trigger')
+          ?.textContent?.includes(`${totalCardCount}`),
+      );
+      let getsDuringSelectAll = getCallCount - countBeforeSelectAll;
+
+      assert
+        .dom('.utility-menu-trigger')
+        .containsText(`${totalCardCount}`, 'All cards are now selected');
+      assert.strictEqual(
+        getsDuringSelectAll,
+        0,
+        `Select All should not load any instance (selections are tracked by id); store.get was called ${getsDuringSelectAll}x while selecting ${totalCardCount} cards`,
+      );
+    } finally {
+      (store as any).get = originalGet;
+    }
   });
 
   test('can cancel bulk delete operation', async function (assert) {

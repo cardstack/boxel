@@ -82,7 +82,7 @@ module('LintValidationStep', function () {
         fetchFilenames: makeFetchFilenames([
           'Cards/my-card.json',
           'index.json',
-          '.realm.json',
+          'realm.json',
         ]),
         readFileFn: makeReadFile({}),
         lintFileFn: makeLintFile({}),

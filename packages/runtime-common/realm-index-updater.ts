@@ -27,8 +27,6 @@ import ignore, { type Ignore } from 'ignore';
 export class RealmIndexUpdater {
   #realm: Realm;
   #log = logger('realm-index-updater');
-  // [readiness-diag] — opt-in CI flake diagnostics. Remove with call site.
-  #readinessDiag = logger('readiness-diag');
   #ignoreData: Record<string, string> = {};
   // Bumped every time a from-scratch result writes #ignoreData. Concurrent
   // incrementals capture this version when they snapshot #ignoreData; if a
@@ -154,14 +152,6 @@ export class RealmIndexUpdater {
         {
           clearLastModified: opts?.clearLastModified,
         },
-      );
-      // [readiness-diag] — startedAt covers the full enqueue path
-      // (getRealmOwnerUsername + the optional clearLastModified write
-      // inside enqueueReindexRealmJob + the queue insert), not just the
-      // SQL publish. Labeled accordingly. See also realm.ts
-      // readinessCheck + #startup.
-      this.#readinessDiag.debug(
-        `Realm ${this.realmURL.href} from-scratch job durably enqueued as job_id=${job.id} (enqueue path took ${((performance.now() - startedAt) / 1000).toFixed(2)}s)`,
       );
       return job;
     })();
@@ -362,10 +352,7 @@ export function isIgnored(
     return false; // you can't ignore the entire realm
   }
   if (
-    [
-      `${realmURL.href}.realm.json`,
-      `${realmURL.href}.template-lintrc.js`,
-    ].includes(url.href) ||
+    [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
     url.href.startsWith(`${realmURL.href}.git/`)
   ) {
     return true;

@@ -9,7 +9,11 @@ const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
 
 // Files that must never be pushed, deleted, or overwritten on the server via CLI.
-export const PROTECTED_FILES = new Set(['.realm.json']);
+// The `realm.json` RealmConfig card is intentionally NOT protected — `boxel
+// realm push/sync` is the supported way to manage it. The set is empty; it
+// stays an exported helper so a protected file can be added without a
+// fan-out edit through every command.
+export const PROTECTED_FILES = new Set<string>([]);
 const DELETE_TIMEOUT_MS = 10_000;
 const DELETE_TIMEOUT_PROBE_MS = 3_000;
 

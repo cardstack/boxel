@@ -1269,10 +1269,19 @@ module(basename(__filename), function () {
         let tmp = dirSync();
         let testRealmDir = join(tmp.name, 'peer-realm');
         ensureDirSync(testRealmDir);
-        // Minimal .realm.json so the Realm bootstraps a name + readable
-        // visibility; the test only ever asks for module GETs.
-        writeJSONSync(join(testRealmDir, '.realm.json'), {
-          name: 'Peer Realm',
+        // Minimal RealmConfig card so the Realm bootstraps a name; the
+        // test only ever asks for module GETs.
+        writeJSONSync(join(testRealmDir, 'realm.json'), {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Peer Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
         });
         let cardPath = 'peer-card.gts';
         writeFileSync(join(testRealmDir, cardPath), peerCardSource);
@@ -1729,7 +1738,18 @@ module(basename(__filename), function () {
         let tmp = dirSync();
         let dir = join(tmp.name, 'startup-realm');
         ensureDirSync(dir);
-        writeJSONSync(join(dir, '.realm.json'), { name: 'Startup Realm' });
+        writeJSONSync(join(dir, 'realm.json'), {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Startup Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        });
         let virtualNetwork = createVirtualNetwork();
         let prerenderer = await getTestPrerenderer();
         let definitionLookup = new CachingDefinitionLookup(

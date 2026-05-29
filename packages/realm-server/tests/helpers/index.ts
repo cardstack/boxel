@@ -207,7 +207,7 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
-  includePrerenderedDefaultRealmIndex: false,
+  includePrerenderedDefaultRealmIndex: null,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -732,6 +732,100 @@ async function waitForQueueIdle(
       timeoutMessage: 'waiting for queue to become idle',
     },
   );
+}
+
+// Pure diagnostics — never changes behavior. `_types` (and any reader of the
+// precomputed `realm_meta`) returns instances from the `realm_meta` row whose
+// `realm_version` equals `realm_versions.current_version`. An empty result has
+// three distinguishable causes, and this dump tells them apart in the CI log
+// without needing another iteration:
+//   1. The from-scratch index produced no instance rows at all
+//      (boxel_index.instances = 0).
+//   2. Instances were indexed but their `types` couldn't be resolved (a render
+//      or module fetch failed) — `#fetchTypeSummary` requires `types->>0`, so
+//      those rows silently drop out of `realm_meta` (null_types > 0).
+//   3. No `realm_meta` row matches `current_version` (a version mismatch —
+//      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
+//      even though instances exist (matched = NONE while instances > 0).
+// Logged unconditionally as a one-liner; degraded/error instance rows are
+// dumped only when something looks off. Wrapped so a diagnostics failure can
+// never affect a test result.
+export async function logRealmIndexDiagnostics(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+  label: string,
+): Promise<void> {
+  try {
+    let [versionRow] = await dbAdapter.execute(
+      `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+      { bind: [realmURL] },
+    );
+    let currentVersion = versionRow?.current_version ?? null;
+
+    let metaRows = await dbAdapter.execute(
+      `SELECT realm_version,
+              COALESCE(jsonb_array_length(value->'instances'), -1) AS instances,
+              COALESCE(jsonb_array_length(value->'files'), -1) AS files
+       FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      { bind: [realmURL] },
+    );
+
+    let [counts] = await dbAdapter.execute(
+      `SELECT
+         COUNT(*) FILTER (WHERE type = 'instance' AND (is_deleted IS NULL OR is_deleted = false)) AS instances,
+         COUNT(*) FILTER (WHERE type = 'instance' AND types IS NULL AND (is_deleted IS NULL OR is_deleted = false)) AS null_types,
+         COUNT(*) FILTER (WHERE type = 'instance' AND has_error = true AND (is_deleted IS NULL OR is_deleted = false)) AS errored
+       FROM boxel_index WHERE realm_url = $1`,
+      { bind: [realmURL] },
+    );
+
+    let metaSummary =
+      metaRows
+        .map(
+          (r) =>
+            `v${r.realm_version}{instances:${r.instances},files:${r.files}}`,
+        )
+        .join(', ') || '(none)';
+    let matched = metaRows.find((r) => r.realm_version === currentVersion);
+    let nullTypes = Number(counts?.null_types ?? 0);
+    let errored = Number(counts?.errored ?? 0);
+
+    console.log(
+      `[realm-index-diag ${label}] realm=${realmURL} current_version=${currentVersion} ` +
+        `realm_meta=[${metaSummary}] ` +
+        `matched=${matched ? `instances:${matched.instances}` : 'NONE(version-mismatch)'} ` +
+        `boxel_index.instances=${counts?.instances ?? '?'} null_types=${nullTypes} errored=${errored}`,
+    );
+
+    if (
+      !matched ||
+      Number(matched.instances) <= 0 ||
+      nullTypes > 0 ||
+      errored > 0
+    ) {
+      let badRows = await dbAdapter.execute(
+        `SELECT url, has_error, error_doc->>'message' AS message
+         FROM boxel_index
+         WHERE realm_url = $1 AND type = 'instance'
+           AND (types IS NULL OR has_error = true)
+           AND (is_deleted IS NULL OR is_deleted = false)
+         ORDER BY url
+         LIMIT 25`,
+        { bind: [realmURL] },
+      );
+      for (let r of badRows) {
+        console.log(
+          `[realm-index-diag ${label}]   instance ${r.url} has_error=${r.has_error} ` +
+            `error_doc.message=${r.message ?? 'none'}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.log(
+      `[realm-index-diag ${label}] failed to gather diagnostics for ${realmURL}: ` +
+        `${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 interface CachedPermissionedRealmTemplateEntry {
@@ -1831,7 +1925,7 @@ function realmEventIsIndex(
 }
 
 // The three realm fixtures available under tests/fixtures/. See CS-10009.
-//   blank      — `.realm.json: {}` only; for tests that need a working realm
+//   blank      — empty directory; for tests that need a working realm
 //                with no card content.
 //   simple     — one card def (Person), one instance, one non-card file; for
 //                tests that need *some* indexed content but nothing exotic.
@@ -2158,6 +2252,11 @@ async function buildPermissionedRealmTemplate(
     );
 
     await waitForQueueIdle(builderDatabaseName);
+    await logRealmIndexDiagnostics(
+      dbAdapter,
+      (options.realmURL ?? testRealmURL).href,
+      'template-build',
+    );
     await teardownPermissionedRealmFixture(fixture.testRealmServer);
     fixture = undefined;
 
@@ -2323,6 +2422,13 @@ async function buildPermissionedRealmsTemplate(
     );
 
     await waitForQueueIdle(builderDatabaseName);
+    for (let fixtureRealm of fixture.realms) {
+      await logRealmIndexDiagnostics(
+        dbAdapter,
+        fixtureRealm.realm.url,
+        'template-build',
+      );
+    }
     await teardownPermissionedRealmsFixture(fixture.realms);
     fixture = undefined;
 
@@ -2482,3 +2588,44 @@ export const cardInfo = {
   summary: null,
   cardThumbnailURL: null,
 };
+
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields land
+// on attributes directly. Mirrors the host helper so realm-server tests can
+// build the same shape without depending on host.
+export function realmConfigCardJSON(
+  config: {
+    name?: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    includePrerenderedDefaultRealmIndex?: boolean;
+  } = {},
+): string {
+  let attrs: Record<string, unknown> = {};
+  if (config.name !== undefined) {
+    attrs.cardInfo = { name: config.name };
+  }
+  if (config.iconURL !== undefined) {
+    attrs.iconURL = config.iconURL;
+  }
+  if (config.backgroundURL !== undefined) {
+    attrs.backgroundURL = config.backgroundURL;
+  }
+  if (config.includePrerenderedDefaultRealmIndex !== undefined) {
+    attrs.includePrerenderedDefaultRealmIndex =
+      config.includePrerenderedDefaultRealmIndex;
+  }
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: attrs,
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  });
+}
