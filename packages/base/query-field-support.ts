@@ -134,11 +134,12 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
-    // DIAGNOSTIC (CS-11221): surface call temporarily disabled to confirm
-    // whether surface or the search-task catch is the source of shard-3
-    // regressions. If shard 3 goes green with this disabled, the
-    // tolerance machinery needs different plumbing.
-    // surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+    surfaceSearchResourceErrorState(
+      fieldState,
+      instance,
+      field,
+      searchResource,
+    );
     return searchResource;
   }
 
@@ -187,9 +188,7 @@ export function ensureQueryFieldSearchResource(
   );
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
-  // DIAGNOSTIC (CS-11221): surface call temporarily disabled. See the
-  // matching comment on the cached-return path above.
-  // surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+  surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
 
   return searchResource;
 }
@@ -225,10 +224,6 @@ export function peekQueryFieldSearchResource(
 // the first call (errors === undefined on a fresh resource, source ===
 // undefined on a fresh fieldState) from clobbering a sentinel that was put
 // in place before the field was first read.
-// DIAGNOSTIC (CS-11221): function kept around while the call sites in
-// ensureQueryFieldSearchResource are commented out; the `void` reference at
-// the bottom of this module is what tells TypeScript the symbol is
-// intentionally retained for later re-enable.
 function surfaceSearchResourceErrorState(
   fieldState: QueryFieldState,
   instance: BaseDef,
@@ -636,7 +631,3 @@ function buildFieldDefinition(field: Field): FieldDefinition | undefined {
     fieldOrCard: ref,
   };
 }
-
-// DIAGNOSTIC (CS-11221): retain `surfaceSearchResourceErrorState` while its
-// call sites are commented out for the shard-3 diagnostic experiment.
-void surfaceSearchResourceErrorState;

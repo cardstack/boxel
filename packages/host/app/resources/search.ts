@@ -17,8 +17,10 @@ import type {
   ErrorEntry,
   RealmIdentifier,
   RuntimeDependencyTrackingContext,
+  SerializedError,
 } from '@cardstack/runtime-common';
 import {
+  isCardError,
   subscribeToRealm,
   isFileDefInstance,
   logger as runtimeLogger,
@@ -475,26 +477,99 @@ export class SearchResource<
       let dependencyTrackingContext = this.dependencyTrackingContext(
         'search-resource:search',
       );
-      let { instances, meta } = await this.runtimeStore.search<T>(
-        query,
-        this.realmsToSearch,
-        {
-          includeMeta: true,
-          dependencyTrackingContext,
-        },
-      );
-      this.#log.info(
-        `search task complete; total instances=${instances.length}; refs=${instances
-          .map((r) => r.id)
-          .join(',')}`,
-      );
-      this._meta = meta;
-      this._errors = undefined;
-      await this.updateInstances(instances, dependencyTrackingContext);
+      try {
+        let { instances, meta } = await this.runtimeStore.search<T>(
+          query,
+          this.realmsToSearch,
+          {
+            includeMeta: true,
+            dependencyTrackingContext,
+          },
+        );
+        this.#log.info(
+          `search task complete; total instances=${instances.length}; refs=${instances
+            .map((r) => r.id)
+            .join(',')}`,
+        );
+        this._meta = meta;
+        this._errors = undefined;
+        await this.updateInstances(instances, dependencyTrackingContext);
+      } catch (err) {
+        if (didCancel(err)) {
+          throw err;
+        }
+        // DIAGNOSTIC LOGGING (CS-11221).
+        // eslint-disable-next-line no-console
+        console.error('[CS-11221 DIAG] search task caught error', {
+          query: JSON.stringify(query),
+          realms: this.realmsToSearch,
+          errMessage: (err as { message?: unknown })?.message,
+          errStatus: (err as { status?: unknown })?.status,
+          errName: (err as { name?: unknown })?.name,
+        });
+        this.#log.error(`search task failed`, err);
+        this._errors = [searchErrorEntry(err)];
+        this._meta = { page: { total: 0 } };
+        if (this._instances.length > 0) {
+          try {
+            await this.updateInstances([], dependencyTrackingContext);
+          } catch (cleanupErr) {
+            if (didCancel(cleanupErr)) {
+              throw cleanupErr;
+            }
+            this.#log.error(`search cleanup failed`, cleanupErr);
+          }
+        }
+      }
     } finally {
       waiter.endAsync(token);
     }
   });
+}
+
+function searchErrorEntry(err: unknown): ErrorEntry {
+  let status =
+    typeof (err as { status?: unknown })?.status === 'number'
+      ? ((err as { status: number }).status as number)
+      : 500;
+  let message =
+    typeof (err as { message?: unknown })?.message === 'string'
+      ? ((err as { message: string }).message as string)
+      : String(err);
+  let stack =
+    typeof (err as { stack?: unknown })?.stack === 'string'
+      ? ((err as { stack: string }).stack as string)
+      : undefined;
+  let title = status === 404 ? 'Link Not Found' : 'Search Error';
+  let serialized: SerializedError = {
+    title,
+    status,
+    message,
+    stack,
+    additionalErrors: null,
+  };
+  if (isCardError(err)) {
+    if (err.additionalErrors?.length) {
+      serialized.additionalErrors = err.additionalErrors.map(
+        (additionalError) => {
+          let normalized = additionalError as Partial<SerializedError>;
+          return {
+            title: normalized.title,
+            status: normalized.status,
+            message: normalized.message,
+            stack: normalized.stack,
+          };
+        },
+      );
+    }
+    if (err.deps?.length) {
+      serialized.deps = [...err.deps];
+    }
+  }
+  return {
+    type: 'instance-error',
+    error: serialized,
+  };
 }
 
 // WARNING! please don't import this directly into your component's module.
