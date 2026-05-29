@@ -18,7 +18,7 @@ else
   SLUG=$(compute_env_slug "$(git branch --show-current)")
 fi
 
-DB_NAME="boxel_${SLUG}"
+DB_NAME="boxel_$(pg_db_slug "$SLUG")"
 
 echo "Ensuring database '${DB_NAME}' exists..."
 
