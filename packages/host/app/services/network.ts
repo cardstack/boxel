@@ -83,6 +83,19 @@ export default class NetworkService extends Service {
         config.resolvedOpenRouterRealmURL,
       );
     }
+    // Test fixtures and helpers hardcode the standard-mode live test realm
+    // URL (https://localhost:4202/test/), but in environment mode the live
+    // test realm is served at a per-environment Traefik hostname. Rewrite
+    // the hardcoded URL to whatever the running test realm-server is
+    // actually serving so the same test bundle works in both modes. No-op
+    // when the URLs already match (standard mode, production).
+    let hardcodedTestRealmURL = new URL('https://localhost:4202/test/');
+    let resolvedTestRealmURL = new URL(
+      withTrailingSlash(config.resolvedTestRealmURL),
+    );
+    if (resolvedTestRealmURL.href !== hardcodedTestRealmURL.href) {
+      virtualNetwork.addURLMapping(hardcodedTestRealmURL, resolvedTestRealmURL);
+    }
     return virtualNetwork;
   }
 
