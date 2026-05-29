@@ -246,6 +246,11 @@ module(basename(__filename), function () {
     });
 
     test('lookupDefinition', async function (assert) {
+      // Start from a cold modules cache: the fixture realm's indexing
+      // pre-warms its card modules (including person.gts), so without this
+      // reset the first lookup below would hit a populated row and never
+      // reach the prerenderer, breaking the call-count assertions.
+      await dbAdapter.execute('DELETE FROM modules');
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -271,6 +276,8 @@ module(basename(__filename), function () {
     });
 
     test('invalidation', async function (assert) {
+      // Start from a cold modules cache; see lookupDefinition above.
+      await dbAdapter.execute('DELETE FROM modules');
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -310,6 +317,8 @@ module(basename(__filename), function () {
     });
 
     test('invalidates module cache entries without file extensions', async function (assert) {
+      // Start from a cold modules cache; see lookupDefinition above.
+      await dbAdapter.execute('DELETE FROM modules');
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
