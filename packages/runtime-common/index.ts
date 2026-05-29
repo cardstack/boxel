@@ -355,13 +355,17 @@ export interface ModuleRenderResponse extends ModulePrerenderModel {
 export interface PrerenderResponseMeta {
   // Aggregated diagnostic payload — server-observed timings
   // (launchMs, waits, renderElapsedMs, totalElapsedMs from
-  // `RenderTimeoutDiagnostics`) plus host-side breadcrumbs
-  // (renderStage, in-flight loads, recent module evaluations,
-  // blocked-timer summary, etc.). Populated by the Prerenderer from
-  // both its own timing measurements and any `RenderError.diagnostics`
-  // lifted out of embedded errors. The indexer picks this up, merges
-  // in the HTTP `requestId`, and persists into `diagnostics`.
-  diagnostics?: RenderTimeoutDiagnostics;
+  // `RenderTimeoutDiagnostics`) plus the host-side `render.meta` block
+  // (`PrerenderMetaDiagnostics`: computed-field counters and the
+  // `brokenLinks` findings) lifted off the card sub-response. Typed as
+  // the full persisted `Diagnostics` shape so consumers of the response
+  // contract can read every lifted field — notably `brokenLinks` —
+  // without casts; the write-side stamps it adds (`invalidationId`,
+  // `indexedAt`) are simply absent at this stage. Populated by the
+  // Prerenderer from its own timing measurements and any lifted
+  // `RenderError.diagnostics`; the indexer merges in the HTTP `requestId`
+  // and persists the result into the `diagnostics` column.
+  diagnostics?: Diagnostics;
   // HTTP correlation ID stamped by the prerender server's Koa layer.
   // Lets operators join client → manager → prerender-server logs for
   // a single request. Absent for in-process (non-HTTP) callers.
@@ -387,14 +391,15 @@ export interface PrerenderResponseMeta {
 // write-side stamps come from the IndexWriter. Any stage may skip
 // pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
-export interface Diagnostics extends RenderTimeoutDiagnostics {
+// Extends both render-side diagnostic shapes so the persisted blob types
+// every field that actually lands in it: server-observed timings from
+// `RenderTimeoutDiagnostics` and the host-side `render.meta` block from
+// `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
+// The two write-side stamps below are added at `IndexWriter.updateEntry`.
+export interface Diagnostics
+  extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
-  // Broken-link findings lifted from the render.meta `diagnostics` block
-  // (see `PrerenderMetaDiagnostics.brokenLinks`). Surfaced on the
-  // persisted shape so SQL-side consumers can read it as a queryable
-  // property of the index row.
-  brokenLinks?: BrokenLinkSummary[];
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to

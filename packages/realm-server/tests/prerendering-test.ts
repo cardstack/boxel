@@ -1466,10 +1466,7 @@ module(basename(__filename), function () {
           result.response.card?.error,
           'prerender succeeds — the card indexes cleanly',
         );
-        let brokenLinks = (result.response.meta as any)?.diagnostics
-          ?.brokenLinks as
-          | { fieldName: string; reference: string; kind: string }[]
-          | undefined;
+        let brokenLinks = result.response.meta?.diagnostics?.brokenLinks;
         assert.strictEqual(
           brokenLinks?.length,
           1,
@@ -1507,10 +1504,7 @@ module(basename(__filename), function () {
           result.response.card?.error,
           'prerender succeeds — the card indexes cleanly',
         );
-        let brokenLinks = (result.response.meta as any)?.diagnostics
-          ?.brokenLinks as
-          | { fieldName: string; reference: string; kind: string }[]
-          | undefined;
+        let brokenLinks = result.response.meta?.diagnostics?.brokenLinks;
         // Only the broken element is recorded; the present sibling slot
         // (./real-pet) produces no finding.
         assert.strictEqual(
