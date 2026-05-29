@@ -513,9 +513,7 @@ export default class OperatorModeOverlays extends Overlays {
           label.style.maxWidth = 'max-content';
         }
         let anchorTopY =
-          side === 'top'
-            ? cardRect.top - labelHeight - 2
-            : cardRect.bottom + 2;
+          side === 'top' ? cardRect.top - labelHeight - 2 : cardRect.bottom + 2;
 
         // The label's anchor positions (anchorLeftX, anchorTopY) are
         // in viewport coordinates. With `position: absolute`, the
@@ -544,8 +542,7 @@ export default class OperatorModeOverlays extends Overlays {
         if (!Number.isFinite(scaleY) || scaleY === 0) {
           scaleY = 1;
         }
-        label.style.left =
-          (anchorLeftX - parentRect.left) / scaleX + 'px';
+        label.style.left = (anchorLeftX - parentRect.left) / scaleX + 'px';
         label.style.top = (anchorTopY - parentRect.top) / scaleY + 'px';
       };
 
