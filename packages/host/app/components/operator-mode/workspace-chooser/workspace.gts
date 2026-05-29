@@ -395,6 +395,7 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
+        max-width: var(--boxel-xxs-container);
       }
       .info > span {
         text-overflow: ellipsis;
@@ -404,9 +405,14 @@ export default class Workspace extends Component<Signature> {
         text-align: center;
         letter-spacing: var(--boxel-lsp);
       }
-      .name {
+      .info > .name {
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-wrap: wrap;
+        overflow-wrap: anywhere;
       }
       .visibility {
         color: var(--boxel-400);
