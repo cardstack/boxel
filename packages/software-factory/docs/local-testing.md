@@ -204,6 +204,5 @@ If you click on Issue Board, you will see that the software factory marked all t
 
 <img width="1457" height="957" alt="image" src="https://github.com/user-attachments/assets/92fbbafa-3478-43aa-a93b-48bde4d9ea65" />
 
-
 For the full breakdown of every step the agent performs, what it
 invokes, and the expected output, see [docs/runbook.md](./runbook.md).
