@@ -12,6 +12,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type {
@@ -50,6 +51,7 @@ export interface Model {
 }
 
 export default class RenderHtmlRoute extends Route<Model> {
+  @service declare network: NetworkService;
   @service declare router: RouterService;
   @service declare realm: RealmService;
 
@@ -126,7 +128,14 @@ export default class RenderHtmlRoute extends Route<Model> {
   // receive the opt-in automatically from the publish handler.
   #isDefaultRealmCardsGridIndex(instance: CardDef, types: CodeRef[]): boolean {
     let cardRealmURL = instance[realmURL];
-    if (!cardRealmURL || !isRealmIndexCardId(instance.id, cardRealmURL)) {
+    if (
+      !cardRealmURL ||
+      !isRealmIndexCardId(
+        instance.id,
+        cardRealmURL,
+        this.network.virtualNetwork,
+      )
+    ) {
       return false;
     }
     let topType = types[0];

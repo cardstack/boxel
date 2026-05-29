@@ -88,6 +88,7 @@ import DeleteModal from './delete-modal';
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
@@ -156,6 +157,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
@@ -304,7 +306,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get isIndexCard() {
-    return isRealmIndexCardId(this.url, this.realmURL);
+    return isRealmIndexCardId(
+      this.url,
+      this.realmURL,
+      this.network.virtualNetwork,
+    );
   }
 
   // Element ref captured by submode-layout's expanded-card-header-slot.
