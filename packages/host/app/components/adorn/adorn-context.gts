@@ -1,16 +1,10 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { hash } from '@ember/helper';
-
-import AdornLabel, { type AdornLabelSignature } from './adorn-label';
-import AdornSelectChip, {
-  type AdornSelectChipSignature,
-} from './adorn-select-chip';
-
-import type { ComponentLike } from '@glint/template';
 
 // AdornContext: the entry point for the Adorn visual treatment.
-// Wraps the consumer's markup in a transparent (display:contents)
-// container that:
+// Wraps the consumer's outer container of Adorn-decorated items
+// (the operator-mode overlay row, the search-results list, the card-
+// chooser grid) in a layout-transparent (`display: contents`) div
+// that:
 //
 //   - Declares the Adorn color tokens (`--adorn-accent-light`,
 //     `--adorn-accent`) so descendant Adorn primitives pick them up
@@ -19,49 +13,45 @@ import type { ComponentLike } from '@glint/template';
 //     that carries the `.adorn-stroke` class gets the standard 2px
 //     teal hover, 4px selected, darker teal selected+hover treatment
 //     (the rules respond to both `:hover` and an explicit `.hovered`
-//     class so consumers driving hover from JS can opt in too).
-//   - Yields `{ Label, SelectChip }` — component references already
-//     curried with `@compact`, so the consumer can render them
-//     without re-passing the context's compactness.
+//     class so consumers that drive hover from JS can opt in too).
+//   - Marks the bounding region for dynamic label positioning. The
+//     `<AdornLabel>` component's overflow-tracking modifier finds
+//     the closest enclosing `.adorn-context` and uses that
+//     element's bounding rect as the boundary the label must stay
+//     inside.
+//
+// Consumers wrap a list of adornable items once and render
+// `<AdornLabel>` / `<AdornSelectChip>` directly inside each item.
 //
 // Usage:
 //
-//   <AdornContext @compact={{isCompact}} as |adorn|>
-//     <div class={{cn 'my-card adorn-stroke' selected=isSelected}}>
-//       <adorn.Label>
-//         <:text>{{cardTypeName}}</:text>
-//       </adorn.Label>
-//       <adorn.SelectChip @selected={{isSelected}} />
-//     </div>
+//   <AdornContext>
+//     {{#each cards as |card|}}
+//       <div class={{cn 'my-card adorn-stroke' selected=card.selected}}>
+//         <AdornLabel><:text>{{card.typeName}}</:text></AdornLabel>
+//         <AdornSelectChip @selected={{card.selected}} />
+//       </div>
+//     {{/each}}
 //   </AdornContext>
 interface AdornContextSignature {
-  Args: {
-    compact?: boolean;
-  };
+  Element: HTMLDivElement;
   Blocks: {
-    default: [
-      {
-        Label: ComponentLike<AdornLabelSignature>;
-        SelectChip: ComponentLike<AdornSelectChipSignature>;
-      },
-    ];
+    default: [];
   };
 }
 
 const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
-  <div class='adorn-context'>
-    {{yield
-      (hash
-        Label=(component AdornLabel compact=@compact)
-        SelectChip=(component AdornSelectChip compact=@compact)
-      )
-    }}
+  <div class='adorn-context' ...attributes>
+    {{yield}}
   </div>
   <style scoped>
     /* `display: contents` so the wrapper is not visually
        represented; the CSS variables and `:deep()` rules below still
        attach to this element and cascade / match against descendants
-       normally. */
+       normally. The element is also the boundary that
+       trackLabelOverflow reads (via `cardEl.closest('.adorn-context')`)
+       so its `getBoundingClientRect()` defines where the label may
+       extend. */
     .adorn-context {
       display: contents;
 
@@ -75,9 +65,7 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
     /* Stroke utility. The consumer applies `.adorn-stroke` to
        whichever descendant should carry the outline (typically the
        card-like element itself), then drives `.selected` and either
-       the `:hover` pseudo-class or a `.hovered` class. Using
-       `:deep()` to reach the descendant keeps the rules encapsulated
-       to AdornContext — they only fire inside its subtree. */
+       the `:hover` pseudo-class or a `.hovered` class. */
     .adorn-context :deep(.adorn-stroke:hover:not(.selected)),
     .adorn-context :deep(.adorn-stroke.hovered:not(.selected)) {
       box-shadow: 0 0 0 2px var(--adorn-accent-light);

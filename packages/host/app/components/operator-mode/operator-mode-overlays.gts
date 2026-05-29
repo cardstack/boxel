@@ -45,6 +45,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import AdornContext from '@cardstack/host/components/adorn/adorn-context';
+import AdornLabel from '@cardstack/host/components/adorn/adorn-label';
+import AdornSelectChip from '@cardstack/host/components/adorn/adorn-select-chip';
 
 import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 
@@ -68,14 +70,13 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
 
-// The label's outward growth should be bounded by the visible frame
-// of the operator-mode stack item — that's the box that defines the
-// "page" the card is rendered on, and it keeps the label out of the
-// chrome around it (sidebar, dialog title bar). Within that frame
-// the label is free to extend across sibling cards / columns when
-// the hovered card is near an edge.
+// The label's outward growth is bounded by the enclosing
+// AdornContext. The context aligns with the visible outer container
+// of adorn-decorated items (the operator-mode overlay row, a search-
+// results list, a card-chooser grid), so its bounding rect is the
+// region the label may extend into.
 function findAdornLabelBoundary(cardEl: HTMLElement): HTMLElement | null {
-  return cardEl.closest<HTMLElement>('.stack-item-content');
+  return cardEl.closest<HTMLElement>('.adorn-context');
 }
 
 // Adorn's `@compact` variant shrinks the label and selection chip
@@ -102,17 +103,17 @@ export default class OperatorModeOverlays extends Overlays {
   }
 
   <template>
-    {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
-      {{#let
-        renderedCard.cardDefOrId
-        (this.getCardId renderedCard.cardDefOrId)
-        (this.isSelected renderedCard.cardDefOrId)
-        (this.isHovered renderedCard)
-        (this.isCompact renderedCard.element)
-        as |cardDefOrId cardId isSelected isHovered isCompact|
-      }}
-        {{#if (or isSelected isHovered)}}
-          <AdornContext @compact={{isCompact}} as |adorn|>
+    <AdornContext>
+      {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
+        {{#let
+          renderedCard.cardDefOrId
+          (this.getCardId renderedCard.cardDefOrId)
+          (this.isSelected renderedCard.cardDefOrId)
+          (this.isHovered renderedCard)
+          (this.isCompact renderedCard.element)
+          as |cardDefOrId cardId isSelected isHovered isCompact|
+        }}
+          {{#if (or isSelected isHovered)}}
             <div
               class={{cn
                 'actions-overlay adorn-stroke'
@@ -133,11 +134,12 @@ export default class OperatorModeOverlays extends Overlays {
             >
               {{! Type-label tab — hover only. trackLabelOverflow
                   positions the label so it stays inside the
-                  containing card's footprint, flips below the card
-                  when there isn't room above, and truncates with an
-                  ellipsis when it can't fit sideways. }}
+                  enclosing AdornContext's bounds, flips below the
+                  card when there isn't room above, and truncates
+                  with an ellipsis when it can't fit sideways. }}
               {{#if isHovered}}
-                <adorn.Label
+                <AdornLabel
+                  @compact={{isCompact}}
                   data-test-overlay-label
                   {{this.trackLabelOverflow renderedCard.element}}
                   {{on 'mouseenter' this.cancelHoverClear}}
@@ -185,7 +187,7 @@ export default class OperatorModeOverlays extends Overlays {
                       </:content>
                     </BoxelDropdown>
                   </:dropdown>
-                </adorn.Label>
+                </AdornLabel>
               {{/if}}
 
               {{! Selection indicator — wrap the chip in a button so
@@ -200,14 +202,17 @@ export default class OperatorModeOverlays extends Overlays {
                   aria-pressed={{if isSelected 'true' 'false'}}
                   data-test-overlay-select={{removeFileExtension cardId}}
                 >
-                  <adorn.SelectChip @selected={{isSelected}} />
+                  <AdornSelectChip
+                    @selected={{isSelected}}
+                    @compact={{isCompact}}
+                  />
                 </button>
               {{/if}}
             </div>
-          </AdornContext>
-        {{/if}}
-      {{/let}}
-    {{/each}}
+          {{/if}}
+        {{/let}}
+      {{/each}}
+    </AdornContext>
     <style scoped>
       .actions-overlay {
         pointer-events: none;
