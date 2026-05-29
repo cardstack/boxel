@@ -3545,7 +3545,8 @@ function lazilyLoadLink(
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = resolveCardReference(
+          let notLoadedRef = resolveRef(
+            store,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
