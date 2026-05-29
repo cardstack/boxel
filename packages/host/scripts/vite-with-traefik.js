@@ -92,11 +92,7 @@ function refuseIfAnotherSlugLocked(currentSlug) {
 function writeEnvModeLock(slug) {
   try {
     fs.mkdirSync(path.dirname(ENV_MODE_LOCK_PATH), { recursive: true });
-    fs.writeFileSync(
-      ENV_MODE_LOCK_PATH,
-      `${process.pid} ${slug}\n`,
-      'utf-8',
-    );
+    fs.writeFileSync(ENV_MODE_LOCK_PATH, `${process.pid} ${slug}\n`, 'utf-8');
   } catch (e) {
     console.warn(
       `[environment-mode] Could not write ${ENV_MODE_LOCK_PATH}: ${e.message}`,
