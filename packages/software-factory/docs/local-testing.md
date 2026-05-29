@@ -114,8 +114,8 @@ pnpm factory:go \
 
 ```bash
 pnpm factory:go \
-  --brief-url https://localhost:4201/software-factory/Wiki/cookalong-recipe \
-  --target-realm https://localhost:4201/user/cookalong-9708/ \
+  --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm https://localhost:4201/user/sticky-note-9708/ \
   --enable-boxel-ui-discovery \
   --debug
 ```
@@ -150,8 +150,8 @@ Target realm: <TARGET_REALM_URL>
 
 ```
 Run the software factory per docs/runbook.md.
-Brief: https://localhost:4201/software-factory/Wiki/cookalong-recipe
-Target realm: https://localhost:4201/user/cookalong-d4f1-1/
+Brief: https://localhost:4201/software-factory/Wiki/sticky-note
+Target realm: https://localhost:4201/user/sticky-note-d4f1-1/
 ```
 
 > Always include "per docs/runbook.md". Without it, the agent falls
