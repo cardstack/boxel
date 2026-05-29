@@ -115,7 +115,7 @@ pnpm factory:go \
 ```bash
 pnpm factory:go \
   --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm https://localhost:4201/user/sticky-note-9708/ \
+  --target-realm https://localhost:4201/user/sticky-note/ \
   --enable-boxel-ui-discovery \
   --debug
 ```
@@ -128,7 +128,7 @@ then point both URLs at `realms-staging.stack.cards`:
 ```bash
 pnpm factory:go \
   --brief-url https://realms-staging.stack.cards/software-factory/Wiki/sticky-note \
-  --target-realm https://realms-staging.stack.cards/<your-username>/sticky-note-9708/ \
+  --target-realm https://realms-staging.stack.cards/<your-username>/sticky-note/ \
   --enable-boxel-ui-discovery \
   --debug
 ```
@@ -143,8 +143,8 @@ full log shape and the resulting target-realm artifact tree.
 target realm to browse the generated Project, Issues, card
 definitions, instances, and Spec.
 
-- Local: `https://localhost:4200/user/sticky-note-9708/`
-- Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note-9708/`
+- Local: `https://localhost:4200/user/sticky-note/`
+- Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note/`
 
 ---
 
@@ -171,7 +171,7 @@ Target realm: <TARGET_REALM_URL>
 ```
 Run the software factory per docs/runbook.md.
 Brief: https://localhost:4201/software-factory/Wiki/sticky-note
-Target realm: https://localhost:4201/user/sticky-note-d4f1-1/
+Target realm: https://localhost:4201/user/sticky-note/
 ```
 
 **Concrete example (staging):**
@@ -182,7 +182,7 @@ With a staging profile selected, point both URLs at
 ```
 Run the software factory per docs/runbook.md.
 Brief: https://realms-staging.stack.cards/software-factory/Wiki/sticky-note
-Target realm: https://realms-staging.stack.cards/<your-username>/sticky-note-d4f1-1/
+Target realm: https://realms-staging.stack.cards/<your-username>/sticky-note/
 ```
 
 > Always include "per docs/runbook.md". Without it, the agent falls
@@ -193,8 +193,8 @@ Target realm: https://realms-staging.stack.cards/<your-username>/sticky-note-d4f
 and navigate to the target realm to browse the generated Project,
 Issues, card definitions, instances, and Spec.
 
-- Local: `https://localhost:4200/user/sticky-note-d4f1-1/`
-- Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note-d4f1-1/`
+- Local: `https://localhost:4200/user/sticky-note/`
+- Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note/`
 
 This is an example of what you should be seeing when you visit the newly created realm:
 
