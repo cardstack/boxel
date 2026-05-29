@@ -13,11 +13,17 @@ class FakeSearchCache {
   constructor(keys: string[] = []) {
     this.#keys = new Set(keys);
   }
-  jobIds(): string[] {
+  // Async to match the DB-backed JobScopedSearchCache surface the listener
+  // awaits.
+  async jobIds(): Promise<string[]> {
     return [...this.#keys];
   }
-  clearJob(jobId: string): void {
+  async clearJob(jobId: string): Promise<void> {
     this.#keys.delete(jobId);
+  }
+  // Synchronous snapshot for assertions.
+  current(): string[] {
+    return [...this.#keys];
   }
 }
 
@@ -58,7 +64,7 @@ module(basename(__filename), function () {
       await listener.handleNotification();
 
       assert.deepEqual(
-        cache.jobIds().sort(),
+        cache.current().sort(),
         ['9.1'],
         'the finalized job entry is cleared; the running job entry is kept',
       );
@@ -75,7 +81,7 @@ module(basename(__filename), function () {
       await listener.handleNotification();
 
       assert.deepEqual(
-        cache.jobIds(),
+        cache.current(),
         [],
         'all reservations of the finalized job are cleared',
       );
@@ -122,7 +128,7 @@ module(basename(__filename), function () {
         'only the well-formed key contributes a job id',
       );
       assert.deepEqual(
-        cache.jobIds(),
+        cache.current(),
         ['not-a-number'],
         'the finalized entry is cleared; the malformed key is left untouched',
       );
@@ -162,7 +168,7 @@ module(basename(__filename), function () {
       await listener.handleNotification();
 
       assert.deepEqual(
-        cache.jobIds(),
+        cache.current(),
         ['5.1'],
         'a failed sweep leaves the cache intact (entries fall back to TTL)',
       );
@@ -242,7 +248,7 @@ module(basename(__filename), function () {
       await listener.handleNotification();
 
       assert.deepEqual(
-        cache.jobIds(),
+        cache.current(),
         [`${runningId}.1`],
         'resolved and rejected jobs are evicted; the unfulfilled job is kept',
       );
@@ -258,9 +264,9 @@ module(basename(__filename), function () {
       await listener.start();
       try {
         await dbAdapter.notify('jobs_finished', '');
-        await waitFor(() => (cache.jobIds().length === 0 ? true : undefined));
+        await waitFor(() => (cache.current().length === 0 ? true : undefined));
         assert.deepEqual(
-          cache.jobIds(),
+          cache.current(),
           [],
           'the finalized job entry was evicted in response to the NOTIFY',
         );
