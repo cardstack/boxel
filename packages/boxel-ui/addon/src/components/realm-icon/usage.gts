@@ -20,7 +20,7 @@ export default class RealmIconUsage extends Component {
   <template>
     <FreestyleUsage
       @name='Realm Icon'
-      @description='Visual identifier for a Boxel realm — shows the realm\'s configured icon (or a fallback) at a consistent size, used in workspace pickers, headers, and search results.'
+      @description='Visual identifier for a Boxel realm — shows its configured icon (or a fallback) at a consistent size, used in workspace pickers, headers, and search results.'
     >
       <:example>
         <RealmIcon
