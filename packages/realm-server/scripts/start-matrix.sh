@@ -12,7 +12,7 @@ pnpm assert-synapse-running
 # In environment mode, register users once per fresh Synapse data dir.
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
   SLUG=$(resolve_env_slug)
-  export PGDATABASE="${PGDATABASE:-boxel_${SLUG}}"
+  export PGDATABASE="${PGDATABASE:-boxel_$(pg_db_slug "$SLUG")}"
   export PGPORT="${PGPORT:-5435}"
 
   MARKER="./synapse-data-${SLUG}/.users-registered"

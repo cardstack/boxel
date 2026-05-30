@@ -17,6 +17,15 @@ compute_env_slug() {
   echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g' | cut -c -63 | sed 's|^-||; s|-$||'
 }
 
+# Postgres identifiers can technically contain hyphens, but only when
+# quoted — every unquoted reference (CREATE DATABASE foo-bar, psql -d
+# foo-bar, connection-string parsers that split on '-') treats them as
+# operators or delimiters. Swap hyphens for underscores so the slug is
+# safe to use unquoted as a database name.
+pg_db_slug() {
+  echo "$1" | tr '-' '_'
+}
+
 # Use `${VAR:-}` so callers running under `set -u` (e.g.
 # `mise-tasks/infra/ensure-dev-cert`) don't get killed by a bare
 # reference to an unset env var — bash's nounset terminates the

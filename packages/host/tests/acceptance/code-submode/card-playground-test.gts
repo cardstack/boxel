@@ -2204,23 +2204,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser]').exists();
       assert.dom('[data-test-error-container]').doesNotExist();
 
-      // cause error (non-existent link)
+      // cause error: flip the card's adoptsFrom to a missing module.
+      // Module → instance propagation lands the card as instance-error
+      // (broken-linksTo no longer demotes a consumer, so we use a missing
+      // adoptsFrom module to keep the "card is in error" precondition).
       await realm.write(
         'Person/delilah.json',
         JSON.stringify({
           data: {
             attributes: { cardInfo: { name: 'Lila' } },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+                module: `${testRealmURL}Person/missing-person`,
+                name: 'MissingPerson',
               },
             },
           },
@@ -2239,23 +2235,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it can render the last known good state for card with error when the not in the edit format', async function (assert) {
-      // cause error (non-existent link)
+      // cause error: missing adoptsFrom module → instance-error via the
+      // module → instance cascade. Broken-linksTo no longer demotes the
+      // consuming card to instance-error so it is no longer the lever for
+      // "make this card error" UI tests.
       await realm.write(
         'Person/delilah.json',
         JSON.stringify({
           data: {
             attributes: { cardInfo: { name: 'Lila' } },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+                module: `${testRealmURL}Person/missing-person`,
+                name: 'MissingPerson',
               },
             },
           },
@@ -2276,20 +2268,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-boxel-card-header-title]')
-        .containsText('Card Error: Link Not Found');
+        .containsText('Card Error');
       assert.dom('[data-test-card-error]').exists();
       assert
         .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
-        .hasText(`missing file ${testRealmURL}Person/missing-link.json`);
+        .hasText(`${testRealmURL}Person/missing-person not found`);
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
-        .containsText('Person/missing-link.json not found');
+        .containsText('Person/missing-person not found');
       assert.dom('[data-test-error-stack]').exists();
 
       // fix error
@@ -2337,24 +2329,21 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         );
     });
 
-    test('it renders error message for non-existent link in relationship field', async function (assert) {
-      // non-existent link in links-to field
+    test('it renders error message for a card whose adoptsFrom module is missing', async function (assert) {
+      // Make Person/chef-mike adopt from a module that does not exist —
+      // module → instance propagation lands the card as instance-error
+      // and the playground shows the operator-mode error UI. Broken-linksTo
+      // no longer demotes a consumer, so a missing adoptsFrom is now the
+      // lever for "make this card error" UI tests at this layer.
       await realm.write(
         'Person/chef-mike.json',
         JSON.stringify({
           data: {
             attributes: { title: 'Chef Mike' },
-            relationships: {
-              pet: {
-                links: {
-                  self: '../Pet/missing-pet',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+                module: `${testRealmURL}Person/missing-person`,
+                name: 'MissingPerson',
               },
             },
           },
@@ -2371,10 +2360,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-boxel-card-header-title]')
-        .containsText('Card Error: Link Not Found');
+        .containsText('Card Error');
       assert
         .dom('[data-test-error-message]')
-        .containsText(`missing file ${testRealmURL}Pet/missing-pet.json`);
+        .containsText(`${testRealmURL}Person/missing-person not found`);
     });
   });
 });

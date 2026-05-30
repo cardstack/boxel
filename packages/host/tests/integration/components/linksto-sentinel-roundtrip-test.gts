@@ -267,9 +267,13 @@ module(
         'pets.1': { links: { self: GHOST } },
       });
       broken.pets; // triggers lazy loads for both slots
+      // Per-slot index access is masked to `Card | undefined`, so observe the
+      // planted broken state through the typed `getRelationship` surface.
       await waitUntil(() => {
-        let arr = bucketEntry(broken, 'pets');
-        return Array.isArray(arr) && arr.some((e: any) => isLinkNotFound(e));
+        let states = getRelationship(broken, 'pets');
+        return (
+          Array.isArray(states) && states.some((s) => s.kind === 'not-found')
+        );
       });
 
       let notLoaded = await createPerson({

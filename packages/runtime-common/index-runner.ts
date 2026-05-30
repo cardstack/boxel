@@ -29,7 +29,7 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
@@ -849,7 +849,7 @@ export class IndexRunner {
     resourceCreatedAt,
     resource,
     renderResult,
-    timingDiagnostics,
+    diagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -859,7 +859,7 @@ export class IndexRunner {
     renderResult: NonNullable<
       Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
     >;
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -885,7 +885,7 @@ export class IndexRunner {
         auth: this.#auth,
         jobInfo: this.#jobInfo,
         precomputedRenderResult: renderResult,
-        timingDiagnostics,
+        diagnostics,
         dependencyResolver: this.#dependencyResolver,
         virtualNetwork: this.#virtualNetwork,
         updateEntry: async (entryURL, entry) =>
@@ -905,7 +905,7 @@ export class IndexRunner {
     hasModulePrerender,
     extractResult,
     renderResult,
-    timingDiagnostics,
+    diagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -920,7 +920,7 @@ export class IndexRunner {
     renderResult?: Parameters<
       typeof performFileIndexing
     >[0]['precomputedRenderResult'];
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let result = await performFileIndexing({
@@ -934,7 +934,7 @@ export class IndexRunner {
       jobInfo: this.#jobInfo,
       precomputedExtractResult: extractResult,
       precomputedRenderResult: renderResult,
-      timingDiagnostics,
+      diagnostics,
       dependencyResolver: this.#dependencyResolver,
       virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {

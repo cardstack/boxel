@@ -22,6 +22,7 @@ import {
   type SerializeOpts,
 } from './card-serialization';
 import { initSharedState } from './shared-state';
+import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
@@ -78,7 +79,7 @@ const fieldOverrides = initSharedState(
 // off-pass case in the host-UI hot loop.
 let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 // Counters snapshotted by the render/meta route to populate
-// `boxel_index.timing_diagnostics`. They are unconditional integer
+// `boxel_index.diagnostics`. They are unconditional integer
 // increments inside `getter` — cheap enough to keep on in production, but
 // only meaningful between `beginComputePass`/`endComputePass`.
 let computedCallCount = 0;
@@ -613,7 +614,12 @@ export function getRelationship<T extends CardDef = CardDef>(
         `expected ${fieldName} to be an array but was ${typeof related}`,
       );
     }
-    return related.map((entry) => relationshipStateForEntry<T>(entry));
+    // Read the raw backing array: per-slot index access hides the broken-link
+    // sentinels (surfacing them as `undefined`), but `getRelationship` is the
+    // typed surface whose whole job is to report each slot's true state.
+    return rawArrayValues(related).map((entry) =>
+      relationshipStateForEntry<T>(entry),
+    );
   }
 
   return relationshipStateForEntry<T>(related);
@@ -677,6 +683,18 @@ export function getBrokenLinks(
     if (!field || field.computeVia) {
       continue;
     }
+    // Query-backed `linksTo` / `linksToMany` fields (the `{ query }` form
+    // resolved through `_federated-search`) sit outside the
+    // broken-link / declared-`linksTo` scan: their failure surface is
+    // `getRelationship`, not the indexer-side cascade. A search resource
+    // can fail for "soft" reasons that should not classify the consuming
+    // card as instance-error (cross-realm assertions, transient federated
+    // failures), and the field getter already routes them through a
+    // structured state machine. Skip them here so a planted resource-level
+    // sentinel does not flow into a render error.
+    if (field.queryDefinition) {
+      continue;
+    }
     // Only inspect fields already in the data bucket — reading an absent field
     // through the getter would initialize it (see above).
     if (!bucket.has(fieldName)) {
@@ -686,6 +704,19 @@ export function getBrokenLinks(
       let state = getRelationship(instance as CardDef, fieldName);
       for (let entry of Array.isArray(state) ? state : [state]) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
+          // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Read
+          // only fields that won't initialize bucket entries via the
+          // field getter (constructor name + the entry's own reference);
+          // reading `instance.id` here would write the `id` field's
+          // emptyValue into the bucket and violate the pure-read contract
+          // the surrounding `getBrokenLinks` upholds.
+          console.error('[CS-11221 DIAG] getBrokenLinks finding', {
+            ownerType: instance?.constructor?.name,
+            fieldName,
+            fieldType: field.fieldType,
+            kind: entry.kind,
+            reference: entry.reference,
+          });
           findings.push({
             fieldName,
             kind: entry.kind,
@@ -760,9 +791,7 @@ export function relationshipMeta(
   return toLegacyRelationshipMeta(state);
 }
 
-function toLegacyRelationshipMeta(
-  state: RelationshipState,
-): RelationshipMeta {
+function toLegacyRelationshipMeta(state: RelationshipState): RelationshipMeta {
   // Legacy callers only branched on 'loaded' vs 'not-loaded'; the new error /
   // not-found kinds did not exist when the contract was written. Map them to
   // 'not-loaded' so existing consumers see a stable shape until migration.

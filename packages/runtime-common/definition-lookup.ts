@@ -23,7 +23,7 @@ import {
   type Realm,
   type RealmPermissions,
   type ResolvedCodeRef,
-  type TimingDiagnostics,
+  type Diagnostics,
   executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
@@ -197,9 +197,9 @@ interface WriteToDatabaseCacheParams {
   authUserId: string;
   // Server-observed render timings + host-side breadcrumbs flattened from
   // the prerender response's `meta` block (same shape as
-  // `boxel_index.timing_diagnostics`). Lets operators query slow / hung
+  // `boxel_index.diagnostics`). Lets operators query slow / hung
   // module renders the same way they query slow / hung card renders.
-  timingDiagnostics?: TimingDiagnostics;
+  diagnostics?: Diagnostics;
 }
 
 export class FilterRefersToNonexistentTypeError extends Error {
@@ -1383,7 +1383,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL,
     cacheScope,
     authUserId,
-    timingDiagnostics,
+    diagnostics,
   }: WriteToDatabaseCacheParams): Promise<void> {
     await this.query([
       'INSERT INTO',
@@ -1399,7 +1399,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ['resolved_realm_url'],
           ['cache_scope'],
           ['auth_user_id'],
-          ['timing_diagnostics'],
+          ['diagnostics'],
         ]),
       ) as Expression),
       'VALUES',
@@ -1423,7 +1423,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(resolvedRealmURL)],
           [param(cacheScope)],
           [param(authUserId)],
-          [param(timingDiagnostics ? JSON.stringify(timingDiagnostics) : null)],
+          [param(diagnostics ? JSON.stringify(diagnostics) : null)],
         ]),
       ) as Expression),
       'ON CONFLICT ON CONSTRAINT modules_pkey DO UPDATE SET',
@@ -1434,7 +1434,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['error_doc = excluded.error_doc'],
         ['created_at = excluded.created_at'],
         ['resolved_realm_url = excluded.resolved_realm_url'],
-        ['timing_diagnostics = excluded.timing_diagnostics'],
+        ['diagnostics = excluded.diagnostics'],
       ]) as Expression),
     ]);
   }
@@ -1490,7 +1490,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       cacheScope,
       authUserId: cacheScope === 'public' ? '' : userId,
-      timingDiagnostics: flattenPrerenderMeta(response.meta),
+      diagnostics: flattenPrerenderMeta(response.meta),
     });
     return cacheEntry;
   }
