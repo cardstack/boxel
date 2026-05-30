@@ -48,6 +48,30 @@ import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
+// Default module pre-warm concurrency. Aligned with the prerender
+// server's per-affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`, default
+// 5): a single realm's pre-warm targets one prerender affinity, so beyond
+// this many concurrent module prerenders the requests just queue at the
+// server's per-affinity admission. Raising it past the affinity budget
+// shifts the queueing into the prerender server rather than adding real
+// parallelism.
+const DEFAULT_PREWARM_CONCURRENCY = 5;
+
+// Resolve the pre-warm fan-out width from `INDEXER_PREWARM_CONCURRENCY`,
+// falling back to the default. Reads `process.env` defensively — pre-warm
+// is skipped in the browser (see `isBrowserTestEnv`), but the bundle is
+// shared, so guard against a missing `process`.
+function prewarmConcurrency(): number {
+  let raw =
+    typeof process !== 'undefined'
+      ? process.env?.INDEXER_PREWARM_CONCURRENCY
+      : undefined;
+  let parsed = raw != null && raw !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_PREWARM_CONCURRENCY;
+}
+
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -738,30 +762,47 @@ export class IndexRunner {
       return;
     }
 
+    // Bound-parallelize the populate loop. Each populate fires a
+    // `prerenderModule` on a cache miss; DefinitionLookup owns the
+    // in-flight dedup and cross-process coalescer, so different modules
+    // run independently while same-URL callers share one prerender.
+    // Concurrency is capped at the prerender server's per-affinity tab
+    // budget (`INDEXER_PREWARM_CONCURRENCY`, default aligned with
+    // `PRERENDER_AFFINITY_TAB_MAX`): a single realm's pre-warm is one
+    // prerender affinity, so beyond that the requests just queue at the
+    // server's per-affinity admission rather than running in parallel.
+    let urls = [...toWarm];
     let failed = 0;
-    for (let moduleUrl of toWarm) {
-      try {
-        await this.#definitionLookup.populateDefinitionCacheEntry({
-          moduleURL: moduleUrl,
-          realmURL: this.realmURL.href,
-          resolvedRealmURL,
-          cacheScope,
-          cacheUserId: authUserId,
-          prerenderUserId: this.#realmOwnerUserId,
-          priority: this.#jobPriority,
-        });
-      } catch {
-        failed += 1;
+    let nextIndex = 0;
+    let concurrency = Math.max(1, Math.min(prewarmConcurrency(), urls.length));
+    let warmOne = async (): Promise<void> => {
+      // `nextIndex++` is atomic between awaits (single-threaded event
+      // loop), so each worker claims a distinct URL.
+      for (let i = nextIndex++; i < urls.length; i = nextIndex++) {
+        try {
+          await this.#definitionLookup.populateDefinitionCacheEntry({
+            moduleURL: urls[i],
+            realmURL: this.realmURL.href,
+            resolvedRealmURL,
+            cacheScope,
+            cacheUserId: authUserId,
+            prerenderUserId: this.#realmOwnerUserId,
+            priority: this.#jobPriority,
+          });
+        } catch {
+          failed += 1;
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => warmOne()));
     if (failed > 0) {
       this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${urls.length} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
       );
     }
 
     this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${urls.length} failed=${failed} concurrency=${concurrency})`,
     );
   }
 
