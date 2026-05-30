@@ -48,6 +48,11 @@ function renderActiveCard(state: RealmIndexingState): string {
     state.totalFiles > 0
       ? Math.round((state.filesCompleted / state.totalFiles) * 100)
       : 0;
+  // The job announces itself at kickoff with a total of 0 and fills it in
+  // once invalidation discovery + pre-warm have determined how much work
+  // there is. Show a "calculating" state for that window instead of a
+  // misleading 0 / 0 (0%).
+  let calculating = state.status === 'indexing' && state.totalFiles === 0;
 
   const completedSet = new Set(state.completedFiles);
   let remainingFiles = state.files.filter((f) => !completedSet.has(f));
@@ -69,12 +74,20 @@ function renderActiveCard(state: RealmIndexingState): string {
         <span class="job-meta">job #${state.jobId} &middot; started ${timeSince(state.startedAt)} &middot; ${durationMs(state.startedAt)} elapsed</span>
       </div>
       <div class="progress-bar-container">
-        <div class="progress-bar" style="width: ${pct}%"></div>
-        <span class="progress-text">${state.filesCompleted} / ${state.totalFiles} files (${pct}%)</span>
+        <div class="progress-bar${calculating ? ' calculating' : ''}" style="width: ${calculating ? 100 : pct}%"></div>
+        <span class="progress-text">${
+          calculating
+            ? 'Calculating files to index&hellip;'
+            : `${state.filesCompleted} / ${state.totalFiles} files (${pct}%)`
+        }</span>
       </div>
-      <div class="remaining-count">${remaining} file${remaining !== 1 ? 's' : ''} remaining</div>
       ${
-        remainingFiles.length > 0
+        calculating
+          ? ''
+          : `<div class="remaining-count">${remaining} file${remaining !== 1 ? 's' : ''} remaining</div>`
+      }
+      ${
+        !calculating && remainingFiles.length > 0
           ? `<details>
         <summary>${remaining} file${remaining !== 1 ? 's' : ''} left to index</summary>
         <ul class="file-list">${remainingList}</ul>
@@ -252,6 +265,13 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       height: 100%;
       border-radius: 4px;
       transition: width 0.3s ease;
+    }
+    /* "Calculating" state: full-width subdued bar that pulses while the
+       invalidation/pre-warm phase determines how much work the job has. */
+    .progress-bar.calculating {
+      background: linear-gradient(90deg, #30363d, #484f58);
+      animation: pulse 1.4s ease-in-out infinite;
+      transition: none;
     }
     .progress-text {
       position: absolute;
