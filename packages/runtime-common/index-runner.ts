@@ -48,14 +48,17 @@ import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
-// Default module pre-warm concurrency. Aligned with the prerender
-// server's per-affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`, default
-// 5): a single realm's pre-warm targets one prerender affinity, so beyond
-// this many concurrent module prerenders the requests just queue at the
-// server's per-affinity admission. Raising it past the affinity budget
-// shifts the queueing into the prerender server rather than adding real
-// parallelism.
-const DEFAULT_PREWARM_CONCURRENCY = 5;
+// Default module pre-warm concurrency. Serial by default: a cold/shared
+// prerender pool serves serial pre-warm by reusing a single warm tab,
+// whereas concurrent module prerenders force the pool to materialize one
+// tab per in-flight request — and that tab-startup cost outweighs the
+// parallelism for the fast definition-extraction renders pre-warm fires.
+// Raise `INDEXER_PREWARM_CONCURRENCY` only where the prerender pool is
+// pre-sized for the extra concurrent module renders; the ceiling that
+// matters is the per-affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`),
+// since a realm's pre-warm targets one prerender affinity and beyond that
+// the requests just queue at the server's per-affinity admission.
+const DEFAULT_PREWARM_CONCURRENCY = 1;
 
 // Resolve the pre-warm fan-out width from `INDEXER_PREWARM_CONCURRENCY`,
 // falling back to the default. Reads `process.env` defensively — pre-warm
@@ -758,15 +761,11 @@ export class IndexRunner {
       return;
     }
 
-    // Bound-parallelize the populate loop. Each populate fires a
+    // Drain the populate set with a bounded worker pool (serial by
+    // default — see DEFAULT_PREWARM_CONCURRENCY). Each populate fires a
     // `prerenderModule` on a cache miss; DefinitionLookup owns the
     // in-flight dedup and cross-process coalescer, so different modules
     // run independently while same-URL callers share one prerender.
-    // Concurrency is capped at the prerender server's per-affinity tab
-    // budget (`INDEXER_PREWARM_CONCURRENCY`, default aligned with
-    // `PRERENDER_AFFINITY_TAB_MAX`): a single realm's pre-warm is one
-    // prerender affinity, so beyond that the requests just queue at the
-    // server's per-affinity admission rather than running in parallel.
     let urls = [...toWarm];
     let failed = 0;
     let nextIndex = 0;
