@@ -266,11 +266,18 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       border-radius: 4px;
       transition: width 0.3s ease;
     }
-    /* "Calculating" state: full-width subdued bar that pulses while the
-       invalidation/pre-warm phase determines how much work the job has. */
+    /* "Calculating" state: full-width subdued striped bar shown while the
+       invalidation/pre-warm phase determines how much work the job has.
+       Intentionally static (no animation) — the dashboard reloads every
+       2s, which would restart any animation and make it flicker. */
     .progress-bar.calculating {
-      background: linear-gradient(90deg, #30363d, #484f58);
-      animation: pulse 1.4s ease-in-out infinite;
+      background: repeating-linear-gradient(
+        45deg,
+        #30363d,
+        #30363d 10px,
+        #3a414b 10px,
+        #3a414b 20px
+      );
       transition: none;
     }
     .progress-text {
