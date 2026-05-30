@@ -672,9 +672,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     priority?: number;
     skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
-    keyLog.debug(
-      `LOOKUP source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL)}`,
-    );
+    // Real cache-effectiveness signal: a MISS is logged exactly once below,
+    // only when the lookup exhausts the cache (primary + every alias/extension
+    // candidate) and commits to a prerender. Per-probe DB reads are NOT logged
+    // as misses — those alias probes inflate the count with non-real misses.
+    // HITs are logged at the DB read itself (the choke point for all callers).
+    let prerenderMissLogged = false;
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmDefinitions (and any future synchronous bump) runs entirely before
     // its first await, so a snapshot taken after an await above would already
@@ -706,6 +709,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         if (candidateCached && !this.isExpiredErrorEntry(candidateCached)) {
           return candidateCached;
         }
+      }
+      if (!prerenderMissLogged) {
+        keyLog.debug(
+          `MISS source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL)}`,
+        );
+        prerenderMissLogged = true;
       }
       let response = await this.getModuleDefinitionsViaPrerenderer(
         candidateURL,
@@ -1284,13 +1293,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       created_at: string | null;
     }[];
 
-    keyLog.debug(
-      `READ ${rows.length ? 'HIT' : 'MISS'} ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL)} alias=${moduleAlias}`,
-    );
-
+    // Only HITs are logged here — a HIT (row found) is unambiguous. A "no
+    // rows" result is just one probe (primary URL or an alias/extension
+    // candidate) and is NOT a real miss on its own; the real miss is logged
+    // once at the prerender-commit point in loadDefinitionCacheEntryUncached.
     if (!rows.length) {
       return undefined;
     }
+
+    keyLog.debug(
+      `HIT ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL)} alias=${moduleAlias}`,
+    );
 
     let row = rows[0];
     let definitions =
@@ -1467,7 +1480,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
   ): Promise<DefinitionCacheEntry> {
     keyLog.debug(
-      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, userId, resolvedRealmURL)}`,
+      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, cacheScope === 'public' ? '' : userId, resolvedRealmURL)}`,
     );
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
