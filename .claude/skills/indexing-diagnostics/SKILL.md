@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, and (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal). Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), and (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -11,8 +11,9 @@ Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on th
 - **A render that timed out during indexing** — classify the stall, fix the right layer. (Also applies to user-facing 504s since the UI path goes through the same prerender.)
 - **A reindex that was slow but succeeded** — attribute wall-clock across the cards that got re-rendered, find the real culprit in the fan-out.
 - **Which cards have broken links** — enumerate cards with a broken `linksTo` / `linksToMany` target straight from the column; those cards index cleanly, so `diagnostics.brokenLinks` is the only indexed signal. See [Mode E](#mode-e--enumerate-cards-with-broken-links).
+- **Whether module pre-warm is effective** — confirm the pre-warm phase populates the definition cache under a key the indexer / on-demand reads actually hit (not a silent no-op), using the `definition-cache-key` hit/miss log channel. This one isn't about the `diagnostics` column — it reads the logs. See [Mode F](#mode-f--module-pre-warm-and-definition-cache-hitmiss).
 
-All three read from the same column. The difference is the query you start with.
+The first three read from the same `diagnostics` column; the difference is the query you start with. Mode F is log-based.
 
 ## Where the diagnostics live
 
@@ -698,6 +699,101 @@ Caveats:
 - **Older rows predate the scan.** A row last indexed before this capability shipped has no `brokenLinks` key even if its links are broken — it'll only appear after the next reindex. Don't read "absent" as "no broken links" for stale rows; check `indexedAt` if in doubt.
 - **`boxel_index_working` carries it too**, so you can watch broken-link findings accrue mid-reindex the same way as the timing fields (see [Reading partial progress](#5-reading-partial-progress-from-boxel_index_working)).
 - This is the cheap enumeration path the rendered-HTML / `getRelationship` runtime surfaces were too expensive for — querying the column avoids parsing HTML or re-running `getBrokenLinks` per read.
+
+## Mode F — module pre-warm and definition-cache hit/miss
+
+Use this when you're asking *"is the module pre-warm actually populating the definition cache, and are the indexer / prerender reads hitting it — or silently re-computing?"* This is about **cache effectiveness**, not render timing.
+
+### What pre-warm is
+
+A from-scratch (and incremental) index runs a **pre-warm phase** before the visit phase: `IndexRunner.preWarmModulesTable` walks the realm's modules and calls `definitionLookup.populateDefinitionCacheEntry(...)`, which prerenders each module's definitions and persists them to the `modules` table. The intent is that the subsequent **visit phase** (indexing instances) and **on-demand reads** (the realm-server serving `getDefinition` to prerender tabs) then find those rows already cached instead of re-prerendering them.
+
+The original failure this guards against: a worker pre-warm that ran with a self-resolved *null* cache context wrote nothing (or wrote under a key nobody reads), so pre-warm was a silent no-op. The diagnostic below tells you definitively whether that's happening.
+
+### The cache key
+
+The `modules` table row is keyed on **`(resolved_realm_url, cache_scope, auth_user_id)`**. The two derivations that MUST agree:
+
+- **Write** (`persistDefinitionCacheEntry`): stores `auth_user_id = cacheScope === 'public' ? '' : userId`.
+- **Read** (`buildLookupContext`): looks up with `cacheUserId = isPublic ? '' : prerenderUserId`.
+
+So the key differs by realm visibility:
+
+- **Public realm** → `cache_scope='public'`, `auth_user_id=''` (empty). The realm owner / render identity is **not** part of the key.
+- **Private realm** → `cache_scope='realm-auth'`, `auth_user_id=@<owner>:<matrix-domain>`.
+
+If write and read ever derive `auth_user_id` differently for the same module, pre-warm writes a row no reader probes → permanent miss. The hit/miss log is how you catch that.
+
+### Enabling the hit/miss log channel
+
+Category: **`definition-cache-key=debug`** (and `definition-lookup=debug` for the pre-warm warnings/skips). Locally:
+
+```sh
+LOG_LEVELS='*=info,definition-cache-key=debug' mise run dev-all
+```
+
+Deployed: set `LOG_LEVELS` in the worker's SSM param and redeploy (same mechanics as [Mode C step 7](#7-cross-referencing-with-worker-logs)). It applies to subsequently-launched workers.
+
+Three events are emitted (all via the framework `logger`, so the lines carry **no `[category]` prefix** — grep the message text, not the word `definition-cache-key`):
+
+| Line | Where | Meaning |
+| --- | --- | --- |
+| `WRITE module=<u> scope=<s> user=<id\|(empty)> realm=<r>` | `persistDefinitionCacheEntry` | A definition was persisted. The `user=` shown is the **normalized stored key** (public → `(empty)`), not the render identity. |
+| `HIT module=<u> scope=<s> user=<…> realm=<r> alias=<a>` | `readFromDatabaseCache` | A DB read found the row. Always a real hit (logged at the read choke point, covers worker + realm-server). |
+| `MISS source=pre-warm\|on-demand module=<u> …` | `loadDefinitionCacheEntryUncached` | A lookup **exhausted the cache** (primary URL + every alias/extension candidate) and committed to a prerender. Logged **once per logical lookup** — not per alias probe. `source=pre-warm` is the pre-warm phase's own cold probe; `source=on-demand` is a visit-phase / live read. |
+
+> Two logging facts that will mislead you if you don't know them:
+> 1. **Category overrides only take effect because `setup-logger.ts` calls `reapplyLogLevels()`** after installing `_logDefinitions`. Module-scope `logger()` calls (like this one) are evaluated during the barrel import *before* `_logDefinitions` exists, so without the re-apply they stay stuck at loglevel's default and `definition-cache-key=debug` silently no-ops. If you add a new module-scope category and it won't emit, this is why.
+> 2. A bare `readFromDatabaseCache` returning no rows is **not** a real miss — it's one probe (the reader tries `foo`, `foo.ts`, `foo.js`, `foo.gts`, `foo.gjs`). Counting those as misses inflates the number ~5×. The `MISS source=…` line is the de-duplicated, real signal; trust it over raw DB-read counts.
+
+### The healthy shape
+
+For a cold from-scratch of a single realm, healthy looks like:
+
+- `MISS source=pre-warm` ≈ one per module being warmed. **These are expected** — they *are* the warming (probe cold → prerender → `WRITE`).
+- `MISS source=on-demand` = **0**.
+- Realm-server on-demand reads = all HIT, **0 miss**, after the pre-warm phase.
+
+i.e. **misses occur only during the pre-warm phase.** Anything else is a bug.
+
+### The unhealthy shape (what you're hunting)
+
+- **`MISS source=on-demand` > 0 for canonical modules** (the `.gts`/`.ts` form, not an alias probe), or persistent realm-server misses for a module pre-warm already `WRITE`-d → the write key ≠ the read key. Compare the `user=`/`scope=` on the `WRITE` line vs the `MISS`/read line for the same module. The usual culprit is a divergence between `persistDefinitionCacheEntry`'s `auth_user_id` normalization and `buildLookupContext`'s `cacheUserId` (e.g. one resolving the owner where the other uses empty). Public realms are the sensitive case — both paths must collapse the user to `''`.
+- **No `WRITE` lines at all during pre-warm** → pre-warm is skipping (context-resolve failure → `definition-lookup` warn line, empty user, browser-test env, or empty candidate set). Check `definition-lookup=debug`.
+
+### Verification protocol (isolated, repeatable)
+
+```sh
+# 1. Pick a CLEAN realm (0 error rows). Confirm public vs private from the cache:
+#    public realms have cache_scope='public' rows.
+SELECT regexp_replace(resolved_realm_url,'^https?://[^/]+/','') realm, cache_scope, count(*)
+FROM modules GROUP BY 1,2 ORDER BY 1,2;
+
+# 2. Force a cold pre-warm: delete the realm's module rows.
+DELETE FROM modules WHERE resolved_realm_url LIKE '%/<realm-path>/';
+
+# 3. Mark the log offset, trigger a single-realm reindex (see "Triggering a reindex"):
+OFF=$(wc -l < /tmp/stack.log)
+curl -sk -X POST "https://localhost:4201/_grafana-reindex?realm=<realm-path>" \
+  -H "Authorization: Bearer $GRAFANA_SECRET"
+
+# 4. After it settles, split HIT/MISS by process and source:
+tail -n +$((OFF+1)) /tmp/stack.log | grep -a '<realm-path>' \
+  | grep -aoE 'HIT |MISS source=pre-warm|MISS source=on-demand|WRITE ' | sort | uniq -c
+# and the realm-server's on-demand misses specifically:
+tail -n +$((OFF+1)) /tmp/stack.log | grep -a 'services:realm-server' | grep -a '<realm-path>' \
+  | grep -acE 'MISS source=on-demand'   # expect 0
+```
+
+Run it once on a **private** realm and once on a **public** realm — the public case is where a key-derivation divergence hides. Reference numbers from a healthy run (a private 234-file realm): worker `MISS source=pre-warm`=159, `MISS source=on-demand`=0, realm-server on-demand misses=0; pre-warm phase ~8.5s for 86 modules (~99 ms/module), serial.
+
+### Pre-warm concurrency
+
+Pre-warm is **serial by default** (`INDEXER_PREWARM_CONCURRENCY=1`). It's opt-in tunable — a bounded worker pool over `populateDefinitionCacheEntry`. On a cold / shared prerender pool, raising it can be *slower* (tab materialization cost vs warm-tab reuse), so measure the pre-warm-phase wall-clock (the `modules.created_at` min→max window for the realm) before and after rather than assuming parallel wins. Align the ceiling with the prerender affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`); beyond that you just queue inside the prerender server.
+
+### What Mode F can't tell you
+
+Pre-warm only populates module **definitions**. A realm whose card-authored modules fail to *evaluate* (e.g. a circular-dependency TDZ in a bundled module — `Cannot access 'X' before initialization`) will still fail the **visit phase** instance renders regardless of a clean pre-warm; those show up as `boxel_index` error rows, not cache misses. Mode F confirms the cache is keyed and populated correctly; it says nothing about whether the modules themselves render.
 
 ## Field-by-field reading
 
