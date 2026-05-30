@@ -653,44 +653,50 @@ module('Acceptance | prerender | html', function (hooks) {
     );
   });
 
-  test('prerender can handle missing link in linksTo field', async function (assert) {
+  test('prerender renders the broken-link placeholder inline for a missing linksTo target', async function (assert) {
     let url = `${testRealmURL}Cat/molly.json`;
     await visit(renderPath(url, '/html/isolated/0'));
-    let { value } = await capturePrerenderResult('innerHTML', 'error');
-    let { error }: RenderError = JSON.parse(value);
-    assert.strictEqual(error.status, 404, 'error code is correct');
-    assert.strictEqual(error.title, 'Link Not Found', 'error title is correct');
+    let { status, value } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(
-      error.message,
-      `missing file ${testRealmURL}Cat/missing-link.json`,
-      'error message is correct',
+      status,
+      'ready',
+      'a missing linksTo target no longer demotes the prerender to an error — the broken slot renders the placeholder, the entry indexes cleanly',
     );
-    assert.strictEqual(
-      error.id,
-      `${testRealmURL}Cat/missing-link.json`,
-      'error id is correct',
+    assert.ok(
+      /data-test-broken-link-template/.test(value),
+      `isolated HTML contains the broken-link placeholder, got: ${value.slice(0, 400)}`,
     );
-    assert.ok(error.stack, 'stack exists in error');
+    assert.ok(
+      /data-test-broken-link-state="not-found"/.test(value),
+      'placeholder is in the not-found state',
+    );
+    assert.ok(
+      value.includes(`${testRealmURL}Cat/missing-link`),
+      'placeholder surfaces the missing target reference inline for diagnostics',
+    );
   });
 
-  test('prerender can handle missing link in linksToMany field', async function (assert) {
+  test('prerender renders the per-element broken-link placeholder for a missing linksToMany element', async function (assert) {
     let url = `${testRealmURL}Person/jade.json`;
     await visit(renderPath(url, '/html/isolated/0'));
-    let { value } = await capturePrerenderResult('innerHTML', 'error');
-    let { error }: RenderError = JSON.parse(value);
-    assert.strictEqual(error.status, 404, 'error code is correct');
-    assert.strictEqual(error.title, 'Link Not Found', 'error title is correct');
+    let { status, value } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(
-      error.message,
-      `missing file ${testRealmURL}Pet/missing-link.json`,
-      'error message is correct',
+      status,
+      'ready',
+      'a missing linksToMany element no longer demotes the prerender to an error — the broken slot renders the placeholder, the entry indexes cleanly',
     );
-    assert.strictEqual(
-      error.id,
-      `${testRealmURL}Pet/missing-link.json`,
-      'error id is correct',
+    assert.ok(
+      /data-test-broken-link-template/.test(value),
+      `isolated HTML contains the broken-link placeholder, got: ${value.slice(0, 400)}`,
     );
-    assert.ok(error.stack, 'stack exists in error');
+    assert.ok(
+      /data-test-broken-link-state="not-found"/.test(value),
+      'placeholder is in the not-found state',
+    );
+    assert.ok(
+      value.includes(`${testRealmURL}Pet/missing-link`),
+      'placeholder surfaces the missing element reference inline for diagnostics',
+    );
   });
 
   test('can prerender instance with a cycle in a linksTo field', async function (assert) {
