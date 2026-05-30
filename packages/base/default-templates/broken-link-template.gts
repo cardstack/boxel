@@ -1,5 +1,9 @@
 import GlimmerComponent from '@glimmer/component';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { guidFor } from '@ember/object/internals';
+import { htmlSafe } from '@ember/template';
+import LinkOffIcon from '@cardstack/boxel-icons/link-off';
+import InfoCircleIcon from '@cardstack/boxel-icons/info-circle';
+import { cardTypeName } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common';
 
 export type BrokenLinkState = 'error' | 'not-found';
@@ -39,6 +43,13 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
   Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
 }> {
+  // The placeholder box is identical for every failure — what went wrong only
+  // surfaces inside the reveal overlay. `typeName` is the human-readable label
+  // shown next to the link-off icon, derived from the reference URL.
+  private get typeName(): string {
+    return cardTypeName(this.args.brokenUrl);
+  }
+
   private get isNotFound() {
     return this.args.state === 'not-found';
   }
@@ -72,12 +83,28 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return this.args.errorDoc?.stack ?? '';
   }
 
-  private get isErrorState(): boolean {
-    return this.args.state === 'error';
+  // not-found's message is always "Could not find <url>", which the overlay
+  // already renders as the URL line — only show the prose message when it
+  // carries a distinct error reason.
+  private get showMessage(): boolean {
+    return !this.isNotFound && this.errorMessage.length > 0;
   }
 
   private get urlIsSafe(): boolean {
     return isSafeHttpUrl(this.args.brokenUrl);
+  }
+
+  // The toggle checkbox and the trigger/close labels are wired by id, and the
+  // beak anchors to the trigger by dashed-ident — all must be unique per
+  // instance so multiple broken links on a page don't cross-trigger.
+  private toggleId = `broken-link-reveal-${guidFor(this)}`;
+  private anchorName = `--${this.toggleId}`;
+  private get triggerStyle() {
+    return htmlSafe(`anchor-name: ${this.anchorName}`);
+  }
+  private get overlayStyle() {
+    // `position-anchor` glues the overlay to the trigger.
+    return htmlSafe(`position-anchor: ${this.anchorName}`);
   }
 
   private get additionalErrors(): NormalizedAdditionalError[] {
@@ -111,183 +138,338 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
 
   <template>
     <div
-      class='broken-link-template {{@format}} {{@state}}'
+      class='broken-link-template {{@format}}'
       data-test-broken-link-template={{@format}}
       data-test-broken-link-state={{@state}}
       ...attributes
     >
-      {{#if (eq @format 'atom')}}
-        <span class='atom-line'>
-          <span class='atom-marker' aria-hidden='true'>!</span>
-          <span class='atom-label'>
-            {{if this.isNotFound 'Not found' 'Error'}}:
-          </span>
-          <span class='atom-url' data-test-broken-link-url>{{@brokenUrl}}</span>
+      {{! Pure-CSS disclosure: the checkbox holds open/closed state; the trigger
+          and close affordances are <label>s pointing at it. No JS, and — unlike
+          a popover — the overlay stays a normal in-flow descendant, so the
+          card's own overflow keeps it inside the card boundary. }}
+      <input
+        id={{this.toggleId}}
+        type='checkbox'
+        class='reveal-toggle'
+        data-test-broken-link-toggle
+      />
+
+      {{! The box is intentionally identical across states — a faint diagonal
+          cross with a centered link-off + type-name chip. The reason the link
+          is broken lives only in the reveal overlay. }}
+      <div class='box'>
+        <span class='label'>
+          <LinkOffIcon width='14' height='14' />
+          <span
+            class='type-name'
+            data-test-broken-link-type
+          >{{this.typeName}}</span>
         </span>
-      {{else}}
-        <div class='headline-row'>
-          <span class='marker' aria-hidden='true'>!</span>
-          <span class='headline' data-test-broken-link-headline>
+        <label
+          for={{this.toggleId}}
+          class='reveal-trigger'
+          style={{this.triggerStyle}}
+          aria-label='Show broken link details'
+          data-test-broken-link-reveal
+        >
+          <InfoCircleIcon width='16' height='16' />
+        </label>
+      </div>
+
+      {{! Detail stays DOM-resident (display:none, still in the DOM) so a reader
+          or AI consumer can always recover the failure; it becomes visible only
+          when the toggle is checked. }}
+      <div class='overlay' style={{this.overlayStyle}} data-test-broken-link-overlay>
+        {{! Header stays out of the scroller so the close affordance is always
+            reachable while the detail below scrolls. }}
+        <div class='overlay-header'>
+          <span class='overlay-title' data-test-broken-link-headline>
             {{this.headline}}
           </span>
+          <label
+            for={{this.toggleId}}
+            class='overlay-close'
+            aria-label='Close'
+            data-test-broken-link-overlay-close
+          >×</label>
         </div>
-        {{#if this.urlIsSafe}}
-          <a
-            class='url'
-            href={{@brokenUrl}}
-            target='_blank'
-            rel='noopener noreferrer'
-            data-test-broken-link-url
-          >
-            {{@brokenUrl}}
-          </a>
-        {{else}}
-          {{! Unsafe protocol — render as text so a click cannot execute. }}
-          <span class='url' data-test-broken-link-url>{{@brokenUrl}}</span>
-        {{/if}}
-        {{#if this.statusLabel}}
-          <div class='status' data-test-broken-link-status>
-            {{this.statusLabel}}
-          </div>
-        {{/if}}
-        {{#unless (eq @format 'fitted')}}
-          {{! For not-found, message is always "Could not find <url>" — the
-              URL is already rendered prominently above, so suppress it.
-              Show the message only when state == 'error', where it carries
-              the actual error reason. }}
-          {{#if this.isErrorState}}
-            {{#if this.errorMessage}}
-              <div class='message' data-test-broken-link-message>
-                {{this.errorMessage}}
-              </div>
-            {{/if}}
+        <div class='overlay-panel'>
+          {{#if this.statusLabel}}
+            <div class='overlay-status' data-test-broken-link-status>
+              {{this.statusLabel}}
+            </div>
           {{/if}}
-        {{/unless}}
-        {{#if (eq @format 'isolated')}}
+
+          {{#if this.urlIsSafe}}
+            <a
+              class='overlay-url'
+              href={{@brokenUrl}}
+              target='_blank'
+              rel='noopener noreferrer'
+              data-test-broken-link-url
+            >{{@brokenUrl}}</a>
+          {{else}}
+            {{! Unsafe protocol — render as text so a click cannot execute. }}
+            <span
+              class='overlay-url'
+              data-test-broken-link-url
+            >{{@brokenUrl}}</span>
+          {{/if}}
+
+          {{#if this.showMessage}}
+            <div class='overlay-message' data-test-broken-link-message>
+              {{this.errorMessage}}
+            </div>
+          {{/if}}
+
           {{#if this.errorStack}}
             <pre
-              class='stack'
+              class='overlay-stack'
               data-test-broken-link-stack
             >{{this.errorStack}}</pre>
           {{/if}}
+
           {{#let this.additionalErrors as |additionalErrors|}}
             {{#if additionalErrors.length}}
-              <details class='additional-errors'>
-                <summary data-test-broken-link-additional-errors-toggle>
-                  {{additionalErrors.length}}
-                  additional error{{if (eq additionalErrors.length 1) '' 's'}}
-                </summary>
-                <ul>
-                  {{#each additionalErrors as |err i|}}
-                    <li data-test-broken-link-additional-error={{i}}>
-                      {{#if err.status}}
-                        <span class='additional-status'>{{err.status}}</span>
-                      {{/if}}
-                      <span class='additional-message'>{{err.message}}</span>
-                      {{#if err.stack}}
-                        <pre class='additional-stack'>{{err.stack}}</pre>
-                      {{/if}}
-                    </li>
-                  {{/each}}
-                </ul>
-              </details>
+              <ul class='overlay-additional'>
+                {{#each additionalErrors as |err i|}}
+                  <li data-test-broken-link-additional-error={{i}}>
+                    {{#if err.status}}
+                      <span class='additional-status'>{{err.status}}</span>
+                    {{/if}}
+                    <span class='additional-message'>{{err.message}}</span>
+                    {{#if err.stack}}
+                      <pre class='additional-stack'>{{err.stack}}</pre>
+                    {{/if}}
+                  </li>
+                {{/each}}
+              </ul>
             {{/if}}
           {{/let}}
-        {{/if}}
-      {{/if}}
+        </div>
+      </div>
     </div>
+
     <style scoped>
+      /* The placeholder fills its host slot but does NOT clip — the cross is
+         clipped by the inner `.box`, leaving the root free so the overlay can
+         extend out of the small placeholder footprint and be bounded only by
+         the surrounding card (whose own overflow keeps it inside the card). */
       .broken-link-template {
         box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-100);
-        border: 1px dashed var(--boxel-300);
-        border-radius: var(--boxel-form-control-border-radius);
-        color: var(--boxel-dark);
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        overflow: hidden;
+        position: static;
       }
-      .broken-link-template.error {
-        background-color: var(--boxel-error-100, #fdecec);
-        border-color: var(--boxel-error-200, #f5c2c0);
-      }
-
-      /* Per-format sizing — mirrors field-component.gts:450-481 so the
-         placeholder occupies the same footprint as the card it stands in for. */
       .broken-link-template.fitted {
         width: 100%;
         height: 100%;
         min-height: 40px;
         max-height: 600px;
-        container-type: size;
-        gap: 2px;
-        padding: var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-xs);
       }
       .broken-link-template.embedded {
-        container-type: inline-size;
         width: 100%;
-        padding: var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-xs);
-        gap: 2px;
-      }
-      .broken-link-template.embedded .message {
-        /* Clamp long error messages so the placeholder fits even when the
-           parent embedded slot is height-constrained (e.g. a 110px tall row
-           inside a tight flex container). The full message remains in the
-           DOM for screen readers / AI consumers. */
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        line-clamp: 2;
-        overflow: hidden;
+        min-height: 9.375rem;
       }
       .broken-link-template.isolated {
         width: 100%;
         height: 100%;
-        padding: var(--boxel-sp);
-        font: 500 var(--boxel-font);
+        min-height: 18.75rem;
       }
       .broken-link-template.atom {
         display: inline-flex;
-        align-items: center;
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-xs);
-        gap: 0;
+        vertical-align: middle;
       }
 
-      .headline-row {
+      /* ── The box ──────────────────────────────────────────────────────────
+         Mirrors the markdown broken-card treatment (markdown.gts
+         .markdown-bfm-broken*): two crossed linear-gradient strokes forming a
+         faint diagonal X, with a centered link-off + type-name chip whose fill
+         matches the box so the cross does not slice through the label. */
+      .box {
+        position: relative;
+        box-sizing: border-box;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-5xs);
-        min-width: 0;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: inherit;
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light-100);
+        background-image: linear-gradient(
+            to top right,
+            transparent calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          ),
+          linear-gradient(
+            to bottom right,
+            transparent calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          );
+        overflow: hidden;
       }
-      .marker {
+      .broken-link-template.atom .box {
+        min-height: 1.6em;
+        padding: 0 var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
+        background-color: var(--boxel-light-100);
+        color: var(--boxel-500);
+        font: 500 var(--boxel-font-xs);
+        line-height: 1.5;
+        white-space: nowrap;
+      }
+      .label svg {
+        flex: none;
+      }
+      .type-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .broken-link-template.atom .type-name {
+        max-width: 12ch;
+      }
+
+      /* ── Reveal trigger ───────────────────────────────────────────────────
+         An "i" affordance pinned to the top-right of the box (right-of-label
+         for the inline atom). Sits on its own fill chip so the cross does not
+         cut through it. */
+      .reveal-toggle {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        border: 0;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .reveal-trigger {
+        position: absolute;
+        top: var(--boxel-sp-5xs);
+        right: var(--boxel-sp-5xs);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        flex: 0 0 auto;
-        width: 1.1em;
-        height: 1.1em;
+        padding: 2px;
         border-radius: 50%;
-        background-color: var(--boxel-error-300, #d9534f);
-        color: var(--boxel-light, #fff);
-        font-size: 0.75em;
-        font-weight: 700;
-        line-height: 1;
+        background-color: var(--boxel-light-100);
+        color: var(--boxel-400);
+        cursor: pointer;
       }
-      .headline {
-        font-weight: 600;
-        white-space: nowrap;
+      .reveal-trigger:hover,
+      .reveal-toggle:focus-visible + .box .reveal-trigger {
+        color: var(--boxel-highlight);
+      }
+      .reveal-toggle:checked + .box .reveal-trigger {
+        color: var(--boxel-highlight);
+      }
+      .broken-link-template.atom .reveal-trigger {
+        position: static;
+        padding: 0;
+      }
+
+      /* ── Reveal overlay ───────────────────────────────────────────────────
+         A normal absolutely-positioned element (NOT a top-layer popover) so the
+         surrounding card's overflow keeps it inside the card. Anchored to the
+         trigger and flipped only on the block axis — it stays below the trigger
+         and slides horizontally to fit, or flips above when there's no room
+         below. The rounded frame + clip live here (the outer box) while the
+         inner panel scrolls, so the scrollbar can't square off the corners. */
+      .overlay {
+        display: none;
+        /* Absolutely positioned (NOT a top-layer popover) so the overlay is a
+           normal descendant: the card slot is its containing block and the
+           card's own overflow clips it, keeping it inside the card boundary
+           rather than spilling out over the page. */
+        position: absolute;
+        width: max-content;
+        max-width: min(20rem, 80cqw);
+        max-height: min(18rem, 80cqh);
+        position-area: bottom;
+        justify-self: anchor-center;
+        position-try-fallbacks: bottom span-left, bottom span-right, top,
+          top span-left, top span-right;
+        /* Block margin = the gap to the trigger; inline margin = the gap kept
+           from the card's left/right edge (position-try holds the margin box
+           inside the card, so the overlay never sits flush against the edge). */
+        margin: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
+        /* Clip the scrolling panel to the rounded frame. */
         overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
+        color: var(--boxel-dark);
+        font: 500 var(--boxel-font-sm);
+        /* Column layout: a fixed header + a scrolling detail panel. */
+        flex-direction: column;
+        /* Sit above every placeholder box in the card — the boxes are
+           positioned (for the trigger), so without this an overlay would paint
+           behind any later placeholder it overlaps. */
+        z-index: 5;
       }
-      .url {
+      .reveal-toggle:checked ~ .overlay {
+        display: flex;
+      }
+      .overlay-header {
+        flex: none;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) 0;
+      }
+      .overlay-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs) var(--boxel-sp-xs);
+      }
+      .overlay-title {
+        font-weight: 600;
+      }
+      .overlay-close {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin: -2px -2px 0 0;
+        border-radius: 50%;
+        color: var(--boxel-400);
+        font-size: 1.1rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .overlay-close:hover {
+        background-color: var(--boxel-100);
+        color: var(--boxel-dark);
+      }
+      .overlay-status {
+        margin-top: var(--boxel-sp-5xs);
+        color: var(--boxel-450, #6f6f6f);
+        font-size: 0.8em;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .overlay-url {
+        display: block;
+        margin-top: var(--boxel-sp-5xs);
         font-family: var(--boxel-monospace-font-family, monospace);
         font-size: 0.85em;
         word-break: break-all;
@@ -296,52 +478,42 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         text-decoration-style: dotted;
         text-decoration-color: var(--boxel-450, #6f6f6f);
       }
-      .status {
-        color: var(--boxel-450, #6f6f6f);
-        font-size: 0.8em;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .message {
+      .overlay-message {
+        margin-top: var(--boxel-sp-xs);
         font-weight: 400;
         white-space: pre-wrap;
         word-break: break-word;
         font-size: 0.9em;
       }
-      .stack {
+      .overlay-stack {
         font-family: var(--boxel-monospace-font-family, monospace);
         font-size: 0.75em;
         white-space: pre-wrap;
         word-break: break-word;
-        margin: 0;
+        margin: var(--boxel-sp-xs) 0 0;
         padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-200);
+        background-color: var(--boxel-100);
         border-radius: var(--boxel-form-control-border-radius);
-        max-height: 240px;
-        overflow: auto;
       }
-      .additional-errors {
-        font-size: 0.85em;
-      }
-      .additional-errors summary {
-        cursor: pointer;
-        color: var(--boxel-450, #6f6f6f);
-      }
-      .additional-errors ul {
+      .overlay-additional {
         list-style: none;
         padding: 0;
-        margin: var(--boxel-sp-5xs) 0 0;
+        margin: var(--boxel-sp-xs) 0 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
+        font-size: 0.85em;
       }
       .additional-status {
         display: inline-block;
         padding: 0 var(--boxel-sp-5xs);
         margin-right: var(--boxel-sp-5xs);
-        background-color: var(--boxel-200);
+        background-color: var(--boxel-100);
         border-radius: var(--boxel-form-control-border-radius);
         font-weight: 600;
+      }
+      .additional-message {
+        word-break: break-word;
       }
       .additional-stack {
         font-family: var(--boxel-monospace-font-family, monospace);
@@ -349,61 +521,6 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         white-space: pre-wrap;
         word-break: break-word;
         margin: 2px 0 0;
-      }
-
-      .atom-line {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-5xs);
-        min-width: 0;
-      }
-      .atom-marker {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex: 0 0 auto;
-        width: 0.95em;
-        height: 0.95em;
-        border-radius: 50%;
-        background-color: var(--boxel-error-300, #d9534f);
-        color: var(--boxel-light, #fff);
-        font-size: 0.7em;
-        font-weight: 700;
-        line-height: 1;
-      }
-      .atom-label {
-        flex: 0 0 auto;
-        font-weight: 600;
-        font-size: 0.9em;
-        white-space: nowrap;
-      }
-      .atom-url {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        font-size: 0.9em;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
-      }
-
-      /* Container queries: when the host slot is small (e.g. a 65px
-         linksToMany row, a small fitted badge) we squeeze the layout
-         further so the URL stays the dominant signal. */
-      @container (max-height: 65px) {
-        .headline-row .headline {
-          font-size: 0.85em;
-        }
-        .url {
-          font-size: 0.8em;
-        }
-        .status {
-          display: none;
-        }
-      }
-      @container (max-width: 200px) {
-        .headline {
-          display: none;
-        }
       }
     </style>
   </template>
