@@ -276,19 +276,30 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       border-radius: 4px;
       transition: width 0.3s ease;
     }
-    /* "Calculating" state: full-width subdued striped bar shown while the
-       invalidation/pre-warm phase determines how much work the job has.
-       Intentionally static (no animation) — the dashboard reloads every
-       2s, which would restart any animation and make it flicker. */
+    /* "Calculating" state: full-width subdued bar with moving diagonal
+       stripes, shown while the invalidation/pre-warm phase determines how
+       much work the job has. The animation runs continuously across
+       refreshes because morphdom patches the bar in place (it isn't
+       recreated), so the stripes don't restart or flicker. */
     .progress-bar.calculating {
-      background: repeating-linear-gradient(
+      background-color: #30363d;
+      background-image: linear-gradient(
         45deg,
-        #30363d,
-        #30363d 10px,
-        #3a414b 10px,
-        #3a414b 20px
+        rgba(255, 255, 255, 0.08) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.08) 50%,
+        rgba(255, 255, 255, 0.08) 75%,
+        transparent 75%,
+        transparent
       );
+      background-size: 40px 40px;
+      animation: calc-stripes 1s linear infinite;
       transition: none;
+    }
+    @keyframes calc-stripes {
+      from { background-position: 40px 0; }
+      to { background-position: 0 0; }
     }
     .progress-text {
       position: absolute;
