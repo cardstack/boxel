@@ -196,6 +196,7 @@ const ALL_TEST_FILES: string[] = [
   './page-pool-priority-test',
   './page-pool-eviction-recovery-test',
   './page-pool-standby-refill-test',
+  './page-pool-cert-verifier-retry-test',
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
