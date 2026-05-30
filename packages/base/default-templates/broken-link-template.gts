@@ -397,8 +397,13 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
            rather than spilling out over the page. */
         position: absolute;
         width: max-content;
-        max-width: min(20rem, 80cqw);
-        max-height: min(18rem, 80cqh);
+        /* Cap relative to the containing block (the card slot), never the
+           viewport — the placeholder isn't inside a query container, so
+           container units would fall back to the viewport and could outgrow a
+           small card. The card's own overflow is the hard bound; the panel
+           scrolls past the height cap. */
+        max-width: min(20rem, 100%);
+        max-height: 18rem;
         position-area: bottom;
         justify-self: anchor-center;
         position-try-fallbacks: bottom span-left, bottom span-right, top,
