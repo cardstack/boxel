@@ -11,6 +11,22 @@ import {
   type Querier,
 } from './expression';
 import { clampSerializedError, type SerializedError } from './error';
+import { logger } from './log';
+
+// Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
+// mismatches: every cache read logs its exact key + HIT/MISS, every write
+// logs its key, and each definition load is tagged pre-warm vs on-demand.
+// Off unless `LOG_LEVELS` enables it, e.g. `*=info,definition-cache-key=debug`.
+const log = logger('definition-lookup');
+const keyLog = logger('definition-cache-key');
+function fmtKey(
+  moduleUrl: string,
+  cacheScope: string,
+  authUserId: string,
+  resolvedRealmURL: string,
+): string {
+  return `module=${moduleUrl} scope=${cacheScope} user=${authUserId || '(empty)'} realm=${resolvedRealmURL}`;
+}
 import {
   fetchUserPermissions,
   flattenPrerenderMeta,
@@ -656,6 +672,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     priority?: number;
     skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
+    keyLog.debug(
+      `LOOKUP source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL)}`,
+    );
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmDefinitions (and any future synchronous bump) runs entirely before
     // its first await, so a snapshot taken after an await above would already
@@ -1063,7 +1082,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     } catch (err: unknown) {
       // Local state is already consistent; cross-instance staleness is
       // bounded and self-healing. Don't fail the invalidation.
-      console.warn(
+      log.warn(
         `pg_notify ${MODULE_CACHE_INVALIDATED_CHANNEL} failed for "${payload}": ${String(err)}`,
       );
     }
@@ -1208,10 +1227,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       };
     } catch (err) {
-      console.warn(
-        `Failed to probe remote realm visibility for ${moduleURL}`,
-        err,
-      );
+      log.warn(`Failed to probe remote realm visibility for ${moduleURL}`, err);
       return null;
     }
   }
@@ -1267,6 +1283,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolved_realm_url: string | null;
       created_at: string | null;
     }[];
+
+    keyLog.debug(
+      `READ ${rows.length ? 'HIT' : 'MISS'} ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL)} alias=${moduleAlias}`,
+    );
 
     if (!rows.length) {
       return undefined;
@@ -1446,6 +1466,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope,
     userId: string,
   ): Promise<DefinitionCacheEntry> {
+    keyLog.debug(
+      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, userId, resolvedRealmURL)}`,
+    );
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
       response.deps ?? [],
