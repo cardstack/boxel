@@ -18,6 +18,7 @@ import {
 } from './card-api';
 import BrokenLinkTemplate from './default-templates/broken-link-template';
 import { getRelationship, type RelationshipState } from './field-support';
+import { rawArrayValues } from './watched-array';
 import {
   BoxComponentSignature,
   DefaultFormatsConsumer,
@@ -120,10 +121,16 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         fileType ? { fileType, fileTypeName } : undefined,
       );
       if (file) {
-        let selectedCards =
-          (this.args.model.value as any)[this.args.field.name] ?? [];
-        selectedCards = [...selectedCards, file];
-        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+        // Rebuild from the raw backing array so any broken sibling slot keeps
+        // its sentinel instead of collapsing to `undefined` (per-slot reads are
+        // masked). The new file is appended after the existing entries.
+        let existing = rawArrayValues(
+          (this.args.model.value as any)[this.args.field.name] ?? [],
+        );
+        (this.args.model.value as any)[this.args.field.name] = [
+          ...existing,
+          file,
+        ];
       }
       return;
     }
@@ -162,16 +169,31 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         isCardInstance(card),
       ) as CardDef[];
       if (newCards.length > 0) {
-        selectedCards = [...selectedCards, ...newCards];
-        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+        // `selectedCards` above is the masked read used only to build the
+        // already-selected query filter. Rebuild the field from the raw backing
+        // array so broken sibling slots keep their sentinels rather than
+        // collapsing to `undefined` on append.
+        let existing = rawArrayValues(
+          (this.args.model.value as any)[this.args.field.name] ?? [],
+        );
+        (this.args.model.value as any)[this.args.field.name] = [
+          ...existing,
+          ...newCards,
+        ];
       }
     }
   });
 
   remove = (index: number) => {
-    let cards = (this.args.model.value as any)[this.args.field.name];
-    cards = cards.filter((_c: CardDef, i: number) => i !== index);
-    (this.args.model.value as any)[this.args.field.name] = cards;
+    // Drop the slot by position on the raw backing array so the other slots —
+    // including any broken sentinels — are preserved verbatim. Filtering the
+    // masked field value would turn every other broken slot into `undefined`.
+    let raw = rawArrayValues<CardDef>(
+      (this.args.model.value as any)[this.args.field.name] ?? [],
+    );
+    (this.args.model.value as any)[this.args.field.name] = raw.filter(
+      (_c, i) => i !== index,
+    );
   };
 }
 
@@ -211,11 +233,18 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     // still keys on the stable index `key`, so adding this never changes block
     // identity and an input elsewhere in the edit form keeps focus.
     let broken = brokenSlotsFor(this.args.model, this.args.field.name);
+    // `raw` is the per-slot backing value handed to ember-sortable as its item
+    // model. A broken slot's masked value is `undefined` (non-unique and lossy
+    // across a reorder), so we pass the raw entry — the card for a present slot,
+    // the sentinel object for a broken one — as an opaque, stable token. This is
+    // never inspected here; it only keeps reorder from dropping broken slots.
+    let raw = rawArrayValues(this.args.arrayField.value ?? []);
     return this.args.arrayField.children.map((child, index) => ({
       box: child,
       index,
       key: index,
       broken: broken[index],
+      raw: raw[index],
     }));
   }
 
@@ -239,10 +268,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
             <li
               class='editor {{if permissions.canWrite "can-write" "read-only"}}'
               data-test-item={{entry.index}}
-              {{sortableItem
-                groupName=this.sortableGroupId
-                model=entry.box.value
-              }}
+              {{sortableItem groupName=this.sortableGroupId model=entry.raw}}
             >
               {{#if permissions.canWrite}}
                 <IconButton

@@ -145,6 +145,7 @@
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },
   "dependencies": {
+    "morphdom": "^2.7.8",
     "puppeteer": "^24.8.2"
   }
 }

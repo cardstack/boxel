@@ -1657,7 +1657,11 @@ module('Integration | serialization', function (hooks) {
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
-    assert.strictEqual(card.pet, null, 'relationship is null');
+    assert.strictEqual(
+      card.pet,
+      undefined,
+      'an explicitly-null linksTo surfaces as undefined to userland',
+    );
   });
 
   test('can deserialize coexisting linksTo, contains, and containsMany fields in a card', async function (assert) {
@@ -3534,8 +3538,15 @@ module('Integration | serialization', function (hooks) {
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Burcu');
-      assert.strictEqual(card.friendPet, null, 'relationship is null');
+      assert.strictEqual(
+        card.friendPet,
+        undefined,
+        'an explicitly-null computed linksTo surfaces as undefined to userland',
+      );
 
+      // relationshipMeta is the deprecated back-compat wrapper; it preserves
+      // the original `{ type: 'loaded', card: null }` shape that pre-dated the
+      // unified userland surface so existing callers keep working.
       let relationship = relationshipMeta(card, 'friendPet');
       assert.deepEqual(relationship, { type: 'loaded', card: null });
     });

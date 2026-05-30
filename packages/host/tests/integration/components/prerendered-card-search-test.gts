@@ -595,6 +595,12 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   });
 
   test(`can include last known good state for instances in error state`, async function (assert) {
+    // Flip card-1 to adopt from a missing module so it lands as
+    // instance-error on re-index via module → instance propagation.
+    // Broken-linksTo no longer demotes the consuming card, so a missing
+    // adoptsFrom module is the new lever for "put a card in error state"
+    // here; the prior clean indexing pass leaves the last-known-good HTML
+    // available for the assertions below.
     await testRealm.write(
       'card-1.json',
       JSON.stringify({
@@ -609,17 +615,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
             },
             views: 0,
           },
-          relationships: {
-            publisher: {
-              links: {
-                self: './missing-instance',
-              },
-            },
-          },
           meta: {
             adoptsFrom: {
-              module: testRRI('book'),
-              name: 'Book',
+              module: testRRI('missing-book'),
+              name: 'MissingBook',
             },
           },
         },

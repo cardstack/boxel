@@ -296,12 +296,31 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
+    // Throws during indexing when `status === 'boom'` so a seeded
+    // fixture lands directly as instance-error with no last-known-good
+    // HTML. cardTitle sits on the search-doc traversal, so the throw
+    // fires whether the indexer is rendering or building the search doc.
+    class ExplodingPerson extends CardDef {
+      static displayName = 'Exploding Person';
+      @field firstName = contains(StringField);
+      @field status = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: ExplodingPerson) {
+          if (this.status === 'boom') {
+            throw new Error('Boom!');
+          }
+          return this.firstName;
+        },
+      });
+    }
+
     ({ realm: testRealm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
         'boom-person.gts': { BoomPerson },
+        'exploding-person.gts': { ExplodingPerson },
         'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
         'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
         'person.gts': { Person },
@@ -383,21 +402,18 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         },
         'Person/error.json': {
+          // Lands as instance-error from the seed indexing pass — the
+          // cardTitle compute throws on `status: 'boom'`, and there is
+          // no prior clean render so the row has no last-known-good HTML.
           data: {
             attributes: {
               firstName: 'Error',
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
+              status: 'boom',
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('person'),
-                name: 'Person',
+                module: testRRI('exploding-person'),
+                name: 'ExplodingPerson',
               },
             },
           },
@@ -549,21 +565,23 @@ module('Acceptance | operator mode tests', function (hooks) {
     'card with an error that has a last known good state',
     function (hooks) {
       hooks.beforeEach(async function () {
+        // Flip Person/fadhlan to ExplodingPerson with `status: 'boom'` so
+        // the cardTitle compute throws on re-index. The card's
+        // last-known-good HTML — captured by the prior clean indexing
+        // pass — survives the flip and is what the tests below assert
+        // against.
         await testRealm.write(
           'Person/fadhlan.json',
           JSON.stringify({
             data: {
-              relationships: {
-                pet: {
-                  links: {
-                    self: './missing-link',
-                  },
-                },
+              attributes: {
+                firstName: 'Fadhlan',
+                status: 'boom',
               },
               meta: {
                 adoptsFrom: {
-                  module: testRRI('person'),
-                  name: 'Person',
+                  module: testRRI('exploding-person'),
+                  name: 'ExplodingPerson',
                 },
               },
             },
@@ -596,7 +614,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
 
         assert.dom(`[data-test-card-error]`).exists();
-        assert.dom(`[data-test-error-message]`).includesText('missing file');
+        assert.dom(`[data-test-error-message]`).includesText('Boom!');
       });
 
       test('can delete a card', async function (assert) {
@@ -656,13 +674,9 @@ module('Acceptance | operator mode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
       )
       .exists('the error state of the card is displayed');
-    assert
-      .dom('[data-test-error-message]')
-      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+    assert.dom('[data-test-error-message]').includesText('Boom!');
     await click('[data-test-toggle-details]');
-    assert
-      .dom('[data-test-error-details]')
-      .includesText(`Person/missing-link.json not found`);
+    assert.dom('[data-test-error-details]').includesText('Boom!');
   });
 
   test('error card header more-options menu includes Copy Card URL', async function (assert) {

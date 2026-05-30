@@ -1388,7 +1388,7 @@ export async function withTimeout<T>(
     // Diagnostics ride on the outer `RenderError.diagnostics` as a
     // transient transport; the Prerenderer lifts them to
     // `response.meta.diagnostics` before returning, where the indexer
-    // reads them and persists into `timing_diagnostics`. The field is
+    // reads them and persists into `diagnostics`. The field is
     // dropped from the final response.
     let diagnostics: RenderTimeoutDiagnostics = {
       ...(richDiagnostics?.renderStage

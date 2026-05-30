@@ -76,7 +76,7 @@ Before promoting to prod, run a synthetic saturating workload on staging:
 - High-priority p95 `tabQueueMs` < 1 s during the burst.
 - Memory peak < 80 % of allocated.
 - CPU peak < 80 % of allocated, sustained over a 1-minute window (brief overshoots OK).
-- Zero 145-second render-timeouts (`SELECT count(*) FROM boxel_index WHERE (timing_diagnostics->>'totalElapsedMs')::int >= 145000`).
+- Zero 145-second render-timeouts (`SELECT count(*) FROM boxel_index WHERE (diagnostics->>'totalElapsedMs')::int >= 145000`).
 
 **Adjustment paths:**
 - CPU peak > 80 % sustained → drop `MAX` by 1, retest.

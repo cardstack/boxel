@@ -59,7 +59,10 @@ module('Integration | operator-mode | basics', function (hooks) {
   });
 
   test('it renders a card with an error that has does not have a last known good state', async function (assert) {
-    ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/missing-link`);
+    // ExplodingCard/exploded has status='boom' from the seed fixture, so
+    // its cardTitle compute throws on first index — the entry lands as
+    // instance-error with no last-known-good HTML available.
+    ctx.setCardInOperatorModeState(`${testRealmURL}ExplodingCard/exploded`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
@@ -68,20 +71,12 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     assert
       .dom('[data-test-boxel-card-header-title]')
-      .includesText('Link Not Found', 'card error title is displayed');
-    assert
-      .dom('[data-test-error-message]')
-      .containsText(
-        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-      );
+      .containsText('Card Error', 'card error title is displayed');
+    assert.dom('[data-test-error-message]').containsText('Boom!');
     await percySnapshot(assert);
     await click('[data-test-toggle-details]');
-    assert
-      .dom('[data-test-error-details]')
-      .containsText(`FriendWithCSS/does-not-exist.json not found`);
-    assert
-      .dom('[data-test-error-stack]')
-      .containsText('at Realm.getSourceOrRedirect');
+    assert.dom('[data-test-error-details]').exists();
+    assert.dom('[data-test-error-stack]').exists();
     assert.strictEqual(
       ctx.operatorModeStateService.state?.submode,
       'interact',
@@ -95,7 +90,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
     assert.strictEqual(
       ctx.operatorModeStateService.state?.codePath?.href,
-      `${testRealmURL}FriendWithCSS/missing-link.json`,
+      `${testRealmURL}ExplodingCard/exploded.json`,
       'codePath is correct',
     );
   });
@@ -104,25 +99,24 @@ module('Integration | operator-mode | basics', function (hooks) {
     'card with an error that has a last known good state',
     function (hooks) {
       hooks.beforeEach(async function () {
+        // Flip the existing clean ExplodingCard/1 (status='ok', cardTitle
+        // resolves to 'Stable Example') to status='boom' so the cardTitle
+        // compute throws on the next index. The card's last-known-good HTML
+        // — captured by the prior clean indexing pass — survives the flip
+        // and is what the operator-mode error renderer shows below.
         await ctx.testRealm.write(
-          'FriendWithCSS/friend-a.json',
+          'ExplodingCard/1.json',
           JSON.stringify({
             data: {
               type: 'card',
               attributes: {
-                name: 'Friend A',
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: './does-not-exist',
-                  },
-                },
+                name: 'Stable Example',
+                status: 'boom',
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('../friend-with-css.gts'),
-                  name: 'FriendWithCSS',
+                  module: rri('../exploding-card.gts'),
+                  name: 'ExplodingCard',
                 },
               },
             },
@@ -131,7 +125,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       });
 
       test('it renders a card with an error that has a last known good state', async function (assert) {
-        ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
+        ctx.setCardInOperatorModeState(`${testRealmURL}ExplodingCard/1`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
             <template><OperatorMode @onClose={{noop}} /></template>
@@ -140,23 +134,19 @@ module('Integration | operator-mode | basics', function (hooks) {
 
         assert
           .dom('[data-test-boxel-card-header-title]')
-          .includesText('Link Not Found', 'card error title is displayed');
+          .containsText('Card Error', 'card error title is displayed');
         assert
           .dom('[data-test-card-error]')
           .includesText(
-            'Hassan has a friend Jade',
+            'Stable Example',
             'the last known good HTML is rendered',
           );
 
         await percySnapshot(assert);
 
         await click('[data-test-toggle-details]');
-        assert
-          .dom('[data-test-error-details]')
-          .containsText(`FriendWithCSS/does-not-exist.json not found`);
-        assert
-          .dom('[data-test-error-stack]')
-          .containsText('at Realm.getSourceOrRedirect');
+        assert.dom('[data-test-error-details]').containsText('Boom!');
+        assert.dom('[data-test-error-stack]').exists();
         assert.strictEqual(
           ctx.operatorModeStateService.state?.submode,
           'interact',
@@ -170,13 +160,13 @@ module('Integration | operator-mode | basics', function (hooks) {
         );
         assert.strictEqual(
           ctx.operatorModeStateService.state?.codePath?.href,
-          `${testRealmURL}FriendWithCSS/friend-a.json`,
+          `${testRealmURL}ExplodingCard/1.json`,
           'codePath is correct',
         );
       });
 
       test('it has the ability to delete the card that has an error', async function (assert) {
-        ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
+        ctx.setCardInOperatorModeState(`${testRealmURL}ExplodingCard/1`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
             <template><OperatorMode @onClose={{noop}} /></template>
@@ -187,11 +177,11 @@ module('Integration | operator-mode | basics', function (hooks) {
         await click('[data-test-boxel-menu-item-text="Delete Card"]');
         assert
           .dom('[data-test-delete-modal-container]')
-          .includesText('Delete the card Hassan?');
+          .includesText('Delete the card');
         await click('[data-test-confirm-delete-button]');
 
         assert
-          .dom(`[data-test-stack-card="${testRealmURL}FriendWithCSS/friend-a"]`)
+          .dom(`[data-test-stack-card="${testRealmURL}ExplodingCard/1"]`)
           .doesNotExist();
         assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
       });

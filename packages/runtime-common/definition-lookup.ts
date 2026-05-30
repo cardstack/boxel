@@ -11,6 +11,22 @@ import {
   type Querier,
 } from './expression';
 import { clampSerializedError, type SerializedError } from './error';
+import { logger } from './log';
+
+// Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
+// mismatches: every cache read logs its exact key + HIT/MISS, every write
+// logs its key, and each definition load is tagged pre-warm vs on-demand.
+// Off unless `LOG_LEVELS` enables it, e.g. `*=info,definition-cache-key=debug`.
+const log = logger('definition-lookup');
+const keyLog = logger('definition-cache-key');
+function fmtKey(
+  moduleUrl: string,
+  cacheScope: string,
+  authUserId: string,
+  resolvedRealmURL: string,
+): string {
+  return `module=${moduleUrl} scope=${cacheScope} user=${authUserId || '(empty)'} realm=${resolvedRealmURL}`;
+}
 import {
   fetchUserPermissions,
   flattenPrerenderMeta,
@@ -23,7 +39,7 @@ import {
   type Realm,
   type RealmPermissions,
   type ResolvedCodeRef,
-  type TimingDiagnostics,
+  type Diagnostics,
   executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
@@ -197,9 +213,9 @@ interface WriteToDatabaseCacheParams {
   authUserId: string;
   // Server-observed render timings + host-side breadcrumbs flattened from
   // the prerender response's `meta` block (same shape as
-  // `boxel_index.timing_diagnostics`). Lets operators query slow / hung
+  // `boxel_index.diagnostics`). Lets operators query slow / hung
   // module renders the same way they query slow / hung card renders.
-  timingDiagnostics?: TimingDiagnostics;
+  diagnostics?: Diagnostics;
 }
 
 export class FilterRefersToNonexistentTypeError extends Error {
@@ -656,6 +672,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     priority?: number;
     skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
+    // Real cache-effectiveness signal: a MISS is logged exactly once below,
+    // only when the lookup exhausts the cache (primary + every alias/extension
+    // candidate) and commits to a prerender. Per-probe DB reads are NOT logged
+    // as misses — those alias probes inflate the count with non-real misses.
+    // HITs are logged at the DB read itself (the choke point for all callers).
+    let prerenderMissLogged = false;
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmDefinitions (and any future synchronous bump) runs entirely before
     // its first await, so a snapshot taken after an await above would already
@@ -687,6 +709,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         if (candidateCached && !this.isExpiredErrorEntry(candidateCached)) {
           return candidateCached;
         }
+      }
+      if (!prerenderMissLogged) {
+        keyLog.debug(
+          `MISS source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL)}`,
+        );
+        prerenderMissLogged = true;
       }
       let response = await this.getModuleDefinitionsViaPrerenderer(
         candidateURL,
@@ -1063,7 +1091,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     } catch (err: unknown) {
       // Local state is already consistent; cross-instance staleness is
       // bounded and self-healing. Don't fail the invalidation.
-      console.warn(
+      log.warn(
         `pg_notify ${MODULE_CACHE_INVALIDATED_CHANNEL} failed for "${payload}": ${String(err)}`,
       );
     }
@@ -1208,10 +1236,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       };
     } catch (err) {
-      console.warn(
-        `Failed to probe remote realm visibility for ${moduleURL}`,
-        err,
-      );
+      log.warn(`Failed to probe remote realm visibility for ${moduleURL}`, err);
       return null;
     }
   }
@@ -1268,9 +1293,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       created_at: string | null;
     }[];
 
+    // Only HITs are logged here — a HIT (row found) is unambiguous. A "no
+    // rows" result is just one probe (primary URL or an alias/extension
+    // candidate) and is NOT a real miss on its own; the real miss is logged
+    // once at the prerender-commit point in loadDefinitionCacheEntryUncached.
     if (!rows.length) {
       return undefined;
     }
+
+    keyLog.debug(
+      `HIT ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL)} alias=${moduleAlias}`,
+    );
 
     let row = rows[0];
     let definitions =
@@ -1383,7 +1416,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL,
     cacheScope,
     authUserId,
-    timingDiagnostics,
+    diagnostics,
   }: WriteToDatabaseCacheParams): Promise<void> {
     await this.query([
       'INSERT INTO',
@@ -1399,7 +1432,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ['resolved_realm_url'],
           ['cache_scope'],
           ['auth_user_id'],
-          ['timing_diagnostics'],
+          ['diagnostics'],
         ]),
       ) as Expression),
       'VALUES',
@@ -1423,7 +1456,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(resolvedRealmURL)],
           [param(cacheScope)],
           [param(authUserId)],
-          [param(timingDiagnostics ? JSON.stringify(timingDiagnostics) : null)],
+          [param(diagnostics ? JSON.stringify(diagnostics) : null)],
         ]),
       ) as Expression),
       'ON CONFLICT ON CONSTRAINT modules_pkey DO UPDATE SET',
@@ -1434,7 +1467,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['error_doc = excluded.error_doc'],
         ['created_at = excluded.created_at'],
         ['resolved_realm_url = excluded.resolved_realm_url'],
-        ['timing_diagnostics = excluded.timing_diagnostics'],
+        ['diagnostics = excluded.diagnostics'],
       ]) as Expression),
     ]);
   }
@@ -1446,6 +1479,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope,
     userId: string,
   ): Promise<DefinitionCacheEntry> {
+    keyLog.debug(
+      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, cacheScope === 'public' ? '' : userId, resolvedRealmURL)}`,
+    );
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
       response.deps ?? [],
@@ -1490,7 +1526,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       cacheScope,
       authUserId: cacheScope === 'public' ? '' : userId,
-      timingDiagnostics: flattenPrerenderMeta(response.meta),
+      diagnostics: flattenPrerenderMeta(response.meta),
     });
     return cacheEntry;
   }

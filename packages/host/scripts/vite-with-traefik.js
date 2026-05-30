@@ -21,6 +21,11 @@ require('./wtfnode-on-signal');
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
+const {
+  refuseIfAnotherSlugLocked,
+  writeEnvModeLock,
+  removeEnvModeLockIfOwned,
+} = require('./env-mode-lock');
 
 function runVite({ subcommand, port, allHosts, host, extraEnv, nodeMemory }) {
   const args = ['vite'];
@@ -287,9 +292,14 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
   const { ensureTraefik } = require('./ensure-traefik');
   const { getEnvSlug, registerWithTraefik } = require('./traefik-helpers');
 
+  const slug = getEnvSlug();
+  // Belt-and-suspenders: vite-serve.js / serve-dist.js also call this
+  // up-front (before boxel-ui conditional-build) so the second start
+  // exits immediately. Repeat here for direct callers of startWithTraefik.
+  refuseIfAnotherSlugLocked();
+
   ensureTraefik();
 
-  const slug = getEnvSlug();
   const hostname = `host.${slug}.localhost`;
 
   // Point the client at the per-environment Synapse via Traefik
@@ -331,6 +341,12 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
           '[environment-mode] Failed to register with Traefik:',
           e.message,
         );
+      }
+
+      writeEnvModeLock(slug);
+      process.on('exit', removeEnvModeLockIfOwned);
+      for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+        process.on(signal, removeEnvModeLockIfOwned);
       }
     });
   });
