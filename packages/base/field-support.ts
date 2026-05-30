@@ -683,6 +683,18 @@ export function getBrokenLinks(
     if (!field || field.computeVia) {
       continue;
     }
+    // Query-backed `linksTo` / `linksToMany` fields (the `{ query }` form
+    // resolved through `_federated-search`) sit outside the
+    // broken-link / declared-`linksTo` scan: their failure surface is
+    // `getRelationship`, not the indexer-side cascade. A search resource
+    // can fail for "soft" reasons that should not classify the consuming
+    // card as instance-error (cross-realm assertions, transient federated
+    // failures), and the field getter already routes them through a
+    // structured state machine. Skip them here so a planted resource-level
+    // sentinel does not flow into a render error.
+    if (field.queryDefinition) {
+      continue;
+    }
     // Only inspect fields already in the data bucket — reading an absent field
     // through the getter would initialize it (see above).
     if (!bucket.has(fieldName)) {
@@ -692,6 +704,19 @@ export function getBrokenLinks(
       let state = getRelationship(instance as CardDef, fieldName);
       for (let entry of Array.isArray(state) ? state : [state]) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
+          // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Read
+          // only fields that won't initialize bucket entries via the
+          // field getter (constructor name + the entry's own reference);
+          // reading `instance.id` here would write the `id` field's
+          // emptyValue into the bucket and violate the pure-read contract
+          // the surrounding `getBrokenLinks` upholds.
+          console.error('[CS-11221 DIAG] getBrokenLinks finding', {
+            ownerType: instance?.constructor?.name,
+            fieldName,
+            fieldType: field.fieldType,
+            kind: entry.kind,
+            reference: entry.reference,
+          });
           findings.push({
             fieldName,
             kind: entry.kind,

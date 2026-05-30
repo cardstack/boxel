@@ -1227,6 +1227,24 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         this,
         dependencyTrackingContext,
       );
+      // `ensureQueryFieldSearchResource` mirrors the resource's error state
+      // into the bucket. The recognition pattern mirrors the declared
+      // `linksTo` path above — a terminal `link-error` / `link-not-found`
+      // sentinel surfaces as `undefined`, and `getRelationship` is the
+      // structured read.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        console.error(
+          '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
+          {
+            fieldName: this.name,
+            ownerType: instance?.constructor?.name,
+            sentinelType: (bucketEntry as { type?: string })?.type,
+          },
+        );
+        return undefined;
+      }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
       let value = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
       trackRuntimeRelationshipDependency(
@@ -1660,6 +1678,23 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         this,
         dependencyTrackingContext,
       )!;
+      // Resource-level failure: `ensureQueryFieldSearchResource` plants a
+      // single whole-field sentinel in the bucket (the search fails as a
+      // unit, not per element). The empty array hands callers a usable
+      // shape; the structured failure surfaces through `getRelationship`.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        console.error(
+          '[CS-11221 DIAG] linksToMany getter returning emptyValue (bucket sentinel)',
+          {
+            fieldName: this.name,
+            ownerType: instance?.constructor?.name,
+            sentinelType: (bucketEntry as { type?: string })?.type,
+          },
+        );
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
       let records = searchResource.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,
@@ -1733,6 +1768,21 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
+    // A whole-field sentinel (a query-field whose search resource errored, or
+    // a computed `linksToMany` that consumes an unresolved upstream link)
+    // arrives here as a single LinkErrorValue / LinkNotFoundValue / NotLoaded
+    // object — NOT an array. Without this guard, the `[...instances]` spread
+    // below would throw `instances is not iterable`, the render would fail,
+    // and the indexer would classify the consumer as instance-error — the
+    // exact cascade the field-getter side of the tolerance machine avoids.
+    // Treat a non-present whole-field sentinel as an empty plural for index
+    // purposes; the broken reference is preserved on the wire via the
+    // serializer (`relationships.{field}` carries the sentinel's `reference`),
+    // and `getRelationship` is the structured read surface for the failure
+    // state outside the index.
+    if (isNonPresentLink(instances)) {
+      return null;
+    }
     if (instances === null || instances.length === 0) {
       // we intentionally use a "null" to represent an empty plural field as
       // this is a limitation to SQLite's json_tree() function when trying to match
