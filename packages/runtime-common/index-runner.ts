@@ -613,10 +613,6 @@ export class IndexRunner {
   // process coalescer, so two callers asking for the same URL share
   // one prerender.
   //
-  // Phase 1: serial. Validates that pre-warm as a concept clears the
-  // deadlock without concurrency-driven variability. Phase 2 will
-  // bound-parallelize this loop.
-  //
   // Failures here are warned but do not fail the batch — a mid-render
   // sub-prerender will still fire on demand if pre-warm misses a
   // module.
