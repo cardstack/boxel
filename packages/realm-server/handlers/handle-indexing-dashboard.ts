@@ -1,4 +1,14 @@
+import { readFileSync } from 'node:fs';
+
 import type { RealmIndexingState } from '../indexing-event-sink';
+
+// morphdom's UMD build, inlined into the dashboard so the auto-refresh can
+// patch the live DOM in place instead of reloading the page. Read once at
+// module load; the dashboard is a local-only debug surface.
+const MORPHDOM_SOURCE = readFileSync(
+  require.resolve('morphdom/dist/morphdom-umd.min.js'),
+  'utf8',
+);
 
 export interface PendingJob {
   jobId: number;
@@ -378,6 +388,7 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
     </div>
   </div>
 
+  <div id="dashboard-content">
   <div class="summary-bar">
     <div class="summary-item${active.length > 0 ? ' alert' : ''}">
       <div class="value">${active.length}</div>
@@ -441,14 +452,46 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
   </div>`
       : '<div class="empty-state">No completed jobs yet (history is populated from events received since the worker manager started)</div>'
   }
+  </div>
 
+  <script>${MORPHDOM_SOURCE}</script>
   <script>
-    document.getElementById('last-updated').textContent =
-      'Updated: ' + new Date().toLocaleTimeString();
+    function stamp() {
+      document.getElementById('last-updated').textContent =
+        'Updated: ' + new Date().toLocaleTimeString();
+    }
+    stamp();
+
+    // Refresh by patching the live DOM toward a freshly fetched copy
+    // instead of reloading the page. morphdom preserves element identity,
+    // so open <details> disclosures, focus, scroll position, and text
+    // selection survive each tick (the whole #dashboard-content subtree —
+    // every active card and table — updates in one pass).
+    async function refresh() {
+      let res = await fetch(location.href, { headers: { 'X-Requested-With': 'fetch' } });
+      if (!res.ok) return;
+      let html = await res.text();
+      let incoming = new DOMParser()
+        .parseFromString(html, 'text/html')
+        .getElementById('dashboard-content');
+      let live = document.getElementById('dashboard-content');
+      if (!incoming || !live) return;
+      window.morphdom(live, incoming, {
+        onBeforeElUpdated(fromEl, toEl) {
+          // The server always renders <details> closed; keep whatever the
+          // user has toggled open rather than letting the morph snap it shut.
+          if (fromEl.nodeName === 'DETAILS') {
+            toEl.open = fromEl.open;
+          }
+          return true;
+        },
+      });
+      stamp();
+    }
 
     let refreshInterval;
     function startRefresh() {
-      refreshInterval = setInterval(() => location.reload(), 2000);
+      refreshInterval = setInterval(refresh, 2000);
     }
     function stopRefresh() {
       clearInterval(refreshInterval);
