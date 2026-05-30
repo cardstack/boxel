@@ -1,7 +1,7 @@
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
-import { WatchedArray } from './watched-array';
+import { WatchedArray, rawArrayValues } from './watched-array';
 import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
@@ -1701,39 +1701,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       );
     }
 
-    let notLoadedRefs: string[] = [];
-    for (let entry of value) {
+    // Sentinels live in the backing array, but the WatchedArray hides them from
+    // userland per-slot access (`arr[i]` is `Card | undefined`). Scan the raw
+    // backing array — not the hiding proxy — so the not-loaded slots are still
+    // visible to kick off their lazy load.
+    let rawEntries = rawArrayValues(value);
+    let hasNotLoaded = false;
+    for (let entry of rawEntries) {
       if (isNotLoadedValue(entry)) {
-        notLoadedRefs = [...notLoadedRefs, entry.reference];
+        hasNotLoaded = true;
+        break;
       }
     }
-    if (notLoadedRefs.length > 0) {
-      // Important: we intentionally leave the NotLoadedValue sentinels inside the
-      // WatchedArray so the lazy loader can swap them out in place once the linked
-      // cards finish loading. Because the array identity never changes, Glimmer’s
-      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
-      // sentinel with a CardDef instance. Callers should treat these entries as
-      // placeholders (e.g. check for constructor.getComponent) rather than assuming
-      // every element is immediately renderable. Ideally the .value refactor can
-      // iron out this kink.
-      // TODO
-      // Codex has offered a couple interim solutions to ease the burden on card
-      // authors around this:
-      // We can wrap the guard in a reusable helper/component so card authors don’t
-      // have to think about the sentinel:
-      //
-      // - Helper – export something like `has-card-component` (just checks
-      //   `value?.constructor?.getComponent`) from card-api. Then in templates
-      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
-      //   `{{#each (filter-loadable cards) as |c|}}`.
-      //
-      // - Component – provide a `LoadableCard` component that takes a card instance
-      //   and renders the correct `CardContainer` only when the component is ready;
-      //   otherwise it renders nothing or a skeleton. Card authors use
-      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
-      //   themselves.
-
-      for (let entry of value) {
+    if (hasNotLoaded) {
+      // Each not-loaded sentinel stays in place so the lazy loader can swap it
+      // for the resolved card (success) or a terminal error/not-found sentinel
+      // (failure). The array identity never changes, so Glimmer re-renders on
+      // the in-place swap. A failed slot becomes terminal and surfaces as
+      // `undefined` per-slot — `getRelationship` is the only way to read its
+      // structured failure state.
+      for (let entry of rawEntries) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
           (entry as any).loading = true;
@@ -1741,7 +1728,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    trackRuntimeRelationshipDependencies(value, this.card);
+    trackRuntimeRelationshipDependencies(rawEntries, this.card);
     return value as BaseInstanceType<FieldT>;
   }
 
@@ -1753,11 +1740,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       return null;
     }
 
-    // Need to replace the WatchedArray proxy with an actual array because the
-    // WatchedArray proxy is not structuredClone-able, and hence cannot be
-    // communicated over the postMessage boundary between worker and DOM.
-    // TODO: can this be simplified since we don't have the worker anymore?
-    let results = [...instances]
+    // Read the raw backing array (not the hiding proxy) so a broken slot still
+    // serializes its reference into the queryable value rather than dropping out
+    // as `undefined`. Replacing the WatchedArray proxy with a plain array also
+    // keeps the result structuredClone-able for the postMessage boundary.
+    let results = rawArrayValues(instances)
       .map((instance) => {
         if (instance == null) {
           return null;
@@ -1817,7 +1804,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       ? FileMetaResourceType
       : CardResourceType;
     let relationships: Record<string, Relationship> = {};
-    values.map((value, i) => {
+    // Iterate the raw backing array so broken slots serialize their reference
+    // through `serializeNonPresentLink` instead of collapsing to `data: null`.
+    rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -2021,20 +2010,25 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           notifyCardTracking(instance);
         }),
       await Promise.all(resources),
+      { hideSlot: isNonPresentLink },
     );
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((oldValue, value) => {
-      applySubscribersToInstanceValue(
-        instance,
-        this,
-        oldValue as BaseDef[],
-        value as BaseDef[],
-      );
-      notifySubscribers(instance, this.name, value);
-      notifyCardTracking(instance);
-    });
+    return new WatchedArray(
+      (oldValue, value) => {
+        applySubscribersToInstanceValue(
+          instance,
+          this,
+          oldValue as BaseDef[],
+          value as BaseDef[],
+        );
+        notifySubscribers(instance, this.name, value);
+        notifyCardTracking(instance);
+      },
+      [],
+      { hideSlot: isNonPresentLink },
+    );
   }
 
   validate(instance: BaseDef, values: any[] | null) {
@@ -2077,16 +2071,22 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    return new WatchedArray((oldValue, value) => {
-      applySubscribersToInstanceValue(
-        instance,
-        this,
-        oldValue as BaseDef[],
-        value as BaseDef[],
-      );
-      notifySubscribers(instance, this.name, value);
-      notifyCardTracking(instance);
-    }, values);
+    return new WatchedArray(
+      (oldValue, value) => {
+        applySubscribersToInstanceValue(
+          instance,
+          this,
+          oldValue as BaseDef[],
+          value as BaseDef[],
+        );
+        notifySubscribers(instance, this.name, value);
+        notifyCardTracking(instance);
+      },
+      // Read raw so re-assigning a field that already holds broken slots keeps
+      // the sentinels in the new backing array rather than baking in `undefined`.
+      rawArrayValues(values),
+      { hideSlot: isNonPresentLink },
+    );
   }
 
   captureQueryFieldSeedData(
@@ -3458,8 +3458,11 @@ function lazilyLoadLink(
       }
       if (pluralArgs) {
         let { value } = pluralArgs;
+        // Match against the raw backing array (the proxy hides not-loaded
+        // sentinels from index access); swap through the proxy so the in-place
+        // mutation notifies subscribers and Glimmer re-renders.
         let indices: number[] = [];
-        for (let [index, item] of value.entries()) {
+        for (let [index, item] of rawArrayValues(value).entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
@@ -3544,9 +3547,10 @@ function lazilyLoadLink(
         // Swap the sentinel into the slot(s) whose reference just failed,
         // leaving the WatchedArray identity intact so Glimmer re-renders. We
         // match the same not-loaded entries the success path would have
-        // replaced with the loaded card.
+        // replaced with the loaded card. Match against the raw backing array
+        // (the proxy hides sentinels) but write through the proxy to notify.
         let { value } = pluralArgs;
-        for (let [index, item] of value.entries()) {
+        for (let [index, item] of rawArrayValues(value).entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
