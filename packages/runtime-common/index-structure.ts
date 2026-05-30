@@ -34,12 +34,14 @@ export interface BoxelIndexTable {
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
-  // Per-row render timing diagnostics (launch/waits breakdown,
-  // render elapsed, host-side renderStage, top-N module evaluations,
-  // etc.). Populated on every updateEntry — success or error — so
-  // operators can post-hoc investigate slow (but not failing)
-  // renders too.
-  timing_diagnostics: Record<string, unknown> | null;
+  // Per-row render diagnostics. Carries the render timing breakdown
+  // (launch/waits, render elapsed, host-side renderStage, top-N module
+  // evaluations, etc.) plus non-timing render findings — notably
+  // `brokenLinks`, the broken `linksTo` / `linksToMany` targets the
+  // render surfaced. Populated on every updateEntry — success or error —
+  // so operators can post-hoc investigate slow (but not failing) renders
+  // and enumerate cards with broken links. See `Diagnostics` in `index.ts`.
+  diagnostics: Record<string, unknown> | null;
   // Originating worker job id. Stamped on every working-table write so
   // a retry of the same job can find (and skip) URLs the previous
   // attempt already processed. Only present on `boxel_index_working`
@@ -115,5 +117,5 @@ export const coerceTypes = Object.freeze({
   resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',
   value: 'JSON',
-  timing_diagnostics: 'JSON',
+  diagnostics: 'JSON',
 });

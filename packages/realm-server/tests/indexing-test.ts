@@ -709,6 +709,43 @@ module(basename(__filename), function () {
         deps.includes(`http://localhost:9000/this-is-a-link-to-nowhere`),
         'deps include the unreachable link target so invalidation can reach this card if it becomes reachable',
       );
+
+      // The broken slot is also recorded as searchable metadata on the
+      // (successful) index row: the render.meta scan runs getBrokenLinks
+      // after the store settles and the finding rides the diagnostics
+      // channel into `boxel_index.diagnostics.brokenLinks`. This is
+      // the direct, indexed signal that lets a consumer enumerate
+      // cards-with-broken-links without parsing HTML or re-running the scan.
+      let [diagRow] = (await testDbAdapter.execute(
+        `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+        { bind: [realm.url, `${testRealm}bad-link.json`] },
+      )) as { diagnostics: { brokenLinks?: unknown } | null }[];
+      let brokenLinks = diagRow?.diagnostics?.brokenLinks as
+        | { fieldName: string; reference: string; kind: string }[]
+        | undefined;
+      assert.strictEqual(
+        brokenLinks?.length,
+        1,
+        `diagnostics.brokenLinks records the single broken slot, got: ${JSON.stringify(
+          brokenLinks,
+        )}`,
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.fieldName,
+        'author',
+        'broken-link finding names the linksTo field',
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.reference,
+        'http://localhost:9000/this-is-a-link-to-nowhere',
+        'broken-link finding carries the unreachable reference',
+      );
+      // An unreachable external host fails as a generic fetch error rather
+      // than a 404; either is a valid terminal broken-link kind.
+      assert.ok(
+        ['error', 'not-found'].includes(brokenLinks?.[0]?.kind ?? ''),
+        `broken-link finding carries a terminal kind, got: ${brokenLinks?.[0]?.kind}`,
+      );
     });
 
     // Note this particular test should only be a server test as the nature of

@@ -79,7 +79,7 @@ const fieldOverrides = initSharedState(
 // off-pass case in the host-UI hot loop.
 let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 // Counters snapshotted by the render/meta route to populate
-// `boxel_index.timing_diagnostics`. They are unconditional integer
+// `boxel_index.diagnostics`. They are unconditional integer
 // increments inside `getter` — cheap enough to keep on in production, but
 // only meaningful between `beginComputePass`/`endComputePass`.
 let computedCallCount = 0;
