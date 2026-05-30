@@ -1072,6 +1072,72 @@ module(basename(__filename), function () {
             'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
         });
+
+        test('GET on an existing-but-errored index entry mirrors the underlying error status onto the HTTP response, but never 404 (reserved for a missing row) and never a non-HTTP status', async function (assert) {
+          let cardURL = `${testRealmHref}person-1`;
+          let cases: { errorStatus: number; expectedHttp: number }[] = [
+            // Real, card-level HTTP error statuses flow through unchanged.
+            { errorStatus: 401, expectedHttp: 401 },
+            { errorStatus: 403, expectedHttp: 403 },
+            { errorStatus: 422, expectedHttp: 422 },
+            { errorStatus: 500, expectedHttp: 500 },
+            // An unregistered-but-in-range upstream status (e.g. a proxied
+            // 520) is still mirrored and must not throw while building the
+            // error response.
+            { errorStatus: 520, expectedHttp: 520 },
+            // An existing-but-errored card is never "not found": a
+            // recorded 404 (e.g. the error's underlying cause was a
+            // missing linked instance) falls back to 500 so that a 404
+            // on a card GET stays an unambiguous "card no longer exists"
+            // signal.
+            { errorStatus: 404, expectedHttp: 500 },
+            // Non-HTTP / out-of-range statuses also fall back to 500: a
+            // fetch failure recorded as 0, and a non-error status that
+            // should never reach the error-row branch.
+            { errorStatus: 0, expectedHttp: 500 },
+            { errorStatus: 200, expectedHttp: 500 },
+          ];
+
+          for (let { errorStatus, expectedHttp } of cases) {
+            let errorDoc = {
+              message: 'boom',
+              status: errorStatus,
+              title: 'Some Error',
+              additionalErrors: null,
+            };
+            // The instance row is keyed by `url` with the `.json` suffix;
+            // the bare card URL is the `file_alias`. Match either so the
+            // error flag lands on the row the GET read resolves.
+            for (let table of ['boxel_index', 'boxel_index_working']) {
+              await dbAdapter.execute(
+                `UPDATE ${table}
+                 SET has_error = TRUE, error_doc = $1::jsonb
+                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+                {
+                  bind: [JSON.stringify(errorDoc), cardURL],
+                },
+              );
+            }
+
+            let response = await request
+              .get('/person-1')
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(
+              response.status,
+              expectedHttp,
+              `errorDoc.status ${errorStatus} → HTTP ${expectedHttp}`,
+            );
+            // The JSON:API body always carries the real underlying
+            // status regardless of the HTTP status chosen, so consumers
+            // can still see the precise cause.
+            assert.strictEqual(
+              response.body.errors?.[0]?.status,
+              errorStatus,
+              `JSON:API body preserves the underlying status (${errorStatus})`,
+            );
+          }
+        });
       });
 
       module('permissioned realm', function (hooks) {

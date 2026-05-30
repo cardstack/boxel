@@ -700,6 +700,7 @@ export function systemError({
   body,
   id,
   lid,
+  status: httpStatus = 500,
 }: {
   requestContext: RequestContext;
   message: string;
@@ -707,9 +708,21 @@ export function systemError({
   body?: Record<string, any>;
   id?: string;
   lid?: string;
+  // HTTP status for the response. Defaults to 500; callers serving an
+  // index error row pass the underlying error's status so a card whose
+  // recorded failure is, say, an auth or validation error returns that
+  // status rather than masquerading as a realm outage.
+  status?: number;
 }): Response {
   let err = new CardError(message, {
-    status: 500,
+    status: httpStatus,
+    // Supply a title explicitly so the CardError constructor never falls
+    // back to `getReasonPhrase`, which throws for unregistered codes — a
+    // mirrored upstream status (e.g. a proxied 520/499) would otherwise
+    // turn the error response itself into an unhandled failure. The
+    // `statuses` lookup returns undefined for unknown codes rather than
+    // throwing, and we backstop that with a generic phrase.
+    title: status.message[httpStatus] || `HTTP ${httpStatus}`,
     ...(id ? { id } : {}),
     ...(lid ? { lid } : {}),
   });
