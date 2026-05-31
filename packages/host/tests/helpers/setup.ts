@@ -294,6 +294,11 @@ const EVENT_LOOP_LAG_SAMPLE_LIMIT = 12;
 const EVENT_LOOP_LAG_INTERVAL_MS = 500;
 let eventLoopLagLastTick = 0;
 let eventLoopLagSamplerStarted = false;
+// Last substantial #ember-testing HTML captured while a test was still
+// mounted. On a silent timeout the dump runs at QUnit.testDone — after the app
+// is torn down and the live container is empty — so this preserves what the
+// hung test was actually rendering ~during the stall.
+let lastMountedDomSnapshot = '';
 function startEventLoopLagSampler() {
   if (eventLoopLagSamplerStarted) return;
   eventLoopLagSamplerStarted = true;
@@ -308,6 +313,17 @@ function startEventLoopLagSampler() {
     EVENT_LOOP_LAG_SAMPLES_MS.push(Math.round(lag));
     if (EVENT_LOOP_LAG_SAMPLES_MS.length > EVENT_LOOP_LAG_SAMPLE_LIMIT) {
       EVENT_LOOP_LAG_SAMPLES_MS.shift();
+    }
+    try {
+      let root = document.querySelector('#ember-testing');
+      let html = root ? root.innerHTML.replace(/\s+/g, ' ').trim() : '';
+      // Only keep substantial renders so a between-tests empty container
+      // doesn't clobber the last real one.
+      if (html.length > 60) {
+        lastMountedDomSnapshot = html;
+      }
+    } catch {
+      // never let diagnostics sampling throw
     }
   }, EVENT_LOOP_LAG_INTERVAL_MS);
 }
@@ -328,16 +344,20 @@ function summarizeEventLoopLag(): string {
 function summarizeDomSnapshot(): string {
   try {
     let root = document.querySelector('#ember-testing') ?? document.body;
-    if (!root) {
-      return 'dom snapshot: <no test container>';
-    }
-    let html = root.innerHTML.replace(/\s+/g, ' ').trim();
+    let live = root ? root.innerHTML.replace(/\s+/g, ' ').trim() : '';
+    // At QUnit.testDone the app is already torn down, so the live container is
+    // empty; fall back to the last substantial DOM the sampler captured while
+    // the test was still mounted (i.e. ~during the hang).
+    let useSampled =
+      live.length <= 60 && lastMountedDomSnapshot.length > live.length;
+    let html = useSampled ? lastMountedDomSnapshot : live;
+    let source = useSampled ? 'last sampled while mounted' : 'live';
     const LIMIT = 4000;
     let body =
       html.length > LIMIT
         ? `${html.slice(0, LIMIT)}… (+${html.length - LIMIT} more chars)`
         : html;
-    return `dom snapshot (#ember-testing, ${html.length} chars):\n  ${body}`;
+    return `dom snapshot (#ember-testing, ${source}, ${html.length} chars):\n  ${body}`;
   } catch (error) {
     return `dom snapshot: <unavailable: ${formatErrorForLog(error)}>`;
   }
