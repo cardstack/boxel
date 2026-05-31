@@ -2303,7 +2303,7 @@ module(basename(__filename), function () {
       nextPrerenderMeta = undefined;
     });
 
-    test('persists timing_diagnostics from prerender meta on module rows', async function (assert) {
+    test('persists diagnostics from prerender meta on module rows', async function (assert) {
       nextPrerenderMeta = {
         requestId: 'req-test-123',
         diagnostics: {
@@ -2320,11 +2320,11 @@ module(basename(__filename), function () {
       assert.strictEqual(definition?.displayName, 'Person');
 
       let rows = (await adapter.execute(
-        `SELECT timing_diagnostics FROM modules WHERE url = $1`,
+        `SELECT diagnostics FROM modules WHERE url = $1`,
         { bind: [`${realmURL}person.gts`] },
-      )) as { timing_diagnostics: unknown }[];
+      )) as { diagnostics: unknown }[];
       assert.strictEqual(rows.length, 1, 'one modules row was written');
-      let raw = rows[0].timing_diagnostics;
+      let raw = rows[0].diagnostics;
       let persisted =
         typeof raw === 'string'
           ? (JSON.parse(raw) as Record<string, any>)
@@ -2336,7 +2336,7 @@ module(basename(__filename), function () {
       assert.strictEqual(persisted?.totalElapsedMs, 4334);
     });
 
-    test('persists null timing_diagnostics when prerender returns no meta', async function (assert) {
+    test('persists null diagnostics when prerender returns no meta', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -2344,14 +2344,14 @@ module(basename(__filename), function () {
       assert.strictEqual(definition?.displayName, 'Person');
 
       let rows = (await adapter.execute(
-        `SELECT timing_diagnostics FROM modules WHERE url = $1`,
+        `SELECT diagnostics FROM modules WHERE url = $1`,
         { bind: [`${realmURL}person.gts`] },
-      )) as { timing_diagnostics: unknown }[];
+      )) as { diagnostics: unknown }[];
       assert.strictEqual(rows.length, 1, 'one modules row was written');
       assert.strictEqual(
-        rows[0].timing_diagnostics,
+        rows[0].diagnostics,
         null,
-        'timing_diagnostics is null when meta is absent',
+        'diagnostics is null when meta is absent',
       );
     });
   });

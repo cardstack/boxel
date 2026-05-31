@@ -42,7 +42,7 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    markdown TEXT,
-   timing_diagnostics BLOB,
+   diagnostics BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -71,7 +71,7 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    markdown TEXT,
-   timing_diagnostics BLOB,
+   diagnostics BLOB,
    job_id INTEGER,
    PRIMARY KEY ( url, realm_url, type ) 
 );
@@ -110,7 +110,7 @@
    created_at,
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
-   timing_diagnostics BLOB,
+   diagnostics BLOB,
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 

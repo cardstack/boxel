@@ -138,31 +138,31 @@ The output is a histogram: how many snapshots saw each `(totalTabs, totalPending
 
 #### DB — render-timing distribution
 
-Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.timing_diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
+Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
 
 ```sql
 -- 7-day render-timing histogram. The `::int` casts assume the
 -- diagnostic shape Prerenderer emits today; if a row is missing
 -- a key (older diagnostic shape, partial write, manual edit) the
 -- whole query errors. If that happens, narrow the WHERE clause to
--- skip the malformed rows: e.g. `AND timing_diagnostics->'waits' ?
+-- skip the malformed rows: e.g. `AND diagnostics->'waits' ?
 -- 'tabQueueMs'` (the JSONB `?` operator tests for a key) keeps
 -- only rows with that key present.
 SELECT 
   count(*) AS rows_with_diag,
-  count(*) FILTER (WHERE (timing_diagnostics->>'totalElapsedMs')::int >= 145000) AS at_or_over_timeout,
-  percentile_cont(0.95) WITHIN GROUP (ORDER BY (timing_diagnostics->>'totalElapsedMs')::int) AS p95_total_ms,
-  percentile_cont(0.99) WITHIN GROUP (ORDER BY (timing_diagnostics->>'totalElapsedMs')::int) AS p99_total_ms,
-  max((timing_diagnostics->>'totalElapsedMs')::int) AS max_total_ms,
-  percentile_cont(0.95) WITHIN GROUP (ORDER BY (timing_diagnostics->'waits'->>'tabQueueMs')::int) AS p95_tabq_ms,
-  max((timing_diagnostics->'waits'->>'tabQueueMs')::int) AS max_tabq_ms,
-  percentile_cont(0.95) WITHIN GROUP (ORDER BY (timing_diagnostics->'waits'->>'semaphoreMs')::int) AS p95_sem_ms,
-  max((timing_diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms
+  count(*) FILTER (WHERE (diagnostics->>'totalElapsedMs')::int >= 145000) AS at_or_over_timeout,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->>'totalElapsedMs')::int) AS p95_total_ms,
+  percentile_cont(0.99) WITHIN GROUP (ORDER BY (diagnostics->>'totalElapsedMs')::int) AS p99_total_ms,
+  max((diagnostics->>'totalElapsedMs')::int) AS max_total_ms,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->'waits'->>'tabQueueMs')::int) AS p95_tabq_ms,
+  max((diagnostics->'waits'->>'tabQueueMs')::int) AS max_tabq_ms,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->'waits'->>'semaphoreMs')::int) AS p95_sem_ms,
+  max((diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms
 FROM boxel_index
-WHERE timing_diagnostics IS NOT NULL
-  AND timing_diagnostics ? 'totalElapsedMs'
-  AND (timing_diagnostics->>'indexedAt') ~ '^[0-9]+$'
-  AND (timing_diagnostics->>'indexedAt')::bigint > extract(epoch from now() - interval '7 days')*1000;
+WHERE diagnostics IS NOT NULL
+  AND diagnostics ? 'totalElapsedMs'
+  AND (diagnostics->>'indexedAt') ~ '^[0-9]+$'
+  AND (diagnostics->>'indexedAt')::bigint > extract(epoch from now() - interval '7 days')*1000;
 ```
 
 Key signals to look for:
@@ -253,7 +253,7 @@ Captured on 2026-04-30 ~20:00 UTC for the CS-10976 PR 12 staging activation.
 | Memory avg of 5-min Avg | 35 % | 39 % |
 | Memory 5-min peak | 64 % | 98.3 % |
 
-7-d render-timing histogram from `boxel_index.timing_diagnostics`:
+7-d render-timing histogram from `boxel_index.diagnostics`:
 
 - 58,549 rows with diagnostics
 - 0 timeouts (`totalElapsedMs ≥ 145 000`)
