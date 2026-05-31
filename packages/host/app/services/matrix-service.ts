@@ -319,8 +319,12 @@ export default class MatrixService extends Service {
   );
 
   private loadState = task(async () => {
+    if (isTesting())
+      console.warn('[start-phase] loadState:requestStorageAccess');
     await this.requestStorageAccess();
+    if (isTesting()) console.warn('[start-phase] loadState:loadSDK');
     await this.loadSDK();
+    if (isTesting()) console.warn('[start-phase] loadState:done');
   });
 
   private get inIframe() {
@@ -751,6 +755,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
+      if (isTesting()) console.warn('[start-phase] realmServer.login');
       await this.realmServer.login(registrationToken);
       this.saveAuth(auth);
       this.bindEventListeners();
@@ -766,6 +771,8 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
+        if (isTesting())
+          console.warn('[start-phase] getAccountData(realms,favorites)');
         let [accountDataContent, favoritesData] = await Promise.all([
           this.client.getAccountDataFromServer(
             APP_BOXEL_REALMS_EVENT_TYPE,
@@ -780,6 +787,10 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
+        if (isTesting())
+          console.warn(
+            '[start-phase] fetchCatalogRealms+setAvailableRealmIdentifiers',
+          );
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmIdentifiers(
@@ -787,29 +798,39 @@ export default class MatrixService extends Service {
           ),
         ]);
 
+        if (isTesting()) console.warn('[start-phase] prefetchRealmInfos');
         await this.realm.prefetchRealmInfos(
           this.realmServer.availableRealmIdentifiers,
         );
 
+        if (isTesting()) console.warn('[start-phase] initSlidingSync');
         await this.initSlidingSync(accountDataContent);
+        if (isTesting()) console.warn('[start-phase] startClient');
         await this.client.startClient({ slidingSync: this.slidingSync });
+        if (isTesting())
+          console.warn('[start-phase] getAccountData(systemCard)');
         let systemCardAccountData = (await this.client.getAccountDataFromServer(
           APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
         )) as { id?: string } | null;
+        if (isTesting()) console.warn('[start-phase] setSystemCard');
         await this.setSystemCard(systemCardAccountData?.id);
         if (noRealmsLoggedIn) {
           // In this case we want to authenticate to all accessible realms in a single request,
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).
 
+          if (isTesting())
+            console.warn('[start-phase] authenticateToAllAccessibleRealms');
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
         // Login here triggers other setup code that needs to happen after
         // otherwise we don't have the realm info.
         // This should be cleaned up as we move to single logins
+        if (isTesting()) console.warn('[start-phase] loginToRealms');
         await this.loginToRealms();
 
         this.postLoginCompleted = true;
+        if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
