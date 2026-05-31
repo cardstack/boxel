@@ -396,6 +396,18 @@ export default class MatrixService extends Service {
     return this._client?.isLoggedIn() === true && this.postLoginCompleted;
   }
 
+  // Test-only diagnostic for the intermittent "operator-mode renders the login
+  // form" flake: names which precondition of `isLoggedIn` is unmet when a route
+  // decides to render <Auth/>. No production caller.
+  get loginReadinessDebug() {
+    return {
+      authPresent: Boolean(this.getAuth()),
+      clientExists: Boolean(this._client),
+      clientLoggedIn: this._client?.isLoggedIn() === true,
+      postLoginCompleted: this.postLoginCompleted,
+    };
+  }
+
   private get client() {
     if (!this._client) {
       throw new Error(`cannot use matrix client before matrix SDK has loaded`);
