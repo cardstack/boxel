@@ -43,6 +43,53 @@ function isSafeHttpUrl(url: string): boolean {
   }
 }
 
+// Solid amber warning triangle with a black "!" — a two-tone svg the
+// single-colour boxel icon can't express. Shared by the reveal trigger and the
+// overlay title; `@size` sets both svg dimensions so each caller can match its
+// context.
+class WarningIcon extends GlimmerComponent<{
+  Element: SVGElement;
+  Args: { size: string };
+}> {
+  <template>
+    <svg
+      class='warn-icon'
+      viewBox='0 0 24 24'
+      width={{@size}}
+      height={{@size}}
+      aria-hidden='true'
+      ...attributes
+    >
+      <path
+        class='warn-icon-tri'
+        d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
+      />
+      <path class='warn-icon-mark' d='M12 9.2v4.3' />
+      <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
+    </svg>
+    <style scoped>
+      .warn-icon {
+        display: block;
+      }
+      .warn-icon-tri {
+        fill: var(--boxel-warning-200, #ffba00);
+        stroke: var(--boxel-warning-200, #ffba00);
+        stroke-width: 1.5;
+        stroke-linejoin: round;
+      }
+      .warn-icon-mark {
+        fill: none;
+        stroke: #1a1a1a;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+      }
+      .warn-icon-dot {
+        fill: #1a1a1a;
+      }
+    </style>
+  </template>
+}
+
 export default class BrokenLinkTemplate extends GlimmerComponent<{
   Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
@@ -266,22 +313,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
           aria-label='Show broken link details'
           data-test-broken-link-reveal
         >
-          {{! Solid amber warning triangle with a black "!" — a two-tone svg the
-              single-colour boxel icon can't express. }}
-          <svg
-            class='warn-icon'
-            viewBox='0 0 24 24'
-            width='17'
-            height='17'
-            aria-hidden='true'
-          >
-            <path
-              class='warn-icon-tri'
-              d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
-            />
-            <path class='warn-icon-mark' d='M12 9.2v4.3' />
-            <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
-          </svg>
+          <WarningIcon @size='17' />
         </label>
       </div>
 
@@ -298,20 +330,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         <div class='overlay-header'>
           <div class='overlay-title-row'>
             <span class='overlay-title'>
-              <svg
-                class='warn-icon'
-                viewBox='0 0 24 24'
-                width='16'
-                height='16'
-                aria-hidden='true'
-              >
-                <path
-                  class='warn-icon-tri'
-                  d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
-                />
-                <path class='warn-icon-mark' d='M12 9.2v4.3' />
-                <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
-              </svg>
+              <WarningIcon @size='16' />
               <span data-test-broken-link-headline>{{this.headline}}</span>
             </span>
             <label
@@ -498,27 +517,6 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       }
       .broken-link-template.atom .type-name {
         max-width: 12ch;
-      }
-
-      /* ── Warning triangle ─────────────────────────────────────────────────
-         Solid amber fill, black exclamation. */
-      .warn-icon {
-        display: block;
-      }
-      .warn-icon-tri {
-        fill: var(--boxel-warning-200, #ffba00);
-        stroke: var(--boxel-warning-200, #ffba00);
-        stroke-width: 1.5;
-        stroke-linejoin: round;
-      }
-      .warn-icon-mark {
-        fill: none;
-        stroke: #1a1a1a;
-        stroke-width: 2.2;
-        stroke-linecap: round;
-      }
-      .warn-icon-dot {
-        fill: #1a1a1a;
       }
 
       /* ── Reveal trigger ───────────────────────────────────────────────────
