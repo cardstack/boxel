@@ -1,7 +1,7 @@
 /* eslint-disable @cardstack/host/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
-import { getSettledState, settled } from '@ember/test-helpers';
+import { getContext, getSettledState, settled } from '@ember/test-helpers';
 
 import { getPendingWaiterState } from '@ember/test-waiters';
 import type { TestWaiterDebugInfo } from '@ember/test-waiters';
@@ -276,6 +276,7 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
       summarizeSettledState(),
+      summarizeRealmAuth(),
       summarizeEventLoopLag(),
       summarizeDomSnapshot(),
     ].join('\n'),
@@ -347,6 +348,55 @@ function summarizeDomSnapshot(): string {
 // something other than the network. Snapshot Ember's settledness metrics and,
 // when a test waiter is the culprit, name it (with any captured begin-async
 // origin) so the next timeout points at the stuck gate instead of being opaque.
+// `realm.canWrite(url)` drives whether the card editor renders its fields
+// editable; it reads the realm session JWT claims, which populate
+// asynchronously once the realm token is minted. A silent timeout — or a
+// `fillIn`-on-disabled failure with everything settled — is consistent with
+// the editor having rendered before the session resolved, so report each realm
+// resource's auth/permission state at failure time. Read-only, and only looked
+// up on failure, so it never instantiates the service for tests that don't use
+// it. Note: on QUnit's post-teardown timeout path the owner is already gone,
+// so this reports `<no active test owner>` there; the during-test uncaught /
+// unhandled-rejection paths still capture it.
+function summarizeRealmAuth(): string {
+  try {
+    let owner = (
+      getContext() as { owner?: { lookup(name: string): unknown } } | undefined
+    )?.owner;
+    if (!owner) {
+      return 'realm auth: <no active test owner>';
+    }
+    let realmService = owner.lookup('service:realm') as
+      | {
+          realms?: ReadonlyMap<
+            string,
+            {
+              url: string;
+              isLoggedIn: boolean;
+              canRead: boolean;
+              canWrite: boolean;
+            }
+          >;
+        }
+      | undefined;
+    let realms = realmService?.realms;
+    if (!realms) {
+      return 'realm auth: <no realm service>';
+    }
+    let lines: string[] = [];
+    for (let resource of realms.values()) {
+      lines.push(
+        `${resource.url} loggedIn=${resource.isLoggedIn} canRead=${resource.canRead} canWrite=${resource.canWrite}`,
+      );
+    }
+    return lines.length
+      ? `realm auth:\n  ${lines.join('\n  ')}`
+      : 'realm auth: <no realm resources>';
+  } catch (error) {
+    return `realm auth: <unavailable: ${formatErrorForLog(error)}>`;
+  }
+}
+
 function summarizeSettledState(): string {
   try {
     let state = getSettledState();
