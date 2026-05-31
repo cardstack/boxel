@@ -56,6 +56,7 @@ let currentTestEpoch = 0;
 let timeoutDiagnosticsInstalled = false;
 function installTimeoutDiagnosticsOnce() {
   if (timeoutDiagnosticsInstalled) return;
+  startEventLoopLagSampler();
   let qunitGlobal = getQUnitWithCallbacks();
   if (!qunitGlobal || typeof qunitGlobal.testDone !== 'function') return;
   qunitGlobal.testDone((details: QUnitTestDoneDetails) => {
@@ -275,8 +276,70 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
       summarizeSettledState(),
+      summarizeEventLoopLag(),
+      summarizeDomSnapshot(),
     ].join('\n'),
   );
+}
+
+// Sample event-loop lag across the whole suite so a silent timeout can be
+// attributed. Flat lag while a single await never resolves points at a real
+// code/render hang; lag spiking to seconds points at runner CPU/GC contention
+// — the suite was simply too slow to beat the 60s budget, not stuck. Uses a
+// raw setInterval, which is invisible to Ember's `settled()`, so it never
+// perturbs the state it measures.
+const EVENT_LOOP_LAG_SAMPLES_MS: number[] = [];
+const EVENT_LOOP_LAG_SAMPLE_LIMIT = 12;
+const EVENT_LOOP_LAG_INTERVAL_MS = 500;
+let eventLoopLagLastTick = 0;
+let eventLoopLagSamplerStarted = false;
+function startEventLoopLagSampler() {
+  if (eventLoopLagSamplerStarted) return;
+  eventLoopLagSamplerStarted = true;
+  eventLoopLagLastTick = performance.now();
+  setInterval(() => {
+    let now = performance.now();
+    let lag = Math.max(
+      0,
+      now - eventLoopLagLastTick - EVENT_LOOP_LAG_INTERVAL_MS,
+    );
+    eventLoopLagLastTick = now;
+    EVENT_LOOP_LAG_SAMPLES_MS.push(Math.round(lag));
+    if (EVENT_LOOP_LAG_SAMPLES_MS.length > EVENT_LOOP_LAG_SAMPLE_LIMIT) {
+      EVENT_LOOP_LAG_SAMPLES_MS.shift();
+    }
+  }, EVENT_LOOP_LAG_INTERVAL_MS);
+}
+
+function summarizeEventLoopLag(): string {
+  if (!EVENT_LOOP_LAG_SAMPLES_MS.length) {
+    return 'event-loop lag: <no samples>';
+  }
+  let samples = EVENT_LOOP_LAG_SAMPLES_MS.slice();
+  let max = Math.max(...samples);
+  return `event-loop lag (last ${samples.length} @ ${EVENT_LOOP_LAG_INTERVAL_MS}ms, max=${max}ms): ${samples.join(',')}ms`;
+}
+
+// On a silent timeout the client is usually fully settled, so the real failure
+// is "the awaited DOM never appeared" rather than a hung promise. Capturing the
+// rendered test container shows what DID render (an error card, an empty stack,
+// a spinner) in place of the element the test was waiting for.
+function summarizeDomSnapshot(): string {
+  try {
+    let root = document.querySelector('#ember-testing') ?? document.body;
+    if (!root) {
+      return 'dom snapshot: <no test container>';
+    }
+    let html = root.innerHTML.replace(/\s+/g, ' ').trim();
+    const LIMIT = 4000;
+    let body =
+      html.length > LIMIT
+        ? `${html.slice(0, LIMIT)}… (+${html.length - LIMIT} more chars)`
+        : html;
+    return `dom snapshot (#ember-testing, ${html.length} chars):\n  ${body}`;
+  } catch (error) {
+    return `dom snapshot: <unavailable: ${formatErrorForLog(error)}>`;
+  }
 }
 
 // A silent QUnit timeout (e.g. a `waitFor`/`settled` that never resolves)
