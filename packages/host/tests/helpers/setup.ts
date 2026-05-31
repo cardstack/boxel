@@ -44,6 +44,65 @@ const recentFailedFetches: string[] = [];
 const RECENT_FAILED_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
 
+// Module/name of the test currently running, captured from QUnit.testStart so a
+// global error can be attributed to the test that produced it. Resets on page
+// reload (i.e. per shard), which is exactly the lifetime over which the
+// renderer-corruption tracking below is meaningful.
+let currentTestLabel = '<unknown test>';
+
+// An error thrown synchronously during render (e.g. a backtracking re-render
+// assertion: "attempted to update X, but it had already been used previously in
+// the same computation") leaves Ember's renderer in an unrecoverable state for
+// the rest of the page load. Every later test that tries to render or fetch
+// then fails too — typically as an opaque `settled()` timeout or `Failed to
+// fetch` — with nothing tying it back to the test that actually broke the app.
+// Remember the first such error so a later cascade victim's diagnostic can name
+// the originating test instead of looking like an independent failure. Gated to
+// the render-corruption signatures so a benign earlier rejection is never
+// blamed for an unrelated downstream failure.
+interface CapturedRenderError {
+  epoch: number;
+  label: string;
+  message: string;
+}
+let firstRenderCorruptingError: CapturedRenderError | undefined;
+
+function isRenderCorruptingError(message: string): boolean {
+  return (
+    message.includes(
+      'had already been used previously in the same computation',
+    ) ||
+    message.includes('unrecoverable error occur during render') ||
+    message.includes('Attempted to rerender')
+  );
+}
+
+function rememberRenderCorruptingError(message: string) {
+  if (firstRenderCorruptingError || !isRenderCorruptingError(message)) {
+    return;
+  }
+  firstRenderCorruptingError = {
+    epoch: currentTestEpoch,
+    label: currentTestLabel,
+    message,
+  };
+}
+
+// Only surfaced for a test that ran AFTER the corrupting one — the originating
+// test's own diagnostic already prints the error directly, so flagging it there
+// as a "cascade" would be misleading.
+function summarizePriorRenderCorruption(): string | undefined {
+  let prior = firstRenderCorruptingError;
+  if (!prior || prior.epoch >= currentTestEpoch) {
+    return undefined;
+  }
+  return (
+    `prior render-corrupting error (in "${prior.label}") left Ember's renderer ` +
+    `unrecoverable for the rest of this page load — this failure is likely a ` +
+    `cascade of it, not an independent failure:\n  ${prior.message}`
+  );
+}
+
 // Lazily install a single global QUnit.testDone callback that fires the
 // existing diagnostic dump when a failed test ran longer than 60s. Silent
 // QUnit timeouts (e.g. a waitFor that never resolves) don't surface through
@@ -59,6 +118,13 @@ function installTimeoutDiagnosticsOnce() {
   startEventLoopLagSampler();
   let qunitGlobal = getQUnitWithCallbacks();
   if (!qunitGlobal || typeof qunitGlobal.testDone !== 'function') return;
+  if (typeof qunitGlobal.testStart === 'function') {
+    qunitGlobal.testStart((details: QUnitTestStartDetails) => {
+      currentTestLabel = `${details?.module ?? '<unknown module>'} > ${
+        details?.name ?? '<unknown test>'
+      }`;
+    });
+  }
   qunitGlobal.testDone((details: QUnitTestDoneDetails) => {
     if (
       details &&
@@ -87,13 +153,22 @@ interface QUnitTestDoneDetails {
   runtime?: number;
 }
 
+interface QUnitTestStartDetails {
+  name?: string;
+  module?: string;
+}
+
 function getQUnitWithCallbacks():
-  | { testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void }
+  | {
+      testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
+      testStart?: (cb: (details: QUnitTestStartDetails) => void) => void;
+    }
   | undefined {
   let q = (globalThis as { QUnit?: unknown }).QUnit;
   return q && typeof q === 'object'
     ? (q as {
         testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
+        testStart?: (cb: (details: QUnitTestStartDetails) => void) => void;
       })
     : undefined;
 }
@@ -202,10 +277,9 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
       handler = (event: PromiseRejectionEvent) => {
         // Observation only — do NOT call event.preventDefault(). QUnit's own
         // unhandled-rejection handling must still run and fail the test.
-        logRejectionDiagnostics(
-          '[test-unhandled-rejection]',
-          formatRejectionReason(event.reason),
-        );
+        let reason = formatRejectionReason(event.reason);
+        rememberRenderCorruptingError(reason);
+        logRejectionDiagnostics('[test-unhandled-rejection]', reason);
       };
       target.addEventListener('unhandledrejection', handler);
     }
@@ -222,10 +296,9 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
       originalOnUncaughtException = qunitGlobal.onUncaughtException;
       wrappedOnUncaughtException = (error: unknown) => {
         try {
-          logRejectionDiagnostics(
-            '[test-qunit-uncaught]',
-            formatRejectionReason(error),
-          );
+          let reason = formatRejectionReason(error);
+          rememberRenderCorruptingError(reason);
+          logRejectionDiagnostics('[test-qunit-uncaught]', reason);
         } catch (_e) {
           // never let diagnostic logging swallow the original failure
         }
@@ -265,10 +338,12 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
 function logRejectionDiagnostics(prefix: string, formattedReason: string) {
   let inFlightSnapshot = Array.from(inFlightFetches.values());
   let recent = recentFailedFetches.slice();
+  let priorCorruption = summarizePriorRenderCorruption();
   console.error(
     [
       prefix,
       formattedReason,
+      priorCorruption,
       inFlightSnapshot.length
         ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
         : 'in-flight fetches at rejection time: <none>',
@@ -279,7 +354,9 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
       summarizeRealmAuth(),
       summarizeEventLoopLag(),
       summarizeDomSnapshot(),
-    ].join('\n'),
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n'),
   );
 }
 
