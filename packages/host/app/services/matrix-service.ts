@@ -780,36 +780,23 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
-        await Promise.all([
-          this.realmServer.fetchCatalogRealms(),
-          this.realmServer.setAvailableRealmIdentifiers(
-            (accountDataContent?.realms ?? []).map(ri),
-          ),
-        ]);
-
-        await this.realm.prefetchRealmInfos(
-          this.realmServer.availableRealmIdentifiers,
-        );
-
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
-        let systemCardAccountData = (await this.client.getAccountDataFromServer(
-          APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
-        )) as { id?: string } | null;
-        await this.setSystemCard(systemCardAccountData?.id);
-        if (noRealmsLoggedIn) {
-          // In this case we want to authenticate to all accessible realms in a single request,
-          // for performance reasons (otherwise we would make 2 auth requests for
-          // each realm, which could be a lot of requests).
 
-          await this.realmServer.authenticateToAllAccessibleRealms();
-        }
-        // Login here triggers other setup code that needs to happen after
-        // otherwise we don't have the realm info.
-        // This should be cleaned up as we move to single logins
-        await this.loginToRealms();
-
+        // The Matrix session is valid and synced, so the user is logged in.
+        // Mark login complete here rather than after the realm catalog / info
+        // prefetch / system-card / eager realm auth below: those hit the realm
+        // server, which can be slow to respond on a cold start, and `isLoggedIn`
+        // gates on `postLoginCompleted` — awaiting them here strands the app on
+        // the login screen even though the session is established. None is
+        // required for the session to be usable (card loads authenticate their
+        // realm and fetch realm info on demand), so run them in the background.
         this.postLoginCompleted = true;
+
+        void this.completeRealmSetupAfterLogin(
+          accountDataContent,
+          noRealmsLoggedIn,
+        );
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -827,6 +814,38 @@ export default class MatrixService extends Service {
       } else if (refreshRoutes) {
         await this.router.refresh();
       }
+    }
+  }
+
+  // Realm catalog, realm-info prefetch, system-card load, and eager realm
+  // authentication. Invoked (not awaited) by `start` after login is marked
+  // complete, so a slow realm-server cold start can't block `isLoggedIn` and
+  // strand the app on the login screen. Failures are non-fatal — card loads
+  // authenticate and fetch realm info on demand — so they're logged, not thrown.
+  private async completeRealmSetupAfterLogin(
+    accountDataContent: { realms: string[] } | null,
+    noRealmsLoggedIn: boolean,
+  ) {
+    try {
+      await this.realmServer.setAvailableRealmIdentifiers(
+        (accountDataContent?.realms ?? []).map(ri),
+      );
+      await this.realmServer.fetchCatalogRealms();
+      await this.realm.prefetchRealmInfos(
+        this.realmServer.availableRealmIdentifiers,
+      );
+      let systemCardAccountData = (await this.client.getAccountDataFromServer(
+        APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
+      )) as { id?: string } | null;
+      await this.setSystemCard(systemCardAccountData?.id);
+      if (noRealmsLoggedIn) {
+        // Authenticate to all accessible realms in a single request for
+        // performance (otherwise ~2 auth requests per realm).
+        await this.realmServer.authenticateToAllAccessibleRealms();
+      }
+      await this.loginToRealms();
+    } catch (e) {
+      console.log('Error completing realm setup after login', e);
     }
   }
 
