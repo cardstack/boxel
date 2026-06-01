@@ -18,6 +18,19 @@ permissions:
   deployments: write
   id-token: write
 
+# Serialize deploys per environment so overlapping runs can't land out of
+# order. A deploy is a ~50-60 min serial chain that ends by pointing each ECS
+# service at a :<git-sha> image; when two runs overlap, whichever finishes last
+# wins, so an older commit's build can overwrite a newer one. For staging
+# (auto-deployed on every merge to main) we cancel any in-flight deploy when a
+# newer one starts, so the newest commit always wins — the superseding run is a
+# full deploy of every service, so it reconciles any partially-updated state
+# left by the cancelled run. For production (manual only) we queue instead of
+# cancel, to avoid interrupting a deliberate deploy mid-chain.
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: ${{ inputs.environment != 'production' }}
+
 jobs:
   create-deployment:
     name: Create GitHub deployment
