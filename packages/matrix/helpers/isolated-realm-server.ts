@@ -35,7 +35,20 @@ export const appURL = 'https://localhost:4205/test';
 const DEFAULT_PRERENDER_PORT = 4231;
 const DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS = 120_000;
 const DEFAULT_WORKER_START_TIMEOUT_MS = 90_000;
-const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 120_000;
+// Absolute backstop for the realm-server-ready wait. The realm server only
+// emits `ready` after a boot-time from-scratch full index of every mounted
+// realm (test + skills + base, ~500 files), which legitimately runs for
+// ~2 minutes on a loaded CI runner. The progress-aware watchdog below is the
+// real guard; this cap only catches a pathological slow-drip that keeps
+// emitting output without ever finishing.
+const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 300_000;
+// Fail the boot only when it goes silent: if neither the worker's
+// indexing-progress stream nor the realm server's lifecycle output advances
+// for this long, treat the boot as stalled. Comfortably larger than the
+// worst observed gap between progress signals (~1.3s) so a slow-but-
+// progressing cold index never trips it, while a genuine hang surfaces fast.
+const DEFAULT_REALM_SERVER_PROGRESS_IDLE_TIMEOUT_MS = 90_000;
+const REALM_SERVER_PROGRESS_POLL_MS = 5_000;
 const STARTUP_LOG_TAIL_LINES = 80;
 
 export interface PrerenderServerConfig {
@@ -347,6 +360,10 @@ export async function startServer({
     process.env.TEST_HARNESS_REALM_SERVER_START_TIMEOUT_MS,
     DEFAULT_REALM_SERVER_START_TIMEOUT_MS,
   );
+  let realmServerProgressIdleTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_REALM_SERVER_PROGRESS_IDLE_TIMEOUT_MS,
+    DEFAULT_REALM_SERVER_PROGRESS_IDLE_TIMEOUT_MS,
+  );
   let workerManagerMetadataFile = join(
     dir.name,
     'worker-manager-metadata.json',
@@ -355,6 +372,15 @@ export async function startServer({
   let workerManagerOutput: string[] = [];
   let realmServerOutput: string[] = [];
   let realmServer: ReturnType<typeof spawn> | undefined;
+
+  // Liveness signal for the boot-stall watchdog in the realm-server-ready
+  // wait below. Bumped by the worker's per-file indexing-progress events and
+  // by realm-server lifecycle output (boot, request log during indexing,
+  // post-index "serving realms"), which together cover every boot phase.
+  let lastBootProgressAt = Date.now();
+  let noteBootProgress = () => {
+    lastBootProgressAt = Date.now();
+  };
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = testDBName;
@@ -404,8 +430,14 @@ export async function startServer({
   });
   if (workerManager.stdout) {
     workerManager.stdout.on('data', (data: Buffer) => {
+      let text = data.toString();
       pushOutputTail(workerManagerOutput, 'stdout: ', data);
-      console.log(`worker: ${data.toString()}`);
+      console.log(`worker: ${text}`);
+      // Each indexed file emits an `[indexing-progress]` line — the forward-
+      // progress heartbeat the boot-stall watchdog keys on.
+      if (text.includes('[indexing-progress]')) {
+        noteBootProgress();
+      }
     });
   }
   if (workerManager.stderr) {
@@ -442,6 +474,8 @@ export async function startServer({
     workerManagerReadyTimeoutMs,
     workerStartTimeoutMs,
     realmServerStartTimeoutMs,
+    realmServerProgressIdleTimeoutMs,
+    lastBootProgressMsAgo: Date.now() - lastBootProgressAt,
     workerManagerState: describeChildProcess(workerManager),
     realmServerState: describeChildProcess(realmServer),
     workerManagerMetadata: readMetadataFile(workerManagerMetadataFile),
@@ -530,6 +564,9 @@ export async function startServer({
     realmServer.stdout.on('data', (data: Buffer) => {
       pushOutputTail(realmServerOutput, 'stdout: ', data);
       console.log(`realm server: ${data.toString()}`);
+      // Covers the boot phases the worker's indexing-progress stream doesn't:
+      // pre-index startup and post-index listener setup before `ready`.
+      noteBootProgress();
     });
   }
   if (realmServer.stderr) {
@@ -555,6 +592,9 @@ export async function startServer({
   let realmServerReadyListener: ((message: unknown) => void) | undefined;
   let realmServerStartTimeout: NodeJS.Timeout | undefined;
 
+  // Measure the idle window from the moment the wait begins, regardless of
+  // any time the worker-manager-ready wait above consumed.
+  noteBootProgress();
   try {
     await Promise.race([
       new Promise<void>((resolve) => {
@@ -583,13 +623,29 @@ export async function startServer({
         realmServer.once('error', realmServerErrorListener);
       }),
       new Promise<never>((_, reject) => {
-        realmServerStartTimeout = setTimeout(() => {
-          reject(
-            new Error(
-              `timed-out waiting for realm server to start after ${realmServerStartTimeoutMs}ms. Stopping server`,
-            ),
-          );
-        }, realmServerStartTimeoutMs);
+        let startedAt = Date.now();
+        realmServerStartTimeout = setInterval(() => {
+          let now = Date.now();
+          let sinceProgressMs = now - lastBootProgressAt;
+          let sinceStartMs = now - startedAt;
+          if (sinceProgressMs >= realmServerProgressIdleTimeoutMs) {
+            reject(
+              new Error(
+                `realm server boot stalled: no startup progress for ` +
+                  `${sinceProgressMs}ms (idle timeout ` +
+                  `${realmServerProgressIdleTimeoutMs}ms). Stopping server`,
+              ),
+            );
+          } else if (sinceStartMs >= realmServerStartTimeoutMs) {
+            reject(
+              new Error(
+                `timed-out waiting for realm server to start after ` +
+                  `${realmServerStartTimeoutMs}ms (absolute cap; last ` +
+                  `progress ${sinceProgressMs}ms ago). Stopping server`,
+              ),
+            );
+          }
+        }, REALM_SERVER_PROGRESS_POLL_MS);
         realmServerStartTimeout.unref();
       }),
     ]);
@@ -610,7 +666,7 @@ export async function startServer({
       realmServer.removeListener('message', realmServerReadyListener);
     }
     if (realmServerStartTimeout) {
-      clearTimeout(realmServerStartTimeout);
+      clearInterval(realmServerStartTimeout);
     }
   }
 
