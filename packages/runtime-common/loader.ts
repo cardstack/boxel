@@ -1091,6 +1091,9 @@ export class Loader {
       let iconMessage = iconNotFoundMessage(moduleURL.href, response.status);
       if (iconMessage) {
         error.message = iconMessage;
+        if (!error.deps?.length) {
+          error.deps = [response.url || moduleURL.href];
+        }
       }
       // Surfaced from `_fetch`'s catch: the request never reached the
       // server. Tag the error so `fetchModule` skips caching it as a
