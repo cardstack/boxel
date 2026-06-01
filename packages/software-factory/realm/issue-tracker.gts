@@ -1324,12 +1324,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let fieldName = this.groupByFieldName;
     this.args.model.placements = newPlacements.map((p) => {
       let card = cards[p.index] as any;
-      if (
-        card &&
-        p.columnId !== 'uncategorized' &&
-        (card as any)[fieldName] !== p.columnId
-      ) {
-        (card as any)[fieldName] = p.columnId;
+      if (card) {
+        if (p.columnId === 'uncategorized') {
+          (card as any)[fieldName] = undefined;
+        } else if ((card as any)[fieldName] !== p.columnId) {
+          (card as any)[fieldName] = p.columnId;
+        }
       }
       return Object.assign(new KanbanBoardPlacement(), {
         itemId: card?.id ?? '',

@@ -1253,6 +1253,50 @@ export function runTests() {
             .dom('[data-kanban-column="critical"] [data-test-issue-id="IT-3"]')
             .doesNotExist('IT-3 is not placed in the first regular column');
         });
+
+        test<TestContextWithSave>('dragging a card into Uncategorized clears its priority field', async function (assert) {
+          let savedIssueDocs: any[] = [];
+          this.onSave((url, doc) => {
+            if (url.href === `${testRealmURL}Issues/issue-1`) {
+              savedIssueDocs.push(doc);
+            }
+          });
+
+          await visitOperatorMode({
+            stacks: [[{ id: boardId, format: 'isolated' }]],
+          });
+          await waitFor('[data-test-issue-id]');
+
+          assert
+            .dom('[data-kanban-column="critical"] [data-test-issue-id]')
+            .hasText('IT-1', 'IT-1 starts in critical');
+
+          // critical → high → medium → low → uncategorized
+          await triggerKeyEvent('[data-card-index="0"]', 'keydown', ' ');
+          for (let i = 0; i < 4; i++) {
+            await triggerKeyEvent(
+              '[data-test-kanban-board]',
+              'keydown',
+              'ArrowRight',
+            );
+          }
+          await triggerKeyEvent('[data-test-kanban-board]', 'keydown', ' ');
+          await settled();
+
+          assert
+            .dom('[data-kanban-column="uncategorized"] [data-test-issue-id]')
+            .includesText('IT-1', 'IT-1 is now in the Uncategorized column');
+          assert
+            .dom('[data-kanban-column="critical"] [data-test-issue-id="IT-1"]')
+            .doesNotExist('IT-1 is no longer in the critical column');
+
+          let savedDoc = savedIssueDocs[savedIssueDocs.length - 1];
+          assert.strictEqual(
+            savedDoc?.data?.attributes?.priority,
+            undefined,
+            'priority field is cleared when card is moved to Uncategorized',
+          );
+        });
       });
 
       module('groupBy=priority with fallback column', function (hooks) {
