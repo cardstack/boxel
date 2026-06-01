@@ -60,7 +60,9 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         let col =
           this.columns.find((c: KanbanColumnConfig) => c.key === p.columnKey) ??
           this.firstColumn;
-        let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
+        let cardIdx = cards.findIndex(
+          (c) => c != null && (c as any).id === p.itemId,
+        );
         if (!col || !col.key || cardIdx === -1) return null;
         return {
           columnId: col.key,
@@ -80,6 +82,14 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
       (col: KanbanColumnConfig) =>
         this.placements.filter((p) => p.columnId === col.key).length,
     );
+  }
+
+  get columnCardCountsByKey(): Record<string, number> {
+    let result: Record<string, number> = {};
+    this.columns.forEach((col, i) => {
+      result[col.key] = this.columnCardCounts[i] ?? 0;
+    });
+    return result;
   }
 
   handleChange = (newPlacements: KanbanPlacement[]) => {
@@ -120,6 +130,9 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
 
   handleToggleCollapsed = (col: KanbanColumnConfig | null): void => {
     if (!col) return;
+    if (this.hideEmpty && (this.columnCardCountsByKey[col.key] ?? 0) === 0) {
+      return;
+    }
     this.handleColumnsChange(
       this.columns.map((c: KanbanColumnConfig) =>
         c.key === col.key ? { ...c, collapsed: !c.collapsed } : c,
@@ -216,6 +229,7 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
                 @isEnabled={{this.hideEmpty}}
                 @onChange={{this.toggleHideEmptyColumns}}
                 @label='Hide empty columns'
+                data-test-hide-empty-switch
               />
             </div>
           {{/if}}
@@ -281,6 +295,8 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         >
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
+            @cardCounts={{this.columnCardCountsByKey}}
+            @hideEmpty={{this.hideEmpty}}
             @onClose={{this.toggleSidebar}}
             @onToggleCollapsed={{this.handleToggleCollapsed}}
             @onLabelChange={{this.handleLabelChange}}

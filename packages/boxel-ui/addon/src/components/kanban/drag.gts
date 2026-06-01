@@ -515,7 +515,7 @@ export class KanbanDragManager {
       .sort((a, b) => a.sortOrder - b.sortOrder);
 
     const colEl = container.querySelector(
-      `[data-kanban-column="${columnId}"]`,
+      `[data-kanban-column="${CSS.escape(columnId)}"]`,
     ) as HTMLElement | null;
     const bodyEl = colEl?.querySelector(
       '[data-kanban-col-body]',
@@ -588,7 +588,7 @@ export class KanbanDragManager {
       .sort((a, b) => a.sortOrder - b.sortOrder);
 
     const colEl = container.querySelector(
-      `[data-kanban-column="${columnId}"]`,
+      `[data-kanban-column="${CSS.escape(columnId)}"]`,
     ) as HTMLElement | null;
     if (!colEl) {
       return;
