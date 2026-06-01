@@ -273,7 +273,7 @@ export default class OperatorModeOverlays extends Overlays {
       /* Compact-mode sizing for the operator-mode-specific elements
          (the menu trigger and the select button). The AdornLabel /
          AdornSelectChip primitives get their compact variant from
-         the `@compact` arg we pass to AdornContext. */
+         the `@compact` arg we pass to each of them directly. */
       .actions-overlay.compact .overlay-label-menu {
         width: 14px;
         height: 14px;
@@ -302,8 +302,9 @@ export default class OperatorModeOverlays extends Overlays {
   // Tracks which rendered cards are currently small enough to warrant
   // the Adorn compact treatment (narrow atom-format cards). The set
   // is updated by `trackCompact` as cards resize; `isCompact` reads
-  // from it on each render so the template can pass `@compact` to
-  // AdornContext and toggle a `.compact` class on the overlay.
+  // from it on each render so the template can pass `@compact` to the
+  // AdornLabel / AdornSelectChip primitives and toggle a `.compact`
+  // class on the overlay.
   private compactCards = new TrackedSet<HTMLElement>();
 
   // Single ResizeObserver shared across all overlay elements in this
@@ -313,20 +314,23 @@ export default class OperatorModeOverlays extends Overlays {
   // and one entry in the observer's observation set, no per-overlay
   // ResizeObserver instance.
   private overlayToCard = new WeakMap<HTMLElement, HTMLElement>();
-  private compactObserver = new ResizeObserver((entries) => {
-    for (let entry of entries) {
-      let overlay = entry.target as HTMLElement;
-      let cardEl = this.overlayToCard.get(overlay);
-      if (!cardEl) continue;
-      let { width, height } = entry.contentRect;
-      let isCompact = shouldRenderCompact(width, height);
-      if (isCompact && !this.compactCards.has(cardEl)) {
-        this.compactCards.add(cardEl);
-      } else if (!isCompact && this.compactCards.has(cardEl)) {
-        this.compactCards.delete(cardEl);
-      }
-    }
-  });
+  private compactObserver =
+    typeof ResizeObserver === 'undefined'
+      ? undefined
+      : new ResizeObserver((entries) => {
+          for (let entry of entries) {
+            let overlay = entry.target as HTMLElement;
+            let cardEl = this.overlayToCard.get(overlay);
+            if (!cardEl) continue;
+            let { width, height } = entry.contentRect;
+            let isCompact = shouldRenderCompact(width, height);
+            if (isCompact && !this.compactCards.has(cardEl)) {
+              this.compactCards.add(cardEl);
+            } else if (!isCompact && this.compactCards.has(cardEl)) {
+              this.compactCards.delete(cardEl);
+            }
+          }
+        });
 
   private trackCompact = modifier(
     (overlay: HTMLElement, [cardEl]: [HTMLElement | undefined]) => {
@@ -334,14 +338,14 @@ export default class OperatorModeOverlays extends Overlays {
         return undefined;
       }
       this.overlayToCard.set(overlay, cardEl);
-      this.compactObserver.observe(overlay);
+      this.compactObserver?.observe(overlay);
       // Seed the initial state; the observer won't have fired yet.
       let { width, height } = overlay.getBoundingClientRect();
       if (shouldRenderCompact(width, height)) {
         this.compactCards.add(cardEl);
       }
       return () => {
-        this.compactObserver.unobserve(overlay);
+        this.compactObserver?.unobserve(overlay);
         this.overlayToCard.delete(overlay);
         this.compactCards.delete(cardEl);
       };
@@ -350,7 +354,7 @@ export default class OperatorModeOverlays extends Overlays {
 
   willDestroy() {
     super.willDestroy?.();
-    this.compactObserver.disconnect();
+    this.compactObserver?.disconnect();
   }
 
   @action

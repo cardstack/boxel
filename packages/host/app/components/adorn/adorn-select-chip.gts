@@ -59,7 +59,11 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
         height: 20px;
         padding: 3px;
         border-radius: 5px;
-        background: var(--adorn-label-bg, var(--adorn-accent-light));
+        /* Chip-specific token so the chip can be themed independently
+           of the label — reading the label's `--adorn-label-bg` here
+           would let a label-selection override (operator-mode sets it
+           to the darker accent) bleed into the chip. */
+        background: var(--adorn-chip-bg, var(--adorn-accent-light));
         color: var(--adorn-accent-light);
         z-index: 1;
       }
