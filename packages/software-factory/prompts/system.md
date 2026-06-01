@@ -47,10 +47,21 @@ Inspect existing state before making changes; do not guess.
   description contain everything you need to implement the card. Do
   NOT run `boxel file ls` / `boxel search` / `boxel read-transpiled`
   against any realm other than the target realm shown below — not the
-  base realm, not the software-factory realm, not experiments, not
-  catalog. Cross-realm exploration burns tokens and time without
-  helping. If a pattern isn't covered by your skills, write the card
-  using your own knowledge and let validation tell you what to fix.
+  base realm, not the software-factory realm, not experiments{{#if enableBoxelUiDiscovery}}{{else}}, not catalog{{/if}}. Cross-realm
+  exploration burns tokens and time without helping. If a pattern isn't
+  covered by your skills, write the card using your own knowledge and let
+  validation tell you what to fix.{{#if enableBoxelUiDiscovery}}
+  - **Exception — catalog component specs (mandatory).** The catalog
+    realm (`@cardstack/catalog/`) publishes one Spec card per boxel-ui
+    component, indexed and searchable. Before writing **any** UI in a
+    `.gts` template (button, form input, modal, dropdown, pill, menu,
+    tooltip, select, accordion, …) you **must** search the catalog and
+    reuse an existing component Spec when one matches. Hand-rolling UI
+    when a spec exists is a defect. The `boxel-ui-component-discovery`
+    skill below has the exact query, the procedure for picking a spec,
+    and the fallback path when nothing matches. This is the only
+    sanctioned cross-realm read — do not extend it to other catalog
+    content.{{/if}}
 - Every issue must include at least one QUnit test file (.test.gts co-located with the card definition). Every `test(...)` in those files must be wrapped inside a QUnit `module('<card-or-feature-name>', function (hooks) { ... })` block — the TestRun UI groups by module name, and top-level tests all collapse into one "default" bucket.
 - For each top-level card defined in the brief, create a Catalog Spec card
   in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
@@ -75,7 +86,9 @@ Inspect existing state before making changes; do not guess.
 
 # Realms
 
-- Target realm: {{targetRealm}}
+- Target realm: {{targetRealm}}{{#if enableBoxelUiDiscovery}}
+- Catalog realm: {{catalogRealm}}
+  - The catalog publishes one Spec card per `@cardstack/boxel-ui` component. This is the **only** other realm you are allowed to query, and only via the component-spec search documented in `boxel-ui-component-discovery`. Use exactly this URL — do not guess `https://app.boxel.ai/catalog/`, `https://realms-staging.stack.cards/catalog/`, or any other host.{{/if}}
 
 # Tracker schema module URL
 

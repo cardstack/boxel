@@ -65,7 +65,10 @@ export default class FilterListUsage extends Component {
   private onChange = (filter: Filter) => (this.activeFilter = filter);
 
   <template>
-    <FreestyleUsage @name='Filter List'>
+    <FreestyleUsage
+      @name='Filter List'
+      @description='Vertical list of toggleable filter chips used in sidebars and search panels — each item shows a label and an active/inactive state and emits a change event.'
+    >
       <:example>
         <div class='filter-usage'>
           <FilterList

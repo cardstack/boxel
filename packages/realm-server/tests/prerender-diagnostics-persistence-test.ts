@@ -8,7 +8,7 @@ import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app';
 // breadcrumbs lifted from `RenderError.diagnostics`, and the HTTP
 // correlation ID) ends up on `response.meta`, not on any embedded
 // inner `SerializedError`. The indexer reads from `response.meta`
-// and persists into `boxel_index.timing_diagnostics`; the error-row
+// and persists into `boxel_index.diagnostics`; the error-row
 // write path also copies the same blob onto `error_doc.diagnostics`
 // so the UI read surface (CardErrorJSONAPI.meta.diagnostics) keeps
 // working without a schema rename. The point of these tests is to
@@ -33,6 +33,11 @@ type FakeVisitResponse = {
       // `response.meta.diagnostics` and then deleted.
       diagnostics?: Record<string, unknown>;
     };
+    // Success-path host diagnostics block (computed-field counters,
+    // broken-link findings) captured by render.meta and spread onto the
+    // card response. Lifted onto `response.meta.diagnostics` the same way
+    // as the error-path block.
+    diagnostics?: Record<string, unknown>;
   };
   meta?: {
     timing?: Record<string, unknown>;
@@ -163,7 +168,7 @@ module(basename(__filename), function () {
 
     test('decorator populates response.meta even when there is no embedded error (successful render)', function (assert) {
       // Successful renders still get timing summaries so the indexer
-      // can persist them onto `timing_diagnostics` — that's the whole
+      // can persist them onto `diagnostics` — that's the whole
       // point of the consolidated column: operators can retrospectively
       // ask "why did this instance take N seconds?" regardless of
       // error status.
@@ -179,6 +184,63 @@ module(basename(__filename), function () {
       assert.strictEqual(response.meta?.diagnostics?.renderElapsedMs, 2);
       assert.strictEqual(response.meta?.diagnostics?.totalElapsedMs, 3);
       assert.deepEqual(response.meta?.diagnostics?.waits, {});
+    });
+
+    test('broken-link findings on the success-path card diagnostics are lifted onto response.meta.diagnostics', function (assert) {
+      // A card with a broken linksTo indexes cleanly (no error wrapper),
+      // but render.meta records the broken slot on the card's success-path
+      // diagnostics block. The decorator must lift that onto
+      // response.meta.diagnostics — the consolidated channel the indexer
+      // flattens into `boxel_index.diagnostics.brokenLinks`.
+      let response: FakeVisitResponse = {
+        card: {
+          diagnostics: {
+            serializeMs: 1.5,
+            brokenLinks: [
+              {
+                fieldName: 'pet',
+                reference: 'http://realm.example/missing-pet',
+                kind: 'not-found',
+              },
+            ],
+          },
+        } as FakeVisitResponse['card'],
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 1, renderMs: 2, waits: {} },
+        3,
+      );
+
+      let diagnostics = response.meta?.diagnostics;
+      assert.deepEqual(
+        diagnostics?.brokenLinks,
+        [
+          {
+            fieldName: 'pet',
+            reference: 'http://realm.example/missing-pet',
+            kind: 'not-found',
+          },
+        ],
+        'brokenLinks lifted onto response.meta.diagnostics',
+      );
+      assert.strictEqual(
+        diagnostics?.serializeMs,
+        1.5,
+        'sibling host-side counters lifted alongside brokenLinks',
+      );
+      assert.strictEqual(
+        diagnostics?.launchMs,
+        1,
+        'server timings merged into the same block',
+      );
+      // The card success-path diagnostics was a transient transport,
+      // deleted after the lift just like the error-path block.
+      assert.strictEqual(
+        response.card?.diagnostics,
+        undefined,
+        'card success-path diagnostics cleared after lift',
+      );
     });
 
     test('both decorators stack: host-lifted diagnostics + server timings + requestId coexist on response.meta', function (assert) {

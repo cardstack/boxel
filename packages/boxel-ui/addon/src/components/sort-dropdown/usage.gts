@@ -46,7 +46,10 @@ export default class SortDropdownUsage extends Component<Signature> {
   };
 
   <template>
-    <FreestyleUsage @name='SortDropdown'>
+    <FreestyleUsage
+      @name='SortDropdown'
+      @description='Dropdown for choosing a sort order from a list of named options — common at the top of a list/table view; emits the chosen sort key on change.'
+    >
       <:example>
         <SortDropdown
           @options={{this.options}}

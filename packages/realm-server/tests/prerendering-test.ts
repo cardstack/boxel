@@ -785,7 +785,10 @@ module(basename(__filename), function () {
                 }
               `,
               // Links to ./missing-pet, which does not exist — the lazy load
-              // 404s and the prerender surfaces a not-found error for the card.
+              // 404s and the broken slot renders the placeholder. The card
+              // itself indexes cleanly; the missing target is carried in
+              // `deps` so invalidation can reach the card if the target is
+              // created later.
               'owner-with-broken-pet.json': {
                 data: {
                   attributes: {
@@ -835,9 +838,9 @@ module(basename(__filename), function () {
                 },
               },
               // One present element (./real-pet) and one broken element
-              // (./missing-pet-2, which does not exist): the good slot loads
-              // while the broken slot 404s, and the prerender surfaces a
-              // not-found error for the card.
+              // (./missing-pet-2, which does not exist): the present slot
+              // loads while the broken slot 404s and renders the
+              // per-element placeholder. The card itself indexes cleanly.
               'owner-with-broken-pets.json': {
                 data: {
                   attributes: {
@@ -1391,7 +1394,7 @@ module(basename(__filename), function () {
         );
       });
 
-      test('card prerender captures a broken linksTo via the relationship scan', async function (assert) {
+      test('card prerender succeeds for a card with a broken linksTo target — the broken slot is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
         let cardURL = `${realmURL}owner-with-broken-pet.json`;
 
         let result = await prerenderCard(prerenderer, {
@@ -1402,27 +1405,22 @@ module(basename(__filename), function () {
           auth: auth(),
         });
 
-        assert.ok(
+        assert.notOk(
           result.response.error,
-          'prerender reports an error for the broken linksTo',
-        );
-        assert.strictEqual(
-          result.response.error?.error.status,
-          404,
-          'a missing link target surfaces as 404',
+          `prerender succeeds despite the broken linksTo — broken slot renders inline, error: ${JSON.stringify(result.response.error?.error ?? null)}`,
         );
         assert.ok(
-          result.response.error?.error.message?.includes('missing-pet'),
-          `error message names the missing link target, got: ${result.response.error?.error.message}`,
+          result.response.serialized,
+          'prerender returns the serialized JSON:API document',
         );
-        let deps = result.response.error?.error.deps ?? [];
+        let deps = result.response.deps ?? [];
         assert.ok(
           deps.some((dep) => dep.includes('missing-pet')),
-          `deps include the broken link reference, got: ${JSON.stringify(deps)}`,
+          `deps include the broken link reference so invalidation can reach the card if the target is created later, got: ${JSON.stringify(deps)}`,
         );
       });
 
-      test('card prerender captures a broken linksToMany element via the relationship scan', async function (assert) {
+      test('card prerender succeeds for a card with a broken linksToMany element — the broken element is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
         let cardURL = `${realmURL}owner-with-broken-pets.json`;
 
         let result = await prerenderCard(prerenderer, {
@@ -1433,23 +1431,102 @@ module(basename(__filename), function () {
           auth: auth(),
         });
 
-        assert.ok(
+        assert.notOk(
           result.response.error,
-          'prerender reports an error for the broken linksToMany element',
-        );
-        assert.strictEqual(
-          result.response.error?.error.status,
-          404,
-          'a missing element target surfaces as 404',
+          `prerender succeeds despite the broken linksToMany element — broken slot renders inline, error: ${JSON.stringify(result.response.error?.error ?? null)}`,
         );
         assert.ok(
-          result.response.error?.error.message?.includes('missing-pet-2'),
-          `error message names the missing element target, got: ${result.response.error?.error.message}`,
+          result.response.serialized,
+          'prerender returns the serialized JSON:API document',
         );
-        let deps = result.response.error?.error.deps ?? [];
+        let deps = result.response.deps ?? [];
         assert.ok(
           deps.some((dep) => dep.includes('missing-pet-2')),
           `deps include the broken element reference, got: ${JSON.stringify(deps)}`,
+        );
+      });
+
+      test('card prerender records a broken linksTo target on meta.diagnostics.brokenLinks for persistence', async function (assert) {
+        // The broken-link findings ride the same consolidated diagnostics
+        // channel as the server timings: render.meta runs getBrokenLinks on
+        // the settled instance, attaches the findings to its diagnostics
+        // block, and the Prerenderer lifts that onto
+        // `response.meta.diagnostics` — exactly the blob the indexer flattens
+        // into `boxel_index.diagnostics`.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}owner-with-broken-pet.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(
+          result.response.card?.error,
+          'prerender succeeds — the card indexes cleanly',
+        );
+        let brokenLinks = result.response.meta?.diagnostics?.brokenLinks;
+        assert.strictEqual(
+          brokenLinks?.length,
+          1,
+          `meta.diagnostics.brokenLinks has the single broken slot, got: ${JSON.stringify(
+            brokenLinks,
+          )}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.fieldName,
+          'pet',
+          'broken-link finding names the linksTo field',
+        );
+        assert.ok(
+          brokenLinks?.[0]?.reference.includes('missing-pet'),
+          `broken-link finding carries the broken reference, got: ${brokenLinks?.[0]?.reference}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.kind,
+          'not-found',
+          'a missing realm target is classified not-found',
+        );
+      });
+
+      test('card prerender records a broken linksToMany element on meta.diagnostics.brokenLinks for persistence', async function (assert) {
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}owner-with-broken-pets.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(
+          result.response.card?.error,
+          'prerender succeeds — the card indexes cleanly',
+        );
+        let brokenLinks = result.response.meta?.diagnostics?.brokenLinks;
+        // Only the broken element is recorded; the present sibling slot
+        // (./real-pet) produces no finding.
+        assert.strictEqual(
+          brokenLinks?.length,
+          1,
+          `meta.diagnostics.brokenLinks has only the broken element, got: ${JSON.stringify(
+            brokenLinks,
+          )}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.fieldName,
+          'pets',
+          'broken-link finding names the linksToMany field',
+        );
+        assert.ok(
+          brokenLinks?.[0]?.reference.includes('missing-pet-2'),
+          `broken-link finding carries the broken element reference, got: ${brokenLinks?.[0]?.reference}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.kind,
+          'not-found',
+          'a missing realm element is classified not-found',
         );
       });
 
@@ -2109,7 +2186,7 @@ module(basename(__filename), function () {
         // block so operators can classify the stall. Diagnostics
         // live on `response.meta.diagnostics` (the consolidated
         // channel — the indexer reads from there and persists into
-        // `boxel_index.timing_diagnostics`, mirroring to
+        // `boxel_index.diagnostics`, mirroring to
         // `error_doc.diagnostics` at write time for UI compat).
         let diagnostics = (timedOut.response as any)?.meta?.diagnostics;
         assert.strictEqual(
@@ -2226,7 +2303,7 @@ module(basename(__filename), function () {
 
           // Diagnostics live on `response.meta.diagnostics` — the
           // consolidated channel the indexer reads from and persists
-          // onto `boxel_index.timing_diagnostics` (mirrored to
+          // onto `boxel_index.diagnostics` (mirrored to
           // `error_doc.diagnostics` for UI compat).
           let diagnostics = (result.response as any)?.meta?.diagnostics;
           assert.strictEqual(
@@ -4674,7 +4751,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('missing link surfaces 404 without eviction', async function (assert) {
+        test('a card whose linksTo target is missing prerenders cleanly and does not evict the page', async function (assert) {
           const testCardURL = `${realmURL2}missing-link`;
           let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4685,12 +4762,10 @@ module(basename(__filename), function () {
           });
           let { response } = result;
 
-          assert.ok(response.error, 'error present for missing link');
-          assert.strictEqual(
-            response.error?.error.message,
-            `missing file ${realmURL1}missing-owner.json`,
+          assert.notOk(
+            response.error,
+            `prerender succeeds — broken slot renders inline, error: ${JSON.stringify(response.error?.error ?? null)}`,
           );
-          assert.strictEqual(response.error?.error.status, 404);
           assert.false(
             result.pool.evicted,
             'missing link does not evict prerender page',
@@ -4701,7 +4776,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('fetch failed surfaces error without eviction', async function (assert) {
+        test('a card whose linksTo target fails to fetch prerenders cleanly and does not evict the page', async function (assert) {
           const testCardURL = `${realmURL2}fetch-failed`;
           let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4712,19 +4787,17 @@ module(basename(__filename), function () {
           });
           let { response } = result;
 
-          assert.ok(response.error, 'error present for fetch failed');
-          assert.strictEqual(
-            response.error?.error.message,
-            `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+          assert.notOk(
+            response.error,
+            `prerender succeeds — broken slot renders inline, error: ${JSON.stringify(response.error?.error ?? null)}`,
           );
-          assert.strictEqual(response.error?.error.status, 500);
           assert.false(
             result.pool.evicted,
-            'fetch failed does not evict prerender page',
+            'fetch-failed link does not evict prerender page',
           );
           assert.false(
             result.pool.timedOut,
-            'fetch failed does not mark prerender timeout',
+            'fetch-failed link does not mark prerender timeout',
           );
         });
 

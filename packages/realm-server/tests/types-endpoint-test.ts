@@ -161,9 +161,14 @@ module(basename(__filename), function () {
         {
           type: 'card-type-summary',
           id: `${testRealm.url}friend/Friend`,
+          // The fixture realm includes a Friend instance whose linksTo
+          // target is broken; that instance now lands as type='instance'
+          // (broken slot renders the placeholder) instead of being
+          // demoted to instance-error, so it contributes to the
+          // type-summary total alongside the two clean Friend instances.
           attributes: {
             displayName: 'Friend',
-            total: 2,
+            total: 3,
             iconHTML,
             kind: 'instance' as const,
           },

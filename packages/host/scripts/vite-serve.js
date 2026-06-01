@@ -16,6 +16,12 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 
+// Refuse a second env-mode vite from this worktree BEFORE the boxel-ui
+// conditional-build runs — that step can take many seconds when the
+// addon dist is stale, which would look like a hang to the user instead
+// of a clear error. See env-mode-lock.js for the underlying constraint.
+require('./env-mode-lock').refuseIfAnotherSlugLocked();
+
 execFileSync(
   path.join(
     __dirname,
