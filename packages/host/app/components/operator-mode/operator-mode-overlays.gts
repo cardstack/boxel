@@ -144,6 +144,7 @@ export default class OperatorModeOverlays extends Overlays {
               {{#if isHovered}}
                 <AdornLabel
                   @compact={{isCompact}}
+                  class='overlay-type-label'
                   data-test-overlay-label
                   {{this.trackLabelOverflow renderedCard.element}}
                   {{on 'mouseenter' this.cancelHoverClear}}
@@ -226,84 +227,23 @@ export default class OperatorModeOverlays extends Overlays {
       }
       /* Switch the label background to the darker accent when the
          underlying card is selected. AdornLabel reads
-         `--adorn-label-bg` from any cascading ancestor; the variable
-         here propagates down through the rendered label. */
+         `--adorn-label-bg` from any cascading ancestor; setting it here
+         propagates down through the rendered label. The hover /
+         selection outline is supplied by AdornContext via the
+         `adorn-stroke` class on the overlay. */
       .actions-overlay.selected {
-        box-shadow: 0 0 0 4px var(--adorn-accent-light);
+        --adorn-label-bg: var(--adorn-accent);
       }
-
-      /* Hover on a selected card: stroke shifts to darker accent */
-      .actions-overlay.selected.hovered {
-        box-shadow: 0 0 0 4px var(--adorn-accent);
-      }
-
-      /* Type-label tab — flag shape with sloped right edge. The
-         `top` and `left` are written inline by trackLabelOverflow,
-         relative to the actions-overlay offset parent (which velcro
-         keeps aligned with the card). Absolute (not fixed) so the
-         positioning is naturally interpreted in the overlay's local
-         coordinate space — fixed would be sensitive to any
-         transformed ancestor (e.g. the test runner's `#ember-testing`
-         scale wrapper) creating a different containing block. The
-         flag shape is defined entirely by clip-path so it can mirror
-         vertically when the label flips below the card. */
-      .adorn-label {
+      /* Position the type-label tab within the overlay. trackLabelOverflow
+         writes the inline `top`/`left` each frame; the overlay itself is
+         pointer-events:none, so the label re-enables pointer events to
+         keep its hover handlers live. The flag shape, colors, and compact
+         variant all live in the AdornLabel primitive — this class only
+         carries the consumer's placement concerns. */
+      .overlay-type-label {
         position: absolute;
-        top: 0;
-        left: 0;
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 3px 12px 3px 7px;
-        background: var(--adorn-accent-light);
-        color: #0a2e1c;
-        font: 700 10px/1 var(--boxel-font-family, inherit);
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-        white-space: nowrap;
-        overflow: hidden;
-        border-radius: 5px 0 0 5px;
-        clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 100%, 0 100%);
         pointer-events: auto;
         z-index: 1;
-        filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.2));
-      }
-      /* When the label flips below the card, mirror the clip-path
-         vertically so the slope still points toward the card (now
-         upward from the bottom-right corner). The rounded corners
-         stay on the left side either way. */
-      .adorn-label[data-side='bottom'] {
-        clip-path: polygon(0 100%, calc(100% - 13px) 100%, 100% 0, 0 0);
-      }
-      .actions-overlay.selected .adorn-label {
-        background: var(--adorn-accent);
-      }
-      .adorn-label-icon {
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-        color: #0a2e1c;
-      }
-      .adorn-label-text {
-        /* `min-width: 0` lets the flex item shrink below its
-           min-content size when the label is capped by floating-ui's
-           `size` middleware; without it, text-overflow:ellipsis can't
-           kick in. */
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      /* BoxelDropdown wrapper. Inline-flex so the trigger and the
-         portal-origin element (which appears beside the trigger when
-         the menu is open) live inside their own flex container
-         instead of being two direct flex items of the label. Without
-         this wrapper, the label's natural width grows by one
-         flex-gap as soon as the menu opens, shifting the label
-         on click. */
-      .adorn-label-dropdown {
-        --adorn-label-bg: var(--adorn-accent);
-        display: inline-flex;
-        align-items: center;
       }
       .adorn-label-menu {
         width: 18px;
