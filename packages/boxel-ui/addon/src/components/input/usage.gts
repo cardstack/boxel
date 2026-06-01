@@ -85,7 +85,10 @@ export default class InputUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Input'>
+    <FreestyleUsage
+      @name='Input'
+      @description='Form text input field with validation states, helper/error text, and support for text, email, password, number, search, textarea, and checkbox types.'
+    >
       <:example>
         <label for={{this.id}} class='boxel-sr-only'>Label for example input
           component</label>

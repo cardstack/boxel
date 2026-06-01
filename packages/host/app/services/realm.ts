@@ -32,8 +32,6 @@ import type {
 import {
   Deferred,
   ensureTrailingSlash,
-  isRegisteredPrefix,
-  cardIdToURL,
   logger,
   ri,
   rri,
@@ -829,8 +827,8 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): EnhancedRealmInfo => {
-    if (isRegisteredPrefix(url)) {
-      url = cardIdToURL(url).href;
+    if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
+      url = this.network.virtualNetwork.toURL(url).href;
     }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
@@ -870,8 +868,8 @@ export default class RealmService extends Service {
   };
 
   async allUsersPermissions(url: string) {
-    if (isRegisteredPrefix(url)) {
-      url = cardIdToURL(url).href;
+    if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
+      url = this.network.virtualNetwork.toURL(url).href;
     }
     let resource = this.knownRealm(url);
     if (!resource) {

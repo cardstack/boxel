@@ -818,7 +818,11 @@ export default class Room extends Component<Signature> {
       if (!this.args.selectedCardRef) {
         return;
       }
-      let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+      let moduleId = internalKeyFor(
+        this.args.selectedCardRef,
+        undefined,
+        this.network.virtualNetwork,
+      );
       state.value = this.playgroundPanelService.getSelection(moduleId)?.cardId;
     })();
 
@@ -1518,7 +1522,10 @@ export default class Room extends Component<Signature> {
     bytes: Uint8Array,
   ): Promise<FileDef> {
     let sourceUrl = this.buildLocalSourceUrl(localFile.name);
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
+    let fileDefCodeRef = resolveFileDefCodeRef(
+      new URL(sourceUrl),
+      this.network.virtualNetwork,
+    );
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 import {
   logger,
   aiBotUsername,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -164,7 +164,7 @@ class Assistant {
   }
 
   getModel(prompt: PromptParts) {
-    return prompt.model ?? DEFAULT_LLM;
+    return prompt.model ?? DEFAULT_FALLBACK_MODEL_ID;
   }
 
   async handleDebugCommands(

@@ -1,7 +1,4 @@
-import {
-  isRegisteredPrefix,
-  resolveCardReference,
-} from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 
 export type FetcherMiddlewareHandler = (
   req: Request,
@@ -11,6 +8,7 @@ export type FetcherMiddlewareHandler = (
 export function fetcher(
   fetchImplementation: typeof globalThis.fetch,
   middlewareStack: FetcherMiddlewareHandler[],
+  virtualNetwork?: VirtualNetwork,
 ): typeof globalThis.fetch {
   let instance: typeof globalThis.fetch = async (urlOrRequest, init) => {
     function buildNext(remainingHandlers: FetcherMiddlewareHandler[]) {
@@ -32,8 +30,11 @@ export function fetcher(
     // and produce a literal `https://<origin>/@cardstack/catalog/...` URL.
     // Mirrors VirtualNetwork.fetch — but every authedFetch caller funnels
     // through fetcher first, so the resolution has to happen here too.
-    if (typeof urlOrRequest === 'string' && isRegisteredPrefix(urlOrRequest)) {
-      urlOrRequest = resolveCardReference(urlOrRequest, undefined);
+    if (
+      typeof urlOrRequest === 'string' &&
+      virtualNetwork?.isRegisteredPrefix(urlOrRequest)
+    ) {
+      urlOrRequest = virtualNetwork.toURL(urlOrRequest).href;
     }
 
     let request =

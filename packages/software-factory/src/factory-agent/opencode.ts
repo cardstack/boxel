@@ -52,6 +52,7 @@ import {
   type FactoryTool,
   type ToolCallEntry,
 } from '../factory-tool-builder';
+import { deriveCatalogRealmUrl } from '../factory-catalog-realm';
 import { logger } from '../logger';
 import {
   assembleBootstrapPrompt,
@@ -468,7 +469,9 @@ export class OpencodeFactoryAgent implements LoopAgent {
     }));
     return this.promptLoader.load('system', {
       targetRealm: context.targetRealm,
+      catalogRealm: deriveCatalogRealmUrl(context.targetRealm),
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      enableBoxelUiDiscovery: context.enableBoxelUiDiscovery === true,
       skills,
     });
   }

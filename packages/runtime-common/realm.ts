@@ -1,6 +1,5 @@
 import { Deferred } from './deferred';
 import {
-  resolveCardReference,
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -695,11 +694,6 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
-  // [readiness-diag] — opt-in logger, off in production, enabled in CI
-  // host tests via `readiness-diag=debug` in HOST_TEST_LOG_LEVELS.
-  // Remove this field together with the [readiness-diag] call sites
-  // once the CI readiness-check timeout flake is rooted out.
-  #readinessDiag = logger('readiness-diag');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -775,6 +769,7 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
+  #virtualNetwork: VirtualNetwork;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so a /_config PATCH (or any other path that nulls
@@ -798,6 +793,10 @@ export class Realm {
 
   get realmServerURL(): string {
     return this.#realmServerURL;
+  }
+
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
   }
 
   constructor(
@@ -841,6 +840,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
     this.#queue = queue;
+    this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
@@ -858,35 +858,39 @@ export class Realm {
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
-    let _fetch = fetcher(virtualNetwork.fetch, [
-      // when we run cards directly in node we do so under the authority of the
-      // realm server so that we can assume the user that owns this realm. this
-      // logic will eventually go away after we refactor to running cards only
-      // in headless chrome.
-      async (req, next) => {
-        if (!owner) {
-          owner = await this.getRealmOwnerUserId();
-        }
-        req.headers.set('X-Boxel-Assume-User', owner);
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      async (request, next) => {
-        if (!this.paths.inRealm(rri(request.url))) {
-          return next(request);
-        }
-        return await this.internalHandle(request, true);
-      },
-      authorizationMiddleware(
-        // ditto with above, we run cards under the authority of the realm
-        // server so that we can assume user that owns this realm. refactor this
-        // back to using the realm's own matrix client after running cards in
-        // headless chrome lands.
-        new RealmAuthDataSource(this.#matrixClient, () => _fetch),
-      ),
-    ]);
+    let _fetch = fetcher(
+      virtualNetwork.fetch,
+      [
+        // when we run cards directly in node we do so under the authority of the
+        // realm server so that we can assume the user that owns this realm. this
+        // logic will eventually go away after we refactor to running cards only
+        // in headless chrome.
+        async (req, next) => {
+          if (!owner) {
+            owner = await this.getRealmOwnerUserId();
+          }
+          req.headers.set('X-Boxel-Assume-User', owner);
+          return next(req);
+        },
+        async (req, next) => {
+          return (await maybeHandleScopedCSSRequest(req)) || next(req);
+        },
+        async (request, next) => {
+          if (!this.paths.inRealm(rri(request.url))) {
+            return next(request);
+          }
+          return await this.internalHandle(request, true);
+        },
+        authorizationMiddleware(
+          // ditto with above, we run cards under the authority of the realm
+          // server so that we can assume user that owns this realm. refactor this
+          // back to using the realm's own matrix client after running cards in
+          // headless chrome lands.
+          new RealmAuthDataSource(this.#matrixClient, () => _fetch),
+        ),
+      ],
+      virtualNetwork,
+    );
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);
@@ -1076,19 +1080,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
-    // [readiness-diag] — entry / fulfillment markers. The per-realm
-    // startup heartbeat lives in #startup so that wait-on's 0.5–2s
-    // probe cadence doesn't multiply heartbeat intervals (~300 of them
-    // accumulating across a 10-minute hang) on a single Deferred.
-    let waitStart = Date.now();
-    this.#readinessDiag.debug(
-      `readiness check requested for realm ${this.url}`,
-    );
     await this.#startedUp.promise;
-    let totalElapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
-    this.#readinessDiag.debug(
-      `readiness check fulfilled for realm ${this.url} (waited ${totalElapsed}s)`,
-    );
 
     return createResponse({
       body: null,
@@ -2473,109 +2465,54 @@ export class Realm {
   async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
-    // [readiness-diag] — every `this.#readinessDiag.debug(...)` line in
-    // this method is a temporary phase marker for the CI readiness-check
-    // timeout flake. The whole logger is opt-in (off in production, on
-    // in CI host tests via HOST_TEST_LOG_LEVELS). Remove the call sites
-    // together with the `#readinessDiag` field once root cause is found.
-    this.#readinessDiag.debug(`startup begin for realm ${this.url}`);
-    // [readiness-diag] — one heartbeat per realm-lifetime, not per
-    // readiness-probe (wait-on polls every 0.5–2s; a per-request
-    // heartbeat would multiply to hundreds of concurrent intervals).
-    // Cleared in the finally below so a startup that fails or throws
-    // doesn't leak the timer past the lifetime of this method.
-    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
-      () => {
-        let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        this.#readinessDiag.debug(
-          `startup still pending for realm ${this.url} (elapsed=${elapsed}s)`,
-        );
-      },
-      15_000,
-    );
-    if (
-      heartbeat &&
-      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
-        'function'
-    ) {
-      (heartbeat as unknown as { unref: () => void }).unref();
-    }
-    try {
-      if (this.#copiedFromRealm) {
-        this.#readinessDiag.debug(
-          `startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
-        );
-        await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-        this.#readinessDiag.debug(
-          `startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-        );
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
+        realmURL: this.url,
+      });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      if (isNewIndex || this.#fullIndexOnStartup) {
+        if (this.#fullIndexOnStartup) {
+          // CS-11245: bootstrap realms (kind='bootstrap': base,
+          // catalog, skills, …) full-index on every realm-server
+          // boot. On a rolling deploy the worker that picks up the
+          // resulting from-scratch-index job fans HTTP source reads
+          // through the LB, which can route to a still-warm
+          // pre-deploy peer whose `#sourceCache` was populated from
+          // pre-rsync bytes. `getSourceOrRedirect` would return those
+          // stale bytes and the reindex would persist them into
+          // `boxel_index.pristine_doc` plus sticky `error_doc` rows
+          // that survive past fleet stabilization (see CS-11245 for
+          // the originating incident). Broadcast a per-realm
+          // NOTIFY so every peer drops its entries for this URL and
+          // the next read falls through to `/persistent/` (EFS,
+          // already brought up to date by this container's
+          // `setup:<realm>-in-deployment` rsync at PID 1). The local
+          // clear is a no-op on a freshly booted container; the
+          // broadcast is what does the work. Skipped on the
+          // `isNewIndex` branch — that branch fires for first-ever
+          // mounts (e.g., brand-new publish), where peer caches for
+          // a never-before-seen URL are empty by construction.
+          await this.clearLocalSourceCachesAndBroadcast();
+        }
+        let priority =
+          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+        let promise = this.#realmIndexUpdater.fullIndex(priority);
+        if (isNewIndex) {
+          // we only await the full indexing at boot if this is a brand new index
+          await promise;
+        }
+        // not sure how useful this event is--nothing is currently listening for
+        // it, and it may happen during or after the full index...
         this.broadcastRealmEvent({
           eventName: 'index',
-          indexType: 'copy',
-          sourceRealmURL: this.#copiedFromRealm.href,
+          indexType: 'full',
           realmURL: this.url,
         });
-      } else {
-        let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-        this.#readinessDiag.debug(
-          `startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
-        );
-        if (isNewIndex || this.#fullIndexOnStartup) {
-          if (this.#fullIndexOnStartup) {
-            // CS-11245: bootstrap realms (kind='bootstrap': base,
-            // catalog, skills, …) full-index on every realm-server
-            // boot. On a rolling deploy the worker that picks up the
-            // resulting from-scratch-index job fans HTTP source reads
-            // through the LB, which can route to a still-warm
-            // pre-deploy peer whose `#sourceCache` was populated from
-            // pre-rsync bytes. `getSourceOrRedirect` would return those
-            // stale bytes and the reindex would persist them into
-            // `boxel_index.pristine_doc` plus sticky `error_doc` rows
-            // that survive past fleet stabilization (see CS-11245 for
-            // the originating incident). Broadcast a per-realm
-            // NOTIFY so every peer drops its entries for this URL and
-            // the next read falls through to `/persistent/` (EFS,
-            // already brought up to date by this container's
-            // `setup:<realm>-in-deployment` rsync at PID 1). The local
-            // clear is a no-op on a freshly booted container; the
-            // broadcast is what does the work. Skipped on the
-            // `isNewIndex` branch — that branch fires for first-ever
-            // mounts (e.g., brand-new publish), where peer caches for
-            // a never-before-seen URL are empty by construction.
-            await this.clearLocalSourceCachesAndBroadcast();
-          }
-          let priority =
-            opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-          let promise = this.#realmIndexUpdater.fullIndex(priority);
-          if (isNewIndex) {
-            // we only await the full indexing at boot if this is a brand new index
-            this.#readinessDiag.debug(
-              `startup awaiting fullIndex (new index) for realm ${this.url}`,
-            );
-            await promise;
-            this.#readinessDiag.debug(
-              `startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-            );
-          } else {
-            this.#readinessDiag.debug(
-              `startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
-            );
-          }
-          // not sure how useful this event is--nothing is currently listening for
-          // it, and it may happen during or after the full index...
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'full',
-            realmURL: this.url,
-          });
-        }
-      }
-      this.#readinessDiag.debug(
-        `startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
-      );
-    } finally {
-      if (heartbeat !== undefined) {
-        clearInterval(heartbeat);
       }
     }
 
@@ -4049,7 +3986,10 @@ export class Realm {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+    let fileDefCodeRef = resolveFileDefCodeRef(
+      new URL(fileURL),
+      this.#virtualNetwork,
+    );
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
@@ -4122,7 +4062,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : resolveFileDefCodeRef(new URL(fileURL)));
+        : resolveFileDefCodeRef(new URL(fileURL), this.#virtualNetwork));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {
@@ -4436,8 +4376,12 @@ export class Realm {
 
       if (
         originalClone.meta?.adoptsFrom &&
-        internalKeyFor(patch.meta.adoptsFrom, url) !==
-          internalKeyFor(originalClone.meta.adoptsFrom, url)
+        internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
+          internalKeyFor(
+            originalClone.meta.adoptsFrom,
+            url,
+            this.#virtualNetwork,
+          )
       ) {
         return badRequest({
           message: `Cannot change card instance type to ${JSON.stringify(
@@ -4554,10 +4498,7 @@ export class Realm {
           });
           visitModuleDeps(resource, (moduleURL, setModuleURL) => {
             setModuleURL(
-              resolveCardReference(
-                moduleURL,
-                instanceURL,
-              ) as RealmResourceIdentifier,
+              this.#virtualNetwork.resolveRRI(moduleURL, rri(instanceURL)),
             );
           });
         }
@@ -4701,7 +4642,7 @@ export class Realm {
     // say "not foreign" and the guard would silently fail to fire.
     let resolved: string;
     try {
-      resolved = resolveCardReference(dep, undefined);
+      resolved = this.#virtualNetwork.toURL(dep).href;
     } catch {
       // Bare specifier with no matching prefix mapping. `loadLinks`
       // can't fetch it, so it's not a request-time mutation source —
@@ -4870,8 +4811,26 @@ export class Realm {
         }
       }
       if (maybeError.type === 'error') {
+        // The index has a row for this card, it just can't be served
+        // cleanly — so mirror the underlying error's HTTP status when it
+        // is a real HTTP error status (auth 401/403, validation 422,
+        // upstream 5xx, …) instead of flattening everything to 500.
+        //
+        // 404 is the one status we never mirror: an existing-but-errored
+        // card is not "not found". 404 is reserved for a missing index
+        // row (see `notFound` above) so that a 404 on a card GET is an
+        // unambiguous "this card no longer exists" signal. A recorded
+        // 404 (e.g. an error whose underlying cause was a missing linked
+        // instance) therefore falls back to 500, as do non-HTTP failures
+        // (fetch failures recorded as status 0) and any out-of-range
+        // value.
+        let errorStatus = maybeError.error.errorDetail.status;
         return systemError({
           requestContext,
+          status:
+            errorStatus >= 400 && errorStatus <= 599 && errorStatus !== 404
+              ? errorStatus
+              : 500,
           message: `cannot return card, ${request.url}, from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.message}`,
           id: request.url,
           additionalError: CardError.fromSerializableError(maybeError.error),
@@ -6721,6 +6680,7 @@ export class Realm {
       definition,
       relativeTo,
       definitionLookup: this.#definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
     });
   }
 

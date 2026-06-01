@@ -45,6 +45,8 @@ export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   ENV_SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
   export ENV_SLUG
+  ENV_DB_SLUG=$(pg_db_slug "$ENV_SLUG")
+  export ENV_DB_SLUG
   export ENV_MODE=true
 
   # Drop standard-mode TLS env vars if they leaked in from a parent
@@ -73,9 +75,11 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ICONS_URL="https://icons.${ENV_SLUG}.localhost"
   export HOST_URL="https://host.${ENV_SLUG}.localhost"
 
-  # Database
-  export PGDATABASE="${PGDATABASE:-boxel_${ENV_SLUG}}"
-  export PGDATABASE_TEST="boxel_test_${ENV_SLUG}"
+  # Database. Hyphens in slugs (e.g. `cs-12345-foo`) aren't valid in
+  # unquoted Postgres identifiers, so use the underscored variant for
+  # the DB name while keeping ENV_SLUG hyphenated for hostnames/paths.
+  export PGDATABASE="${PGDATABASE:-boxel_${ENV_DB_SLUG}}"
+  export PGDATABASE_TEST="boxel_test_${ENV_DB_SLUG}"
 
   # Ports (dynamic in env mode)
   export REALM_PORT=0
@@ -93,6 +97,7 @@ else
   # Capture previous ENV_MODE before resetting it, so we can detect transitions
   _PREV_ENV_MODE="${ENV_MODE:-}"
   export ENV_SLUG=""
+  export ENV_DB_SLUG=""
   export ENV_MODE=""
 
   if [ "$_PREV_ENV_MODE" = true ]; then

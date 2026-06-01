@@ -53,6 +53,10 @@ START_CATALOG=true
 if [ "${SKIP_CATALOG:-}" = "true" ]; then
   START_CATALOG=""
 fi
+START_SOFTWARE_FACTORY=true
+if [ "${SKIP_SOFTWARE_FACTORY:-}" = "true" ]; then
+  START_SOFTWARE_FACTORY=""
+fi
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 
@@ -133,8 +137,8 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
   \
-  --path='../software-factory/realm' \
-  --username='software_factory_realm' \
-  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
-  --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  ${START_SOFTWARE_FACTORY:+--path='../software-factory/realm'} \
+  ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
+  ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   2>&1 | "$LOG_TEE" realm-server

@@ -22,7 +22,6 @@ import {
   SupportedMimeType,
   isCardError,
   isBaseDefInstance,
-  cardIdToURL,
   rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -53,7 +52,6 @@ import {
   withCardType,
   coerceRenderError,
   normalizeRenderError,
-  brokenLinkRenderError,
 } from '../utils/render-error';
 import {
   enableRenderTimerStub,
@@ -109,7 +107,6 @@ export default class RenderRoute extends Route<Model> {
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
   #windowListenersAttached = false;
-  #routeActivated = false;
   #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
@@ -151,16 +148,6 @@ export default class RenderRoute extends Route<Model> {
     }
   };
 
-  activate() {
-    // Tracks whether this route was entered via a real transition (the
-    // puppeteer prerenderer navigates to /render/...). The in-browser
-    // prerenderer drives the model hook through `recognizeAndLoad` without
-    // activating the route, so this stays false there — gating the
-    // broken-link surfacing below to the transition path that owns the DOM
-    // error element, and keeping it from hijacking the app router under test.
-    this.#routeActivated = true;
-  }
-
   deactivate() {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
@@ -193,7 +180,6 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderStageSetAt = undefined;
     (globalThis as any).__boxelRenderDiagnostics = undefined;
     (globalThis as any).__waitForRenderLoadStability = undefined;
-    this.#routeActivated = false;
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
@@ -416,7 +402,9 @@ export default class RenderRoute extends Route<Model> {
       let instance = (await this.store.addFileMeta(
         resource,
         doc,
-        resource.id ? cardIdToURL(resource.id) : undefined,
+        resource.id
+          ? this.network.virtualNetwork.toURL(resource.id)
+          : undefined,
       )) as unknown as CardDef;
 
       let state = new TrackedMap<string, unknown>();
@@ -581,15 +569,6 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
-  }
-
-  async #scanForBrokenLinks(
-    instance: CardDef,
-  ): Promise<RenderError | undefined> {
-    let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
-    return brokenLinkRenderError(cardApi.getBrokenLinks(instance));
   }
 
   async #touchIsUsedFields(instance: CardDef): Promise<void> {
@@ -800,18 +779,6 @@ export default class RenderRoute extends Route<Model> {
     renderReadyLogger.debug(
       `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
     );
-    // The store has settled, so every lazy link the render pulled on has
-    // resolved and any failure has planted its sentinel. Scan the rendered
-    // instance for broken links and surface the first as a render error —
-    // this is the indexer's broken-link capture, replacing the synchronous
-    // dispatch that used to fire mid-render. Only the activated (transition)
-    // path surfaces here; the in-browser prerenderer runs its own scan.
-    if (this.#routeActivated && model.instance) {
-      let brokenLinkError = await this.#scanForBrokenLinks(model.instance);
-      if (brokenLinkError) {
-        throw new Error(JSON.stringify(brokenLinkError));
-      }
-    }
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();

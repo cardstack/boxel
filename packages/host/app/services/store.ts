@@ -22,8 +22,6 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 import {
   baseFileRef,
   CardError,
-  cardIdToURL,
-  isRegisteredPrefix,
   hasExecutableExtension,
   isCardError,
   isCardInstance,
@@ -76,7 +74,7 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
-  resolveCardReference,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -400,7 +398,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!id) {
       return;
     }
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
     currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
@@ -424,7 +422,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!id) {
       return;
     }
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     let readType: StoreReadType = opts?.type ?? 'card';
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
@@ -435,7 +433,7 @@ export default class StoreService extends Service implements StoreInterface {
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
-    if (isLocalId(id)) {
+    if (isLocalId(id, this.network.virtualNetwork)) {
       let instanceOrError = this.peek(id);
       if (instanceOrError) {
         let realmURL = isCardInstance(instanceOrError)
@@ -687,7 +685,7 @@ export default class StoreService extends Service implements StoreInterface {
     id: string,
     opts?: { type?: StoreReadType },
   ): T | CardErrorJSONAPI | undefined {
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
@@ -705,7 +703,7 @@ export default class StoreService extends Service implements StoreInterface {
     id: string,
     opts?: { type?: StoreReadType },
   ): CardErrorJSONAPI | undefined {
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return this.store.getFileMetaError(id);
@@ -781,7 +779,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async delete(id: string): Promise<void> {
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -1210,7 +1208,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     return this.autoSaveStates.get(id);
   }
 
@@ -1224,7 +1222,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getReferenceCount(id: string) {
-    id = asURL(id);
+    id = asURL(id, this.network.virtualNetwork);
     return this.referenceCount.get(id) ?? 0;
   }
 
@@ -1233,7 +1231,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async waitForCardLoad(cardId: string): Promise<void> {
-    let normalizedId = asURL(cardId);
+    let normalizedId = asURL(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
       return;
     }
@@ -1249,7 +1247,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!cardId) {
       return;
     }
-    let normalizedId = asURL(cardId);
+    let normalizedId = asURL(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
       return;
     }
@@ -1265,7 +1263,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!cardId || !deferred) {
       return;
     }
-    let normalizedId = asURL(cardId);
+    let normalizedId = asURL(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
       return;
     }
@@ -1398,7 +1396,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     // if there are no more subscribers to this realm then unsubscribe from realm
-    let realmHref = !isLocalId(id)
+    let realmHref = !isLocalId(id, this.network.virtualNetwork)
       ? [...this.subscriptions.keys()].find((realmURL) =>
           id.startsWith(realmURL),
         )
@@ -1412,7 +1410,7 @@ export default class StoreService extends Service implements StoreInterface {
       subscription &&
       ![...this.referenceCount.entries()].find(
         ([referenceId, count]) =>
-          !isLocalId(referenceId) &&
+          !isLocalId(referenceId, this.network.virtualNetwork) &&
           count > 0 &&
           referenceId.startsWith(realmHref),
       )
@@ -1423,10 +1421,15 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private createCardStore(): CardStore {
-    return new CardStore(this.referenceCount, this.network.authedFetch, {
-      getSearchResource: (parent, getQuery, getRealms, opts) =>
-        this.getSearchResource(parent, getQuery, getRealms, opts),
-    });
+    return new CardStore(
+      this.referenceCount,
+      this.network.authedFetch,
+      this.network.virtualNetwork,
+      {
+        getSearchResource: (parent, getQuery, getRealms, opts) =>
+          this.getSearchResource(parent, getQuery, getRealms, opts),
+      },
+    );
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -1474,6 +1477,24 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
         if (isCardInstance(instance)) {
+          // The invalidation id is the canonical remote id for this card. When
+          // the server has just assigned a remote id to a locally-created
+          // instance, this event is the first the store hears of it: the
+          // instance is still keyed by its local id with an unset/local `id`.
+          // Reconcile the identity now — this event is precisely when we learn a
+          // remote id exists for the local id. We only learn the identity here,
+          // not the new content: the instance keeps its original local content
+          // until `reloadInstance` (below) fetches the server state, but its
+          // `id` must be the remote id first so that fetch targets the right
+          // URL. Doing it here, in the event handler, keeps `store.peek` a pure
+          // read — reconciling during a render-time peek would mutate the
+          // tracked `id` mid-render and trip a backtracking re-render assertion.
+          if (
+            invalidation.split('/').pop() === instance[localIdSymbol] &&
+            instance.id !== rri(invalidation)
+          ) {
+            instance.id = rri(invalidation);
+          }
           // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
           // overwriting the inputs with past values. This can happen if the user makes edits in the time between
           // the auto save request and the arrival realm event.
@@ -1529,7 +1550,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
-      let url = asURL(idOrDoc);
+      let url = asURL(idOrDoc, this.network.virtualNetwork);
       let reloadTracker = this.startTrackingCardLoad(url);
       try {
         let oldInstance = url ? this.store.getCard(url) : undefined;
@@ -1554,7 +1575,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (referenceCount === 0) {
         continue;
       }
-      if (isLocalId(id)) {
+      if (isLocalId(id, this.network.virtualNetwork)) {
         let remoteIdsForLocal = this.store.getRemoteIds(id);
         if (remoteIdsForLocal.length === 0) {
           let error = this.store.getCardError(id);
@@ -1602,7 +1623,20 @@ export default class StoreService extends Service implements StoreInterface {
       }
       if (isDelete) {
         await this.stopAutoSaving(instance);
+        // Snapshot the consumers BEFORE removing the deleted instance from
+        // the store. `consumersOf` walks the loaded cards and reads their
+        // linksTo refs — every consumer that has the now-deleted card in
+        // its bucket needs its slot rewritten to a link-not-found sentinel
+        // so the placeholder render takes over the slot without a
+        // navigation. Without this, the consumer's render stays stale on
+        // the now-orphaned card object until something else forces a
+        // re-render.
+        let api = await this.cardService.getAPI();
+        let consumers = this.store.consumersOf(api, instance);
         this.store.delete(instance.id);
+        for (let consumer of consumers) {
+          api.notifyLinksToTargetDeleted(consumer, instance.id);
+        }
       }
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);
@@ -1759,7 +1793,7 @@ export default class StoreService extends Service implements StoreInterface {
     };
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
-    let id = asURL(idOrDoc);
+    let id = asURL(idOrDoc, this.network.virtualNetwork);
     if (id) {
       let working = this.inflightGetCards.get(id);
       if (working) {
@@ -1802,7 +1836,8 @@ export default class StoreService extends Service implements StoreInterface {
         deferred?.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T;
       }
-      if (isLocalId(id) && !isRegisteredPrefix(id)) {
+      let vn = this.network.virtualNetwork;
+      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
         let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
@@ -1814,7 +1849,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
       // Resolve registered prefix IDs (e.g. @cardstack/skills/...) to actual
       // URLs so they can be used for fetching.
-      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
+      let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
@@ -1822,7 +1857,7 @@ export default class StoreService extends Service implements StoreInterface {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
           let result = await this.cardService.getSource(
-            cardIdToURL(`${url}.json`),
+            vn.toURL(`${url}.json`),
           );
           if (result.status === 200) {
             json = JSON.parse(result.content);
@@ -1857,7 +1892,10 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(json, null, 2)}`,
           );
         }
-        if (!json.data.id || !isResolvableInstanceId(json.data.id)) {
+        if (
+          !json.data.id ||
+          !isResolvableInstanceId(json.data.id, this.network.virtualNetwork)
+        ) {
           // Normalize the instance id to the canonical URL form when the
           // server-returned doc is missing one, or when it carries a bare
           // local id that doesn't resolve to a realm location (e.g. a
@@ -1938,7 +1976,7 @@ export default class StoreService extends Service implements StoreInterface {
     };
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
-    let id = asURL(idOrDoc);
+    let id = asURL(idOrDoc, this.network.virtualNetwork);
     if (!id) {
       throw new Error('file-meta reads require a URL id');
     }
@@ -1957,10 +1995,11 @@ export default class StoreService extends Service implements StoreInterface {
         deferred.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T | CardErrorJSONAPI;
       }
-      if (isLocalId(id) && !isRegisteredPrefix(id)) {
+      let vn = this.network.virtualNetwork;
+      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
-      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
+      let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
       let fileMetaDoc: SingleFileMetaDocument | CardError;
       if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
         fileMetaDoc = await this.extractFileMetaDirectly(url);
@@ -2002,7 +2041,10 @@ export default class StoreService extends Service implements StoreInterface {
   private async extractFileMetaDirectly(
     url: string,
   ): Promise<SingleFileMetaDocument | CardError> {
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(url));
+    let fileDefCodeRef = resolveFileDefCodeRef(
+      new URL(url),
+      this.network.virtualNetwork,
+    );
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,
@@ -2112,7 +2154,10 @@ export default class StoreService extends Service implements StoreInterface {
         } finally {
           autoSaveState.isSaving = false;
           this.calculateLastSavedMsg(autoSaveState);
-          if (isLocalId(queueName) && instance.id) {
+          if (
+            isLocalId(queueName, this.network.virtualNetwork) &&
+            instance.id
+          ) {
             this.autoSaveStates.set(instance.id, autoSaveState);
           }
         }
@@ -2289,7 +2334,10 @@ export default class StoreService extends Service implements StoreInterface {
           await this.startAutoSaving(instance);
         }
         if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(cardIdToURL(json.data.id!), json);
+          this.onSaveSubscriber(
+            this.network.virtualNetwork.toURL(json.data.id!),
+            json,
+          );
         }
         return instance;
       } catch (err) {
@@ -2301,7 +2349,11 @@ export default class StoreService extends Service implements StoreInterface {
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
         let remoteId = cardError.meta?.remoteId;
-        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
+        if (
+          remoteId &&
+          (!cardError.id ||
+            isLocalId(cardError.id, this.network.virtualNetwork))
+        ) {
           this.store.addCardInstanceOrError(remoteId, cardError);
         }
         return cardError;
@@ -2423,7 +2475,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getCardInstance({
-      idOrDoc: resolveCardReference(id, relativeTo),
+      idOrDoc: this.network.virtualNetwork.resolveURL(id, relativeTo).href,
     });
     return isCardInstance(instance) ? instance : undefined;
   }
@@ -2484,25 +2536,36 @@ function needsServerStateMerge(
 // receive an id over the wire should pass it through this gate; if it
 // returns false the caller substitutes the canonical URL form before
 // deserialization.
-function isResolvableInstanceId(id: string): boolean {
+function isResolvableInstanceId(id: string, vn: VirtualNetwork): boolean {
   return (
-    isRegisteredPrefix(id) ||
+    vn.isRegisteredPrefix(id) ||
     id.startsWith('http://') ||
     id.startsWith('https://')
   );
 }
 
-export function asURL(urlOrDoc: string): string;
-export function asURL(urlOrDoc: LooseSingleCardDocument): string | undefined;
+export function asURL(urlOrDoc: string, vn: VirtualNetwork): string;
+export function asURL(
+  urlOrDoc: LooseSingleCardDocument,
+  vn: VirtualNetwork,
+): string | undefined;
 export function asURL(
   urlOrDoc: string | LooseSingleCardDocument,
+  vn: VirtualNetwork,
 ): string | undefined;
-export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
+export function asURL(
+  urlOrDoc: string | LooseSingleCardDocument,
+  vn: VirtualNetwork,
+) {
   if (typeof urlOrDoc !== 'string') {
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  return isLocalId(id) ? id : resolveCardReference(id, undefined);
+  // Locals stay as-is; remotes resolve through the VN. `isLocalId` and
+  // `vn.toURL` both consult the VN's mappings and fall back to the
+  // deprecated module-level registry, so prefixes registered either way
+  // produce the same canonical URL.
+  return isLocalId(id, vn) ? id : vn.toURL(id).href;
 }
 
 function isSystemCardDefaultId(
