@@ -7,10 +7,12 @@ import {
   Component,
   CSSField,
   FieldDef,
+  ImageDef,
   StringField,
   contains,
   containsMany,
   field,
+  linksTo,
 } from './card-api';
 import ColorField from './color';
 import {
@@ -370,9 +372,39 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     </dl>
                   </div>
                 {{/if}}
+              {{else if (eq section.id 'brand-image-attachments')}}
+                <p class='brand-guide-vars-description'>Custom CSS variables for
+                  image attachments:</p>
+                <div class='brand-guide-vars-box brand-guide-custom-css-block'>
+                  <CopyButton
+                    class='brand-guide-custom-css-block-copy-button'
+                    @textToCopy={{this.brandImageAttachmentCssBlock}}
+                  />
+                  <dl class='brand-guide-vars'>
+                    {{#each this.brandImageAttachmentVarEntries as |entry|}}
+                      <dt class='var-row' data-test-brand-image-attachment-var>
+                        <code
+                          data-test-brand-image-attachment-varname
+                        >{{entry.varName}}</code>
+                      </dt>
+                      <dd
+                        class='var-row brand-image-attachment-var-dd'
+                        data-test-brand-image-attachment-url
+                      >
+                        <img
+                          src={{entry.url}}
+                          alt={{entry.altText}}
+                          class='brand-image-attachment-thumb-mini'
+                          data-test-brand-image-attachment-thumb
+                        />
+                        <code class='css-var-value'>url({{entry.url}})</code>
+                      </dd>
+                    {{/each}}
+                  </dl>
+                </div>
               {{else if (eq section.id 'custom-css')}}
-                <p class='brand-guide-vars-description'>These variables are
-                  custom css properties for usage by this theme only.</p>
+                <p class='brand-guide-vars-description'>These variables are all
+                  of the custom CSS properties for usage by this theme only.</p>
                 <div class='brand-guide-vars-box brand-guide-custom-css-block'>
                   <CopyButton
                     class='brand-guide-custom-css-block-copy-button'
@@ -407,6 +439,27 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                           class='css-var-value'
                           data-test-brand-guide-css-var-value
                         >{{entry.value}}</code>
+                      </dd>
+                    {{/each}}
+                    {{#each this.brandImageAttachmentVarEntries as |entry|}}
+                      <dt
+                        class='var-row'
+                        data-test-brand-guide-image-attachment-var
+                      >
+                        <code
+                          data-test-brand-guide-image-attachment-varname
+                        >{{entry.varName}}</code>
+                      </dt>
+                      <dd
+                        class='var-row brand-image-attachment-var-dd'
+                        data-test-brand-guide-image-attachment-url
+                      >
+                        <img
+                          src={{entry.url}}
+                          alt={{entry.altText}}
+                          class='brand-image-attachment-thumb-mini'
+                        />
+                        <code class='css-var-value'>url({{entry.url}})</code>
                       </dd>
                     {{/each}}
                   </dl>
@@ -534,11 +587,13 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
+        height: 100%;
       }
       .typography-preview {
         display: flex;
         align-items: center;
         justify-content: center;
+        flex: 1;
         min-height: 11.25rem;
         background-color: var(--muted, var(--boxel-100));
         color: var(--foreground, var(--boxel-dark));
@@ -693,7 +748,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         grid-template-columns: max-content 1fr;
         gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
         font-size: var(--boxel-font-size-sm);
-        align-items: baseline;
       }
       .brand-guide-vars dt {
         font-weight: 600;
@@ -737,6 +791,23 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         color: var(--dsr-muted-fg);
       }
 
+      /* Attachments */
+      .brand-image-attachment-var-dd {
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        word-break: break-all;
+      }
+      .brand-image-attachment-thumb-mini {
+        width: 2.5rem;
+        height: 2.5rem;
+        object-fit: cover;
+        border-radius: var(--boxel-border-radius-sm);
+        flex-shrink: 0;
+        border: 1px solid var(--dsr-border);
+      }
+      .brand-image-attachment-vars {
+        align-items: center;
+      }
       /* Import CSS */
       .css-textarea {
         --boxel-input-height: 19rem;
@@ -827,11 +898,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       title: 'Brand Palette',
     },
     {
-      id: 'custom-css',
-      navTitle: 'Custom CSS',
-      title: 'Custom CSS Variables',
-    },
-    {
       id: 'typography',
       navTitle: 'Typography',
       title: 'Typography',
@@ -842,6 +908,16 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       navTitle: 'Mark Usage',
       title: 'Mark Usage',
       fieldName: 'markUsage',
+    },
+    {
+      id: 'brand-image-attachments',
+      navTitle: 'Image Attachments',
+      title: 'Image Attachments',
+    },
+    {
+      id: 'custom-css',
+      navTitle: 'Custom CSS',
+      title: 'Custom CSS Variables',
     },
     {
       id: 'ui-components',
@@ -865,6 +941,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
       if (section.id === 'custom-css') {
         return this.hasCustomVariables;
+      }
+
+      if (section.id === 'brand-image-attachments') {
+        return Boolean(this.brandImageAttachmentVarEntries.length);
       }
 
       if (section.id === 'brand-palette') {
@@ -916,6 +996,12 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }));
   }
 
+  private get brandImageAttachmentCssBlock() {
+    return this.brandImageAttachmentVarEntries
+      .map((entry) => `${entry.varName}: url(${entry.url});`)
+      .join('\n');
+  }
+
   private get customCssVarsBlock() {
     let lines: string[] = [];
     if (entriesToCssRuleMap && this.args.model?.brandColorPalette?.length) {
@@ -929,6 +1015,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     }
     for (let cssVar of this.customCssVarEntries) {
       lines.push(`${cssVar.name}: ${cssVar.value};`);
+    }
+    for (let entry of this.brandImageAttachmentVarEntries) {
+      lines.push(`${entry.varName}: url(${entry.url});`);
     }
     return lines.join('\n');
   }
@@ -944,10 +1033,21 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     }));
   }
 
+  private get brandImageAttachmentVarEntries() {
+    return (this.args.model?.brandImageAttachments ?? [])
+      .filter((item) => item.name?.trim() && item.image?.url)
+      .map((item) => ({
+        varName: buildCssVariableName(item.name!.trim()),
+        url: item.image!.url!,
+        altText: item.image!.name ?? '',
+      }));
+  }
+
   private get hasCustomVariables() {
     return Boolean(
       this.args.model?.brandColorPalette?.length ||
-      this.customCssVarEntries.length,
+      this.customCssVarEntries.length ||
+      this.brandImageAttachmentVarEntries.length,
     );
   }
 
@@ -1043,6 +1143,89 @@ export class CustomCssVariable extends FieldDef {
   };
 }
 
+export class CompoundImageField extends FieldDef {
+  static displayName = 'Named Image';
+  @field name = contains(StringField);
+  @field image = linksTo(() => ImageDef);
+
+  static embedded = class Embedded extends Component<
+    typeof CompoundImageField
+  > {
+    <template>
+      {{#if @model.image.url}}
+        <figure
+          class='brand-image-attachment-embedded'
+          data-test-brand-image-attachment
+        >
+          <img
+            src={{@model.image.url}}
+            alt={{@model.image.name}}
+            class='brand-image-attachment-thumb'
+            data-test-brand-image-attachment-thumb
+          />
+          {{#if @model.name}}
+            <figcaption
+              class='brand-image-attachment-varname'
+              data-test-brand-image-attachment-varname
+            >
+              <code>{{buildCssVariableName @model.name}}</code>
+            </figcaption>
+          {{/if}}
+        </figure>
+      {{/if}}
+      <style scoped>
+        .brand-image-attachment-embedded {
+          margin: 0;
+          border-radius: var(--boxel-border-radius);
+          overflow: hidden;
+          background-color: var(--dsr-card);
+          border: 1px solid var(--dsr-border);
+          display: flex;
+          flex-direction: column;
+        }
+        .brand-image-attachment-thumb {
+          width: 100%;
+          aspect-ratio: 16 / 10;
+          object-fit: cover;
+          display: block;
+        }
+        .brand-image-attachment-varname {
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          font-size: var(--boxel-font-size-xs);
+          color: var(--dsr-muted-fg);
+        }
+        .brand-image-attachment-varname code {
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: 0.9em;
+        }
+      </style>
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof CompoundImageField> {
+    <template>
+      <div class='brand-image-attachment-edit'>
+        <FieldContainer @label='Variable Name' @vertical={{true}}>
+          <@fields.name />
+        </FieldContainer>
+        <FieldContainer @label='Image' @vertical={{true}}>
+          <@fields.image />
+        </FieldContainer>
+      </div>
+      <style scoped>
+        .brand-image-attachment-edit {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp-sm);
+        }
+      </style>
+    </template>
+  };
+}
+
 export default class BrandGuide extends DetailedStyleRef {
   static displayName = 'Brand Guide';
 
@@ -1090,6 +1273,15 @@ export default class BrandGuide extends DetailedStyleRef {
         }
         brandRules.set(name, value);
       }
+    }
+
+    // add brand image attachment variables as url() references
+    for (let item of this.brandImageAttachments ?? []) {
+      let name = item.name?.trim();
+      let url = item.image?.url;
+      if (!name || !url) continue;
+      let varName = buildCssVariableName(name);
+      if (!brandRules.has(varName)) brandRules.set(varName, `url(${url})`);
     }
 
     // add custom CSS variables
@@ -1167,10 +1359,11 @@ export default class BrandGuide extends DetailedStyleRef {
   }
 
   @field brandColorPalette = containsMany(CompoundColorField);
-  @field customCssVariables = containsMany(CustomCssVariable);
   @field functionalPalette = contains(BrandFunctionalPalette);
   @field typography = contains(ThemeTypographyField);
   @field markUsage = contains(BrandLogo);
+  @field brandImageAttachments = containsMany(CompoundImageField);
+  @field customCssVariables = containsMany(CustomCssVariable);
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
@@ -1198,6 +1391,10 @@ export default class BrandGuide extends DetailedStyleRef {
           [
             '--brand-secondary-mark-greyscale',
             toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-1')),
+          ],
+          [
+            '--brand-social-media-profile-icon',
+            toUrlValue(markMap?.get('--brand-social-media-profile-icon')),
           ],
         ].filter(([, v]) => v) as [string, string][],
       );
@@ -1230,6 +1427,10 @@ export default class BrandGuide extends DetailedStyleRef {
               markMap?.get('--brand-secondary-mark-greyscale-2') ??
                 markMap?.get('--brand-secondary-mark-greyscale-1'),
             ),
+          ],
+          [
+            '--brand-social-media-profile-icon',
+            toUrlValue(markMap?.get('--brand-social-media-profile-icon')),
           ],
         ].filter(([, v]) => v) as [string, string][],
       );
