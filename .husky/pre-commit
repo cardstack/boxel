@@ -20,6 +20,17 @@ if ! command -v pnpm >/dev/null 2>&1; then
   exit 0
 fi
 
+# Same rationale for the dependencies themselves: on a fresh checkout, after a
+# branch switch before `pnpm install`, or with node_modules cleared, lint-staged
+# isn't installed and `pnpm exec lint-staged` would exit non-zero — blocking the
+# commit. Skip instead. (Anchored to the repo root so the check holds regardless
+# of the hook's working directory.)
+root="$(git rev-parse --show-toplevel)"
+if [ ! -x "$root/node_modules/.bin/lint-staged" ]; then
+  echo "pre-commit: lint-staged not installed; skipping lint autofix (commit not blocked). Run pnpm install." >&2
+  exit 0
+fi
+
 # lint-staged buffers task output and only prints it when a task fails. Our
 # autofix tasks intentionally exit 0 (they never block the commit), so any
 # "issues remain after autofix" warning would be hidden. To surface it, the
