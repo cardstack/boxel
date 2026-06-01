@@ -27,9 +27,18 @@ permissions:
 # full deploy of every service, so it reconciles any partially-updated state
 # left by the cancelled run. For production (manual only) we queue instead of
 # cancel, to avoid interrupting a deliberate deploy mid-chain.
+#
+# The environment is read with a fallback: `inputs.environment` for the
+# workflow_call path (merge-to-main auto deploy), then
+# `github.event.inputs.environment` for the workflow_dispatch path. The
+# fallback is required because the `inputs` context is NOT populated in a
+# workflow-level concurrency expression for workflow_dispatch — without it a
+# manual deploy would land in an empty-env group with cancel-in-progress
+# silently defaulting to false. The trailing 'staging' default keeps the group
+# non-empty and matches every caller's default.
 concurrency:
-  group: deploy-${{ inputs.environment }}
-  cancel-in-progress: ${{ inputs.environment != 'production' }}
+  group: deploy-${{ inputs.environment || github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: ${{ (inputs.environment || github.event.inputs.environment || 'staging') != 'production' }}
 
 jobs:
   create-deployment:
