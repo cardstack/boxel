@@ -16,10 +16,11 @@ import {
   type RealmPaths,
   type RenderRouteOptions,
   type RenderVisitResponse,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from '../index';
 import { CardError } from '../error';
 import { resolveFileDefCodeRef } from '../file-def-code-ref';
+import type { VirtualNetwork } from '../virtual-network';
 
 interface VisitFileFusedOptions {
   url: URL;
@@ -41,6 +42,7 @@ interface VisitFileFusedOptions {
   // traffic that happens to land on the same warm tab.
   batchId: string;
   prerenderer: Prerenderer;
+  virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
   logDebug(message: string): void;
   logWarn(message: string): void;
@@ -52,9 +54,9 @@ interface VisitFileFusedOptions {
     renderResult: NonNullable<RenderVisitResponse['card']>;
     // Timing / diagnostic payload flattened from the fused visit's
     // `response.meta` (server timings + host-side breadcrumbs +
-    // HTTP requestId). Persisted onto `boxel_index.timing_diagnostics`
+    // HTTP requestId). Persisted onto `boxel_index.diagnostics`
     // so operators can investigate slow renders after the fact.
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void>;
   indexFileWithResults(args: {
     path: LocalPath;
@@ -63,7 +65,7 @@ interface VisitFileFusedOptions {
     hasModulePrerender?: boolean;
     extractResult?: RenderVisitResponse['fileExtract'];
     renderResult?: RenderVisitResponse['fileRender'];
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void>;
 }
 
@@ -83,6 +85,7 @@ export async function visitFileForIndexingFused({
   auth,
   batchId,
   prerenderer,
+  virtualNetwork,
   consumeClearCacheForRender,
   logDebug,
   logWarn,
@@ -157,7 +160,7 @@ export async function visitFileForIndexingFused({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   let clearCache = consumeClearCacheForRender();
   let renderOptions: RenderRouteOptions = {
@@ -227,7 +230,7 @@ export async function visitFileForIndexingFused({
       resourceCreatedAt,
       resource: parsedCardResource,
       renderResult: cardResult,
-      timingDiagnostics: flattenPrerenderMeta(visitResponse.meta),
+      diagnostics: flattenPrerenderMeta(visitResponse.meta),
     });
   }
 
@@ -241,7 +244,7 @@ export async function visitFileForIndexingFused({
     hasModulePrerender: isModule,
     extractResult: visitResponse.fileExtract,
     renderResult: visitResponse.fileRender,
-    timingDiagnostics: flattenPrerenderMeta(visitResponse.meta),
+    diagnostics: flattenPrerenderMeta(visitResponse.meta),
   });
 
   logDebug(

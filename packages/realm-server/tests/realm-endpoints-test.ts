@@ -355,7 +355,7 @@ module(basename(__filename), function () {
           dir.name,
           'realm_server_1',
           'test',
-          '.realm.json',
+          'realm.json',
         );
         initialConfig = existsSync(realmConfigPath)
           ? readJSONSync(realmConfigPath)
@@ -382,7 +382,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json was not modified',
+            'realm.json card was not modified',
           );
         }
       });
@@ -517,7 +517,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json sidecar is untouched by a publishable PATCH',
+            'realm.json card is untouched by a publishable PATCH',
           );
         }
 
@@ -548,7 +548,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after disallowed property',
+            'realm.json card remains unchanged after disallowed property',
           );
         }
       });
@@ -680,12 +680,12 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after invalid request',
+            'realm.json card remains unchanged after invalid request',
           );
         } else {
           assert.false(
             existsSync(realmConfigPath),
-            '.realm.json is not created on invalid request',
+            'realm.json card is not created on invalid request',
           );
         }
       });
@@ -733,12 +733,12 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after malformed requests',
+            'realm.json card remains unchanged after malformed requests',
           );
         } else {
           assert.false(
             existsSync(realmConfigPath),
-            '.realm.json is not created when payloads are malformed',
+            'realm.json card is not created when payloads are malformed',
           );
         }
       });
@@ -772,26 +772,25 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after empty property name',
+            'realm.json card remains unchanged after empty property name',
           );
         } else {
           assert.false(
             existsSync(realmConfigPath),
-            '.realm.json is not created when property name is empty',
+            'realm.json card is not created when property name is empty',
           );
         }
       });
 
-      test('returns error when existing .realm.json cannot be parsed', async function (assert) {
-        let invalidContent = '{ "name": "realm" ';
+      test('returns error when the existing RealmConfig card cannot be parsed', async function (assert) {
+        let invalidContent = '{ "data": { "type": "card" ';
         writeFileSync(realmConfigPath, invalidContent);
 
         try {
-          // interactHome is sidecar-owned, so this exercises the sidecar
-          // JSON-parse error path. Card-owned fields (name, backgroundURL,
-          // iconURL, hostRoutingRules) go to realm.json and metadata-owned
-          // fields (publishable) go to realm_metadata; neither would
-          // surface an error from a malformed .realm.json.
+          // `name` is a card-owned field, so a PATCH that targets it
+          // reaches the card-read/parse path in patchRealmConfig. A
+          // malformed realm.json at this point surfaces a 500 with the
+          // "Unable to parse existing realm config card" message.
           let response = await request
             .patch('/_config')
             .set('Accept', SupportedMimeType.JSON)
@@ -806,21 +805,21 @@ module(basename(__filename), function () {
             .send({
               data: {
                 type: 'realm-config',
-                attributes: { interactHome: 'card://realm/home' },
+                attributes: { name: 'Patched Name' },
               },
             });
 
           assert.strictEqual(response.status, 500, 'HTTP 500 status');
           assert.ok(
             response.body.errors?.[0]?.message?.startsWith(
-              'Unable to parse existing realm config:',
+              'Unable to parse existing realm config card:',
             ),
             'error message indicates parsing failure',
           );
           assert.strictEqual(
             readFileSync(realmConfigPath, 'utf8'),
             invalidContent,
-            '.realm.json remains unchanged when existing file is invalid',
+            'realm.json card remains unchanged when existing file is invalid',
           );
         } finally {
           if (initialConfig) {
@@ -2009,7 +2008,6 @@ module(basename(__filename), function () {
     let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
-      '.realm.json': readJSONSync(join(fixtureDir('realistic'), '.realm.json')),
       'realm.json': readJSONSync(join(fixtureDir('realistic'), 'realm.json')),
       'person.gts': readFileSync(
         join(fixtureDir('realistic'), 'person.gts'),

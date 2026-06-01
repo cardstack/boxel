@@ -16,6 +16,7 @@ import {
   setupUserSubscription,
   testRealmSecretSeed,
   visitOperatorMode,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -50,11 +51,7 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Owned Workspace',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Owned Workspace' }),
         'index.json': {
           data: {
             type: 'card',
@@ -92,11 +89,7 @@ export class Person extends CardDef {}
         '@otheruser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Shared Workspace',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Shared Workspace' }),
         'index.json': {
           data: {
             type: 'card',
@@ -119,11 +112,9 @@ export class Person extends CardDef {}
         '@otheruser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Delegated Owner Workspace',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        }),
         'index.json': {
           data: {
             type: 'card',

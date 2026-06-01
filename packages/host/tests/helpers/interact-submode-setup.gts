@@ -16,6 +16,7 @@ import {
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -474,12 +475,12 @@ export function setupInteractSubmodeTests(
         'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
         'grid.json': new CardsGrid(),
         'index.json': new CardsGrid(),
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
       },
     }));
 
@@ -489,12 +490,12 @@ export function setupInteractSubmodeTests(
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace A',
           backgroundURL:
             'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        },
+        }),
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
@@ -520,12 +521,12 @@ export function setupInteractSubmodeTests(
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace C',
           backgroundURL:
             'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        },
+        }),
       },
     });
 
@@ -535,12 +536,12 @@ export function setupInteractSubmodeTests(
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Personal Workspace',
           backgroundURL:
             'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        },
+        }),
       },
     });
 

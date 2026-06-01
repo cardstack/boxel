@@ -80,7 +80,7 @@ export async function upsertPublishedRealmInRegistry(
 }
 
 // Insert a source realm row. Called from server.ts:createRealm after
-// permissions + .realm.json are written to disk.
+// permissions + realm.json are written to disk.
 export async function insertSourceRealmInRegistry(
   dbAdapter: DBAdapter,
   args: {

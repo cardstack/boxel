@@ -50,6 +50,7 @@ import {
   setupUserSubscription,
   assertMessages,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
@@ -491,12 +492,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -508,11 +509,11 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -524,12 +525,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Catalog Realm`,
               backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
               iconURL:
                 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -886,12 +887,12 @@ module('Acceptance | code submode tests', function (_hooks) {
             'z18.json': '{}',
             'z19.json': '{}',
             'zzz/zzz/file.json': '{}',
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: 'Test Workspace B',
               backgroundURL:
                 'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-            },
+            }),
             'noop.gts': `export function noop() {};\nclass NoopClass {}`,
           },
         }),
@@ -2559,20 +2560,19 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-card-error]')
         .doesNotExist('card error state is not displayed');
 
+      // Cause error: flip the card's adoptsFrom to a missing module.
+      // Broken-linksTo no longer demotes the consuming instance, so a
+      // missing adoptsFrom module is the lever for "make this card error"
+      // live-update assertions.
       await realm.write(
         'Person/fadhlan.json',
         JSON.stringify({
           data: {
             type: 'card',
-            relationships: {
-              'friends.0': {
-                links: { self: './missing' },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: rri('../person'),
-                name: 'Person',
+                module: rri('../missing-person'),
+                name: 'MissingPerson',
               },
             },
           },
@@ -2589,11 +2589,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         JSON.stringify({
           data: {
             type: 'card',
-            relationships: {
-              'friends.0': {
-                links: { self: null },
-              },
-            },
             meta: {
               adoptsFrom: {
                 module: rri('../person'),

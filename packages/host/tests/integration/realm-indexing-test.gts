@@ -309,7 +309,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
   });
 
-  test('can recover from indexing a card with a broken link', async function (assert) {
+  test('a card with a broken linksTo target indexes cleanly, and invalidation fan-out re-indexes it when the target is later created', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -341,23 +341,30 @@ module(`Integration | realm indexing`, function (hooks) {
       let mango = await queryEngine.cardDocument(
         new URL(`${testRealmURL}Pet/mango`),
       );
-      if (mango?.type === 'error') {
-        assert.deepEqual(
-          mango.error.errorDetail.message,
-          `missing file ${testRealmURL}Person/owner.json`,
-        );
-        assert.deepEqual(
-          [...(mango.error.errorDetail.deps ?? [])].sort(),
-          [
-            `${testRealmURL}Person/owner`,
-            `${testRealmURL}Person/owner.json`,
-            'https://localhost:4202/test/pet',
-          ].sort(),
-          'error deps are correct',
+      if (mango?.type === 'doc') {
+        let owner = mango.doc.data.relationships?.owner;
+        assert.strictEqual(
+          (Array.isArray(owner) ? owner[0] : owner)?.links?.self,
+          `../Person/owner`,
+          'broken owner reference is preserved on the wire so the consumer can render the placeholder',
         );
       } else {
-        assert.ok(false, `expected search entry to be an error doc`);
+        assert.ok(
+          false,
+          `mango with a missing linksTo target indexes as a clean instance, got: ${mango?.error?.errorDetail.message}`,
+        );
       }
+      let mangoInstance = await queryEngine.instance(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      assert.ok(
+        (mangoInstance?.deps ?? []).some(
+          (dep) =>
+            dep === `${testRealmURL}Person/owner.json` ||
+            dep === `${testRealmURL}Person/owner`,
+        ),
+        'deps include the unresolved owner link so invalidation can reach mango when the target is created',
+      );
     }
     await realm.write(
       'Person/owner.json',
@@ -5031,28 +5038,6 @@ posts/please-ignore-me.json
       );
       assert.ok(card, 'instance exists');
     }
-  });
-
-  test('search index ignores .realm.json file', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        '.realm.json': `{ name: 'Example Workspace' }`,
-        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      },
-    });
-
-    let indexer = realm.realmIndexQueryEngine;
-    let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
-    assert.ok(card, 'instance exists');
-    let instance = await indexer.cardDocument(
-      new URL(`${testRealmURL}.realm.json`),
-    );
-    assert.strictEqual(
-      instance,
-      undefined,
-      'instance does not exist because file is ignored',
-    );
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {

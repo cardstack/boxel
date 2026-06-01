@@ -592,8 +592,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     ).length;
     assert.strictEqual(
       allTypeOptions,
-      15,
-      `type picker shows 15 types (got ${allTypeOptions})`,
+      16,
+      `type picker shows 16 types (got ${allTypeOptions})`,
     );
   });
 
@@ -1026,7 +1026,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (16)',
+        'Any Type (17)',
         'select-all shows count of all realm types',
       );
 
@@ -1087,7 +1087,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (16)',
+        'Any Type (17)',
         'select-all shows count of all realm types',
       );
 
@@ -1096,7 +1096,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       nonSelectAllOptions.length,
-      15,
+      16,
       'all realm types are shown even without recent cards',
     );
   });
@@ -1521,7 +1521,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       assert
         .dom('[data-test-boxel-picker-option-row="select-all"]')
         .containsText(
-          'Any Type (16)',
+          'Any Type (17)',
           'select-all shows total count from API, not loaded options count',
         );
     } finally {

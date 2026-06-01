@@ -110,8 +110,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
     });
 
     let referenceCount: ReferenceCount = new Map();
-    let fetch = getService('network').fetch;
-    let store = new CardStore(referenceCount, fetch);
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
 
     store.setCard(jade[localId], jade);
     store.setCard(germaine[localId], germaine);
@@ -322,8 +326,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
     }
 
     let referenceCount: ReferenceCount = new Map();
-    let fetch = getService('network').fetch;
-    let store = new CardStore(referenceCount, fetch);
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
 
     let fileUrl = `${testRealmURL}hero.png`;
     let fileDef = new FileDef({

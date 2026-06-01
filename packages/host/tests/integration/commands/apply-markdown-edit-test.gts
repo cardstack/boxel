@@ -21,6 +21,7 @@ import {
   setupRealmServerEndpoints,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -162,7 +163,10 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
               },
             },
           },
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-m.png" }`,
+          'realm.json': realmConfigCardJSON({
+            name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-m.png',
+          }),
         },
       }),
     );

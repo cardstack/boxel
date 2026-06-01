@@ -1,128 +1,90 @@
 import {
   logger,
   normalizeQueryForSignature,
+  query,
+  param,
   sortKeysDeep,
+  type DBAdapter,
+  type Expression,
   type Query,
 } from '@cardstack/runtime-common';
 import { md5 } from 'super-fast-md5';
 
 const log = logger('job-scoped-search-cache');
 
-// Default entry TTL. Picked to comfortably outlive a single indexing
-// batch — from-scratch reindexes of large realms can run for an hour
-// or more, so the TTL has to comfortably exceed that worst case while
-// bounding the leak window when a job ends without an explicit
-// eviction reaching this process. Cross-job collision is impossible
-// because the cache key includes `jobId` (the `<jobId>.<reservationId>`
-// composite, so a re-run of a failed job hashes to a different entry),
-// so a stale leak only hurts memory, never correctness.
+const TABLE = 'job_scoped_search_cache';
+
+// Missed-NOTIFY backstop. The jobs_finished listener evicts a job's entries as
+// soon as it finalizes; this TTL only governs the janitor sweep that reclaims
+// rows a job left behind when a replica missed the NOTIFY. Picked to
+// comfortably outlive a single indexing batch (from-scratch reindexes of large
+// realms can run an hour or more) while bounding the leak window.
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
-// Hard cap on total entries across all jobs. When the cap is reached
-// the FIFO-oldest entry is evicted to make room. Cap exists to bound
-// worst-case memory: the `jobId` header is sanitized to a digits-only
-// shape but the cache otherwise accepts any well-formed
-// `(jobId, query, opts)` tuple from an authenticated caller, so a
-// reader who mints synthetic jobIds and varied queries could otherwise
-// grow the cache without bound for the full TTL window. Picked to
-// comfortably accommodate the busiest realistic workload (a from-
-// scratch reindex of a piranha-class realm fires hundreds of distinct
-// queries within one job) while keeping worst-case footprint bounded
-// to ~tens of MB.
-const DEFAULT_MAX_ENTRIES = 5000;
+// How often the janitor sweeps aged rows. Infrequent — eviction is normally
+// driven by the NOTIFY listener; this only mops up missed-NOTIFY orphans.
+const DEFAULT_JANITOR_INTERVAL_MS = 30 * 60 * 1000;
 
-type CachedEntry = {
-  // Entries store the *serialized* JSON response body, not the parsed
-  // document. The handler hands off a populate thunk that wraps its
-  // `searchRealms` / `searchPrerenderedRealms` call in
-  // `JSON.stringify(..., null, 2)`, so the cache holds the exact bytes
-  // shipped to the next caller — no re-stringify on hit, no parsed
-  // object graph kept alive for the TTL window. Both
-  // `_federated-search` (`LinkableCollectionDocument`) and
-  // `_federated-search-prerendered` (`PrerenderedCardCollectionDocument`)
-  // share this single instance: inner-key canonicalisation already
-  // includes the endpoint-distinguishing params (htmlFormat /
-  // cardUrls / renderType pass through `opts`), so two endpoints'
-  // entries cannot collide on a key they don't both fully share.
-  result: string;
-  timer: ReturnType<typeof setTimeout>;
-  // Position in the FIFO eviction ring. Stored on the entry so a
-  // cache hit doesn't need a separate map lookup to know its slot.
-  fifoSeq: number;
-};
-
-// Per-batch read cache used during indexing. Each entry is keyed by
-// `(jobId, normalizedRealms, normalizedQuery, normalizedOpts)` and
-// represents one search populate computed during the lifetime of one
-// indexing job. The cache is shared across both `_federated-search`
-// (`LinkableCollectionDocument` results) and
-// `_federated-search-prerendered` (`PrerenderedCardCollectionDocument`
-// results) — the endpoint-specific request shape (`htmlFormat`,
-// `cardUrls`, `renderType` for the prerendered handler) is folded into
-// `opts` before the call here, so the canonicalised inner key already
-// segregates the two endpoints' entries. The job-id boundary scopes
-// the cache to a single batch; a subsequent job hashes to different
-// keys and never reuses a stale value.
+// Per-batch read cache used during indexing, backed by a shared Postgres table
+// so every realm-server replica reads and writes the same entries — one
+// consolidated hit rate across the fleet rather than one per process.
 //
-// Same-realm reads are safe by construction: within an indexing batch
-// the writer touches `boxel_index_working`, not `boxel_index`, so
-// every read of the consuming realm's `boxel_index` returns identical
-// bytes until the batch's `applyBatchUpdates` swap fires (at which
-// point `Realm.update`'s onInvalidation tears down the cache via
-// `clearInFlightSearch`, Phase 1's path — unchanged here).
+// Each entry is keyed by the `<jobId>.<reservationId>` job identity (stamped on
+// `x-boxel-job-id`) plus the md5 of the canonical `(realms, query, opts)`
+// signature. That md5 is the same digest `computeETag` emits as the entry's
+// validator, so matching on the hash is consistent with the existing ETag
+// trust model. The job-id boundary scopes the cache to a single batch; a
+// subsequent job hashes to different keys and never reuses a stale value.
 //
-// Cross-realm reads accept a different staleness contract: within one
-// jobId, results are pinned to the *first* observation regardless of
-// whether a peer realm has swapped since. The rationale is "one
-// consolidated view of the realm-server's state per batch" — repeated
-// reads of the same broad cross-realm query during one batch are
-// strictly better when they all see the same snapshot than when they
-// each chase whatever a peer realm has just published. The bound is
-// the job's lifetime; a subsequent job re-observes.
+// Same-realm reads are safe by construction: within an indexing batch the
+// writer touches `boxel_index_working`, not `boxel_index`, so every read of the
+// consuming realm's `boxel_index` returns identical bytes until the batch's
+// `applyBatchUpdates` swap fires. Cross-realm reads accept a looser contract —
+// within one jobId, results are pinned to the first observation regardless of
+// whether a peer realm has swapped since ("one consolidated view of the
+// realm-server's state per batch"). The bound is the job's lifetime.
 //
-// The handler gates entry into this cache on two conditions:
-// `x-boxel-job-id` present and well-formed, and
-// `x-boxel-consuming-realm` present and well-formed. Both headers are
-// only stamped by indexer-driven prerender requests, so user-facing
-// API callers always bypass and see live state.
+// The handler gates entry into this cache on `x-boxel-job-id` and
+// `x-boxel-consuming-realm` both being present and well-formed; both headers
+// are only stamped by indexer-driven prerender requests, so user-facing API
+// callers always bypass and see live state.
 //
-// Entries store the *resolved, serialized* response bytes, not the
-// in-flight promise. Concurrent same-key callers each run their own
-// `populate` (Phase 1's in-flight dedup at
-// `RealmIndexQueryEngine.searchCards` already coalesces the heavy
-// inner SQL+loadLinks walk for same-realm calls arriving concurrently).
-// The first to finish stores its serialized bytes here; later
-// sequential callers within the same job see the cached string and
-// ship it directly with no re-stringify pass.
-//
-// Storing promises was tempting (it would also dedupe at this layer)
-// but creates a tail-latency stall: a slow first populate blocks every
-// later same-key caller past their render-timeout window, even when
-// they could otherwise have run their own search in parallel and made
-// progress. Resolved-only avoids that failure mode and keeps the
-// benefit of sequential dedup, which is the win this cache exists for.
+// Entries store the *resolved, serialized* response bytes (a `string`).
+// Concurrent same-key populates each run their own `populate` and race to
+// `INSERT ... ON CONFLICT DO NOTHING`; first write wins, and because both came
+// from the same `(jobId, query)` tuple against the same snapshot-stable
+// `boxel_index` either resolved doc is equally valid.
 export class JobScopedSearchCache {
-  #byJob = new Map<string, Map<string, CachedEntry>>();
-  // FIFO ring keyed by an ever-incrementing sequence so eviction
-  // ordering survives the (jobId, innerKey) name space. The oldest
-  // surviving sequence number is `#evictionCursor`; advances as the
-  // entry it points at is evicted (either via cap or its own TTL).
-  #fifo = new Map<number, { jobId: string; innerKey: string }>();
-  #nextFifoSeq = 0;
+  readonly #dbAdapter: DBAdapter;
   readonly #ttlMs: number;
-  readonly #maxEntries: number;
-  // Per-job hit/miss counters for observability. Recorded on every
-  // `getOrPopulate` call and emitted as a single debug-level log line
-  // when the job's last entry leaves the cache — either via
-  // `clearJob` (worker signals job completion) or via TTL eviction of
-  // the last surviving entry, whichever fires first. Off by default;
-  // enable via `LOG_LEVELS=job-scoped-search-cache=debug` when an
-  // operator wants to confirm cache utilisation on a specific batch.
-  #stats = new Map<string, { hits: number; misses: number }>();
+  readonly #janitorIntervalMs: number;
+  #janitorTimer: ReturnType<typeof setInterval> | undefined;
+  // Per-process hit/miss counters for observability. Recorded on every
+  // `getOrPopulate` and emitted as a single debug line when the job's entries
+  // are dropped via `clearJob`. Off by default; enable via
+  // `LOG_LEVELS=job-scoped-search-cache=debug`. Cross-replica hit rates aren't
+  // aggregated — each replica reports what it observed.
+  //
+  // `clearJob` is the normal flush path, but it isn't guaranteed to run for
+  // every job this process observed: a peer replica can `clearJob` the shared
+  // rows first (so this process's jobs_finished sweep never sees the job id),
+  // or the rows can be reclaimed by the janitor on a missed NOTIFY. Without a
+  // backstop those entries would accumulate forever. So each entry carries the
+  // time it was last touched, and the janitor flushes (and drops) any entry not
+  // touched within the TTL — the same age bound the DB rows themselves obey.
+  #stats = new Map<
+    string,
+    { hits: number; misses: number; lastTouchedAt: number }
+  >();
 
-  constructor(opts?: { ttlMs?: number; maxEntries?: number }) {
+  constructor(
+    dbAdapter: DBAdapter,
+    opts?: { ttlMs?: number; janitorIntervalMs?: number },
+  ) {
+    this.#dbAdapter = dbAdapter;
     this.#ttlMs = opts?.ttlMs ?? DEFAULT_TTL_MS;
-    this.#maxEntries = opts?.maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.#janitorIntervalMs =
+      opts?.janitorIntervalMs ?? DEFAULT_JANITOR_INTERVAL_MS;
   }
 
   async getOrPopulate(args: {
@@ -132,121 +94,163 @@ export class JobScopedSearchCache {
     opts: unknown | undefined;
     populate: () => Promise<string>;
   }): Promise<string> {
-    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
-    let jobMap = this.#byJob.get(args.jobId);
-    let existing = jobMap?.get(innerKey);
-    if (existing) {
-      // A hit implies a prior store, which must have allocated the
-      // jobId's stats entry — but be defensive in case a hand-rolled
-      // test ever pre-seeds entries without going through populate.
+    let hash = innerKeyHash(args.realms, args.query, args.opts);
+    let existing = await this.#getCachedByHash(args.jobId, hash);
+    if (existing !== undefined) {
       let stat = this.#stats.get(args.jobId);
-      if (stat) stat.hits += 1;
-      return existing.result;
+      if (stat) {
+        stat.hits += 1;
+        stat.lastTouchedAt = Date.now();
+      }
+      return existing;
     }
 
     let result = await args.populate();
-    // Count the miss only after populate resolves. If populate throws
-    // we count nothing — the call is observationally equivalent to
-    // "never happened" from the cache's perspective, and we avoid
-    // leaking a `#stats` entry for a jobId that never produced a
-    // cache entry whose eviction would clear it.
+    // Count the miss only after populate resolves: if it throws we count
+    // nothing and never allocate a #stats entry for a jobId that produced no
+    // cache entry.
     let stat = this.#stats.get(args.jobId);
     if (!stat) {
-      stat = { hits: 0, misses: 0 };
+      stat = { hits: 0, misses: 0, lastTouchedAt: Date.now() };
       this.#stats.set(args.jobId, stat);
     }
     stat.misses += 1;
+    stat.lastTouchedAt = Date.now();
 
-    // Late-arriving check: the populate may have just settled while a
-    // peer's populate (same key) also settled and stored its result
-    // first. Last-write-wins; either of the two resolved docs is
-    // equally valid since they came from the same `(jobId, query)`
-    // tuple against the same snapshot-stable boxel_index.
-    let currentJobMap = this.#byJob.get(args.jobId);
-    if (!currentJobMap) {
-      currentJobMap = new Map();
-      this.#byJob.set(args.jobId, currentJobMap);
-    }
-    let prior = currentJobMap.get(innerKey);
-    if (prior) {
-      clearTimeout(prior.timer);
-      this.#fifo.delete(prior.fifoSeq);
-    }
-    let fifoSeq = this.#nextFifoSeq++;
-    let timer = setTimeout(() => {
-      this.#evictByKey(args.jobId, innerKey, timer);
-    }, this.#ttlMs);
-    if (typeof (timer as { unref?: () => void }).unref === 'function') {
-      (timer as { unref: () => void }).unref();
-    }
-    currentJobMap.set(innerKey, { result, timer, fifoSeq });
-    this.#fifo.set(fifoSeq, { jobId: args.jobId, innerKey });
-
-    // Cap enforcement: evict FIFO-oldest until under the limit. Map
-    // preserves insertion order, so the first key is the oldest. We
-    // skip-over any keys whose entries are already gone (TTL fired)
-    // without rewriting the ring.
-    while (this.#fifo.size > this.#maxEntries) {
-      let oldestSeq = this.#fifo.keys().next().value;
-      if (oldestSeq === undefined) break;
-      let slot = this.#fifo.get(oldestSeq)!;
-      this.#fifo.delete(oldestSeq);
-      let jm = this.#byJob.get(slot.jobId);
-      let entry = jm?.get(slot.innerKey);
-      if (entry?.fifoSeq === oldestSeq) {
-        clearTimeout(entry.timer);
-        jm!.delete(slot.innerKey);
-        if (jm!.size === 0) {
-          this.#byJob.delete(slot.jobId);
-          this.#flushStats(slot.jobId, 'cap-evicted');
-        }
-      }
-    }
+    await query(this.#dbAdapter, [
+      `INSERT INTO ${TABLE} (job_id, inner_key_hash, result) VALUES (`,
+      param(args.jobId),
+      `,`,
+      param(hash),
+      `,`,
+      param(result),
+      `) ON CONFLICT (job_id, inner_key_hash) DO NOTHING`,
+    ] as Expression);
 
     return result;
   }
 
-  #evictByKey(
+  // Read the cached body without populating or touching stats. Used by the
+  // handler's 304 path to confirm the slot still exists before returning
+  // Not-Modified.
+  async getCached(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): Promise<string | undefined> {
+    return this.#getCachedByHash(
+      args.jobId,
+      innerKeyHash(args.realms, args.query, args.opts),
+    );
+  }
+
+  async #getCachedByHash(
     jobId: string,
-    innerKey: string,
-    expectedTimer: ReturnType<typeof setTimeout>,
-  ): void {
-    let jm = this.#byJob.get(jobId);
-    if (!jm) return;
-    let entry = jm.get(innerKey);
-    if (entry?.timer === expectedTimer) {
-      this.#fifo.delete(entry.fifoSeq);
-      jm.delete(innerKey);
-      if (jm.size === 0) {
-        this.#byJob.delete(jobId);
-        this.#flushStats(jobId, 'TTL-evicted');
-      }
+    hash: string,
+  ): Promise<string | undefined> {
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT result FROM ${TABLE} WHERE job_id=`,
+      param(jobId),
+      ` AND inner_key_hash=`,
+      param(hash),
+    ] as Expression)) as { result: string }[];
+    return rows[0]?.result;
+  }
+
+  // Drop every entry for a given job. Driven by the jobs_finished NOTIFY
+  // listener so the cache releases rows as soon as the worker signals
+  // completion, rather than waiting on the janitor.
+  async clearJob(jobId: string): Promise<void> {
+    this.#flushStats(jobId, 'clearJob');
+    await query(this.#dbAdapter, [
+      `DELETE FROM ${TABLE} WHERE job_id=`,
+      param(jobId),
+    ] as Expression);
+  }
+
+  // Distinct `<jobId>.<reservationId>` keys currently holding entries. The
+  // listener parses these to learn which jobs to check for finalization.
+  async jobIds(): Promise<string[]> {
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT DISTINCT job_id FROM ${TABLE}`,
+    ] as Expression)) as { job_id: string }[];
+    return rows.map((row) => row.job_id);
+  }
+
+  // Total entry count across all jobs. Useful for tests + observability.
+  async size(): Promise<number> {
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT COUNT(*)::int AS count FROM ${TABLE}`,
+    ] as Expression)) as { count: number }[];
+    return rows[0]?.count ?? 0;
+  }
+
+  // Count of jobs this process is holding local #stats for. Bounded by the
+  // stale-stats janitor; exposed so tests can assert that backstop runs.
+  get trackedStatJobCount(): number {
+    return this.#stats.size;
+  }
+
+  // Job-id-based weak ETag. Same `(jobId, realms, query, opts)` always produces
+  // the same value for an entry's lifetime; a different jobId yields a
+  // different ETag so a stale If-None-Match from a previous batch never matches
+  // a fresh entry.
+  computeETag(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string {
+    return `W/"${args.jobId}-${innerKeyHash(args.realms, args.query, args.opts)}"`;
+  }
+
+  // ── Janitor (missed-NOTIFY backstop) ──
+
+  startJanitor(): void {
+    if (this.#janitorTimer) {
+      return;
+    }
+    this.#janitorTimer = setInterval(() => {
+      void this.sweepExpired();
+    }, this.#janitorIntervalMs);
+    if (
+      typeof (this.#janitorTimer as { unref?: () => void }).unref === 'function'
+    ) {
+      (this.#janitorTimer as { unref: () => void }).unref();
     }
   }
 
-  // Drop every entry for a given job. Wired in by the NOTIFY-driven
-  // eviction path so the cache releases memory as soon as the worker
-  // signals job completion, rather than waiting on TTL.
-  clearJob(jobId: string): void {
-    let jobMap = this.#byJob.get(jobId);
-    let entries = jobMap?.size ?? 0;
-    this.#flushStats(jobId, `clearJob entries=${entries}`);
-    if (!jobMap) return;
-    for (let entry of jobMap.values()) {
-      clearTimeout(entry.timer);
-      this.#fifo.delete(entry.fifoSeq);
+  stopJanitor(): void {
+    if (this.#janitorTimer) {
+      clearInterval(this.#janitorTimer);
+      this.#janitorTimer = undefined;
     }
-    this.#byJob.delete(jobId);
   }
 
-  // Single sink for the once-per-job stats log. Called from every
-  // path that can leave a jobId with no remaining cache entries —
-  // TTL eviction, cap eviction, and clearJob. The stats map's entry
-  // is dropped in lockstep so a subsequent jobId reuse (rare, since
-  // jobIds are monotonic) starts fresh.
+  // Delete rows older than the TTL — the rows a job left behind because some
+  // replica missed its jobs_finished NOTIFY. Best-effort. Also flushes local
+  // #stats entries that have aged out, so they can't accumulate when clearJob
+  // never runs for a job this process observed (see #flushStaleStats).
+  async sweepExpired(): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `DELETE FROM ${TABLE} WHERE created_at < NOW() - (`,
+        param(this.#ttlMs),
+        ` * INTERVAL '1 millisecond')`,
+      ] as Expression);
+    } catch (err: unknown) {
+      log.warn(`job-scoped search cache janitor sweep failed: ${String(err)}`);
+    }
+    this.#flushStaleStats();
+  }
+
+  // Single sink for the once-per-job stats log, emitted from clearJob.
   #flushStats(jobId: string, reason: string): void {
     let stat = this.#stats.get(jobId);
-    if (!stat) return;
+    if (!stat) {
+      return;
+    }
     let total = stat.hits + stat.misses;
     let hitRate =
       total === 0 ? '0%' : `${Math.round((100 * stat.hits) / total)}%`;
@@ -256,70 +260,36 @@ export class JobScopedSearchCache {
     this.#stats.delete(jobId);
   }
 
-  // Total entry count across all jobs. Useful for tests + observability.
-  size(): number {
-    let total = 0;
-    for (let jm of this.#byJob.values()) {
-      total += jm.size;
+  // Flush #stats entries that haven't been touched within the TTL. clearJob
+  // handles the normal eviction, but a job's stats outlive its rows whenever
+  // clearJob never runs for it on this process — a peer replica cleared the
+  // shared rows first, or the janitor reclaimed them on a missed NOTIFY. An
+  // entry stops being touched once its job stops issuing reads, so aging out at
+  // the TTL bounds the map without dropping stats for a still-active job.
+  #flushStaleStats(): void {
+    let cutoff = Date.now() - this.#ttlMs;
+    for (let [jobId, stat] of this.#stats) {
+      if (stat.lastTouchedAt < cutoff) {
+        this.#flushStats(jobId, 'expired');
+      }
     }
-    return total;
-  }
-
-  jobIds(): string[] {
-    return [...this.#byJob.keys()];
-  }
-
-  // Look up the cached body without populating or touching stats.
-  // Used by the handler's 304 path to confirm the slot still exists
-  // before returning Not-Modified — otherwise an If-None-Match whose
-  // expected ETag matches a TTL-evicted slot would short-circuit to
-  // 304 with no body to back it up on a follow-up.
-  peek(args: {
-    jobId: string;
-    realms: string[];
-    query: Query;
-    opts: unknown | undefined;
-  }): string | undefined {
-    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
-    return this.#byJob.get(args.jobId)?.get(innerKey)?.result;
-  }
-
-  // Job-id-based ETag. Same `(jobId, realms, query, opts)` always
-  // produces the same value for an entry's lifetime; a different
-  // jobId yields a different ETag so a stale If-None-Match from a
-  // previous batch never matches a fresh entry. Weak-form (`W/`)
-  // because the underlying body is pretty-printed JSON and we
-  // validate by recomputing-and-comparing, not by byte-exact match
-  // of the body itself.
-  computeETag(args: {
-    jobId: string;
-    realms: string[];
-    query: Query;
-    opts: unknown | undefined;
-  }): string {
-    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
-    return `W/"${args.jobId}-${md5(innerKey)}"`;
   }
 }
 
-// Compose the per-job inner key. Excludes jobId since the outer Map is
-// already partitioned by jobId — this keeps inner-key length bounded
-// regardless of how the call site formats the jobId. The realms array
-// is included verbatim (no sort, no dedupe): `_federated-search`
-// preserves input order in its `data` array and first-occurrence
-// `included`, so `[A, B]` and `[B, A]` are *different* responses and
-// must hash to different cache entries. A duplicated realm entry
-// likewise contributes duplicate per-realm searches at the handler
-// layer — preserve that observable shape too rather than silently
-// canonicalising it here.
-function buildInnerKey(
+// Compose the per-job inner key and hash it. Excludes jobId since the outer
+// `job_id` column already partitions by job. The realms array is included
+// verbatim (no sort, no dedupe): `_federated-search` preserves input order in
+// its `data` array and first-occurrence `included`, so `[A, B]` and `[B, A]`
+// are different responses and must hash to different entries.
+function innerKeyHash(
   realms: string[],
   query: Query,
   opts: unknown | undefined,
 ): string {
-  return JSON.stringify([
+  let innerKey = JSON.stringify([
     realms,
     normalizeQueryForSignature(query),
     opts ? sortKeysDeep(opts) : null,
   ]);
+  return md5(innerKey);
 }

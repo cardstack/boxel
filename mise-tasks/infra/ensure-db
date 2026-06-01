@@ -6,7 +6,10 @@
 [ -z "$BOXEL_ENVIRONMENT" ] && exit 0
 
 DB_SUFFIX="${1:-$ENV_SLUG}"
-DB_NAME="boxel_${DB_SUFFIX}"
+# Hyphens in slugs aren't valid in unquoted Postgres identifiers (see
+# scripts/env-slug.sh `pg_db_slug`). Inlined here because mise tasks
+# can run standalone without sourcing env-slug.sh.
+DB_NAME="boxel_$(echo "$DB_SUFFIX" | tr '-' '_')"
 
 echo "Ensuring database '${DB_NAME}' exists…"
 

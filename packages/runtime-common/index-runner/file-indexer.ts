@@ -10,7 +10,7 @@ import {
   type JobInfo,
   type LocalPath,
   type ResolvedCodeRef,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from '../index';
 import {
   CardError,
@@ -24,6 +24,7 @@ import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
 } from '../file-def-code-ref';
+import type { VirtualNetwork } from '../virtual-network';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -41,9 +42,10 @@ export interface FileIndexerOptions {
   precomputedExtractResult: FileExtractResponse | undefined;
   precomputedRenderResult?: FileRenderResponse;
   // Timing / diagnostic payload attached to the fused-visit response;
-  // persisted onto `boxel_index.timing_diagnostics` for this file's row.
-  timingDiagnostics?: TimingDiagnostics;
+  // persisted onto `boxel_index.diagnostics` for this file's row.
+  diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
+  virtualNetwork: VirtualNetwork;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
@@ -62,8 +64,9 @@ export async function performFileIndexing({
   jobInfo,
   precomputedExtractResult,
   precomputedRenderResult,
-  timingDiagnostics,
+  diagnostics,
   dependencyResolver,
+  virtualNetwork,
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
@@ -71,7 +74,7 @@ export async function performFileIndexing({
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
 
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
   let fileTypeRefs = [fileDefCodeRef];
   if (
     fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
@@ -145,7 +148,7 @@ export async function performFileIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(entryURL, { ...renderError, timingDiagnostics });
+    await updateEntry(entryURL, { ...renderError, diagnostics });
     return 'error';
   }
 
@@ -156,7 +159,7 @@ export async function performFileIndexing({
   }
 
   let fallbackTypes = fileTypeRefs.map((ref: ResolvedCodeRef) =>
-    internalKeyFor(ref, undefined),
+    internalKeyFor(ref, undefined, virtualNetwork),
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
@@ -184,7 +187,7 @@ export async function performFileIndexing({
         ...(extractResult.searchDoc ?? {}),
       },
       types: fileTypes,
-      timingDiagnostics,
+      diagnostics,
     });
     return 'error';
   }
@@ -224,7 +227,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
-    timingDiagnostics,
+    diagnostics,
   });
 
   return 'indexed';

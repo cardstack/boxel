@@ -2174,3 +2174,43 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
     throw enriched;
   }
 }
+
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields
+// land on attributes directly. Omit a key to leave that field unset.
+export function realmConfigCardJSON(
+  config: {
+    name?: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    includePrerenderedDefaultRealmIndex?: boolean;
+  } = {},
+): string {
+  let attrs: Record<string, unknown> = {};
+  if (config.name !== undefined) {
+    attrs.cardInfo = { name: config.name };
+  }
+  if (config.iconURL !== undefined) {
+    attrs.iconURL = config.iconURL;
+  }
+  if (config.backgroundURL !== undefined) {
+    attrs.backgroundURL = config.backgroundURL;
+  }
+  if (config.includePrerenderedDefaultRealmIndex !== undefined) {
+    attrs.includePrerenderedDefaultRealmIndex =
+      config.includePrerenderedDefaultRealmIndex;
+  }
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: attrs,
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  });
+}

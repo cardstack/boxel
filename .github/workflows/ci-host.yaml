@@ -190,6 +190,10 @@ jobs:
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
           SKIP_CATALOG: true
+          # Dump HTTP/2 session/stream state for any realm-server stream that
+          # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
+          # 60s host-test timeouts. Diagnostics-only; see server.ts.
+          REALM_SERVER_HTTP2_DIAGNOSTICS: "1"
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
@@ -250,15 +254,6 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
-          # [readiness-diag] — start-server-and-test reads DEBUG and
-          # propagates `log: true` + `verbose: true` to wait-on, so each
-          # readiness-probe attempt prints its HTTP status / connection
-          # error. Distinguishes "server not listening" from "server
-          # hanging mid-request" from "server returning 500" when the
-          # 10-minute wait-on timer fires. Remove together with the
-          # other [readiness-diag] markers once the root cause is
-          # identified.
-          DEBUG: start-server-and-test
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts

@@ -6,6 +6,7 @@ import type {
   DefinitionLookup,
   Prerenderer,
   QueuePublisher,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   fullReindex,
@@ -40,6 +41,7 @@ module(basename(__filename), function (hooks) {
       indexWriter: null as unknown as IndexWriter,
       prerenderer: null as unknown as Prerenderer,
       definitionLookup: null as unknown as DefinitionLookup,
+      virtualNetwork: null as unknown as VirtualNetwork,
       matrixURL: 'http://localhost:8008',
       getReader: () => {
         throw new Error('getReader is not used by full-reindex');

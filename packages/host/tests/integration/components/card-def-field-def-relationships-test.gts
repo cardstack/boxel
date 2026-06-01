@@ -20,6 +20,7 @@ import {
   setupIntegrationTestRealm,
   provideConsumeContext,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import {
   CardDef,
@@ -473,7 +474,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       contents: {
         'currency.gts': { CurrencyCard },
         'tx.gts': { TxCard },
-        '.realm.json': `{ "name": "Local Workspace" }`,
+        'realm.json': realmConfigCardJSON({ name: 'Local Workspace' }),
         'usd.json': usdCard,
         'Tx/1.json': txCard,
       },

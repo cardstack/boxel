@@ -29,6 +29,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -295,7 +296,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
           },
           ...stubFiles,
           'zzz/zzz/file.json': '{}',
-          '.realm.json': realmInfo,
+          'realm.json': realmConfigCardJSON(realmInfo),
         },
       });
     }));

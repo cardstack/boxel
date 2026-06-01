@@ -47,7 +47,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     test('read permission GET /_mtimes', async function (assert) {
       let expectedMtimes = mtimes(testRealmPath, testRealmURL);
-      delete expectedMtimes[`${testRealmURL}.realm.json`];
 
       let response = await request
         .get('/_mtimes')

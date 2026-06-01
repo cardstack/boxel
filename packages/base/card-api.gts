@@ -1,7 +1,7 @@
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
-import { WatchedArray } from './watched-array';
+import { WatchedArray, rawArrayValues } from './watched-array';
 import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
@@ -93,6 +93,7 @@ import {
   resolveCardReference,
   rri,
   type RealmResourceIdentifier,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -214,6 +215,7 @@ export {
   getFieldDescription,
   getFields,
   getRelationship,
+  isNonPresentLink,
   peekAtField,
   isCard,
   isField,
@@ -469,6 +471,11 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
+  // The VirtualNetwork that owns this store's realm mappings, used for
+  // prefix/RRI resolution during (de)serialization. Optional so test doubles
+  // don't need to implement it; resolution sites fall back to the deprecated
+  // module-level resolver when it's absent.
+  virtualNetwork?: VirtualNetwork;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -1220,6 +1227,24 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         this,
         dependencyTrackingContext,
       );
+      // `ensureQueryFieldSearchResource` mirrors the resource's error state
+      // into the bucket. The recognition pattern mirrors the declared
+      // `linksTo` path above — a terminal `link-error` / `link-not-found`
+      // sentinel surfaces as `undefined`, and `getRelationship` is the
+      // structured read.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        console.error(
+          '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
+          {
+            fieldName: this.name,
+            ownerType: instance?.constructor?.name,
+            sentinelType: (bucketEntry as { type?: string })?.type,
+          },
+        );
+        return undefined;
+      }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
       let value = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
       trackRuntimeRelationshipDependency(
@@ -1245,7 +1270,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
-    return value;
+    // An unset linksTo falls through to LinksTo.emptyValue() which returns
+    // `null`; the userland contract is that every non-present state — including
+    // not-set — surfaces as `undefined`, so all four non-present discriminants
+    // collapse to one nullish shape.
+    return value ?? undefined;
   }
 
   queryableValue(instance: any, stack: CardDef[]): any {
@@ -1402,7 +1431,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveCardReference(reference, relativeTo);
+    let href = resolveRef(store, reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1649,6 +1678,23 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         this,
         dependencyTrackingContext,
       )!;
+      // Resource-level failure: `ensureQueryFieldSearchResource` plants a
+      // single whole-field sentinel in the bucket (the search fails as a
+      // unit, not per element). The empty array hands callers a usable
+      // shape; the structured failure surfaces through `getRelationship`.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        console.error(
+          '[CS-11221 DIAG] linksToMany getter returning emptyValue (bucket sentinel)',
+          {
+            fieldName: this.name,
+            ownerType: instance?.constructor?.name,
+            sentinelType: (bucketEntry as { type?: string })?.type,
+          },
+        );
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
       let records = searchResource.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,
@@ -1690,39 +1736,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       );
     }
 
-    let notLoadedRefs: string[] = [];
-    for (let entry of value) {
+    // Sentinels live in the backing array, but the WatchedArray hides them from
+    // userland per-slot access (`arr[i]` is `Card | undefined`). Scan the raw
+    // backing array — not the hiding proxy — so the not-loaded slots are still
+    // visible to kick off their lazy load.
+    let rawEntries = rawArrayValues(value);
+    let hasNotLoaded = false;
+    for (let entry of rawEntries) {
       if (isNotLoadedValue(entry)) {
-        notLoadedRefs = [...notLoadedRefs, entry.reference];
+        hasNotLoaded = true;
+        break;
       }
     }
-    if (notLoadedRefs.length > 0) {
-      // Important: we intentionally leave the NotLoadedValue sentinels inside the
-      // WatchedArray so the lazy loader can swap them out in place once the linked
-      // cards finish loading. Because the array identity never changes, Glimmer’s
-      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
-      // sentinel with a CardDef instance. Callers should treat these entries as
-      // placeholders (e.g. check for constructor.getComponent) rather than assuming
-      // every element is immediately renderable. Ideally the .value refactor can
-      // iron out this kink.
-      // TODO
-      // Codex has offered a couple interim solutions to ease the burden on card
-      // authors around this:
-      // We can wrap the guard in a reusable helper/component so card authors don’t
-      // have to think about the sentinel:
-      //
-      // - Helper – export something like `has-card-component` (just checks
-      //   `value?.constructor?.getComponent`) from card-api. Then in templates
-      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
-      //   `{{#each (filter-loadable cards) as |c|}}`.
-      //
-      // - Component – provide a `LoadableCard` component that takes a card instance
-      //   and renders the correct `CardContainer` only when the component is ready;
-      //   otherwise it renders nothing or a skeleton. Card authors use
-      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
-      //   themselves.
-
-      for (let entry of value) {
+    if (hasNotLoaded) {
+      // Each not-loaded sentinel stays in place so the lazy loader can swap it
+      // for the resolved card (success) or a terminal error/not-found sentinel
+      // (failure). The array identity never changes, so Glimmer re-renders on
+      // the in-place swap. A failed slot becomes terminal and surfaces as
+      // `undefined` per-slot — `getRelationship` is the only way to read its
+      // structured failure state.
+      for (let entry of rawEntries) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
           (entry as any).loading = true;
@@ -1730,11 +1763,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    trackRuntimeRelationshipDependencies(value, this.card);
+    trackRuntimeRelationshipDependencies(rawEntries, this.card);
     return value as BaseInstanceType<FieldT>;
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
+    // A whole-field sentinel (a query-field whose search resource errored, or
+    // a computed `linksToMany` that consumes an unresolved upstream link)
+    // arrives here as a single LinkErrorValue / LinkNotFoundValue / NotLoaded
+    // object — NOT an array. Without this guard, the `[...instances]` spread
+    // below would throw `instances is not iterable`, the render would fail,
+    // and the indexer would classify the consumer as instance-error — the
+    // exact cascade the field-getter side of the tolerance machine avoids.
+    // Treat a non-present whole-field sentinel as an empty plural for index
+    // purposes; the broken reference is preserved on the wire via the
+    // serializer (`relationships.{field}` carries the sentinel's `reference`),
+    // and `getRelationship` is the structured read surface for the failure
+    // state outside the index.
+    if (isNonPresentLink(instances)) {
+      return null;
+    }
     if (instances === null || instances.length === 0) {
       // we intentionally use a "null" to represent an empty plural field as
       // this is a limitation to SQLite's json_tree() function when trying to match
@@ -1742,11 +1790,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       return null;
     }
 
-    // Need to replace the WatchedArray proxy with an actual array because the
-    // WatchedArray proxy is not structuredClone-able, and hence cannot be
-    // communicated over the postMessage boundary between worker and DOM.
-    // TODO: can this be simplified since we don't have the worker anymore?
-    let results = [...instances]
+    // Read the raw backing array (not the hiding proxy) so a broken slot still
+    // serializes its reference into the queryable value rather than dropping out
+    // as `undefined`. Replacing the WatchedArray proxy with a plain array also
+    // keeps the result structuredClone-able for the postMessage boundary.
+    let results = rawArrayValues(instances)
       .map((instance) => {
         if (instance == null) {
           return null;
@@ -1806,7 +1854,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       ? FileMetaResourceType
       : CardResourceType;
     let relationships: Record<string, Relationship> = {};
-    values.map((value, i) => {
+    // Iterate the raw backing array so broken slots serialize their reference
+    // through `serializeNonPresentLink` instead of collapsing to `data: null`.
+    rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1949,7 +1999,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveCardReference(reference, relativeTo);
+        let normalizedReference = resolveRef(store, reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2010,20 +2060,25 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           notifyCardTracking(instance);
         }),
       await Promise.all(resources),
+      { hideSlot: isNonPresentLink },
     );
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((oldValue, value) => {
-      applySubscribersToInstanceValue(
-        instance,
-        this,
-        oldValue as BaseDef[],
-        value as BaseDef[],
-      );
-      notifySubscribers(instance, this.name, value);
-      notifyCardTracking(instance);
-    });
+    return new WatchedArray(
+      (oldValue, value) => {
+        applySubscribersToInstanceValue(
+          instance,
+          this,
+          oldValue as BaseDef[],
+          value as BaseDef[],
+        );
+        notifySubscribers(instance, this.name, value);
+        notifyCardTracking(instance);
+      },
+      [],
+      { hideSlot: isNonPresentLink },
+    );
   }
 
   validate(instance: BaseDef, values: any[] | null) {
@@ -2066,16 +2121,22 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    return new WatchedArray((oldValue, value) => {
-      applySubscribersToInstanceValue(
-        instance,
-        this,
-        oldValue as BaseDef[],
-        value as BaseDef[],
-      );
-      notifySubscribers(instance, this.name, value);
-      notifyCardTracking(instance);
-    }, values);
+    return new WatchedArray(
+      (oldValue, value) => {
+        applySubscribersToInstanceValue(
+          instance,
+          this,
+          oldValue as BaseDef[],
+          value as BaseDef[],
+        );
+        notifySubscribers(instance, this.name, value);
+        notifyCardTracking(instance);
+      },
+      // Read raw so re-assigning a field that already holds broken slots keeps
+      // the sentinels in the new backing array rather than baking in `undefined`.
+      rawArrayValues(values),
+      { hideSlot: isNonPresentLink },
+    );
   }
 
   captureQueryFieldSeedData(
@@ -2383,7 +2444,11 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
-        return resolveCardReference(maybeRelativeReference, value[relativeTo]);
+        return resolveRef(
+          getStore(value),
+          maybeRelativeReference,
+          value[relativeTo],
+        );
       }
       return Object.fromEntries(
         Object.entries(
@@ -2406,7 +2471,8 @@ export class BaseDef {
           if (isNonPresentLink(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = resolveCardReference(
+              normalizedId = resolveRef(
+                getStore(value),
                 normalizedId,
                 value[relativeTo],
               );
@@ -3378,13 +3444,10 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = resolveCardReference(
-    link,
-    instance.id ?? instance[relativeTo],
-  );
+  let store = getStore(instance);
+  let reference = resolveRef(store, link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
-  let store = getStore(instance);
   if (promise) {
     store.trackLoad(promise);
     return;
@@ -3445,12 +3508,16 @@ function lazilyLoadLink(
       }
       if (pluralArgs) {
         let { value } = pluralArgs;
+        // Match against the raw backing array (the proxy hides not-loaded
+        // sentinels from index access); swap through the proxy so the in-place
+        // mutation notifies subscribers and Glimmer re-renders.
         let indices: number[] = [];
-        for (let [index, item] of value.entries()) {
+        for (let [index, item] of rawArrayValues(value).entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = resolveCardReference(
+          let notLoadedRef = resolveRef(
+            store,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3530,9 +3597,10 @@ function lazilyLoadLink(
         // Swap the sentinel into the slot(s) whose reference just failed,
         // leaving the WatchedArray identity intact so Glimmer re-renders. We
         // match the same not-loaded entries the success path would have
-        // replaced with the loaded card.
+        // replaced with the loaded card. Match against the raw backing array
+        // (the proxy hides sentinels) but write through the proxy to notify.
         let { value } = pluralArgs;
-        for (let [index, item] of value.entries()) {
+        for (let [index, item] of rawArrayValues(value).entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
@@ -3561,6 +3629,83 @@ function lazilyLoadLink(
       }
     }
   })();
+}
+
+// Replace any linksTo / linksToMany bucket entry on `consumer` that points
+// to `deletedRef` with a `link-not-found` sentinel, and notify subscribers
+// so the placeholder render takes over the slot. Returns true when at
+// least one slot was rewritten. The host's store calls this from its
+// realm-event handler when an instance is removed: the deleted target's
+// loaded card is still hard-referenced by every consumer that has it in
+// memory, and without this rewrite the consumer's render stays stale
+// until something else forces a re-render. Mirrors the sentinel shape
+// `lazilyLoadLink` plants for a 404 — same `link-not-found` discriminator,
+// same `errorDoc.status: 404`, same `deps` (both id and `.json` forms) so
+// downstream invalidation behaves identically to a real fetch failure.
+export function notifyLinksToTargetDeleted(
+  consumer: CardDef,
+  deletedRef: string,
+): boolean {
+  let bucket = getDataBucket(consumer);
+  let fields = getFields(consumer, { includeComputeds: false });
+  let referenceWithJson = deletedRef.endsWith('.json')
+    ? deletedRef
+    : `${deletedRef}.json`;
+  let referenceWithoutJson = deletedRef.replace(/\.json$/, '');
+  let buildSentinel = (): LinkNotFoundValue => ({
+    type: 'link-not-found',
+    reference: referenceWithoutJson,
+    errorDoc: {
+      title: 'Link Not Found',
+      status: 404,
+      message: `missing file ${referenceWithJson}`,
+      deps: [referenceWithoutJson, referenceWithJson],
+      additionalErrors: null,
+    } as SerializedError,
+  });
+  let changed = false;
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (!field) {
+      continue;
+    }
+    if (field.fieldType === 'linksTo') {
+      let current = bucket.get(fieldName);
+      if (
+        current &&
+        typeof current === 'object' &&
+        'id' in current &&
+        (current as { id?: unknown }).id === referenceWithoutJson
+      ) {
+        let sentinel = buildSentinel();
+        bucket.set(fieldName, sentinel);
+        notifySubscribers(consumer, fieldName, sentinel);
+        notifyCardTracking(consumer);
+        changed = true;
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      let arr = bucket.get(fieldName);
+      if (Array.isArray(arr)) {
+        let arrChanged = false;
+        for (let [index, item] of arr.entries()) {
+          if (
+            item &&
+            typeof item === 'object' &&
+            'id' in item &&
+            (item as { id?: unknown }).id === referenceWithoutJson
+          ) {
+            arr[index] = buildSentinel();
+            arrChanged = true;
+          }
+        }
+        if (arrChanged) {
+          notifySubscribers(consumer, fieldName, arr);
+          notifyCardTracking(consumer);
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
 }
 
 function trackRuntimeRelationshipDependency(
@@ -4500,6 +4645,29 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
+// The VirtualNetwork associated with an instance's store, for prefix/RRI
+// resolution outside this module. Returns undefined when the store can't
+// supply one, so callers fall back to the deprecated module-level resolver.
+export function virtualNetworkFor(
+  instance: BaseDef,
+): VirtualNetwork | undefined {
+  return getStore(instance).virtualNetwork;
+}
+
+// Resolve a (possibly prefix-form or relative) reference to an absolute URL
+// string through the store's VirtualNetwork when available, falling back to
+// the deprecated module-level resolver when it's absent.
+function resolveRef(
+  store: CardStore | undefined,
+  reference: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+): string {
+  let vn = store?.virtualNetwork;
+  return vn
+    ? vn.resolveURL(reference, relativeTo).href
+    : resolveCardReference(reference, relativeTo);
+}
+
 function myLoader(): Loader {
   // we know this code is always loaded by an instance of our Loader, which sets
   // import.meta.loader.
@@ -4516,6 +4684,10 @@ class FallbackCardStore implements CardStore {
   #fileMetaInstances: Map<string, FileDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
+
+  get virtualNetwork(): VirtualNetwork | undefined {
+    return myLoader().getVirtualNetwork();
+  }
 
   getCard(id: string) {
     id = id.replace(/\.json$/, '');
@@ -4575,7 +4747,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url);
+    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }
@@ -4585,7 +4757,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url);
+    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }

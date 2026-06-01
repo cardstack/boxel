@@ -34,6 +34,8 @@ const stubVirtualNetwork = {
   fetch: (async () => {
     throw new Error('fetch not used in this test');
   }) as typeof fetch,
+  isRegisteredPrefix: () => false,
+  toURL: (url: string) => new URL(url),
 } as unknown as VirtualNetwork;
 const stubCreatePrerenderAuth = (
   _userId: string,

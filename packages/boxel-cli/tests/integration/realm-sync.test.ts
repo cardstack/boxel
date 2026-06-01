@@ -607,11 +607,11 @@ describe('realm sync (integration)', () => {
     expect(after.length).toBe(before.length);
   });
 
-  it('protected files (.realm.json) are never synced', async () => {
+  it('dotfiles are never synced', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
 
-    writeLocalFile(localDir, '.realm.json', '{"name":"hacked"}\n');
+    writeLocalFile(localDir, '.gitkeep', 'marker\n');
     writeLocalFile(localDir, 'normal.gts', 'export const n = 1;\n');
 
     await sync(localDir, realmUrl, {
@@ -619,9 +619,9 @@ describe('realm sync (integration)', () => {
       profileManager,
     });
 
-    // .realm.json should not appear in manifest
+    // dotfiles should not appear in manifest
     let manifest = readManifest(localDir);
-    expect(manifest.files['.realm.json']).toBeUndefined();
+    expect(manifest.files['.gitkeep']).toBeUndefined();
   });
 
   it('creates checkpoint after sync with changes', async () => {

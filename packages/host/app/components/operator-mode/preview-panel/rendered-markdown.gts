@@ -27,13 +27,15 @@ import {
   cardTypeName,
   extractCardReferenceUrls,
   isCardErrorJSONAPI,
-  resolveCardReference,
+  rri,
   trimJsonExtension,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -55,9 +57,15 @@ interface RenderSlot {
   typeName?: string; // present when state === 'unresolved'
 }
 
-function resolveUrl(raw: string, baseUrl: string | undefined): string {
+function resolveUrl(
+  raw: string,
+  baseUrl: string | undefined,
+  virtualNetwork: VirtualNetwork,
+): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl));
+    return trimJsonExtension(
+      virtualNetwork.resolveRRI(raw, baseUrl ? rri(baseUrl) : undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -95,6 +103,7 @@ const DEFAULT_CARD_CONTEXT: Partial<CardContext> = {
 };
 
 export default class RenderedMarkdown extends Component<Signature> {
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
   @consume(CardContextName) declare private dynamicCardContext: CardContext;
 
@@ -136,6 +145,7 @@ export default class RenderedMarkdown extends Component<Signature> {
     return extractCardReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
+      this.network.virtualNetwork,
     );
   }
 
@@ -197,7 +207,9 @@ export default class RenderedMarkdown extends Component<Signature> {
             sizeStyle = derived.sizeStyle;
           }
 
-          let card = cardsByUrl.get(resolveUrl(rawUrl, baseUrl));
+          let card = cardsByUrl.get(
+            resolveUrl(rawUrl, baseUrl, this.network.virtualNetwork),
+          );
           if (card) {
             let style: ReturnType<typeof htmlSafe> | undefined;
             if (format === 'fitted') {
