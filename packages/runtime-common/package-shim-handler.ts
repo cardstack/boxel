@@ -417,10 +417,11 @@ export class PackageShimHandler {
   }
 
   // Records a resolved module's exports for `findExportSources`.
-  // Non-object resolutions (rare, but resolvers can return anything)
-  // are skipped — there are no own-properties to search.
+  // Resolvers can return anything; we keep whatever can carry own
+  // properties (objects and functions) and skip the rest — there's
+  // nothing to search on a primitive.
   private rememberExports(key: string, module: ModuleLike) {
-    if (module != null && typeof module === 'object') {
+    if (canOwnExports(module)) {
       this.resolvedExports.set(key, module);
     }
   }
@@ -429,19 +430,20 @@ export class PackageShimHandler {
   // export name, returns the import-friendly IDs of every known shim
   // that owns an own-property with that name. Uses `hasOwnProperty`
   // (not `in`) for the same reason the Proxy does: only own properties
-  // are real exports — inherited Object.prototype names aren't.
+  // are real exports — inherited Object.prototype names aren't. Sorted
+  // so the message (and the copy-paste import, which uses the first
+  // entry) is stable regardless of shim registration/resolve order.
   private findExportSources = (symbol: string): string[] => {
     let matches: string[] = [];
     for (let [moduleId, exports] of this.resolvedExports) {
       if (
-        exports != null &&
-        typeof exports === 'object' &&
+        canOwnExports(exports) &&
         Object.prototype.hasOwnProperty.call(exports, symbol)
       ) {
         matches.push(toImportSpecifier(moduleId));
       }
     }
-    return matches;
+    return matches.sort();
   };
 
   shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
@@ -510,4 +512,14 @@ function toImportSpecifier(moduleId: string): string {
   return moduleId.startsWith(PACKAGES_FAKE_ORIGIN)
     ? moduleId.slice(PACKAGES_FAKE_ORIGIN.length)
     : moduleId;
+}
+
+// Whether a resolved namespace can carry own-property exports worth
+// searching. Both objects and functions can hold own properties (a
+// shim resolver may return a callable namespace), so both qualify;
+// primitives and null/undefined don't.
+function canOwnExports(value: unknown): boolean {
+  return (
+    value != null && (typeof value === 'object' || typeof value === 'function')
+  );
 }
