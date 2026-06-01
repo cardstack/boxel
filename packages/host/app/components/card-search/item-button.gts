@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -48,14 +49,21 @@ const captureAdornCardMeta = modifier(
     [setMeta, enabled]: [(meta: AdornCardMeta) => void, boolean | undefined],
   ) => {
     if (!enabled) return;
+    let destroyed = false;
     let read = () => {
+      if (destroyed) return;
       let inner = element.querySelector('[data-card-type-display-name]');
       setMeta({
         name: inner?.getAttribute('data-card-type-display-name') ?? undefined,
         iconHtml: inner?.getAttribute('data-card-type-icon-html') ?? undefined,
       });
     };
-    read();
+    // Defer the initial read out of the current render. This modifier
+    // installs during render commit, and setMeta writes tracked state
+    // the label getters already consumed this render — writing it
+    // synchronously here trips a backtracking assertion. MutationObserver
+    // callbacks are always async, so subsequent reads are already safe.
+    scheduleOnce('afterRender', null, read);
     let observer = new MutationObserver(read);
     observer.observe(element, {
       childList: true,
@@ -66,7 +74,10 @@ const captureAdornCardMeta = modifier(
         'data-card-type-icon-html',
       ],
     });
-    return () => observer.disconnect();
+    return () => {
+      destroyed = true;
+      observer.disconnect();
+    };
   },
 );
 
@@ -146,8 +157,16 @@ export default class ItemButton extends Component<Signature> {
   }
 
   @action private setAdornCardMeta(meta: AdornCardMeta) {
-    this.prerenderedTypeName = meta.name;
-    this.prerenderedTypeIconHtml = meta.iconHtml;
+    // Only write when a value actually changed. The MutationObserver
+    // that feeds this fires on any mutation inside the button subtree —
+    // including our own label/icon render — so re-assigning identical
+    // values would dirty tracked state and re-render in a loop.
+    if (meta.name !== this.prerenderedTypeName) {
+      this.prerenderedTypeName = meta.name;
+    }
+    if (meta.iconHtml !== this.prerenderedTypeIconHtml) {
+      this.prerenderedTypeIconHtml = meta.iconHtml;
+    }
   }
 
   private get adornTypeName(): string | undefined {

@@ -20,6 +20,18 @@ const PrerenderedStub: ComponentLike<{ Element: Element }> = <template>
   </div>
 </template>;
 
+// Same as above, but also carries the type-icon HTML the realm server
+// stamps on prerendered cards — ItemButton renders it into the label's
+// icon slot.
+const PrerenderedStubWithIcon: ComponentLike<{ Element: Element }> = <template>
+  <div
+    data-card-type-display-name='Authenticated Image Tester'
+    data-card-type-icon-html='<svg data-test-type-icon></svg>'
+  >
+    Authenticated Image Tester preview
+  </div>
+</template>;
+
 const noop = () => {};
 const newCardItem: NewCardArgs = {
   ref: { module: rri('http://test/foo.gts'), name: 'Foo' },
@@ -105,5 +117,27 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
         'Authenticated Image Tester',
         'the type-label tab reflects data-card-type-display-name from the inner card render',
       );
+  });
+
+  test('renders the type icon from data-card-type-icon-html and settles (no render loop)', async function (assert) {
+    await render(
+      <template>
+        <ItemButton
+          @item={{PrerenderedStubWithIcon}}
+          @itemId='http://test/Foo/1'
+          @isSelected={{false}}
+          @onSelect={{noop}}
+          @adorn={{true}}
+        />
+      </template>,
+    );
+    await waitFor('[data-test-adorn-label]');
+    // `settled()` would never resolve if reading the icon HTML and
+    // rendering it fed the capture MutationObserver in a loop.
+    await settled();
+
+    assert
+      .dom('[data-test-adorn-label] [data-test-type-icon]')
+      .exists('the type icon is rendered in the label icon slot');
   });
 });
