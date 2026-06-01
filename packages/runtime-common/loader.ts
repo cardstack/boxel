@@ -1081,20 +1081,17 @@ export class Loader {
       throw err;
     }
     if (!response.ok) {
+      let error = await CardError.fromFetchResponse(moduleURL.href, response);
+      // Replace the raw S3 AccessDenied XML for a missing boxel icon with a
+      // user-actionable message, while preserving everything else the base
+      // error carries (status, deps, responseText). The host's browser loader
+      // rewrites these failures to a fallback icon module, but the indexing
+      // worker's loader has no such middleware, so without this the XML lands
+      // in error_doc.message.
       let iconMessage = iconNotFoundMessage(moduleURL.href, response.status);
       if (iconMessage) {
-        // Surface a user-actionable message for a missing boxel icon instead of
-        // the raw S3 AccessDenied XML. The host's browser loader rewrites these
-        // to a fallback icon module, but the indexing worker's loader has no
-        // such middleware, so without this the XML lands in error_doc.message.
-        throw new CardError(iconMessage, {
-          id: moduleURL.href,
-          title: response.statusText,
-          status: response.status,
-          responseText: await response.text(),
-        });
+        error.message = iconMessage;
       }
-      let error = await CardError.fromFetchResponse(moduleURL.href, response);
       // Surfaced from `_fetch`'s catch: the request never reached the
       // server. Tag the error so `fetchModule` skips caching it as a
       // broken module — transport-level failures are non-deterministic
