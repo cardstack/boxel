@@ -70,18 +70,80 @@ Each spec type has specific characteristics and use cases:
 
 ### 3. Component Specs (`specType: 'component'`)
 
-**Purpose**: Document reusable UI components that don't represent data.
+**Purpose**: Document reusable UI components that don't represent data, so AI agents and developers can discover them by searching the catalog instead of needing a per-component skill.
 
 **Characteristics**:
-- No support for examples 
-- Only when it extends Glimmer Component  
+- Only when it extends Glimmer Component
 - Potentially includes reactive data loading resources from ember-resources
+- API documentation, an example, and CSS variables live in the `readMe` markdown field
+- `cardDescription` is the keyword-rich one-liner the agent matches against — keep it concrete (e.g. "Form text input with validation states") rather than abstract
 
 **Example Use Cases**:
 - `CardsGrid` - Responsive grid layout component for card collections
 - `FilterDropdown` - Multi-select dropdown component for filtering
 - `Pill` - Badge component for displaying tags and statuses
 - `LinksToEditor` - Component for editing card relationships
+
+#### Boxel-UI Component Specs
+
+All `@cardstack/boxel-ui` components ship a generated Spec card. The
+generator (`packages/boxel-ui/addon/bin/generate-component-specs.mjs`)
+walks each component's `usage.gts` file, extracts the `FreestyleUsage`
+metadata (arguments, description, example, CSS variables), and emits a
+Spec JSON with:
+
+- `ref: { module: '@cardstack/boxel-ui/components', name: ComponentName }`
+- `cardTitle: ComponentName`
+- `cardDescription`: the top-level `@description` attribute on the
+  primary `<FreestyleUsage>` tag, or the first sentence of its
+  `<:description>` block. **For agent discoverability, add a
+  keyword-rich `@description` attribute to the primary
+  `<FreestyleUsage>` block in `usage.gts` whenever the synthesized
+  description is generic.**
+- `readMe`: a markdown body with the API table, a usage example, and the
+  CSS-variable table.
+
+##### Developer workflow
+
+The generated specs are **not committed anywhere** — neither to the
+boxel repo nor to `cardstack/boxel-catalog`. They're treated as build
+artifacts of `boxel-ui` and regenerated fresh at realm-server deployment
+time. The inputs (`usage.gts`) in boxel are the source of truth; the
+deployed catalog content is whatever the generator produces against
+the deployed commit.
+
+1. Edit the component's `usage.gts`. Make sure the primary
+   `<FreestyleUsage>` block has a `@description='…'` attribute and
+   complete `<Args.X>` documentation.
+2. (Optional, but recommended) Run
+   `pnpm --dir packages/boxel-ui/addon generate:component-specs` locally
+   to inspect the resulting spec content and have your local
+   realm-server reindex it. Requires
+   `pnpm --dir packages/catalog catalog:setup` to have run at least
+   once (clones `cardstack/boxel-catalog` into
+   `packages/catalog/contents/`, which is gitignored from boxel).
+   Output: `packages/catalog/contents/Spec/boxel-ui-<slug>.json`.
+3. Commit only your `usage.gts` change to your boxel PR — no spec JSON
+   needs to land in any repo.
+4. On deploy, the realm-server's `setup:catalog-in-deployment` script
+   pulls latest `boxel-catalog`, then runs the generator against the
+   deployed `usage.gts` files, then rsyncs the merged tree into
+   `/persistent/catalog/`. The deployed catalog is full-indexed at
+   startup.
+
+##### Gotchas
+
+- `packages/catalog/contents/` is its own git repo (clone of
+  `cardstack/boxel-catalog`), gitignored from boxel. The generator
+  drops `boxel-ui-*.json` files into that working tree locally. Treat
+  those as transient — running `pnpm --dir packages/catalog catalog:update`
+  will stash them automatically if a `git pull` would conflict.
+- Because the generator regenerates fresh on every deploy, there is
+  no in-boxel-repo drift-detection step. If you change `usage.gts`
+  but don't run the generator locally to eyeball the result, the
+  deployed catalog still ends up correct — but you only see what the
+  agent will read at runtime after the next deploy. Running the
+  generator locally before pushing is the recommended habit.
 
 ### 4. App Specs (`specType: 'app'`)
 

@@ -27,7 +27,10 @@ export default class ContextButtonUsage extends Component {
   @tracked private label = 'context-button usage';
 
   <template>
-    <FreestyleUsage @name='ContextButton'>
+    <FreestyleUsage
+      @name='ContextButton'
+      @description='Overflow / context-menu trigger button (three-dot ellipsis style) used to surface secondary actions on cards, list items, or panels without cluttering the primary UI.'
+    >
       <:example>
         <ContextButton
           @label={{this.label}}
