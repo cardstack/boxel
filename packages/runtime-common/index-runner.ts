@@ -766,17 +766,33 @@ export class IndexRunner {
     url: string,
     resource: LooseCardResource,
   ) {
+    // Resolving the card's adoptsFrom module to an RRI is best-effort
+    // telemetry for the jobs dashboard. A malformed reference (e.g. a
+    // legacy "/"-prefixed module path that resolveRRI rejects) must not be
+    // able to abort the whole indexing job — the card's own error doc,
+    // written by performCardIndexing, is the durable signal for a broken
+    // reference. So degrade to empty deps and keep going.
+    let deps: RealmResourceIdentifier[] = [];
+    try {
+      deps = [
+        this.#virtualNetwork.resolveRRI(
+          moduleFrom(resource.meta.adoptsFrom),
+          url as RealmResourceIdentifier,
+        ),
+      ];
+    } catch (e) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} could not resolve adoptsFrom module "${moduleFrom(
+          resource.meta.adoptsFrom,
+        )}" for ${url} while reporting status: ${(e as Error)?.message}`,
+      );
+    }
     this.#reportStatus?.(
       {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [
-          this.#virtualNetwork.resolveRRI(
-            moduleFrom(resource.meta.adoptsFrom),
-            url as RealmResourceIdentifier,
-          ),
-        ],
+        deps,
       },
       status,
     );
