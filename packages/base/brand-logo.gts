@@ -442,6 +442,109 @@ export class MarkField extends URLField {
   };
 }
 
+class BrandLogoEdit extends Component<typeof BrandLogo> {
+  <template>
+    <div class='brand-logo-edit'>
+
+      <section class='brand-logo-edit-section'>
+        <h4 class='brand-logo-edit-heading'>Primary Mark</h4>
+        <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
+          <FieldContainer @label='Min Height' @vertical={{true}}>
+            <@fields.primaryMarkMinHeight />
+          </FieldContainer>
+          <FieldContainer @label='Clearance Ratio' @vertical={{true}}>
+            <@fields.primaryMarkClearanceRatio />
+          </FieldContainer>
+        </div>
+        <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
+          <FieldContainer @label='Light Background' @vertical={{true}}>
+            <@fields.primaryMark1 />
+          </FieldContainer>
+          <FieldContainer @label='Dark Background' @vertical={{true}}>
+            <@fields.primaryMark2 />
+          </FieldContainer>
+        </div>
+        <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
+          <FieldContainer @label='Greyscale — Light' @vertical={{true}}>
+            <@fields.primaryMarkGreyscale1 />
+          </FieldContainer>
+          <FieldContainer @label='Greyscale — Dark' @vertical={{true}}>
+            <@fields.primaryMarkGreyscale2 />
+          </FieldContainer>
+        </div>
+      </section>
+
+      <section class='brand-logo-edit-section'>
+        <h4 class='brand-logo-edit-heading'>Secondary Mark</h4>
+        <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
+          <FieldContainer @label='Min Height' @vertical={{true}}>
+            <@fields.secondaryMarkMinHeight />
+          </FieldContainer>
+          <FieldContainer @label='Clearance Ratio' @vertical={{true}}>
+            <@fields.secondaryMarkClearanceRatio />
+          </FieldContainer>
+        </div>
+        <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
+          <FieldContainer @label='Light Background' @vertical={{true}}>
+            <@fields.secondaryMark1 />
+          </FieldContainer>
+          <FieldContainer @label='Dark Background' @vertical={{true}}>
+            <@fields.secondaryMark2 />
+          </FieldContainer>
+        </div>
+        <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
+          <FieldContainer @label='Greyscale — Light' @vertical={{true}}>
+            <@fields.secondaryMarkGreyscale1 />
+          </FieldContainer>
+          <FieldContainer @label='Greyscale — Dark' @vertical={{true}}>
+            <@fields.secondaryMarkGreyscale2 />
+          </FieldContainer>
+        </div>
+      </section>
+
+      <section class='brand-logo-edit-section'>
+        <h4 class='brand-logo-edit-heading'>Social Media Icon</h4>
+        <FieldContainer @label='Profile Icon' @vertical={{true}}>
+          <@fields.socialMediaProfileIcon />
+        </FieldContainer>
+      </section>
+
+    </div>
+    <style scoped>
+      .brand-logo-edit {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      .brand-logo-edit-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .brand-logo-edit-heading {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        color: var(--muted-foreground, var(--boxel-400));
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding-bottom: var(--boxel-sp-xs);
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+      }
+      .brand-logo-edit-row {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .brand-logo-edit-row--2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-sm);
+      }
+    </style>
+  </template>
+}
+
 export default class BrandLogo extends FieldDef {
   static displayName = 'Mark Usage';
 
@@ -519,6 +622,7 @@ export default class BrandLogo extends FieldDef {
     return entriesToCssRuleMap(this.cssVariableFields);
   }
 
+  static edit = BrandLogoEdit;
   static embedded = Embedded;
 
   // CS-10787: emit a bulleted list of the logo URLs that are actually
