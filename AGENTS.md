@@ -163,6 +163,17 @@
 
 - Always run `pnpm lint` in modified packages before committing
 
+### Pre-commit autofix hook
+
+A husky `pre-commit` hook runs `lint-staged`, which auto-fixes staged files
+(`eslint --fix` for `.js/.ts/.gjs/.gts`, `ember-template-lint --fix` for
+`.hbs`, `prettier --write` for other formats) and re-stages them. It does
+**not** block the commit: issues that can't be auto-fixed (type errors, unused
+vars, the `data-test-*` ban, etc.) are printed as a warning so you get early
+notice, but the commit still proceeds. CI lint remains the real gate, so still
+fix what the warning reports. Do **not** pass `git commit --no-verify` — that
+skips the autofix and is what lets trivial lint errors waste a CI run.
+
 ### boxel-cli commit prefixes
 
 PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.

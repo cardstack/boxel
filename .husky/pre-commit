@@ -1,0 +1,50 @@
+# GUI git clients (Sourcetree, etc.) launch hooks with a minimal PATH that
+# omits version managers like mise, so `pnpm` may not be found. Best-effort:
+# add mise's shims and a few common bin dirs so `pnpm` resolves.
+if ! command -v pnpm >/dev/null 2>&1; then
+  for dir in \
+    "${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims" \
+    "$HOME/.local/bin" \
+    /opt/homebrew/bin \
+    /home/linuxbrew/.linuxbrew/bin \
+    /usr/local/bin; do
+    [ -d "$dir" ] && case ":$PATH:" in *":$dir:"*) ;; *) PATH="$dir:$PATH" ;; esac
+  done
+  export PATH
+fi
+
+# If pnpm still isn't available, skip the autofix rather than block the commit —
+# a missing toolchain should never cost someone a commit.
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pre-commit: pnpm not found on PATH; skipping lint autofix (commit not blocked)." >&2
+  exit 0
+fi
+
+# Same rationale for the dependencies themselves: on a fresh checkout, after a
+# branch switch before `pnpm install`, or with node_modules cleared, lint-staged
+# isn't installed and `pnpm exec lint-staged` would exit non-zero — blocking the
+# commit. Skip instead. (Anchored to the repo root so the check holds regardless
+# of the hook's working directory.)
+root="$(git rev-parse --show-toplevel)"
+if [ ! -x "$root/node_modules/.bin/lint-staged" ]; then
+  echo "pre-commit: lint-staged not installed; skipping lint autofix (commit not blocked). Run pnpm install." >&2
+  exit 0
+fi
+
+# lint-staged buffers task output and only prints it when a task fails. Our
+# autofix tasks intentionally exit 0 (they never block the commit), so any
+# "issues remain after autofix" warning would be hidden. To surface it, the
+# autofix script appends warnings to this file and we print them here, after
+# lint-staged has finished.
+warn_file="$(git rev-parse --git-path lint-autofix-warnings.log)"
+rm -f "$warn_file"
+
+LINT_AUTOFIX_WARN_FILE="$warn_file" pnpm exec lint-staged
+status=$?
+
+if [ -s "$warn_file" ]; then
+  cat "$warn_file"
+  rm -f "$warn_file"
+fi
+
+exit $status
