@@ -2477,6 +2477,250 @@ async function buildPermissionedRealmsTemplate(
   }
 }
 
+// Periodic heartbeat for long indexing phases. A from-scratch index runs as a
+// single QUnit phase with no intermediate output, so a slow or stuck index
+// surfaces only as an opaque `Test took longer than Nms` phase timeout — no
+// signal about whether it was making progress or wedged. This logs elapsed
+// time plus index progress (boxel_index rows per realm + unfulfilled job
+// count) every `intervalMs` while `fn` runs, so the next failure on this path
+// shows a moving row count (slow) versus a frozen one (stuck) and which realm
+// is mid-index. The timer is unref'd by the suite bootstrap, so it never keeps
+// the process alive on its own; it only fires while the awaited work is
+// holding the event loop.
+export async function withIndexProgressHeartbeat<T>(
+  label: string,
+  dbAdapter: PgAdapter,
+  fn: () => Promise<T>,
+  { intervalMs = 15000 }: { intervalMs?: number } = {},
+): Promise<T> {
+  let startedAt = Date.now();
+  let beat = async () => {
+    let elapsedS = Math.round((Date.now() - startedAt) / 1000);
+    let detail = '';
+    try {
+      let rows = await dbAdapter.execute(
+        `SELECT realm_url, COUNT(*)::int AS rows FROM boxel_index GROUP BY realm_url ORDER BY realm_url`,
+      );
+      let jobs = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+      );
+      detail = ` boxel_index=[${rows
+        .map((r) => `${r.realm_url}:${r.rows}`)
+        .join(', ')}] unfulfilled_jobs=${jobs[0]?.count ?? '?'}`;
+    } catch (e) {
+      detail = ` (progress query failed: ${(e as Error).message})`;
+    }
+    console.log(
+      `[index-heartbeat] ${label} still running after ${elapsedS}s;${detail}`,
+    );
+  };
+  let timer = setInterval(() => void beat(), intervalMs);
+  try {
+    return await fn();
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+// Template-database cache for a fully-indexed base realm. Cold-indexing the
+// whole base realm (every `.gts` definition rendered through the single-tab
+// in-process prerenderer) is the most expensive setup in the suite — tens of
+// seconds — and any test that does it inline pays that cost inside a QUnit
+// phase bounded by `config.testTimeout`. Building it once here, snapshotting
+// to a template database, and cloning that per test turns each test's
+// `base.start()` into a no-op: the cloned database already holds base's
+// `boxel_index` rows (so `isNewIndex()` is false and startup skips the
+// from-scratch pass) and its `modules` definition cache (so a later
+// `reindex()` re-derives every definition from a cache hit instead of a fresh
+// prerender). Keyed by prerenderer identity so unrelated injected
+// prerenderers don't share a snapshot; built at most once per qunit process.
+let baseRealmTemplateCache = new Map<string, { ready: Promise<void> }>();
+
+function baseRealmTemplateCacheKey(prerenderer: Prerenderer): string {
+  return hashCacheKeyPayload({
+    version: 1,
+    type: 'base-realm',
+    prerenderer: prerendererCacheKeyPart(prerenderer),
+  });
+}
+
+// Build (or reuse) a template database with the base realm fully indexed and
+// return its name. Pass the resulting name as `setupDB`'s `templateDatabase`
+// so each test clones a base-indexed database instead of re-indexing base.
+// `basePath` is the on-disk base realm source (packages/base).
+export async function acquireBaseRealmTemplate(
+  basePath: string,
+  prerenderer: Prerenderer,
+): Promise<string> {
+  let cacheKey = baseRealmTemplateCacheKey(prerenderer);
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let existing = baseRealmTemplateCache.get(cacheKey);
+  if (existing) {
+    await existing.ready;
+    return templateDatabaseName;
+  }
+
+  let entry: { ready: Promise<void> } = { ready: Promise.resolve() };
+  entry.ready = buildBaseRealmTemplate(cacheKey, basePath, prerenderer).catch(
+    async (error) => {
+      baseRealmTemplateCache.delete(cacheKey);
+      try {
+        await dropDatabase(templateDatabaseName);
+      } catch {
+        // best-effort cleanup
+      }
+      throw error;
+    },
+  );
+  baseRealmTemplateCache.set(cacheKey, entry);
+  await entry.ready;
+  return templateDatabaseName;
+}
+
+// Dedicated port for the throwaway base-realm server the template builder
+// stands up so the prerenderer can fetch base modules during the cold index.
+// Kept out of the 4444-4446 range the in-process fixture servers bind; the
+// builder runs in a module `before` hook and tears its server down before any
+// test's `beforeEach` binds its own ports, so there is no overlap.
+const baseRealmTemplateBuilderPort = 4459;
+
+async function buildBaseRealmTemplate(
+  cacheKey: string,
+  basePath: string,
+  prerenderer: Prerenderer,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let httpServer: Server | undefined;
+  let base: Realm | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'base-template-worker',
+    });
+
+    let virtualNetwork = createVirtualNetwork();
+    let localBaseRealmURL = new URL(
+      `http://127.0.0.1:${baseRealmTemplateBuilderPort}/base/`,
+    );
+    virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+
+    let definitionLookup = new CachingDefinitionLookup(
+      dbAdapter,
+      prerenderer,
+      virtualNetwork,
+      testCreatePrerenderAuth,
+    );
+
+    ({ realm: base } = await createRealm({
+      definitionLookup,
+      withWorker: true,
+      prerenderer,
+      dir: basePath,
+      realmURL: baseRealm.url,
+      virtualNetwork,
+      publisher,
+      runner,
+      dbAdapter,
+      deferStartUp: true,
+    }));
+    virtualNetwork.mount(base.handle);
+
+    let matrixClient = new MatrixClient({
+      matrixURL: realmServerTestMatrix.url,
+      username: realmServerTestMatrix.username,
+      seed: realmSecretSeed,
+    });
+    let server = new RealmServer({
+      realms: [base],
+      reconciler: makeTestReconciler(dbAdapter, [base]),
+      virtualNetwork,
+      matrixClient,
+      realmServerSecretSeed,
+      realmSecretSeed,
+      grafanaSecret,
+      matrixRegistrationSecret,
+      realmsRootPath: dirSync().name,
+      dbAdapter,
+      queue: publisher,
+      getIndexHTML,
+      serverURL: new URL(`http://127.0.0.1:${baseRealmTemplateBuilderPort}`),
+      assetsURL: new URL(`http://example.com/notional-assets-host/`),
+      definitionLookup,
+      prerenderer,
+    });
+    httpServer = server.listen(baseRealmTemplateBuilderPort);
+    await withIndexProgressHeartbeat(
+      'base-realm template build (base.start)',
+      dbAdapter,
+      () => base!.start(),
+    );
+
+    await waitForQueueIdle(builderDatabaseName);
+
+    await closeServer(httpServer);
+    httpServer = undefined;
+    base.__testOnlyClearCaches();
+    base = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (httpServer) {
+      try {
+        await closeServer(httpServer);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
 async function acquirePermissionedRealmsTemplate(
   options: SetupPermissionedRealmsCachedOptions,
 ): Promise<{ cacheKey: string; templateDatabaseName: string }> {
