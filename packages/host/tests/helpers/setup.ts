@@ -28,7 +28,7 @@ import { cleanupMonacoEditorModels } from './index';
 // than reassigning, otherwise late-resolving fetches would mutate the next
 // test's tracking container. Snapshotted by the unhandled-rejection
 // diagnostics helper to surface what was outstanding when a rejection fired.
-const inFlightFetches = new Map<number, string>();
+const inFlightFetches = new Map<number, { desc: string; startedAt: number }>();
 let nextFetchId = 0;
 
 // Track the most recent failed fetches per test so a "Promise rejected during X"
@@ -191,7 +191,10 @@ function setupFetchDebugging(hooks: NestedHooks) {
       let { method, url } = describeFetchRequest(input, init);
       let id = nextFetchId++;
       let epoch = currentTestEpoch;
-      inFlightFetches.set(id, `${method} ${url}`);
+      inFlightFetches.set(id, {
+        desc: `${method} ${url}`,
+        startedAt: Date.now(),
+      });
       try {
         return await boundFetch(input, init);
       } catch (error) {
@@ -336,7 +339,14 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
 }
 
 function logRejectionDiagnostics(prefix: string, formattedReason: string) {
-  let inFlightSnapshot = Array.from(inFlightFetches.values());
+  // Include how long each fetch has been outstanding — a request hung for most
+  // of the test's lifetime (vs one just dispatched) is the wedge signature, and
+  // pairing the age with the `recent failed fetches` list below shows whether
+  // earlier retry attempts of the same URL rejected before this one stuck.
+  let now = Date.now();
+  let inFlightSnapshot = Array.from(inFlightFetches.values()).map(
+    (f) => `${f.desc} (outstanding ${now - f.startedAt}ms)`,
+  );
   let recent = recentFailedFetches.slice();
   let priorCorruption = summarizePriorRenderCorruption();
   console.error(
