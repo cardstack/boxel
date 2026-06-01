@@ -609,6 +609,11 @@ export default class SearchContent extends Component<Signature> {
         flex-direction: row;
         flex-wrap: nowrap;
         padding-inline: var(--boxel-sp-xs);
+        /* `overflow-y: hidden` (needed so only the row scrolls
+           horizontally) would otherwise clip the Adorn outline stroke
+           and the type-label tab, which extend a few px outside each
+           card. Block padding keeps them inside the clip region. */
+        padding-block: var(--boxel-sp-xs);
         overflow-y: hidden;
         overflow-x: auto;
       }
