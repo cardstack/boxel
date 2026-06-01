@@ -1218,7 +1218,7 @@ export function runTests() {
           assert.dom('[data-kanban-column="uncategorized"]').exists();
         });
 
-        test('issues appear in their priority column', async function (assert) {
+        test('cards are placed in their priority column; cards with no priority land in Uncategorized', async function (assert) {
           await visitOperatorMode({
             stacks: [[{ id: boardId, format: 'isolated' }]],
           });
@@ -1230,19 +1230,9 @@ export function runTests() {
           assert
             .dom('[data-kanban-column="medium"] [data-test-issue-id]')
             .hasText('IT-2', 'IT-2 is in the medium column');
-        });
-
-        test('issue with no priority is placed in an Uncategorized column', async function (assert) {
-          await visitOperatorMode({
-            stacks: [[{ id: boardId, format: 'isolated' }]],
-          });
-          await waitFor('[data-test-issue-id]');
-
           assert
             .dom('[data-kanban-column="uncategorized"]')
-            .exists(
-              'an Uncategorized column is added for cards with no matching field value',
-            );
+            .exists('Uncategorized column appears for cards with no priority');
           assert
             .dom('[data-kanban-column="uncategorized"] [data-test-issue-id]')
             .hasText(
@@ -1365,11 +1355,11 @@ export function runTests() {
           });
         });
 
-        test('columns are the six issue type options', async function (assert) {
+        test('six issue-type columns are rendered and cards appear in the correct column', async function (assert) {
           await visitOperatorMode({
             stacks: [[{ id: boardId, format: 'isolated' }]],
           });
-          await waitFor('[data-kanban-column]');
+          await waitFor('[data-test-issue-id]');
 
           assert
             .dom('[data-kanban-column]')
@@ -1380,14 +1370,6 @@ export function runTests() {
           assert.dom('[data-kanban-column="task"]').exists();
           assert.dom('[data-kanban-column="research"]').exists();
           assert.dom('[data-kanban-column="infrastructure"]').exists();
-        });
-
-        test('issues appear in their type column', async function (assert) {
-          await visitOperatorMode({
-            stacks: [[{ id: boardId, format: 'isolated' }]],
-          });
-          await waitFor('[data-test-issue-id]');
-
           assert
             .dom('[data-kanban-column="feature"] [data-test-issue-id]')
             .hasText('IT-1', 'IT-1 is in the feature column');
@@ -1431,7 +1413,7 @@ export function runTests() {
           assert.dom('[data-test-group-by-option="issueType"]').exists();
         });
 
-        test('switching to priority grouping shows priority columns and re-places cards', async function (assert) {
+        test('switching group-by re-renders columns and re-places cards', async function (assert) {
           await visitOperatorMode({
             stacks: [[{ id: boardId, format: 'isolated' }]],
           });
@@ -1446,27 +1428,17 @@ export function runTests() {
 
           assert
             .dom('[data-kanban-column="backlog"]')
-            .doesNotExist('status columns gone after switching');
-          assert
-            .dom('[data-kanban-column="high"]')
-            .exists('priority column visible');
+            .doesNotExist('status columns gone after switching to priority');
           assert
             .dom('[data-kanban-column="high"] [data-test-issue-id]')
             .hasText('IT-1', 'IT-1 placed in high priority column');
-        });
-
-        test('switching to issueType grouping shows type columns', async function (assert) {
-          await visitOperatorMode({
-            stacks: [[{ id: boardId, format: 'isolated' }]],
-          });
-          await waitFor('[data-kanban-column]');
 
           await selectGroupBy('issueType');
           await settled();
 
           assert
-            .dom('[data-kanban-column="feature"]')
-            .exists('feature column visible');
+            .dom('[data-kanban-column="high"]')
+            .doesNotExist('priority columns gone after switching to issueType');
           assert
             .dom('[data-kanban-column="feature"] [data-test-issue-id]')
             .hasText('IT-1', 'IT-1 placed in feature type column');
