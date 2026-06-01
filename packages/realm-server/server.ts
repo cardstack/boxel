@@ -47,6 +47,37 @@ const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 // so this only ever runs in local dev / CI.
 const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
 
+// HTTP/2 PING keepalive tuning. The realm server speaks h2 to the browser on
+// the TLS path (dev/CI only; production is plain HTTP behind Traefik, see
+// createListener). An h2 session can wedge — a stream is queued but neither
+// completes nor errors — leaving the browser's `fetch` hung forever (it never
+// rejects, so client-side retry never kicks in and a host test eventually
+// times out). The PING keepalive turns that silent wedge into an observable,
+// recoverable event: every live session is pinged; a session that fails to
+// answer within the budget is closed, which RSTs its streams so the browser's
+// hung fetch rejects and its existing retry path can reissue on a fresh
+// session. Worst-case detection is maxMissedPings × (interval + pongTimeout) +
+// grace ≈ 55s, comfortably under the host-test timeout. Timeouts are kept
+// generous (vs. a busy server event loop briefly not servicing a pong) because
+// a false teardown only costs a reconnect, never a wrong result.
+const HTTP2_KEEPALIVE_INTERVAL_MS = 15000;
+const HTTP2_KEEPALIVE_PONG_TIMEOUT_MS = 10000;
+const HTTP2_KEEPALIVE_MAX_MISSED_PINGS = 2;
+// After a graceful close (GOAWAY) the wedged stream won't end on its own, so
+// force the session down to actually release the browser's hung fetch.
+const HTTP2_KEEPALIVE_GRACE_MS = 5000;
+const HTTP2_KEEPALIVE_TCP_INITIAL_DELAY_MS = 15000;
+
+// Per-session liveness recorded by the PING keepalive and read by the h2
+// diagnostics dump, so a stalled-stream report can say whether the underlying
+// session was still answering pings (transport alive, stream wedged) or had
+// gone silent (whole session wedged).
+interface SessionLiveness {
+  lastPongAt: number | undefined;
+  lastRttMs: number | undefined;
+  consecutiveMisses: number;
+}
+
 export type RealmHttpServer =
   | http.Server
   | http2.Http2SecureServer
@@ -150,8 +181,12 @@ export function createListener(
     );
     return { server: http.createServer(app.callback()), proto: 'http' };
   }
+  // Always on: keep h2 sessions live and tear down wedged ones so a hung
+  // browser fetch rejects (and retries) instead of hanging until a test
+  // timeout. Returns the shared liveness map the diagnostics dump reads.
+  let liveness = installHttp2Keepalive(tlsServer, log);
   if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
-    installHttp2Diagnostics(tlsServer, log);
+    installHttp2Diagnostics(tlsServer, log, liveness);
   }
   let redirectServer = http.createServer(redirectToHttps);
   // Track every accepted socket so shutdown can force-close them. Without
@@ -225,6 +260,180 @@ export function createListener(
   return { server: dispatcher, proto: 'https/h2' };
 }
 
+// Wire HTTP/2 PING keepalive onto every session the secure server accepts.
+// Always on (the fix, not a diagnostic) — see the HTTP2_KEEPALIVE_* constants
+// for the rationale. Returns the liveness map so the diagnostics dump can
+// report each session's ping health.
+function installHttp2Keepalive(
+  tlsServer: http2.Http2SecureServer,
+  log: ReturnType<typeof logger>,
+): WeakMap<http2.Http2Session, SessionLiveness> {
+  let liveness = new WeakMap<http2.Http2Session, SessionLiveness>();
+  tlsServer.on('session', (session) => {
+    // Belt-and-suspenders: TCP keepalive surfaces a dead peer at the socket
+    // layer even if the h2 PING path is somehow starved. Best-effort.
+    try {
+      session.socket?.setKeepAlive?.(
+        true,
+        HTTP2_KEEPALIVE_TCP_INITIAL_DELAY_MS,
+      );
+    } catch {
+      // some socket states reject setKeepAlive; ignore
+    }
+    startSessionKeepalive(session, log, {}, liveness);
+  });
+  return liveness;
+}
+
+interface KeepaliveOptions {
+  intervalMs?: number;
+  pongTimeoutMs?: number;
+  maxMissedPings?: number;
+  graceMsBeforeDestroy?: number;
+}
+
+// Ping a single h2 session on an interval; if it misses `maxMissedPings`
+// consecutive pings (no PONG within `pongTimeoutMs`, or the PING frame can't
+// even be queued), the session is wedged — close it (GOAWAY) and force it down
+// after a grace period so its hung streams RST and the browser's pending
+// fetch rejects. Returns a stop() for teardown/testing. Exported for unit
+// tests, which drive it with a fake session and short timers.
+export function startSessionKeepalive(
+  session: http2.Http2Session,
+  log: ReturnType<typeof logger>,
+  options: KeepaliveOptions = {},
+  liveness?: WeakMap<http2.Http2Session, SessionLiveness>,
+): () => void {
+  let intervalMs = options.intervalMs ?? HTTP2_KEEPALIVE_INTERVAL_MS;
+  let pongTimeoutMs = options.pongTimeoutMs ?? HTTP2_KEEPALIVE_PONG_TIMEOUT_MS;
+  let maxMissedPings =
+    options.maxMissedPings ?? HTTP2_KEEPALIVE_MAX_MISSED_PINGS;
+  let graceMsBeforeDestroy =
+    options.graceMsBeforeDestroy ?? HTTP2_KEEPALIVE_GRACE_MS;
+
+  let stopped = false;
+  let misses = 0;
+  let nextTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function record(patch: Partial<SessionLiveness>) {
+    if (!liveness) {
+      return;
+    }
+    let prev = liveness.get(session) ?? {
+      lastPongAt: undefined,
+      lastRttMs: undefined,
+      consecutiveMisses: 0,
+    };
+    liveness.set(session, { ...prev, ...patch });
+  }
+
+  function stop() {
+    stopped = true;
+    if (nextTimer) {
+      clearTimeout(nextTimer);
+      nextTimer = undefined;
+    }
+  }
+
+  function scheduleNext() {
+    if (stopped) {
+      return;
+    }
+    nextTimer = setTimeout(sendPing, intervalMs);
+    nextTimer.unref?.();
+  }
+
+  function onMiss(reason: string) {
+    misses++;
+    record({ consecutiveMisses: misses });
+    if (misses < maxMissedPings) {
+      scheduleNext();
+      return;
+    }
+    let lastPongAt = liveness?.get(session)?.lastPongAt;
+    let pongAge = lastPongAt != null ? `${Date.now() - lastPongAt}ms` : 'never';
+    log.warn(
+      `[h2-keepalive] session unresponsive (${misses} missed pings, ${reason}, ` +
+        `last pong ${pongAge} ago) — closing to release wedged streams`,
+    );
+    stop();
+    try {
+      session.close();
+    } catch {
+      // already closing/closed
+    }
+    let hard = setTimeout(() => {
+      try {
+        if (!session.destroyed) {
+          session.destroy();
+        }
+      } catch {
+        // already destroyed
+      }
+    }, graceMsBeforeDestroy);
+    hard.unref?.();
+  }
+
+  function sendPing() {
+    if (stopped || session.destroyed || session.closed) {
+      stop();
+      return;
+    }
+    let settled = false;
+    let pongTimer: ReturnType<typeof setTimeout> | undefined;
+    function finish(then: () => void) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (pongTimer) {
+        clearTimeout(pongTimer);
+      }
+      then();
+    }
+
+    let queued: boolean;
+    try {
+      // ping() returns false when the frame couldn't be queued; the callback
+      // fires on PONG (or with an error if the session dies first).
+      queued =
+        session.ping((err: Error | null, duration: number) => {
+          finish(() => {
+            if (err) {
+              onMiss(`ping errored: ${err.message}`);
+              return;
+            }
+            misses = 0;
+            record({
+              lastPongAt: Date.now(),
+              lastRttMs: Math.round(duration),
+              consecutiveMisses: 0,
+            });
+            scheduleNext();
+          });
+        }) !== false;
+    } catch (e) {
+      finish(() => onMiss(`ping threw: ${(e as Error).message}`));
+      return;
+    }
+
+    if (!queued) {
+      finish(() => onMiss('ping frame could not be queued'));
+      return;
+    }
+
+    pongTimer = setTimeout(() => {
+      finish(() => onMiss(`no pong within ${pongTimeoutMs}ms`));
+    }, pongTimeoutMs);
+    pongTimer.unref?.();
+  }
+
+  session.once('close', stop);
+  session.once('error', stop);
+  scheduleNext();
+  return stop;
+}
+
 // Instrument the HTTP/2 secure server so an intermittent stall — a stream that
 // is accepted but whose response never reaches the browser — is observable
 // instead of surfacing only as a downstream 60s host-test timeout. The flake
@@ -242,10 +451,13 @@ export function createListener(
 // Read-only: it attaches observer listeners and reads getters, never consuming
 // the stream body or writing a response, so it cannot perturb the path it
 // watches. Periodic so a single stuck stream is dumped repeatedly and its
-// window/queue evolution is visible.
+// window/queue evolution is visible. The keepalive liveness (see
+// installHttp2Keepalive) is folded into each stalled-stream line so a report
+// can tell a single wedged stream from a wholly-silent session.
 function installHttp2Diagnostics(
   tlsServer: http2.Http2SecureServer,
   log: ReturnType<typeof logger>,
+  liveness?: WeakMap<http2.Http2Session, SessionLiveness>,
 ) {
   const STALL_THRESHOLD_MS = 8000;
   const SWEEP_INTERVAL_MS = 5000;
@@ -373,6 +585,13 @@ function installHttp2Diagnostics(
           }
         }
       }
+      // PING liveness disambiguates the wedge: a recent pong (low pongAge,
+      // missedPings=0) means the transport is alive and only this stream is
+      // stuck; a stale/never pongAge with rising missedPings means the whole
+      // session has gone silent and the keepalive is about to tear it down.
+      let live = session ? liveness?.get(session) : undefined;
+      let pongAge =
+        live?.lastPongAt != null ? `${now - live.lastPongAt}ms` : 'never';
       log.warn(
         `[h2-diag] STALLED stream #${rec.id} ${rec.method} ${rec.path} age=${age}ms ` +
           `sawRequest=${rec.sawRequest} ` +
@@ -388,6 +607,8 @@ function installHttp2Diagnostics(
           `effectiveRecvData=${ss?.effectiveRecvDataLength} ` +
           `remoteWindow=${ss?.remoteWindowSize} ` +
           `liveStreamsThisSession=${liveThisSession} liveStreamsTotal=${open.size}) ` +
+          `keepalive(pingRtt=${live?.lastRttMs ?? 'n/a'}ms pongAge=${pongAge} ` +
+          `missedPings=${live?.consecutiveMisses ?? 0}) ` +
           `maxConcurrentStreams(local=${session?.localSettings?.maxConcurrentStreams} ` +
           `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
       );

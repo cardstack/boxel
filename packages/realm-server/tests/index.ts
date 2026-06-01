@@ -182,6 +182,7 @@ const ALL_TEST_FILES: string[] = [
   './indexing-test',
   './lazy-mount-test',
   './listener-dispatcher-test',
+  './http2-keepalive-test',
   './module-cache-race-test',
   './module-syntax-test',
   './permissions/permission-checker-test',
