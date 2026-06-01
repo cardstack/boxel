@@ -47,6 +47,18 @@ export interface FactoryEntrypointOptions {
   openRouterApiKey?: string;
   debug?: boolean;
   retryBlocked?: boolean;
+  /**
+   * Feature flag — when set, the boxel-ui-component-discovery skill is
+   * loaded into the agent's system prompt and the system prompt's
+   * catalog-search exception is enabled, so the agent must search the
+   * catalog for boxel-ui Spec cards before writing UI in a .gts
+   * template. When unset (default), the agent has no awareness of
+   * boxel-ui components at all — neither the skill nor the system-prompt
+   * exception is visible.
+   *
+   * Set via `--enable-boxel-ui-discovery` on the CLI.
+   */
+  enableBoxelUiDiscovery?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -153,6 +165,11 @@ export function getFactoryEntrypointUsage(): string {
     '                              backend falls back to the realm server passthrough at',
     '                              `/_openrouter/chat/completions` — burns boxel tokens.',
     '  --debug                     Log LLM prompts and responses to stderr',
+    '  --enable-boxel-ui-discovery Make the agent search the catalog for @cardstack/boxel-ui',
+    '                              component Spec cards before writing UI in a .gts template.',
+    '                              When omitted, the agent has no awareness of boxel-ui',
+    '                              components — neither the discovery skill nor the',
+    '                              system-prompt catalog exception is loaded. Feature flag.',
     '  --help                      Show this usage information',
     '',
     'Auth:',
@@ -199,6 +216,9 @@ export function parseFactoryEntrypointArgs(
           type: 'string',
         },
         debug: {
+          type: 'boolean',
+        },
+        'enable-boxel-ui-discovery': {
           type: 'boolean',
         },
       },
@@ -253,6 +273,8 @@ export function parseFactoryEntrypointArgs(
     openRouterApiKey,
     debug: parsed.values.debug === true ? true : undefined,
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
+    enableBoxelUiDiscovery:
+      parsed.values['enable-boxel-ui-discovery'] === true ? true : undefined,
   };
 }
 
@@ -350,6 +372,7 @@ export async function runFactoryEntrypoint(
     openRouterApiKey: options.openRouterApiKey,
     debug: options.debug,
     retryBlocked: options.retryBlocked,
+    enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
   });
 
   summary.issueLoop = {

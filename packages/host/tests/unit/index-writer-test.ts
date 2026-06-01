@@ -649,7 +649,7 @@ module('Unit | index-writer', function (hooks) {
         icon_html: '<svg>test icon</svg>',
         markdown: null,
         is_deleted: null,
-        timing_diagnostics: null,
+        diagnostics: null,
       },
       'the copied instance is correct',
     );
@@ -745,16 +745,12 @@ module('Unit | index-writer', function (hooks) {
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     // Strip non-deterministic write-time stamps from both the row and
-    // the error_doc (the indexer mirrors timing_diagnostics onto
+    // the error_doc (the indexer mirrors diagnostics onto
     // error_doc.diagnostics for UI compat); they're verified
     // separately below.
-    let {
-      indexed_at: _remove,
-      timing_diagnostics,
-      ...errorEntry
-    } = rawErrorEntry;
+    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
-    // The indexer mirrors `timing_diagnostics` onto `error_doc.diagnostics`
+    // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
     // mirror relationship separately below). `diagnostics` is a declared
     // optional field on `SerializedError`, so this is a plain destructure
@@ -806,16 +802,16 @@ module('Unit | index-writer', function (hooks) {
       },
       'the error entry includes last known good state of instance',
     );
-    assert.ok(timing_diagnostics, 'timing_diagnostics populated on error row');
+    assert.ok(diagnostics, 'diagnostics populated on error row');
     assert.strictEqual(
-      typeof timing_diagnostics,
+      typeof diagnostics,
       'object',
-      'timing_diagnostics is an object',
+      'diagnostics is an object',
     );
     assert.deepEqual(
       errorDocDiagnostics,
-      timing_diagnostics,
-      'error_doc.diagnostics mirrors timing_diagnostics',
+      diagnostics,
+      'error_doc.diagnostics mirrors diagnostics',
     );
   });
 
@@ -840,13 +836,9 @@ module('Unit | index-writer', function (hooks) {
       'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
-    let {
-      indexed_at: _remove,
-      timing_diagnostics,
-      ...errorEntry
-    } = rawErrorEntry;
+    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
-    // The indexer mirrors `timing_diagnostics` onto `error_doc.diagnostics`
+    // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
     // mirror relationship separately below). `diagnostics` is a declared
     // optional field on `SerializedError`, so this is a plain destructure
@@ -888,16 +880,16 @@ module('Unit | index-writer', function (hooks) {
       },
       'the error entry does not include last known good state of instance',
     );
-    assert.ok(timing_diagnostics, 'timing_diagnostics populated on error row');
+    assert.ok(diagnostics, 'diagnostics populated on error row');
     assert.strictEqual(
-      typeof timing_diagnostics,
+      typeof diagnostics,
       'object',
-      'timing_diagnostics is an object',
+      'diagnostics is an object',
     );
     assert.deepEqual(
       errorDocDiagnostics,
-      timing_diagnostics,
-      'error_doc.diagnostics mirrors timing_diagnostics',
+      diagnostics,
+      'error_doc.diagnostics mirrors diagnostics',
     );
   });
 

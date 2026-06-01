@@ -11,7 +11,6 @@ import {
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
-  rri,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   logger,
@@ -73,10 +72,6 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
-
-function isCardOrFileInstance(item: unknown): item is StoredInstance {
-  return isCardInstance(item) || isFileDefInstance(item);
-}
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -797,14 +792,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
 
       localId = this.#idResolver.getLocalId(remoteId);
-      // try correlating the last part of the URL with a local ID to handle
-      // the scenario where the instance has a newly assigned remote id
+      // Correlate the last segment of the remote URL with a local ID to find an
+      // instance that was created locally and has since been given a remote id
+      // the resolver doesn't know about yet. This is a pure lookup: it does NOT
+      // reconcile the instance's `id` to the remote id, because it runs inside
+      // render-time reads (`store.peek`) and writing the tracked `id` mid-render
+      // trips Glimmer's backtracking re-render assertion. Identity reconciliation
+      // happens when the store learns the remote id out of band — at the realm
+      // invalidation event (StoreService.handleInvalidations) and the
+      // save/deserialize flow (api.setId / updateFromSerialized).
       if (!localId) {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
-        if (item && type === 'instance' && isCardOrFileInstance(item)) {
-          item.id = rri(remoteId);
-        }
       }
     }
 
@@ -1040,10 +1039,10 @@ function findInstances(
   if (isFileDefInstance(obj)) {
     return [obj];
   }
-  if (
-    (obj as { type?: unknown; reference?: unknown }).type === 'not-loaded' &&
-    typeof (obj as { reference?: unknown }).reference === 'string'
-  ) {
+  // A sentinel in the bucket (not-loaded / link-error / link-not-found) is
+  // never an instance and never owns instance references — skip the recursion
+  // so its `errorDoc` and `reference` fields are not walked as a generic object.
+  if (api.isNonPresentLink(obj)) {
     return [];
   }
   if (isBaseDefInstance(obj)) {

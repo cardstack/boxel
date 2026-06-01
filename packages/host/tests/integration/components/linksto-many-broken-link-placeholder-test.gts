@@ -406,5 +406,78 @@ module(
         .dom('[data-test-broken-link-template]')
         .exists({ count: 1 }, 'the broken placeholder is still in place');
     });
+
+    test('removing a present sibling preserves a broken element in the list', async function (assert) {
+      await setupRealm();
+      // Present / broken / present. Removing the FIRST present slot must not
+      // disturb the broken middle slot — the per-slot read mask turns broken
+      // slots into `undefined`, so a naive array rebuild would silently drop the
+      // broken reference. The editor rebuilds from the raw backing array instead.
+      let person = await createPerson({
+        'pets.0': { links: { self: MANGO_URL } },
+        'pets.1': { links: { self: GHOST_URL } },
+        'pets.2': { links: { self: VANGOGH_URL } },
+      });
+
+      await renderCard(loader, person, 'edit');
+      await waitFor('[data-test-broken-link-template]');
+      await waitFor('[data-test-item="0"] [data-test-pet]');
+      await waitFor('[data-test-item="2"] [data-test-pet]');
+
+      // Remove the present slot at index 0 (Mango).
+      await click('[data-test-remove="0"]');
+      await waitUntil(
+        () => document.querySelectorAll('[data-test-pet]').length === 1,
+      );
+
+      // The broken slot survived — its placeholder and broken URL are intact —
+      // and the other present sibling (Van Gogh) remains.
+      assert
+        .dom('[data-test-broken-link-template]')
+        .exists(
+          { count: 1 },
+          'the broken element is preserved after removing a present sibling',
+        );
+      assert
+        .dom('[data-test-broken-link-url]')
+        .hasText(GHOST_URL, 'the broken reference is not lost on removal');
+      assert
+        .dom('[data-test-pet]')
+        .exists({ count: 1 }, 'the surviving present sibling still renders');
+      assert.dom('[data-test-pet]').hasText('Van Gogh');
+    });
+
+    test('typing into a sibling field while a broken element is present keeps input focus', async function (assert) {
+      await setupRealm();
+      let person = await createPerson({
+        'pets.0': { links: { self: MANGO_URL } },
+        'pets.1': { links: { self: GHOST_URL } },
+      });
+
+      await renderCard(loader, person, 'edit');
+      await waitFor('[data-test-broken-link-template]');
+      await waitFor('[data-test-pet]');
+
+      // Capture the firstName input node, then type into it. If the broken slot
+      // destabilized the edit form, this subtree would re-create and the input
+      // node would be replaced — `document.activeElement` would no longer be the
+      // node we captured, i.e. focus would have been stolen mid-edit.
+      let inputBefore = document.querySelector('[data-test-name-field] input');
+      await fillIn('[data-test-name-field] input', 'Hassan A.');
+
+      assert.strictEqual(
+        document.querySelector('[data-test-name-field] input'),
+        inputBefore,
+        'the firstName input keeps its DOM identity across the re-render',
+      );
+      assert.strictEqual(
+        document.activeElement,
+        inputBefore,
+        'focus stays on the firstName input — the broken slot does not steal it',
+      );
+      assert
+        .dom('[data-test-broken-link-template]')
+        .exists({ count: 1 }, 'the broken placeholder is still in place');
+    });
   },
 );

@@ -31,6 +31,9 @@ const stubDefinitionLookup: DefinitionLookup = {
   async getCachedDefinitions() {
     return undefined;
   },
+  async populateDefinitionCacheEntry() {
+    return undefined;
+  },
   async getCachedDefinitionsBatch() {
     return {};
   },

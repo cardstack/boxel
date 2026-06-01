@@ -4825,8 +4825,26 @@ export class Realm {
         }
       }
       if (maybeError.type === 'error') {
+        // The index has a row for this card, it just can't be served
+        // cleanly — so mirror the underlying error's HTTP status when it
+        // is a real HTTP error status (auth 401/403, validation 422,
+        // upstream 5xx, …) instead of flattening everything to 500.
+        //
+        // 404 is the one status we never mirror: an existing-but-errored
+        // card is not "not found". 404 is reserved for a missing index
+        // row (see `notFound` above) so that a 404 on a card GET is an
+        // unambiguous "this card no longer exists" signal. A recorded
+        // 404 (e.g. an error whose underlying cause was a missing linked
+        // instance) therefore falls back to 500, as do non-HTTP failures
+        // (fetch failures recorded as status 0) and any out-of-range
+        // value.
+        let errorStatus = maybeError.error.errorDetail.status;
         return systemError({
           requestContext,
+          status:
+            errorStatus >= 400 && errorStatus <= 599 && errorStatus !== 404
+              ? errorStatus
+              : 500,
           message: `cannot return card, ${request.url}, from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.message}`,
           id: request.url,
           additionalError: CardError.fromSerializableError(maybeError.error),

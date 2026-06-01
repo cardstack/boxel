@@ -48,7 +48,10 @@ export default class ResizablePanelUsage extends Component {
   declare boxelPanelResizeHandleHoverBackgroundColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='Horizontal ResizablePanelGroup'>
+    <FreestyleUsage
+      @name='Horizontal ResizablePanelGroup'
+      @description='Split-pane layout with horizontal or vertical orientation and draggable dividers between panels — used to build resizable IDE-style or master-detail layouts.'
+    >
       <:example>
         <ResizablePanelGroup
           @orientation='horizontal'

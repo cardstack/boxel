@@ -13,7 +13,10 @@ export default class SwatchUsage extends Component {
   @tracked private style?: 'round' | 'default';
 
   <template>
-    <FreestyleUsage @name='Swatch'>
+    <FreestyleUsage
+      @name='Swatch'
+      @description='Visual color or material sample displayed as a circle or chip — used in color pickers, theme galleries, and style previews.'
+    >
       <:example>
         <Swatch
           @color={{this.color}}

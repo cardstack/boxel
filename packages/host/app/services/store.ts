@@ -1477,6 +1477,24 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
         if (isCardInstance(instance)) {
+          // The invalidation id is the canonical remote id for this card. When
+          // the server has just assigned a remote id to a locally-created
+          // instance, this event is the first the store hears of it: the
+          // instance is still keyed by its local id with an unset/local `id`.
+          // Reconcile the identity now — this event is precisely when we learn a
+          // remote id exists for the local id. We only learn the identity here,
+          // not the new content: the instance keeps its original local content
+          // until `reloadInstance` (below) fetches the server state, but its
+          // `id` must be the remote id first so that fetch targets the right
+          // URL. Doing it here, in the event handler, keeps `store.peek` a pure
+          // read — reconciling during a render-time peek would mutate the
+          // tracked `id` mid-render and trip a backtracking re-render assertion.
+          if (
+            invalidation.split('/').pop() === instance[localIdSymbol] &&
+            instance.id !== rri(invalidation)
+          ) {
+            instance.id = rri(invalidation);
+          }
           // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
           // overwriting the inputs with past values. This can happen if the user makes edits in the time between
           // the auto save request and the arrival realm event.
@@ -1605,7 +1623,20 @@ export default class StoreService extends Service implements StoreInterface {
       }
       if (isDelete) {
         await this.stopAutoSaving(instance);
+        // Snapshot the consumers BEFORE removing the deleted instance from
+        // the store. `consumersOf` walks the loaded cards and reads their
+        // linksTo refs — every consumer that has the now-deleted card in
+        // its bucket needs its slot rewritten to a link-not-found sentinel
+        // so the placeholder render takes over the slot without a
+        // navigation. Without this, the consumer's render stays stale on
+        // the now-orphaned card object until something else forces a
+        // re-render.
+        let api = await this.cardService.getAPI();
+        let consumers = this.store.consumersOf(api, instance);
         this.store.delete(instance.id);
+        for (let consumer of consumers) {
+          api.notifyLinksToTargetDeleted(consumer, instance.id);
+        }
       }
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);
