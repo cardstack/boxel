@@ -3,7 +3,7 @@ import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
 import { executableExtensions, logger } from './index';
 
-import { CardError } from './error';
+import { CardError, iconNotFoundMessage } from './error';
 import flatMap from 'lodash/flatMap';
 import {
   trackRuntimeModuleDependency,
@@ -1081,6 +1081,19 @@ export class Loader {
       throw err;
     }
     if (!response.ok) {
+      let iconMessage = iconNotFoundMessage(moduleURL.href, response.status);
+      if (iconMessage) {
+        // Surface a user-actionable message for a missing boxel icon instead of
+        // the raw S3 AccessDenied XML. The host's browser loader rewrites these
+        // to a fallback icon module, but the indexing worker's loader has no
+        // such middleware, so without this the XML lands in error_doc.message.
+        throw new CardError(iconMessage, {
+          id: moduleURL.href,
+          title: response.statusText,
+          status: response.status,
+          responseText: await response.text(),
+        });
+      }
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
       // Surfaced from `_fetch`'s catch: the request never reached the
       // server. Tag the error so `fetchModule` skips caching it as a
