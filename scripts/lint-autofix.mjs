@@ -14,7 +14,7 @@
 // Usage (from lint-staged): node scripts/lint-autofix.mjs <tool> <files...>
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const TOOLS = {
   eslint: ['eslint', ['--fix', '--no-error-on-unmatched-pattern']],
@@ -47,11 +47,18 @@ function packageDirFor(file) {
   return process.cwd();
 }
 
+// Resolve to absolute paths up front so the per-package cwd below never
+// double-nests them. lint-staged passes absolute paths by default, but a
+// `relative: true` config would hand us repo-root-relative paths that would
+// otherwise resolve against the package dir (packages/host/packages/host/...)
+// and get silently skipped — eslint swallows them via
+// --no-error-on-unmatched-pattern.
 const groups = new Map();
 for (const file of files) {
-  const dir = packageDirFor(file);
+  const abs = resolve(file);
+  const dir = packageDirFor(abs);
   if (!groups.has(dir)) groups.set(dir, []);
-  groups.get(dir).push(file);
+  groups.get(dir).push(abs);
 }
 
 let diagnostics = '';
