@@ -11,6 +11,7 @@ import {
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
+  rri,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   logger,
@@ -72,6 +73,10 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
+
+function isCardOrFileInstance(item: unknown): item is StoredInstance {
+  return isCardInstance(item) || isFileDefInstance(item);
+}
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -792,19 +797,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
 
       localId = this.#idResolver.getLocalId(remoteId);
-      // Correlate the last segment of the remote URL with a local ID to find
-      // an instance that was created locally and has since been given a remote
-      // id the resolver doesn't know about yet. This runs inside render-time
-      // reads (store.peek), so it must not mutate tracked state: assigning the
-      // remote id to the instance here would dirty the instance's tracked `id`
-      // field while that same field is being consumed by the in-progress
-      // render, tripping Glimmer's backtracking re-render assertion. The
-      // instance's id is reconciled outside of render by the save/deserialize
-      // flow (api.setId / updateFromSerialized); here we only locate the
-      // already-stored instance.
+      // try correlating the last part of the URL with a local ID to handle
+      // the scenario where the instance has a newly assigned remote id
       if (!localId) {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
+        if (item && type === 'instance' && isCardOrFileInstance(item)) {
+          item.id = rri(remoteId);
+        }
       }
     }
 
