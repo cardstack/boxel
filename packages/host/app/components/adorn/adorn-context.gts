@@ -1,6 +1,6 @@
-import { hash } from '@ember/helper';
-
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { hash } from '@ember/helper';
 
 // AdornContext: the entry point for the Adorn visual treatment.
 // Wraps the consumer's outer container of Adorn-decorated items

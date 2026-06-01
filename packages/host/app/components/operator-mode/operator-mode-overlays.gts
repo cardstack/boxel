@@ -399,7 +399,11 @@ export default class OperatorModeOverlays extends Overlays {
       if (!cardEl) {
         return undefined;
       }
-      let boundary = getBoundaryElement(cardEl);
+      // Resolve the boundary from the label, not the card: the label
+      // is rendered inside the overlays' <AdornContext>, whereas the
+      // card lives in a sibling subtree (the stack-item preview), so
+      // only the label can walk up to the context marker.
+      let boundary = getBoundaryElement(label);
       if (!boundary) {
         return undefined;
       }
