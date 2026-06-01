@@ -2579,10 +2579,12 @@ export async function acquireBaseRealmTemplate(
 
 // Dedicated port for the throwaway base-realm server the template builder
 // stands up so the prerenderer can fetch base modules during the cold index.
-// Kept out of the 4444-4446 range the in-process fixture servers bind; the
-// builder runs in a module `before` hook and tears its server down before any
-// test's `beforeEach` binds its own ports, so there is no overlap.
-const baseRealmTemplateBuilderPort = 4459;
+// Routed through `testPort()` like the rest of the suite so environment-mode
+// runs offset it per environment — two parallel realm-test processes both
+// building the template won't collide on `127.0.0.1` with EADDRINUSE. Kept
+// just below the prerender port (testPort(4460)); the builder also tears its
+// server down before any test's `beforeEach` binds its own ports.
+const baseRealmTemplateBuilderPort = testPort(4459);
 
 async function buildBaseRealmTemplate(
   cacheKey: string,
