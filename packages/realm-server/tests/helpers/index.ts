@@ -2482,11 +2482,13 @@ async function buildPermissionedRealmsTemplate(
 // surfaces only as an opaque `Test took longer than Nms` phase timeout — no
 // signal about whether it was making progress or wedged. This logs elapsed
 // time plus index progress (boxel_index rows per realm + unfulfilled job
-// count) every `intervalMs` while `fn` runs, so the next failure on this path
-// shows a moving row count (slow) versus a frozen one (stuck) and which realm
-// is mid-index. The timer is unref'd by the suite bootstrap, so it never keeps
-// the process alive on its own; it only fires while the awaited work is
-// holding the event loop.
+// count) roughly every `intervalMs` while `fn` runs, so the next failure on
+// this path shows a moving row count (slow) versus a frozen one (stuck) and
+// which realm is mid-index. The next beat is scheduled only after the previous
+// one finishes, so a progress query slower than `intervalMs` can't pile up
+// concurrent queries on the same adapter during already-slow indexing. The
+// timer is unref'd by the suite bootstrap, so it never keeps the process alive
+// on its own; it only fires while the awaited work is holding the event loop.
 export async function withIndexProgressHeartbeat<T>(
   label: string,
   dbAdapter: PgAdapter,
@@ -2494,6 +2496,8 @@ export async function withIndexProgressHeartbeat<T>(
   { intervalMs = 15000 }: { intervalMs?: number } = {},
 ): Promise<T> {
   let startedAt = Date.now();
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let beat = async () => {
     let elapsedS = Math.round((Date.now() - startedAt) / 1000);
     let detail = '';
@@ -2514,11 +2518,25 @@ export async function withIndexProgressHeartbeat<T>(
       `[index-heartbeat] ${label} still running after ${elapsedS}s;${detail}`,
     );
   };
-  let timer = setInterval(() => void beat(), intervalMs);
+  let schedule = () => {
+    timer = setTimeout(async () => {
+      if (stopped) {
+        return;
+      }
+      await beat();
+      if (!stopped) {
+        schedule();
+      }
+    }, intervalMs);
+  };
+  schedule();
   try {
     return await fn();
   } finally {
-    clearInterval(timer);
+    stopped = true;
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -2532,14 +2550,19 @@ export async function withIndexProgressHeartbeat<T>(
 // `boxel_index` rows (so `isNewIndex()` is false and startup skips the
 // from-scratch pass) and its `modules` definition cache (so a later
 // `reindex()` re-derives every definition from a cache hit instead of a fresh
-// prerender). Keyed by prerenderer identity so unrelated injected
-// prerenderers don't share a snapshot; built at most once per qunit process.
+// prerender). Keyed by base source path + prerenderer identity so a different
+// base directory or unrelated injected prerenderer doesn't reuse the wrong
+// snapshot; built at most once per qunit process.
 let baseRealmTemplateCache = new Map<string, { ready: Promise<void> }>();
 
-function baseRealmTemplateCacheKey(prerenderer: Prerenderer): string {
+function baseRealmTemplateCacheKey(
+  basePath: string,
+  prerenderer: Prerenderer,
+): string {
   return hashCacheKeyPayload({
     version: 1,
     type: 'base-realm',
+    basePath,
     prerenderer: prerendererCacheKeyPart(prerenderer),
   });
 }
@@ -2552,7 +2575,7 @@ export async function acquireBaseRealmTemplate(
   basePath: string,
   prerenderer: Prerenderer,
 ): Promise<string> {
-  let cacheKey = baseRealmTemplateCacheKey(prerenderer);
+  let cacheKey = baseRealmTemplateCacheKey(basePath, prerenderer);
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
   let existing = baseRealmTemplateCache.get(cacheKey);
   if (existing) {
