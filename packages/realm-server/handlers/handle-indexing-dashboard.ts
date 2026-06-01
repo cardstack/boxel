@@ -1,4 +1,14 @@
+import { readFileSync } from 'node:fs';
+
 import type { RealmIndexingState } from '../indexing-event-sink';
+
+// morphdom's UMD build, inlined into the dashboard so the auto-refresh can
+// patch the live DOM in place instead of reloading the page. Read once at
+// module load; the dashboard is a local-only debug surface.
+const MORPHDOM_SOURCE = readFileSync(
+  require.resolve('morphdom/dist/morphdom-umd.min.js'),
+  'utf8',
+);
 
 export interface PendingJob {
   jobId: number;
@@ -48,6 +58,11 @@ function renderActiveCard(state: RealmIndexingState): string {
     state.totalFiles > 0
       ? Math.round((state.filesCompleted / state.totalFiles) * 100)
       : 0;
+  // The job announces itself at kickoff with a total of 0 and fills it in
+  // once invalidation discovery + pre-warm have determined how much work
+  // there is. Show a "calculating" state for that window instead of a
+  // misleading 0 / 0 (0%).
+  let calculating = state.status === 'indexing' && state.totalFiles === 0;
 
   const completedSet = new Set(state.completedFiles);
   let remainingFiles = state.files.filter((f) => !completedSet.has(f));
@@ -69,12 +84,20 @@ function renderActiveCard(state: RealmIndexingState): string {
         <span class="job-meta">job #${state.jobId} &middot; started ${timeSince(state.startedAt)} &middot; ${durationMs(state.startedAt)} elapsed</span>
       </div>
       <div class="progress-bar-container">
-        <div class="progress-bar" style="width: ${pct}%"></div>
-        <span class="progress-text">${state.filesCompleted} / ${state.totalFiles} files (${pct}%)</span>
+        <div class="progress-bar${calculating ? ' calculating' : ''}" style="width: ${calculating ? 100 : pct}%"></div>
+        <span class="progress-text">${
+          calculating
+            ? 'Calculating files to index&hellip;'
+            : `${state.filesCompleted} / ${state.totalFiles} files (${pct}%)`
+        }</span>
       </div>
-      <div class="remaining-count">${remaining} file${remaining !== 1 ? 's' : ''} remaining</div>
       ${
-        remainingFiles.length > 0
+        calculating
+          ? ''
+          : `<div class="remaining-count">${remaining} file${remaining !== 1 ? 's' : ''} remaining</div>`
+      }
+      ${
+        !calculating && remainingFiles.length > 0
           ? `<details>
         <summary>${remaining} file${remaining !== 1 ? 's' : ''} left to index</summary>
         <ul class="file-list">${remainingList}</ul>
@@ -253,6 +276,31 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       border-radius: 4px;
       transition: width 0.3s ease;
     }
+    /* "Calculating" state: full-width subdued bar with moving diagonal
+       stripes, shown while the invalidation/pre-warm phase determines how
+       much work the job has. The animation runs continuously across
+       refreshes because morphdom patches the bar in place (it isn't
+       recreated), so the stripes don't restart or flicker. */
+    .progress-bar.calculating {
+      background-color: #30363d;
+      background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.08) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.08) 50%,
+        rgba(255, 255, 255, 0.08) 75%,
+        transparent 75%,
+        transparent
+      );
+      background-size: 40px 40px;
+      animation: calc-stripes 1s linear infinite;
+      transition: none;
+    }
+    @keyframes calc-stripes {
+      from { background-position: 40px 0; }
+      to { background-position: 0 0; }
+    }
     .progress-text {
       position: absolute;
       top: 0;
@@ -351,6 +399,7 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
     </div>
   </div>
 
+  <div id="dashboard-content">
   <div class="summary-bar">
     <div class="summary-item${active.length > 0 ? ' alert' : ''}">
       <div class="value">${active.length}</div>
@@ -414,14 +463,46 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
   </div>`
       : '<div class="empty-state">No completed jobs yet (history is populated from events received since the worker manager started)</div>'
   }
+  </div>
 
+  <script>${MORPHDOM_SOURCE}</script>
   <script>
-    document.getElementById('last-updated').textContent =
-      'Updated: ' + new Date().toLocaleTimeString();
+    function stamp() {
+      document.getElementById('last-updated').textContent =
+        'Updated: ' + new Date().toLocaleTimeString();
+    }
+    stamp();
+
+    // Refresh by patching the live DOM toward a freshly fetched copy
+    // instead of reloading the page. morphdom preserves element identity,
+    // so open <details> disclosures, focus, scroll position, and text
+    // selection survive each tick (the whole #dashboard-content subtree —
+    // every active card and table — updates in one pass).
+    async function refresh() {
+      let res = await fetch(location.href, { headers: { 'X-Requested-With': 'fetch' } });
+      if (!res.ok) return;
+      let html = await res.text();
+      let incoming = new DOMParser()
+        .parseFromString(html, 'text/html')
+        .getElementById('dashboard-content');
+      let live = document.getElementById('dashboard-content');
+      if (!incoming || !live) return;
+      window.morphdom(live, incoming, {
+        onBeforeElUpdated(fromEl, toEl) {
+          // The server always renders <details> closed; keep whatever the
+          // user has toggled open rather than letting the morph snap it shut.
+          if (fromEl.nodeName === 'DETAILS') {
+            toEl.open = fromEl.open;
+          }
+          return true;
+        },
+      });
+      stamp();
+    }
 
     let refreshInterval;
     function startRefresh() {
-      refreshInterval = setInterval(() => location.reload(), 2000);
+      refreshInterval = setInterval(refresh, 2000);
     }
     function stopRefresh() {
       clearInterval(refreshInterval);

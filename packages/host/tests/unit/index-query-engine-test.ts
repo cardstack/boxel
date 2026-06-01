@@ -247,6 +247,9 @@ module('Unit | query', function (hooks) {
       async getCachedDefinitions(): Promise<undefined> {
         return undefined;
       },
+      async populateDefinitionCacheEntry(): Promise<undefined> {
+        return undefined;
+      },
       async getCachedDefinitionsBatch(): Promise<Record<string, never>> {
         return {};
       },
