@@ -793,13 +793,16 @@ export default class StoreService extends Service implements StoreInterface {
     // first. So for a delete initiated in this session the invalidation handler
     // has nothing to reload, and without this the consumer's render stays stale
     // on the now-orphaned card object until a reload.
-    let api = await this.cardService.getAPI();
     let instance = this.store.getCard(id);
-    let consumers = instance ? this.store.consumersOf(api, instance) : [];
+    let api = instance ? await this.cardService.getAPI() : undefined;
+    let consumers =
+      api && instance ? this.store.consumersOf(api, instance) : [];
     this.unsubscribeFromInstance(id);
     this.store.delete(id);
-    for (let consumer of consumers) {
-      api.notifyLinksToTargetDeleted(consumer, id);
+    if (api) {
+      for (let consumer of consumers) {
+        api.notifyLinksToTargetDeleted(consumer, id);
+      }
     }
     await this.cardService.fetchJSON(id, { method: 'DELETE' });
   }
