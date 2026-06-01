@@ -23,7 +23,7 @@ import { cardIdToURL } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
-import { trimExecutableExtension } from './index';
+import { isUrlLike, trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
@@ -134,6 +134,31 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
+// The deprecated `resolveCardReference` throws on bare specifiers (e.g.
+// `@cardstack/boxel-host/commands/foo`) that aren't registered as a
+// realm prefix — callers above rely on that throw, via a surrounding
+// try/catch or a not-found surface, to leave the original ref alone so
+// the loader's importMap shim can resolve it. `VirtualNetwork.resolveURL`
+// is by design more permissive (it allows bare names like `card` against
+// a scoped base) and would URL-join a bare specifier to `relativeTo`,
+// producing a nonexistent realm path. Match the deprecated throw exactly
+// for that case before delegating to `resolveURL`.
+function resolveModuleHref(
+  module: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork | undefined,
+): string {
+  if (virtualNetwork) {
+    if (!isUrlLike(module) && !virtualNetwork.isRegisteredPrefix(module)) {
+      throw new Error(
+        `Cannot resolve bare package specifier "${module}" — no matching prefix mapping registered`,
+      );
+    }
+    return virtualNetwork.resolveURL(module, relativeTo).href;
+  }
+  return resolveCardReference(module, relativeTo);
+}
+
 export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
   relativeTo?: RealmResourceIdentifier | URL | undefined,
@@ -142,10 +167,10 @@ export function codeRefWithAbsoluteIdentifier(
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = (
-        virtualNetwork
-          ? virtualNetwork.resolveURL(ref.module, relativeTo).href
-          : resolveCardReference(ref.module, relativeTo)
+      let moduleHref = resolveModuleHref(
+        ref.module,
+        relativeTo,
+        virtualNetwork,
       ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
         moduleHref = trimExecutableExtension(moduleHref);
@@ -183,9 +208,11 @@ export async function loadCardDef(
   let loader = opts.loader;
   let virtualNetwork = loader.getVirtualNetwork();
   if (!('type' in ref)) {
-    let resolvedModuleURL = virtualNetwork
-      ? virtualNetwork.resolveURL(ref.module, opts?.relativeTo).href
-      : resolveCardReference(ref.module, opts?.relativeTo);
+    let resolvedModuleURL = resolveModuleHref(
+      ref.module,
+      opts?.relativeTo,
+      virtualNetwork,
+    );
     let module = await loader.import<Record<string, any>>(
       resolvedModuleURL,
       opts.dependencyTrackingContext,
@@ -206,9 +233,11 @@ export async function loadCardDef(
     return maybeCard;
   }
 
-  let resolvedFromRef = virtualNetwork
-    ? virtualNetwork.resolveURL(moduleFrom(ref), opts?.relativeTo).href
-    : resolveCardReference(moduleFrom(ref), opts?.relativeTo);
+  let resolvedFromRef = resolveModuleHref(
+    moduleFrom(ref),
+    opts?.relativeTo,
+    virtualNetwork,
+  );
   let err = new CardError(
     `Cannot find card ${humanReadable(ref)}. Make sure ${resolvedFromRef} exports ${exportFrom(ref)}`,
     {
