@@ -12,7 +12,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -6534,7 +6534,7 @@ module('set model in prompt', (hooks) => {
     fakeMatrixClient.resetSentEvents();
   });
 
-  test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
+  test('default active LLM must be equal to `DEFAULT_FALLBACK_MODEL_ID`', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -6550,7 +6550,7 @@ module('set model in prompt', (hooks) => {
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.strictEqual(model, DEFAULT_LLM);
+    assert.strictEqual(model, DEFAULT_FALLBACK_MODEL_ID);
   });
 
   test('use latest active llm', async () => {
