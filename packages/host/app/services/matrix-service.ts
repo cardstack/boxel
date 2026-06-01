@@ -520,6 +520,12 @@ export default class MatrixService extends Service {
       // Waiting on background Matrix flush promises first can leave the
       // authenticated shell visible for an arbitrarily long time.
       this.clearAuth();
+      if (isTesting() && this.postLoginCompleted) {
+        console.warn(
+          '[login-diag] postLoginCompleted reset to false via logout()\n' +
+            new Error().stack,
+        );
+      }
       this.postLoginCompleted = false;
       // Logout is the explicit boundary where we forget persisted workspace UI
       // state for the signed-in user. Generic reset paths must stay in-memory
@@ -747,6 +753,9 @@ export default class MatrixService extends Service {
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
+        if (isTesting()) {
+          console.warn('[login-diag] start() aborted: no auth present');
+        }
         return;
       }
     }
@@ -848,6 +857,15 @@ export default class MatrixService extends Service {
       } else if (refreshRoutes) {
         await this.router.refresh();
       }
+    } else if (isTesting()) {
+      // start() did nothing because the client wasn't logged in at this point,
+      // so postLoginCompleted is left untouched. The index route's start() is a
+      // one-shot, so a no-op here strands it on the login form. Name the unmet
+      // precondition so a cold-boot timeout points at the gap.
+      console.warn(
+        '[login-diag] start() no-op: client not logged in ' +
+          JSON.stringify(this.loginReadinessDebug),
+      );
     }
   }
 
@@ -1447,6 +1465,12 @@ export default class MatrixService extends Service {
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
+    if (isTesting() && this.postLoginCompleted) {
+      console.warn(
+        '[login-diag] postLoginCompleted reset to false via resetState()\n' +
+          new Error().stack,
+      );
+    }
     this.postLoginCompleted = false;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();

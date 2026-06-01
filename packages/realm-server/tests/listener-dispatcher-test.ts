@@ -377,6 +377,56 @@ module(basename(__filename), function (hooks) {
     }
   });
 
+  test('h2 diagnostics (passive ping + session snapshot) do not disrupt serving', async function (assert) {
+    // With REALM_SERVER_HTTP2_DIAGNOSTICS on, every accepted session is swept
+    // every 5s — a passive PING + a state snapshot. Hold one h2 connection open
+    // across a sweep and confirm the session still serves afterwards, i.e. the
+    // observer-only diagnostics neither throw in the interval nor perturb the
+    // session they watch.
+    let prior = process.env.REALM_SERVER_HTTP2_DIAGNOSTICS;
+    process.env.REALM_SERVER_HTTP2_DIAGNOSTICS = '1';
+    let restoreEnv = () => {
+      if (prior !== undefined) {
+        process.env.REALM_SERVER_HTTP2_DIAGNOSTICS = prior;
+      } else {
+        delete process.env.REALM_SERVER_HTTP2_DIAGNOSTICS;
+      }
+    };
+    let { port, isHttp2, close } = await startListener({
+      cert: certFile,
+      key: keyFile,
+    });
+    let client = http2.connect(`https://127.0.0.1:${port}`, {
+      rejectUnauthorized: false,
+    });
+    let request = (path: string) =>
+      new Promise<number>((resolve, reject) => {
+        let req = client.request({ ':method': 'GET', ':path': path });
+        let status = 0;
+        req.on('response', (h) => (status = Number(h[':status'] ?? 0)));
+        req.on('error', reject);
+        req.resume();
+        req.on('end', () => resolve(status));
+        req.end();
+      });
+    try {
+      assert.true(isHttp2, 'listener advertises h2 mode');
+      assert.strictEqual(await request('/_alive'), 200, 'first request OK');
+      // Cross at least one 5s sweep so the passive ping + snapshot run against
+      // the live session.
+      await new Promise((r) => setTimeout(r, 5500));
+      assert.strictEqual(
+        await request('/_alive'),
+        200,
+        'request after a diagnostics sweep still OK — ping did not disrupt the session',
+      );
+    } finally {
+      client.close();
+      await close();
+      restoreEnv();
+    }
+  });
+
   test('no cert env vars produces plain HTTP listener', async function (assert) {
     let { port, isHttp2, close } = await startListener({
       cert: null,
