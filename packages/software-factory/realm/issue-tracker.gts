@@ -21,6 +21,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 
 import {
+  BoxelSelect,
   FieldContainer,
   KanbanColumnConfigSidebar,
   KanbanPlane,
@@ -45,7 +46,10 @@ import { KanbanColumnField } from './kanban-column';
 import { KanbanBoardPlacement } from './kanban-board-placement';
 import {
   issueStatusOptions,
+  issuePriorityOptions,
+  issueTypeOptions,
   projectStatusOptions,
+  defaultColumns,
   findOptionColor,
   buildIssueOptionFields,
   configuredIssueStatusOptions,
@@ -53,6 +57,7 @@ import {
   IssueTypeField,
   IssuePriorityField,
   ProjectStatusField,
+  type Column,
 } from './kanban-config';
 import { Comment } from './comment';
 import { KnowledgeArticle } from './knowledge-article';
@@ -105,19 +110,6 @@ function getIssueStatusColor(
   value: string | null | undefined,
 ) {
   return getIssueStatusOption(issue, value)?.color;
-}
-
-function buildColumnsFromStatusOptions(
-  options: ReturnType<typeof getProjectIssueStatusOptions>,
-): KanbanColumnConfig[] {
-  return options.map((option, i) => ({
-    key: option.value,
-    label: option.label,
-    color: option.color ?? null,
-    collapsed: false,
-    wipLimit: 0,
-    sortOrder: i + 1,
-  }));
 }
 
 class IssueIsolated extends Component<typeof Issue> {
@@ -1052,11 +1044,57 @@ export class Project extends CardDef {
 
 class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   @tracked isSidebarOpen = false;
+  @tracked uncategorizedCollapsed = false;
+
+  get activeGroupBy(): string {
+    return this.args.model.groupBy ?? 'status';
+  }
+
+  get groupByFieldName(): string {
+    switch (this.activeGroupBy) {
+      case 'priority':
+        return 'priority';
+      case 'issueType':
+        return 'issueType';
+      default:
+        return 'status';
+    }
+  }
+
+  get groupByDimensions(): Column[] {
+    return defaultColumns;
+  }
+
+  get selectedGroupByDimension(): Column | undefined {
+    return defaultColumns.find((d) => d.key === this.activeGroupBy);
+  }
+
+  updateGroupBy = (dim: Column): void => {
+    this.args.model.groupBy = dim.key;
+    this.args.model.columns = [];
+    this.uncategorizedCollapsed = false;
+  };
 
   get columns(): KanbanColumnConfig[] {
+    let options =
+      this.activeGroupBy === 'priority'
+        ? issuePriorityOptions
+        : this.activeGroupBy === 'issueType'
+          ? issueTypeOptions
+          : getProjectIssueStatusOptions(this.args.model?.project);
+
     let stored = this.args.model.columns ?? [];
-    if (stored.length) {
-      return stored.map((col) => ({
+    let optionKeys = new Set(options.map((o) => o.value));
+    let storedMatchesCurrent =
+      stored.length > 0 && stored.every((c) => optionKeys.has(c.key));
+
+    let fieldName = this.groupByFieldName;
+    let cards = this.args.model.cards ?? [];
+    let hideEmpty = this.args.model.hideEmptyColumns ?? false;
+
+    let baseColumns: KanbanColumnConfig[];
+    if (storedMatchesCurrent) {
+      baseColumns = stored.map((col) => ({
         key: col.key,
         label: col.label,
         color: col.color,
@@ -1064,10 +1102,41 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         wipLimit: col.wipLimit ?? null,
         sortOrder: col.sortOrder,
       }));
+    } else {
+      baseColumns = options.map((option, i) => {
+        let isEmpty =
+          hideEmpty &&
+          !cards.some((c) => (c as any)[fieldName] === option.value);
+        return {
+          key: option.value,
+          label: option.label,
+          color: option.color ?? null,
+          collapsed: isEmpty,
+          wipLimit: 0,
+          sortOrder: i + 1,
+        };
+      });
     }
-    return buildColumnsFromStatusOptions(
-      getProjectIssueStatusOptions(this.args.model?.project),
-    );
+
+    if (this.args.model.groupByFallbackKey) return baseColumns;
+    let hasOrphan = cards.some((card) => {
+      let v = (card as any)[fieldName];
+      return !v || !optionKeys.has(v);
+    });
+
+    if (!hasOrphan) return baseColumns;
+
+    return [
+      ...baseColumns,
+      {
+        key: 'uncategorized',
+        label: 'Uncategorized',
+        color: null,
+        collapsed: this.uncategorizedCollapsed,
+        wipLimit: null,
+        sortOrder: baseColumns.length + 1,
+      },
+    ];
   }
 
   get statusColor(): string | undefined {
@@ -1075,6 +1144,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       projectStatusOptions,
       this.args.model?.project?.projectStatus,
     );
+  }
+
+  get configurableColumns(): KanbanColumnConfig[] {
+    return this.columns.filter((c) => c.key !== 'uncategorized');
   }
 
   get firstColumn(): KanbanColumnConfig | undefined {
@@ -1122,6 +1195,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
   handleToggleCollapsed = (col: KanbanColumnConfig | null): void => {
     if (!col) return;
+    if (col.key === 'uncategorized') {
+      this.uncategorizedCollapsed = !this.uncategorizedCollapsed;
+      return;
+    }
     this.handleColumnsChange(
       this.columns.map((c: KanbanColumnConfig) =>
         c.key === col.key ? { ...c, collapsed: !c.collapsed } : c,
@@ -1130,28 +1207,32 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   };
 
   handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
-    this.args.model.columns = newColumns.map((cfg) =>
-      Object.assign(new KanbanColumnField(), {
-        key: cfg.key,
-        label: cfg.label,
-        color: cfg.color,
-        collapsed: cfg.collapsed,
-        wipLimit: cfg.wipLimit,
-        sortOrder: cfg.sortOrder,
-      }),
-    );
+    this.args.model.columns = newColumns
+      .filter((cfg) => cfg.key !== 'uncategorized')
+      .map((cfg) =>
+        Object.assign(new KanbanColumnField(), {
+          key: cfg.key,
+          label: cfg.label,
+          color: cfg.color,
+          collapsed: cfg.collapsed,
+          wipLimit: cfg.wipLimit,
+          sortOrder: cfg.sortOrder,
+        }),
+      );
 
-    let project = this.args.model.project;
-    if (project?.issueStatusOptions?.length) {
-      project.issueStatusOptions = project.issueStatusOptions.map((opt) => {
-        let col = newColumns.find((c) => c.key === opt.value);
-        if (!col) return opt;
-        return Object.assign(new IssueOptionField(), {
-          value: opt.value,
-          label: col.label ?? opt.label,
-          color: col.color ?? opt.color,
+    if (this.activeGroupBy === 'status') {
+      let project = this.args.model.project;
+      if (project?.issueStatusOptions?.length) {
+        project.issueStatusOptions = project.issueStatusOptions.map((opt) => {
+          let col = newColumns.find((c) => c.key === opt.value);
+          if (!col) return opt;
+          return Object.assign(new IssueOptionField(), {
+            value: opt.value,
+            label: col.label ?? opt.label,
+            color: col.color ?? opt.color,
+          });
         });
-      });
+      }
     }
   };
 
@@ -1203,6 +1284,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let model = this.args.model as any;
     let boardRealmURL: URL | undefined = model[realmURL];
     let projectId: string | null = model.project?.id ?? null;
+    let fieldName = this.groupByFieldName;
+    let fieldValue = columnKey !== 'uncategorized' ? columnKey : null;
     let cardId = await this.args.createCard?.(
       issueCodeRef,
       new URL(issueCodeRef.module),
@@ -1211,7 +1294,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         doc: {
           data: {
             type: 'card',
-            attributes: { status: columnKey },
+            attributes: { [fieldName]: fieldValue },
             relationships: projectId
               ? { project: { links: { self: projectId } } }
               : {},
@@ -1238,10 +1321,15 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
   handleChange = (newPlacements: KanbanPlacement[]) => {
     let cards = this.args.model?.cards ?? [];
+    let fieldName = this.groupByFieldName;
     this.args.model.placements = newPlacements.map((p) => {
       let card = cards[p.index] as any;
-      if (card && card.status !== p.columnId) {
-        card.status = p.columnId;
+      if (
+        card &&
+        p.columnId !== 'uncategorized' &&
+        (card as any)[fieldName] !== p.columnId
+      ) {
+        (card as any)[fieldName] = p.columnId;
       }
       return Object.assign(new KanbanBoardPlacement(), {
         itemId: card?.id ?? '',
@@ -1263,6 +1351,23 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   get placements(): KanbanPlacement[] {
     let stored = this.args.model?.placements;
     let cards = this.args.model?.cards ?? [];
+    let fieldName = this.groupByFieldName;
+    let fallbackKey = this.args.model.groupByFallbackKey;
+
+    let resolveColumn = (fieldValue: string | null | undefined): string => {
+      return (
+        (fieldValue
+          ? this.columns.find((c) => c.key === fieldValue)?.key
+          : undefined) ??
+        (fallbackKey
+          ? this.columns.find((c) => c.key === fallbackKey)?.key
+          : undefined) ??
+        this.columns.find((c) => c.key === 'uncategorized')?.key ??
+        this.firstColumn?.key ??
+        ''
+      );
+    };
+
     if (stored?.length) {
       let placedCardIds = new Set(stored.map((p) => p.itemId));
       let resolved = stored
@@ -1270,12 +1375,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
           if (cardIdx === -1) return null;
           let card = cards[cardIdx] as any;
-          let effectiveKey = card?.status ?? p.columnKey;
-          let colKey =
-            this.columns.find((c) => c.key === effectiveKey)?.key ??
-            this.columns.find((c) => c.key === p.columnKey)?.key ??
-            this.columns.find((c) => c.key === 'backlog')?.key ??
-            this.firstColumn?.key;
+          let colKey = resolveColumn(card[fieldName] ?? p.columnKey);
           if (!colKey) return null;
           return {
             columnId: colKey,
@@ -1290,32 +1390,18 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       let unplaced = cards
         .map((card, idx) => ({ card, idx }))
         .filter(({ card }) => !placedCardIds.has((card as any).id))
-        .map(({ card, idx }, i) => {
-          let status = (card as any).status ?? 'backlog';
-          let colKey =
-            this.columns.find((c) => c.key === status)?.key ??
-            this.columns.find((c) => c.key === 'backlog')?.key ??
-            this.firstColumn?.key;
-          return {
-            columnId: colKey ?? '',
-            index: idx,
-            sortOrder: maxOrder + 1 + i,
-          };
-        });
+        .map(({ card, idx }, i) => ({
+          columnId: resolveColumn((card as any)[fieldName]),
+          index: idx,
+          sortOrder: maxOrder + 1 + i,
+        }));
       return [...resolved, ...unplaced];
     }
-    return cards.map((card, idx) => {
-      let status = (card as any).status ?? 'backlog';
-      let colKey =
-        this.columns.find((c) => c.key === status)?.key ??
-        this.columns.find((c) => c.key === 'backlog')?.key ??
-        this.firstColumn?.key;
-      return {
-        columnId: colKey ?? '',
-        index: idx,
-        sortOrder: idx,
-      };
-    });
+    return cards.map((card, idx) => ({
+      columnId: resolveColumn((card as any)[fieldName]),
+      index: idx,
+      sortOrder: idx,
+    }));
   }
 
   <template>
@@ -1346,15 +1432,33 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           </div>
         </div>
         <div class='toolbar-right'>
-          <div class='kanban-column-visibility-toggle'>
-            <span class='kanban-header-label'>Hide empty</span>
+          <FieldContainer
+            @label='Group by'
+            class='toolbar-field group-by-selector'
+            data-test-group-by-selector
+          >
+            <BoxelSelect
+              @options={{this.groupByDimensions}}
+              @selected={{this.selectedGroupByDimension}}
+              @onChange={{this.updateGroupBy}}
+              @renderInPlace={{true}}
+              as |dim|
+            >
+              <span data-test-group-by-option={{dim.key}}>{{dim.label}}</span>
+            </BoxelSelect>
+          </FieldContainer>
+          <FieldContainer
+            @label='Hide empty'
+            @inline={{true}}
+            class='toolbar-field'
+          >
             <Switch
               @isEnabled={{this.hideEmpty}}
               @onChange={{this.toggleHideEmptyColumns}}
               @label='Hide empty columns'
               data-test-hide-empty-switch
             />
-          </div>
+          </FieldContainer>
           <Tooltip @placement='bottom'>
             <:trigger>
               <ContextButton
@@ -1420,7 +1524,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           class={{cn 'kanban-config-sidebar-wrap' is-open=this.isSidebarOpen}}
         >
           <KanbanColumnConfigSidebar
-            @columns={{this.columns}}
+            @columns={{this.configurableColumns}}
             @cardCounts={{this.columnCardCountsByKey}}
             @onClose={{this.toggleSidebar}}
             @onToggleCollapsed={{this.handleToggleCollapsed}}
@@ -1480,7 +1584,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       .toolbar-right {
         display: flex;
         align-items: center;
-        gap: 0.375rem;
+        gap: var(--boxel-sp-sm);
         color: var(--board-muted-fg);
       }
       .kanban-title {
@@ -1511,10 +1615,32 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
-      .kanban-column-visibility-toggle {
-        display: flex;
+      .toolbar-field {
+        --boxel-field-label-font-size: 0.75rem;
+        --boxel-field-label-color: var(--board-muted-fg);
+        display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: var(--boxel-sp-2xs);
+        white-space: nowrap;
+      }
+      .group-by-selector :deep(.label-container) {
+        padding-top: unset;
+      }
+      .group-by-selector :deep(.ember-power-select-trigger) {
+        width: 7rem;
+      }
+      .group-by-selector :deep(.ember-power-select-trigger),
+      .group-by-selector :deep(.boxel-trigger-content),
+      .group-by-selector :deep(.boxel-trigger-content > span) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .group-by-selector :deep(.ember-power-select-dropdown) {
+        min-width: max-content;
+      }
+      .group-by-selector :deep(.ember-power-select-option) {
+        white-space: nowrap;
       }
       .kanban-header-label {
         font-size: 0.75rem;
@@ -1557,6 +1683,8 @@ export class IssueTracker extends KanbanBoard {
   static displayName = 'Issue Tracker Board';
 
   @field project = linksTo(() => Project);
+  @field groupBy = contains(StringField);
+  @field groupByFallbackKey = contains(StringField);
   @field cards = linksToMany(() => Issue, {
     computeVia: function (this: IssueTracker) {
       return this.project?.issues;
