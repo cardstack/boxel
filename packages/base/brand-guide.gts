@@ -29,6 +29,7 @@ import {
   buildCssVariableName,
   sanitizeHtmlSafe,
   eq,
+  CssVariableEntry,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
@@ -395,20 +396,18 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                         />
                       </dd>
                     {{/each}}
-                    {{#each @model.customCssVariables as |cssVar|}}
-                      {{#if cssVar.name}}
-                        <dt class='var-row' data-test-brand-guide-css-var>
-                          <code
-                            data-test-brand-guide-css-var-name
-                          >{{buildCssVariableName cssVar.name}}</code>
-                        </dt>
-                        <dd class='var-row'>
-                          <code
-                            class='css-var-value'
-                            data-test-brand-guide-css-var-value
-                          >{{cssVar.value}}</code>
-                        </dd>
-                      {{/if}}
+                    {{#each this.customCssVarEntries as |entry|}}
+                      <dt class='var-row' data-test-brand-guide-css-var>
+                        <code
+                          data-test-brand-guide-css-var-name
+                        >{{entry.name}}</code>
+                      </dt>
+                      <dd class='var-row'>
+                        <code
+                          class='css-var-value'
+                          data-test-brand-guide-css-var-value
+                        >{{entry.value}}</code>
+                      </dd>
                     {{/each}}
                   </dl>
                 </div>
@@ -905,12 +904,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     if (!entriesToCssRuleMap || !this.args.model?.brandColorPalette?.length) {
       return [];
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let paletteRules = entriesToCssRuleMap(
-      this.args.model.brandColorPalette as any,
+      this.args.model.brandColorPalette as any as CssVariableEntry[],
     );
     return this.args.model.brandColorPalette
-      .filter((color) => color.name)
+      .filter((color) => color.name && color.value)
       .map((color) => ({
         color,
         varName: buildCssVariableName(color.name!),
@@ -929,20 +927,27 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         lines.push(`${buildCssVariableName(name)}: ${colorValue};`);
       }
     }
-    for (let cssVar of this.args.model?.customCssVariables ?? []) {
-      let name = cssVar.name?.trim();
-      let value = cssVar.value?.trim();
-      if (name && value) {
-        lines.push(`${buildCssVariableName(name)}: ${value};`);
-      }
+    for (let cssVar of this.customCssVarEntries) {
+      lines.push(`${cssVar.name}: ${cssVar.value};`);
     }
     return lines.join('\n');
+  }
+
+  private get customCssVarEntries() {
+    if (!entriesToCssRuleMap || !this.args.model?.customCssVariables?.length) {
+      return [];
+    }
+    let rules = entriesToCssRuleMap(this.args.model?.customCssVariables);
+    return [...rules.entries()].map(([name, value]) => ({
+      name: buildCssVariableName(name),
+      value,
+    }));
   }
 
   private get hasCustomVariables() {
     return Boolean(
       this.args.model?.brandColorPalette?.length ||
-      this.args.model?.customCssVariables?.length,
+      this.customCssVarEntries.length,
     );
   }
 
