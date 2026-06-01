@@ -6,7 +6,10 @@ import * as path from 'path';
 import {
   indexingErrors,
   shortErrorMessage,
+  shortBrokenLinks,
+  formatEntry,
   type IndexingErrorEntry,
+  type BrokenLinkEntry,
 } from '../../src/commands/realm/indexing-errors';
 import { ProfileManager } from '../../src/lib/profile-manager';
 import {
@@ -50,7 +53,7 @@ describe('realm indexing-errors (integration)', () => {
     expect(result.document!.data).toEqual([]);
   });
 
-  it('reports errored entries with errorDoc and timingDiagnostics', async () => {
+  it('reports errored entries with errorDoc and diagnostics', async () => {
     let dbAdapter = getTestDbAdapter();
     expect(dbAdapter).toBeDefined();
 
@@ -62,7 +65,7 @@ describe('realm indexing-errors (integration)', () => {
       title: 'RenderError',
       additionalErrors: null,
     };
-    let timingDiagnostics = { invalidationId: 'inv-cli-test-1', ms: 17 };
+    let diagnostics = { invalidationId: 'inv-cli-test-1', ms: 17 };
 
     // Seed via direct INSERT rather than fullIndex() because this suite's
     // noopPrerenderer cannot extract types from `.gts` modules — any
@@ -72,7 +75,7 @@ describe('realm indexing-errors (integration)', () => {
     await dbAdapter!.execute(
       `INSERT INTO boxel_index
          (url, file_alias, type, realm_version, realm_url,
-          has_error, error_doc, timing_diagnostics, is_deleted)
+          has_error, error_doc, diagnostics, is_deleted)
        VALUES ($1, $2, 'instance', 1, $3,
                TRUE, $4::jsonb, $5::jsonb, FALSE)`,
       {
@@ -81,7 +84,7 @@ describe('realm indexing-errors (integration)', () => {
           fileAlias,
           realmUrl,
           JSON.stringify(errorDoc),
-          JSON.stringify(timingDiagnostics),
+          JSON.stringify(diagnostics),
         ],
       },
     );
@@ -92,9 +95,101 @@ describe('realm indexing-errors (integration)', () => {
 
     let entry = result.document!.data[0] as IndexingErrorEntry;
     expect(entry.type).toBe('indexing-error');
-    expect(entry.id).toBe(cardURL);
+    expect(entry.id).toBe(`instance::${cardURL}`);
+    expect(entry.attributes.url).toBe(cardURL);
+    expect(entry.attributes.entryType).toBe('instance');
     expect(entry.attributes.errorDoc).toEqual(errorDoc);
-    expect(entry.attributes.timingDiagnostics).toEqual(timingDiagnostics);
+    expect(entry.attributes.diagnostics).toEqual(diagnostics);
+  });
+
+  it('disambiguates same URL with different entry types', async () => {
+    let dbAdapter = getTestDbAdapter();
+    let sharedURL = `${realmUrl}two-row-error.json`;
+    let fileAlias = `${realmUrl}two-row-error`;
+    let instanceError = {
+      message: 'instance render failed',
+      status: 500,
+      title: 'RenderError',
+    };
+    let fileError = {
+      message: 'file extract failed',
+      status: 500,
+      title: 'FileExtractError',
+    };
+
+    for (let [type, errorDoc] of [
+      ['instance', instanceError],
+      ['file', fileError],
+    ] as const) {
+      await dbAdapter!.execute(
+        `INSERT INTO boxel_index
+           (url, file_alias, type, realm_version, realm_url,
+            has_error, error_doc, is_deleted)
+         VALUES ($1, $2, $3, 1, $4, TRUE, $5::jsonb, FALSE)`,
+        {
+          bind: [
+            sharedURL,
+            fileAlias,
+            type,
+            realmUrl,
+            JSON.stringify(errorDoc),
+          ],
+        },
+      );
+    }
+
+    let result = await indexingErrors(realmUrl, { profileManager });
+    expect(result.ok).toBe(true);
+    let forUrl = result.document!.data.filter(
+      (e) => e.attributes.url === sharedURL,
+    );
+    expect(forUrl.length).toBe(2);
+    let ids = forUrl.map((e) => e.id).sort();
+    expect(ids).toEqual([`file::${sharedURL}`, `instance::${sharedURL}`]);
+    let byType = Object.fromEntries(
+      forUrl.map((e) => [e.attributes.entryType, e]),
+    );
+    expect(
+      (byType.instance as IndexingErrorEntry).attributes.errorDoc?.message,
+    ).toBe(instanceError.message);
+    expect(
+      (byType.file as IndexingErrorEntry).attributes.errorDoc?.message,
+    ).toBe(fileError.message);
+  });
+
+  it('surfaces broken-link rows with has_error = FALSE', async () => {
+    let dbAdapter = getTestDbAdapter();
+    let cardURL = `${realmUrl}broken-links-only.json`;
+    let fileAlias = `${realmUrl}broken-links-only`;
+    let brokenLinks = [
+      {
+        fieldName: 'author',
+        reference: 'https://example.com/missing',
+        kind: 'not-found',
+      },
+    ];
+    let diagnostics = { brokenLinks };
+
+    await dbAdapter!.execute(
+      `INSERT INTO boxel_index
+         (url, file_alias, type, realm_version, realm_url,
+          has_error, error_doc, diagnostics, is_deleted)
+       VALUES ($1, $2, 'instance', 1, $3,
+               FALSE, NULL, $4::jsonb, FALSE)`,
+      {
+        bind: [cardURL, fileAlias, realmUrl, JSON.stringify(diagnostics)],
+      },
+    );
+
+    let result = await indexingErrors(realmUrl, { profileManager });
+    expect(result.ok).toBe(true);
+    let entry = result.document!.data.find(
+      (e) => e.attributes.url === cardURL,
+    ) as BrokenLinkEntry | undefined;
+    expect(entry).toBeDefined();
+    expect(entry!.type).toBe('broken-link');
+    expect(entry!.attributes.brokenLinks).toEqual(brokenLinks);
+    expect(formatEntry(entry!)).toContain('1 broken: author→');
   });
 
   it('returns ok=false when the realm is unreachable', async () => {
@@ -125,5 +220,24 @@ describe('realm indexing-errors (integration)', () => {
     );
     expect(shortErrorMessage(null)).toBe('<no error document>');
     expect(shortErrorMessage({})).toBe('<no message>');
+  });
+
+  it('shortBrokenLinks summarizes broken-link findings', () => {
+    expect(shortBrokenLinks(null)).toBe('<no broken links>');
+    expect(shortBrokenLinks([])).toBe('<no broken links>');
+    expect(
+      shortBrokenLinks([
+        { fieldName: 'a', reference: 'x', kind: 'not-found' },
+        { fieldName: 'b', reference: 'y', kind: 'error' },
+      ]),
+    ).toBe('2 broken: a→x, b→y');
+    expect(
+      shortBrokenLinks([
+        { fieldName: 'a', reference: 'x', kind: 'not-found' },
+        { fieldName: 'b', reference: 'y', kind: 'error' },
+        { fieldName: 'c', reference: 'z', kind: 'error' },
+        { fieldName: 'd', reference: 'w', kind: 'error' },
+      ]),
+    ).toBe('4 broken: a→x, b→y, c→z, …+1 more');
   });
 });

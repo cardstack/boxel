@@ -13,17 +13,45 @@ export interface IndexingErrorsCommandOptions {
   profileManager?: ProfileManager;
 }
 
+// Resource for a row with `has_error = TRUE`: render/extract failed and
+// the persisted SerializedError carries the cause.
 export interface IndexingErrorEntry {
   type: 'indexing-error';
   id: string;
   attributes: {
+    url: string;
+    entryType: string;
     errorDoc: SerializedErrorLike | null;
-    timingDiagnostics: Record<string, unknown> | null;
+    diagnostics: Record<string, unknown> | null;
+    brokenLinks?: BrokenLinkLike[];
   };
 }
 
+// Resource for a row that indexed cleanly but holds broken
+// linksTo / linksToMany targets surfaced via `diagnostics.brokenLinks`.
+export interface BrokenLinkEntry {
+  type: 'broken-link';
+  id: string;
+  attributes: {
+    url: string;
+    entryType: string;
+    diagnostics: Record<string, unknown> | null;
+    brokenLinks: BrokenLinkLike[];
+  };
+}
+
+export type IndexingErrorsEntry = IndexingErrorEntry | BrokenLinkEntry;
+
 export interface IndexingErrorsDocument {
-  data: IndexingErrorEntry[];
+  data: IndexingErrorsEntry[];
+}
+
+// Mirror of BrokenLinkSummary from @cardstack/runtime-common, kept local
+// to avoid pulling the runtime-common barrel into the CLI bundle.
+export interface BrokenLinkLike {
+  fieldName: string;
+  reference: string;
+  kind: 'error' | 'not-found';
 }
 
 export interface IndexingErrorsResult {
@@ -135,14 +163,40 @@ export function registerIndexingErrorsCommand(realm: Command): void {
       }
 
       console.log(
-        `${FG_GREEN}${entries.length} indexing error${
+        `${FG_GREEN}${entries.length} indexing finding${
           entries.length === 1 ? '' : 's'
         } for ${opts.realm}:${RESET}`,
       );
       for (let entry of entries) {
-        console.log(
-          `${entry.id}  ${shortErrorMessage(entry.attributes.errorDoc)}`,
-        );
+        console.log(formatEntry(entry));
       }
     });
+}
+
+export function formatEntry(entry: IndexingErrorsEntry): string {
+  let prefix = `[${entry.attributes.entryType}]`;
+  let url = entry.attributes.url;
+  if (entry.type === 'indexing-error') {
+    return `${prefix} ${url}  ${shortErrorMessage(entry.attributes.errorDoc)}`;
+  }
+  return `${prefix} ${url}  ${shortBrokenLinks(entry.attributes.brokenLinks)}`;
+}
+
+const BROKEN_LINKS_MAX_LIST = 3;
+
+export function shortBrokenLinks(
+  brokenLinks: BrokenLinkLike[] | null | undefined,
+): string {
+  if (!brokenLinks || brokenLinks.length === 0) {
+    return '<no broken links>';
+  }
+  let preview = brokenLinks
+    .slice(0, BROKEN_LINKS_MAX_LIST)
+    .map((link) => `${link.fieldName}→${link.reference}`)
+    .join(', ');
+  let suffix =
+    brokenLinks.length > BROKEN_LINKS_MAX_LIST
+      ? `, …+${brokenLinks.length - BROKEN_LINKS_MAX_LIST} more`
+      : '';
+  return `${brokenLinks.length} broken: ${preview}${suffix}`;
 }

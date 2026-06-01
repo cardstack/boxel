@@ -34,6 +34,11 @@ import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
 import {
   indexingErrors as coreIndexingErrors,
   type IndexingErrorsResult,
+  type IndexingErrorsDocument,
+  type IndexingErrorsEntry,
+  type IndexingErrorEntry,
+  type BrokenLinkEntry,
+  type BrokenLinkLike,
 } from '../commands/realm/indexing-errors';
 import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
@@ -135,7 +140,14 @@ export interface AtomicResult {
 }
 
 export type { CancelIndexingResult };
-export type { IndexingErrorsResult };
+export type {
+  IndexingErrorsResult,
+  IndexingErrorsDocument,
+  IndexingErrorsEntry,
+  IndexingErrorEntry,
+  BrokenLinkEntry,
+  BrokenLinkLike,
+};
 
 export class BoxelCLIClient {
   private pm: ProfileManager;

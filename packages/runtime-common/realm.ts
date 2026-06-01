@@ -43,6 +43,7 @@ import {
   responseWithError,
   formattedError,
   unsupportedMediaType,
+  type SerializedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -5961,26 +5962,59 @@ export class Realm {
     let sourceRealmURL = ensureTrailingSlash(this.url);
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, error_doc, timing_diagnostics FROM boxel_index WHERE realm_url =`,
+      `SELECT url, type, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
-      `AND has_error = TRUE`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-      `ORDER BY url`,
+      `AND (`,
+      `  has_error = TRUE`,
+      `  OR (`,
+      `    jsonb_typeof(diagnostics->'brokenLinks') = 'array'`,
+      `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
+      `  )`,
+      `)`,
+      `ORDER BY type, url`,
     ])) as {
       url: string;
-      error_doc: unknown | null;
-      timing_diagnostics: unknown | null;
+      type: string;
+      error_doc: SerializedError | null;
+      diagnostics: Record<string, unknown> | null;
     }[];
 
     let doc = {
-      data: rows.map((row) => ({
-        type: 'indexing-error',
-        id: row.url,
-        attributes: {
-          errorDoc: row.error_doc,
-          timingDiagnostics: row.timing_diagnostics,
-        },
-      })),
+      data: rows.map((row) => {
+        let brokenLinks =
+          row.diagnostics && Array.isArray(row.diagnostics.brokenLinks)
+            ? (row.diagnostics.brokenLinks as unknown[])
+            : null;
+        let hasError = row.error_doc != null;
+        // 'indexing-error' = row.has_error = TRUE (rendered/indexed badly).
+        // 'broken-link' = the index row is healthy but the rendered card has
+        // dead linksTo/linksToMany targets surfaced by render.meta. Both
+        // classes share the (entryType, url) key; the discriminator lets
+        // consumers branch on which attributes to read.
+        let resourceType: 'indexing-error' | 'broken-link' = hasError
+          ? 'indexing-error'
+          : 'broken-link';
+        let attributes: Record<string, unknown> = {
+          url: row.url,
+          entryType: row.type,
+          diagnostics: row.diagnostics,
+        };
+        if (hasError) {
+          attributes.errorDoc = row.error_doc;
+        }
+        if (brokenLinks && brokenLinks.length > 0) {
+          attributes.brokenLinks = brokenLinks;
+        }
+        return {
+          type: resourceType,
+          // `(type, url)` is the boxel_index PK partition; encoding both
+          // keeps the JSON:API resource id unique when the same URL fails
+          // as both 'instance' and 'file'.
+          id: `${row.type}::${row.url}`,
+          attributes,
+        };
+      }),
     };
 
     return createResponse({
