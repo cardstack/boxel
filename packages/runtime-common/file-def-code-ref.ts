@@ -26,6 +26,12 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
+  '.mp3': { module: baseModule('mp3-audio-def'), name: 'Mp3Def' },
+  '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
+  '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
+  '.oga': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
+  '.m4a': { module: baseModule('m4a-audio-def'), name: 'M4aDef' },
+  '.flac': { module: baseModule('flac-audio-def'), name: 'FlacDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',
