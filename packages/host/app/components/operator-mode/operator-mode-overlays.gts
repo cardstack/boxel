@@ -123,7 +123,7 @@ export default class OperatorModeOverlays extends Overlays {
               style={{renderedCard.overlayZIndexStyle}}
               ...attributes
             >
-              {{! Type-label tab — hover only. trackLabelOverflow
+              {{! Type-label tab — hover only. adorn.positionLabel
                   positions the label so it stays inside the
                   enclosing AdornContext's bounds, flips below the
                   card when there isn't room above, and truncates
