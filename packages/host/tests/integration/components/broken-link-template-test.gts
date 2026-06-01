@@ -202,6 +202,39 @@ module('Integration | Component | broken-link-template', function (hooks) {
     }
   });
 
+  test('the overlay keeps the prose message visible when it differs from the stack, and hides the visual duplicate when the stack repeats it', async function (this: RenderingTestContext, assert) {
+    // The fixture's stack ("Error: kaboom ...") does not carry the message, so
+    // the message is distinct information and must stay visible.
+    await renderTemplate({
+      brokenUrl: ERROR_URL,
+      errorDoc: genericErrorDoc(),
+      state: 'error',
+      format: 'isolated',
+    });
+    await click('[data-test-broken-link-reveal]');
+    assert
+      .dom('[data-test-broken-link-message]')
+      .isVisible('message stays visible when the stack header differs from it');
+
+    // When the stack's first line already carries the message, the prose is a
+    // visual duplicate — hidden, but still recoverable from the DOM.
+    let redundant = genericErrorDoc();
+    redundant.stack = `Error: ${redundant.message}\n    at PetCard.render (pet.gts:42:7)`;
+    await renderTemplate({
+      brokenUrl: ERROR_URL,
+      errorDoc: redundant,
+      state: 'error',
+      format: 'isolated',
+    });
+    await click('[data-test-broken-link-reveal]');
+    assert
+      .dom('[data-test-broken-link-message]')
+      .hasText(redundant.message)
+      .isNotVisible(
+        'the redundant message stays in the DOM but is visually hidden',
+      );
+  });
+
   test('atom format renders an inline placeholder with the type name and a reveal trigger', async function (this: RenderingTestContext, assert) {
     await renderTemplate({
       brokenUrl: NOT_FOUND_URL,
