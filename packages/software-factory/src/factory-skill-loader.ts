@@ -39,6 +39,12 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
   join(MONOREPO_ROOT, '.agents', 'skills'),
+  // Package-local interactive skills (`packages/software-factory/.agents/skills`)
+  // are the primary skill set for the runbook (interactive Claude Code) loop and
+  // also where the optional `boxel-ui-component-discovery` skill lives. Listing
+  // them here lets the orchestrator's resolver pick them up too when the
+  // matching flag (`--enable-boxel-ui-discovery`) is on.
+  join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
 /** Approximate characters per token for budget estimation. */
