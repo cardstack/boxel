@@ -1,9 +1,18 @@
-import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
+import { on } from '@ember/modifier';
+import {
+  FieldContainer,
+  GridContainer,
+  Button,
+  BoxelInput,
+} from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
   markdownEscape,
+  not,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
+
+import { chooseFile, identifyCard } from '@cardstack/runtime-common';
 
 import {
   field,
@@ -11,6 +20,7 @@ import {
   getFields,
   Component,
   FieldDef,
+  ImageDef,
   StringField,
   getFieldDescription,
 } from './card-api';
@@ -290,9 +300,109 @@ class Embedded extends Component<typeof BrandLogo> {
   </template>
 }
 
+class MarkFieldEdit extends Component<typeof MarkField> {
+  uploadImage = async () => {
+    let imageRef = identifyCard(ImageDef);
+    let file = await chooseFile(
+      imageRef ? { fileType: imageRef, fileTypeName: 'Image' } : undefined,
+    );
+    if (file?.url) {
+      this.args.set(file.url);
+    }
+  };
+
+  <template>
+    <div class='mark-field-edit'>
+      {{#if @model}}
+        <img
+          src={{@model}}
+          alt=''
+          class='mark-field-preview'
+          aria-hidden='true'
+        />
+      {{else}}
+        <div class='mark-field-preview mark-field-preview--empty' />
+      {{/if}}
+      <div class='mark-field-inputs'>
+        <BoxelInput
+          type='url'
+          value={{@model}}
+          @onInput={{@set}}
+          @disabled={{not @canEdit}}
+        />
+        {{#if @canEdit}}
+          <span class='mark-field-or'>or</span>
+          <Button
+            @kind='secondary'
+            @size='extra-small'
+            {{on 'click' this.uploadImage}}
+          >
+            Select Image
+          </Button>
+        {{/if}}
+      </div>
+    </div>
+    <style scoped>
+      .mark-field-edit {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .mark-field-preview {
+        flex-shrink: 0;
+        width: 3rem;
+        height: 3rem;
+        object-fit: contain;
+        border-radius: var(--boxel-border-radius-sm);
+        border: 1px solid var(--border, var(--boxel-border-color));
+        background-color: var(--muted, var(--boxel-100));
+      }
+      .mark-field-preview--empty {
+        background-image: repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 3px,
+          color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            )
+            3px,
+          color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            )
+            4px
+        );
+      }
+      .mark-field-inputs {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .mark-field-inputs :deep(input) {
+        flex: 1;
+        min-width: 0;
+      }
+      .mark-field-or {
+        flex-shrink: 0;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground, var(--boxel-400));
+      }
+    </style>
+  </template>
+}
+
 export class MarkField extends URLField {
   static displayName = 'Mark URL';
-  static embedded = class Embedded extends Component<typeof this> {
+  static edit = MarkFieldEdit;
+
+  static embedded = class Embedded extends Component<typeof MarkField> {
     <template>
       <img
         class='mark-image'
@@ -423,8 +533,14 @@ export default class BrandLogo extends FieldDef {
       let pairs: { key: keyof typeof model; label: string }[] = [
         { key: 'primaryMark1', label: 'Primary mark (light)' },
         { key: 'primaryMark2', label: 'Primary mark (dark)' },
-        { key: 'primaryMarkGreyscale1', label: 'Primary mark greyscale (light)' },
-        { key: 'primaryMarkGreyscale2', label: 'Primary mark greyscale (dark)' },
+        {
+          key: 'primaryMarkGreyscale1',
+          label: 'Primary mark greyscale (light)',
+        },
+        {
+          key: 'primaryMarkGreyscale2',
+          label: 'Primary mark greyscale (dark)',
+        },
         { key: 'secondaryMark1', label: 'Secondary mark (light)' },
         { key: 'secondaryMark2', label: 'Secondary mark (dark)' },
         {
@@ -447,7 +563,10 @@ export default class BrandLogo extends FieldDef {
         return '';
       }
       return rows
-        .map(({ label, url }) => `- ${markdownEscape(label)}: ${markdownLink(url, url)}`)
+        .map(
+          ({ label, url }) =>
+            `- ${markdownEscape(label)}: ${markdownLink(url, url)}`,
+        )
         .join('\n');
     }
     <template>{{this.text}}</template>
