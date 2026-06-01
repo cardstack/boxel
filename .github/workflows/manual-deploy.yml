@@ -73,29 +73,14 @@ jobs:
               description: 'Deployment started',
             });
 
-  # Temporarily inlined (CS-11143): the reusable docker-ecr workflow in
-  # cardstack/gh-actions caches via `type=gha`, which is a net loss for our
-  # large pnpm-fetch layers — observed cache transfer ~230s vs ~30s to just
-  # rerun the fetch. We call a local composite action instead that uses an
-  # ECR registry cache (same AWS region as the build runner, much faster).
-  # Once we're confident in the approach we can fold it back into the shared
-  # action.
   build-ai-bot:
     name: Build ai-bot Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-ai-bot-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/ai-bot/Dockerfile"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-ai-bot-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/ai-bot/Dockerfile"
 
   deploy-ai-bot:
     needs: [build-ai-bot, post-migrate-db]
@@ -112,20 +97,12 @@ jobs:
 
   build-bot-runner:
     name: Build bot-runner Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-bot-runner-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/bot-runner/Dockerfile"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-bot-runner-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/bot-runner/Dockerfile"
 
   deploy-bot-runner:
     needs: [build-bot-runner, post-migrate-db]
@@ -165,96 +142,56 @@ jobs:
 
   build-realm-server:
     name: Build realm-server Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-realm-server-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/realm-server/realm-server.Dockerfile"
-          build-args: |
-            "realm_server_script=scripts/start-${{ inputs.environment }}.sh"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-realm-server-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/realm-server.Dockerfile"
+      build-args: |
+        "realm_server_script=scripts/start-${{ inputs.environment }}.sh"
 
   build-prerender-manager:
     name: Build prerender manager Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-prerender-manager-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/realm-server/prerender-manager.Dockerfile"
-          build-args: |
-            "prerender_manager_script=scripts/start-prerender-manager.sh"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-prerender-manager-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/prerender-manager.Dockerfile"
+      build-args: |
+        "prerender_manager_script=scripts/start-prerender-manager.sh"
 
   build-prerender:
     name: Build prerender Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-prerender-server-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/realm-server/prerender.Dockerfile"
-          build-args: |
-            "prerender_script=scripts/start-prerender-${{ inputs.environment }}.sh"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-prerender-server-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/prerender.Dockerfile"
+      build-args: |
+        "prerender_script=scripts/start-prerender-${{ inputs.environment }}.sh"
 
   build-worker:
     name: Build worker Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-worker-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/realm-server/worker.Dockerfile"
-          build-args: |
-            "worker_script=scripts/start-worker-${{ inputs.environment }}.sh"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-worker-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/worker.Dockerfile"
+      build-args: |
+        "worker_script=scripts/start-worker-${{ inputs.environment }}.sh"
 
   build-pg-migration:
     name: Build pg-migration Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - id: build
-        uses: ./.github/actions/docker-build-ecr
-        with:
-          repository: "boxel-pg-migration-${{ inputs.environment }}"
-          environment: ${{ inputs.environment }}
-          dockerfile: "packages/postgres/Dockerfile"
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-pg-migration-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/postgres/Dockerfile"
 
   migrate-db:
     # use "deploy-host" and "build-realm-server" as deps so we can run
