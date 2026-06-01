@@ -742,27 +742,42 @@ module(basename(__filename), function () {
         let publishedRealmPath = new URL(resolvedPublishedRealmURL).pathname;
         let publishedRealmHost = new URL(resolvedPublishedRealmURL).host;
 
-        // Mount the freshly-published realm, then wait for its module file to
-        // be indexed WITHOUT reading the card — a card read would warm the
-        // module cache and mask the bug.
+        // Mount the freshly-published realm, then wait for BOTH the module
+        // file row AND the same-named instance row to be indexed, WITHOUT
+        // reading the card (a card read would warm the module cache and mask
+        // the bug). Both are required: the collision only triggers when the
+        // instance row is present so isIndexedCardInstance takes the
+        // instance-alias path and reaches the protocol-sensitive module
+        // probe. The indexer visits home.json after home.gts, so fetching as
+        // soon as only home.gts exists would let the request fall through to
+        // normal module serving and pass even when the collision logic is
+        // still broken.
         await testRealmServer.testingOnlyReconcile();
         await waitUntil(
           async () => {
-            let rows = await dbAdapter.execute(
-              `SELECT 1 FROM boxel_index WHERE realm_url = $1 AND url = $2 LIMIT 1`,
+            let rows = (await dbAdapter.execute(
+              `SELECT
+                 bool_or(url = $2) AS has_module,
+                 bool_or(type = 'instance' AND url = $3) AS has_instance
+               FROM boxel_index
+               WHERE realm_url = $1`,
               {
                 bind: [
                   resolvedPublishedRealmURL,
                   `${resolvedPublishedRealmURL}home.gts`,
+                  `${resolvedPublishedRealmURL}home.json`,
                 ],
               },
-            );
-            return rows.length > 0 ? rows : undefined;
+            )) as { has_module: boolean | null; has_instance: boolean | null }[];
+            return rows[0]?.has_module && rows[0]?.has_instance
+              ? rows
+              : undefined;
           },
           {
             timeout: 30_000,
             interval: 200,
-            timeoutMessage: 'published home module was not indexed',
+            timeoutMessage:
+              'published home module and instance were not both indexed',
           },
         );
 
