@@ -32,6 +32,7 @@ import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
 import assistantIcon from './ai-assist-icon.webp';
+import FallbackBanner from './fallback-banner';
 import NewSessionButton from './new-session-button';
 
 import type MatrixService from '../../services/matrix-service';
@@ -121,6 +122,10 @@ export default class AiAssistantPanel extends Component<Signature> {
             data-test-close-ai-assistant
           />
         </header>
+
+        {{#if this.matrixService.isUsingFallbackSystemCard}}
+          <FallbackBanner class='fallback-banner-slot' />
+        {{/if}}
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
           <AiAssistantPastSessionsList
@@ -324,6 +329,18 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .room {
         padding-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
+      }
+
+      .fallback-banner-slot {
+        position: absolute;
+        top: var(--ai-assistant-panel-header-height);
+        left: 0;
+        right: 0;
+        z-index: 9;
+      }
+      .fallback-banner-slot ~ * .room,
+      .fallback-banner-slot + .room {
+        padding-top: var(--ai-assistant-panel-padding);
       }
 
       @keyframes cycle-color-to-background {
