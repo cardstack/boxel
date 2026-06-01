@@ -4,7 +4,6 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
-import { autoUpdate } from '@floating-ui/dom';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
@@ -134,10 +133,7 @@ export default class OperatorModeOverlays extends Overlays {
                   @compact={{isCompact}}
                   class='overlay-type-label'
                   data-test-overlay-label
-                  {{this.trackLabelOverflow
-                    renderedCard.element
-                    adorn.getBoundaryElement
-                  }}
+                  {{adorn.positionLabel renderedCard.element}}
                   {{on 'mouseenter' this.cancelHoverClear}}
                   {{on 'mouseleave' this.scheduleHoverClear}}
                 >
@@ -361,151 +357,6 @@ export default class OperatorModeOverlays extends Overlays {
   private isCompact(cardEl: HTMLElement | undefined): boolean {
     return cardEl ? this.compactCards.has(cardEl) : false;
   }
-
-  // Positions the type-label tab manually inside the containing
-  // card's footprint, so its slope stays anchored to the hovered
-  // card and long type-names get truncated with an ellipsis when
-  // they would otherwise spill into the chrome around the
-  // containing card.
-  //
-  // Behavior:
-  // - While the natural label width fits the card's interior (card
-  //   width minus the top-right corner radius plus 4px stroke
-  //   bleed), the label is anchored top-left at the card; otherwise
-  //   it pins its right edge to the corner-radius point and grows
-  //   leftward. (4px hysteresis keeps sub-pixel wobble from
-  //   flipping the placement decision.)
-  // - If there isn't room above the card inside the boundary, the
-  //   label flips below; a [data-side] attribute drives the CSS
-  //   that mirrors the clip-path vertically so the slope still
-  //   points toward the card.
-  // - The label's max-width is capped to the space available
-  //   between the anchored edge and the boundary; CSS
-  //   text-overflow:ellipsis truncates the type-name rather than
-  //   letting the label spill outside the containing card.
-  //
-  // The boundary comes from AdornContext's yielded
-  // `getBoundaryElement` — the visible container the enclosing
-  // <AdornContext> was mounted inside of.
-  //
-  // Floating-ui's `autoUpdate` only triggers the re-fire on scroll,
-  // resize, and ancestor mutations; the placement math is direct
-  // because floating-ui's flip + shift + size middleware aren't a
-  // clean fit for the right-anchored-with-truncation pattern.
-  private trackLabelOverflow = modifier(
-    (
-      label: HTMLElement,
-      [cardEl, getBoundaryElement]: [
-        HTMLElement | undefined,
-        (el: HTMLElement) => HTMLElement | null,
-      ],
-    ) => {
-      if (!cardEl) {
-        return undefined;
-      }
-      // Resolve the boundary from the label, not the card: the label
-      // is rendered inside the overlays' <AdornContext>, whereas the
-      // card lives in a sibling subtree (the stack-item preview), so
-      // only the label can walk up to the context marker.
-      let boundary = getBoundaryElement(label);
-      if (!boundary) {
-        return undefined;
-      }
-
-      label.style.position = 'absolute';
-      label.style.top = '0';
-      label.style.left = '0';
-
-      let update = () => {
-        label.style.maxWidth = 'none';
-        let labelWidth = label.scrollWidth;
-        let labelHeight = label.offsetHeight;
-
-        let cardRect = cardEl.getBoundingClientRect();
-        let boundaryRect = boundary.getBoundingClientRect();
-        let radius =
-          parseFloat(window.getComputedStyle(cardEl).borderTopRightRadius) || 0;
-        let availableWithinCard = cardRect.width - radius + 4;
-        let wasOverflowing = label.hasAttribute('data-overflow');
-        let shouldOverflow = wasOverflowing
-          ? !(labelWidth + 4 < availableWithinCard)
-          : labelWidth > availableWithinCard;
-        if (shouldOverflow) {
-          label.setAttribute('data-overflow', '');
-        } else {
-          label.removeAttribute('data-overflow');
-        }
-
-        let spaceAbove = cardRect.top - boundaryRect.top;
-        let spaceBelow = boundaryRect.bottom - cardRect.bottom;
-        let side: 'top' | 'bottom' =
-          spaceAbove >= labelHeight + 2 || spaceAbove >= spaceBelow
-            ? 'top'
-            : 'bottom';
-        label.setAttribute('data-side', side);
-
-        let anchorLeftX: number;
-        if (shouldOverflow) {
-          let anchorRightX = cardRect.right - (radius - 4);
-          let unclampedLeft = anchorRightX - labelWidth;
-          let boundaryLeftLimit = boundaryRect.left + 4;
-          if (unclampedLeft >= boundaryLeftLimit) {
-            // Natural width fits inside the boundary — use
-            // max-content so the browser sizes to the true intrinsic
-            // width (scrollWidth is integer-rounded, so writing it
-            // back as `max-width: Npx` would shave a sub-pixel
-            // remainder and trip text-overflow:ellipsis even though
-            // there's room to spare).
-            anchorLeftX = unclampedLeft;
-            label.style.maxWidth = 'max-content';
-          } else {
-            // Label can't fit inside the boundary at natural width;
-            // clamp the un-anchored edge and let the ellipsis show.
-            anchorLeftX = boundaryLeftLimit;
-            let width = Math.max(0, anchorRightX - anchorLeftX);
-            label.style.maxWidth = width + 'px';
-          }
-        } else {
-          anchorLeftX = cardRect.left - 4;
-          label.style.maxWidth = 'max-content';
-        }
-        let anchorTopY =
-          side === 'top' ? cardRect.top - labelHeight - 2 : cardRect.bottom + 2;
-
-        // The label's anchor positions (anchorLeftX, anchorTopY) are
-        // in viewport coordinates. With `position: absolute`, the
-        // inline `left`/`top` write to the offset-parent's local
-        // coordinate space — which can be scaled relative to the
-        // viewport (e.g. `#ember-testing` applies `scale(0.5)` in
-        // the test runner). Read the offset parent's rect vs its
-        // unscaled `offsetWidth/offsetHeight` to recover the scale
-        // factors, then convert the viewport anchor into the offset
-        // parent's local space.
-        let offsetParent = label.offsetParent as HTMLElement | null;
-        let parentRect = offsetParent
-          ? offsetParent.getBoundingClientRect()
-          : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
-        let scaleX =
-          offsetParent && offsetParent.offsetWidth > 0
-            ? parentRect.width / offsetParent.offsetWidth
-            : 1;
-        let scaleY =
-          offsetParent && offsetParent.offsetHeight > 0
-            ? parentRect.height / offsetParent.offsetHeight
-            : 1;
-        if (!Number.isFinite(scaleX) || scaleX === 0) {
-          scaleX = 1;
-        }
-        if (!Number.isFinite(scaleY) || scaleY === 0) {
-          scaleY = 1;
-        }
-        label.style.left = (anchorLeftX - parentRect.left) / scaleX + 'px';
-        label.style.top = (anchorTopY - parentRect.top) / scaleY + 'px';
-      };
-
-      return autoUpdate(cardEl, label, update);
-    },
-  );
 
   protected override shouldDelayHoverClear(): boolean {
     return this.openDropdownCount > 0;
