@@ -669,6 +669,15 @@ interface Options {
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
   fromScratchIndexPriority?: number;
+  // When set, the realm mounts and serves source but does not run a
+  // from-scratch index on startup, even when its index is empty (new). Card
+  // definitions are still resolved lazily on demand via the prerenderer, so
+  // source serving and definition lookup keep working. Used by the
+  // realm-server test stack, whose suite runs its own in-process realms and
+  // only needs the boot realms to serve source — skipping their boot index
+  // removes both the startup wait and the prerender-pool contention it would
+  // otherwise create with the tests.
+  skipBootIndex?: true;
 }
 
 interface UpdateItem {
@@ -700,6 +709,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
+  #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
@@ -842,6 +852,7 @@ export class Realm {
     this.#queue = queue;
     this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#matrixClient = matrixClient;
@@ -2475,7 +2486,10 @@ export class Realm {
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      if (isNewIndex || this.#fullIndexOnStartup) {
+      if (this.#skipBootIndex) {
+        // Mount-and-serve only: no from-scratch index, even on a new index.
+        // Definitions resolve lazily via the prerenderer on first lookup.
+      } else if (isNewIndex || this.#fullIndexOnStartup) {
         if (this.#fullIndexOnStartup) {
           // CS-11245: bootstrap realms (kind='bootstrap': base,
           // catalog, skills, …) full-index on every realm-server
