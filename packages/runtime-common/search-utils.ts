@@ -322,6 +322,7 @@ type SearchableRealm = {
     opts?: {
       cacheOnlyDefinitions?: boolean;
       skipQueryBackedExpansion?: boolean;
+      omitIncluded?: boolean;
     },
   ) => Promise<LinkableCollectionDocument>;
   url?: string;
@@ -333,6 +334,7 @@ export async function searchRealms(
   opts?: {
     cacheOnlyDefinitions?: boolean;
     skipQueryBackedExpansion?: boolean;
+    omitIncluded?: boolean;
   },
 ): Promise<LinkableCollectionDocument> {
   let realmEntries = realms

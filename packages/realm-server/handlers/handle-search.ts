@@ -66,6 +66,13 @@ export default function handleSearch(opts: {
     // re-query, so the eager closure is a wasted round-trip in this
     // path. Same gating as `cacheOnlyDefinitions`.
     let skipQueryBackedExpansion = cacheOnlyDefinitions;
+    // Inside a prerender the host never reads the response's
+    // `included[]` — it resolves every linked card by URL via
+    // card+source (query fields from the seed umbrella, static links via
+    // a lazy-loading `not-loaded` sentinel). Omit `included[]` entirely:
+    // seed the root result cards and skip the static-link BFS that builds
+    // it. Same gating as `cacheOnlyDefinitions`.
+    let omitIncluded = cacheOnlyDefinitions;
     // The host's `_federated-search` fetch wrapper stamps
     // `x-boxel-job-priority` while rendering inside a prerender tab.
     // Threading it into search opts here lets `CachingDefinitionLookup`
@@ -80,10 +87,12 @@ export default function handleSearch(opts: {
     let searchOpts: {
       cacheOnlyDefinitions?: true;
       skipQueryBackedExpansion?: true;
+      omitIncluded?: true;
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (skipQueryBackedExpansion) searchOpts.skipQueryBackedExpansion = true;
+    if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;

@@ -289,6 +289,7 @@ const ALL_TEST_FILES: string[] = [
   './node-realm-test',
   './session-room-queries-test',
   './indexing-event-sink-test',
+  './skip-query-backed-expansion-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful
