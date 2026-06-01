@@ -250,6 +250,150 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       }
     },
 
+  'PackageShimHandler error message names the correct subpath when the symbol is exported from another shim':
+    async (assert) => {
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      // The canonical footgun: `markdownToHtml` lives on the
+      // `/marked-sync` subpath, not on the main runtime-common barrel.
+      handler.shimModule('@cardstack/runtime-common', {
+        Loader: class {},
+        baseRealm: 'https://cardstack.com/base/',
+      });
+      handler.shimModule('@cardstack/runtime-common/marked-sync', {
+        markdownToHtml: () => '',
+      });
+      let response = await handler.handle(
+        new Request(`${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`),
+      );
+      let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
+      try {
+        void shimmed.markdownToHtml;
+        assert.ok(false, 'should have thrown');
+      } catch (err: any) {
+        let message = err?.message ?? '';
+        assert.ok(
+          /has no exported member 'markdownToHtml'/.test(message),
+          `error still names the missing export, got: ${message}`,
+        );
+        assert.ok(
+          message.includes(
+            'It is exported from `@cardstack/runtime-common/marked-sync`',
+          ),
+          `error names the correct source subpath, got: ${message}`,
+        );
+        assert.ok(
+          message.includes(
+            "try `import { markdownToHtml } from '@cardstack/runtime-common/marked-sync'`",
+          ),
+          `error shows a copy-pasteable corrected import, got: ${message}`,
+        );
+        // The suggestion replaces the generic "wrong module ID" advice.
+        assert.notOk(
+          /you may be importing from the wrong module ID/.test(message),
+          `generic fallback advice is dropped when we have a concrete suggestion, got: ${message}`,
+        );
+      }
+    },
+
+  'PackageShimHandler error message lists every shim that owns the symbol when more than one matches':
+    async (assert) => {
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimModule('@cardstack/runtime-common', { Loader: class {} });
+      handler.shimModule('mod-a', { sharedHelper: () => 1 });
+      handler.shimModule('mod-b', { sharedHelper: () => 2 });
+      let response = await handler.handle(
+        new Request(`${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`),
+      );
+      let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
+      try {
+        void shimmed.sharedHelper;
+        assert.ok(false, 'should have thrown');
+      } catch (err: any) {
+        let message = err?.message ?? '';
+        assert.ok(
+          message.includes('`mod-a`') && message.includes('`mod-b`'),
+          `error lists every shim that owns the symbol, got: ${message}`,
+        );
+        assert.ok(
+          /It is exported from `mod-a` and `mod-b`/.test(message),
+          `error joins multiple sources readably, got: ${message}`,
+        );
+      }
+    },
+
+  'PackageShimHandler error message falls back to the verbatim message for a typo no shim owns':
+    async (assert) => {
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimModule('@cardstack/runtime-common', { Loader: class {} });
+      handler.shimModule('@cardstack/runtime-common/marked-sync', {
+        markdownToHtml: () => '',
+      });
+      let response = await handler.handle(
+        new Request(`${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`),
+      );
+      let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
+      try {
+        // Misspelled — no shim owns `markdownToHtm`, so we can't
+        // suggest a subpath and keep today's generic guidance.
+        void shimmed.markdownToHtm;
+        assert.ok(false, 'should have thrown');
+      } catch (err: any) {
+        let message = err?.message ?? '';
+        assert.ok(
+          /has no exported member 'markdownToHtm'/.test(message),
+          `error names the missing export, got: ${message}`,
+        );
+        assert.ok(
+          /you may be importing from the wrong module ID/.test(message),
+          `error keeps the verbatim fallback advice, got: ${message}`,
+        );
+        assert.notOk(
+          /It is exported from/.test(message),
+          `error does not fabricate a source when none matches, got: ${message}`,
+        );
+      }
+    },
+
+  'PackageShimHandler suggests an async-shimmed module once it has been served':
+    async (assert) => {
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimModule('@cardstack/runtime-common', { Loader: class {} });
+      handler.shimAsyncModule({
+        id: '@cardstack/runtime-common/marked-sync',
+        resolve: async () => ({ markdownToHtml: () => '' }),
+      });
+      // Serve the async module so its exports get cached for lookup.
+      await handler.handle(
+        new Request(
+          `${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common/marked-sync`,
+        ),
+      );
+      let response = await handler.handle(
+        new Request(`${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`),
+      );
+      let shimmed = (response as any)?.[Symbol.for('shimmed-module')];
+      try {
+        void shimmed.markdownToHtml;
+        assert.ok(false, 'should have thrown');
+      } catch (err: any) {
+        let message = err?.message ?? '';
+        assert.ok(
+          message.includes(
+            'It is exported from `@cardstack/runtime-common/marked-sync`',
+          ),
+          `async shim is searchable after being served, got: ${message}`,
+        );
+      }
+    },
+
   'returns the resolved module on first attempt when there is no failure':
     async (assert) => {
       let calls = 0;

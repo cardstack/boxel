@@ -93,9 +93,19 @@ const RUNTIME_PROBE_NAMES = new Set<string>([
 // `ALLOW_MISSING_NAMED_EXPORTS`, the Proxy returns `undefined` for
 // missing string keys (pre-Proxy behavior). Modules that
 // intentionally expose a dynamic shape can opt out this way.
+//
+// `findExportSources` is an optional hook supplied by the caller
+// (`PackageShimHandler`). Given a missing export name, it returns the
+// human-friendly module IDs of every currently-known shimmed module
+// that owns an own-property with that name, so the throw path can name
+// the correct subpath. It stays optional so tests that construct the
+// wrapper directly (without a handler/virtual-network) keep working.
+export type FindExportSources = (symbol: string) => string[];
+
 export function wrapWithStrictNamespace(
   moduleIdentifier: string,
   namespace: ModuleLike,
+  findExportSources?: FindExportSources,
 ): ModuleLike {
   if (
     namespace == null ||
@@ -126,16 +136,60 @@ export function wrapWithStrictNamespace(
       if (RUNTIME_PROBE_NAMES.has(prop)) {
         return Reflect.get(target, prop, receiver);
       }
+      let sources = findExportSources?.(prop) ?? [];
       throw new ReferenceError(
-        `Module '${moduleIdentifier}' has no exported member '${prop}'. ` +
-          `If this is a card, check the import statement that names '${prop}' — ` +
-          `you may be importing from the wrong module ID. ` +
-          `(JavaScript silently produces \`undefined\` for missing named imports, ` +
-          `which then surfaces as confusing downstream errors. This Proxy ` +
-          `surfaces the missing import directly.)`,
+        buildMissingExportMessage(moduleIdentifier, prop, sources),
       );
     },
   });
+}
+
+// JS-undefined explanation appended to every missing-export error,
+// whether or not we found a better source to point at.
+const MISSING_EXPORT_TAIL =
+  `(JavaScript silently produces \`undefined\` for missing named imports, ` +
+  `which then surfaces as confusing downstream errors. This Proxy ` +
+  `surfaces the missing import directly.)`;
+
+function buildMissingExportMessage(
+  moduleIdentifier: string,
+  prop: string,
+  sources: string[],
+): string {
+  let head = `Module '${moduleIdentifier}' has no exported member '${prop}'. `;
+  if (sources.length === 0) {
+    // No shimmed module owns this name (typo, genuinely-missing
+    // export, …) — keep the original generic guidance verbatim.
+    return (
+      head +
+      `If this is a card, check the import statement that names '${prop}' — ` +
+      `you may be importing from the wrong module ID. ` +
+      MISSING_EXPORT_TAIL
+    );
+  }
+  // One or more shimmed modules export this name — point the author at
+  // the correct subpath(s) and give a copy-pasteable corrected import
+  // using the first match.
+  return (
+    head +
+    `It is exported from ${formatModuleList(sources)} — try ` +
+    `\`import { ${prop} } from '${sources[0]}'\`. ` +
+    MISSING_EXPORT_TAIL
+  );
+}
+
+// Renders module IDs as a backtick-quoted, comma-separated list with
+// an Oxford "and" before the last entry: `a`; `a` and `b`; `a`, `b`,
+// and `c`.
+function formatModuleList(modules: string[]): string {
+  let quoted = modules.map((m) => `\`${m}\``);
+  if (quoted.length === 1) {
+    return quoted[0];
+  }
+  if (quoted.length === 2) {
+    return `${quoted[0]} and ${quoted[1]}`;
+  }
+  return `${quoted.slice(0, -1).join(', ')}, and ${quoted[quoted.length - 1]}`;
 }
 
 // Backoff schedule applied between retries for a failed
@@ -306,6 +360,14 @@ export class PackageShimHandler {
     string,
     (rest: string) => Promise<ModuleLike>
   >();
+  // Resolved exports of every shimmed module we currently know about,
+  // keyed by trimmed module identifier. Synchronously-shimmed modules
+  // land here at registration; async-shimmed ones are cached the first
+  // time they resolve through `handle`. Used by `findExportSources` to
+  // suggest the correct subpath when an importer names an export that
+  // lives on a *different* shim. Best-effort: an async shim that hasn't
+  // been served yet won't be searchable until it has.
+  private resolvedExports = new Map<string, ModuleLike>();
   private log = logger('shim-handler');
 
   constructor(resolveImport: (moduleIdentifier: string) => string) {
@@ -328,7 +390,11 @@ export class PackageShimHandler {
           // existing keys; only missing-key string reads change
           // behavior.
           (response as any)[Symbol.for('shimmed-module')] =
-            wrapWithStrictNamespace(request.url, shimmedModule);
+            wrapWithStrictNamespace(
+              request.url,
+              shimmedModule,
+              this.findExportSources,
+            );
           return response;
         }
         return null;
@@ -345,11 +411,38 @@ export class PackageShimHandler {
 
   shimModule(moduleIdentifier: string, module: ModuleLike) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    this.moduleIds.set(
-      trimModuleIdentifier(moduleIdentifier),
-      async () => module,
-    );
+    let key = trimModuleIdentifier(moduleIdentifier);
+    this.moduleIds.set(key, async () => module);
+    this.rememberExports(key, module);
   }
+
+  // Records a resolved module's exports for `findExportSources`.
+  // Non-object resolutions (rare, but resolvers can return anything)
+  // are skipped — there are no own-properties to search.
+  private rememberExports(key: string, module: ModuleLike) {
+    if (module != null && typeof module === 'object') {
+      this.resolvedExports.set(key, module);
+    }
+  }
+
+  // Lookup hook handed to `wrapWithStrictNamespace`. Given a missing
+  // export name, returns the import-friendly IDs of every known shim
+  // that owns an own-property with that name. Uses `hasOwnProperty`
+  // (not `in`) for the same reason the Proxy does: only own properties
+  // are real exports — inherited Object.prototype names aren't.
+  private findExportSources = (symbol: string): string[] => {
+    let matches: string[] = [];
+    for (let [moduleId, exports] of this.resolvedExports) {
+      if (
+        exports != null &&
+        typeof exports === 'object' &&
+        Object.prototype.hasOwnProperty.call(exports, symbol)
+      ) {
+        matches.push(toImportSpecifier(moduleId));
+      }
+    }
+    return matches;
+  };
 
   shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
     // Wrap each user-supplied resolver with bounded retry against the
@@ -381,9 +474,14 @@ export class PackageShimHandler {
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {
-    let resolver = this.moduleIds.get(trimModuleIdentifier(url));
+    let key = trimModuleIdentifier(url);
+    let resolver = this.moduleIds.get(key);
     if (resolver) {
-      return await resolver();
+      let module = await resolver();
+      // Cache so an async-shimmed module becomes searchable by
+      // `findExportSources` once it has been served at least once.
+      this.rememberExports(key, module);
+      return module;
     }
     return undefined;
   }
@@ -394,10 +492,22 @@ export class PackageShimHandler {
     for (const [modulePrefix, resolveModule] of this.modulePrefixes) {
       if (url.startsWith(modulePrefix)) {
         let rest = url.slice(modulePrefix.length);
-        return await resolveModule(rest);
-        break;
+        let module = await resolveModule(rest);
+        this.rememberExports(trimModuleIdentifier(url), module);
+        return module;
       }
     }
     return undefined;
   }
+}
+
+// Turns the internal module key (a `https://packages/...` fake-origin
+// URL for shimmed packages) back into the bare import specifier an
+// author would actually write — `@cardstack/runtime-common/marked-sync`
+// rather than `https://packages/@cardstack/runtime-common/marked-sync`.
+// Real-URL modules (no fake origin) are returned as-is.
+function toImportSpecifier(moduleId: string): string {
+  return moduleId.startsWith(PACKAGES_FAKE_ORIGIN)
+    ? moduleId.slice(PACKAGES_FAKE_ORIGIN.length)
+    : moduleId;
 }
