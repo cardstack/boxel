@@ -784,8 +784,26 @@ export default class StoreService extends Service implements StoreInterface {
       // the card isn't actually saved yet, so do nothing
       return;
     }
+    // Snapshot the consumers BEFORE removing the deleted instance from the
+    // store, then rewrite each consumer's slot to a link-not-found sentinel so
+    // the placeholder render takes over without a navigation. This is the same
+    // rewrite the realm-invalidation path performs when a delete originates
+    // elsewhere — but that path keys off the deleted id still being loaded when
+    // its invalidation event arrives, and the eager eviction below removes it
+    // first. So for a delete initiated in this session the invalidation handler
+    // has nothing to reload, and without this the consumer's render stays stale
+    // on the now-orphaned card object until a reload.
+    let instance = this.store.getCard(id);
+    let api = instance ? await this.cardService.getAPI() : undefined;
+    let consumers =
+      api && instance ? this.store.consumersOf(api, instance) : [];
     this.unsubscribeFromInstance(id);
     this.store.delete(id);
+    if (api) {
+      for (let consumer of consumers) {
+        api.notifyLinksToTargetDeleted(consumer, id);
+      }
+    }
     await this.cardService.fetchJSON(id, { method: 'DELETE' });
   }
 
