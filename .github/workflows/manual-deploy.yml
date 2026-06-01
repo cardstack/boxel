@@ -76,7 +76,6 @@ jobs:
   build-ai-bot:
     name: Build ai-bot Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-ai-bot-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
@@ -98,7 +97,6 @@ jobs:
   build-bot-runner:
     name: Build bot-runner Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-bot-runner-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
@@ -143,7 +141,6 @@ jobs:
   build-realm-server:
     name: Build realm-server Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-realm-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
@@ -154,7 +151,6 @@ jobs:
   build-prerender-manager:
     name: Build prerender manager Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-prerender-manager-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
@@ -165,7 +161,6 @@ jobs:
   build-prerender:
     name: Build prerender Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-prerender-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
@@ -176,7 +171,6 @@ jobs:
   build-worker:
     name: Build worker Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-worker-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
@@ -187,7 +181,6 @@ jobs:
   build-pg-migration:
     name: Build pg-migration Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
     with:
       repository: "boxel-pg-migration-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
