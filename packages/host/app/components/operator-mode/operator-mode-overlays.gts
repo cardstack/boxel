@@ -70,19 +70,6 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
 
-// The label's outward growth is bounded by the visible outer
-// container of adorn-decorated items. We find that container by
-// walking up to the closest `<AdornContext>` marker, then taking
-// its parent element: AdornContext itself renders as
-// `display: contents` so it doesn't disrupt the consumer's layout,
-// which means its own bounding rect is empty — but its parent is
-// the element the consumer mounted the context inside of, and
-// that's the visual region we want.
-function findAdornLabelBoundary(cardEl: HTMLElement): HTMLElement | null {
-  let marker = cardEl.closest<HTMLElement>('.adorn-context');
-  return marker?.parentElement ?? null;
-}
-
 // Adorn's `@compact` variant shrinks the label and selection chip
 // for narrow atom-format cards. The threshold mirrors what the
 // previous CSS @container query used: cards that are wider than 2:1
@@ -107,7 +94,7 @@ export default class OperatorModeOverlays extends Overlays {
   }
 
   <template>
-    <AdornContext>
+    <AdornContext as |adorn|>
       {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
         {{#let
           renderedCard.cardDefOrId
@@ -120,7 +107,8 @@ export default class OperatorModeOverlays extends Overlays {
           {{#if (or isSelected isHovered)}}
             <div
               class={{cn
-                'actions-overlay adorn-stroke'
+                'actions-overlay'
+                adorn.strokeClass
                 selected=isSelected
                 hovered=isHovered
                 field=(this.isField renderedCard)
@@ -146,7 +134,10 @@ export default class OperatorModeOverlays extends Overlays {
                   @compact={{isCompact}}
                   class='overlay-type-label'
                   data-test-overlay-label
-                  {{this.trackLabelOverflow renderedCard.element}}
+                  {{this.trackLabelOverflow
+                    renderedCard.element
+                    adorn.getBoundaryElement
+                  }}
                   {{on 'mouseenter' this.cancelHoverClear}}
                   {{on 'mouseleave' this.scheduleHoverClear}}
                 >
@@ -171,7 +162,7 @@ export default class OperatorModeOverlays extends Overlays {
                       <:trigger as |bindings|>
                         <IconButton
                           @icon={{DotsVertical}}
-                          class='adorn-label-menu'
+                          class='overlay-label-menu'
                           aria-label='Options'
                           data-test-overlay-more-options
                           {{bindings}}
@@ -200,7 +191,7 @@ export default class OperatorModeOverlays extends Overlays {
               {{#if (this.isButtonDisplayed 'select' renderedCard)}}
                 <button
                   type='button'
-                  class='adorn-select-button'
+                  class='overlay-select-button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
                   {{on 'click' (fn @toggleSelect cardDefOrId)}}
                   aria-label='select card'
@@ -229,8 +220,8 @@ export default class OperatorModeOverlays extends Overlays {
          underlying card is selected. AdornLabel reads
          `--adorn-label-bg` from any cascading ancestor; setting it here
          propagates down through the rendered label. The hover /
-         selection outline is supplied by AdornContext via the
-         `adorn-stroke` class on the overlay. */
+         selection outline is supplied by AdornContext via the stroke
+         class it yields, applied to the overlay above. */
       .actions-overlay.selected {
         --adorn-label-bg: var(--adorn-accent);
       }
@@ -245,7 +236,7 @@ export default class OperatorModeOverlays extends Overlays {
         pointer-events: auto;
         z-index: 1;
       }
-      .adorn-label-menu {
+      .overlay-label-menu {
         width: 18px;
         height: 18px;
         margin-inline-start: 0;
@@ -256,13 +247,13 @@ export default class OperatorModeOverlays extends Overlays {
         --boxel-icon-button-width: 18px;
         --boxel-icon-button-height: 18px;
       }
-      .adorn-label-menu:hover {
+      .overlay-label-menu:hover {
         background: rgba(0, 0, 0, 0.12);
       }
       /* Selection-toggle button: positions the AdornSelectChip in
          the bottom-right corner of the overlay and turns it into an
          interactive control. */
-      .adorn-select-button {
+      .overlay-select-button {
         position: absolute;
         bottom: 4px;
         right: 4px;
@@ -276,20 +267,20 @@ export default class OperatorModeOverlays extends Overlays {
       /* Field overlays (containsMany items, linksToMany items) don't get the
          select indicator — see isButtonDisplayed('select'). The label tab is
          still useful so it stays. */
-      .actions-overlay.field .adorn-select-button {
+      .actions-overlay.field .overlay-select-button {
         display: none;
       }
       /* Compact-mode sizing for the operator-mode-specific elements
          (the menu trigger and the select button). The AdornLabel /
          AdornSelectChip primitives get their compact variant from
          the `@compact` arg we pass to AdornContext. */
-      .actions-overlay.compact .adorn-label-menu {
+      .actions-overlay.compact .overlay-label-menu {
         width: 14px;
         height: 14px;
         --boxel-icon-button-width: 14px;
         --boxel-icon-button-height: 14px;
       }
-      .actions-overlay.compact .adorn-select-button {
+      .actions-overlay.compact .overlay-select-button {
         bottom: 2px;
         right: 2px;
       }
@@ -389,21 +380,26 @@ export default class OperatorModeOverlays extends Overlays {
   //   text-overflow:ellipsis truncates the type-name rather than
   //   letting the label spill outside the containing card.
   //
-  // The boundary is the closest enclosing rendered-card wrapper
-  // (`[data-boxel-card-id]`) — i.e. the card this card is embedded
-  // in. Top-level cards fall back to the operator-mode stack item's
-  // content area.
+  // The boundary comes from AdornContext's yielded
+  // `getBoundaryElement` — the visible container the enclosing
+  // <AdornContext> was mounted inside of.
   //
   // Floating-ui's `autoUpdate` only triggers the re-fire on scroll,
   // resize, and ancestor mutations; the placement math is direct
   // because floating-ui's flip + shift + size middleware aren't a
   // clean fit for the right-anchored-with-truncation pattern.
   private trackLabelOverflow = modifier(
-    (label: HTMLElement, [cardEl]: [HTMLElement | undefined]) => {
+    (
+      label: HTMLElement,
+      [cardEl, getBoundaryElement]: [
+        HTMLElement | undefined,
+        (el: HTMLElement) => HTMLElement | null,
+      ],
+    ) => {
       if (!cardEl) {
         return undefined;
       }
-      let boundary = findAdornLabelBoundary(cardEl);
+      let boundary = getBoundaryElement(cardEl);
       if (!boundary) {
         return undefined;
       }
