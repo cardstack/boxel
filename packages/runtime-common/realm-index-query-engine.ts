@@ -102,6 +102,19 @@ type Options = {
   // so that key is the per-field "is this query-backed?" signal at
   // follow time.
   skipQueryBackedExpansion?: boolean;
+  // When true, `loadLinks` seeds the top-level result cards
+  // (`populateQueryFields` on the roots) and then returns an empty
+  // `included[]` — the transitive static-link BFS, the deeper-layer
+  // `populateQueryFields`, and the clone-into-`included` step are all
+  // skipped. Set by the realm-server search handlers when the request
+  // originates inside a prerender: the host resolves every linked card
+  // by URL via card+source (query fields from the seed umbrella, static
+  // links via a `not-loaded` sentinel that lazy-loads), so the response's
+  // `included[]` is dead weight. Strictly prerender-scoped — live /
+  // external `_federated-search` callers still receive compound documents.
+  // Implies the query-backed `${field}.N` sub-entry stripping
+  // (see `skipQueryBackedExpansion`) so the seeded roots stay orphan-free.
+  omitIncluded?: boolean;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -1254,6 +1267,50 @@ export class RealmIndexQueryEngine {
         throw err;
       }
 
+      // Step 1b: strip `fieldName.N` sub-entries from query-backed fields.
+      // The host deserializer treats every per-item entry as a
+      // follow-able relationship and expects its target in `included[]`,
+      // so leaving them on the wire alongside an omitted / query-backed
+      // `included[]` produces orphan-link errors. The umbrella entry
+      // (`fieldName`) stays — it carries `links.search` and
+      // `data: [array of IDs]` for the host's per-URL hydration path.
+      // Runs for both the query-backed-only prerender skip and the
+      // broader `omitIncluded` short-circuit below.
+      if (opts?.skipQueryBackedExpansion || opts?.omitIncluded) {
+        for (let { resource } of layer) {
+          if (!resource.relationships) {
+            continue;
+          }
+          for (let fieldName of Object.keys(resource.relationships)) {
+            let umbrella = resource.relationships[fieldName];
+            if (
+              !umbrella ||
+              Array.isArray(umbrella) ||
+              !umbrella.links?.search
+            ) {
+              continue;
+            }
+            for (let key of Object.keys(resource.relationships)) {
+              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
+                delete resource.relationships[key];
+              }
+            }
+          }
+        }
+      }
+
+      // Prerender included-omission: the host never reads the search
+      // response's `included[]` — it resolves every linked card by URL
+      // via card+source (query fields from the seed umbrella written by
+      // `populateQueryFields` above; static links via a `not-loaded`
+      // sentinel that lazy-loads). Once the root result cards are seeded,
+      // the transitive static-link BFS (Steps 2-5) and the deeper-layer
+      // `populateQueryFields` are pure waste, so stop after the root
+      // layer and return an empty `included[]`. Strictly prerender-scoped.
+      if (opts?.omitIncluded) {
+        break;
+      }
+
       // Step 2: walk every resource's relationships, classify each link,
       // and accumulate URL sets for the batched DB queries.
       type Entry = {
@@ -1282,31 +1339,6 @@ export class RealmIndexQueryEngine {
           : opts?.linkFields
             ? { ...opts, linkFields: undefined }
             : opts;
-        if (activeOpts?.skipQueryBackedExpansion && resource.relationships) {
-          // Strip `fieldName.N` sub-entries from query-backed fields
-          // before traversal: the host deserializer treats every
-          // per-item entry as a follow-able relationship and expects
-          // its target in `included[]`, so leaving them on the wire
-          // alongside an empty `included[]` produces orphan-link
-          // errors. The umbrella entry (`fieldName`) stays — it
-          // carries `links.search` and `data: [array of IDs]` for the
-          // host's per-URL hydration path.
-          for (let fieldName of Object.keys(resource.relationships)) {
-            let umbrella = resource.relationships[fieldName];
-            if (
-              !umbrella ||
-              Array.isArray(umbrella) ||
-              !umbrella.links?.search
-            ) {
-              continue;
-            }
-            for (let key of Object.keys(resource.relationships)) {
-              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
-                delete resource.relationships[key];
-              }
-            }
-          }
-        }
         let processed = new Set<string>();
 
         for (let entry of relationshipEntries(resource.relationships)) {

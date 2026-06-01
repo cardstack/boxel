@@ -5124,6 +5124,7 @@ export class Realm {
     opts?: {
       cacheOnlyDefinitions?: boolean;
       skipQueryBackedExpansion?: boolean;
+      omitIncluded?: boolean;
     },
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
@@ -5133,6 +5134,7 @@ export class Realm {
       ...(opts?.skipQueryBackedExpansion
         ? { skipQueryBackedExpansion: true }
         : {}),
+      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
     });
   }
 
@@ -5194,6 +5196,11 @@ export class Realm {
         // instance-GET); the eager closure is a wasted round-trip in
         // the prerender path.
         skipQueryBackedExpansion: duringPrerender,
+        // Inside a prerender the host discards the response's
+        // `included[]` entirely (it resolves every linked card by URL
+        // via card+source), so omit it: seed the root result cards and
+        // skip the static-link BFS that would otherwise build it.
+        omitIncluded: duringPrerender,
       });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
