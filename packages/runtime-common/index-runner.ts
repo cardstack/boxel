@@ -13,6 +13,7 @@ import {
   SupportedMimeType,
   jobIdentity,
   Deferred,
+  isBrowserTestEnv,
   RealmPaths,
   type IndexWriter,
   type Batch,
@@ -189,6 +190,18 @@ export class IndexRunner {
       current.#jobInfo,
       current.#virtualNetwork,
     );
+    // Announce the job at kickoff — before invalidation discovery and
+    // pre-warm — so the dashboard shows it immediately. The total starts
+    // at 0 and is filled in by the first `file-visited` once the
+    // pre-warm + invalidation counts are known.
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'from-scratch',
+      totalFiles: 0,
+      files: [],
+    });
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
@@ -221,19 +234,29 @@ export class IndexRunner {
     let allRealmCardModules = Object.keys(
       discoverResult.filesystemMtimes,
     ).filter(hasCardExtension);
-    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    // Pre-warm reports each warmed module as a `file-visited`; the modules
+    // and the files visited below share one `totalFiles`, so the dashboard
+    // bar advances through pre-warming and into the visit phase.
+    let filesCompleted = 0;
+    let preWarmedCount = await current.preWarmModulesTable(
+      invalidations,
+      allRealmCardModules,
+      ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
+        filesCompleted = completed;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: moduleUrl,
+          filesCompleted,
+          totalFiles,
+        });
+      },
+    );
+    let totalFiles = preWarmedCount + invalidations.length;
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
-    current.#onProgress?.({
-      type: 'indexing-started',
-      realmURL: current.realmURL.href,
-      jobId: current.#jobInfo.jobId,
-      jobType: 'from-scratch',
-      totalFiles: invalidations.length,
-      files: invalidations.map((u) => u.href),
-    });
     try {
-      let filesCompleted = 0;
       for (let invalidation of invalidations) {
         // Resume guard. If a previous attempt of this same job already
         // wrote URL_X to the working table AND the EFS mtime hasn't
@@ -255,7 +278,7 @@ export class IndexRunner {
               jobId: current.#jobInfo.jobId,
               url: invalidation.href,
               filesCompleted,
-              totalFiles: invalidations.length,
+              totalFiles,
             });
             continue;
           }
@@ -268,7 +291,7 @@ export class IndexRunner {
           jobId: current.#jobInfo.jobId,
           url: invalidation.href,
           filesCompleted,
-          totalFiles: invalidations.length,
+          totalFiles,
         });
       }
       if (resumedSkipped > 0) {
@@ -350,6 +373,17 @@ export class IndexRunner {
       current.#jobInfo,
       current.#virtualNetwork,
     );
+    // Announce the job at kickoff — before invalidation and pre-warm — so
+    // the dashboard shows it immediately. The total starts at 0 and the
+    // first `file-visited` fills it in once the counts are known.
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'incremental',
+      totalFiles: 0,
+      files: [],
+    });
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
@@ -380,21 +414,31 @@ export class IndexRunner {
     let incrementalMtimes = await current.#reader.mtimes();
     let allRealmCardModules =
       Object.keys(incrementalMtimes).filter(hasCardExtension);
-    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    // Pre-warm reports each warmed module as a `file-visited`; modules and
+    // the files visited below share one `totalFiles` so the dashboard bar
+    // spans both phases.
+    let filesCompleted = 0;
+    let preWarmedCount = await current.preWarmModulesTable(
+      invalidations,
+      allRealmCardModules,
+      ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
+        filesCompleted = completed;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: moduleUrl,
+          filesCompleted,
+          totalFiles,
+        });
+      },
+    );
+    let totalFiles = preWarmedCount + invalidations.length;
 
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
-    current.#onProgress?.({
-      type: 'indexing-started',
-      realmURL: current.realmURL.href,
-      jobId: current.#jobInfo.jobId,
-      jobType: 'incremental',
-      totalFiles: invalidations.length,
-      files: invalidations.map((u) => u.href),
-    });
     try {
-      let filesCompleted = 0;
       for (let invalidation of invalidations) {
         if (
           operations.get(invalidation.href) === 'delete' &&
@@ -417,7 +461,7 @@ export class IndexRunner {
           jobId: current.#jobInfo.jobId,
           url: invalidation.href,
           filesCompleted,
-          totalFiles: invalidations.length,
+          totalFiles,
         });
       }
       if (resumedSkipped > 0) {
@@ -595,12 +639,36 @@ export class IndexRunner {
   // Failures here are warned but do not fail the batch — a mid-render
   // sub-prerender will still fire on demand if pre-warm misses a
   // module.
+  // Returns the number of modules pre-warmed. Callers fold this into the
+  // job's `totalFiles` so the dashboard progress bar covers pre-warming +
+  // the visit phase as one total, and `onModuleWarmed` advances the bar as
+  // each module lands. Returns 0 when pre-warm is skipped (in-browser, no
+  // candidates, or an unresolvable cache context), so those modules don't
+  // inflate the total.
   private async preWarmModulesTable(
     invalidations: URL[],
     allRealmCardModules: string[] = [],
-  ): Promise<void> {
+    onModuleWarmed?: (progress: {
+      moduleUrl: string;
+      filesCompleted: number;
+      totalFiles: number;
+    }) => void,
+  ): Promise<number> {
+    // Pre-warm exists to keep the prerender server's affinity-scoped tab
+    // pool from deadlocking when a mid-render `lookupDefinition` fires a
+    // same-affinity sub-`prerenderModule`. The in-browser realm (host
+    // tests run a Realm + IndexRunner inside a Chrome tab) has no separate
+    // prerender server and no tab pool, so pre-warm is pointless there.
+    // It is also actively harmful: the in-browser realm shares the global
+    // card-reference prefix registry with the host, so populating the
+    // definition cache before the host registers a prefix bakes in keys
+    // the prefixed reader can't match. A real server never sees this — it
+    // only receives resolved URLs over the wire. Skip pre-warm in-browser.
+    if (isBrowserTestEnv()) {
+      return 0;
+    }
     if (invalidations.length === 0 && allRealmCardModules.length === 0) {
-      return;
+      return 0;
     }
     let preWarmStart = Date.now();
 
@@ -680,18 +748,71 @@ export class IndexRunner {
     }
 
     if (toWarm.size === 0) {
-      return;
+      return 0;
     }
 
+    // Supply the cache context explicitly. The worker constructs a bare
+    // `CachingDefinitionLookup` with no registered realm, so the
+    // self-resolving `getCachedDefinitions` would return null from
+    // `buildLookupContext` and persist nothing — pre-warm would log
+    // success while doing nothing. This is the same context the read-only
+    // batch reader uses (`getModuleCacheContext` → `getCachedDefinitionsBatch`).
+    //
+    // Resolving the context fetches realm `_info`, which can transiently
+    // fail. Pre-warm is best-effort, so a failure here must degrade to a
+    // warn/skip — the visit phase still populates on demand — rather than
+    // throwing out of this method and aborting the whole indexing run.
+    let resolvedRealmURL: string;
+    let cacheScope: CacheScope;
+    let authUserId: string;
+    try {
+      ({ resolvedRealmURL, cacheScope, authUserId } =
+        await this.getModuleCacheContext());
+    } catch (err) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} skipping module pre-warm: could not resolve cache context for realm ${this.realmURL.href}; the visit phase will populate on demand`,
+        err,
+      );
+      return 0;
+    }
+
+    // The visit-phase reader (the realm-server's realm-scoped lookup)
+    // keys a private realm's modules cache on (realm-auth, realm-owner
+    // user id). Writing a different key — e.g. an empty user id — would
+    // replace the silent no-op with a silent *mismatch*: pre-warm would
+    // persist rows the reader never reads. A private realm with no owner
+    // user id is a misconfiguration that should never happen
+    // (`realmOwnerUserId` is derived from the realm username); if it does,
+    // skip pre-warm and let the visit phase populate on demand rather than
+    // writing keys the reader can't read.
+    if (cacheScope === 'realm-auth' && !authUserId) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} skipping module pre-warm for private realm ${this.realmURL.href}: empty cache user id would write cache keys the visit phase cannot read`,
+      );
+      return 0;
+    }
+
+    // Pre-warmed modules and the files visited below share one progress
+    // total, so the dashboard bar spans both phases.
+    let totalFiles = toWarm.size + invalidations.length;
     let failed = 0;
+    let warmed = 0;
     for (let moduleUrl of toWarm) {
       try {
-        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
+        await this.#definitionLookup.populateDefinitionCacheEntry({
+          moduleURL: moduleUrl,
+          realmURL: this.realmURL.href,
+          resolvedRealmURL,
+          cacheScope,
+          cacheUserId: authUserId,
+          prerenderUserId: this.#realmOwnerUserId,
           priority: this.#jobPriority,
         });
       } catch {
         failed += 1;
       }
+      warmed += 1;
+      onModuleWarmed?.({ moduleUrl, filesCompleted: warmed, totalFiles });
     }
     if (failed > 0) {
       this.#log.warn(
@@ -702,6 +823,7 @@ export class IndexRunner {
     this.#perfLog.debug(
       `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
     );
+    return warmed;
   }
 
   async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
