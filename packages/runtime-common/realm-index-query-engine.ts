@@ -103,10 +103,12 @@ type Options = {
   // follow time.
   skipQueryBackedExpansion?: boolean;
   // When true, `loadLinks` seeds the top-level result cards
-  // (`populateQueryFields` on the roots) and then returns an empty
-  // `included[]` — the transitive static-link BFS, the deeper-layer
+  // (`populateQueryFields` on the roots) and then returns an empty array —
+  // the transitive static-link BFS, the deeper-layer
   // `populateQueryFields`, and the clone-into-`included` step are all
-  // skipped. Set by the realm-server search handlers when the request
+  // skipped. (The search assembler only sets `doc.included` when the array
+  // is non-empty, so the response document omits the `included` member
+  // entirely.) Set by the realm-server search handlers when the request
   // originates inside a prerender: the host resolves every linked card
   // by URL via card+source (query fields from the seed umbrella, static
   // links via a `not-loaded` sentinel that lazy-loads), so the response's
@@ -1306,7 +1308,9 @@ export class RealmIndexQueryEngine {
       // sentinel that lazy-loads). Once the root result cards are seeded,
       // the transitive static-link BFS (Steps 2-5) and the deeper-layer
       // `populateQueryFields` are pure waste, so stop after the root
-      // layer and return an empty `included[]`. Strictly prerender-scoped.
+      // layer and return an empty array (the caller then omits the
+      // `included` member from the response document). Strictly
+      // prerender-scoped.
       if (opts?.omitIncluded) {
         break;
       }
