@@ -768,7 +768,10 @@ module(basename(__filename), function () {
                   `${resolvedPublishedRealmURL}home.json`,
                 ],
               },
-            )) as { has_module: boolean | null; has_instance: boolean | null }[];
+            )) as {
+              has_module: boolean | null;
+              has_instance: boolean | null;
+            }[];
             return rows[0]?.has_module && rows[0]?.has_instance
               ? rows
               : undefined;
