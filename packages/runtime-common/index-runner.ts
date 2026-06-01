@@ -48,6 +48,33 @@ import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
+// Default module pre-warm concurrency. Serial by default: a cold/shared
+// prerender pool serves serial pre-warm by reusing a single warm tab,
+// whereas concurrent module prerenders force the pool to materialize one
+// tab per in-flight request — and that tab-startup cost outweighs the
+// parallelism for the fast definition-extraction renders pre-warm fires.
+// Raise `INDEXER_PREWARM_CONCURRENCY` only where the prerender pool is
+// pre-sized for the extra concurrent module renders; the ceiling that
+// matters is the per-affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`),
+// since a realm's pre-warm targets one prerender affinity and beyond that
+// the requests just queue at the server's per-affinity admission.
+const DEFAULT_PREWARM_CONCURRENCY = 1;
+
+// Resolve the pre-warm fan-out width from `INDEXER_PREWARM_CONCURRENCY`,
+// falling back to the default. Reads `process.env` defensively — pre-warm
+// is skipped in the browser (see `isBrowserTestEnv`), but the bundle is
+// shared, so guard against a missing `process`.
+function prewarmConcurrency(): number {
+  let raw =
+    typeof process !== 'undefined'
+      ? process.env?.INDEXER_PREWARM_CONCURRENCY
+      : undefined;
+  let parsed = raw != null && raw !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_PREWARM_CONCURRENCY;
+}
+
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -632,10 +659,6 @@ export class IndexRunner {
   // process coalescer, so two callers asking for the same URL share
   // one prerender.
   //
-  // Phase 1: serial. Validates that pre-warm as a concept clears the
-  // deadlock without concurrency-driven variability. Phase 2 will
-  // bound-parallelize this loop.
-  //
   // Failures here are warned but do not fail the batch — a mid-render
   // sub-prerender will still fire on demand if pre-warm misses a
   // module.
@@ -795,33 +818,54 @@ export class IndexRunner {
     // Pre-warmed modules and the files visited below share one progress
     // total, so the dashboard bar spans both phases.
     let totalFiles = toWarm.size + invalidations.length;
+
+    // Drain the populate set with a bounded worker pool (serial by
+    // default — see DEFAULT_PREWARM_CONCURRENCY). Each populate fires a
+    // `prerenderModule` on a cache miss; DefinitionLookup owns the
+    // in-flight dedup and cross-process coalescer, so different modules
+    // run independently while same-URL callers share one prerender.
+    let urls = [...toWarm];
     let failed = 0;
     let warmed = 0;
-    for (let moduleUrl of toWarm) {
-      try {
-        await this.#definitionLookup.populateDefinitionCacheEntry({
-          moduleURL: moduleUrl,
-          realmURL: this.realmURL.href,
-          resolvedRealmURL,
-          cacheScope,
-          cacheUserId: authUserId,
-          prerenderUserId: this.#realmOwnerUserId,
-          priority: this.#jobPriority,
+    let nextIndex = 0;
+    let concurrency = Math.max(1, Math.min(prewarmConcurrency(), urls.length));
+    let warmOne = async (): Promise<void> => {
+      // `nextIndex++` is atomic between awaits (single-threaded event
+      // loop), so each worker claims a distinct URL.
+      for (let i = nextIndex++; i < urls.length; i = nextIndex++) {
+        try {
+          await this.#definitionLookup.populateDefinitionCacheEntry({
+            moduleURL: urls[i],
+            realmURL: this.realmURL.href,
+            resolvedRealmURL,
+            cacheScope,
+            cacheUserId: authUserId,
+            prerenderUserId: this.#realmOwnerUserId,
+            priority: this.#jobPriority,
+          });
+        } catch {
+          failed += 1;
+        }
+        // Advance the shared progress total as each module lands. Under
+        // concurrency the completion order isn't the input order, but the
+        // count still climbs monotonically — all the dashboard bar needs.
+        warmed += 1;
+        onModuleWarmed?.({
+          moduleUrl: urls[i],
+          filesCompleted: warmed,
+          totalFiles,
         });
-      } catch {
-        failed += 1;
       }
-      warmed += 1;
-      onModuleWarmed?.({ moduleUrl, filesCompleted: warmed, totalFiles });
-    }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => warmOne()));
     if (failed > 0) {
       this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${urls.length} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
       );
     }
 
     this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${urls.length} failed=${failed} concurrency=${concurrency})`,
     );
     return warmed;
   }
