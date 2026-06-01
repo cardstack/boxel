@@ -134,6 +134,16 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return this.args.errorDoc?.stack ?? '';
   }
 
+  // The prose message is only a visual duplicate when the stack's text already
+  // carries it (a JS stack's first line is typically `ErrorName: message`).
+  // When they differ — or there is no stack — the message is distinct
+  // information and stays visible.
+  private get isMessageRedundant(): boolean {
+    let stack = this.errorStack;
+    let message = this.errorMessage;
+    return stack.length > 0 && message.length > 0 && stack.includes(message);
+  }
+
   // not-found's message is always "Could not find <url>", which the overlay
   // already renders as the URL line — only show the prose message when it
   // carries a distinct error reason.
@@ -376,12 +386,12 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
                 </summary>
                 <div class='diag-body'>
                   {{#if this.showMessage}}
-                    {{! When a stack accompanies the message its first line
-                        already carries it — keep the message in the DOM for AI
-                        consumers but hide the redundant prose. }}
+                    {{! When the stack's first line already carries the message,
+                        keep the prose in the DOM for AI consumers but hide the
+                        visual duplicate; show it whenever the two differ. }}
                     <div
                       class='error-message
-                        {{if this.errorStack "is-redundant"}}'
+                        {{if this.isMessageRedundant "is-redundant"}}'
                       data-test-broken-link-message
                     >{{this.errorMessage}}</div>
                   {{/if}}
@@ -734,8 +744,8 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         font-size: 0.8em;
         color: var(--boxel-dark);
       }
-      /* The stack's first line already carries the message — keep the prose
-         in the DOM for AI consumers but hide the visual duplicate. */
+      /* Applied only when the stack already carries the message — keep the
+         prose in the DOM for AI consumers but hide the visual duplicate. */
       .error-message.is-redundant {
         display: none;
       }
