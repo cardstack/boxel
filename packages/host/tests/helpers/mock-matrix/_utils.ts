@@ -25,7 +25,18 @@ export class MockUtils {
     return this.testState.sdk!.getRoomEvents(roomId);
   };
   getRoomIds = () => {
-    return this.testState.sdk!.serverState.rooms.map((r) => r.id);
+    // A realm can fire a deferred `broadcastRealmEvent` (the trailing `index`
+    // event of an indexing run) after the owning test has ended and
+    // `setupMockMatrix`'s afterEach has torn the mock SDK down. The test
+    // adapter's broadcast path reads room ids through here; without this guard
+    // a late broadcast throws `Cannot read properties of undefined (reading
+    // 'serverState')` as a QUnit *global failure*, which fails an unrelated
+    // sibling test instead of the test that leaked the broadcast. No SDK means
+    // there are no rooms to deliver to, so report none.
+    if (!this.testState.sdk) {
+      return [];
+    }
+    return this.testState.sdk.serverState.rooms.map((r) => r.id);
   };
 
   getRoomIdForRealmAndUser = (realmURL: string, userId: string) => {

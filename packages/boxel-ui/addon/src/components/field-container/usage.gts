@@ -35,7 +35,10 @@ export default class FieldUsage extends Component {
   declare boxelFieldLabelJustifyContent: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='Field'>
+    <FreestyleUsage
+      @name='Field'
+      @description='Form-field wrapper that pairs a label with its input control, plus helper text and validation messages — the standard layout primitive for form rows.'
+    >
       <:example>
         <BoxelFieldContainer
           @tag={{this.tag}}

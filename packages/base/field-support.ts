@@ -742,68 +742,6 @@ export function getBrokenLinks(
   return findings;
 }
 
-type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
-interface NotLoadedRelationship {
-  type: 'not-loaded';
-  reference: string;
-  // TODO add a loader (which may turn this into a class)
-  // load(): Promise<CardInstanceType<CardT>>;
-}
-interface LoadedRelationship {
-  type: 'loaded';
-  card: CardDef | null;
-}
-
-/**
- * @deprecated Use {@link getRelationship} instead. `relationshipMeta` is a
- * back-compat wrapper that collapses the five-kind `RelationshipState` union
- * into the legacy `{ type: 'loaded' | 'not-loaded' }` envelope and will be
- * removed once all callers have migrated.
- */
-export function relationshipMeta(
-  instance: CardDef,
-  fieldName: string,
-): RelationshipMeta | RelationshipMeta[] | undefined {
-  let field = getField(instance, fieldName);
-  if (!field) {
-    throw new Error(
-      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
-    );
-  }
-  if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
-    return undefined;
-  }
-  // Legacy linksToMany scalar shape: a computed `linksToMany` whose upstream
-  // link hasn't resolved surfaces as a single sentinel rather than an array.
-  // Before `getRelationship`, this returned a scalar meta (not a one-element
-  // array). `getRelationship`'s typed contract wraps it as `[state]`, so the
-  // wrapper unwraps that case here to keep `relationshipMeta` callers stable.
-  if (field.fieldType === 'linksToMany') {
-    let peeked = peekAtField(instance, fieldName);
-    if (isNonPresentLink(peeked)) {
-      return toLegacyRelationshipMeta(relationshipStateForEntry(peeked));
-    }
-  }
-  let state = getRelationship(instance, fieldName);
-  if (Array.isArray(state)) {
-    return state.map(toLegacyRelationshipMeta);
-  }
-  return toLegacyRelationshipMeta(state);
-}
-
-function toLegacyRelationshipMeta(state: RelationshipState): RelationshipMeta {
-  // Legacy callers only branched on 'loaded' vs 'not-loaded'; the new error /
-  // not-found kinds did not exist when the contract was written. Map them to
-  // 'not-loaded' so existing consumers see a stable shape until migration.
-  if (state.isLoaded) {
-    return { type: 'loaded', card: state.value };
-  }
-  if (state.kind === 'not-set') {
-    return { type: 'loaded', card: null };
-  }
-  return { type: 'not-loaded', reference: state.reference };
-}
-
 export function serializedGet<CardT extends BaseDefConstructor>(
   model: InstanceType<CardT>,
   fieldName: string,

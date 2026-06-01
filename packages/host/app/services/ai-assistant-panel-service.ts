@@ -14,7 +14,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -510,7 +510,7 @@ export default class AiAssistantPanelService extends Service {
         {
           type: APP_BOXEL_ACTIVE_LLM,
           content: {
-            model: configuration?.modelId ?? DEFAULT_LLM,
+            model: configuration?.modelId ?? DEFAULT_FALLBACK_MODEL_ID,
             toolsSupported: Boolean(configuration?.toolsSupported),
             reasoningEffort: configuration?.reasoningEffort ?? undefined,
           },

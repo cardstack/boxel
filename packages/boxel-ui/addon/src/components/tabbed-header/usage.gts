@@ -44,7 +44,10 @@ export default class TabbedHeaderUsage extends Component {
   setActiveTab = (tabId: string) => (this.activeTabId = tabId);
 
   <template>
-    <FreestyleUsage @name='TabbedHeader'>
+    <FreestyleUsage
+      @name='TabbedHeader'
+      @description='Header row with horizontally arranged tab buttons that switch between sections — pair with content panels below for the standard tabs pattern.'
+    >
       <:example>
         <TabbedHeader
           @headerTitle={{this.headerTitle}}

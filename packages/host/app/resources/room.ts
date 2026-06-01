@@ -26,7 +26,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -411,7 +411,7 @@ export class RoomResource extends Resource<Args> {
     return (
       systemCard?.defaultModelConfiguration?.id ??
       systemCard?.modelConfigurations?.[0]?.id ??
-      DEFAULT_LLM
+      DEFAULT_FALLBACK_MODEL_ID
     );
   }
 

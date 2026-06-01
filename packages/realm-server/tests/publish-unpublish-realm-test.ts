@@ -29,6 +29,7 @@ import {
   createVirtualNetwork,
   fixtureDir,
   realmSecretSeed,
+  grafanaSecret,
   matrixURL,
   waitUntil,
 } from './helpers';
@@ -391,6 +392,91 @@ module(basename(__filename), function () {
           publishedLastPublishedAt,
           response.body.data.attributes.lastPublishedAt,
           'published realm lastPublishedAt matches publish response timestamp',
+        );
+      });
+
+      // A published realm lives on a different domain than the server
+      // that hosts it (here the published realm is on
+      // testuser.localhost:4445 while the server's own URL is
+      // 127.0.0.1:4445). The grafana reindex handler gates on registry
+      // membership rather than the server's origin, so a hosted realm on
+      // any domain — published ones included — can be reindexed.
+      test('can reindex a published realm via grafana endpoint even though it is on a different domain', async function (assert) {
+        let publishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+        assert.strictEqual(publishResponse.status, 202, 'HTTP 202 status');
+        let publishedRealmURL =
+          publishResponse.body.data.attributes.publishedRealmURL;
+        assert.notStrictEqual(
+          new URL(publishedRealmURL).origin,
+          new URL(testRealm2URL).origin,
+          'published realm is on a different origin than the server',
+        );
+
+        // Drive a reconcile pass so the freshly-published realm is in the
+        // reconciler's registry view and reindex's lookupOrMount can
+        // resolve it.
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index WHERE realm_url = $1 LIMIT 1`,
+              { bind: [publishedRealmURL] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'boxel_index entries for published realm did not appear',
+          },
+        );
+
+        let initialJobs = (await dbAdapter.execute('select id from jobs')) as {
+          id: string;
+        }[];
+        let initialJobIds = new Set(initialJobs.map((j) => String(j.id)));
+
+        let reindexResponse = await request
+          .post(
+            `/_grafana-reindex?realm=${encodeURIComponent(publishedRealmURL)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          reindexResponse.status,
+          200,
+          'reindex of a cross-domain published realm succeeds',
+        );
+
+        let finalJobs = (await dbAdapter.execute(
+          'select id, job_type, args from jobs',
+        )) as { id: string; job_type: string; args: any }[];
+        let newJobs = finalJobs.filter((j) => !initialJobIds.has(String(j.id)));
+        let reindexJob = newJobs.find(
+          (j) =>
+            j.job_type === 'from-scratch-index' &&
+            j.args?.realmURL === publishedRealmURL,
+        );
+        assert.ok(
+          reindexJob,
+          'a from-scratch-index job was enqueued for the published realm',
         );
       });
 
