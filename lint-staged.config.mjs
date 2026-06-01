@@ -7,7 +7,16 @@
 // edit here. All routing goes through scripts/lint-autofix.mjs, which applies
 // fixes, re-stages, and warns without ever blocking the commit.
 import { getFileInfo } from 'prettier';
-import { extname } from 'node:path';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Resolve .prettierignore next to this config (repo root) rather than relying
+// on cwd, so getFileInfo's `ignored` verdict matches what the prettier CLI in
+// lint-autofix.mjs actually honors.
+const PRETTIER_IGNORE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '.prettierignore',
+);
 
 // eslint also applies prettier formatting for these via eslint-plugin-prettier,
 // so they must go to eslint ONLY (never also to prettier — that would double-
@@ -34,10 +43,12 @@ export default async (stagedFiles) => {
       templateFiles.push(file);
     } else {
       // Ask prettier whether it can format this file. resolveConfig picks up
-      // the repo's .prettierrc (and its plugins) so the decision matches what
-      // `prettier --write` would actually do.
+      // the repo's .prettierrc (and its plugins) and ignorePath consults
+      // .prettierignore, so the decision matches what `prettier --write` would
+      // actually do — including skipping ignored files like pnpm-lock.yaml.
       const { inferredParser, ignored } = await getFileInfo(file, {
         resolveConfig: true,
+        ignorePath: PRETTIER_IGNORE,
       });
       if (inferredParser && !ignored) prettierFiles.push(file);
     }
