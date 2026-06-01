@@ -123,7 +123,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     if (errorDoc.title) {
       pieces.push(errorDoc.title);
     }
-    return pieces.join(' · ');
+    return pieces.join(' - ');
   }
 
   private get errorMessage(): string {
@@ -132,6 +132,16 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
 
   private get errorStack(): string {
     return this.args.errorDoc?.stack ?? '';
+  }
+
+  // The prose message is only a visual duplicate when the stack's text already
+  // carries it (a JS stack's first line is typically `ErrorName: message`).
+  // When they differ — or there is no stack — the message is distinct
+  // information and stays visible.
+  private get isMessageRedundant(): boolean {
+    let stack = this.errorStack;
+    let message = this.errorMessage;
+    return stack.length > 0 && message.length > 0 && stack.includes(message);
   }
 
   // not-found's message is always "Could not find <url>", which the overlay
@@ -365,51 +375,65 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
               </div>
             {{/if}}
           {{else}}
-            <details class='error-section' open>
-              <summary class='status-summary' data-test-broken-link-status>
-                {{this.statusLabel}}
-              </summary>
-              <div class='error-body'>
-                {{#if this.showMessage}}
-                  <div
-                    class='error-message'
-                    data-test-broken-link-message
-                  >{{this.errorMessage}}</div>
-                {{/if}}
-                {{#if this.errorStack}}
-                  <pre
-                    class='error-stack'
-                    data-test-broken-link-stack
-                  >{{this.errorStack}}</pre>
-                {{/if}}
-              </div>
-            </details>
+            {{! One bordered container groups the failure(s); each is a
+                disclosure whose header sits on a tinted strip and whose body
+                sits flush on white, divided by hairlines. }}
+            <div class='diagnostics'>
+              <details class='diag-section' open>
+                <summary class='diag-summary' data-test-broken-link-status>
+                  <span class='diag-caret' aria-hidden='true'></span>
+                  <span class='diag-summary-text'>{{this.statusLabel}}</span>
+                </summary>
+                <div class='diag-body'>
+                  {{#if this.showMessage}}
+                    {{! When the stack's first line already carries the message,
+                        keep the prose in the DOM for AI consumers but hide the
+                        visual duplicate; show it whenever the two differ. }}
+                    <div
+                      class='error-message
+                        {{if this.isMessageRedundant "is-redundant"}}'
+                      data-test-broken-link-message
+                    >{{this.errorMessage}}</div>
+                  {{/if}}
+                  {{#if this.errorStack}}
+                    <pre
+                      class='error-stack'
+                      data-test-broken-link-stack
+                    >{{this.errorStack}}</pre>
+                  {{/if}}
+                </div>
+              </details>
 
-            {{#let this.additionalErrors as |additionalErrors|}}
-              {{#if additionalErrors.length}}
-                <details class='additional-section'>
-                  <summary class='additional-summary'>
-                    {{this.additionalErrorsLabel}}
-                  </summary>
-                  <ul class='additional-list'>
-                    {{#each additionalErrors as |err i|}}
-                      <li
-                        class='additional-item'
-                        data-test-broken-link-additional-error={{i}}
-                      >
-                        <span class='additional-badge'>
-                          {{#if err.status}}{{err.status}}
-                          {{/if}}{{err.message}}
-                        </span>
-                        {{#if err.stack}}
-                          <pre class='additional-stack'>{{err.stack}}</pre>
-                        {{/if}}
-                      </li>
-                    {{/each}}
-                  </ul>
-                </details>
-              {{/if}}
-            {{/let}}
+              {{#let this.additionalErrors as |additionalErrors|}}
+                {{#if additionalErrors.length}}
+                  <details class='diag-section additional-section'>
+                    <summary class='diag-summary'>
+                      <span class='diag-caret' aria-hidden='true'></span>
+                      <span
+                        class='diag-summary-text'
+                      >{{this.additionalErrorsLabel}}</span>
+                    </summary>
+                    <div class='diag-body'>
+                      <ul class='additional-list'>
+                        {{#each additionalErrors as |err i|}}
+                          <li
+                            class='additional-item'
+                            data-test-broken-link-additional-error={{i}}
+                          >
+                            <span
+                              class='additional-badge'
+                            >{{#if err.status}}{{err.status}} {{/if}}{{err.message}}</span>
+                            {{#if err.stack}}
+                              <pre class='additional-stack'>{{err.stack}}</pre>
+                            {{/if}}
+                          </li>
+                        {{/each}}
+                      </ul>
+                    </div>
+                  </details>
+                {{/if}}
+              {{/let}}
+            </div>
           {{/if}}
         </div>
       </div>
@@ -639,80 +663,128 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         padding: 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
       }
 
-      .status-badge,
-      .status-summary,
-      .additional-summary {
+      /* ── Overlay panel: status badge (not-found) ──────────────────────
+         A single bordered box carrying the status code. */
+      .status-badge {
+        display: block;
+        margin-top: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-light-100);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-form-control-border-radius);
         font-size: 0.6875rem;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: var(--boxel-450, #6f6f6f);
+        color: var(--boxel-dark);
       }
-      .status-badge {
-        display: inline-block;
-        margin-top: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        background-color: var(--boxel-light-100);
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
-      }
-      .error-section,
-      .additional-section {
+
+      /* ── Overlay panel: diagnostics accordion (error) ─────────────────
+         One bordered container groups the failure(s); each is a disclosure
+         whose header sits on a tinted strip and whose body sits flush on
+         white, separated by hairline dividers. */
+      .diagnostics {
         margin-top: var(--boxel-sp-xs);
-      }
-      .status-summary,
-      .additional-summary {
-        cursor: pointer;
-      }
-      .error-body {
-        margin-top: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-light-100);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-form-control-border-radius);
+        overflow: hidden;
+        background-color: var(--boxel-light);
+      }
+      .diag-section + .diag-section {
+        border-top: 1px solid var(--boxel-200);
+      }
+      .diag-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-light-100);
+        color: var(--boxel-dark);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      .diag-summary::-webkit-details-marker {
+        display: none;
+      }
+      .diag-summary::marker {
+        content: '';
+      }
+      /* The status code reads as an all-caps constant; the additional-error
+         count is descriptive prose, so it keeps sentence case. */
+      .additional-section > .diag-summary {
+        text-transform: none;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .diag-caret {
+        flex: none;
+        width: 0;
+        height: 0;
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+        border-left: 5px solid currentColor;
+        transition: transform 0.12s ease;
+      }
+      .diag-section[open] > .diag-summary .diag-caret {
+        transform: rotate(90deg);
+      }
+      .diag-body {
+        padding: var(--boxel-sp-sm);
+        border-top: 1px solid var(--boxel-200);
+        background-color: var(--boxel-light);
       }
       .error-message {
         font-weight: 400;
         white-space: pre-wrap;
         word-break: break-word;
-        font-size: 0.85em;
+        font-size: 0.8em;
+        color: var(--boxel-dark);
+      }
+      /* Applied only when the stack already carries the message — keep the
+         prose in the DOM for AI consumers but hide the visual duplicate. */
+      .error-message.is-redundant {
+        display: none;
+      }
+      .error-message + .error-stack {
+        margin-top: var(--boxel-sp-5xs);
       }
       .error-stack {
         font-family: var(--boxel-monospace-font-family, monospace);
         font-size: 0.75em;
+        line-height: 1.5;
         white-space: pre-wrap;
         word-break: break-word;
-        margin: var(--boxel-sp-5xs) 0 0;
-      }
-      .error-message + .error-stack {
-        padding-top: var(--boxel-sp-5xs);
+        margin: 0;
+        color: var(--boxel-dark);
       }
       .additional-list {
         list-style: none;
         padding: 0;
-        margin: var(--boxel-sp-5xs) 0 0;
+        margin: 0;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-xs);
       }
       .additional-badge {
-        display: inline-block;
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        background-color: var(--boxel-light-100);
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
+        display: block;
         font-size: 0.6875rem;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: var(--boxel-500);
+        color: var(--boxel-dark);
       }
       .additional-stack {
         font-family: var(--boxel-monospace-font-family, monospace);
         font-size: 0.75em;
+        line-height: 1.5;
         white-space: pre-wrap;
         word-break: break-word;
-        margin: 2px 0 0;
+        margin: var(--boxel-sp-5xs) 0 0;
+        color: var(--boxel-500);
       }
 
       /* ── The tip ──────────────────────────────────────────────────────────
