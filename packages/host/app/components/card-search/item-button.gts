@@ -12,12 +12,14 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
+  cardTypeIcon,
   isCardInstance,
   rri,
 } from '@cardstack/runtime-common';
 
 import AdornLabel from '@cardstack/host/components/adorn/adorn-label';
 import AdornSelectChip from '@cardstack/host/components/adorn/adorn-select-chip';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
 import type RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -31,23 +33,27 @@ import CardRenderer from '../card-renderer';
 
 import type { ComponentLike, ModifierLike } from '@glint/template';
 
-// CardRenderer stamps `data-card-type-display-name` on each rendered card, so
-// look it up inside the button DOM once it has rendered. This is the same
-// attribute that OperatorModeOverlays reads to label the hover tab.
-const captureAdornTypeName = modifier(
+interface AdornCardMeta {
+  name: string | undefined;
+  iconHtml: string | undefined;
+}
+
+// CardRenderer / the prerendered wrapper stamp `data-card-type-display-name`
+// and `data-card-type-icon-html` on each rendered card, so look them up
+// inside the button DOM once it has rendered. These are the same attributes
+// OperatorModeOverlays reads to label and icon the hover tab.
+const captureAdornCardMeta = modifier(
   (
     element: HTMLElement,
-    [setName, enabled]: [
-      (name: string | undefined) => void,
-      boolean | undefined,
-    ],
+    [setMeta, enabled]: [(meta: AdornCardMeta) => void, boolean | undefined],
   ) => {
     if (!enabled) return;
     let read = () => {
       let inner = element.querySelector('[data-card-type-display-name]');
-      let name =
-        inner?.getAttribute('data-card-type-display-name') ?? undefined;
-      setName(name);
+      setMeta({
+        name: inner?.getAttribute('data-card-type-display-name') ?? undefined,
+        iconHtml: inner?.getAttribute('data-card-type-icon-html') ?? undefined,
+      });
     };
     read();
     let observer = new MutationObserver(read);
@@ -55,7 +61,10 @@ const captureAdornTypeName = modifier(
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['data-card-type-display-name'],
+      attributeFilter: [
+        'data-card-type-display-name',
+        'data-card-type-icon-html',
+      ],
     });
     return () => observer.disconnect();
   },
@@ -114,6 +123,7 @@ export default class ItemButton extends Component<Signature> {
   @service declare realm: RealmService;
 
   @tracked private prerenderedTypeName: string | undefined;
+  @tracked private prerenderedTypeIconHtml: string | undefined;
 
   // The catalog-item button element, captured so the shared
   // positionAdornLabel modifier can anchor the type-label tab to the
@@ -135,8 +145,9 @@ export default class ItemButton extends Component<Signature> {
     return this.args.adornPositionLabel ?? noopPositionLabel;
   }
 
-  @action private setPrerenderedTypeName(name: string | undefined) {
-    this.prerenderedTypeName = name;
+  @action private setAdornCardMeta(meta: AdornCardMeta) {
+    this.prerenderedTypeName = meta.name;
+    this.prerenderedTypeIconHtml = meta.iconHtml;
   }
 
   private get adornTypeName(): string | undefined {
@@ -146,6 +157,21 @@ export default class ItemButton extends Component<Signature> {
       return cardTypeDisplayName(this.cardItem);
     }
     return this.prerenderedTypeName;
+  }
+
+  // Type-name precedence mirrored for the icon: card instances supply
+  // it in-memory; prerendered items carry it as icon HTML stamped on
+  // the rendered wrapper (the realm server resolves the proper
+  // subclass icon there).
+  private get adornTypeIcon(): unknown {
+    if (!this.args.adorn || this.isNewCard) return undefined;
+    if (this.cardItem) {
+      return cardTypeIcon(this.cardItem);
+    }
+    if (this.prerenderedTypeIconHtml) {
+      return htmlComponent(this.prerenderedTypeIconHtml);
+    }
+    return undefined;
   }
 
   private get isNewCard(): boolean {
@@ -246,7 +272,7 @@ export default class ItemButton extends Component<Signature> {
       {{on 'click' this.handleClick}}
       {{on 'dblclick' this.handleDblClick}}
       {{on 'keydown' this.handleKeydown}}
-      {{captureAdornTypeName this.setPrerenderedTypeName @adorn}}
+      {{captureAdornCardMeta this.setAdornCardMeta @adorn}}
       {{this.registerCardEl}}
       data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
       data-test-card-catalog-item={{removeFileExtension this.resolvedItemId}}
@@ -266,6 +292,13 @@ export default class ItemButton extends Component<Signature> {
             aria-hidden='true'
             {{this.positionLabel this.cardEl}}
           >
+            <:icon>
+              {{#let this.adornTypeIcon as |TypeIcon|}}
+                {{#if TypeIcon}}
+                  <TypeIcon />
+                {{/if}}
+              {{/let}}
+            </:icon>
             <:text>{{this.adornTypeName}}</:text>
           </AdornLabel>
         {{/if}}
