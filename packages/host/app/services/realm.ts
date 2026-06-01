@@ -71,6 +71,12 @@ const log = logger('service:realm');
 // fixing the test surface that pre-CS-11003 relied on the synchronous-
 // indexing semantic of the +source POST.
 const indexingWaiter = buildWaiter('realm:incremental-indexing');
+// Held while a realm session login is in flight so `await settled()` (and other
+// Ember test helpers) wait for the realm JWT to be minted before proceeding.
+// `realm.canWrite` reads the session claims; without this gate a card editor can
+// render during the anonymous→logged-in window with its fields disabled, so a
+// `fillIn` throws even though nothing is otherwise "pending". No-op outside tests.
+const sessionWaiter = buildWaiter('realm:session-login');
 
 // The name returned by `RealmService#info()` when the corresponding realm
 // resource hasn't yet resolved its `_info` document. Exported so consumers
@@ -293,6 +299,7 @@ class RealmResource {
   }
 
   private loginTask = task(async () => {
+    let sessionWaiterToken = sessionWaiter.beginAsync();
     try {
       let token = await this.matrixService.createRealmSession(
         new URL(this.realmURL),
@@ -305,6 +312,7 @@ class RealmResource {
       globalThis.dispatchEvent(event);
     } finally {
       this.loggingIn = undefined;
+      sessionWaiter.endAsync(sessionWaiterToken);
     }
   });
 

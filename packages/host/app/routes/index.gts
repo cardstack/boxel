@@ -103,6 +103,12 @@ export default class Card extends Route {
     }
 
     if (!this.matrixService.isLoggedIn) {
+      if (isTesting()) {
+        console.warn(
+          `[login-diag] index route rendering login form: didMatrixServiceStart=${this.didMatrixServiceStart} ` +
+            JSON.stringify(this.matrixService.loginReadinessDebug),
+        );
+      }
       return; // Show login component
     }
 

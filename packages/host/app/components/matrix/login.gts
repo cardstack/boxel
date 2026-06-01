@@ -1,8 +1,10 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -152,6 +154,19 @@ export default class Login extends Component<Signature> {
   @tracked private password: string | undefined;
   @service declare private matrixService: MatrixService;
   @service declare router: RouterService;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    if (isTesting()) {
+      // Names which isLoggedIn precondition is unmet when the login UI mounts
+      // in a test (the intermittent cold-boot login-screen flake). Test-gated;
+      // no production effect.
+      console.warn(
+        `[login-diag] login UI mounted: ` +
+          JSON.stringify(this.matrixService.loginReadinessDebug),
+      );
+    }
+  }
 
   private get isLoginButtonDisabled() {
     return (

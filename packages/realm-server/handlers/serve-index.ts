@@ -19,6 +19,7 @@ import {
   retrieveIsolatedHTML,
 } from '../lib/index-html-injection';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css';
+import { fullRequestURL } from '../middleware';
 import {
   findOrMountRealm,
   getPublishedRealmInfo,
@@ -195,9 +196,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
     let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
 
-    let requestURL = new URL(
-      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-    );
+    // Derive the request URL via fullRequestURL so the protocol honors
+    // `x-forwarded-proto` from a TLS-terminating proxy (ALB/Traefik), matching
+    // the rest of the request pipeline. Building it from the raw `ctxt.protocol`
+    // yields `http` behind such a proxy, which makes the published-realm module
+    // probe (isIndexedCardInstance → hasExtensionlessSourceModule) throw on the
+    // http-vs-https mismatch and mis-serve a module URL as the HTML page.
+    let requestURL = fullRequestURL(ctxt);
 
     // Track published realm info from routing checks to avoid redundant
     // DB queries in the ETag logic below.
