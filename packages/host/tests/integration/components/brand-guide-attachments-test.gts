@@ -78,13 +78,23 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
 
     assert
       .dom('[data-test-brand-image-attachment-thumb]')
-      .hasAttribute('src', 'https://example.com/hero.png', 'thumbnail src is correct');
+      .hasAttribute(
+        'src',
+        'https://example.com/hero.png',
+        'thumbnail src is correct',
+      );
     assert
       .dom('[data-test-brand-image-attachment-varname]')
-      .hasText('--hero-banner', 'camelCase name is dasherized and prefixed with --');
+      .hasText(
+        '--hero-banner',
+        'camelCase name is dasherized and prefixed with --',
+      );
     assert
       .dom('[data-test-brand-image-attachment-url]')
-      .hasText('url(https://example.com/hero.png)', 'url() value is rendered in the dd cell');
+      .hasText(
+        'url(https://example.com/hero.png)',
+        'url() value is rendered in the dd cell',
+      );
   });
 
   test('brand image attachments without a url are not rendered in the dedicated section', async function (this: RenderingTestContext, assert) {
@@ -111,7 +121,9 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
 
     assert
       .dom('[data-test-brand-guide-section="custom-css"]')
-      .exists('custom-css section appears when only brand image attachments are present');
+      .exists(
+        'custom-css section appears when only brand image attachments are present',
+      );
   });
 
   test('brand image attachments appear in custom-css section with var name and url value', async function (this: RenderingTestContext, assert) {
@@ -131,7 +143,10 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
       .hasText('--hero-banner', 'var name is rendered in custom-css section');
     assert
       .dom('[data-test-brand-guide-image-attachment-url]')
-      .hasText('url(https://example.com/hero.png)', 'url() value is rendered in custom-css section');
+      .hasText(
+        'url(https://example.com/hero.png)',
+        'url() value is rendered in custom-css section',
+      );
   });
 
   test('brand image attachments without a url are excluded from custom-css section', async function (this: RenderingTestContext, assert) {
@@ -142,7 +157,9 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
 
     assert
       .dom('[data-test-brand-guide-section="custom-css"]')
-      .doesNotExist('custom-css section is hidden when all entries have no url');
+      .doesNotExist(
+        'custom-css section is hidden when all entries have no url',
+      );
     assert
       .dom('[data-test-brand-guide-image-attachment-var]')
       .doesNotExist('no rows rendered for entries with no image url');

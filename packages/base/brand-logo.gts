@@ -4,6 +4,7 @@ import {
   GridContainer,
   Button,
   BoxelInput,
+  IconButton,
 } from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
@@ -13,6 +14,7 @@ import {
 } from '@cardstack/boxel-ui/helpers';
 
 import { chooseFile, identifyCard } from '@cardstack/runtime-common';
+import XIcon from '@cardstack/boxel-icons/x';
 
 import {
   field,
@@ -30,7 +32,7 @@ import {
   type CssVariableField,
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
-import URLField from './url';
+import URLField, { isValidUrl } from './url';
 
 class Embedded extends Component<typeof BrandLogo> {
   <template>
@@ -301,6 +303,14 @@ class Embedded extends Component<typeof BrandLogo> {
 }
 
 class MarkFieldEdit extends Component<typeof MarkField> {
+  get validationState() {
+    if (!this.args.model) {
+      // do not error before any input
+      return;
+    }
+    return isValidUrl(this.args.model) ? 'valid' : 'invalid';
+  }
+
   uploadImage = async () => {
     let imageRef = identifyCard(ImageDef);
     let file = await chooseFile(
@@ -311,36 +321,48 @@ class MarkFieldEdit extends Component<typeof MarkField> {
     }
   };
 
+  clearImage = () => {
+    this.args.set(null);
+  };
+
   <template>
     <div class='mark-field-edit'>
-      {{#if @model}}
-        <img
-          src={{@model}}
-          alt=''
-          class='mark-field-preview'
-          aria-hidden='true'
-        />
-      {{else}}
-        <div class='mark-field-preview mark-field-preview--empty' />
-      {{/if}}
       <div class='mark-field-inputs'>
         <BoxelInput
           type='url'
           value={{@model}}
           @onInput={{@set}}
           @disabled={{not @canEdit}}
+          @state={{this.validationState}}
+          data-test-mark-url-input
         />
+        {{#if @model}}
+          {{#if @canEdit}}
+            <IconButton
+              class='mark-field-clear'
+              @icon={{XIcon}}
+              @width='16px'
+              @height='16px'
+              aria-label='Clear image'
+              data-test-mark-clear
+              {{on 'click' this.clearImage}}
+            />
+          {{/if}}
+        {{/if}}
+      </div>
+      {{#unless @model}}
         {{#if @canEdit}}
           <span class='mark-field-or'>or</span>
           <Button
             @kind='secondary'
             @size='extra-small'
+            data-test-mark-select-image
             {{on 'click' this.uploadImage}}
           >
             Select Image
           </Button>
         {{/if}}
-      </div>
+      {{/unless}}
     </div>
     <style scoped>
       .mark-field-edit {
@@ -349,45 +371,31 @@ class MarkFieldEdit extends Component<typeof MarkField> {
         align-items: center;
         gap: var(--boxel-sp-sm);
       }
-      .mark-field-preview {
-        flex-shrink: 0;
-        width: 3rem;
-        height: 3rem;
-        object-fit: contain;
-        border-radius: var(--boxel-border-radius-sm);
-        border: 1px solid var(--border, var(--boxel-border-color));
-        background-color: var(--muted, var(--boxel-100));
-      }
-      .mark-field-preview--empty {
-        background-image: repeating-linear-gradient(
-          -45deg,
-          transparent,
-          transparent 3px,
-          color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            )
-            3px,
-          color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            )
-            4px
-        );
-      }
       .mark-field-inputs {
         flex: 1;
         min-width: 0;
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
+        position: relative;
       }
       .mark-field-inputs :deep(input) {
-        flex: 1;
-        min-width: 0;
+        width: 100%;
+        padding-right: 2.5rem;
+      }
+      .mark-field-clear {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 100%;
+        opacity: 0.5;
+        z-index: 1;
+      }
+      .mark-field-clear:hover,
+      .mark-field-clear:focus {
+        opacity: 1;
+        outline: 0;
       }
       .mark-field-or {
         flex-shrink: 0;
@@ -449,26 +457,50 @@ class BrandLogoEdit extends Component<typeof BrandLogo> {
       <section class='brand-logo-edit-section'>
         <h4 class='brand-logo-edit-heading'>Primary Mark</h4>
         <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
-          <FieldContainer @label='Min Height' @vertical={{true}}>
+          <FieldContainer
+            @label='Min Height'
+            @vertical={{true}}
+            data-test-field='primaryMarkMinHeight'
+          >
             <@fields.primaryMarkMinHeight />
           </FieldContainer>
-          <FieldContainer @label='Clearance Ratio' @vertical={{true}}>
+          <FieldContainer
+            @label='Clearance Ratio'
+            @vertical={{true}}
+            data-test-field='primaryMarkClearanceRatio'
+          >
             <@fields.primaryMarkClearanceRatio />
           </FieldContainer>
         </div>
         <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
-          <FieldContainer @label='Light Background' @vertical={{true}}>
+          <FieldContainer
+            @label='Light Background'
+            @vertical={{true}}
+            data-test-field='primaryMark1'
+          >
             <@fields.primaryMark1 />
           </FieldContainer>
-          <FieldContainer @label='Dark Background' @vertical={{true}}>
+          <FieldContainer
+            @label='Dark Background'
+            @vertical={{true}}
+            data-test-field='primaryMark2'
+          >
             <@fields.primaryMark2 />
           </FieldContainer>
         </div>
         <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
-          <FieldContainer @label='Greyscale — Light' @vertical={{true}}>
+          <FieldContainer
+            @label='Greyscale — Light'
+            @vertical={{true}}
+            data-test-field='primaryMarkGreyscale1'
+          >
             <@fields.primaryMarkGreyscale1 />
           </FieldContainer>
-          <FieldContainer @label='Greyscale — Dark' @vertical={{true}}>
+          <FieldContainer
+            @label='Greyscale — Dark'
+            @vertical={{true}}
+            data-test-field='primaryMarkGreyscale2'
+          >
             <@fields.primaryMarkGreyscale2 />
           </FieldContainer>
         </div>
@@ -477,26 +509,50 @@ class BrandLogoEdit extends Component<typeof BrandLogo> {
       <section class='brand-logo-edit-section'>
         <h4 class='brand-logo-edit-heading'>Secondary Mark</h4>
         <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
-          <FieldContainer @label='Min Height' @vertical={{true}}>
+          <FieldContainer
+            @label='Min Height'
+            @vertical={{true}}
+            data-test-field='secondaryMarkMinHeight'
+          >
             <@fields.secondaryMarkMinHeight />
           </FieldContainer>
-          <FieldContainer @label='Clearance Ratio' @vertical={{true}}>
+          <FieldContainer
+            @label='Clearance Ratio'
+            @vertical={{true}}
+            data-test-field='secondaryMarkClearanceRatio'
+          >
             <@fields.secondaryMarkClearanceRatio />
           </FieldContainer>
         </div>
         <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
-          <FieldContainer @label='Light Background' @vertical={{true}}>
+          <FieldContainer
+            @label='Light Background'
+            @vertical={{true}}
+            data-test-field='secondaryMark1'
+          >
             <@fields.secondaryMark1 />
           </FieldContainer>
-          <FieldContainer @label='Dark Background' @vertical={{true}}>
+          <FieldContainer
+            @label='Dark Background'
+            @vertical={{true}}
+            data-test-field='secondaryMark2'
+          >
             <@fields.secondaryMark2 />
           </FieldContainer>
         </div>
         <div class='brand-logo-edit-row brand-logo-edit-row--2col'>
-          <FieldContainer @label='Greyscale — Light' @vertical={{true}}>
+          <FieldContainer
+            @label='Greyscale — Light'
+            @vertical={{true}}
+            data-test-field='secondaryMarkGreyscale1'
+          >
             <@fields.secondaryMarkGreyscale1 />
           </FieldContainer>
-          <FieldContainer @label='Greyscale — Dark' @vertical={{true}}>
+          <FieldContainer
+            @label='Greyscale — Dark'
+            @vertical={{true}}
+            data-test-field='secondaryMarkGreyscale2'
+          >
             <@fields.secondaryMarkGreyscale2 />
           </FieldContainer>
         </div>
@@ -504,7 +560,11 @@ class BrandLogoEdit extends Component<typeof BrandLogo> {
 
       <section class='brand-logo-edit-section'>
         <h4 class='brand-logo-edit-heading'>Social Media Icon</h4>
-        <FieldContainer @label='Profile Icon' @vertical={{true}}>
+        <FieldContainer
+          @label='Profile Icon'
+          @vertical={{true}}
+          data-test-field='socialMediaProfileIcon'
+        >
           <@fields.socialMediaProfileIcon />
         </FieldContainer>
       </section>
