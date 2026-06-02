@@ -223,6 +223,7 @@ const ALL_TEST_FILES: string[] = [
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
   './realm-endpoints/directory-test',
+  './realm-endpoints/indexing-errors-test',
   './realm-endpoints/info-test',
   './realm-endpoints/invalidate-urls-test',
   './realm-endpoints/lint-test',
@@ -289,6 +290,7 @@ const ALL_TEST_FILES: string[] = [
   './node-realm-test',
   './session-room-queries-test',
   './indexing-event-sink-test',
+  './skip-query-backed-expansion-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

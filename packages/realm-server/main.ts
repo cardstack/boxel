@@ -153,6 +153,14 @@ const FULL_INDEX_ON_STARTUP_OVERRIDE =
 // test's first lookupDefinition.
 const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
   process.env.REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP === 'true';
+// When set to 'true', every realm in this process mounts and serves source
+// without running a from-scratch index on startup (even on a new/empty index).
+// Definitions resolve lazily via the prerenderer on first lookup. Used by the
+// realm-server test stack's boot realm server: the suite runs its own
+// in-process realms and only needs the boot realms to serve source, so
+// skipping their boot index removes both the ~minutes-long startup wait and
+// the prerender-pool contention that index would create with the tests.
+const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -526,6 +534,7 @@ const smokeTestHostApp = async () => {
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+          ...(SKIP_BOOT_INDEX ? { skipBootIndex: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),

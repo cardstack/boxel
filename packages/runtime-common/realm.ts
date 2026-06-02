@@ -43,6 +43,7 @@ import {
   responseWithError,
   formattedError,
   unsupportedMediaType,
+  type SerializedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -669,6 +670,15 @@ interface Options {
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
   fromScratchIndexPriority?: number;
+  // When set, the realm mounts and serves source but does not run a
+  // from-scratch index on startup, even when its index is empty (new). Card
+  // definitions are still resolved lazily on demand via the prerenderer, so
+  // source serving and definition lookup keep working. Used by the
+  // realm-server test stack, whose suite runs its own in-process realms and
+  // only needs the boot realms to serve source — skipping their boot index
+  // removes both the startup wait and the prerender-pool contention it would
+  // otherwise create with the tests.
+  skipBootIndex?: true;
 }
 
 interface UpdateItem {
@@ -700,6 +710,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
+  #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
@@ -842,6 +853,7 @@ export class Realm {
     this.#queue = queue;
     this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#matrixClient = matrixClient;
@@ -953,6 +965,11 @@ export class Realm {
         '/_publishability',
         SupportedMimeType.JSONAPI,
         this.publishability.bind(this),
+      )
+      .get(
+        '/_indexing-errors',
+        SupportedMimeType.JSONAPI,
+        this.indexingErrors.bind(this),
       )
       .get(
         '/_card-dependencies',
@@ -2475,7 +2492,10 @@ export class Realm {
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      if (isNewIndex || this.#fullIndexOnStartup) {
+      if (this.#skipBootIndex) {
+        // Mount-and-serve only: no from-scratch index, even on a new index.
+        // Definitions resolve lazily via the prerenderer on first lookup.
+      } else if (isNewIndex || this.#fullIndexOnStartup) {
         if (this.#fullIndexOnStartup) {
           // CS-11245: bootstrap realms (kind='bootstrap': base,
           // catalog, skills, …) full-index on every realm-server
@@ -5124,6 +5144,7 @@ export class Realm {
     opts?: {
       cacheOnlyDefinitions?: boolean;
       skipQueryBackedExpansion?: boolean;
+      omitIncluded?: boolean;
     },
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
@@ -5133,6 +5154,7 @@ export class Realm {
       ...(opts?.skipQueryBackedExpansion
         ? { skipQueryBackedExpansion: true }
         : {}),
+      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
     });
   }
 
@@ -5194,6 +5216,11 @@ export class Realm {
         // instance-GET); the eager closure is a wasted round-trip in
         // the prerender path.
         skipQueryBackedExpansion: duringPrerender,
+        // Inside a prerender the host discards the response's
+        // `included[]` entirely (it resolves every linked card by URL
+        // via card+source), so omit it: seed the root result cards and
+        // skip the static-link BFS that would otherwise build it.
+        omitIncluded: duringPrerender,
       });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -5928,6 +5955,87 @@ export class Realm {
           warningTypes: warningTypes.length ? warningTypes : undefined,
         },
       },
+    };
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  private async indexingErrors(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // With CS-11003's deferred indexing on +source POSTs, a caller that
+    // pushes a fix and immediately polls this endpoint could otherwise
+    // see a stale snapshot — either still reporting an error the just-
+    // pushed fix cleared, or missing a fresh failure from the same write.
+    // Same hazard publishability() guards against (see realm.ts:5629).
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
+    let sourceRealmURL = ensureTrailingSlash(this.url);
+
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT url, type, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      `AND (`,
+      `  has_error = TRUE`,
+      `  OR (`,
+      `    jsonb_typeof(diagnostics->'brokenLinks') = 'array'`,
+      `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
+      `  )`,
+      `)`,
+      `ORDER BY type, url`,
+    ])) as {
+      url: string;
+      type: string;
+      error_doc: SerializedError | null;
+      diagnostics: Record<string, unknown> | null;
+    }[];
+
+    let doc = {
+      data: rows.map((row) => {
+        let brokenLinks =
+          row.diagnostics && Array.isArray(row.diagnostics.brokenLinks)
+            ? (row.diagnostics.brokenLinks as unknown[])
+            : null;
+        let hasError = row.error_doc != null;
+        // 'indexing-error' = row.has_error = TRUE (rendered/indexed badly).
+        // 'broken-link' = the index row is healthy but the rendered card has
+        // dead linksTo/linksToMany targets surfaced by render.meta. Both
+        // classes share the (entryType, url) key; the discriminator lets
+        // consumers branch on which attributes to read.
+        let resourceType: 'indexing-error' | 'broken-link' = hasError
+          ? 'indexing-error'
+          : 'broken-link';
+        let attributes: Record<string, unknown> = {
+          url: row.url,
+          entryType: row.type,
+          diagnostics: row.diagnostics,
+        };
+        if (hasError) {
+          attributes.errorDoc = row.error_doc;
+        }
+        if (brokenLinks && brokenLinks.length > 0) {
+          attributes.brokenLinks = brokenLinks;
+        }
+        return {
+          type: resourceType,
+          // `(type, url)` is the boxel_index PK partition; encoding both
+          // keeps the JSON:API resource id unique when the same URL fails
+          // as both 'instance' and 'file'.
+          id: `${row.type}::${row.url}`,
+          attributes,
+        };
+      }),
     };
 
     return createResponse({

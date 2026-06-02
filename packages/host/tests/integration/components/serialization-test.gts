@@ -61,7 +61,7 @@ import {
   updateFromSerialized,
   CodeRefField,
   linksTo,
-  relationshipMeta,
+  getRelationship,
   FieldDef,
   containsMany,
   linksToMany,
@@ -1389,26 +1389,29 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"pet" field value is not an instance of Pet');
     }
 
-    let relationship = relationshipMeta(card, 'pet');
+    let relationship = getRelationship(card, 'pet');
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship',
+        'getRelationship should not be an array for linksTo relationship',
       );
     } else {
-      if (relationship?.type === 'loaded') {
-        let relatedCard = relationship.card;
+      if (relationship.kind === 'present') {
+        let relatedCard = relationship.value;
         assert.true(relatedCard instanceof Pet, 'related card is a Pet');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
       } else {
-        assert.ok(false, 'relationship type was not "loaded"');
+        assert.ok(
+          false,
+          `relationship kind was not "present": ${relationship.kind}`,
+        );
       }
     }
 
-    assert.strictEqual(
-      relationshipMeta(card, 'firstName'),
-      undefined,
-      'relationshipMeta returns undefined for non-relationship field',
+    assert.throws(
+      () => getRelationship(card, 'firstName'),
+      /requires a 'linksTo' or 'linksToMany' field/,
+      'getRelationship throws for a non-relationship field',
     );
   });
 
@@ -1483,17 +1486,20 @@ module('Integration | serialization', function (hooks) {
 
     hassan.pet; // should no longer throw NotLoaded errors
 
-    let relationship = relationshipMeta(hassan, 'pet');
+    let relationship = getRelationship(hassan, 'pet');
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship',
+        'getRelationship should not be an array for linksTo relationship',
       );
     } else {
-      if (relationship?.type === 'not-loaded') {
+      if (relationship.kind === 'not-loaded') {
         assert.strictEqual(relationship.reference, `${testRealmURL}Pet/mango`);
       } else {
-        assert.ok(false, 'relationship type was not "not-loaded"');
+        assert.ok(
+          false,
+          `relationship kind was not "not-loaded": ${relationship.kind}`,
+        );
       }
     }
 
@@ -1753,27 +1759,30 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
     }
 
-    let relationship = relationshipMeta(card, 'owner');
+    let relationship = getRelationship(card, 'owner');
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship',
+        'getRelationship should not be an array for linksTo relationship',
       );
     } else {
-      if (relationship?.type === 'loaded') {
-        let relatedCard = relationship.card;
+      if (relationship.kind === 'present') {
+        let relatedCard = relationship.value;
         assert.true(relatedCard instanceof Person, 'related card is a Person');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Person/burcu`);
       } else {
-        assert.ok(false, 'relationship type was not "loaded"');
+        assert.ok(
+          false,
+          `relationship kind was not "present": ${relationship.kind}`,
+        );
       }
     }
 
     ['firstName', 'toys', 'favoriteToy'].map((fieldName) =>
-      assert.strictEqual(
-        relationshipMeta(card, fieldName),
-        undefined,
-        `relationshipMeta returns undefined for non-relationship field ${fieldName}`,
+      assert.throws(
+        () => getRelationship(card, fieldName),
+        /requires a 'linksTo' or 'linksToMany' field/,
+        `getRelationship throws for non-relationship field ${fieldName}`,
       ),
     );
   });
@@ -3425,19 +3434,22 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"friendPet" field value is not an instance of Pet');
       }
 
-      let relationship = relationshipMeta(card, 'friendPet');
+      let relationship = getRelationship(card, 'friendPet');
       if (Array.isArray(relationship)) {
         assert.ok(
           false,
-          'relationshipMeta should not be an array for linksTo relationship',
+          'getRelationship should not be an array for linksTo relationship',
         );
       } else {
-        if (relationship?.type === 'loaded') {
-          let relatedCard = relationship.card;
+        if (relationship.kind === 'present') {
+          let relatedCard = relationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded"');
+          assert.ok(
+            false,
+            `relationship kind was not "present": ${relationship.kind}`,
+          );
         }
       }
     });
@@ -3544,11 +3556,14 @@ module('Integration | serialization', function (hooks) {
         'an explicitly-null computed linksTo surfaces as undefined to userland',
       );
 
-      // relationshipMeta is the deprecated back-compat wrapper; it preserves
-      // the original `{ type: 'loaded', card: null }` shape that pre-dated the
-      // unified userland surface so existing callers keep working.
-      let relationship = relationshipMeta(card, 'friendPet');
-      assert.deepEqual(relationship, { type: 'loaded', card: null });
+      let relationship = getRelationship(card, 'friendPet');
+      assert.deepEqual(relationship, {
+        kind: 'not-set',
+        isLoaded: false,
+        isError: false,
+        value: undefined,
+        reference: undefined,
+      });
     });
 
     test('can deserialize a computed linksTo relationship that does not include all the related resources', async function (assert) {
@@ -3594,16 +3609,22 @@ module('Integration | serialization', function (hooks) {
       );
 
       card.friendPet; // Should no longer throw NotLoaded error
-      let friendRel = relationshipMeta(card, 'friend');
+      let friendRel = getRelationship(card, 'friend');
       assert.deepEqual(friendRel, {
-        type: 'not-loaded',
+        kind: 'not-loaded',
+        isLoaded: false,
+        isError: false,
+        value: undefined,
         reference: `${testRealmURL}Person/hassan`,
       });
 
-      let friendPetRel = relationshipMeta(card, 'friendPet');
+      let friendPetRel = getRelationship(card, 'friendPet');
       assert.deepEqual(friendPetRel, {
-        type: 'loaded',
-        card: null,
+        kind: 'not-set',
+        isLoaded: false,
+        isError: false,
+        value: undefined,
+        reference: undefined,
       });
     });
 
@@ -6199,31 +6220,37 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationships = relationshipMeta(card, 'pets');
-      if (relationships !== undefined && Array.isArray(relationships)) {
+      let relationships = getRelationship(card, 'pets');
+      if (Array.isArray(relationships)) {
         let [mangoRelationship, vanGoghRelationship] = relationships;
 
-        if (mangoRelationship?.type === 'loaded') {
-          let relatedCard = mangoRelationship.card;
+        if (mangoRelationship?.kind === 'present') {
+          let relatedCard = mangoRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for mango');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for mango: ${mangoRelationship?.kind}`,
+          );
         }
-        if (vanGoghRelationship?.type === 'loaded') {
-          let relatedCard = vanGoghRelationship.card;
+        if (vanGoghRelationship?.kind === 'present') {
+          let relatedCard = vanGoghRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for vanGogh');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for vanGogh: ${vanGoghRelationship?.kind}`,
+          );
         }
-        assert.strictEqual(
-          relationshipMeta(card, 'firstName'),
-          undefined,
-          'relationshipMeta returns undefined for non-relationship field',
+        assert.throws(
+          () => getRelationship(card, 'firstName'),
+          /requires a 'linksTo' or 'linksToMany' field/,
+          'getRelationship throws for a non-relationship field',
         );
       } else {
-        assert.ok(false, 'relationshipMeta returned an unexpected value');
+        assert.ok(false, 'getRelationship returned an unexpected value');
       }
     });
 
@@ -6332,26 +6359,32 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationships = relationshipMeta(card, 'pets');
-      if (relationships !== undefined && Array.isArray(relationships)) {
+      let relationships = getRelationship(card, 'pets');
+      if (Array.isArray(relationships)) {
         let [mangoRelationship, vanGoghRelationship] = relationships;
 
-        if (mangoRelationship?.type === 'loaded') {
-          let relatedCard = mangoRelationship.card;
+        if (mangoRelationship?.kind === 'present') {
+          let relatedCard = mangoRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for mango');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for mango: ${mangoRelationship?.kind}`,
+          );
         }
-        if (vanGoghRelationship?.type === 'loaded') {
-          let relatedCard = vanGoghRelationship.card;
+        if (vanGoghRelationship?.kind === 'present') {
+          let relatedCard = vanGoghRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for vanGogh');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for vanGogh: ${vanGoghRelationship?.kind}`,
+          );
         }
       } else {
-        assert.ok(false, 'relationshipMeta returned an unexpected value');
+        assert.ok(false, 'getRelationship returned an unexpected value');
       }
     });
 
@@ -6737,28 +6770,28 @@ module('Integration | serialization', function (hooks) {
 
       hassan.pets; // no longer throws NotLoaded
 
-      let relationships = relationshipMeta(hassan, 'pets');
+      let relationships = getRelationship(hassan, 'pets');
       if (!Array.isArray(relationships)) {
         assert.ok(
           false,
-          'relationshipMeta should be an array for linksToMany relationship',
+          'getRelationship should be an array for linksToMany relationship',
         );
       } else {
         let [mango, vanGogh] = relationships;
-        if (mango?.type === 'loaded') {
-          assert.strictEqual(mango.card?.id, `${testRealmURL}Pet/mango`);
+        if (mango?.kind === 'present') {
+          assert.strictEqual(mango.value?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/mango was not "loaded"`,
+            `relationship kind for ${testRealmURL}Pet/mango was not "present": ${mango?.kind}`,
           );
         }
-        if (vanGogh?.type === 'not-loaded') {
+        if (vanGogh?.kind === 'not-loaded') {
           assert.strictEqual(vanGogh.reference, `${testRealmURL}Pet/vanGogh`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/vanGogh was not "not-loaded"`,
+            `relationship kind for ${testRealmURL}Pet/vanGogh was not "not-loaded": ${vanGogh?.kind}`,
           );
         }
       }
@@ -7276,11 +7309,18 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationship = relationshipMeta(card, 'friendPets');
-      assert.deepEqual(relationship, [
-        { type: 'loaded', card: mango },
-        { type: 'loaded', card: vanGogh },
-      ]);
+      let relationship = getRelationship(card, 'friendPets');
+      assert.ok(
+        Array.isArray(relationship),
+        'getRelationship returns an array for linksToMany relationship',
+      );
+      if (Array.isArray(relationship)) {
+        let [mangoRel, vanGoghRel] = relationship;
+        assert.strictEqual(mangoRel.kind, 'present');
+        assert.strictEqual(mangoRel.value, mango);
+        assert.strictEqual(vanGoghRel.kind, 'present');
+        assert.strictEqual(vanGoghRel.value, vanGogh);
+      }
     });
 
     test('can serialize an empty computed linksToMany relationship', async function (assert) {
@@ -7468,25 +7508,25 @@ module('Integration | serialization', function (hooks) {
       card.friendPets; // No longer throws NotLoaded
       card.ownPets; // No longer throws NotLoaded
 
-      let relationships = relationshipMeta(card, 'ownPets');
+      let relationships = getRelationship(card, 'ownPets');
       if (!Array.isArray(relationships)) {
-        assert.ok(false, 'relationshipMeta should be an array');
+        assert.ok(false, 'getRelationship should be an array');
       } else {
         let [mango, vanGogh] = relationships;
-        if (mango?.type === 'loaded') {
-          assert.strictEqual(mango.card?.id, `${testRealmURL}Pet/mango`);
+        if (mango?.kind === 'present') {
+          assert.strictEqual(mango.value?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/mango was not "loaded"`,
+            `relationship kind for ${testRealmURL}Pet/mango was not "present": ${mango?.kind}`,
           );
         }
-        if (vanGogh?.type === 'not-loaded') {
+        if (vanGogh?.kind === 'not-loaded') {
           assert.strictEqual(vanGogh.reference, `${testRealmURL}Pet/vanGogh`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/vanGogh was not "not-loaded"`,
+            `relationship kind for ${testRealmURL}Pet/vanGogh was not "not-loaded": ${vanGogh?.kind}`,
           );
         }
       }

@@ -49,6 +49,11 @@ export const InputValidationStates = {
 
 export type InputValidationState = Values<typeof InputValidationStates>;
 
+export const InputSizes = {
+  Default: 'default',
+  Large: 'large',
+} as const;
+
 export const InputBottomTreatments = {
   Flat: 'flat',
   Rounded: 'rounded',
@@ -74,7 +79,7 @@ export interface Signature {
     placeholder?: string;
     readonly?: boolean;
     required?: boolean;
-    size?: 'large' | 'default';
+    size?: Values<typeof InputSizes>;
     state?: InputValidationState;
     type?: InputType;
     value: string | number | boolean | null | undefined;
@@ -248,14 +253,16 @@ export default class BoxelInput extends Component<Signature> {
         .input-container {
           --icon-size: var(--boxel-icon-sm);
           --icon-space: var(--boxel-sp-xs);
-          --icon-full-length: calc(
-            var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2
+          --_icon-full-length: var(
+            --boxel-input-icon-size,
+            calc(var(--icon-size) + var(--icon-space) * 2)
           );
 
           display: grid;
-          grid-template-columns: var(--icon-full-length) 1fr var(
-              --icon-full-length
-            );
+          grid-template-columns:
+            var(--_icon-full-length)
+            1fr
+            var(--_icon-full-length);
           grid-template-areas:
             'optional optional optional'
             'pre-icon input post-icon'
@@ -269,7 +276,8 @@ export default class BoxelInput extends Component<Signature> {
           grid-row: 2;
 
           box-sizing: border-box;
-          width: 100%;
+          width: var(--boxel-input-width, 100%);
+          min-width: 0;
           max-width: 100%;
           min-height: var(
             --boxel-input-height,
@@ -297,6 +305,35 @@ export default class BoxelInput extends Component<Signature> {
           --boxel-input-height: 10rem;
           resize: both;
           overflow: auto;
+        }
+
+        .input-container:has([type='color']) {
+          --boxel-input-icon-size: 0;
+        }
+
+        .input-container:has([type='color']) .validation-icon-container,
+        .input-container:has([type='color']) .error-message,
+        .input-container:has([type='color']) .helper-text {
+          display: none;
+        }
+
+        .boxel-input[type='color'] {
+          width: 1.5rem;
+          height: 1.5rem;
+          min-height: unset;
+          padding: 0;
+          background: none;
+          border-radius: var(--boxel-border-radius-sm);
+          cursor: pointer;
+        }
+
+        .boxel-input[type='color']::-webkit-color-swatch-wrapper {
+          padding: 0;
+        }
+
+        .boxel-input[type='color']::-webkit-color-swatch {
+          border: none;
+          border-radius: calc(var(--boxel-border-radius-sm) - 1px);
         }
 
         .boxel-input:not([type='color']):disabled {
@@ -390,6 +427,11 @@ export default class BoxelInput extends Component<Signature> {
           align-items: center;
           justify-content: center;
           user-select: none;
+        }
+
+        .is-multiline .validation-icon-container {
+          align-items: flex-start;
+          padding-top: var(--boxel-sp-xs);
         }
 
         .search ~ .validation-icon-container .validation-icon-loading {

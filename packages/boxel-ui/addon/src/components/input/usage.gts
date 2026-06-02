@@ -16,6 +16,7 @@ import BoxelInput from './index.gts';
 import {
   type InputValidationState,
   InputBottomTreatments,
+  InputSizes,
   InputTypes,
   InputValidationStates,
 } from './index.gts';
@@ -23,6 +24,7 @@ import {
 const validTypes = Object.values(InputTypes);
 const validBottomTreatments = Object.values(InputBottomTreatments);
 const validStates = Object.values(InputValidationStates);
+const validSizes = Object.values(InputSizes);
 
 export default class InputUsage extends Component {
   @tracked id = 'sample-input';
@@ -37,7 +39,8 @@ export default class InputUsage extends Component {
   @tracked min = '';
   @tracked max = '';
   @tracked state: InputValidationState = 'initial';
-  @tracked size: 'large' | 'default' = 'default';
+  @tracked size: (typeof InputSizes)[keyof typeof InputSizes] =
+    InputSizes.Default;
 
   @tracked isChecked = false;
 
@@ -199,9 +202,9 @@ export default class InputUsage extends Component {
         />
         <Args.String
           @name='size'
-          @description='Optional larger size'
+          @description='Input size: large increases height, auto sets container width to fit-content'
           @onInput={{fn (mut this.size)}}
-          @options={{Array 'default' 'large'}}
+          @options={{validSizes}}
           @value={{this.size}}
           @defaultValue={{this.size}}
         />

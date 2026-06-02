@@ -440,6 +440,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     test('can upload multiple files via the New menu', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
+      // Open the file tree so FileTree is mounted before the upload;
+      // otherwise the {{#if}} in left-panel-toggle keeps Directory out
+      // of the DOM and the assertion below has nothing to match.
+      await click('[data-test-file-browser-toggle]');
       await waitFor('[data-test-new-file-button]');
       await click('[data-test-new-file-button]');
 
@@ -467,23 +471,13 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           'code editor navigated to the first uploaded file',
         );
 
-      // Workaround for the live file-tree refresh race (uploads AND
-      // deletes both leave the tree stale until refresh / view toggle).
-      // Tracked in CS-11295. Toggling the left panel destroys +
-      // recreates the FileTree component via the {{#if}} in
-      // left-panel-toggle.gts, which forces FileTreeFromIndexResource
-      // to re-run its search through modify(). Remove once the
-      // underlying race is fixed.
-      await click('[data-test-inspector-toggle]');
-      await click('[data-test-file-browser-toggle]');
-
       await waitUntil(
         () =>
           document.querySelector(
             '[data-test-file="multi-upload-second.txt"]',
           ) != null,
         {
-          timeout: 20000,
+          timeout: 10000,
           timeoutMessage:
             'second uploaded file did not appear in the file tree',
         },

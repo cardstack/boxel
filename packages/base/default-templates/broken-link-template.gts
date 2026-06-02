@@ -1,6 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+import { guidFor } from '@ember/object/internals';
+import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
+import LinkOffIcon from '@cardstack/boxel-icons/link-off';
+import { cardTypeName } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common';
+
+type TipCorner = 'tl' | 'tr' | 'bl' | 'br';
 
 export type BrokenLinkState = 'error' | 'not-found';
 export type BrokenLinkFormat = 'isolated' | 'fitted' | 'embedded' | 'atom';
@@ -35,10 +43,64 @@ function isSafeHttpUrl(url: string): boolean {
   }
 }
 
+// Solid amber warning triangle with a black "!" — a two-tone svg the
+// single-colour boxel icon can't express. Shared by the reveal trigger and the
+// overlay title; `@size` sets both svg dimensions so each caller can match its
+// context.
+class WarningIcon extends GlimmerComponent<{
+  Element: SVGElement;
+  Args: { size: string };
+}> {
+  <template>
+    <svg
+      class='warn-icon'
+      viewBox='0 0 24 24'
+      width={{@size}}
+      height={{@size}}
+      aria-hidden='true'
+      ...attributes
+    >
+      <path
+        class='warn-icon-tri'
+        d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
+      />
+      <path class='warn-icon-mark' d='M12 9.2v4.3' />
+      <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
+    </svg>
+    <style scoped>
+      .warn-icon {
+        display: block;
+      }
+      .warn-icon-tri {
+        fill: var(--boxel-warning-200, #ffba00);
+        stroke: var(--boxel-warning-200, #ffba00);
+        stroke-width: 1.5;
+        stroke-linejoin: round;
+      }
+      .warn-icon-mark {
+        fill: none;
+        stroke: #1a1a1a;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+      }
+      .warn-icon-dot {
+        fill: #1a1a1a;
+      }
+    </style>
+  </template>
+}
+
 export default class BrokenLinkTemplate extends GlimmerComponent<{
   Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
 }> {
+  // The placeholder box is identical for every failure — what went wrong only
+  // surfaces inside the reveal overlay. `typeName` is the human-readable label
+  // shown next to the link-off icon, derived from the reference URL.
+  private get typeName(): string {
+    return cardTypeName(this.args.brokenUrl);
+  }
+
   private get isNotFound() {
     return this.args.state === 'not-found';
   }
@@ -61,7 +123,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     if (errorDoc.title) {
       pieces.push(errorDoc.title);
     }
-    return pieces.join(' · ');
+    return pieces.join(' - ');
   }
 
   private get errorMessage(): string {
@@ -72,12 +134,50 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return this.args.errorDoc?.stack ?? '';
   }
 
-  private get isErrorState(): boolean {
-    return this.args.state === 'error';
+  // The prose message is only a visual duplicate when the stack's text already
+  // carries it (a JS stack's first line is typically `ErrorName: message`).
+  // When they differ — or there is no stack — the message is distinct
+  // information and stays visible.
+  private get isMessageRedundant(): boolean {
+    let stack = this.errorStack;
+    let message = this.errorMessage;
+    return stack.length > 0 && message.length > 0 && stack.includes(message);
+  }
+
+  // not-found's message is always "Could not find <url>", which the overlay
+  // already renders as the URL line — only show the prose message when it
+  // carries a distinct error reason.
+  private get showMessage(): boolean {
+    return !this.isNotFound && this.errorMessage.length > 0;
   }
 
   private get urlIsSafe(): boolean {
     return isSafeHttpUrl(this.args.brokenUrl);
+  }
+
+  private get additionalErrorsLabel(): string {
+    let n = this.additionalErrors.length;
+    return `${n} additional error${n === 1 ? '' : 's'}`;
+  }
+
+  // The toggle checkbox and the trigger/close labels are wired by id; the
+  // overlay and tip anchor by dashed-ident. All must be unique per instance so
+  // multiple broken links on a page don't cross-trigger.
+  private toggleId = `broken-link-reveal-${guidFor(this)}`;
+  private anchorName = `--${this.toggleId}`;
+  private overlayAnchorName = `--${this.toggleId}-ov`;
+  private get triggerStyle() {
+    return htmlSafe(`anchor-name: ${this.anchorName}`);
+  }
+  private get overlayStyle() {
+    // The overlay anchors to the trigger, and is itself an anchor so the tip
+    // can sit on the overlay corner that faces the card.
+    return htmlSafe(
+      `position-anchor: ${this.anchorName}; anchor-name: ${this.overlayAnchorName}`,
+    );
+  }
+  private get tipStyle() {
+    return htmlSafe(`position-anchor: ${this.overlayAnchorName}`);
   }
 
   private get additionalErrors(): NormalizedAdditionalError[] {
@@ -109,301 +209,659 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return normalized;
   }
 
+  // The reveal itself is pure CSS (a checkbox). But which corner the tip
+  // attaches to depends on where CSS anchor positioning actually placed the
+  // overlay (above/below × left/right of the trigger, to stay inside the card).
+  // CSS can't report the resolved position, so on open we measure it and pick
+  // the corner nearest the trigger; the matching CSS variant orients the tip
+  // and squares that corner.
+  @tracked private tipCorner: TipCorner = 'br';
+
+  private onToggle = (event: Event) => {
+    let input = event.target as HTMLInputElement;
+    if (!input.checked) {
+      return;
+    }
+    let root = input.closest('.broken-link-template') as HTMLElement | null;
+    if (root) {
+      requestAnimationFrame(() => this.updateTipCorner(root));
+    }
+  };
+
+  private updateTipCorner = (root: HTMLElement) => {
+    let overlay = root.querySelector('.overlay') as HTMLElement | null;
+    let trigger = root.querySelector('.reveal-trigger') as HTMLElement | null;
+    if (!overlay || !trigger) {
+      return;
+    }
+    // The card boundary is the overlay's containing block.
+    let cardEl = (overlay.offsetParent as HTMLElement) ?? document.documentElement;
+    let card = cardEl.getBoundingClientRect();
+    let o = overlay.getBoundingClientRect();
+    let t = trigger.getBoundingClientRect();
+    let w = o.width;
+    let h = o.height;
+    let triggerX = t.left + t.width / 2;
+    // The overlay edge sits at the trigger centre, and the gap (tip height +
+    // clearance) separates it from the trigger.
+    let gap = 24;
+    let edge = 10;
+    // Prefer opening above the card (tip points down into the shadow); fall
+    // back to below, then to whichever side has more room.
+    let roomAbove = t.top - card.top;
+    let roomBelow = card.bottom - t.bottom;
+    let above =
+      roomAbove >= h + gap + edge
+        ? true
+        : roomBelow >= h + gap + edge
+          ? false
+          : roomAbove >= roomBelow;
+    // Prefer extending left (overlay edge at the trigger centre, tip on the
+    // right); flip to extending right (tip on the left) when the overlay would
+    // crowd the card's left edge.
+    let roomLeft = triggerX - card.left;
+    let roomRight = card.right - triggerX;
+    let extendLeft =
+      roomLeft >= w + edge
+        ? true
+        : roomRight >= w + edge
+          ? false
+          : roomLeft >= roomRight;
+    this.tipCorner = `${above ? 'b' : 't'}${extendLeft ? 'r' : 'l'}` as TipCorner;
+  };
+
+  // Re-measure the corner if the layout shifts while the overlay is open.
+  private watchReposition = modifier((root: HTMLElement) => {
+    let onResize = () => {
+      let input = root.querySelector(
+        '.reveal-toggle',
+      ) as HTMLInputElement | null;
+      if (input?.checked) {
+        this.updateTipCorner(root);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  });
+
   <template>
     <div
-      class='broken-link-template {{@format}} {{@state}}'
+      class='broken-link-template {{@format}} tip-{{this.tipCorner}}'
       data-test-broken-link-template={{@format}}
       data-test-broken-link-state={{@state}}
+      {{this.watchReposition}}
       ...attributes
     >
-      {{#if (eq @format 'atom')}}
-        <span class='atom-line'>
-          <span class='atom-marker' aria-hidden='true'>!</span>
-          <span class='atom-label'>
-            {{if this.isNotFound 'Not found' 'Error'}}:
-          </span>
-          <span class='atom-url' data-test-broken-link-url>{{@brokenUrl}}</span>
+      {{! Pure-CSS disclosure: the checkbox holds open/closed state; the trigger
+          and close affordances are <label>s pointing at it. The only JS is a
+          measurement on open that picks which corner the tip attaches to. The
+          overlay stays a normal in-flow descendant, so the card's own overflow
+          keeps it inside the card boundary. }}
+      <input
+        id={{this.toggleId}}
+        type='checkbox'
+        class='reveal-toggle'
+        {{on 'change' this.onToggle}}
+        data-test-broken-link-toggle
+      />
+
+      {{! The box is identical across states — a faint diagonal cross with a
+          centered link-off + type-name chip. A warning triangle is the reveal
+          trigger; the reason the link is broken lives only in the overlay. }}
+      <div class='box'>
+        <span class='label'>
+          <LinkOffIcon width='14' height='14' />
+          <span
+            class='type-name'
+            data-test-broken-link-type
+          >{{this.typeName}}</span>
         </span>
-      {{else}}
-        <div class='headline-row'>
-          <span class='marker' aria-hidden='true'>!</span>
-          <span class='headline' data-test-broken-link-headline>
-            {{this.headline}}
-          </span>
-        </div>
-        {{#if this.urlIsSafe}}
-          <a
-            class='url'
-            href={{@brokenUrl}}
-            target='_blank'
-            rel='noopener noreferrer'
-            data-test-broken-link-url
-          >
-            {{@brokenUrl}}
-          </a>
-        {{else}}
-          {{! Unsafe protocol — render as text so a click cannot execute. }}
-          <span class='url' data-test-broken-link-url>{{@brokenUrl}}</span>
-        {{/if}}
-        {{#if this.statusLabel}}
-          <div class='status' data-test-broken-link-status>
-            {{this.statusLabel}}
+        <label
+          for={{this.toggleId}}
+          class='reveal-trigger'
+          style={{this.triggerStyle}}
+          aria-label='Show broken link details'
+          data-test-broken-link-reveal
+        >
+          <WarningIcon @size='17' />
+        </label>
+      </div>
+
+      {{! Detail stays DOM-resident (display:none, still in the DOM) so a reader
+          or AI consumer can always recover the failure; it becomes visible only
+          when the toggle is checked. }}
+      <div
+        class='overlay'
+        style={{this.overlayStyle}}
+        data-test-broken-link-overlay
+      >
+        {{! Title + URL stay out of the scroller so they (and the close
+            affordance) remain visible while the error detail scrolls. }}
+        <div class='overlay-header'>
+          <div class='overlay-title-row'>
+            <span class='overlay-title'>
+              <WarningIcon @size='16' />
+              <span data-test-broken-link-headline>{{this.headline}}</span>
+            </span>
+            <label
+              for={{this.toggleId}}
+              class='overlay-close'
+              aria-label='Close'
+              data-test-broken-link-overlay-close
+            >×</label>
           </div>
-        {{/if}}
-        {{#unless (eq @format 'fitted')}}
-          {{! For not-found, message is always "Could not find <url>" — the
-              URL is already rendered prominently above, so suppress it.
-              Show the message only when state == 'error', where it carries
-              the actual error reason. }}
-          {{#if this.isErrorState}}
-            {{#if this.errorMessage}}
-              <div class='message' data-test-broken-link-message>
-                {{this.errorMessage}}
+          {{#if this.urlIsSafe}}
+            <a
+              class='overlay-url'
+              href={{@brokenUrl}}
+              target='_blank'
+              rel='noopener noreferrer'
+              data-test-broken-link-url
+            >{{@brokenUrl}}</a>
+          {{else}}
+            {{! Unsafe protocol — render as text so a click cannot execute. }}
+            <span
+              class='overlay-url'
+              data-test-broken-link-url
+            >{{@brokenUrl}}</span>
+          {{/if}}
+        </div>
+
+        <div class='overlay-panel'>
+          {{#if this.isNotFound}}
+            {{#if this.statusLabel}}
+              <div class='status-badge' data-test-broken-link-status>
+                {{this.statusLabel}}
               </div>
             {{/if}}
-          {{/if}}
-        {{/unless}}
-        {{#if (eq @format 'isolated')}}
-          {{#if this.errorStack}}
-            <pre
-              class='stack'
-              data-test-broken-link-stack
-            >{{this.errorStack}}</pre>
-          {{/if}}
-          {{#let this.additionalErrors as |additionalErrors|}}
-            {{#if additionalErrors.length}}
-              <details class='additional-errors'>
-                <summary data-test-broken-link-additional-errors-toggle>
-                  {{additionalErrors.length}}
-                  additional error{{if (eq additionalErrors.length 1) '' 's'}}
+          {{else}}
+            {{! One bordered container groups the failure(s); each is a
+                disclosure whose header sits on a tinted strip and whose body
+                sits flush on white, divided by hairlines. }}
+            <div class='diagnostics'>
+              <details class='diag-section' open>
+                <summary class='diag-summary' data-test-broken-link-status>
+                  <span class='diag-caret' aria-hidden='true'></span>
+                  <span class='diag-summary-text'>{{this.statusLabel}}</span>
                 </summary>
-                <ul>
-                  {{#each additionalErrors as |err i|}}
-                    <li data-test-broken-link-additional-error={{i}}>
-                      {{#if err.status}}
-                        <span class='additional-status'>{{err.status}}</span>
-                      {{/if}}
-                      <span class='additional-message'>{{err.message}}</span>
-                      {{#if err.stack}}
-                        <pre class='additional-stack'>{{err.stack}}</pre>
-                      {{/if}}
-                    </li>
-                  {{/each}}
-                </ul>
+                <div class='diag-body'>
+                  {{#if this.showMessage}}
+                    {{! When the stack's first line already carries the message,
+                        keep the prose in the DOM for AI consumers but hide the
+                        visual duplicate; show it whenever the two differ. }}
+                    <div
+                      class='error-message
+                        {{if this.isMessageRedundant "is-redundant"}}'
+                      data-test-broken-link-message
+                    >{{this.errorMessage}}</div>
+                  {{/if}}
+                  {{#if this.errorStack}}
+                    <pre
+                      class='error-stack'
+                      data-test-broken-link-stack
+                    >{{this.errorStack}}</pre>
+                  {{/if}}
+                </div>
               </details>
-            {{/if}}
-          {{/let}}
-        {{/if}}
-      {{/if}}
+
+              {{#let this.additionalErrors as |additionalErrors|}}
+                {{#if additionalErrors.length}}
+                  <details class='diag-section additional-section'>
+                    <summary class='diag-summary'>
+                      <span class='diag-caret' aria-hidden='true'></span>
+                      <span
+                        class='diag-summary-text'
+                      >{{this.additionalErrorsLabel}}</span>
+                    </summary>
+                    <div class='diag-body'>
+                      <ul class='additional-list'>
+                        {{#each additionalErrors as |err i|}}
+                          <li
+                            class='additional-item'
+                            data-test-broken-link-additional-error={{i}}
+                          >
+                            <span
+                              class='additional-badge'
+                            >{{#if err.status}}{{err.status}} {{/if}}{{err.message}}</span>
+                            {{#if err.stack}}
+                              <pre class='additional-stack'>{{err.stack}}</pre>
+                            {{/if}}
+                          </li>
+                        {{/each}}
+                      </ul>
+                    </div>
+                  </details>
+                {{/if}}
+              {{/let}}
+            </div>
+          {{/if}}
+        </div>
+      </div>
+
+      {{! The tip: a solid-white right-triangle sitting ON TOP of the overlay's
+          shadow (so it's uniformly white with no seam) at the overlay corner
+          that faces the card. Its vertical edge is flush with the overlay's
+          side edge and its apex points back at the placeholder. Sibling of the
+          overlay so it can anchor to it; laid out after it. }}
+      <span class='tip' style={{this.tipStyle}} aria-hidden='true'></span>
     </div>
+
     <style scoped>
+      /* The placeholder fills its host slot but does NOT clip — the cross is
+         clipped by the inner `.box`, leaving the root free so the overlay can
+         extend out of the small placeholder footprint and be bounded only by
+         the surrounding card (whose own overflow keeps it inside the card). */
       .broken-link-template {
         box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-100);
-        border: 1px dashed var(--boxel-300);
-        border-radius: var(--boxel-form-control-border-radius);
-        color: var(--boxel-dark);
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        overflow: hidden;
+        position: static;
+        /* Shared by the overlay (gap to the trigger) and the tip (height), so
+           both must live on the common ancestor — the tip is a sibling of the
+           overlay, not a child. The gap is the tip height + 5px so the apex
+           stops ~5px short of the trigger. */
+        --bl-tip-h: 0.9rem;
+        --bl-gap: calc(var(--bl-tip-h) + 5px);
       }
-      .broken-link-template.error {
-        background-color: var(--boxel-error-100, #fdecec);
-        border-color: var(--boxel-error-200, #f5c2c0);
-      }
-
-      /* Per-format sizing — mirrors field-component.gts:450-481 so the
-         placeholder occupies the same footprint as the card it stands in for. */
       .broken-link-template.fitted {
         width: 100%;
         height: 100%;
         min-height: 40px;
         max-height: 600px;
-        container-type: size;
-        gap: 2px;
-        padding: var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-xs);
       }
       .broken-link-template.embedded {
-        container-type: inline-size;
         width: 100%;
-        padding: var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-xs);
-        gap: 2px;
-      }
-      .broken-link-template.embedded .message {
-        /* Clamp long error messages so the placeholder fits even when the
-           parent embedded slot is height-constrained (e.g. a 110px tall row
-           inside a tight flex container). The full message remains in the
-           DOM for screen readers / AI consumers. */
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        line-clamp: 2;
-        overflow: hidden;
+        min-height: 9.375rem;
       }
       .broken-link-template.isolated {
         width: 100%;
         height: 100%;
-        padding: var(--boxel-sp);
-        font: 500 var(--boxel-font);
+        min-height: 18.75rem;
       }
       .broken-link-template.atom {
         display: inline-flex;
-        align-items: center;
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-xs);
-        gap: 0;
+        vertical-align: middle;
       }
 
-      .headline-row {
+      /* ── The box ──────────────────────────────────────────────────────────
+         Mirrors the markdown broken-card treatment (markdown.gts
+         .markdown-bfm-broken*): two crossed linear-gradient strokes forming a
+         faint diagonal X, with a centered link-off + type-name chip whose fill
+         matches the box so the cross does not slice through the label. */
+      .box {
+        position: relative;
+        box-sizing: border-box;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-5xs);
-        min-width: 0;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: inherit;
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light-100);
+        background-image: linear-gradient(
+            to top right,
+            transparent calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          ),
+          linear-gradient(
+            to bottom right,
+            transparent calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% - 0.5px),
+            var(--boxel-border-color) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          );
+        overflow: hidden;
       }
-      .marker {
+      .broken-link-template.atom .box {
+        min-height: 1.6em;
+        padding: 0 var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
+        background-color: var(--boxel-light-100);
+        color: var(--boxel-500);
+        font: 500 var(--boxel-font-xs);
+        line-height: 1.5;
+        white-space: nowrap;
+      }
+      .label svg {
+        flex: none;
+      }
+      .type-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .broken-link-template.atom .type-name {
+        max-width: 12ch;
+      }
+
+      /* ── Reveal trigger ───────────────────────────────────────────────────
+         The warning triangle, pinned top-right of the box (right-of-label for
+         the inline atom). */
+      .reveal-toggle {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        border: 0;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .reveal-trigger {
+        position: absolute;
+        top: var(--boxel-sp-5xs);
+        right: var(--boxel-sp-5xs);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        flex: 0 0 auto;
-        width: 1.1em;
-        height: 1.1em;
-        border-radius: 50%;
-        background-color: var(--boxel-error-300, #d9534f);
-        color: var(--boxel-light, #fff);
-        font-size: 0.75em;
-        font-weight: 700;
-        line-height: 1;
-      }
-      .headline {
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-      }
-      .url {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        font-size: 0.85em;
-        word-break: break-all;
-        color: var(--boxel-dark);
-        text-decoration: underline;
-        text-decoration-style: dotted;
-        text-decoration-color: var(--boxel-450, #6f6f6f);
-      }
-      .status {
-        color: var(--boxel-450, #6f6f6f);
-        font-size: 0.8em;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .message {
-        font-weight: 400;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 0.9em;
-      }
-      .stack {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        font-size: 0.75em;
-        white-space: pre-wrap;
-        word-break: break-word;
-        margin: 0;
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
-        max-height: 240px;
-        overflow: auto;
-      }
-      .additional-errors {
-        font-size: 0.85em;
-      }
-      .additional-errors summary {
         cursor: pointer;
-        color: var(--boxel-450, #6f6f6f);
       }
-      .additional-errors ul {
-        list-style: none;
-        padding: 0;
-        margin: var(--boxel-sp-5xs) 0 0;
+      .reveal-trigger:hover,
+      .reveal-toggle:focus-visible + .box .reveal-trigger {
+        filter: brightness(0.92);
+      }
+      .broken-link-template.atom .reveal-trigger {
+        position: static;
+      }
+
+      /* ── Reveal overlay ───────────────────────────────────────────────────
+         A normal absolutely-positioned element (NOT a top-layer popover) so the
+         card's own overflow keeps it inside the card. It is right-aligned to
+         the trigger and opens above it by default (the tip then sits in the
+         overlay's bottom-right corner, pointing down at the placeholder);
+         flips below near the top edge. The rounded frame + clip live here while
+         the inner panel scrolls, so the scrollbar can't square off the
+         corners. */
+      .overlay {
+        display: none;
+        position: absolute;
+        width: 17rem;
+        max-width: min(20rem, 100%);
+        max-height: 18rem;
+        /* Placement is chosen on open (the `tip-{corner}` class on the root,
+           set by a geometry measurement): the overlay extends into the open
+           space and the tip sits on the corner facing the trigger. Anchored to
+           the trigger; the gap (defined on the root, shared with the tip)
+           leaves the apex ~5px short of the trigger. */
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
+        overflow: hidden;
+        color: var(--boxel-dark);
+        font: 500 var(--boxel-font-sm);
+        flex-direction: column;
+        z-index: 5;
+      }
+      .reveal-toggle:checked ~ .overlay {
+        display: flex;
+      }
+      .overlay-header {
+        flex: none;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-5xs);
       }
-      .additional-status {
-        display: inline-block;
-        padding: 0 var(--boxel-sp-5xs);
-        margin-right: var(--boxel-sp-5xs);
-        background-color: var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
-        font-weight: 600;
+      .overlay-title-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
       }
-      .additional-stack {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        font-size: 0.85em;
-        white-space: pre-wrap;
-        word-break: break-word;
-        margin: 2px 0 0;
-      }
-
-      .atom-line {
+      .overlay-title {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-5xs);
-        min-width: 0;
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
-      .atom-marker {
+      .overlay-close {
+        flex: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        flex: 0 0 auto;
-        width: 0.95em;
-        height: 0.95em;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin: -2px -2px 0 0;
         border-radius: 50%;
-        background-color: var(--boxel-error-300, #d9534f);
-        color: var(--boxel-light, #fff);
-        font-size: 0.7em;
-        font-weight: 700;
+        color: var(--boxel-400);
+        font-size: 1.1rem;
         line-height: 1;
+        cursor: pointer;
       }
-      .atom-label {
-        flex: 0 0 auto;
-        font-weight: 600;
-        font-size: 0.9em;
-        white-space: nowrap;
+      .overlay-close:hover {
+        background-color: var(--boxel-100);
+        color: var(--boxel-dark);
       }
-      .atom-url {
+      .overlay-url {
+        display: block;
         font-family: var(--boxel-monospace-font-family, monospace);
-        font-size: 0.9em;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
+        font-size: 0.8em;
+        word-break: break-all;
+        color: var(--boxel-500);
+        text-decoration: none;
+      }
+      .overlay-url:hover {
+        text-decoration: underline;
+      }
+      .overlay-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
       }
 
-      /* Container queries: when the host slot is small (e.g. a 65px
-         linksToMany row, a small fitted badge) we squeeze the layout
-         further so the URL stays the dominant signal. */
-      @container (max-height: 65px) {
-        .headline-row .headline {
-          font-size: 0.85em;
-        }
-        .url {
-          font-size: 0.8em;
-        }
-        .status {
-          display: none;
-        }
+      /* ── Overlay panel: status badge (not-found) ──────────────────────
+         A single bordered box carrying the status code. */
+      .status-badge {
+        display: block;
+        margin-top: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-light-100);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-form-control-border-radius);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--boxel-dark);
       }
-      @container (max-width: 200px) {
-        .headline {
-          display: none;
-        }
+
+      /* ── Overlay panel: diagnostics accordion (error) ─────────────────
+         One bordered container groups the failure(s); each is a disclosure
+         whose header sits on a tinted strip and whose body sits flush on
+         white, separated by hairline dividers. */
+      .diagnostics {
+        margin-top: var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-form-control-border-radius);
+        overflow: hidden;
+        background-color: var(--boxel-light);
+      }
+      .diag-section + .diag-section {
+        border-top: 1px solid var(--boxel-200);
+      }
+      .diag-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--boxel-light-100);
+        color: var(--boxel-dark);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      .diag-summary::-webkit-details-marker {
+        display: none;
+      }
+      .diag-summary::marker {
+        content: '';
+      }
+      /* The status code reads as an all-caps constant; the additional-error
+         count is descriptive prose, so it keeps sentence case. */
+      .additional-section > .diag-summary {
+        text-transform: none;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .diag-caret {
+        flex: none;
+        width: 0;
+        height: 0;
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+        border-left: 5px solid currentColor;
+        transition: transform 0.12s ease;
+      }
+      .diag-section[open] > .diag-summary .diag-caret {
+        transform: rotate(90deg);
+      }
+      .diag-body {
+        padding: var(--boxel-sp-sm);
+        border-top: 1px solid var(--boxel-200);
+        background-color: var(--boxel-light);
+      }
+      .error-message {
+        font-weight: 400;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.8em;
+        color: var(--boxel-dark);
+      }
+      /* Applied only when the stack already carries the message — keep the
+         prose in the DOM for AI consumers but hide the visual duplicate. */
+      .error-message.is-redundant {
+        display: none;
+      }
+      .error-message + .error-stack {
+        margin-top: var(--boxel-sp-5xs);
+      }
+      .error-stack {
+        font-family: var(--boxel-monospace-font-family, monospace);
+        font-size: 0.75em;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+        color: var(--boxel-dark);
+      }
+      .additional-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .additional-badge {
+        display: block;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--boxel-dark);
+      }
+      .additional-stack {
+        font-family: var(--boxel-monospace-font-family, monospace);
+        font-size: 0.75em;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: var(--boxel-sp-5xs) 0 0;
+        color: var(--boxel-500);
+      }
+
+      /* ── The tip ──────────────────────────────────────────────────────────
+         A solid-white right-triangle clipped from a small box, sitting at the
+         overlay corner that faces the trigger, ON TOP of the shadow (z-index
+         above the overlay) so it's uniformly white with no seam where it meets
+         the overlay. Its straight edge is flush with the overlay's side edge;
+         the apex points back at the placeholder. The corner is chosen on open
+         (`tip-{corner}` on the root) and the matching overlay corner is
+         squared so the tip merges into it cleanly. */
+      .tip {
+        display: none;
+        position: absolute;
+        z-index: 6;
+        box-sizing: border-box;
+        width: 0.85rem;
+        height: var(--bl-tip-h);
+        background-color: var(--boxel-light);
+      }
+      .reveal-toggle:checked ~ .tip {
+        display: block;
+      }
+      /* overlay above, right edge at trigger → tip at overlay bottom-right */
+      .tip-br .tip {
+        right: anchor(right);
+        top: anchor(bottom);
+        translate: 0 -1px;
+        clip-path: polygon(0 0, 100% 0, 100% 100%);
+        border-right: 1px solid var(--boxel-200);
+      }
+      .tip-br .overlay {
+        right: anchor(center);
+        bottom: anchor(top);
+        margin-bottom: var(--bl-gap);
+        border-bottom-right-radius: 0;
+      }
+      /* overlay below, right edge at trigger → tip at overlay top-right */
+      .tip-tr .tip {
+        right: anchor(right);
+        bottom: anchor(top);
+        translate: 0 1px;
+        clip-path: polygon(0 100%, 100% 0, 100% 100%);
+        border-right: 1px solid var(--boxel-200);
+      }
+      .tip-tr .overlay {
+        right: anchor(center);
+        top: anchor(bottom);
+        margin-top: var(--bl-gap);
+        border-top-right-radius: 0;
+      }
+      /* overlay above, left edge at trigger → tip at overlay bottom-left */
+      .tip-bl .tip {
+        left: anchor(left);
+        top: anchor(bottom);
+        translate: 0 -1px;
+        clip-path: polygon(0 0, 100% 0, 0 100%);
+        border-left: 1px solid var(--boxel-200);
+      }
+      .tip-bl .overlay {
+        left: anchor(center);
+        bottom: anchor(top);
+        margin-bottom: var(--bl-gap);
+        border-bottom-left-radius: 0;
+      }
+      /* overlay below, left edge at trigger → tip at overlay top-left */
+      .tip-tl .tip {
+        left: anchor(left);
+        bottom: anchor(top);
+        translate: 0 1px;
+        clip-path: polygon(0 0, 0 100%, 100% 100%);
+        border-left: 1px solid var(--boxel-200);
+      }
+      .tip-tl .overlay {
+        left: anchor(center);
+        top: anchor(bottom);
+        margin-top: var(--bl-gap);
+        border-top-left-radius: 0;
       }
     </style>
   </template>
