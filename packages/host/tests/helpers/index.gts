@@ -113,8 +113,8 @@ export function testModuleRRI(path: string): RealmResourceIdentifier {
 }
 
 export {
-  catalogRealm,
-  skillsRealm,
+  catalogRealmURL,
+  skillsRealmURL,
   skillCardURL,
   devSkillId,
   envSkillId,

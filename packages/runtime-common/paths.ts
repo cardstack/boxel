@@ -1,4 +1,3 @@
-import { cardIdToURL } from './card-reference-resolver';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -121,16 +120,16 @@ export class RealmPaths {
     ) {
       return true;
     }
-    // Cross-form: normalize both sides to URL form and re-check.
+    // Cross-form: needs a VirtualNetwork to normalize prefix-form ↔ URL-form.
+    // Without one, this RealmPaths only resolves same-form membership.
+    if (!this.virtualNetwork) {
+      return false;
+    }
     let realmURL: string;
     let inputURL: string;
     try {
-      realmURL = this.virtualNetwork
-        ? this.virtualNetwork.toURL(this.url).href
-        : cardIdToURL(this.url).href;
-      inputURL = this.virtualNetwork
-        ? this.virtualNetwork.toURL(inputStr).href
-        : cardIdToURL(inputStr).href;
+      realmURL = this.virtualNetwork.toURL(this.url).href;
+      inputURL = this.virtualNetwork.toURL(inputStr).href;
     } catch {
       return false;
     }
