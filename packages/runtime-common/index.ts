@@ -616,6 +616,7 @@ export {
   resolveCardReference,
   unresolveCardReference,
   isRegisteredPrefix,
+  registeredCardReferencePrefixes,
   cardIdToURL,
 } from './card-reference-resolver';
 
