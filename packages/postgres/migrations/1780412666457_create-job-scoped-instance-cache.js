@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // Shared storage for the job-scoped per-instance wire-format cache. Each row
