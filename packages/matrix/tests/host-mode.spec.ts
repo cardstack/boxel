@@ -35,7 +35,7 @@ test.describe('Host mode', () => {
     await createRealm(page, realmName);
     realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
 
-    await page.goto(realmURL);
+    await page.goto(realmURL, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-test-stack-item-content]').first().waitFor();
 
     await postCardSource(
@@ -249,7 +249,7 @@ test.describe('Host mode', () => {
 
     expect(html).toContain('data-test-host-mode-isolated');
 
-    await page.goto(publishedCardURL);
+    await page.goto(publishedCardURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
     await expect(page.locator('body.boxel-ready')).toBeAttached();
   });
@@ -257,7 +257,37 @@ test.describe('Host mode', () => {
   test('printed isolated card produces a stable page count', async ({
     page,
   }) => {
-    await page.goto(publishedWhitePaperCardURL);
+    // beforeEach's `_publish-realm` POST returns before the published
+    // realm has finished re-indexing/prerendering. Navigating cold races
+    // that prerender work and is the source of the flaky `page.goto`
+    // timeout. Warm up first: poll the server-rendered HTML until the
+    // card's marker is present, mirroring the `published card response`
+    // test, so we only navigate once the published card is render-ready.
+    let warmupStart = Date.now();
+    await waitUntil(async () => {
+      let response = await page.request.get(publishedWhitePaperCardURL, {
+        headers: { Accept: 'text/html' },
+      });
+      if (!response.ok()) {
+        return false;
+      }
+      let text = await response.text();
+      return text.includes('data-test-white-paper');
+    });
+    // Diagnostic: if this test ever times out again, the warm-up timing
+    // tells us whether the prerender was the slow part (long warm-up) or
+    // the navigation itself stalled (short warm-up, then goto hangs).
+    console.log(
+      `[host-mode print] warm-up ready after ${Date.now() - warmupStart}ms`,
+    );
+
+    let gotoStart = Date.now();
+    await page.goto(publishedWhitePaperCardURL, {
+      waitUntil: 'domcontentloaded',
+    });
+    console.log(
+      `[host-mode print] page.goto resolved after ${Date.now() - gotoStart}ms`,
+    );
     await page.locator('[data-test-white-paper]').waitFor();
     await page.locator('[data-test-host-mode-card-loaded]').waitFor();
     await page.emulateMedia({ media: 'print' });
@@ -271,7 +301,7 @@ test.describe('Host mode', () => {
   test.skip('card in a published realm renders in host mode with a connect button', async ({
     page,
   }) => {
-    await page.goto(publishedCardURL);
+    await page.goto(publishedCardURL, { waitUntil: 'domcontentloaded' });
 
     await expect(
       page.locator(`[data-test-card="${publishedRealmURL}index"]`),
@@ -284,7 +314,7 @@ test.describe('Host mode', () => {
   test.skip('clicking connect button logs in on main site and redirects back to host mode', async ({
     page,
   }) => {
-    await page.goto(publishedCardURL);
+    await page.goto(publishedCardURL, { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('iframe')).toBeVisible();
 
@@ -309,7 +339,9 @@ test.describe('Host mode', () => {
   test('visiting connect route with known origin includes a matching frame-ancestors CSP', async ({
     page,
   }) => {
-    let response = await page.goto(connectRouteURL);
+    let response = await page.goto(connectRouteURL, {
+      waitUntil: 'domcontentloaded',
+    });
 
     expect(response?.headers()['content-security-policy']).toBe(
       `frame-ancestors ${publishedRealmURL}`,
@@ -321,6 +353,7 @@ test.describe('Host mode', () => {
   }) => {
     let response = await page.goto(
       'https://localhost:4205/connect/http%3A%2F%2Fexample.com',
+      { waitUntil: 'domcontentloaded' },
     );
 
     expect(response?.status()).toBe(404);
@@ -330,7 +363,7 @@ test.describe('Host mode', () => {
   });
 
   test('page title comes from head format template', async ({ page }) => {
-    await page.goto(publishedMyCardURL);
+    await page.goto(publishedMyCardURL, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-test-card-with-head-title]').waitFor();
 
     // Wait for the head template to be injected
@@ -352,7 +385,16 @@ test.describe('Host mode', () => {
   }) => {
     // beforeEach logged out — re-login so we can write to the source realm.
     await login(page, username, password);
-    await page.goto(realmURL);
+    // Diagnostic: this interact-mode boot is the second observed flaky
+    // navigation (CS-11323). Log how long it takes so a future timeout
+    // shows whether the app boot or a subresource was the slow part.
+    let gotoStart = Date.now();
+    await page.goto(realmURL, { waitUntil: 'domcontentloaded' });
+    console.log(
+      `[host-mode routing] interact-mode page.goto resolved after ${
+        Date.now() - gotoStart
+      }ms`,
+    );
     await page.locator('[data-test-stack-item-content]').first().waitFor();
 
     // Overwrite realm.json with a routing rule mapping /whitepaper to the
@@ -433,7 +475,7 @@ test.describe('Host mode', () => {
       return text.includes('data-test-white-paper');
     });
 
-    await page.goto(routedURL);
+    await page.goto(routedURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-white-paper]')).toBeVisible();
   });
 
@@ -451,7 +493,7 @@ test.describe('Host mode', () => {
     // hydration would replace the SSR'd card with the bare-shell
     // fallback. This test pins the canonicalized comparator.
     await login(page, username, password);
-    await page.goto(realmURL);
+    await page.goto(realmURL, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-test-stack-item-content]').first().waitFor();
 
     await postCardSource(
@@ -527,7 +569,7 @@ test.describe('Host mode', () => {
     });
 
     let noSlashURL = publishedRealmURL.replace(/\/$/, '');
-    await page.goto(noSlashURL);
+    await page.goto(noSlashURL, { waitUntil: 'domcontentloaded' });
     // `[data-test-host-mode-card="<id>"]` is set by the host SPA's
     // CardRenderer — that attribute exists ONLY post-hydration (it's
     // not in the SSR'd isolated_html). Pinning it to the rule's target
