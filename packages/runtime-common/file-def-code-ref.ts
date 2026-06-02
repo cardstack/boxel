@@ -30,6 +30,7 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
   '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
   '.oga': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
+  '.opus': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
   '.m4a': { module: baseModule('m4a-audio-def'), name: 'M4aDef' },
   '.flac': { module: baseModule('flac-audio-def'), name: 'FlacDef' },
   '.mismatch': {

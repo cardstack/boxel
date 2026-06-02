@@ -7,7 +7,7 @@ import {
   field,
 } from './card-api';
 import { FileDef } from './file-api';
-import { markdownLink } from './markdown-helpers';
+import { markdownAudio } from './markdown-helpers';
 import AudioDefIsolatedTemplate from './default-templates/audio-def-isolated';
 import AudioDefEmbeddedTemplate from './default-templates/audio-def-embedded';
 import AudioDefFittedTemplate from './default-templates/audio-def-fitted';
@@ -25,9 +25,10 @@ export class AudioDef extends FileDef {
   static fitted: BaseDefComponent = AudioDefFittedTemplate;
   static atom: BaseDefComponent = AudioDefAtomTemplate;
 
-  // HTML5 has no native markdown syntax for audio, so emit a link to the
-  // source. Downstream consumers (LLMs, exporters) get a stable reference
-  // even when there's no inline player.
+  // Markdown has no native audio syntax, but CommonMark passes raw HTML
+  // through, so we emit an inline `<audio controls>` so the Spec preview,
+  // docs, and downstream consumers render a real player rather than a bare
+  // link — matching what ImageDef does for `<img>`.
   static markdown: BaseDefComponent = class Markdown extends Component<
     typeof AudioDef
   > {
@@ -41,10 +42,7 @@ export class AudioDef extends FileDef {
       if (!url && !name) {
         return '';
       }
-      if (!url) {
-        return name;
-      }
-      return markdownLink(name || url, url);
+      return markdownAudio(name, url);
     }
     <template>{{this.text}}</template>
   };
