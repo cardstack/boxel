@@ -19,7 +19,12 @@ import {
   type RealmIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
-import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
+import {
+  getCreatedTime,
+  ensureFileCreatedAt,
+  getContentHash,
+  getContentSize,
+} from './file-meta';
 import {
   type Expression,
   param,
@@ -301,6 +306,20 @@ export class Batch {
   // Ensure a created_at row exists for this file in realm_file_meta and return it
   async ensureFileCreatedAt(localPath: string): Promise<number> {
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
+  // Look up the content hash persisted at write time for a given file path.
+  // Returns undefined when the realm has no recorded hash (e.g. files written
+  // before file-meta hashing existed, or a no-op rewrite that left the column
+  // untouched).
+  async getContentHash(localPath: string): Promise<string | undefined> {
+    return getContentHash(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
+  // Look up the content size (in bytes) persisted at write time for a given
+  // file path. Returns undefined when no size was recorded.
+  async getContentSize(localPath: string): Promise<number | undefined> {
+    return getContentSize(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   @Memoize()

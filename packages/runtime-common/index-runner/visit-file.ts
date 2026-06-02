@@ -163,12 +163,37 @@ export async function visitFileForIndexingFused({
   let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   let clearCache = consumeClearCacheForRender();
+
+  // The file-extract pass runs `FileDef.extractAttributes` in the prerenderer,
+  // which otherwise buffers the entire file just to MD5 it and measure its
+  // size. The realm already persisted both values at write time (computed over
+  // the exact bytes it wrote, which is what the prerenderer would re-fetch), so
+  // hand them through and let `extractAttributes` skip the buffer entirely.
+  // Only forwarded when BOTH are present — `extractAttributes` re-reads the
+  // stream unless it has the hash and the size — so a partial lookup buys
+  // nothing. Absent values (pre-hashing files, no-op rewrites) fall back to the
+  // prerenderer's own buffered read.
+  let fileContentHash: string | undefined;
+  let fileContentSize: number | undefined;
+  if (needFileExtract) {
+    let [hash, size] = await Promise.all([
+      batch.getContentHash(localPath),
+      batch.getContentSize(localPath),
+    ]);
+    if (hash !== undefined && size !== undefined) {
+      fileContentHash = hash;
+      fileContentSize = size;
+    }
+  }
+
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
     ...(needCardRender ? { cardRender: true } : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
     ...(clearCache ? { clearCache } : {}),
+    ...(fileContentHash !== undefined ? { fileContentHash } : {}),
+    ...(fileContentSize !== undefined ? { fileContentSize } : {}),
   };
 
   let visitResponse: RenderVisitResponse;

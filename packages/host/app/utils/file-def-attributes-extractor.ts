@@ -57,12 +57,6 @@ export class FileDefAttributesExtractor {
   #contentSize: number | undefined;
   #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
-  #streamsPromise: Promise<
-    [
-      ReadableStream<Uint8Array> | Uint8Array,
-      ReadableStream<Uint8Array> | Uint8Array,
-    ]
-  > | null = null;
   #fallbackBytes: Uint8Array | null = null;
   #primaryUsed = false;
 
@@ -232,6 +226,16 @@ export class FileDefAttributesExtractor {
     };
   }
 
+  // Each extractAttributes attempt asks for a stream. The first attempt — the
+  // most-specific FileDef subclass — gets the response body streamed directly,
+  // so a FileDef that only needs a small header (e.g. an audio duration in the
+  // `moov` box) can read what it needs and let the rest flow past without the
+  // whole file ever being buffered. The streams are deliberately NOT tee'd:
+  // teeing queues every chunk of the consumed branch for the unread retry
+  // branch, which pins the entire file in memory and defeats the streaming.
+  // Instead, the rare retry path (a subclass mismatch falling back to a parent
+  // class, after the primary stream has already been consumed) re-fetches the
+  // file once and buffers that copy for any further attempts.
   #getStreamForAttempt = async () => {
     if (!this.#primaryUsed) {
       this.#primaryUsed = true;
@@ -240,87 +244,64 @@ export class FileDefAttributesExtractor {
     return this.#getRetryStream();
   };
 
-  async #getStreams() {
-    if (!this.#streamsPromise) {
-      this.#streamsPromise = (async () => {
-        if (this.#fileBytes) {
-          return [this.#fileBytes, this.#fileBytes];
-        }
-
-        let response: Response;
-        try {
-          let request = new Request(this.#fileURL, {
-            method: 'GET',
-            headers: {
-              Accept: SupportedMimeType.CardSource,
-            },
-          });
-          if (this.#authGuard) {
-            response = await this.#authGuard.race(() =>
-              this.#network.authedFetch(request),
-            );
-          } else {
-            response = await this.#network.authedFetch(request);
-          }
-        } catch (error) {
-          console.warn('file extract fetch failed', {
-            fileURL: this.#fileURL,
-            error,
-          });
-          throw error;
-        }
-        if (!response.ok) {
-          console.warn('file extract fetch returned non-ok', {
-            fileURL: this.#fileURL,
-            status: response.status,
-          });
-          throw await CardError.fromFetchResponse(this.#fileURL, response);
-        }
-        return await this.#teeResponse(response);
-      })();
+  async #getPrimaryStream(): Promise<ReadableStream<Uint8Array> | Uint8Array> {
+    if (this.#fileBytes) {
+      return this.#fileBytes;
     }
-    return this.#streamsPromise;
+    let response = await this.#fetch();
+    // Hand back the live body so the consumer decides how much to read. Fall
+    // back to a buffered read only when the body isn't a stream (real fetches
+    // always expose one; this keeps non-streaming environments working).
+    if (response.body) {
+      return response.body;
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 
-  async #getPrimaryStream() {
-    return (await this.#getStreams())[0];
-  }
-
-  async #getFallbackStream() {
-    return (await this.#getStreams())[1];
-  }
-
-  async #getRetryStream() {
+  async #getRetryStream(): Promise<Uint8Array> {
+    if (this.#fileBytes) {
+      return this.#fileBytes;
+    }
+    // Buffer the re-fetched copy once and reuse it for any subsequent
+    // attempts, so a chain of N fallbacks costs at most one extra fetch.
     if (!this.#fallbackBytes) {
-      this.#fallbackBytes = await this.#streamToBytes(
-        await this.#getFallbackStream(),
-      );
+      let response = await this.#fetch();
+      this.#fallbackBytes = new Uint8Array(await response.arrayBuffer());
     }
     return this.#fallbackBytes;
   }
 
-  async #teeResponse(
-    response: Response,
-  ): Promise<
-    [
-      ReadableStream<Uint8Array> | Uint8Array,
-      ReadableStream<Uint8Array> | Uint8Array,
-    ]
-  > {
-    if (response.body && 'tee' in response.body) {
-      return response.body.tee();
+  async #fetch(): Promise<Response> {
+    let response: Response;
+    try {
+      let request = new Request(this.#fileURL, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+      if (this.#authGuard) {
+        response = await this.#authGuard.race(() =>
+          this.#network.authedFetch(request),
+        );
+      } else {
+        response = await this.#network.authedFetch(request);
+      }
+    } catch (error) {
+      console.warn('file extract fetch failed', {
+        fileURL: this.#fileURL,
+        error,
+      });
+      throw error;
     }
-    let bytes = new Uint8Array(await response.arrayBuffer());
-    return [bytes, bytes];
-  }
-
-  async #streamToBytes(
-    stream: ReadableStream<Uint8Array> | Uint8Array,
-  ): Promise<Uint8Array> {
-    if (stream instanceof Uint8Array) {
-      return stream;
+    if (!response.ok) {
+      console.warn('file extract fetch returned non-ok', {
+        fileURL: this.#fileURL,
+        status: response.status,
+      });
+      throw await CardError.fromFetchResponse(this.#fileURL, response);
     }
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    return response;
   }
 
   // Extract query field definitions (linksTo/linksToMany with a query) from
