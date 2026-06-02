@@ -176,13 +176,10 @@ export async function visitFileForIndexingFused({
   let fileContentHash: string | undefined;
   let fileContentSize: number | undefined;
   if (needFileExtract) {
-    let [hash, size] = await Promise.all([
-      batch.getContentHash(localPath),
-      batch.getContentSize(localPath),
-    ]);
-    if (hash !== undefined && size !== undefined) {
-      fileContentHash = hash;
-      fileContentSize = size;
+    let { contentHash, contentSize } = await batch.getContentMeta(localPath);
+    if (contentHash !== undefined && contentSize !== undefined) {
+      fileContentHash = contentHash;
+      fileContentSize = contentSize;
     }
   }
 

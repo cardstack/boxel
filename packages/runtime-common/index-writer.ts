@@ -22,8 +22,7 @@ import type { VirtualNetwork } from './virtual-network';
 import {
   getCreatedTime,
   ensureFileCreatedAt,
-  getContentHash,
-  getContentSize,
+  getContentMeta,
 } from './file-meta';
 import {
   type Expression,
@@ -308,18 +307,15 @@ export class Batch {
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
-  // Look up the content hash persisted at write time for a given file path.
-  // Returns undefined when the realm has no recorded hash (e.g. files written
-  // before file-meta hashing existed, or a no-op rewrite that left the column
-  // untouched).
-  async getContentHash(localPath: string): Promise<string | undefined> {
-    return getContentHash(this.#dbAdapter, this.realmURL.href, localPath);
-  }
-
-  // Look up the content size (in bytes) persisted at write time for a given
-  // file path. Returns undefined when no size was recorded.
-  async getContentSize(localPath: string): Promise<number | undefined> {
-    return getContentSize(this.#dbAdapter, this.realmURL.href, localPath);
+  // Look up the content hash and size persisted at write time for a given file
+  // path, in a single row lookup. Either value is undefined when the realm has
+  // no recorded value (e.g. files written before file-meta hashing existed, or
+  // a no-op rewrite that left the columns untouched).
+  async getContentMeta(localPath: string): Promise<{
+    contentHash: string | undefined;
+    contentSize: number | undefined;
+  }> {
+    return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   @Memoize()

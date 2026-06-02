@@ -236,6 +236,13 @@ export class FileDefAttributesExtractor {
   // Instead, the rare retry path (a subclass mismatch falling back to a parent
   // class, after the primary stream has already been consumed) re-fetches the
   // file once and buffers that copy for any further attempts.
+  //
+  // A FileDef that reads only a prefix MUST cancel the stream rather than
+  // abandon it — an undrained response body can hold the underlying HTTP
+  // connection open until GC. The `readFirstBytes()` helper in
+  // runtime-common/stream.ts does this (it cancels in a `finally`), and is what
+  // the header-only extractors (the image defs) already use; partial readers
+  // should go through it rather than draining the stream by hand.
   #getStreamForAttempt = async () => {
     if (!this.#primaryUsed) {
       this.#primaryUsed = true;

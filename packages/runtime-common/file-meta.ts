@@ -19,22 +19,47 @@ export async function getCreatedTime(
   return typeof created === 'string' ? parseInt(created) : Number(created);
 }
 
-export async function getContentHash(
+// Reads the content hash and size the realm persisted at write time in a
+// single row lookup. Callers that need both (e.g. the file-extract indexing
+// pass) should use this rather than calling getContentHash + getContentSize,
+// which would hit the same row twice.
+export async function getContentMeta(
   db: DBAdapter,
   realmURL: string,
   localPath: string,
-): Promise<string | undefined> {
+): Promise<{
+  contentHash: string | undefined;
+  contentSize: number | undefined;
+}> {
   let rows = await query(db, [
-    'SELECT content_hash FROM realm_file_meta WHERE realm_url =',
+    'SELECT content_hash, content_size FROM realm_file_meta WHERE realm_url =',
     param(realmURL),
     'AND file_path =',
     param(localPath),
     'LIMIT 1',
   ]);
-  if (!rows || rows.length === 0) return undefined;
+  if (!rows || rows.length === 0) {
+    return { contentHash: undefined, contentSize: undefined };
+  }
   let contentHash = rows[0]['content_hash'];
-  if (contentHash == null) return undefined;
-  return String(contentHash);
+  let contentSize = rows[0]['content_size'];
+  return {
+    contentHash: contentHash == null ? undefined : String(contentHash),
+    contentSize:
+      contentSize == null
+        ? undefined
+        : typeof contentSize === 'string'
+          ? parseInt(contentSize)
+          : Number(contentSize),
+  };
+}
+
+export async function getContentHash(
+  db: DBAdapter,
+  realmURL: string,
+  localPath: string,
+): Promise<string | undefined> {
+  return (await getContentMeta(db, realmURL, localPath)).contentHash;
 }
 
 export async function getContentSize(
@@ -42,19 +67,7 @@ export async function getContentSize(
   realmURL: string,
   localPath: string,
 ): Promise<number | undefined> {
-  let rows = await query(db, [
-    'SELECT content_size FROM realm_file_meta WHERE realm_url =',
-    param(realmURL),
-    'AND file_path =',
-    param(localPath),
-    'LIMIT 1',
-  ]);
-  if (!rows || rows.length === 0) return undefined;
-  let contentSize = rows[0]['content_size'];
-  if (contentSize == null) return undefined;
-  return typeof contentSize === 'string'
-    ? parseInt(contentSize)
-    : Number(contentSize);
+  return (await getContentMeta(db, realmURL, localPath)).contentSize;
 }
 
 // Ensures a created_at row exists for the given path; returns epoch seconds
