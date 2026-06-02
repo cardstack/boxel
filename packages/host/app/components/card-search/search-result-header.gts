@@ -42,11 +42,24 @@ export default class SearchResultHeader extends Component<Signature> {
     return this.args.selectedCards?.length ?? 0;
   }
 
+  // The selection menu only makes sense once something is selected — its
+  // trigger shows the count and its items act on the current selection.
+  get showSelectionMenu(): boolean {
+    return Boolean(this.args.multiSelect) && this.selectedCount > 0;
+  }
+
+  // The trigger's visible text is just the count, so spell the control out
+  // for assistive tech (and include the count it stands in for).
+  get selectionMenuLabel(): string {
+    let count = this.selectedCount;
+    return `Selection menu, ${count} card${count === 1 ? '' : 's'} selected`;
+  }
+
   <template>
     <header class='search-result-header' data-test-search-result-header>
       <div class='summary' data-test-search-label>{{@summaryText}}</div>
       <div class='controls'>
-        {{#if @multiSelect}}
+        {{#if this.showSelectionMenu}}
           <div class='selection-menu'>
             <BoxelDropdown
               @contentClass='selection-dropdown-content'
@@ -56,6 +69,7 @@ export default class SearchResultHeader extends Component<Signature> {
                 <button
                   type='button'
                   class='selection-dropdown-trigger'
+                  aria-label={{this.selectionMenuLabel}}
                   {{bindings}}
                   data-test-selection-dropdown-trigger
                 >

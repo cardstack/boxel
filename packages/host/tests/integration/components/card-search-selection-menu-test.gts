@@ -42,6 +42,13 @@ module(
         .dom('[data-test-selection-dropdown-trigger]')
         .hasText('2', 'trigger shows the selected count only');
       assert
+        .dom('[data-test-selection-dropdown-trigger]')
+        .hasAttribute(
+          'aria-label',
+          'Selection menu, 2 cards selected',
+          'trigger spells out the control and count for assistive tech',
+        );
+      assert
         .dom('[data-test-selection-dropdown-trigger] svg circle')
         .exists('trigger renders the dark-circle-with-teal-check icon');
     });
@@ -98,6 +105,29 @@ module(
       await waitFor('[data-test-boxel-menu-item-text="Deselect All"]');
       await click('[data-test-boxel-menu-item-text="Deselect All"]');
       assert.true(deselectedAll, 'Deselect All clears the selection');
+    });
+
+    test('the selection menu is hidden when no cards are selected', async function (assert) {
+      await render(
+        <template>
+          <SearchResultHeader
+            @summaryText='2 results across 1 realm'
+            @viewOptions={{VIEW_OPTIONS}}
+            @activeViewId='grid'
+            @activeSort={{get SORT_OPTIONS 0}}
+            @sortOptions={{SORT_OPTIONS}}
+            @onChangeView={{noop}}
+            @onChangeSort={{noop}}
+            @multiSelect={{true}}
+            @selectedCards={{array}}
+            @allCards={{array 'a' 'b' 'c'}}
+            @onSelectAll={{noop}}
+            @onDeselectAll={{noop}}
+          />
+        </template>,
+      );
+
+      assert.dom('[data-test-selection-dropdown-trigger]').doesNotExist();
     });
 
     test('the selection menu is hidden when not in multi-select mode', async function (assert) {
