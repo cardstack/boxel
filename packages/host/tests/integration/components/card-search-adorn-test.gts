@@ -74,6 +74,28 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
       .doesNotExist('the legacy treatment is unchanged without @adorn');
   });
 
+  test('does not apply the Adorn stroke class when @adorn is false', async function (assert) {
+    // SearchContent wraps every item in an AdornContext and threads its
+    // strokeClass down even to non-adorn callers (e.g. Card Catalog), so
+    // the class must stay gated on @adorn or those items would pick up
+    // the teal outline.
+    await render(
+      <template>
+        <ItemButton
+          @item={{newCardItem}}
+          @isSelected={{false}}
+          @onSelect={{noop}}
+          @adornStrokeClass='adorn-stroke'
+        />
+      </template>,
+    );
+    assert
+      .dom('.catalog-item.adorn-stroke')
+      .doesNotExist(
+        'a non-adorn item does not receive the Adorn outline class',
+      );
+  });
+
   test('renders the teal adorn select chip when adorn + multi-select + selected', async function (assert) {
     await render(
       <template>

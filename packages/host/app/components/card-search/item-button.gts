@@ -144,6 +144,11 @@ export default class ItemButton extends Component<Signature> {
   @tracked private cardEl: HTMLElement | undefined;
 
   private registerCardEl = modifier((element: HTMLElement) => {
+    // Assigned unconditionally: this modifier takes no tracked args, so
+    // it installs once and never re-runs. A guard that read `this.cardEl`
+    // here would instead trip a backtracking assertion, since the
+    // modifier install reads tracked state the label positioner consumes
+    // in the same render.
     this.cardEl = element;
   });
 
@@ -282,7 +287,7 @@ export default class ItemButton extends Component<Signature> {
       @rectangular={{true}}
       class={{cn
         'catalog-item'
-        @adornStrokeClass
+        (if @adorn @adornStrokeClass)
         selected=@isSelected
         create-new-button=this.isNewCard
         multi-select=@multiSelect
@@ -291,7 +296,13 @@ export default class ItemButton extends Component<Signature> {
       {{on 'click' this.handleClick}}
       {{on 'dblclick' this.handleDblClick}}
       {{on 'keydown' this.handleKeydown}}
-      {{captureAdornCardMeta this.setAdornCardMeta @adorn}}
+      {{! Only prerendered (component) items need the DOM observer — card
+          instances supply their type name/icon directly, and the
+          "Create New" row has no label. }}
+      {{captureAdornCardMeta
+        this.setAdornCardMeta
+        (and @adorn this.isComponent)
+      }}
       {{this.registerCardEl}}
       data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
       data-test-card-catalog-item={{removeFileExtension this.resolvedItemId}}
