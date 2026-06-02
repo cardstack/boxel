@@ -413,6 +413,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return false;
@@ -662,6 +664,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return;
@@ -1190,7 +1194,7 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    let realmPath = new RealmPaths(realmURL);
+    let realmPath = new RealmPaths(realmURL, this.#realm.virtualNetwork);
     let omitSet = new Set(omit);
     let visited = new Set<string>();
 

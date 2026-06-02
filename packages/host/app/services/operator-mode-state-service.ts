@@ -447,7 +447,11 @@ export default class OperatorModeStateService extends Service {
 
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
-      const isIndexCard = isRealmIndexCardId(item.id, realmURL);
+      const isIndexCard = isRealmIndexCardId(
+        item.id,
+        realmURL,
+        this.network.virtualNetwork,
+      );
       if (isIndexCard) {
         // Only open workspace chooser if the trimmed item was an index card
         this._state.workspaceChooserOpened = true;

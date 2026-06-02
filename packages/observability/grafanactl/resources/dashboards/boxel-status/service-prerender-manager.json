@@ -24,11 +24,33 @@
         }
       ]
     },
-    "description": "Per-service deep-dive for the Prerender Manager ECS service. Currently stub-only — shows filtered logs from Loki. CloudWatch CPU / memory / running-task-count panels are TBD and will land when ECS cluster naming is standardized in observability config.",
+    "description": "Per-service deep-dive for the Prerender Manager ECS service (`boxel-prerender-manager-${env}`). The manager is a stateless HTTP proxy that fans render requests out to an externally-managed pool of `boxel-prerender-server-${env}` tasks via heartbeat-driven affinity scheduling. Panels cover (1) fleet sizing + resource utilisation from CloudWatch, (2) ALB request rate / latency / host health, (3) manager process lifecycle and pool registry churn (heartbeats, prunes, sweeps) from Loki, (4) proxy throughput by route and backpressure (503 / LRU evictions), (5) upstream + release-batch errors, and (6) per-target-server attribution of proxy outcomes. There is no DB-backed signal — the manager doesn't write to Postgres.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
     "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "service:prerender-server"
+        ],
+        "title": "Prerender Server (pool members)",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:indexing"
+        ],
+        "title": "Indexing",
+        "type": "dashboards"
+      },
       {
         "asDropdown": false,
         "icon": "external link",
@@ -44,17 +66,698 @@
     "panels": [
       {
         "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-prerender-manager-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means tasks are crashing or the service is under-scaled. Locally this shows 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "e1",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "id": "a",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "id": "b",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "a + b/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Tasks (Run / Need)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Request rate (per second) from prerender-manager's `httpLogging` middleware, derived from the `--> METHOD ACCEPT URL: STATUS` exit-log lines. Total, 4xx, and 5xx are charted separately. CloudWatch ALB metrics are the canonical source when load-balancer dimension naming is standardized.",
+        "description": "Approximate prerender-server pool size — distinct target URLs that sent a heartbeat in the last minute, derived from the manager's `received heartbeat from ${url}` log line (manager-app.ts:249). Servers heartbeat every ~5s by default; if this drops to 0 the pool is empty and the next request will 503. Compare against the Prerender Server dashboard's task count.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "green",
+                  "value": 2
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "id": 11,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "count(count by (url) (count_over_time({service=\"prerender-manager\"} |~ \"received heartbeat from\" | regexp \"from (?P<url>https?://[^ ]+)\" [1m])))",
+            "legendFormat": "servers",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Servers in pool",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "503 responses returned when no prerender-server was usable — either the registry was empty or every registered server was over capacity for the requested affinity (manager-app.ts:1039, 1055). Non-zero usually means the pool is too small for current load (scale prerender-server) or every server is unhealthy.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "id": 12,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"503 No servers\" [$__range]))",
+            "legendFormat": "503s",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "503 no-servers (window)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Times the manager hit its `forceExitTimeoutMs` during shutdown without finishing graceful drain (manager-server.ts:78). Each one is an unclean exit — likely cause is in-flight render requests outliving the drain window. Steady-state should be 0.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 3
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Forcing prerender manager shutdown\" [$__range]))",
+            "legendFormat": "force-exits",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Force exits (window)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS CPU and memory utilisation for `boxel-prerender-manager-${env}` on cluster `${env}` — averages over the panel refresh window. The manager is a stateless proxy so CPU should be modest; sustained 90%+ usually means the task is undersized for current request volume. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        },
+        "id": 20,
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          }
+        ],
+        "title": "CPU & memory utilisation",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "Running vs desired ECS task count over time for `boxel-prerender-manager-${env}`. Run < Need means tasks are crash-looping; Run dropping to 0 is a deploy or outage. Multiple managers normally run behind the ALB for HA — they don't coordinate state, so a single drop is usually safe.",
         "fieldConfig": {
           "defaults": {
             "color": {
               "mode": "palette-classic"
             },
             "custom": {
-              "axisLabel": "req/s",
+              "axisLabel": "tasks",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "stepAfter",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Running"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Desired"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "blue"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        },
+        "id": 21,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "alias": "Running"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "alias": "Desired"
+          }
+        ],
+        "title": "Task count over time",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ALB request rate broken out by HTTP status class — `2xx` and `4xx` from the manager process (HTTPCode_Target_*), `5xx target` from the manager process (timeouts, crashes), `5xx ALB` from the ALB itself (no target available, target unresponsive). Auto-discovered ALB via the `prerender_manager_lb` template variable. Locally shows 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "req/min",
               "axisPlacement": "auto",
               "barAlignment": 0,
               "drawStyle": "line",
@@ -91,9 +794,24 @@
                 }
               ]
             },
-            "unit": "reqps"
+            "unit": "short"
           },
           "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "2xx"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
             {
               "matcher": {
                 "id": "byName",
@@ -112,7 +830,7 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "5xx"
+                "options": "5xx target"
               },
               "properties": [
                 {
@@ -127,7 +845,176 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "total"
+                "options": "5xx ALB"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "dark-red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 12
+        },
+        "id": 22,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_2XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "alias": "2xx"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_4XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "alias": "4xx"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "refId": "C",
+            "alias": "5xx target"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_ELB_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "refId": "D",
+            "alias": "5xx ALB"
+          }
+        ],
+        "title": "ALB request rate by status",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ALB-measured response time (manager + upstream prerender-server combined) at p50 / p95 / p99. Renders are long-tailed by nature — p99 spiking while p50 stays flat means a few stuck renders are tying up tabs without affecting the median.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "seconds",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p50"
               },
               "properties": [
                 {
@@ -138,16 +1025,597 @@
                   }
                 }
               ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p95"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p99"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
             }
           ]
         },
         "gridPos": {
           "h": 8,
-          "w": 24,
-          "x": 0,
-          "y": 0
+          "w": 8,
+          "x": 8,
+          "y": 12
         },
-        "id": 2,
+        "id": 23,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "p50",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "alias": "p50"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "p95",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "alias": "p95"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb"
+            },
+            "statistic": "p99",
+            "period": "",
+            "region": "default",
+            "refId": "C",
+            "alias": "p99"
+          }
+        ],
+        "title": "ALB target response time (p50 / p95 / p99)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ALB target-group host health. `Healthy` is what the ALB will route to; `Unhealthy` is tasks failing the health check (GET /). Healthy=0 means clients get 503s. Auto-discovered target group via the `prerender_manager_tg` template variable.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "hosts",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "stepAfter",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Healthy"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Unhealthy"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 12
+        },
+        "id": 24,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HealthyHostCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb",
+              "TargetGroup": "$prerender_manager_tg"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "alias": "Healthy"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "UnHealthyHostCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$prerender_manager_lb",
+              "TargetGroup": "$prerender_manager_tg"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "alias": "Unhealthy"
+          }
+        ],
+        "title": "ALB hosts (healthy / unhealthy)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Manager-process lifecycle events from Loki. `boot` is `prerender manager HTTP listening on port` (manager-server.ts:51) — emitted after Koa binds successfully. `SIGTERM` / `SIGINT` is `Received ${signal}; marking prerender manager as draining` (manager-server.ts:58). `closed` is `Prerender manager listener closed; exiting process` (manager-server.ts:73). `force-exit` is `Forcing prerender manager shutdown after ${ms} ms timeout` (manager-server.ts:78). A `boot` not preceded by a `closed` or `force-exit` in the same task usually means the container died without graceful signal delivery (cgroup OOM, host failure, ECS SIGKILL).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 60,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "boot"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "SIGTERM"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "blue"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "SIGINT"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "purple"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "closed"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "light-blue"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "force-exit"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 20
+        },
+        "id": 30,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"prerender manager HTTP listening on port\" [1m]))",
+            "legendFormat": "boot",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Received SIGTERM; marking prerender manager as draining\" [1m]))",
+            "legendFormat": "SIGTERM",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Received SIGINT; marking prerender manager as draining\" [1m]))",
+            "legendFormat": "SIGINT",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Prerender manager listener closed; exiting process\" [1m]))",
+            "legendFormat": "closed",
+            "queryType": "range",
+            "refId": "D"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Forcing prerender manager shutdown\" [1m]))",
+            "legendFormat": "force-exit",
+            "queryType": "range",
+            "refId": "E"
+          }
+        ],
+        "title": "Manager lifecycle stamps",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Pool-registry churn. `heartbeats` is the rate of `received heartbeat from ${url}` accepted by the manager (manager-app.ts:249) — expect ~12/min per registered server at the default 5s cadence. `sweep-stale` is the sweep loop detecting a missed heartbeat past `PRERENDER_HEARTBEAT_TIMEOUT_MS` and queuing a prune (manager-app.ts:873). `upstream-prune` is `Pruned prerender server ${url} due to upstream failure` — fetch couldn't reach the server (manager-app.ts:1149). `5xx-prune` is `Pruned prerender server ${url} due to status ${5xx}` — server returned a 5xx and was evicted. A spike in either prune flavour with no corresponding spike in heartbeats is a pool member leaving the registry.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "heartbeats"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "sweep-stale"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "upstream-prune"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "5xx-prune"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "dark-red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        },
+        "id": 31,
         "options": {
           "legend": {
             "calcs": [
@@ -170,8 +1638,8 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum(rate({service=\"prerender-manager\"} |~ \"--> .*: [0-9]+($| )\" [1m]))",
-            "legendFormat": "total",
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"received heartbeat from\" [1m]))",
+            "legendFormat": "heartbeats",
             "queryType": "range",
             "refId": "A"
           },
@@ -180,8 +1648,8 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum(rate({service=\"prerender-manager\"} |~ \"--> .*: 4[0-9]{2}($| )\" [1m]))",
-            "legendFormat": "4xx",
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Heartbeat sweep: prerender server .* is stale\" [1m]))",
+            "legendFormat": "sweep-stale",
             "queryType": "range",
             "refId": "B"
           },
@@ -190,13 +1658,23 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum(rate({service=\"prerender-manager\"} |~ \"--> .*: 5[0-9]{2}($| )\" [1m]))",
-            "legendFormat": "5xx",
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Pruned prerender server .* due to upstream failure\" [1m]))",
+            "legendFormat": "upstream-prune",
             "queryType": "range",
             "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Pruned prerender server .* due to status\" [1m]))",
+            "legendFormat": "5xx-prune",
+            "queryType": "range",
+            "refId": "D"
           }
         ],
-        "title": "Request rate (total / 4xx / 5xx)",
+        "title": "Pool registry events",
         "type": "timeseries"
       },
       {
@@ -204,12 +1682,920 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Last 1000 log lines from prerender-manager. Drill-throughs from Overview land here.",
+        "description": "Proxy request volume broken out by endpoint, from `proxying ${label} prerender request` log lines (manager-app.ts:1071). Lets you see whether the manager is mostly handling `visit` (per-card prerender), `module` (compile-time module prerender), `command` (LLM tool-call execution), or `screenshot` traffic — useful when correlating CPU / latency spikes with workload mix.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "req/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 28
+        },
+        "id": 40,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"proxying visit prerender request\" [1m]))",
+            "legendFormat": "visit",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"proxying module prerender request\" [1m]))",
+            "legendFormat": "module",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"proxying command prerender request\" [1m]))",
+            "legendFormat": "command",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"proxying screenshot prerender request\" [1m]))",
+            "legendFormat": "screenshot",
+            "queryType": "range",
+            "refId": "D"
+          }
+        ],
+        "title": "Proxy requests by route",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Pool saturation signals. `registry-empty` and `no-usable-target` are the two 503 paths (manager-app.ts:1039, 1055) — clients see HTTP 503. `LRU eviction` is `Pressure-mode: evicted affinity` (manager-app.ts:809) — the pool is full and the manager kicked the globally least-recently-used affinity to free a slot. `fallback eviction` is `Fallback eviction: evicted affinity` (manager-app.ts:848) — per-server LRU eviction, a softer signal. Sustained evictions usually mean `PRERENDER_MULTIPLEX` or the prerender-server fleet size is too small for the working set.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 60,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "registry-empty"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "dark-red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "no-usable-target"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "LRU eviction"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "fallback eviction"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "yellow"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 28
+        },
+        "id": 41,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"503 No servers: registry empty\" [1m]))",
+            "legendFormat": "registry-empty",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"503 No servers: no usable target\" [1m]))",
+            "legendFormat": "no-usable-target",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Pressure-mode: evicted affinity\" [1m]))",
+            "legendFormat": "LRU eviction",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Fallback eviction: evicted affinity\" [1m]))",
+            "legendFormat": "fallback eviction",
+            "queryType": "range",
+            "refId": "D"
+          }
+        ],
+        "title": "Backpressure & evictions",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Upstream-side proxy failures. `upstream-error` is `Upstream error requestId=` — the fetch to the prerender-server failed at the network layer (manager-app.ts:1122). `proxy-exception` is `Error in /<path> proxy requestId=` — an unhandled exception in the proxy route handler (manager-app.ts:1222). `heartbeat-sweep-error` is internal sweep failure (manager-app.ts:890). `release-batch-broadcast` is the outer release-batch handler failure (manager-app.ts:1348). All four are unexpected — non-zero rates mean something broke.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "errors/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 60,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "upstream-error"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "proxy-exception"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "dark-red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "heartbeat-sweep-error"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "release-batch-broadcast"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "yellow"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 36
+        },
+        "id": 50,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Upstream error requestId=\" [1m]))",
+            "legendFormat": "upstream-error",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Error in /.* proxy requestId=\" [1m]))",
+            "legendFormat": "proxy-exception",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Heartbeat sweep error\" [1m]))",
+            "legendFormat": "heartbeat-sweep-error",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"Unhandled error in /release-batch broadcast\" [1m]))",
+            "legendFormat": "release-batch-broadcast",
+            "queryType": "range",
+            "refId": "D"
+          }
+        ],
+        "title": "Upstream & proxy errors",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Release-batch fanout outcomes plus client aborts. After a batch finishes, the manager broadcasts `release-batch` to every server assigned to that affinity (manager-app.ts:1295). Per-target failures are split out: `rb-non-2xx` is a server returning a non-ok status, `rb-timeout` is the proxy timeout firing, `rb-network` is a transport failure. `client-aborted` is the upstream client disconnecting mid-render (manager-app.ts:941) — usually a tab closing during a long render, not a manager bug; a sustained rate may indicate ALB-side timeout misalignment.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 60,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "rb-non-2xx"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "rb-timeout"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "rb-network"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "dark-red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "client-aborted"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "purple"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 36
+        },
+        "id": 51,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"release-batch on .* returned\" [1m]))",
+            "legendFormat": "rb-non-2xx",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"release-batch on .* timed out\" [1m]))",
+            "legendFormat": "rb-timeout",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"release-batch on .* network error\" [1m]))",
+            "legendFormat": "rb-network",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"prerender-manager\"} |~ \"client-aborted after\" [1m]))",
+            "legendFormat": "client-aborted",
+            "queryType": "range",
+            "refId": "D"
+          }
+        ],
+        "title": "Release-batch failures + client aborts",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Per-prerender-server-target attribution over the dashboard window. `proxied` is total `proxying ... to ${target}` invocations against that server (manager-app.ts:1071). `proxied_5xx` is `proxied ${label} ... target=${target} status=5..` — completed proxies that returned a server-side error (manager-app.ts:1216). `prunes` is `Pruned prerender server ${target}` regardless of cause (manager-app.ts:1149). A target with high `prunes` is unhealthy and being repeatedly evicted; high `proxied_5xx` without prunes is a server returning errors that aren't quite bad enough to trigger eviction. Click the URL to drill into Logs filtered to that target.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 120
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "target"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs for this target",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-service=prerender-manager&var-search=${__data.fields.target}&orgId=1"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "proxied_5xx"
+              },
+              "properties": [
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green"
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 1
+                      },
+                      {
+                        "color": "red",
+                        "value": 10
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "gradient"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "prunes"
+              },
+              "properties": [
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green"
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 1
+                      },
+                      {
+                        "color": "red",
+                        "value": 5
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "gradient"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        },
+        "id": 60,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": true,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "prunes"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "topk(50, sum by (target) (count_over_time({service=\"prerender-manager\"} |~ \"proxying .* prerender request\" | regexp \"to (?P<target>https?://[^ ]+)\" [$__range])))",
+            "legendFormat": "proxied",
+            "queryType": "instant",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (target) (count_over_time({service=\"prerender-manager\"} |~ \"proxied .* status=5\" | regexp \"target=(?P<target>https?://[^ ]+) status=5\" [$__range]))",
+            "legendFormat": "proxied_5xx",
+            "queryType": "instant",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (target) (count_over_time({service=\"prerender-manager\"} |~ \"Pruned prerender server\" | regexp \"Pruned prerender server (?P<target>https?://[^ ]+)\" [$__range]))",
+            "legendFormat": "prunes",
+            "queryType": "instant",
+            "refId": "C"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "joinByField",
+            "options": {
+              "byField": "target",
+              "mode": "outer"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {
+                "target": 0,
+                "Value #A": 1,
+                "Value #B": 2,
+                "Value #C": 3
+              },
+              "renameByName": {
+                "Value #A": "proxied",
+                "Value #B": "proxied_5xx",
+                "Value #C": "prunes"
+              }
+            }
+          }
+        ],
+        "title": "Per-target proxy outcomes (window)",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Filtered error + lifecycle stream — 503s, prunes, upstream errors, proxy exceptions, release-batch failures, evictions, signal handlers, force-exits, boots, and client aborts. The errors-only view triages 'something is wrong' without scrolling the firehose.",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 54
+        },
+        "id": 70,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=\"prerender-manager\"} |~ \"503 No servers|Pruned prerender server|Upstream error requestId=|Error in /.* proxy requestId=|release-batch on .* (returned|timed out|network error)|Pressure-mode: evicted|Fallback eviction: evicted|Received SIG(TERM|INT); marking prerender manager as draining|Forcing prerender manager shutdown|prerender manager HTTP listening on port|Prerender manager listener closed; exiting process|client-aborted after|Heartbeat sweep error|Unhandled error in /release-batch broadcast\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Errors & lifecycle stream",
+        "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Last 1000 log lines from prerender-manager tasks (unfiltered). Drill-throughs from Overview land here.",
         "gridPos": {
           "h": 16,
           "w": 24,
           "x": 0,
-          "y": 8
+          "y": 62
         },
         "id": 1,
         "options": {
@@ -233,7 +2619,7 @@
             "refId": "A"
           }
         ],
-        "title": "Prerender Manager logs",
+        "title": "Prerender Manager logs (all)",
         "type": "logs"
       }
     ],
@@ -243,10 +2629,73 @@
       "service:prerender-manager"
     ],
     "templating": {
-      "list": []
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
+          "definition": "regions()",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Region",
+          "name": "region",
+          "options": [],
+          "query": "regions()",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "type": "query"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
+          "definition": "dimension_values($region,AWS/ApplicationELB,ActiveConnectionCount,LoadBalancer)",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Prerender Manager ALB",
+          "multi": false,
+          "name": "prerender_manager_lb",
+          "options": [],
+          "query": "dimension_values($region,AWS/ApplicationELB,ActiveConnectionCount,LoadBalancer)",
+          "refresh": 1,
+          "regex": "",
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
+          "definition": "dimension_values($region,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$prerender_manager_lb\"})",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Prerender Manager target group",
+          "multi": false,
+          "name": "prerender_manager_tg",
+          "options": [],
+          "query": "dimension_values($region,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$prerender_manager_lb\"})",
+          "refresh": 1,
+          "sort": 1,
+          "type": "query"
+        }
+      ]
     },
     "time": {
-      "from": "now-30m",
+      "from": "now-1h",
       "to": "now"
     },
     "timepicker": {},

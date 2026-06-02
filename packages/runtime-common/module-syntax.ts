@@ -36,6 +36,7 @@ import {
   resolveCardReference,
   rri,
 } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -64,9 +65,20 @@ export class ModuleSyntax {
   declare declarations: Declaration[];
   declare private ast: t.File;
   private url: URL;
+  private virtualNetwork: VirtualNetwork | undefined;
 
-  constructor(src: string, url: RealmResourceIdentifier | URL) {
-    let normalized = url instanceof URL ? url : cardIdToURL(url);
+  constructor(
+    src: string,
+    url: RealmResourceIdentifier | URL,
+    virtualNetwork?: VirtualNetwork,
+  ) {
+    this.virtualNetwork = virtualNetwork;
+    let normalized =
+      url instanceof URL
+        ? url
+        : virtualNetwork
+          ? virtualNetwork.toURL(url)
+          : cardIdToURL(url);
     this.url = new URL(trimExecutableExtension(rri(normalized.href)));
     this.analyze(src);
   }
@@ -153,6 +165,7 @@ export class ModuleSyntax {
       outgoingRealmURL,
       moduleURL: this.url,
       computedFieldFunctionSourceCode,
+      virtualNetwork: this.virtualNetwork,
     });
 
     let src = this.code();
@@ -321,11 +334,10 @@ export class ModuleSyntax {
     classRef: ClassReference,
   ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
-      if (
-        trimExecutableExtension(
-          rri(resolveCardReference(classRef.module, this.url)),
-        ) === this.url.href
-      ) {
+      let resolvedModule = this.virtualNetwork
+        ? this.virtualNetwork.resolveURL(classRef.module, this.url).href
+        : resolveCardReference(classRef.module, this.url);
+      if (trimExecutableExtension(rri(resolvedModule)) === this.url.href) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
         );
@@ -392,6 +404,7 @@ function makeNewField({
   outgoingRealmURL,
   moduleURL,
   computedFieldFunctionSourceCode,
+  virtualNetwork,
 }: {
   target: NodePath<t.Node>;
   fieldRef: ResolvedCodeRef;
@@ -404,6 +417,7 @@ function makeNewField({
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
   computedFieldFunctionSourceCode?: string;
+  virtualNetwork?: VirtualNetwork;
 }): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -426,12 +440,18 @@ function makeNewField({
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
     isEqual(
-      codeRefWithAbsoluteIdentifier(fieldRef, moduleURL, {
-        trimExecutableExtension: true,
-      }),
-      codeRefWithAbsoluteIdentifier(cardBeingModified, moduleURL, {
-        trimExecutableExtension: true,
-      }),
+      codeRefWithAbsoluteIdentifier(
+        fieldRef,
+        moduleURL,
+        { trimExecutableExtension: true },
+        virtualNetwork,
+      ),
+      codeRefWithAbsoluteIdentifier(
+        cardBeingModified,
+        moduleURL,
+        { trimExecutableExtension: true },
+        virtualNetwork,
+      ),
     )
   ) {
     // syntax for when a card has a linksTo or linksToMany field to a card with the same type as itself
@@ -441,7 +461,9 @@ function makeNewField({
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
     relativeFieldModuleRef = maybeRelativeReference(
-      new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
+      virtualNetwork
+        ? virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo)
+        : new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
       outgoingRelativeTo,
       outgoingRealmURL,
     );
