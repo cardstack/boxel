@@ -588,21 +588,38 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private triggerUploadFile() {
-    let realmURL = this.operatorModeStateService.realmURL;
-    if (!realmURL) {
+    let realmURLString = this.operatorModeStateService.realmURL;
+    if (!realmURLString) {
       throw new Error('No realm available for upload');
     }
-    let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
-    task.result
-      .then((fileDef) => {
-        if (fileDef?.url) {
-          this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
-        }
-      })
-      .catch((error) => {
-        console.error('Unexpected error during file upload', error);
-      });
+    let realmURL = new URL(realmURLString);
+    this.uploadFiles.perform(realmURL).catch((error) => {
+      console.error('Unexpected error during file upload', error);
+    });
   }
+
+  private uploadFiles = dropTask(async (realmURL: URL) => {
+    let files = await this.fileUpload.pickLocalFiles({});
+    if (files.length === 0) {
+      return;
+    }
+    // Parallel POSTs are correct on the server: the realm advisory
+    // lock (packages/runtime-common/realm.ts:1746) serializes writes
+    // and each upload emits its own incremental-index event. A
+    // separate live file-tree refresh race (uploads AND deletes both
+    // leave the tree stale until the user refreshes / toggles views)
+    // is tracked in CS-11295.
+    let tasks = files.map((file) =>
+      this.fileUpload.uploadProvidedFile({ realmURL, file }),
+    );
+    let results = await Promise.all(tasks.map((task) => task.result));
+    let firstSuccess = results.find((fileDef) => fileDef?.url);
+    if (firstSuccess?.url) {
+      await this.operatorModeStateService.updateCodePath(
+        new URL(firstSuccess.url),
+      );
+    }
+  });
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();

@@ -1,5 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { render } from '@ember/test-helpers';
+import { click, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -14,8 +14,8 @@ import BrokenLinkTemplate from '../../../../base/default-templates/broken-link-t
 
 import { setupRenderingTest } from '../../helpers/setup';
 
-const NOT_FOUND_URL = 'https://example.com/realm/broken-card-id';
-const ERROR_URL = 'https://example.com/realm/exploded-card-id';
+const NOT_FOUND_URL = 'https://example.com/realm/Pet/broken-card-id';
+const ERROR_URL = 'https://example.com/realm/Author/exploded-card-id';
 
 function notFoundErrorDoc(): SerializedError {
   return {
@@ -65,143 +65,177 @@ async function renderTemplate(scenario: Scenario) {
 module('Integration | Component | broken-link-template', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('not-found / isolated: shows headline, URL, and status; suppresses redundant "Could not find ..." message', async function (this: RenderingTestContext, assert) {
-    await renderTemplate({
-      brokenUrl: NOT_FOUND_URL,
-      errorDoc: notFoundErrorDoc(),
-      state: 'not-found',
-      format: 'isolated',
-    });
+  test('the visible box is identical across states — only the type name shows; the failure reason is not surfaced inline', async function (this: RenderingTestContext, assert) {
+    for (let state of ['not-found', 'error'] as const) {
+      await renderTemplate({
+        brokenUrl: state === 'not-found' ? NOT_FOUND_URL : ERROR_URL,
+        errorDoc:
+          state === 'not-found' ? notFoundErrorDoc() : genericErrorDoc(),
+        state,
+        format: 'embedded',
+      });
 
-    assert
-      .dom('[data-test-broken-link-template="isolated"]')
-      .exists('root carries the format data attribute');
-    assert
-      .dom('[data-test-broken-link-state="not-found"]')
-      .exists('root carries the state data attribute');
-    assert
-      .dom('[data-test-broken-link-headline]')
-      .hasText('Linked card not found');
-    assert.dom('[data-test-broken-link-url]').hasText(NOT_FOUND_URL);
-    assert
-      .dom('[data-test-broken-link-url]')
-      .hasAttribute('href', NOT_FOUND_URL);
-    assert
-      .dom('[data-test-broken-link-status]')
-      .includesText('404')
-      .includesText('Not Found');
-    assert
-      .dom('[data-test-broken-link-message]')
-      .doesNotExist(
-        'message is suppressed for not-found — the URL above already says it',
-      );
+      assert
+        .dom('[data-test-broken-link-template="embedded"]')
+        .exists('root carries the format data attribute');
+      assert
+        .dom(`[data-test-broken-link-state="${state}"]`)
+        .exists('root carries the state data attribute');
+      assert
+        .dom('[data-test-broken-link-type]')
+        .hasText(state === 'not-found' ? 'Pet' : 'Author');
+      // The detail lives only in the (hidden) overlay — nothing about the
+      // failure should be visible in the box itself.
+      assert.dom('[data-test-broken-link-url]').isNotVisible();
+      assert.dom('[data-test-broken-link-headline]').isNotVisible();
+    }
   });
 
-  test('error / isolated: surfaces message, stack, and additional errors so AI consumers can read them', async function (this: RenderingTestContext, assert) {
-    let errorDoc = genericErrorDoc();
+  test('detail stays in the DOM but is visually hidden until the reveal is triggered', async function (this: RenderingTestContext, assert) {
     await renderTemplate({
       brokenUrl: ERROR_URL,
-      errorDoc,
+      errorDoc: genericErrorDoc(),
       state: 'error',
       format: 'isolated',
     });
 
+    // Reveal affordance + overlay scaffolding are present.
     assert
-      .dom('[data-test-broken-link-headline]')
-      .hasText('Linked card failed to load');
-    assert.dom('[data-test-broken-link-message]').hasText(errorDoc.message);
+      .dom('[data-test-broken-link-reveal]')
+      .exists('reveal trigger exists');
+    assert
+      .dom('[data-test-broken-link-overlay]')
+      .exists('overlay node is in the DOM')
+      .isNotVisible('overlay is hidden until the reveal is triggered');
+    assert
+      .dom('[data-test-broken-link-overlay-close]')
+      .exists('close trigger exists');
+
+    // Full detail is recoverable from the DOM for AI consumers even while the
+    // overlay is closed.
+    assert.dom('[data-test-broken-link-url]').hasText(ERROR_URL).isNotVisible();
+    assert
+      .dom('[data-test-broken-link-message]')
+      .hasText(genericErrorDoc().message)
+      .isNotVisible();
     assert
       .dom('[data-test-broken-link-stack]')
       .includesText('PetCard.render')
-      .includesText('pet.gts:42:7');
+      .isNotVisible();
     assert
       .dom('[data-test-broken-link-additional-error="0"]')
-      .includesText('inner dependency exploded');
+      .includesText('inner dependency exploded')
+      .isNotVisible();
   });
 
-  test('not-found / embedded: shows headline + URL but suppresses message and stack', async function (this: RenderingTestContext, assert) {
+  test('triggering the reveal opens the overlay; closing it hides the overlay again', async function (this: RenderingTestContext, assert) {
+    await renderTemplate({
+      brokenUrl: ERROR_URL,
+      errorDoc: genericErrorDoc(),
+      state: 'error',
+      format: 'isolated',
+    });
+
+    assert.dom('[data-test-broken-link-overlay]').isNotVisible();
+    await click('[data-test-broken-link-reveal]');
+    assert
+      .dom('[data-test-broken-link-overlay]')
+      .isVisible('overlay opens when the reveal is triggered');
+    assert.dom('[data-test-broken-link-url]').isVisible();
+
+    await click('[data-test-broken-link-overlay-close]');
+    assert
+      .dom('[data-test-broken-link-overlay]')
+      .isNotVisible('overlay closes when the close affordance is triggered');
+  });
+
+  test('the overlay headline reflects the state — the one place not-found and error differ', async function (this: RenderingTestContext, assert) {
     await renderTemplate({
       brokenUrl: NOT_FOUND_URL,
       errorDoc: notFoundErrorDoc(),
       state: 'not-found',
       format: 'embedded',
     });
-
-    assert.dom('[data-test-broken-link-template="embedded"]').exists();
     assert
       .dom('[data-test-broken-link-headline]')
       .hasText('Linked card not found');
-    assert.dom('[data-test-broken-link-url]').hasText(NOT_FOUND_URL);
+    // not-found's message is just "Could not find <url>" — redundant with the
+    // URL line, so it is suppressed.
     assert
       .dom('[data-test-broken-link-message]')
       .doesNotExist('not-found suppresses the redundant "Could not find" line');
-    assert
-      .dom('[data-test-broken-link-stack]')
-      .doesNotExist('stack panel is isolated-format only');
-  });
 
-  test('error / embedded: shows headline + URL + message but suppresses the stack panel', async function (this: RenderingTestContext, assert) {
     await renderTemplate({
       brokenUrl: ERROR_URL,
       errorDoc: genericErrorDoc(),
       state: 'error',
       format: 'embedded',
     });
-
-    assert.dom('[data-test-broken-link-template="embedded"]').exists();
-    assert.dom('[data-test-broken-link-headline]').exists();
-    assert.dom('[data-test-broken-link-url]').hasText(ERROR_URL);
+    assert
+      .dom('[data-test-broken-link-headline]')
+      .hasText('Linked card failed to load');
     assert.dom('[data-test-broken-link-message]').exists();
-    assert
-      .dom('[data-test-broken-link-stack]')
-      .doesNotExist('stack panel is isolated-format only');
-    assert
-      .dom('[data-test-broken-link-additional-error="0"]')
-      .doesNotExist('additional-errors panel is isolated-format only');
   });
 
-  test('not-found / fitted: keeps URL prominent and drops the verbose message', async function (this: RenderingTestContext, assert) {
-    await renderTemplate({
-      brokenUrl: NOT_FOUND_URL,
-      errorDoc: notFoundErrorDoc(),
-      state: 'not-found',
-      format: 'fitted',
-    });
+  test('the overlay carries status, message, stack, and additional errors regardless of format', async function (this: RenderingTestContext, assert) {
+    let errorDoc = genericErrorDoc();
+    for (let format of ['isolated', 'fitted', 'embedded', 'atom'] as const) {
+      await renderTemplate({
+        brokenUrl: ERROR_URL,
+        errorDoc,
+        state: 'error',
+        format,
+      });
 
-    assert.dom('[data-test-broken-link-template="fitted"]').exists();
-    assert.dom('[data-test-broken-link-headline]').exists();
-    assert.dom('[data-test-broken-link-url]').hasText(NOT_FOUND_URL);
-    assert
-      .dom('[data-test-broken-link-message]')
-      .doesNotExist('fitted suppresses the prose error message');
+      assert
+        .dom('[data-test-broken-link-status]')
+        .includesText('500')
+        .includesText('Internal Server Error');
+      assert.dom('[data-test-broken-link-message]').hasText(errorDoc.message);
+      assert
+        .dom('[data-test-broken-link-stack]')
+        .includesText('PetCard.render')
+        .includesText('pet.gts:42:7');
+      assert
+        .dom('[data-test-broken-link-additional-error="0"]')
+        .includesText('inner dependency exploded');
+    }
   });
 
-  test('error / fitted: still suppresses the message even with a real error reason', async function (this: RenderingTestContext, assert) {
+  test('the overlay keeps the prose message visible when it differs from the stack, and hides the visual duplicate when the stack repeats it', async function (this: RenderingTestContext, assert) {
+    // The fixture's stack ("Error: kaboom ...") does not carry the message, so
+    // the message is distinct information and must stay visible.
     await renderTemplate({
       brokenUrl: ERROR_URL,
       errorDoc: genericErrorDoc(),
       state: 'error',
-      format: 'fitted',
+      format: 'isolated',
     });
-
-    assert.dom('[data-test-broken-link-template="fitted"]').exists();
-    assert
-      .dom('[data-test-broken-link-headline]')
-      .hasText('Linked card failed to load');
-    assert.dom('[data-test-broken-link-url]').hasText(ERROR_URL);
-    assert
-      .dom('[data-test-broken-link-status]')
-      .includesText('500')
-      .includesText('Internal Server Error');
+    await click('[data-test-broken-link-reveal]');
     assert
       .dom('[data-test-broken-link-message]')
-      .doesNotExist('fitted is too small to render the prose message at all');
+      .isVisible('message stays visible when the stack header differs from it');
+
+    // When the stack's first line already carries the message, the prose is a
+    // visual duplicate — hidden, but still recoverable from the DOM.
+    let redundant = genericErrorDoc();
+    redundant.stack = `Error: ${redundant.message}\n    at PetCard.render (pet.gts:42:7)`;
+    await renderTemplate({
+      brokenUrl: ERROR_URL,
+      errorDoc: redundant,
+      state: 'error',
+      format: 'isolated',
+    });
+    await click('[data-test-broken-link-reveal]');
     assert
-      .dom('[data-test-broken-link-stack]')
-      .doesNotExist('stack panel is isolated-format only');
+      .dom('[data-test-broken-link-message]')
+      .hasText(redundant.message)
+      .isNotVisible(
+        'the redundant message stays in the DOM but is visually hidden',
+      );
   });
 
-  test('not-found / atom: renders an inline compact line carrying the URL', async function (this: RenderingTestContext, assert) {
+  test('atom format renders an inline placeholder with the type name and a reveal trigger', async function (this: RenderingTestContext, assert) {
     await renderTemplate({
       brokenUrl: NOT_FOUND_URL,
       errorDoc: notFoundErrorDoc(),
@@ -210,22 +244,9 @@ module('Integration | Component | broken-link-template', function (hooks) {
     });
 
     assert.dom('[data-test-broken-link-template="atom"]').exists();
-    assert
-      .dom('[data-test-broken-link-headline]')
-      .doesNotExist('atom format omits the full headline');
-    assert.dom('[data-test-broken-link-url]').hasText(NOT_FOUND_URL);
-  });
-
-  test('error / atom: still surfaces the URL for diagnostics', async function (this: RenderingTestContext, assert) {
-    await renderTemplate({
-      brokenUrl: ERROR_URL,
-      errorDoc: genericErrorDoc(),
-      state: 'error',
-      format: 'atom',
-    });
-
-    assert.dom('[data-test-broken-link-state="error"]').exists();
-    assert.dom('[data-test-broken-link-url]').hasText(ERROR_URL);
+    assert.dom('[data-test-broken-link-type]').hasText('Pet');
+    assert.dom('[data-test-broken-link-reveal]').exists();
+    assert.dom('[data-test-broken-link-overlay]').isNotVisible();
   });
 
   test('renders without crashing when errorDoc is minimal', async function (this: RenderingTestContext, assert) {
@@ -258,7 +279,7 @@ module('Integration | Component | broken-link-template', function (hooks) {
 
     assert
       .dom('[data-test-broken-link-url]')
-      .exists('the URL is still visible to the reviewer')
+      .exists('the URL is still recoverable in the DOM')
       .hasText(evilUrl)
       .hasTagName(
         'span',

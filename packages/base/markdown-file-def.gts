@@ -12,6 +12,7 @@ import {
   containsMany,
   field,
   linksToMany,
+  virtualNetworkFor,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import {
@@ -450,7 +451,11 @@ export class MarkdownDef extends FileDef {
       if (!this.content) {
         return [];
       }
-      return extractCardReferenceUrls(this.content, this.id ?? '');
+      return extractCardReferenceUrls(
+        this.content,
+        this.id ?? '',
+        virtualNetworkFor(this),
+      );
     },
   });
 

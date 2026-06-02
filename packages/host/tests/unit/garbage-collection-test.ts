@@ -110,8 +110,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
     });
 
     let referenceCount: ReferenceCount = new Map();
-    let fetch = getService('network').fetch;
-    let store = new CardStore(referenceCount, fetch);
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
 
     store.setCard(jade[localId], jade);
     store.setCard(germaine[localId], germaine);
@@ -322,8 +326,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
     }
 
     let referenceCount: ReferenceCount = new Map();
-    let fetch = getService('network').fetch;
-    let store = new CardStore(referenceCount, fetch);
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
 
     let fileUrl = `${testRealmURL}hero.png`;
     let fileDef = new FileDef({
@@ -730,22 +738,30 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('can get a card from the identity map by correlating the last part of the remote id with the local id for an instance that has a newly assigned remote id', async function (assert) {
+  test('can get a card from the identity map by correlating the last part of the remote id with the local id, without reconciling the instance id', async function (assert) {
     let {
       store,
       instances: { hassan },
     } = await setupTest();
 
+    let idBefore = hassan.id;
+
     assert.strictEqual(
       store.getCardInstanceOrError(`${testRealmURL}${hassan[localId]}`),
       hassan,
-      'card instance is returned',
+      'card instance is returned by correlating the remote id tail to the local id',
     );
 
+    // The lookup is a pure read: it must NOT write the instance's tracked `id`.
+    // Identity reconciliation (local id -> remote id) happens when the store
+    // learns the remote id out of band (the realm invalidation event /
+    // save-deserialize flow), not as a side effect of a bare lookup — which can
+    // run during render, where mutating the tracked id trips a backtracking
+    // re-render assertion.
     assert.strictEqual(
       hassan.id,
-      `${testRealmURL}${hassan[localId]}`,
-      'instance has remote id set correctly',
+      idBefore,
+      'the bare lookup leaves the instance id unchanged',
     );
   });
 

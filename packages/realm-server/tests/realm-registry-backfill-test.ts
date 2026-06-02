@@ -39,10 +39,30 @@ async function allRegistryRows(dbAdapter: PgAdapter): Promise<RegistryRow[]> {
 
 function seedRealmJson(realmDir: string, payload: Record<string, unknown>) {
   ensureDirSync(realmDir);
-  writeFileSync(
-    join(realmDir, '.realm.json'),
-    JSON.stringify(payload, null, 2),
-  );
+  // Seed the on-disk RealmConfig card the backfill uses as the marker
+  // for "this directory is a realm". The card shape only matters to the
+  // backfill insofar as the file exists — the payload is captured for
+  // any future assertion that wants to read it back.
+  let cardInfo =
+    typeof payload.name === 'string' ? { name: payload.name } : undefined;
+  let card = {
+    data: {
+      type: 'card',
+      attributes: {
+        ...(cardInfo ? { cardInfo } : {}),
+        ...Object.fromEntries(
+          Object.entries(payload).filter(([k]) => k !== 'name'),
+        ),
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  };
+  writeFileSync(join(realmDir, 'realm.json'), JSON.stringify(card, null, 2));
 }
 
 module(basename(__filename), function () {
@@ -101,7 +121,7 @@ module(basename(__filename), function () {
       seedRealmJson(join(realmsRootPath, 'luke', 'other-realm'), {
         name: 'other-realm',
       });
-      // A directory without .realm.json should be skipped:
+      // A directory without realm.json should be skipped:
       ensureDirSync(join(realmsRootPath, 'luke', 'not-a-realm'));
 
       await runRegistryBackfill({
@@ -132,7 +152,7 @@ module(basename(__filename), function () {
 
     test('skips the _published directory during source-realm scan', async function (assert) {
       seedRealmJson(join(realmsRootPath, 'luke', 'src'), { name: 'src' });
-      // Create a _published/<uuid>/.realm.json — should NOT be picked up as
+      // Create a _published/<uuid>/realm.json — should NOT be picked up as
       // a source realm. (Published rows are written by the publish handler
       // directly into realm_registry; the boot-time scan does not recover
       // them from disk.)

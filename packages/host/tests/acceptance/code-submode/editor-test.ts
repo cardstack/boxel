@@ -35,6 +35,7 @@ import {
   withSlowSave,
   withCachedRealmSetup,
   type TestContextWithSave,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -260,12 +261,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               },
             },
           },
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
           'Person/john-with-bad-pet-link.json': {
             data: {
               attributes: {

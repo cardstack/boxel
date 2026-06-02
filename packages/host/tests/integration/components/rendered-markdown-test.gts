@@ -303,4 +303,158 @@ module('Integration | rendered-markdown', function (hooks) {
       'height is set',
     );
   });
+
+  test('unresolved embedded block ref renders with embedded format class', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing';
+    let content = `::card[${cardUrl}]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasClass(
+        'markdown-bfm-broken--embedded',
+        'block ref defaults to the embedded footprint',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .doesNotHaveAttribute(
+        'style',
+        'embedded broken-link box does not carry an inline width/height style',
+      );
+  });
+
+  test('unresolved isolated block ref renders with isolated format class', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-isolated';
+    let content = `::card[${cardUrl} | isolated]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasClass(
+        'markdown-bfm-broken--isolated',
+        'isolated ref carries the isolated footprint class',
+      );
+  });
+
+  test('unresolved fitted block ref carries inline width/height matching the card footprint', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-fitted';
+    let content = `::card[${cardUrl} | 400x200]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    let brokenBlock = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-block]',
+    ) as HTMLElement | null;
+    assert.ok(brokenBlock, 'broken-link block exists');
+    assert
+      .dom(brokenBlock)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted ref carries the fitted footprint class',
+      );
+    let style = brokenBlock?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
+  test('loading placeholder appears before unresolved card ref settles', async function (assert) {
+    // The modifier emits a loading shimmer on its first run (before
+    // loadReferencedCards has settled) and only transitions to the broken-link
+    // box afterwards. Observe the DOM to confirm the loading element actually
+    // appears — the existing "no broken Pill flashed" tests only check absence
+    // of the unresolved selector and would still pass if the loading element
+    // never rendered.
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-loading';
+    let content = `::card[${cardUrl} | 400x200]`;
+
+    let loadingEverAppeared = false;
+    let capturedLoadingStyle = '';
+    let capturedLoadingClasses = '';
+    let testRoot = document.querySelector('#ember-testing')!;
+    let observer = new MutationObserver(() => {
+      let loadingEl = testRoot.querySelector(
+        '[data-test-markdown-bfm-loading-block]',
+      ) as HTMLElement | null;
+      if (loadingEl) {
+        loadingEverAppeared = true;
+        capturedLoadingStyle =
+          loadingEl.getAttribute('style') ?? capturedLoadingStyle;
+        capturedLoadingClasses = loadingEl.className || capturedLoadingClasses;
+      }
+    });
+    observer.observe(testRoot, { childList: true, subtree: true });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    observer.disconnect();
+
+    assert.true(
+      loadingEverAppeared,
+      'loading shimmer block appeared before the broken-link box',
+    );
+    assert.true(
+      capturedLoadingClasses.includes('markdown-bfm-loading--fitted'),
+      `loading block carries the fitted footprint class (got "${capturedLoadingClasses}")`,
+    );
+    assert.true(
+      /width:\s*400px/.test(capturedLoadingStyle),
+      `loading block inline style includes width: 400px (got "${capturedLoadingStyle}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(capturedLoadingStyle),
+      `loading block inline style includes height: 200px (got "${capturedLoadingStyle}")`,
+    );
+  });
 });

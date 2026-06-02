@@ -21,8 +21,7 @@ let log = logger('serve-realm');
 // Last matching pattern wins. Must agree with the same constant in
 // `cli/cache-realm.ts` so the per-process realm and the cached template
 // see the exact same fixture contents.
-const SF_CARD_DEFINITIONS_GLOB =
-  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+const SF_CARD_DEFINITIONS_GLOB = '*.gts realm.json !document.gts !wiki.gts';
 
 function cardDefinitionsOnly(relativePath: string): boolean {
   let filename = relativePath.split('/').pop() ?? relativePath;
@@ -58,6 +57,10 @@ function parseCliNumber(name: string): number | undefined {
     throw new Error(`--${name} must be a valid number, received: ${value}`);
   }
   return parsed;
+}
+
+function parseCliBool(name: string): boolean {
+  return process.argv.includes(`--${name}`);
 }
 
 interface SerializableRealmConfig {
@@ -160,6 +163,15 @@ async function main(): Promise<void> {
     realmServerPort: parseCliNumber('realmServerPort'),
     compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
     prerenderURL: parseCliArg('prerenderURL'),
+    // When the Playwright fixture spawns this child, the worker process
+    // owns the compat proxy for the testWorker's whole lifetime (so the
+    // stable compat-realm-server port stays bound across per-test
+    // serve-realm spawns) and calls `setTargetPort` itself after reading
+    // the realm-server port out of this child's metadata file. In that
+    // mode the child must not bind the compat port — the fixture passes
+    // `--no-compat-proxy`. Standalone `pnpm serve:realm` omits the flag
+    // and gets the in-stack proxy.
+    noCompatProxy: parseCliBool('no-compat-proxy'),
   });
 
   let payload = {

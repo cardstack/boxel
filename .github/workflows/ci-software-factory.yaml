@@ -16,6 +16,7 @@ on:
       - "packages/matrix/**"
       - "packages/postgres/**"
       - "packages/realm-server/**"
+      - "packages/realm-test-harness/**"
       - "packages/software-factory/**"
       - "package.json"
       - "pnpm-lock.yaml"

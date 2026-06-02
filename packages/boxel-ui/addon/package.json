@@ -25,6 +25,7 @@
     "lint:types": "ember-tsc --noEmit",
     "rebuild:icons": "node bin/rebuild-icons.mjs",
     "rebuild:usage": "node bin/rebuild-usage.mjs",
+    "generate:component-specs": "node bin/generate-component-specs.mjs",
     "prepack": "rollup --config",
     "start": "concurrently \"pnpm:start:*\" --names \"start:\"",
     "start:js": "rollup --config --watch --no-watch.clearScreen",

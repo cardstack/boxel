@@ -17,6 +17,7 @@ import {
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
+  realmConfigCardJSON,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import type { RealmHttpServer as Server } from '../../server';
@@ -51,7 +52,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           {
             realmURL: testRealmURL,
             fileSystem: {
-              '.realm.json': JSON.stringify({ name: 'Primary Realm' }),
+              'realm.json': realmConfigCardJSON({ name: 'Primary Realm' }),
             },
             permissions: {
               '*': ['read'],
@@ -61,7 +62,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           {
             realmURL: secondaryRealmURL,
             fileSystem: {
-              '.realm.json': JSON.stringify({ name: 'Secondary Realm' }),
+              'realm.json': realmConfigCardJSON({ name: 'Secondary Realm' }),
             },
             permissions: {
               [ownerUserId]: ['read', 'write', 'realm-owner'],

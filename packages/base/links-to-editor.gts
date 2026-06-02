@@ -37,8 +37,10 @@ import { type RelationshipState } from './field-support';
 // A broken singular link surfaces as a terminal failure state from
 // `getRelationship`. The owning `linksTo` component reads it (it has the
 // containing instance in scope) and hands it down so the editor can show the
-// placeholder alongside remove and replace controls, rather than the bare
-// "Link" button it shows for a never-set field.
+// placeholder alongside a remove control, rather than the bare "Link" button it
+// shows for a never-set field. To swap in a working link, the user removes the
+// broken reference, which reverts the field to the not-set state and its "Link"
+// button.
 type BrokenLink = Extract<RelationshipState, { kind: 'error' | 'not-found' }>;
 
 interface Signature {
@@ -72,32 +74,19 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       >
         {{#if @brokenLink}}
           {{! A broken reference still occupies the slot — show the placeholder
-              (so the broken URL is visible) and, when writable, the controls to
-              clear it (remove) or swap it for a working link (replace) without
-              first reverting to the empty state. }}
+              (so the broken URL is visible) and, when writable, a remove control
+              to clear it. Removing reverts the field to the not-set state, where
+              the existing "Link" button can add a working replacement. }}
           {{#if permissions.canWrite}}
-            <div class='broken-controls'>
-              <IconButton
-                @icon={{IconMinusCircle}}
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' this.remove}}
-                aria-label='Remove'
-                data-test-remove-card
-              />
-              <Button
-                class='replace'
-                @kind='muted'
-                @size='small'
-                @rectangular={{true}}
-                {{on 'click' this.add}}
-                data-test-add-new={{@field.name}}
-              >
-                Link
-                {{@field.card.displayName}}
-              </Button>
-            </div>
+            <IconButton
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              aria-label='Remove'
+              data-test-remove-card
+            />
           {{/if}}
           {{! The editor lays the slot out in flow (a `1fr auto` grid), not a
               fixed-dimension card slot, so the placeholder renders `embedded`
@@ -190,20 +179,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
       .add-new {
         width: fit-content;
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      /* Broken-state controls stack in the trailing `auto` column beside the
-         placeholder: remove (clear the reference) above replace (swap in a
-         working link via the card chooser). */
-      .broken-controls {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .replace {
-        width: fit-content;
-        white-space: nowrap;
         letter-spacing: var(--boxel-lsp-xs);
       }
     </style>

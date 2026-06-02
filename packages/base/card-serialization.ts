@@ -17,7 +17,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { FileDef } from './file-api';
-import type { ResourceID } from '@cardstack/runtime-common';
+import type { ResourceID, VirtualNetwork } from '@cardstack/runtime-common';
 
 // --- Runtime Imports ---
 
@@ -74,6 +74,10 @@ export interface SerializeOpts {
   omitQueryFields?: boolean;
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
+  // The VirtualNetwork to consult for prefix/RRI resolution during
+  // serialization. Optional; sites fall back to the deprecated module-level
+  // resolver when absent.
+  virtualNetwork?: VirtualNetwork;
 }
 
 export interface DeserializeOpts {
@@ -225,12 +229,18 @@ export function serializeCard(
       maybeRelativeReference(possibleReference: string) {
         // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
         // in their canonical portable form — return as-is
-        if (isRegisteredPrefix(possibleReference)) {
+        if (
+          opts?.virtualNetwork
+            ? opts.virtualNetwork.isRegisteredPrefix(possibleReference)
+            : isRegisteredPrefix(possibleReference)
+        ) {
           return possibleReference;
         }
         let modelRelativeToForURL =
           typeof modelRelativeTo === 'string'
-            ? cardIdToURL(modelRelativeTo)
+            ? opts?.virtualNetwork
+              ? opts.virtualNetwork.toURL(modelRelativeTo)
+              : cardIdToURL(modelRelativeTo)
             : modelRelativeTo;
         let url = maybeURL(possibleReference, modelRelativeToForURL);
         if (!url) {
@@ -327,12 +337,18 @@ export function serializeFileDef(
         maybeRelativeReference(possibleReference: string) {
           // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
           // in their canonical portable form — return as-is
-          if (isRegisteredPrefix(possibleReference)) {
+          if (
+            opts?.virtualNetwork
+              ? opts.virtualNetwork.isRegisteredPrefix(possibleReference)
+              : isRegisteredPrefix(possibleReference)
+          ) {
             return possibleReference;
           }
           let modelRelativeToForURL =
             typeof modelRelativeTo === 'string'
-              ? cardIdToURL(modelRelativeTo)
+              ? opts?.virtualNetwork
+                ? opts.virtualNetwork.toURL(modelRelativeTo)
+                : cardIdToURL(modelRelativeTo)
               : modelRelativeTo;
           let url = maybeURL(possibleReference, modelRelativeToForURL);
           if (!url) {
@@ -344,9 +360,7 @@ export function serializeFileDef(
             return url.href;
           }
           const realmURLString = getCardMeta(model, 'realmURL');
-          const realmURL = realmURLString
-            ? new URL(realmURLString)
-            : undefined;
+          const realmURL = realmURLString ? new URL(realmURLString) : undefined;
           return maybeRelativeReference(url, modelRelativeTo, realmURL);
         },
       },

@@ -3,13 +3,13 @@
 // ── Types ────────────────────────────────────────────────────────────── //
 
 export interface KanbanPlacement {
-  column: number; // which lane (0-based)
+  columnId: string; // column id
   index: number; // card index in linksToMany
   sortOrder: number; // position within column (1, 2, 3...)
 }
 
 export interface InsertionPoint {
-  column: number; // target lane
+  columnId: string; // target column id
   insertBeforeIndex: number; // card index to insert before (-1 = end)
   position: number; // sort position for shift calculations
 }
@@ -24,9 +24,9 @@ export interface DragRect {
 export interface KanbanColumnConfig {
   collapsed: boolean | null;
   color: string | null;
-  key: string | null;
+  key: string;
   label: string | null;
-  sortOrder: number | null;
+  sortOrder: number;
   wipLimit: number | null;
 }
 
@@ -34,20 +34,20 @@ export interface KanbanColumnConfig {
 
 /** Get cards in a column, sorted by sortOrder. */
 export function cardsInColumn(
-  column: number,
+  columnId: string,
   placements: KanbanPlacement[],
 ): KanbanPlacement[] {
   return placements
-    .filter((p) => p.column === column)
+    .filter((p) => p.columnId === columnId)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 /** Count cards in a column. */
 export function columnCount(
-  column: number,
+  columnId: string,
   placements: KanbanPlacement[],
 ): number {
-  return placements.filter((p) => p.column === column).length;
+  return placements.filter((p) => p.columnId === columnId).length;
 }
 
 // ── Insertion Resolution ─────────────────────────────────────────────── //
@@ -68,13 +68,13 @@ export function resolveInsertion(
     return result;
   }
 
-  const sourceColumn = dragCard.column;
-  const targetColumn = insertion.column;
+  const sourceColumn = dragCard.columnId;
+  const targetColumn = insertion.columnId;
 
-  dragCard.column = targetColumn;
+  dragCard.columnId = targetColumn;
 
   const targetCards = result
-    .filter((p) => p.column === targetColumn && p.index !== dragIndex)
+    .filter((p) => p.columnId === targetColumn && p.index !== dragIndex)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   let insertAt = targetCards.length;
@@ -99,7 +99,7 @@ export function resolveInsertion(
 
   if (sourceColumn !== targetColumn) {
     const sourceCards = result
-      .filter((p) => p.column === sourceColumn && p.index !== dragIndex)
+      .filter((p) => p.columnId === sourceColumn && p.index !== dragIndex)
       .sort((a, b) => a.sortOrder - b.sortOrder);
     sourceCards.forEach((p, i) => {
       p.sortOrder = i + 1;
@@ -112,18 +112,18 @@ export function resolveInsertion(
 // ── Insertion Point from Pointer ─────────────────────────────────────── //
 
 function resolveInsertionInColumn(
-  targetColumn: number,
+  targetColumnId: string,
   clientY: number,
   container: HTMLElement,
   placements: KanbanPlacement[],
   dragIndex: number,
 ): InsertionPoint | null {
-  const columnCards = cardsInColumn(targetColumn, placements).filter(
+  const columnCards = cardsInColumn(targetColumnId, placements).filter(
     (p) => p.index !== dragIndex,
   );
 
   if (columnCards.length === 0) {
-    return { column: targetColumn, insertBeforeIndex: -1, position: 1 };
+    return { columnId: targetColumnId, insertBeforeIndex: -1, position: 1 };
   }
 
   for (let i = 0; i < columnCards.length; i++) {
@@ -140,7 +140,7 @@ function resolveInsertionInColumn(
 
     if (clientY < midY) {
       return {
-        column: targetColumn,
+        columnId: targetColumnId,
         insertBeforeIndex: entry.index,
         position: entry.sortOrder,
       };
@@ -149,7 +149,7 @@ function resolveInsertionInColumn(
 
   const lastCard = columnCards[columnCards.length - 1];
   return {
-    column: targetColumn,
+    columnId: targetColumnId,
     insertBeforeIndex: -1,
     position: (lastCard?.sortOrder ?? 0) + 1,
   };
@@ -167,23 +167,23 @@ export function findInsertionFromPointer(
   dragIndex: number,
 ): InsertionPoint | null {
   const columnEls = container.querySelectorAll('[data-kanban-column]');
-  let targetColumn: number | null = null;
+  let targetColumnId: string | null = null;
 
   for (let i = 0; i < columnEls.length; i++) {
     const el = columnEls[i] as HTMLElement;
     const rect = el.getBoundingClientRect();
     if (clientX >= rect.left && clientX <= rect.right) {
-      targetColumn = parseInt(el.getAttribute('data-kanban-column')!, 10);
+      targetColumnId = el.getAttribute('data-kanban-column')!;
       break;
     }
   }
 
-  if (targetColumn === null) {
+  if (targetColumnId === null) {
     return null;
   }
 
   return resolveInsertionInColumn(
-    targetColumn,
+    targetColumnId,
     clientY,
     container,
     placements,
@@ -198,7 +198,7 @@ export function findInsertionFromDragRect(
   dragIndex: number,
 ): InsertionPoint | null {
   const columnEls = container.querySelectorAll('[data-kanban-column]');
-  let targetColumn: number | null = null;
+  let targetColumnId: string | null = null;
   let bestOverlap = 0;
 
   for (let i = 0; i < columnEls.length; i++) {
@@ -209,17 +209,17 @@ export function findInsertionFromDragRect(
 
     if (overlap > bestOverlap) {
       bestOverlap = overlap;
-      targetColumn = parseInt(el.getAttribute('data-kanban-column')!, 10);
+      targetColumnId = el.getAttribute('data-kanban-column')!;
     }
   }
 
-  if (targetColumn === null || bestOverlap <= 0) {
+  if (targetColumnId === null || bestOverlap <= 0) {
     return null;
   }
 
   const centerY = (dragRect.top + dragRect.bottom) / 2;
   return resolveInsertionInColumn(
-    targetColumn,
+    targetColumnId,
     centerY,
     container,
     placements,
@@ -232,16 +232,22 @@ export function findInsertionFromDragRect(
 /** Distribute N cards across columns evenly. */
 export function autoPlaceKanban(
   itemCount: number,
-  columnCount: number,
+  columns: KanbanColumnConfig[],
 ): KanbanPlacement[] {
+  let columnCount = columns?.length;
   if (columnCount <= 0) {
     return [];
   }
   const placements: KanbanPlacement[] = [];
   for (let i = 0; i < itemCount; i++) {
-    const col = i % columnCount;
+    const colIndex = i % columnCount;
+    const colId = columns[colIndex]?.key;
+    if (!colId) {
+      console.error(`Kanban column at index ${colIndex} is missing key.`);
+      continue;
+    }
     const row = Math.floor(i / columnCount) + 1;
-    placements.push({ index: i, column: col, sortOrder: row });
+    placements.push({ index: i, columnId: colId, sortOrder: row });
   }
   return placements;
 }

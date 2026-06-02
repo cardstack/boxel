@@ -27,3 +27,36 @@ while ! docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do
   printf '.'
   sleep 5
 done
+
+# Create the databases the services connect to before anything uses them.
+# Workers fatally crash on startup with `database "<name>" does not exist`
+# if they out-race the realm-server's `--migrateDB` — the only other thing
+# that creates these — and a crash-looping worker never indexes, so the
+# realm's readiness check never passes. This task is a shared dependency of
+# the realm-server and worker tasks, so creating the databases here closes
+# the race for every host CI job, not just one.
+#
+# `docker exec ... -h localhost -p 5432` forces TCP inside the container:
+# the postgres:16.3 image does not always create the unix socket, so a bare
+# `psql -U postgres` can fail on the socket path. Postgres listens on
+# *:5432 (trust auth), so localhost works regardless.
+ensure_db() {
+  db="$1"
+  [ -z "$db" ] && return 0
+  # Create unconditionally and treat "already exists" as success, so a
+  # concurrent creator (the realm-server and worker tasks may run this in
+  # parallel) can't lose a check-then-create race.
+  if out=$(docker exec boxel-pg psql -h localhost -p 5432 -U postgres -w -c "CREATE DATABASE $db" 2>&1); then
+    echo "Created database $db"
+  elif echo "$out" | grep -q "already exists"; then
+    echo "Database $db already exists"
+  else
+    echo "$out" >&2
+    return 1
+  fi
+}
+
+ensure_db "${PGDATABASE:-boxel}"
+if [ -n "${PGDATABASE_TEST:-}" ]; then
+  ensure_db "$PGDATABASE_TEST"
+fi

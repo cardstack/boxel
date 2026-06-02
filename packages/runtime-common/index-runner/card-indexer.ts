@@ -11,7 +11,7 @@ import {
   type LocalPath,
   type LooseCardResource,
   type RenderResponse,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from '../index';
 import {
   CardError,
@@ -20,6 +20,7 @@ import {
   serializableError,
 } from '../error';
 import { unresolveResourceInstanceURLs } from '../url';
+import type { VirtualNetwork } from '../virtual-network';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import { canonicalURL } from './dependency-url';
@@ -38,9 +39,10 @@ export interface CardIndexerOptions {
   // by the fused indexer.
   precomputedRenderResult: RenderResponse;
   // Timing / diagnostic payload attached to the fused-visit
-  // response; persisted onto `boxel_index.timing_diagnostics`.
-  timingDiagnostics?: TimingDiagnostics;
+  // response; persisted onto `boxel_index.diagnostics`.
+  diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
+  virtualNetwork: VirtualNetwork;
   updateEntry(
     instanceURL: URL,
     entry: InstanceEntry | InstanceErrorIndexEntry,
@@ -59,8 +61,9 @@ export async function performCardIndexing({
   auth: _auth,
   jobInfo,
   precomputedRenderResult,
-  timingDiagnostics,
+  diagnostics,
   dependencyResolver,
+  virtualNetwork,
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
@@ -83,7 +86,7 @@ export async function performCardIndexing({
       // Convert instance URLs (id, relationship links/data) from resolved HTTP
       // URLs to registered prefix form (e.g. @cardstack/catalog/...) so that
       // stored card data is portable across environments.
-      unresolveResourceInstanceURLs(serialized.data);
+      unresolveResourceInstanceURLs(serialized.data, virtualNetwork);
     }
   } catch (err: unknown) {
     uncaughtError = uncaughtError ?? (err as Error);
@@ -145,12 +148,12 @@ export async function performCardIndexing({
     renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
     let runtimeErrorDeps = renderResult?.deps ?? [];
     let metaModuleDeps = modulesConsumedInMeta(resource.meta).map((m) =>
-      canonicalURL(m, instanceURL.href),
+      canonicalURL(m, instanceURL.href, virtualNetwork),
     );
     let errorIdDep =
       renderError.error.id &&
       renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ? [canonicalURL(renderError.error.id, instanceURL.href)]
+        ? [canonicalURL(renderError.error.id, instanceURL.href, virtualNetwork)]
         : undefined;
 
     let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(
@@ -199,7 +202,7 @@ export async function performCardIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(instanceURL, { ...renderError, timingDiagnostics });
+    await updateEntry(instanceURL, { ...renderError, diagnostics });
     return;
   }
 
@@ -244,7 +247,7 @@ export async function performCardIndexing({
         typeof searchDoc?._cardType === 'string'
           ? searchDoc._cardType
           : undefined,
-      timingDiagnostics,
+      diagnostics,
     });
     return;
   }
@@ -265,6 +268,6 @@ export async function performCardIndexing({
     types: types!,
     displayNames: displayNames ?? [],
     deps,
-    timingDiagnostics,
+    diagnostics,
   });
 }

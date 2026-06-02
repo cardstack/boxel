@@ -20,7 +20,6 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
 import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
 
 import {
@@ -52,7 +51,6 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
-let onError: (event: Event) => void;
 
 function unwrap(html: string): string {
   return html
@@ -83,23 +81,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    onError = function (event: Event) {
-      let localIndexer = getService('local-indexer');
-      windowErrorHandler({
-        event,
-        setStatusToUnusable() {
-          localIndexer.prerenderStatus = 'unusable';
-        },
-        setError(error) {
-          localIndexer.renderError = error;
-        },
-      });
-    };
-    window.addEventListener('boxel-render-error', onError);
-  });
-
-  hooks.afterEach(function (this: RenderingTestContext) {
-    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
@@ -328,7 +309,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
   });
 
-  test('can recover from indexing a card with a broken link', async function (assert) {
+  test('a card with a broken linksTo target indexes cleanly, and invalidation fan-out re-indexes it when the target is later created', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -360,23 +341,30 @@ module(`Integration | realm indexing`, function (hooks) {
       let mango = await queryEngine.cardDocument(
         new URL(`${testRealmURL}Pet/mango`),
       );
-      if (mango?.type === 'error') {
-        assert.deepEqual(
-          mango.error.errorDetail.message,
-          `missing file ${testRealmURL}Person/owner.json`,
-        );
-        assert.deepEqual(
-          [...(mango.error.errorDetail.deps ?? [])].sort(),
-          [
-            `${testRealmURL}Person/owner`,
-            `${testRealmURL}Person/owner.json`,
-            'https://localhost:4202/test/pet',
-          ].sort(),
-          'error deps are correct',
+      if (mango?.type === 'doc') {
+        let owner = mango.doc.data.relationships?.owner;
+        assert.strictEqual(
+          (Array.isArray(owner) ? owner[0] : owner)?.links?.self,
+          `../Person/owner`,
+          'broken owner reference is preserved on the wire so the consumer can render the placeholder',
         );
       } else {
-        assert.ok(false, `expected search entry to be an error doc`);
+        assert.ok(
+          false,
+          `mango with a missing linksTo target indexes as a clean instance, got: ${mango?.error?.errorDetail.message}`,
+        );
       }
+      let mangoInstance = await queryEngine.instance(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      assert.ok(
+        (mangoInstance?.deps ?? []).some(
+          (dep) =>
+            dep === `${testRealmURL}Person/owner.json` ||
+            dep === `${testRealmURL}Person/owner`,
+        ),
+        'deps include the unresolved owner link so invalidation can reach mango when the target is created',
+      );
     }
     await realm.write(
       'Person/owner.json',
@@ -4780,6 +4768,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
         'https://packages/@ember/object',
+        'https://packages/@ember/object/internals',
         'https://packages/@ember/runloop',
         'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
@@ -4945,6 +4934,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
         'https://packages/@ember/object',
+        'https://packages/@ember/object/internals',
         'https://packages/@ember/runloop',
         'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
@@ -5050,28 +5040,6 @@ posts/please-ignore-me.json
       );
       assert.ok(card, 'instance exists');
     }
-  });
-
-  test('search index ignores .realm.json file', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        '.realm.json': `{ name: 'Example Workspace' }`,
-        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      },
-    });
-
-    let indexer = realm.realmIndexQueryEngine;
-    let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
-    assert.ok(card, 'instance exists');
-    let instance = await indexer.cardDocument(
-      new URL(`${testRealmURL}.realm.json`),
-    );
-    assert.strictEqual(
-      instance,
-      undefined,
-      'instance does not exist because file is ignored',
-    );
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {

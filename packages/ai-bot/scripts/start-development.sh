@@ -23,7 +23,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   SYNAPSE_PORT=$(echo "$PORT_OUTPUT" | sed 's/.*://')
 
   export MATRIX_URL="http://localhost:${SYNAPSE_PORT}"
-  export PGDATABASE="${PGDATABASE:-boxel_${SLUG}}"
+  export PGDATABASE="${PGDATABASE:-boxel_$(pg_db_slug "$SLUG")}"
 
   echo "Environment mode: $BOXEL_ENVIRONMENT (slug: $SLUG)"
   echo "  MATRIX_URL=$MATRIX_URL"

@@ -1,17 +1,19 @@
 import {
   visitModuleDeps,
-  resolveCardReference,
+  rri,
   type LooseCardResource,
   type Loader,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 export function directModuleDeps(
   resource: LooseCardResource,
   instanceURL: URL,
+  virtualNetwork: VirtualNetwork,
 ): string[] {
   let result: string[] = [];
   visitModuleDeps(resource, (moduleURL) => {
-    result.push(resolveCardReference(moduleURL, instanceURL));
+    result.push(virtualNetwork.resolveRRI(moduleURL, rri(instanceURL.href)));
   });
   return result;
 }

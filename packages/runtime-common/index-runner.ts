@@ -13,6 +13,7 @@ import {
   SupportedMimeType,
   jobIdentity,
   Deferred,
+  isBrowserTestEnv,
   RealmPaths,
   type IndexWriter,
   type Batch,
@@ -28,11 +29,12 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
-import { resolveCardReference } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { canonicalURL } from './index-runner/dependency-url';
@@ -46,6 +48,33 @@ import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
+// Default module pre-warm concurrency. Serial by default: a cold/shared
+// prerender pool serves serial pre-warm by reusing a single warm tab,
+// whereas concurrent module prerenders force the pool to materialize one
+// tab per in-flight request — and that tab-startup cost outweighs the
+// parallelism for the fast definition-extraction renders pre-warm fires.
+// Raise `INDEXER_PREWARM_CONCURRENCY` only where the prerender pool is
+// pre-sized for the extra concurrent module renders; the ceiling that
+// matters is the per-affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`),
+// since a realm's pre-warm targets one prerender affinity and beyond that
+// the requests just queue at the server's per-affinity admission.
+const DEFAULT_PREWARM_CONCURRENCY = 1;
+
+// Resolve the pre-warm fan-out width from `INDEXER_PREWARM_CONCURRENCY`,
+// falling back to the default. Reads `process.env` defensively — pre-warm
+// is skipped in the browser (see `isBrowserTestEnv`), but the bundle is
+// shared, so guard against a missing `process`.
+function prewarmConcurrency(): number {
+  let raw =
+    typeof process !== 'undefined'
+      ? process.env?.INDEXER_PREWARM_CONCURRENCY
+      : undefined;
+  let parsed = raw != null && raw !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_PREWARM_CONCURRENCY;
+}
+
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -54,13 +83,12 @@ export class IndexRunner {
   #log = logger('index-runner');
   #fetch: typeof globalThis.fetch;
   #perfLog = logger('index-perf');
-  // [readiness-diag] — opt-in CI flake diagnostics. Remove with call site.
-  #readinessDiag = logger('readiness-diag');
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
   #prerenderer: Prerenderer;
   #auth: string;
   #realmURL: URL;
+  #virtualNetwork: VirtualNetwork;
   #realmInfo?: RealmInfo;
   #moduleCacheContext?: {
     resolvedRealmURL: string;
@@ -102,6 +130,7 @@ export class IndexRunner {
     reader,
     indexWriter,
     definitionLookup,
+    virtualNetwork,
     ignoreData = {},
     jobInfo,
     jobPriority,
@@ -116,6 +145,7 @@ export class IndexRunner {
     reader: Reader;
     indexWriter: IndexWriter;
     definitionLookup: DefinitionLookup;
+    virtualNetwork: VirtualNetwork;
     ignoreData?: Record<string, string>;
     prerenderer: Prerenderer;
     auth: string;
@@ -134,9 +164,10 @@ export class IndexRunner {
     onProgress?(event: IndexingProgressEvent): void;
   }) {
     this.#indexWriter = indexWriter;
-    this.#realmPaths = new RealmPaths(realmURL);
+    this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
     this.#reader = reader;
     this.#realmURL = realmURL;
+    this.#virtualNetwork = virtualNetwork;
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 };
     this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
@@ -150,6 +181,7 @@ export class IndexRunner {
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
+      virtualNetwork: this.#virtualNetwork,
       readDefinitionCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {
           return {};
@@ -183,7 +215,20 @@ export class IndexRunner {
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
+      current.#virtualNetwork,
     );
+    // Announce the job at kickoff — before invalidation discovery and
+    // pre-warm — so the dashboard shows it immediately. The total starts
+    // at 0 and is filled in by the first `file-visited` once the
+    // pre-warm + invalidation counts are known.
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'from-scratch',
+      totalFiles: 0,
+      files: [],
+    });
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
@@ -216,28 +261,29 @@ export class IndexRunner {
     let allRealmCardModules = Object.keys(
       discoverResult.filesystemMtimes,
     ).filter(hasCardExtension);
-    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    // Pre-warm reports each warmed module as a `file-visited`; the modules
+    // and the files visited below share one `totalFiles`, so the dashboard
+    // bar advances through pre-warming and into the visit phase.
+    let filesCompleted = 0;
+    let preWarmedCount = await current.preWarmModulesTable(
+      invalidations,
+      allRealmCardModules,
+      ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
+        filesCompleted = completed;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: moduleUrl,
+          filesCompleted,
+          totalFiles,
+        });
+      },
+    );
+    let totalFiles = preWarmedCount + invalidations.length;
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
-    current.#onProgress?.({
-      type: 'indexing-started',
-      realmURL: current.realmURL.href,
-      jobId: current.#jobInfo.jobId,
-      jobType: 'from-scratch',
-      totalFiles: invalidations.length,
-      files: invalidations.map((u) => u.href),
-    });
     try {
-      let filesCompleted = 0;
-      // [readiness-diag] — visit-loop heartbeat. Today the only
-      // markers between `completed invalidations in Xms` and
-      // `completed index visit in Yms` are per-file onProgress events
-      // (callback-routed, not in the worker log). A stuck visit looks
-      // like a 10-minute log gap. Emit a progress line every 25 files
-      // so the realm-server/worker artifact pinpoints WHERE the loop
-      // parked. Opt-in via the `readiness-diag` logger. Remove with
-      // the other [readiness-diag] blocks once root cause is found.
-      const VISIT_PROGRESS_INTERVAL = 25;
       for (let invalidation of invalidations) {
         // Resume guard. If a previous attempt of this same job already
         // wrote URL_X to the working table AND the EFS mtime hasn't
@@ -259,7 +305,7 @@ export class IndexRunner {
               jobId: current.#jobInfo.jobId,
               url: invalidation.href,
               filesCompleted,
-              totalFiles: invalidations.length,
+              totalFiles,
             });
             continue;
           }
@@ -272,16 +318,8 @@ export class IndexRunner {
           jobId: current.#jobInfo.jobId,
           url: invalidation.href,
           filesCompleted,
-          totalFiles: invalidations.length,
+          totalFiles,
         });
-        if (
-          filesCompleted % VISIT_PROGRESS_INTERVAL === 0 ||
-          filesCompleted === invalidations.length
-        ) {
-          current.#readinessDiag.debug(
-            `${jobIdentity(current.#jobInfo)} visit progress ${filesCompleted}/${invalidations.length} for realm ${current.realmURL.href} (elapsedMs=${Date.now() - visitStart}, last=${invalidation.href})`,
-          );
-        }
       }
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
@@ -360,7 +398,19 @@ export class IndexRunner {
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
+      current.#virtualNetwork,
     );
+    // Announce the job at kickoff — before invalidation and pre-warm — so
+    // the dashboard shows it immediately. The total starts at 0 and the
+    // first `file-visited` fills it in once the counts are known.
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'incremental',
+      totalFiles: 0,
+      files: [],
+    });
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
@@ -391,21 +441,31 @@ export class IndexRunner {
     let incrementalMtimes = await current.#reader.mtimes();
     let allRealmCardModules =
       Object.keys(incrementalMtimes).filter(hasCardExtension);
-    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    // Pre-warm reports each warmed module as a `file-visited`; modules and
+    // the files visited below share one `totalFiles` so the dashboard bar
+    // spans both phases.
+    let filesCompleted = 0;
+    let preWarmedCount = await current.preWarmModulesTable(
+      invalidations,
+      allRealmCardModules,
+      ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
+        filesCompleted = completed;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: moduleUrl,
+          filesCompleted,
+          totalFiles,
+        });
+      },
+    );
+    let totalFiles = preWarmedCount + invalidations.length;
 
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
-    current.#onProgress?.({
-      type: 'indexing-started',
-      realmURL: current.realmURL.href,
-      jobId: current.#jobInfo.jobId,
-      jobType: 'incremental',
-      totalFiles: invalidations.length,
-      files: invalidations.map((u) => u.href),
-    });
     try {
-      let filesCompleted = 0;
       for (let invalidation of invalidations) {
         if (
           operations.get(invalidation.href) === 'delete' &&
@@ -428,7 +488,7 @@ export class IndexRunner {
           jobId: current.#jobInfo.jobId,
           url: invalidation.href,
           filesCompleted,
-          totalFiles: invalidations.length,
+          totalFiles,
         });
       }
       if (resumedSkipped > 0) {
@@ -488,6 +548,7 @@ export class IndexRunner {
         auth: this.#auth,
         batchId: this.#batchId,
         prerenderer: this.#prerenderer,
+        virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
@@ -598,19 +659,39 @@ export class IndexRunner {
   // process coalescer, so two callers asking for the same URL share
   // one prerender.
   //
-  // Phase 1: serial. Validates that pre-warm as a concept clears the
-  // deadlock without concurrency-driven variability. Phase 2 will
-  // bound-parallelize this loop.
-  //
   // Failures here are warned but do not fail the batch — a mid-render
   // sub-prerender will still fire on demand if pre-warm misses a
   // module.
+  // Returns the number of modules pre-warmed. Callers fold this into the
+  // job's `totalFiles` so the dashboard progress bar covers pre-warming +
+  // the visit phase as one total, and `onModuleWarmed` advances the bar as
+  // each module lands. Returns 0 when pre-warm is skipped (in-browser, no
+  // candidates, or an unresolvable cache context), so those modules don't
+  // inflate the total.
   private async preWarmModulesTable(
     invalidations: URL[],
     allRealmCardModules: string[] = [],
-  ): Promise<void> {
+    onModuleWarmed?: (progress: {
+      moduleUrl: string;
+      filesCompleted: number;
+      totalFiles: number;
+    }) => void,
+  ): Promise<number> {
+    // Pre-warm exists to keep the prerender server's affinity-scoped tab
+    // pool from deadlocking when a mid-render `lookupDefinition` fires a
+    // same-affinity sub-`prerenderModule`. The in-browser realm (host
+    // tests run a Realm + IndexRunner inside a Chrome tab) has no separate
+    // prerender server and no tab pool, so pre-warm is pointless there.
+    // It is also actively harmful: the in-browser realm shares the global
+    // card-reference prefix registry with the host, so populating the
+    // definition cache before the host registers a prefix bakes in keys
+    // the prefixed reader can't match. A real server never sees this — it
+    // only receives resolved URLs over the wire. Skip pre-warm in-browser.
+    if (isBrowserTestEnv()) {
+      return 0;
+    }
     if (invalidations.length === 0 && allRealmCardModules.length === 0) {
-      return;
+      return 0;
     }
     let preWarmStart = Date.now();
 
@@ -664,7 +745,7 @@ export class IndexRunner {
       let row = bestByUrl.get(url.href);
       if (row?.deps?.length) {
         for (let dep of row.deps) {
-          let resolved = canonicalURL(dep, url.href);
+          let resolved = canonicalURL(dep, url.href, this.#virtualNetwork);
           // `.json` marks an instance dep and `.glimmer-scoped.css`
           // marks an inline-styles artifact; everything else in the
           // deps array is a module URL (stored extensionless after
@@ -690,28 +771,103 @@ export class IndexRunner {
     }
 
     if (toWarm.size === 0) {
-      return;
+      return 0;
     }
 
-    let failed = 0;
-    for (let moduleUrl of toWarm) {
-      try {
-        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
-          priority: this.#jobPriority,
-        });
-      } catch {
-        failed += 1;
-      }
+    // Supply the cache context explicitly. The worker constructs a bare
+    // `CachingDefinitionLookup` with no registered realm, so the
+    // self-resolving `getCachedDefinitions` would return null from
+    // `buildLookupContext` and persist nothing — pre-warm would log
+    // success while doing nothing. This is the same context the read-only
+    // batch reader uses (`getModuleCacheContext` → `getCachedDefinitionsBatch`).
+    //
+    // Resolving the context fetches realm `_info`, which can transiently
+    // fail. Pre-warm is best-effort, so a failure here must degrade to a
+    // warn/skip — the visit phase still populates on demand — rather than
+    // throwing out of this method and aborting the whole indexing run.
+    let resolvedRealmURL: string;
+    let cacheScope: CacheScope;
+    let authUserId: string;
+    try {
+      ({ resolvedRealmURL, cacheScope, authUserId } =
+        await this.getModuleCacheContext());
+    } catch (err) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} skipping module pre-warm: could not resolve cache context for realm ${this.realmURL.href}; the visit phase will populate on demand`,
+        err,
+      );
+      return 0;
     }
+
+    // The visit-phase reader (the realm-server's realm-scoped lookup)
+    // keys a private realm's modules cache on (realm-auth, realm-owner
+    // user id). Writing a different key — e.g. an empty user id — would
+    // replace the silent no-op with a silent *mismatch*: pre-warm would
+    // persist rows the reader never reads. A private realm with no owner
+    // user id is a misconfiguration that should never happen
+    // (`realmOwnerUserId` is derived from the realm username); if it does,
+    // skip pre-warm and let the visit phase populate on demand rather than
+    // writing keys the reader can't read.
+    if (cacheScope === 'realm-auth' && !authUserId) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} skipping module pre-warm for private realm ${this.realmURL.href}: empty cache user id would write cache keys the visit phase cannot read`,
+      );
+      return 0;
+    }
+
+    // Pre-warmed modules and the files visited below share one progress
+    // total, so the dashboard bar spans both phases.
+    let totalFiles = toWarm.size + invalidations.length;
+
+    // Drain the populate set with a bounded worker pool (serial by
+    // default — see DEFAULT_PREWARM_CONCURRENCY). Each populate fires a
+    // `prerenderModule` on a cache miss; DefinitionLookup owns the
+    // in-flight dedup and cross-process coalescer, so different modules
+    // run independently while same-URL callers share one prerender.
+    let urls = [...toWarm];
+    let failed = 0;
+    let warmed = 0;
+    let nextIndex = 0;
+    let concurrency = Math.max(1, Math.min(prewarmConcurrency(), urls.length));
+    let warmOne = async (): Promise<void> => {
+      // `nextIndex++` is atomic between awaits (single-threaded event
+      // loop), so each worker claims a distinct URL.
+      for (let i = nextIndex++; i < urls.length; i = nextIndex++) {
+        try {
+          await this.#definitionLookup.populateDefinitionCacheEntry({
+            moduleURL: urls[i],
+            realmURL: this.realmURL.href,
+            resolvedRealmURL,
+            cacheScope,
+            cacheUserId: authUserId,
+            prerenderUserId: this.#realmOwnerUserId,
+            priority: this.#jobPriority,
+          });
+        } catch {
+          failed += 1;
+        }
+        // Advance the shared progress total as each module lands. Under
+        // concurrency the completion order isn't the input order, but the
+        // count still climbs monotonically — all the dashboard bar needs.
+        warmed += 1;
+        onModuleWarmed?.({
+          moduleUrl: urls[i],
+          filesCompleted: warmed,
+          totalFiles,
+        });
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => warmOne()));
     if (failed > 0) {
       this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${urls.length} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
       );
     }
 
     this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${urls.length} failed=${failed} concurrency=${concurrency})`,
     );
+    return warmed;
   }
 
   async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
@@ -727,7 +883,7 @@ export class IndexRunner {
       if (typeof module !== 'string') {
         return undefined;
       }
-      return canonicalURL(module, url.href);
+      return canonicalURL(module, url.href, this.#virtualNetwork);
     } catch {
       return undefined;
     }
@@ -776,12 +932,33 @@ export class IndexRunner {
     url: string,
     resource: LooseCardResource,
   ) {
+    // Resolving the card's adoptsFrom module to an RRI is best-effort
+    // telemetry for the jobs dashboard. A malformed reference (e.g. a
+    // legacy "/"-prefixed module path that resolveRRI rejects) must not be
+    // able to abort the whole indexing job — the card's own error doc,
+    // written by performCardIndexing, is the durable signal for a broken
+    // reference. So degrade to empty deps and keep going.
+    let deps: RealmResourceIdentifier[] = [];
+    try {
+      deps = [
+        this.#virtualNetwork.resolveRRI(
+          moduleFrom(resource.meta.adoptsFrom),
+          url as RealmResourceIdentifier,
+        ),
+      ];
+    } catch (e) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} could not resolve adoptsFrom module "${moduleFrom(
+          resource.meta.adoptsFrom,
+        )}" for ${url} while reporting status: ${(e as Error)?.message}`,
+      );
+    }
     this.#reportStatus?.(
       {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
+        deps,
       },
       status,
     );
@@ -793,7 +970,7 @@ export class IndexRunner {
     resourceCreatedAt,
     resource,
     renderResult,
-    timingDiagnostics,
+    diagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -803,7 +980,7 @@ export class IndexRunner {
     renderResult: NonNullable<
       Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
     >;
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let instanceURL = new URL(
@@ -829,8 +1006,9 @@ export class IndexRunner {
         auth: this.#auth,
         jobInfo: this.#jobInfo,
         precomputedRenderResult: renderResult,
-        timingDiagnostics,
+        diagnostics,
         dependencyResolver: this.#dependencyResolver,
+        virtualNetwork: this.#virtualNetwork,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
         logWarn: (message) => this.#log.warn(message),
@@ -848,7 +1026,7 @@ export class IndexRunner {
     hasModulePrerender,
     extractResult,
     renderResult,
-    timingDiagnostics,
+    diagnostics,
   }: {
     path: LocalPath;
     lastModified: number;
@@ -863,7 +1041,7 @@ export class IndexRunner {
     renderResult?: Parameters<
       typeof performFileIndexing
     >[0]['precomputedRenderResult'];
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let result = await performFileIndexing({
@@ -877,8 +1055,9 @@ export class IndexRunner {
       jobInfo: this.#jobInfo,
       precomputedExtractResult: extractResult,
       precomputedRenderResult: renderResult,
-      timingDiagnostics,
+      diagnostics,
       dependencyResolver: this.#dependencyResolver,
+      virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(

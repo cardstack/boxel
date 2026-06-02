@@ -58,10 +58,12 @@ import {
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
+  DEFAULT_FALLBACK_MODELS,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
@@ -93,6 +95,7 @@ import type {
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
+  ActiveLLMEvent,
   BoxelContext,
   BotTriggerContent,
   CardMessageContent,
@@ -317,8 +320,12 @@ export default class MatrixService extends Service {
   );
 
   private loadState = task(async () => {
+    if (isTesting())
+      console.warn('[start-phase] loadState:requestStorageAccess');
     await this.requestStorageAccess();
+    if (isTesting()) console.warn('[start-phase] loadState:loadSDK');
     await this.loadSDK();
+    if (isTesting()) console.warn('[start-phase] loadState:done');
   });
 
   private get inIframe() {
@@ -392,6 +399,18 @@ export default class MatrixService extends Service {
 
   get isLoggedIn() {
     return this._client?.isLoggedIn() === true && this.postLoginCompleted;
+  }
+
+  // Test-only diagnostic for the intermittent "operator-mode renders the login
+  // form" flake: names which precondition of `isLoggedIn` is unmet when a route
+  // decides to render <Auth/>. No production caller.
+  get loginReadinessDebug() {
+    return {
+      authPresent: Boolean(this.getAuth()),
+      clientExists: Boolean(this._client),
+      clientLoggedIn: this._client?.isLoggedIn() === true,
+      postLoginCompleted: this.postLoginCompleted,
+    };
   }
 
   private get client() {
@@ -502,6 +521,12 @@ export default class MatrixService extends Service {
       // Waiting on background Matrix flush promises first can leave the
       // authenticated shell visible for an arbitrarily long time.
       this.clearAuth();
+      if (isTesting() && this.postLoginCompleted) {
+        console.warn(
+          '[login-diag] postLoginCompleted reset to false via logout()\n' +
+            new Error().stack,
+        );
+      }
       this.postLoginCompleted = false;
       // Logout is the explicit boundary where we forget persisted workspace UI
       // state for the signed-in user. Generic reset paths must stay in-memory
@@ -729,6 +754,9 @@ export default class MatrixService extends Service {
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
+        if (isTesting()) {
+          console.warn('[login-diag] start() aborted: no auth present');
+        }
         return;
       }
     }
@@ -737,6 +765,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
+      if (isTesting()) console.warn('[start-phase] realmServer.login');
       await this.realmServer.login(registrationToken);
       this.saveAuth(auth);
       this.bindEventListeners();
@@ -752,6 +781,8 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
+        if (isTesting())
+          console.warn('[start-phase] getAccountData(realms,favorites)');
         let [accountDataContent, favoritesData] = await Promise.all([
           this.client.getAccountDataFromServer(
             APP_BOXEL_REALMS_EVENT_TYPE,
@@ -766,6 +797,10 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
+        if (isTesting())
+          console.warn(
+            '[start-phase] fetchCatalogRealms+setAvailableRealmIdentifiers',
+          );
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmIdentifiers(
@@ -773,29 +808,39 @@ export default class MatrixService extends Service {
           ),
         ]);
 
+        if (isTesting()) console.warn('[start-phase] prefetchRealmInfos');
         await this.realm.prefetchRealmInfos(
           this.realmServer.availableRealmIdentifiers,
         );
 
+        if (isTesting()) console.warn('[start-phase] initSlidingSync');
         await this.initSlidingSync(accountDataContent);
+        if (isTesting()) console.warn('[start-phase] startClient');
         await this.client.startClient({ slidingSync: this.slidingSync });
+        if (isTesting())
+          console.warn('[start-phase] getAccountData(systemCard)');
         let systemCardAccountData = (await this.client.getAccountDataFromServer(
           APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
         )) as { id?: string } | null;
+        if (isTesting()) console.warn('[start-phase] setSystemCard');
         await this.setSystemCard(systemCardAccountData?.id);
         if (noRealmsLoggedIn) {
           // In this case we want to authenticate to all accessible realms in a single request,
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).
 
+          if (isTesting())
+            console.warn('[start-phase] authenticateToAllAccessibleRealms');
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
         // Login here triggers other setup code that needs to happen after
         // otherwise we don't have the realm info.
         // This should be cleaned up as we move to single logins
+        if (isTesting()) console.warn('[start-phase] loginToRealms');
         await this.loginToRealms();
 
         this.postLoginCompleted = true;
+        if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -813,6 +858,15 @@ export default class MatrixService extends Service {
       } else if (refreshRoutes) {
         await this.router.refresh();
       }
+    } else if (isTesting()) {
+      // start() did nothing because the client wasn't logged in at this point,
+      // so postLoginCompleted is left untouched. The index route's start() is a
+      // one-shot, so a no-op here strands it on the login form. Name the unmet
+      // precondition so a cold-boot timeout points at the gap.
+      console.warn(
+        '[login-diag] start() no-op: client not logged in ' +
+          JSON.stringify(this.loginReadinessDebug),
+      );
     }
   }
 
@@ -831,7 +885,7 @@ export default class MatrixService extends Service {
       filters: {
         is_dm: true,
       },
-      timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+      timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
       required_state: [['*', '*']],
     });
     this.slidingSync = new this.matrixSdkLoader.SlidingSync(
@@ -1412,6 +1466,12 @@ export default class MatrixService extends Service {
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
+    if (isTesting() && this.postLoginCompleted) {
+      console.warn(
+        '[login-diag] postLoginCompleted reset to false via resetState()\n' +
+          new Error().stack,
+      );
+    }
     this.postLoginCompleted = false;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
@@ -1732,34 +1792,136 @@ export default class MatrixService extends Service {
     return this.timelineLoadingState.get(this.currentRoomId) ?? false;
   }
 
-  async sendActiveLLMEvent(
+  // Five-layer resolver guaranteeing defined `toolsSupported` + `inputModalities`
+  // on the wire. `reasoningEffort` is a user choice, never auto-filled from
+  // the curated fallback or the conservative floor.
+  //
+  //   1. caller overrides (preserves explicit false / explicit values)
+  //   2. SystemCard.modelConfigurations match by modelId
+  //   3. DEFAULT_FALLBACK_MODELS match by modelId
+  //   4. most-recent valid prior app.boxel.active-llm event in this room
+  //      for the same model (skips CS-11249-era broken events)
+  //   5. conservative floor: tools off, modalities text-only
+  //
+  // Layer 4 reads in-memory events only; if the timeline isn't paginated yet
+  // (rare race) it degrades to layer 5, which is the safe direction.
+  resolveActiveLLMConfig(
     roomId: string,
     model: string,
-    config?: {
+    callerOverrides?: {
       toolsSupported?: boolean;
-      reasoningEffort?: string;
       inputModalities?: string[];
+      reasoningEffort?: string;
     },
-  ) {
-    let resolvedConfig = config;
-    if (!resolvedConfig) {
-      let modelConfiguration = this.systemCard?.modelConfigurations?.find(
-        (configuration) => configuration.modelId === model,
-      );
-      if (modelConfiguration) {
-        resolvedConfig = {
-          toolsSupported: modelConfiguration.toolsSupported,
-          reasoningEffort: modelConfiguration.reasoningEffort,
-          inputModalities: modelConfiguration.inputModalities,
-        };
+  ): {
+    toolsSupported: boolean;
+    inputModalities: string[];
+    reasoningEffort?: string;
+  } {
+    let toolsSupported: boolean | undefined = callerOverrides?.toolsSupported;
+    let inputModalities: string[] | undefined =
+      callerOverrides?.inputModalities;
+    let reasoningEffort: string | undefined = callerOverrides?.reasoningEffort;
+
+    let scMatch = this.systemCard?.modelConfigurations?.find(
+      (c) => c.modelId === model,
+    );
+    if (scMatch) {
+      if (
+        toolsSupported === undefined &&
+        scMatch.toolsSupported !== undefined
+      ) {
+        toolsSupported = scMatch.toolsSupported;
+      }
+      if (
+        inputModalities === undefined &&
+        scMatch.inputModalities !== undefined
+      ) {
+        inputModalities = scMatch.inputModalities;
+      }
+      if (
+        reasoningEffort === undefined &&
+        scMatch.reasoningEffort !== undefined
+      ) {
+        reasoningEffort = scMatch.reasoningEffort;
       }
     }
 
+    let fb = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
+    if (fb) {
+      if (toolsSupported === undefined) {
+        toolsSupported = fb.toolsSupported;
+      }
+      if (inputModalities === undefined) {
+        inputModalities = fb.inputModalities;
+      }
+    }
+
+    if (
+      toolsSupported === undefined ||
+      inputModalities === undefined ||
+      reasoningEffort === undefined
+    ) {
+      let roomData = this.getRoomData(roomId);
+      let mostRecent: ActiveLLMEvent | undefined;
+      for (let e of roomData?.events ?? []) {
+        if (e.type !== APP_BOXEL_ACTIVE_LLM) continue;
+        let candidate = e as ActiveLLMEvent;
+        if (
+          candidate.content.model !== model ||
+          candidate.content.toolsSupported === undefined ||
+          candidate.content.inputModalities === undefined
+        ) {
+          continue;
+        }
+        if (
+          !mostRecent ||
+          (candidate.origin_server_ts ?? 0) > (mostRecent.origin_server_ts ?? 0)
+        ) {
+          mostRecent = candidate;
+        }
+      }
+      if (mostRecent) {
+        if (toolsSupported === undefined) {
+          toolsSupported = mostRecent.content.toolsSupported;
+        }
+        if (inputModalities === undefined) {
+          inputModalities = mostRecent.content.inputModalities;
+        }
+        if (
+          reasoningEffort === undefined &&
+          mostRecent.content.reasoningEffort !== undefined
+        ) {
+          reasoningEffort = mostRecent.content.reasoningEffort;
+        }
+      }
+    }
+
+    if (toolsSupported === undefined) {
+      toolsSupported = false;
+    }
+    if (inputModalities === undefined) {
+      inputModalities = ['text'];
+    }
+
+    return { toolsSupported, inputModalities, reasoningEffort };
+  }
+
+  async sendActiveLLMEvent(
+    roomId: string,
+    model: string,
+    callerOverrides?: {
+      toolsSupported?: boolean;
+      inputModalities?: string[];
+      reasoningEffort?: string;
+    },
+  ) {
+    let caps = this.resolveActiveLLMConfig(roomId, model, callerOverrides);
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
-      toolsSupported: resolvedConfig?.toolsSupported,
-      reasoningEffort: resolvedConfig?.reasoningEffort,
-      inputModalities: resolvedConfig?.inputModalities,
+      toolsSupported: caps.toolsSupported,
+      reasoningEffort: caps.reasoningEffort,
+      inputModalities: caps.inputModalities,
     });
   }
 

@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -10,6 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { TypeOption } from '@cardstack/host/resources/type-summaries';
+import type NetworkService from '@cardstack/host/services/network';
 
 export interface TypeFilter {
   options: TypeOption[];
@@ -36,6 +38,8 @@ interface Signature {
 }
 
 export default class TypePicker extends Component<Signature> {
+  @service declare private network: NetworkService;
+
   @cached
   get selectAllOption(): PickerOption {
     let count =
@@ -66,7 +70,9 @@ export default class TypePicker extends Component<Signature> {
 
   private get pickerSelected(): PickerOption[] {
     const selectedKeys = new Set(
-      this.args.filter.selected.map((ref) => internalKeyFor(ref, undefined)),
+      this.args.filter.selected.map((ref) =>
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
+      ),
     );
     if (selectedKeys.size === 0) {
       return [this.selectAllOption];

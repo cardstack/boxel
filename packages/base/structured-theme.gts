@@ -51,7 +51,7 @@ export const GUIDE_SECTIONS = [
   {
     id: 'import-css',
     navTitle: 'Import CSS',
-    title: 'Import Custom CSS',
+    title: 'Import CSS',
     fieldName: null,
   },
   {

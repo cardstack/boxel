@@ -1,5 +1,6 @@
 import { escapeHtml } from './helpers/html';
 import { resolveCardReference } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import { trimJsonExtension } from './url';
 import { FITTED_FORMATS } from './formats';
 import type { TokenizerAndRendererExtension } from './marked.mts';
@@ -11,9 +12,15 @@ const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // (e.g. `code`, ``code``, ```code```).
 const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 
-function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
+function resolveUrl(
+  ref: string,
+  baseUrl: string | undefined,
+  virtualNetwork?: VirtualNetwork,
+): string | null {
   try {
-    return resolveCardReference(ref, baseUrl || undefined);
+    return virtualNetwork
+      ? virtualNetwork.resolveURL(ref, baseUrl || undefined).href
+      : resolveCardReference(ref, baseUrl || undefined);
   } catch {
     return null;
   }
@@ -106,6 +113,38 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   return null;
 }
 
+export type BfmBlockFormat = 'embedded' | 'fitted' | 'isolated';
+
+/**
+ * Derives the block-level render format and an optional inline sizing style
+ * (`width`/`height`) from a BFM block-ref element's `data-boxel-bfm-*`
+ * attributes. Shared so that resolved cards, the loading shimmer, and the
+ * broken-link placeholder all occupy the same footprint as the eventual card.
+ */
+export function bfmBlockFormatAndSize(
+  formatAttr: string | undefined,
+  widthAttr: string | undefined,
+  heightAttr: string | undefined,
+): { format: BfmBlockFormat; sizeStyle?: string } {
+  let format: BfmBlockFormat =
+    formatAttr === 'fitted' || formatAttr === 'isolated'
+      ? formatAttr
+      : 'embedded';
+  if (format !== 'fitted') {
+    return { format };
+  }
+  let parts: string[] = [];
+  if (widthAttr && /^\d+%$/.test(widthAttr)) {
+    parts.push(`width: ${widthAttr}`);
+  } else if (widthAttr && /^\d+$/.test(widthAttr)) {
+    parts.push(`width: ${widthAttr}px`);
+  }
+  if (heightAttr && /^\d+$/.test(heightAttr)) {
+    parts.push(`height: ${heightAttr}px`);
+  }
+  return { format, sizeStyle: parts.length ? parts.join('; ') : undefined };
+}
+
 /**
  * Splits the content between `[` and `]` in a BFM directive into the URL
  * part and an optional size specifier (after `|`).
@@ -139,6 +178,7 @@ export function extractBfmReferences(
   markdown: string,
   baseUrl: string,
   keywords: string[],
+  virtualNetwork?: VirtualNetwork,
 ): BfmReference[] {
   // Strip code blocks so references inside them are not extracted
   let stripped = markdown
@@ -155,7 +195,7 @@ export function extractBfmReferences(
 
     for (let match of stripped.matchAll(blockRe)) {
       let { url: rawUrl } = splitBfmContent(match[1]);
-      let resolved = resolveUrl(rawUrl, baseUrl);
+      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -165,7 +205,7 @@ export function extractBfmReferences(
       }
     }
     for (let match of stripped.matchAll(inlineRe)) {
-      let resolved = resolveUrl(match[1], baseUrl);
+      let resolved = resolveUrl(match[1], baseUrl, virtualNetwork);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -198,8 +238,11 @@ export function extractBfmReferences(
 export function extractCardReferenceUrls(
   markdown: string,
   baseUrl: string,
+  virtualNetwork?: VirtualNetwork,
 ): string[] {
-  return extractBfmReferences(markdown, baseUrl, ['card']).map((r) => r.url);
+  return extractBfmReferences(markdown, baseUrl, ['card'], virtualNetwork).map(
+    (r) => r.url,
+  );
 }
 
 /**

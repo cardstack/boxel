@@ -57,7 +57,10 @@ export default class PickerUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Picker'>
+    <FreestyleUsage
+      @name='Picker'
+      @description='Generic option-picker control that opens a menu and emits a change event when a value is chosen — a thin abstraction over select/dropdown for custom item rendering.'
+    >
       <:description>
         <p>
           Picker is a reusable multi-select component that provides a labeled

@@ -389,6 +389,7 @@ export async function startFactoryRealmServer(
         fullIndexOnStartup: false,
         realmServerPort: options.realmServerPort,
         prerenderURL: options.prerenderURL,
+        noCompatProxy: options.noCompatProxy,
       });
     } catch (error) {
       let cleanupError: unknown;

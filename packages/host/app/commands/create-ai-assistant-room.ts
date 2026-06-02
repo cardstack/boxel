@@ -6,7 +6,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -36,7 +36,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   private getDefaultLLMDetails() {
     let configuration = this.getDefaultModelConfiguration();
     return {
-      model: configuration?.modelId ?? DEFAULT_LLM,
+      model: configuration?.modelId ?? DEFAULT_FALLBACK_MODEL_ID,
       toolsSupported: Boolean(configuration?.toolsSupported),
       reasoningEffort: configuration?.reasoningEffort ?? undefined,
     };

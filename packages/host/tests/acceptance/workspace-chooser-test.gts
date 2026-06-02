@@ -1,4 +1,4 @@
-import { click, settled, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -17,6 +17,7 @@ import {
   setupRealmCacheTeardown,
   setupUserSubscription,
   visitOperatorMode,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -71,11 +72,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Workspace A',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
         'index.json': {
           data: {
             type: 'card',
@@ -111,11 +108,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Workspace B',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Workspace B' }),
         'index.json': {
           data: {
             type: 'card',
@@ -346,6 +339,66 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       await waitFor(`[data-test-delete-modal="${realmAURL}"]`);
       assert.dom(`[data-test-delete-modal="${realmAURL}"]`).exists();
+    });
+  });
+
+  module('long realm names', function () {
+    test('workspace card stays constrained to icon-tile width when the name is long', async function (assert) {
+      let longName =
+        'A Workspace Name Long Enough To Wrap Onto Multiple Lines For Centering';
+
+      let restoreA = withUpdatedRealmInfo(realmAURL, { name: longName });
+
+      try {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        let cardSelector = `[data-test-workspace-list] [data-test-workspace="${longName}"]`;
+        let nameSelector = `${cardSelector} [data-test-workspace-name]`;
+
+        // Wait for the chooser to render the card with its full long name
+        // text, rather than relying on `settled()` alone — measuring layout
+        // before the name has rendered is a known source of flakiness.
+        await waitUntil(
+          () =>
+            document.querySelector(nameSelector)?.textContent?.trim() ===
+            longName,
+          {
+            timeoutMessage:
+              'workspace-name element did not render the full long realm name',
+          },
+        );
+
+        assert
+          .dom(cardSelector)
+          .exists('workspace card renders with the long realm name');
+        assert
+          .dom(nameSelector)
+          .hasText(
+            longName,
+            'name element renders the full long name in the DOM',
+          );
+
+        let cardEl = document.querySelector(cardSelector) as HTMLElement | null;
+        assert.ok(cardEl, 'workspace-card element is present in the DOM');
+
+        // ItemContainer (.workspace button) is hard-pinned to
+        // var(--boxel-xxs-container) (250px) in item-container.gts. With the
+        // .info > .name 2-line clamp + text-wrap: wrap, the widest child of
+        // .workspace-card is the tile, so the column's fit-content width
+        // resolves to 250px. Reading the resolved CSS width (rather than
+        // comparing two laid-out flex boxes via offsetWidth) is deterministic
+        // and doesn't depend on subpixel/flex layout timing.
+        let cardWidth = cardEl
+          ? parseFloat(window.getComputedStyle(cardEl).width)
+          : NaN;
+        assert.strictEqual(
+          cardWidth,
+          250,
+          `workspace-card resolves to the tile width (250px) regardless of name length; got ${cardWidth}px`,
+        );
+      } finally {
+        restoreA();
+      }
     });
   });
 

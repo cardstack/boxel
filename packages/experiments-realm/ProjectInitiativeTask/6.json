@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Audit Realm Permissions"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../adorn-overflow-demo",
+        "name": "ProjectInitiativeTask"
+      }
+    }
+  }
+}

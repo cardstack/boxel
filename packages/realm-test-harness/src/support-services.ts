@@ -2,6 +2,8 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
+import puppeteer, { type Browser } from 'puppeteer';
+
 import { logger } from './logger';
 
 import {
@@ -206,6 +208,169 @@ async function loadMatrixEnvironmentConfigModule() {
   };
 }
 
+// A cold vite optimize of the host's transitive graph routinely exceeds
+// 90s, so the marker probe needs a generous budget. Env-overridable for
+// especially slow CI runners.
+const STANDBY_DOM_RENDER_TIMEOUT_MS =
+  parseInt(process.env.TEST_HARNESS_STANDBY_DOM_TIMEOUT_MS ?? '', 10) ||
+  240_000;
+
+// Per-attempt cap, bounded by the overall budget. Short enough that a boot
+// that stalls on a mid-optimize module error is abandoned for a fresh page
+// rather than burning the whole budget; long enough to clear a near-ready
+// optimize in one go.
+const STANDBY_DOM_ATTEMPT_TIMEOUT_MS = 60_000;
+
+// Chrome cold-start on a loaded CI runner can take longer than Puppeteer's
+// default 30s launch timeout to print its DevTools WS endpoint, so a single
+// slow start fails the whole support bring-up before the post-launch
+// render-retry loop below ever runs. Retry the launch on a fresh Chrome
+// process with a longer per-attempt budget, bounded by the standby gate's
+// overall deadline. From the first retry onward, pipe Chrome's own
+// stdout/stderr through node (dumpio) so a persistent failure records *why* it
+// could not start — sandbox denial, missing shared library, GPU init crash —
+// instead of only the bare "waiting for the WS endpoint URL" timeout.
+const STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS = 45_000;
+const STANDBY_LAUNCH_MAX_ATTEMPTS = 3;
+const STANDBY_LAUNCH_RETRY_BACKOFF_MS = 2_000;
+
+async function launchStandbyBrowser(deadline: number): Promise<Browser> {
+  let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  let verbose = process.env.TEST_HARNESS_STANDBY_VERBOSE === '1';
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= STANDBY_LAUNCH_MAX_ATTEMPTS; attempt++) {
+    let remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      break;
+    }
+    let timeout = Math.min(STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS, remaining);
+    // Attempt 1 stays quiet on the healthy path; any retry already means
+    // something is wrong, so capture Chrome's own output for the next failure.
+    let dumpio = verbose || attempt > 1;
+    supportLog.info(
+      `standby DOM gate: puppeteer.launch attempt ${attempt}/${STANDBY_LAUNCH_MAX_ATTEMPTS} ` +
+        `(timeout=${timeout}ms, executable=${
+          executablePath ?? 'puppeteer-bundled'
+        }, dumpio=${dumpio})`,
+    );
+    let startedAt = Date.now();
+    try {
+      let browser = await puppeteer.launch({
+        headless: true,
+        timeout,
+        dumpio,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+        ...(executablePath ? { executablePath } : {}),
+      });
+      supportLog.info(
+        `standby DOM gate: puppeteer.launch attempt ${attempt} succeeded after ${
+          Date.now() - startedAt
+        }ms`,
+      );
+      return browser;
+    } catch (error) {
+      lastError = error;
+      supportLog.warn(
+        `standby DOM gate: puppeteer.launch attempt ${attempt} failed after ${
+          Date.now() - startedAt
+        }ms: ${
+          error instanceof Error ? error.message.split('\n')[0] : String(error)
+        }`,
+      );
+      if (
+        attempt === STANDBY_LAUNCH_MAX_ATTEMPTS ||
+        deadline - Date.now() <= STANDBY_LAUNCH_RETRY_BACKOFF_MS
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, STANDBY_LAUNCH_RETRY_BACKOFF_MS));
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`puppeteer.launch failed: ${String(lastError)}`);
+}
+
+// Drive `<hostURL>/_standby` in a real (headless) browser and wait for the
+// `#standby-ready` marker the host app renders once its bundles have loaded
+// and the app shell has booted — the same signal the prerender's PagePool
+// waits on. This is the only check that proves vite served the full module
+// graph (not just the HTML shell) and the app can render DOM. Throws with
+// the captured vite logs if the marker never appears or vite exits.
+async function assertStandbyRendersDom(
+  hostURL: string,
+  getLogs: () => string,
+  getFatalExitCode: () => number | null,
+): Promise<void> {
+  let standbyURL = `${hostURL.replace(/\/$/, '')}/_standby`;
+  let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
+  let browser = await launchStandbyBrowser(deadline);
+  let lastError: Error | undefined;
+  let startedAt = Date.now();
+  let attempt = 0;
+  supportLog.info(`standby DOM gate: probing ${standbyURL} for #standby-ready`);
+  try {
+    // Retry the whole navigation + marker wait on a fresh page each attempt,
+    // not just the connection phase. While vite is cold-optimizing, a first
+    // load can fetch the shell but error or stall on a module request and
+    // never render `#standby-ready`; that page stays permanently stuck, so a
+    // single `waitForFunction` would burn the entire budget on a dead boot.
+    // A fresh page reloads against the now-further-along optimizer (which
+    // keeps running server-side across page closes) and eventually succeeds.
+    // Mirrors the prerender PagePool's fresh-page standby retry.
+    for (;;) {
+      let fatal = getFatalExitCode();
+      if (fatal !== null) {
+        throw new Error(
+          `host app (vite preview) exited early with code ${fatal} while waiting for ${standbyURL} to render\n${getLogs()}`,
+        );
+      }
+      let remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(
+          `Timed out after ${STANDBY_DOM_RENDER_TIMEOUT_MS}ms waiting for ${standbyURL} to render its DOM (#standby-ready)` +
+            (lastError ? `\nlast attempt: ${lastError.message}` : '') +
+            `\n${getLogs()}`,
+        );
+      }
+      let attemptTimeout = Math.min(STANDBY_DOM_ATTEMPT_TIMEOUT_MS, remaining);
+      attempt++;
+      let page = await browser.newPage();
+      try {
+        await page.goto(standbyURL, {
+          waitUntil: 'domcontentloaded',
+          timeout: attemptTimeout,
+        });
+        await page.waitForFunction(
+          () => !!document.querySelector('#standby-ready'),
+          { timeout: attemptTimeout },
+        );
+        supportLog.info(
+          `standby DOM gate: #standby-ready after ${Date.now() - startedAt}ms (${attempt} attempt(s))`,
+        );
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        supportLog.info(
+          `standby DOM gate: attempt ${attempt} did not render (${
+            Date.now() - startedAt
+          }ms elapsed): ${lastError.message.split('\n')[0]}`,
+        );
+        await new Promise((r) => setTimeout(r, 500));
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
 async function ensureHostReady(): Promise<{
   hostURL: string;
   stop?: () => Promise<void>;
@@ -285,6 +450,9 @@ async function ensureHostReady(): Promise<{
         logs = `${logs}${String(chunk)}`.slice(-20_000);
       });
 
+      // Phase 1: wait for vite preview to accept connections. This only
+      // proves the server is listening and can return the HTML shell — it
+      // never requests modules, so it does not prove the app can boot.
       await waitUntil(
         async () => {
           try {
@@ -310,6 +478,25 @@ async function ensureHostReady(): Promise<{
           interval: 500,
           timeoutMessage: `Timed out waiting for host app at ${hostURL}\n${logs}`,
         },
+      );
+
+      // Phase 2: prove vite can actually render the `/_standby` page's DOM,
+      // not just serve the HTML shell. A shell fetch never requests modules,
+      // so it does not kick vite's dep optimizer; only a browser-shaped
+      // navigation forces the (~1000-package) app graph to build, which can
+      // exceed 90s cold. The in-harness realm-server and prerenderer both
+      // drive `/_standby` through Puppeteer and block on the `#standby-ready`
+      // marker (packages/realm-server/prerender/page-pool.ts); gating their
+      // bring-up on the same marker here keeps them from spinning up while
+      // vite is still cold — the window where the prerender's standby load
+      // exhausts its retry budget and renders fail with ECONNREFUSED.
+      await assertStandbyRendersDom(
+        hostURL,
+        () => logs,
+        () =>
+          child.exitCode !== null && !hostStartupLooksLikePortContention(logs)
+            ? child.exitCode
+            : null,
       );
 
       return {

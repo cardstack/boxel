@@ -24,6 +24,7 @@ import { PrerenderedCard } from '../components/prerendered-card-search';
 import { normalizeRealms, resolveCardRealmUrl } from '../lib/realm-utils';
 
 import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
 import type RenderStoreService from '../services/render-store';
 
@@ -55,6 +56,7 @@ function captureModeForFormat(format: Format): 'innerHTML' | 'outerHTML' {
 }
 
 export class LivePrerenderedSearchResource extends Resource<Args> {
+  @service declare private network: NetworkService;
   @service declare private renderService: RenderService;
   // This resource is only used for card prerendering in render context.
   @service('render-store') declare private renderStore: RenderStoreService;
@@ -208,7 +210,11 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
         let cards = await Promise.all(
           instances.map(async (instance) => {
             let url = instance.id;
-            let realmUrl = resolveCardRealmUrl(url, normalizedRealms);
+            let realmUrl = resolveCardRealmUrl(
+              url,
+              normalizedRealms,
+              this.network.virtualNetwork,
+            );
             try {
               await this.loadScopedCssForInstance(instance);
               let component = (

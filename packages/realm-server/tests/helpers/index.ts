@@ -207,7 +207,7 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
-  includePrerenderedDefaultRealmIndex: false,
+  includePrerenderedDefaultRealmIndex: null,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -732,6 +732,100 @@ async function waitForQueueIdle(
       timeoutMessage: 'waiting for queue to become idle',
     },
   );
+}
+
+// Pure diagnostics — never changes behavior. `_types` (and any reader of the
+// precomputed `realm_meta`) returns instances from the `realm_meta` row whose
+// `realm_version` equals `realm_versions.current_version`. An empty result has
+// three distinguishable causes, and this dump tells them apart in the CI log
+// without needing another iteration:
+//   1. The from-scratch index produced no instance rows at all
+//      (boxel_index.instances = 0).
+//   2. Instances were indexed but their `types` couldn't be resolved (a render
+//      or module fetch failed) — `#fetchTypeSummary` requires `types->>0`, so
+//      those rows silently drop out of `realm_meta` (null_types > 0).
+//   3. No `realm_meta` row matches `current_version` (a version mismatch —
+//      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
+//      even though instances exist (matched = NONE while instances > 0).
+// Logged unconditionally as a one-liner; degraded/error instance rows are
+// dumped only when something looks off. Wrapped so a diagnostics failure can
+// never affect a test result.
+export async function logRealmIndexDiagnostics(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+  label: string,
+): Promise<void> {
+  try {
+    let [versionRow] = await dbAdapter.execute(
+      `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+      { bind: [realmURL] },
+    );
+    let currentVersion = versionRow?.current_version ?? null;
+
+    let metaRows = await dbAdapter.execute(
+      `SELECT realm_version,
+              COALESCE(jsonb_array_length(value->'instances'), -1) AS instances,
+              COALESCE(jsonb_array_length(value->'files'), -1) AS files
+       FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      { bind: [realmURL] },
+    );
+
+    let [counts] = await dbAdapter.execute(
+      `SELECT
+         COUNT(*) FILTER (WHERE type = 'instance' AND (is_deleted IS NULL OR is_deleted = false)) AS instances,
+         COUNT(*) FILTER (WHERE type = 'instance' AND types IS NULL AND (is_deleted IS NULL OR is_deleted = false)) AS null_types,
+         COUNT(*) FILTER (WHERE type = 'instance' AND has_error = true AND (is_deleted IS NULL OR is_deleted = false)) AS errored
+       FROM boxel_index WHERE realm_url = $1`,
+      { bind: [realmURL] },
+    );
+
+    let metaSummary =
+      metaRows
+        .map(
+          (r) =>
+            `v${r.realm_version}{instances:${r.instances},files:${r.files}}`,
+        )
+        .join(', ') || '(none)';
+    let matched = metaRows.find((r) => r.realm_version === currentVersion);
+    let nullTypes = Number(counts?.null_types ?? 0);
+    let errored = Number(counts?.errored ?? 0);
+
+    console.log(
+      `[realm-index-diag ${label}] realm=${realmURL} current_version=${currentVersion} ` +
+        `realm_meta=[${metaSummary}] ` +
+        `matched=${matched ? `instances:${matched.instances}` : 'NONE(version-mismatch)'} ` +
+        `boxel_index.instances=${counts?.instances ?? '?'} null_types=${nullTypes} errored=${errored}`,
+    );
+
+    if (
+      !matched ||
+      Number(matched.instances) <= 0 ||
+      nullTypes > 0 ||
+      errored > 0
+    ) {
+      let badRows = await dbAdapter.execute(
+        `SELECT url, has_error, error_doc->>'message' AS message
+         FROM boxel_index
+         WHERE realm_url = $1 AND type = 'instance'
+           AND (types IS NULL OR has_error = true)
+           AND (is_deleted IS NULL OR is_deleted = false)
+         ORDER BY url
+         LIMIT 25`,
+        { bind: [realmURL] },
+      );
+      for (let r of badRows) {
+        console.log(
+          `[realm-index-diag ${label}]   instance ${r.url} has_error=${r.has_error} ` +
+            `error_doc.message=${r.message ?? 'none'}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.log(
+      `[realm-index-diag ${label}] failed to gather diagnostics for ${realmURL}: ` +
+        `${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 interface CachedPermissionedRealmTemplateEntry {
@@ -1831,7 +1925,7 @@ function realmEventIsIndex(
 }
 
 // The three realm fixtures available under tests/fixtures/. See CS-10009.
-//   blank      — `.realm.json: {}` only; for tests that need a working realm
+//   blank      — empty directory; for tests that need a working realm
 //                with no card content.
 //   simple     — one card def (Person), one instance, one non-card file; for
 //                tests that need *some* indexed content but nothing exotic.
@@ -2158,6 +2252,11 @@ async function buildPermissionedRealmTemplate(
     );
 
     await waitForQueueIdle(builderDatabaseName);
+    await logRealmIndexDiagnostics(
+      dbAdapter,
+      (options.realmURL ?? testRealmURL).href,
+      'template-build',
+    );
     await teardownPermissionedRealmFixture(fixture.testRealmServer);
     fixture = undefined;
 
@@ -2323,6 +2422,13 @@ async function buildPermissionedRealmsTemplate(
     );
 
     await waitForQueueIdle(builderDatabaseName);
+    for (let fixtureRealm of fixture.realms) {
+      await logRealmIndexDiagnostics(
+        dbAdapter,
+        fixtureRealm.realm.url,
+        'template-build',
+      );
+    }
     await teardownPermissionedRealmsFixture(fixture.realms);
     fixture = undefined;
 
@@ -2338,6 +2444,275 @@ async function buildPermissionedRealmsTemplate(
     if (fixture) {
       try {
         await teardownPermissionedRealmsFixture(fixture.realms);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
+// Periodic heartbeat for long indexing phases. A from-scratch index runs as a
+// single QUnit phase with no intermediate output, so a slow or stuck index
+// surfaces only as an opaque `Test took longer than Nms` phase timeout — no
+// signal about whether it was making progress or wedged. This logs elapsed
+// time plus index progress (boxel_index rows per realm + unfulfilled job
+// count) roughly every `intervalMs` while `fn` runs, so the next failure on
+// this path shows a moving row count (slow) versus a frozen one (stuck) and
+// which realm is mid-index. The next beat is scheduled only after the previous
+// one finishes, so a progress query slower than `intervalMs` can't pile up
+// concurrent queries on the same adapter during already-slow indexing. The
+// timer is unref'd by the suite bootstrap, so it never keeps the process alive
+// on its own; it only fires while the awaited work is holding the event loop.
+export async function withIndexProgressHeartbeat<T>(
+  label: string,
+  dbAdapter: PgAdapter,
+  fn: () => Promise<T>,
+  { intervalMs = 15000 }: { intervalMs?: number } = {},
+): Promise<T> {
+  let startedAt = Date.now();
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let beat = async () => {
+    let elapsedS = Math.round((Date.now() - startedAt) / 1000);
+    let detail = '';
+    try {
+      let rows = await dbAdapter.execute(
+        `SELECT realm_url, COUNT(*)::int AS rows FROM boxel_index GROUP BY realm_url ORDER BY realm_url`,
+      );
+      let jobs = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+      );
+      detail = ` boxel_index=[${rows
+        .map((r) => `${r.realm_url}:${r.rows}`)
+        .join(', ')}] unfulfilled_jobs=${jobs[0]?.count ?? '?'}`;
+    } catch (e) {
+      detail = ` (progress query failed: ${(e as Error).message})`;
+    }
+    console.log(
+      `[index-heartbeat] ${label} still running after ${elapsedS}s;${detail}`,
+    );
+  };
+  let schedule = () => {
+    timer = setTimeout(async () => {
+      if (stopped) {
+        return;
+      }
+      await beat();
+      if (!stopped) {
+        schedule();
+      }
+    }, intervalMs);
+  };
+  schedule();
+  try {
+    return await fn();
+  } finally {
+    stopped = true;
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+// Template-database cache for a fully-indexed base realm. Cold-indexing the
+// whole base realm (every `.gts` definition rendered through the single-tab
+// in-process prerenderer) is the most expensive setup in the suite — tens of
+// seconds — and any test that does it inline pays that cost inside a QUnit
+// phase bounded by `config.testTimeout`. Building it once here, snapshotting
+// to a template database, and cloning that per test turns each test's
+// `base.start()` into a no-op: the cloned database already holds base's
+// `boxel_index` rows (so `isNewIndex()` is false and startup skips the
+// from-scratch pass) and its `modules` definition cache (so a later
+// `reindex()` re-derives every definition from a cache hit instead of a fresh
+// prerender). Keyed by base source path + prerenderer identity so a different
+// base directory or unrelated injected prerenderer doesn't reuse the wrong
+// snapshot; built at most once per qunit process.
+let baseRealmTemplateCache = new Map<string, { ready: Promise<void> }>();
+
+function baseRealmTemplateCacheKey(
+  basePath: string,
+  prerenderer: Prerenderer,
+): string {
+  return hashCacheKeyPayload({
+    version: 1,
+    type: 'base-realm',
+    basePath,
+    prerenderer: prerendererCacheKeyPart(prerenderer),
+  });
+}
+
+// Build (or reuse) a template database with the base realm fully indexed and
+// return its name. Pass the resulting name as `setupDB`'s `templateDatabase`
+// so each test clones a base-indexed database instead of re-indexing base.
+// `basePath` is the on-disk base realm source (packages/base).
+export async function acquireBaseRealmTemplate(
+  basePath: string,
+  prerenderer: Prerenderer,
+): Promise<string> {
+  let cacheKey = baseRealmTemplateCacheKey(basePath, prerenderer);
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let existing = baseRealmTemplateCache.get(cacheKey);
+  if (existing) {
+    await existing.ready;
+    return templateDatabaseName;
+  }
+
+  let entry: { ready: Promise<void> } = { ready: Promise.resolve() };
+  entry.ready = buildBaseRealmTemplate(cacheKey, basePath, prerenderer).catch(
+    async (error) => {
+      baseRealmTemplateCache.delete(cacheKey);
+      try {
+        await dropDatabase(templateDatabaseName);
+      } catch {
+        // best-effort cleanup
+      }
+      throw error;
+    },
+  );
+  baseRealmTemplateCache.set(cacheKey, entry);
+  await entry.ready;
+  return templateDatabaseName;
+}
+
+// Dedicated port for the throwaway base-realm server the template builder
+// stands up so the prerenderer can fetch base modules during the cold index.
+// Routed through `testPort()` like the rest of the suite so environment-mode
+// runs offset it per environment — two parallel realm-test processes both
+// building the template won't collide on `127.0.0.1` with EADDRINUSE. Kept
+// just below the prerender port (testPort(4460)); the builder also tears its
+// server down before any test's `beforeEach` binds its own ports.
+const baseRealmTemplateBuilderPort = testPort(4459);
+
+async function buildBaseRealmTemplate(
+  cacheKey: string,
+  basePath: string,
+  prerenderer: Prerenderer,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let httpServer: Server | undefined;
+  let base: Realm | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'base-template-worker',
+    });
+
+    let virtualNetwork = createVirtualNetwork();
+    let localBaseRealmURL = new URL(
+      `http://127.0.0.1:${baseRealmTemplateBuilderPort}/base/`,
+    );
+    virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+
+    let definitionLookup = new CachingDefinitionLookup(
+      dbAdapter,
+      prerenderer,
+      virtualNetwork,
+      testCreatePrerenderAuth,
+    );
+
+    ({ realm: base } = await createRealm({
+      definitionLookup,
+      withWorker: true,
+      prerenderer,
+      dir: basePath,
+      realmURL: baseRealm.url,
+      virtualNetwork,
+      publisher,
+      runner,
+      dbAdapter,
+      deferStartUp: true,
+    }));
+    virtualNetwork.mount(base.handle);
+
+    let matrixClient = new MatrixClient({
+      matrixURL: realmServerTestMatrix.url,
+      username: realmServerTestMatrix.username,
+      seed: realmSecretSeed,
+    });
+    let server = new RealmServer({
+      realms: [base],
+      reconciler: makeTestReconciler(dbAdapter, [base]),
+      virtualNetwork,
+      matrixClient,
+      realmServerSecretSeed,
+      realmSecretSeed,
+      grafanaSecret,
+      matrixRegistrationSecret,
+      realmsRootPath: dirSync().name,
+      dbAdapter,
+      queue: publisher,
+      getIndexHTML,
+      serverURL: new URL(`http://127.0.0.1:${baseRealmTemplateBuilderPort}`),
+      assetsURL: new URL(`http://example.com/notional-assets-host/`),
+      definitionLookup,
+      prerenderer,
+    });
+    httpServer = server.listen(baseRealmTemplateBuilderPort);
+    await withIndexProgressHeartbeat(
+      'base-realm template build (base.start)',
+      dbAdapter,
+      () => base!.start(),
+    );
+
+    await waitForQueueIdle(builderDatabaseName);
+
+    await closeServer(httpServer);
+    httpServer = undefined;
+    base.__testOnlyClearCaches();
+    base = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (httpServer) {
+      try {
+        await closeServer(httpServer);
       } catch {
         // best-effort cleanup
       }
@@ -2482,3 +2857,44 @@ export const cardInfo = {
   summary: null,
   cardThumbnailURL: null,
 };
+
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields land
+// on attributes directly. Mirrors the host helper so realm-server tests can
+// build the same shape without depending on host.
+export function realmConfigCardJSON(
+  config: {
+    name?: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    includePrerenderedDefaultRealmIndex?: boolean;
+  } = {},
+): string {
+  let attrs: Record<string, unknown> = {};
+  if (config.name !== undefined) {
+    attrs.cardInfo = { name: config.name };
+  }
+  if (config.iconURL !== undefined) {
+    attrs.iconURL = config.iconURL;
+  }
+  if (config.backgroundURL !== undefined) {
+    attrs.backgroundURL = config.backgroundURL;
+  }
+  if (config.includePrerenderedDefaultRealmIndex !== undefined) {
+    attrs.includePrerenderedDefaultRealmIndex =
+      config.includePrerenderedDefaultRealmIndex;
+  }
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: attrs,
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  });
+}

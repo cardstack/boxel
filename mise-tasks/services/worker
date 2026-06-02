@@ -35,7 +35,7 @@ NODE_ENV=development \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE}" \
-  LOG_LEVELS='*=info' \
+  LOG_LEVELS="${LOG_LEVELS:-*=info}" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \

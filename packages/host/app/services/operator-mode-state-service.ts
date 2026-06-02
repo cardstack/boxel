@@ -16,7 +16,6 @@ import type {
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
   rri,
   RealmPaths,
   type LocalPath,
@@ -448,7 +447,11 @@ export default class OperatorModeStateService extends Service {
 
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
-      const isIndexCard = isRealmIndexCardId(item.id, realmURL);
+      const isIndexCard = isRealmIndexCardId(
+        item.id,
+        realmURL,
+        this.network.virtualNetwork,
+      );
       if (isIndexCard) {
         // Only open workspace chooser if the trimmed item was an index card
         this._state.workspaceChooserOpened = true;
@@ -836,7 +839,9 @@ export default class OperatorModeStateService extends Service {
     moduleInspectorView?: ModuleInspectorView,
   ) {
     let codePathURL =
-      typeof codePath === 'string' ? cardIdToURL(codePath) : codePath;
+      typeof codePath === 'string'
+        ? this.network.virtualNetwork.toURL(codePath)
+        : codePath;
     let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
@@ -1452,7 +1457,11 @@ export default class OperatorModeStateService extends Service {
         return playgroundSelections[this.codePathString];
       }
       let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
-        ? internalKeyFor(this.codeSemanticsService.selectedCodeRef!, undefined)
+        ? internalKeyFor(
+            this.codeSemanticsService.selectedCodeRef!,
+            undefined,
+            this.network.virtualNetwork,
+          )
         : null;
       if (selectedCodeRefUrl && playgroundSelections[selectedCodeRefUrl]) {
         return playgroundSelections[selectedCodeRefUrl];

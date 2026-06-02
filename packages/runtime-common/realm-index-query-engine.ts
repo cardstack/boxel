@@ -11,7 +11,6 @@ import {
   resolveCardReference,
   isRegisteredPrefix,
   cardIdToURL,
-  unresolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -30,6 +29,7 @@ import {
   codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
+import type { VirtualNetwork } from './virtual-network';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
 import type {
@@ -102,6 +102,21 @@ type Options = {
   // so that key is the per-field "is this query-backed?" signal at
   // follow time.
   skipQueryBackedExpansion?: boolean;
+  // When true, `loadLinks` seeds the top-level result cards
+  // (`populateQueryFields` on the roots) and then returns an empty array —
+  // the transitive static-link BFS, the deeper-layer
+  // `populateQueryFields`, and the clone-into-`included` step are all
+  // skipped. (The search assembler only sets `doc.included` when the array
+  // is non-empty, so the response document omits the `included` member
+  // entirely.) Set by the realm-server search handlers when the request
+  // originates inside a prerender: the host resolves every linked card
+  // by URL via card+source (query fields from the seed umbrella, static
+  // links via a `not-loaded` sentinel that lazy-loads), so the response's
+  // `included[]` is dead weight. Strictly prerender-scoped — live /
+  // external `_federated-search` callers still receive compound documents.
+  // Implies the query-backed `${field}.N` sub-entry stripping
+  // (see `skipQueryBackedExpansion`) so the seeded roots stay orphan-free.
+  omitIncluded?: boolean;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -167,17 +182,26 @@ function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
+  virtualNetwork?: VirtualNetwork,
 ) {
   // Registered prefix references (e.g. @cardstack/catalog/foo) are already
   // in their canonical portable form — don't resolve them.
-  if (isRegisteredPrefix(url)) {
+  if (
+    virtualNetwork
+      ? virtualNetwork.isRegisteredPrefix(url)
+      : isRegisteredPrefix(url)
+  ) {
     return;
   }
   if (!resourceId) {
     setURL(url);
     return;
   }
-  setURL(resolveCardReference(url, resourceId));
+  setURL(
+    virtualNetwork
+      ? virtualNetwork.resolveURL(url, resourceId).href
+      : resolveCardReference(url, resourceId),
+  );
 }
 
 export class RealmIndexQueryEngine {
@@ -383,10 +407,14 @@ export class RealmIndexQueryEngine {
     if (!resource.meta?.adoptsFrom) {
       return false;
     }
-    let relativeTo = resource.id ? cardIdToURL(resource.id) : this.realmURL;
+    let relativeTo = resource.id
+      ? this.#realm.virtualNetwork.toURL(resource.id)
+      : this.realmURL;
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return false;
@@ -487,7 +515,11 @@ export class RealmIndexQueryEngine {
           opts.htmlFormat === 'embedded' ? file.embeddedHtml : file.fittedHtml;
         if (htmlByType) {
           if (opts.renderType) {
-            let renderTypeKey = internalKeyFor(opts.renderType, undefined);
+            let renderTypeKey = internalKeyFor(
+              opts.renderType,
+              undefined,
+              this.#realm.virtualNetwork,
+            );
             if (htmlByType[renderTypeKey] != null) {
               html = htmlByType[renderTypeKey];
               usedRenderTypeKey = renderTypeKey;
@@ -582,7 +614,7 @@ export class RealmIndexQueryEngine {
         doc.included = included;
       }
     }
-    relativizeDocument(doc, this.realmURL);
+    relativizeDocument(doc, this.realmURL, this.#realm.virtualNetwork);
     await this.attachRealmInfo(doc);
     return {
       type: 'doc',
@@ -632,6 +664,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return;
@@ -646,7 +680,13 @@ export class RealmIndexQueryEngine {
       '',
       realmURL,
       opts,
-      [internalKeyFor(definition.codeRef, undefined)],
+      [
+        internalKeyFor(
+          definition.codeRef,
+          undefined,
+          this.#realm.virtualNetwork,
+        ),
+      ],
     );
   }
 
@@ -711,7 +751,11 @@ export class RealmIndexQueryEngine {
       if (!isResolvedCodeRef(fieldDefinition.fieldOrCard)) {
         continue;
       }
-      let childCardKey = internalKeyFor(fieldDefinition.fieldOrCard, undefined);
+      let childCardKey = internalKeyFor(
+        fieldDefinition.fieldOrCard,
+        undefined,
+        this.#realm.virtualNetwork,
+      );
       if (visited.filter((v) => v === childCardKey).length > RECURSING_DEPTH) {
         continue;
       }
@@ -814,7 +858,10 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      relativeTo: resource.id ? cardIdToURL(resource.id) : realmURL,
+      relativeTo: resource.id
+        ? this.#realm.virtualNetwork.toURL(resource.id)
+        : realmURL,
+      virtualNetwork: this.#realm.virtualNetwork,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
@@ -1147,7 +1194,7 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    let realmPath = new RealmPaths(realmURL);
+    let realmPath = new RealmPaths(realmURL, this.#realm.virtualNetwork);
     let omitSet = new Set(omit);
     let visited = new Set<string>();
 
@@ -1226,6 +1273,52 @@ export class RealmIndexQueryEngine {
         throw err;
       }
 
+      // Step 1b: strip `fieldName.N` sub-entries from query-backed fields.
+      // The host deserializer treats every per-item entry as a
+      // follow-able relationship and expects its target in `included[]`,
+      // so leaving them on the wire alongside an omitted / query-backed
+      // `included[]` produces orphan-link errors. The umbrella entry
+      // (`fieldName`) stays — it carries `links.search` and
+      // `data: [array of IDs]` for the host's per-URL hydration path.
+      // Runs for both the query-backed-only prerender skip and the
+      // broader `omitIncluded` short-circuit below.
+      if (opts?.skipQueryBackedExpansion || opts?.omitIncluded) {
+        for (let { resource } of layer) {
+          if (!resource.relationships) {
+            continue;
+          }
+          for (let fieldName of Object.keys(resource.relationships)) {
+            let umbrella = resource.relationships[fieldName];
+            if (
+              !umbrella ||
+              Array.isArray(umbrella) ||
+              !umbrella.links?.search
+            ) {
+              continue;
+            }
+            for (let key of Object.keys(resource.relationships)) {
+              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
+                delete resource.relationships[key];
+              }
+            }
+          }
+        }
+      }
+
+      // Prerender included-omission: the host never reads the search
+      // response's `included[]` — it resolves every linked card by URL
+      // via card+source (query fields from the seed umbrella written by
+      // `populateQueryFields` above; static links via a `not-loaded`
+      // sentinel that lazy-loads). Once the root result cards are seeded,
+      // the transitive static-link BFS (Steps 2-5) and the deeper-layer
+      // `populateQueryFields` are pure waste, so stop after the root
+      // layer and return an empty array (the caller then omits the
+      // `included` member from the response document). Strictly
+      // prerender-scoped.
+      if (opts?.omitIncluded) {
+        break;
+      }
+
       // Step 2: walk every resource's relationships, classify each link,
       // and accumulate URL sets for the batched DB queries.
       type Entry = {
@@ -1254,31 +1347,6 @@ export class RealmIndexQueryEngine {
           : opts?.linkFields
             ? { ...opts, linkFields: undefined }
             : opts;
-        if (activeOpts?.skipQueryBackedExpansion && resource.relationships) {
-          // Strip `fieldName.N` sub-entries from query-backed fields
-          // before traversal: the host deserializer treats every
-          // per-item entry as a follow-able relationship and expects
-          // its target in `included[]`, so leaving them on the wire
-          // alongside an empty `included[]` produces orphan-link
-          // errors. The umbrella entry (`fieldName`) stays — it
-          // carries `links.search` and `data: [array of IDs]` for the
-          // host's per-URL hydration path.
-          for (let fieldName of Object.keys(resource.relationships)) {
-            let umbrella = resource.relationships[fieldName];
-            if (
-              !umbrella ||
-              Array.isArray(umbrella) ||
-              !umbrella.links?.search
-            ) {
-              continue;
-            }
-            for (let key of Object.keys(resource.relationships)) {
-              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
-                delete resource.relationships[key];
-              }
-            }
-          }
-        }
         let processed = new Set<string>();
 
         for (let entry of relationshipEntries(resource.relationships)) {
@@ -1344,18 +1412,17 @@ export class RealmIndexQueryEngine {
             }
           }
 
-          let linkURL = new URL(
-            resolveCardReference(
-              relationship.links.self,
-              resource.id ? cardIdToURL(resource.id) : realmURL,
-            ),
+          let vn = this.#realm.virtualNetwork;
+          let linkURL = vn.resolveURL(
+            relationship.links.self,
+            resource.id ? vn.toURL(resource.id) : realmURL,
           );
           let resolvedSelf: string;
           try {
-            resolvedSelf = resolveCardReference(
+            resolvedSelf = vn.resolveURL(
               relationship.links.self,
               resource.id,
-            );
+            ).href;
           } catch {
             throw new Error(
               `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
@@ -1369,7 +1436,7 @@ export class RealmIndexQueryEngine {
           }
           // Use prefix form (e.g. @cardstack/catalog/...) when available
           // so relationship data.id stays portable across environments.
-          let relationshipIdStr = unresolveCardReference(relationshipId.href);
+          let relationshipIdStr = vn.unresolveURL(relationshipId.href);
 
           let inRealm = realmPath.inRealm(linkURL);
           if (inRealm) {
@@ -1575,11 +1642,19 @@ export class RealmIndexQueryEngine {
           ...{ links: { self: resource.id } },
         });
         visitInstanceURLs(rewritten, (url, setURL) =>
-          absolutizeInstanceURL(url, rewritten.id, setURL),
+          absolutizeInstanceURL(
+            url,
+            rewritten.id,
+            setURL,
+            this.#realm.virtualNetwork,
+          ),
         );
         visitModuleDeps(rewritten, (url, setURL) =>
-          absolutizeInstanceURL(url, rewritten.id, (newURL) =>
-            setURL(newURL as RealmResourceIdentifier),
+          absolutizeInstanceURL(
+            url,
+            rewritten.id,
+            (newURL) => setURL(newURL as RealmResourceIdentifier),
+            this.#realm.virtualNetwork,
           ),
         );
         included.push(rewritten);
@@ -1618,6 +1693,7 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
 export function relativizeDocument(
   doc: SingleCardDocument,
   realmURL: URL,
+  virtualNetwork?: VirtualNetwork,
 ): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
@@ -1628,6 +1704,7 @@ export function relativizeDocument(
     doc.data as unknown as LooseCardResource,
     primaryURL,
     realmURL,
+    virtualNetwork,
   );
   if (doc.included) {
     for (let resource of doc.included) {
@@ -1635,6 +1712,7 @@ export function relativizeDocument(
         resource as unknown as LooseCardResource,
         primaryURL,
         realmURL,
+        virtualNetwork,
       );
     }
   }
@@ -1644,28 +1722,43 @@ function relativizeResource(
   resource: LooseCardResource,
   primaryURL: URL,
   realmURL: URL,
+  virtualNetwork?: VirtualNetwork,
 ) {
   // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
   // which is not a valid URL base. Resolve it to a URL for relative resolution.
-  let resourceURL = resource.id ? cardIdToURL(resource.id) : primaryURL;
+  let resourceURL = resource.id
+    ? virtualNetwork
+      ? virtualNetwork.toURL(resource.id)
+      : cardIdToURL(resource.id)
+    : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (isRegisteredPrefix(url)) {
+    if (
+      virtualNetwork
+        ? virtualNetwork.isRegisteredPrefix(url)
+        : isRegisteredPrefix(url)
+    ) {
       return;
     }
-    let urlObj = new URL(resolveCardReference(url, resourceURL));
+    let urlObj = virtualNetwork
+      ? virtualNetwork.resolveURL(url, resourceURL)
+      : new URL(resolveCardReference(url, resourceURL));
     setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (isRegisteredPrefix(moduleURL)) {
+    if (
+      virtualNetwork
+        ? virtualNetwork.isRegisteredPrefix(moduleURL)
+        : isRegisteredPrefix(moduleURL)
+    ) {
       return;
     }
-    let absoluteModuleURL = new URL(
-      resolveCardReference(moduleURL, resourceURL),
-    );
+    let absoluteModuleURL = virtualNetwork
+      ? virtualNetwork.resolveURL(moduleURL, resourceURL)
+      : new URL(resolveCardReference(moduleURL, resourceURL));
     setModuleURL(
       maybeRelativeReference(
         absoluteModuleURL,

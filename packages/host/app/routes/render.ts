@@ -22,7 +22,6 @@ import {
   SupportedMimeType,
   isCardError,
   isBaseDefInstance,
-  cardIdToURL,
   rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -149,11 +148,6 @@ export default class RenderRoute extends Route<Model> {
     }
   };
 
-  activate() {
-    // this is for route errors, not window level error
-    window.addEventListener('boxel-render-error', this.handleRenderError);
-  }
-
   deactivate() {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
@@ -186,7 +180,6 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderStageSetAt = undefined;
     (globalThis as any).__boxelRenderDiagnostics = undefined;
     (globalThis as any).__waitForRenderLoadStability = undefined;
-    window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
@@ -409,7 +402,9 @@ export default class RenderRoute extends Route<Model> {
       let instance = (await this.store.addFileMeta(
         resource,
         doc,
-        resource.id ? cardIdToURL(resource.id) : undefined,
+        resource.id
+          ? this.network.virtualNetwork.toURL(resource.id)
+          : undefined,
       )) as unknown as CardDef;
 
       let state = new TrackedMap<string, unknown>();

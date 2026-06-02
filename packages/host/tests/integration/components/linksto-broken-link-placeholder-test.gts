@@ -286,7 +286,7 @@ module(
       );
     });
 
-    test('in edit format a broken link shows the placeholder plus remove and replace affordances', async function (assert) {
+    test('in edit format a broken link shows the placeholder plus a remove-only affordance', async function (assert) {
       await setupRealm();
       let person = await createPerson({
         pet: { links: { self: GHOST_URL } },
@@ -297,8 +297,8 @@ module(
 
       // The broken state is distinguished from the empty state by the
       // placeholder: a never-set link shows only the bare "Link" button, while a
-      // broken link surfaces the URL alongside remove (clear) and replace (swap)
-      // controls.
+      // broken link surfaces the URL alongside a remove control. There is no
+      // inline replace affordance — relinking routes through the not-set state.
       assert
         .dom('[data-test-broken-link-template]')
         .exists('editor shows the broken-link placeholder');
@@ -310,10 +310,19 @@ module(
         .exists('editor offers a remove affordance for the broken reference');
       assert
         .dom('[data-test-add-new="pet"]')
-        .exists('editor offers a "Link" affordance to replace the broken link')
+        .doesNotExist(
+          'the broken state offers no inline "Link" replace button',
+        );
+
+      // Removing the broken reference reverts to the not-set state, whose "Link"
+      // button is the single entry point for adding a working replacement.
+      await click('[data-test-remove-card]');
+      assert
+        .dom('[data-test-add-new="pet"]')
+        .exists('the not-set state offers the "Link" affordance to relink')
         .hasText(
           'Link Pet',
-          'the replace control is labelled for the field type',
+          'the relink control is labelled for the field type',
         );
     });
 
