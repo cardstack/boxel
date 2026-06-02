@@ -27,6 +27,9 @@ import {
   visitInstanceURLs,
   maybeRelativeReference,
   codeRefFromInternalKey,
+  query,
+  param,
+  type Expression,
 } from '.';
 import type { Realm } from './realm';
 import type { VirtualNetwork } from './virtual-network';
@@ -76,6 +79,21 @@ import {
 // uses the same depth for repeated card types).
 const RECURSING_DEPTH = 3;
 
+const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
+
+// Feature flag for the job-scoped per-instance wire-format cache. Default off
+// so the indexing hot path is byte-for-byte unchanged until an operator opts
+// in; read live (not memoized) so tests can toggle it per-case. Only ever
+// consulted when a request also carries a job identity, so live / external
+// traffic is unaffected regardless of the flag.
+function instanceCacheEnabled(): boolean {
+  return (
+    typeof process !== 'undefined' &&
+    (process.env?.INDEXER_INSTANCE_CACHE === 'true' ||
+      process.env?.INDEXER_INSTANCE_CACHE === '1')
+  );
+}
+
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
@@ -117,6 +135,17 @@ type Options = {
   // Implies the query-backed `${field}.N` sub-entry stripping
   // (see `skipQueryBackedExpansion`) so the seeded roots stay orphan-free.
   omitIncluded?: boolean;
+  // The `<jobId>.<reservationId>` job identity (from the `x-boxel-job-id`
+  // header), threaded by the realm-server search / card-GET handlers when a
+  // request originates inside an indexing prerender. Enables the per-instance
+  // wire-format cache (`job_scoped_instance_cache`): within one job
+  // `boxel_index` is frozen, so an instance's assembled query-field
+  // relationships are stable and can be reused across every search / GET that
+  // touches it. The reservation is part of the key because a job can re-run
+  // under a new reservation, between which committed state may move. Absent
+  // for live / external callers, which therefore never read or write the
+  // cache.
+  jobIdentity?: string;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -209,6 +238,7 @@ export class RealmIndexQueryEngine {
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
+  #dbAdapter: DBAdapter;
   #log = logger('realm:index-query-engine');
   // In-flight dedup for searchCards: concurrent callers asking for the same
   // (realm, query, opts) share one in-flight promise instead of each running
@@ -263,6 +293,7 @@ export class RealmIndexQueryEngine {
     }
     this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
     this.#definitionLookup = definitionLookup;
+    this.#dbAdapter = dbAdapter;
     this.#realm = realm;
     this.#fetch = fetch;
   }
@@ -1175,6 +1206,84 @@ export class RealmIndexQueryEngine {
   // in-realm cards and one for in-realm file-meta resources, alongside
   // Promise.all-fanout cross-realm fetches, all running concurrently
   // regardless of how many siblings reference links at that depth.
+  // ── Job-scoped per-instance wire-format cache (job_scoped_instance_cache) ──
+  // Within one indexing job `boxel_index` is frozen, so an instance's assembled
+  // query-field relationships are stable. Caching them per (jobIdentity, url)
+  // lets every later occurrence of the instance in the job — another search
+  // result, a per-URL card GET, a linked target — skip the definition lookup +
+  // field-tree walk that `populateQueryFields` would otherwise repeat.
+
+  // Cache coordinates for a resource, or undefined when caching doesn't apply:
+  // no job identity (live / external traffic), no id, a sparse-fieldset
+  // (partial) population that mustn't masquerade as a full assembly, or the
+  // flag is off.
+  #instanceCacheKey(
+    resource: LooseCardResource | FileMetaResource,
+    opts: Options | undefined,
+  ): { jobId: string; url: string } | undefined {
+    if (
+      !opts?.jobIdentity ||
+      !resource.id ||
+      opts.linkFields ||
+      !instanceCacheEnabled()
+    ) {
+      return undefined;
+    }
+    return { jobId: opts.jobIdentity, url: resource.id };
+  }
+
+  // `undefined` = cache miss (no row); `null` = cached "no relationships";
+  // object = cached relationships map. Best-effort: a read failure degrades to
+  // a recompute, never an error.
+  async #readCachedRelationships(
+    jobId: string,
+    url: string,
+  ): Promise<Record<string, unknown> | null | undefined> {
+    try {
+      let rows = (await query(this.#dbAdapter, [
+        `SELECT result FROM ${INSTANCE_CACHE_TABLE} WHERE job_id =`,
+        param(jobId),
+        ` AND url =`,
+        param(url),
+      ] as Expression)) as { result: string }[];
+      if (!rows.length) {
+        return undefined;
+      }
+      return JSON.parse(rows[0].result) as Record<string, unknown> | null;
+    } catch (err: unknown) {
+      this.#log.warn(
+        `per-instance cache read failed for ${url} (job ${jobId}): ${String(err)}`,
+      );
+      return undefined;
+    }
+  }
+
+  // First write wins (ON CONFLICT DO NOTHING) — concurrent populates of the
+  // same instance in one job produce equivalent results against the frozen
+  // index, so either is valid. Best-effort: a write failure is logged, never
+  // thrown.
+  async #writeCachedRelationships(
+    jobId: string,
+    url: string,
+    relationships: unknown,
+  ): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `INSERT INTO ${INSTANCE_CACHE_TABLE} (job_id, url, result) VALUES (`,
+        param(jobId),
+        `,`,
+        param(url),
+        `,`,
+        param(JSON.stringify(relationships ?? null)),
+        `) ON CONFLICT (job_id, url) DO NOTHING`,
+      ] as Expression);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `per-instance cache write failed for ${url} (job ${jobId}): ${String(err)}`,
+      );
+    }
+  }
+
   private async loadLinks(
     {
       realmURL,
@@ -1244,6 +1353,28 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
+            let cacheKey = this.#instanceCacheKey(resource, popOpts);
+            if (cacheKey) {
+              let cached = await this.#readCachedRelationships(
+                cacheKey.jobId,
+                cacheKey.url,
+              );
+              if (cached !== undefined) {
+                // Hit: reuse this instance's assembled query-field
+                // relationships from an earlier occurrence in the same job,
+                // skipping the definition lookup + field-tree walk. The
+                // cached value is pre-strip; the `${field}.N` /
+                // included-omission steps below run uniformly on hit and miss.
+                if (cached === null) {
+                  delete (resource as { relationships?: unknown })
+                    .relationships;
+                } else {
+                  (resource as { relationships?: unknown }).relationships =
+                    cached;
+                }
+                return;
+              }
+            }
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
@@ -1258,6 +1389,13 @@ export class RealmIndexQueryEngine {
               );
             } else {
               await this.populateQueryFields(resource, realmURL, popOpts);
+            }
+            if (cacheKey) {
+              await this.#writeCachedRelationships(
+                cacheKey.jobId,
+                cacheKey.url,
+                (resource as { relationships?: unknown }).relationships,
+              );
             }
           }),
         );
