@@ -103,5 +103,20 @@ export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
 export const SLIDING_SYNC_LIST_RANGE_END = 9;
+// AI rooms (ai-room list) emit one event per message and rely on the host's
+// loadAllTimelineEvents scrollback (which calls /messages with an m.replace
+// filter) to backfill older history on demand, so a per-room timeline_limit
+// of 1 is sufficient.
+//
+// Realm session rooms (auth-room list) instead receive a burst of multiple
+// events per write or delete — incremental-index-initiation → update →
+// incremental, plus an extra initiation per file in multi-file batches. The
+// `update` event sits in the middle of that burst and is what DirectoryResource
+// subscribes to for live file-tree refresh; with timeline_limit=1, sliding
+// sync only delivers the latest event of any burst that arrives in the same
+// poll window, so the `update` event gets silently dropped (it remains in the
+// room but never reaches the live Room.timeline listener). The higher limit
+// on the auth-room list keeps the full burst in each /sync response.
 export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_TIMEOUT = 30000;

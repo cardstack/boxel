@@ -63,6 +63,7 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
@@ -884,7 +885,7 @@ export default class MatrixService extends Service {
       filters: {
         is_dm: true,
       },
-      timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+      timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
       required_state: [['*', '*']],
     });
     this.slidingSync = new this.matrixSdkLoader.SlidingSync(
