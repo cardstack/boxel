@@ -24,22 +24,26 @@ jobs:
     name: Check which packages changed
     runs-on: ubuntu-latest
     outputs:
-      boxel: ${{ steps.filter.outputs.boxel }}
-      ai-bot: ${{ steps.filter.outputs.ai-bot }}
-      bot-runner: ${{ steps.filter.outputs.bot-runner }}
-      eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
-      eslint-plugin-cardstack-host: ${{ steps.filter.outputs.eslint-plugin-cardstack-host }}
-      postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
-      boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
-      boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
-      matrix: ${{ steps.filter.outputs.matrix }}
-      realm-server: ${{ steps.filter.outputs.realm-server }}
-      vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
-      bench-amd: ${{ steps.filter.outputs.bench-amd }}
-      bench-realm: ${{ steps.filter.outputs.bench-realm }}
-      # Force all tests to run when on ci-bisect* branches
-      run_all: ${{ steps.force-run-all.outputs.run_all }}
+      # TEMPORARY (host-mode flake stress test): force every suite OFF except
+      # `matrix`, so the only thing this branch runs is the Matrix shard-1 ×20
+      # stress jobs. Revert this block (restore the `steps.filter.outputs.*`
+      # passthroughs) together with the matrix-client-test matrix changes
+      # before merging.
+      boxel: "false"
+      ai-bot: "false"
+      bot-runner: "false"
+      eslint-plugin-boxel: "false"
+      eslint-plugin-cardstack-host: "false"
+      postgres-migrations: "false"
+      boxel-icons: "false"
+      boxel-ui: "false"
+      matrix: "true"
+      realm-server: "false"
+      vscode-boxel-tools: "false"
+      boxel-cli: "false"
+      bench-amd: "false"
+      bench-realm: "false"
+      run_all: "false"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
@@ -361,10 +365,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3]
+        # TEMPORARY (host-mode flake stress test): run only shard 1, twenty
+        # times in parallel, to surface the page.goto flake on the first
+        # attempt. Revert this whole job's matrix/concurrency/artifact-name
+        # changes before merging — restore `shardIndex: [1, 2, 3]` and drop
+        # `copy`.
+        copy:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+          ]
+        shardIndex: [1]
         shardTotal: [3]
     concurrency:
-      group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
+      group: matrix-client-test-${{ matrix.shardIndex }}-${{ matrix.copy }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -404,42 +436,42 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
+          name: matrix-test-realm-server-log-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
+          name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
+          name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
+          name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
+          name: matrix-test-icon-server-log-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: /tmp/icon-server.log
           retention-days: 30
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
+          name: matrix-test-host-dist-log-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: /tmp/host-dist.log
           retention-days: 30
 
@@ -447,7 +479,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: blob-report-${{ matrix.shardIndex }}
+          name: blob-report-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: packages/matrix/blob-report
           retention-days: 1
 
@@ -455,7 +487,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-traces-${{ matrix.shardIndex }}
+          name: playwright-traces-${{ matrix.shardIndex }}-${{ matrix.copy }}
           path: packages/matrix/test-results/**/trace.zip
           retention-days: 30
           if-no-files-found: ignore
@@ -465,8 +497,12 @@ jobs:
     needs:
       - change-check
       - matrix-client-test
-    # !cancelled() makes it run even if a matrix-client-test shard fails, but still respects cancellation
-    if: ${{ !cancelled() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
+    # TEMPORARY (host-mode flake stress run) — revert before merge.
+    # `playwright merge-reports` can't reconcile ten blob reports that all
+    # claim to be shard 1/3, so this job fails and is the run's only red
+    # mark even when every stress shard passes. Disable it for the stress
+    # run; the per-shard pass/fail is visible on the jobs themselves.
+    if: false
     runs-on: ubuntu-latest
     concurrency:
       group: matrix-client-merge-reports-${{ github.head_ref || github.run_id }}

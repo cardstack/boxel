@@ -35,6 +35,11 @@ permissions:
 jobs:
   check-percy:
     name: Check if Percy is needed
+    # TEMPORARY (host-mode flake stress run): disabled so this branch runs
+    # only ci.yaml's Matrix shard-1 ×10 stress jobs. Editing this file makes
+    # it match its own paths filter and trigger, so every job is gated off
+    # rather than relying on the path filter. Revert before merge.
+    if: false
     runs-on: ubuntu-latest
     outputs:
       percy_needed: ${{ steps.check.outputs.percy_needed }}
@@ -78,6 +83,10 @@ jobs:
 
   test-web-assets:
     name: Build test web assets
+    # TEMPORARY (host-mode flake stress run) — revert before merge. Disabling
+    # this entry job cascades to skip live-test, host-test, and all the
+    # report/percy/baseline jobs that depend on it.
+    if: false
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci-host
