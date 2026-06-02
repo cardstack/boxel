@@ -93,11 +93,14 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
+  // Without a VirtualNetwork we can't normalize module identifiers — return
+  // empty adjustments so the caller's `{ ...codeRef, ...adjustments }` keeps
+  // the input ref intact. The `deserializeAbsolute` field-deserialize path
+  // hits this branch deliberately; the `serialize` entry points (in
+  // `card-service.ts` and `store.ts`) thread VN explicitly.
   let vn = opts?.virtualNetwork;
   if (!vn) {
-    throw new Error(
-      `code-ref serializer requires opts.virtualNetwork to resolve module references`,
-    );
+    return {};
   }
   let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
   if (!isUrlLike(codeRef.module)) {
