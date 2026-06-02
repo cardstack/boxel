@@ -93,7 +93,8 @@ export function setupQUnit() {
             `LEAKED_CARD_REFERENCE_PREFIXES module=${JSON.stringify(
               details.name,
             )} prefixes=${JSON.stringify(leaked)} — register/unregister must ` +
-              `be symmetric (clean up addRealmMapping in an afterEach), or ` +
+              `be symmetric: clean up addRealmMapping/removeRealmMapping (or ` +
+              `register/unregister) in an afterEach, after, or try/finally, or ` +
               `these mappings will unresolve URLs in sibling test modules.`,
           );
         }
