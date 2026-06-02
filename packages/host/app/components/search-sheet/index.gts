@@ -285,6 +285,7 @@ export default class SearchSheet extends Component<Signature> {
             class='search-sheet__content'
             @isCompact={{this.isCompact}}
             @handleSelect={{this.handleCardSelect}}
+            @adorn={{true}}
           />
           <div class='footer'>
             <div class='buttons'>
