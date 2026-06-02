@@ -32,7 +32,7 @@ import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
 import assistantIcon from './ai-assist-icon.webp';
-import FallbackBanner from './fallback-banner';
+import FallbackWarning from './fallback-warning';
 import NewSessionButton from './new-session-button';
 
 import type MatrixService from '../../services/matrix-service';
@@ -79,9 +79,14 @@ export default class AiAssistantPanel extends Component<Signature> {
             (if this.roomResource.name this.roomResource.name 'Assistant')
             as |title|
           }}
-            <h3 title={{title}} class='panel-title-text' data-test-chat-title>
-              {{title}}
-            </h3>
+            <div class='panel-title'>
+              <h3 title={{title}} class='panel-title-text' data-test-chat-title>
+                {{title}}
+              </h3>
+              {{#if this.matrixService.isUsingFallbackSystemCard}}
+                <FallbackWarning />
+              {{/if}}
+            </div>
           {{/let}}
           <NewSessionButton
             @disabled={{not this.roomResource.messages.length}}
@@ -122,10 +127,6 @@ export default class AiAssistantPanel extends Component<Signature> {
             data-test-close-ai-assistant
           />
         </header>
-
-        {{#if this.matrixService.isUsingFallbackSystemCard}}
-          <FallbackBanner class='fallback-banner-slot' />
-        {{/if}}
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
           <AiAssistantPastSessionsList
@@ -265,6 +266,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         animation-timeline: --ai-assistant-chat-scroll-timeline;
       }
 
+      .panel-title {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+
       .panel-title-text {
         position: relative;
         margin: 0;
@@ -329,18 +337,6 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .room {
         padding-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
-      }
-
-      .fallback-banner-slot {
-        position: absolute;
-        top: var(--ai-assistant-panel-header-height);
-        left: 0;
-        right: 0;
-        z-index: 9;
-      }
-      .fallback-banner-slot ~ * .room,
-      .fallback-banner-slot + .room {
-        padding-top: var(--ai-assistant-panel-padding);
       }
 
       @keyframes cycle-color-to-background {

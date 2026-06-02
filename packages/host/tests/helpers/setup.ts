@@ -13,7 +13,6 @@ import {
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 
-import { FALLBACK_BANNER_DISMISSED_KEY } from '@cardstack/host/components/ai-assistant/fallback-banner';
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
@@ -649,21 +648,10 @@ function seedAiAssistantClosed(hooks: NestedHooks) {
   });
 }
 
-// Pre-dismiss the fallback-mode banner so tests that don't opt into it
-// aren't visually obstructed when a misconfigured `defaultSystemCardId`
-// (or any other broken SystemCard chain) is in play. Tests that exercise
-// the banner clear this flag explicitly in their own beforeEach.
-function seedFallbackBannerDismissed(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
-    window.sessionStorage.setItem(FALLBACK_BANNER_DISMISSED_KEY, 'true');
-  });
-}
-
 export function setupApplicationTest(hooks: NestedHooks) {
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  seedFallbackBannerDismissed(hooks);
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
@@ -684,7 +672,6 @@ export function setupRenderingTest(hooks: NestedHooks) {
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  seedFallbackBannerDismissed(hooks);
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {

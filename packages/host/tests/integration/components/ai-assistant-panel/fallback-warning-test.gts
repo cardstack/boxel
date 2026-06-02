@@ -1,17 +1,13 @@
-import { click, settled, waitFor } from '@ember/test-helpers';
+import { settled, waitFor } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
-import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import { FALLBACK_BANNER_DISMISSED_KEY } from '@cardstack/host/components/ai-assistant/fallback-banner';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -68,14 +64,9 @@ function commonSetup(hooks: NestedHooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
-  setupWindowMock(hooks);
   envDefaultGuard(hooks);
 
-  // setupRenderingTest pre-dismisses the banner for the wider suite; this
-  // test file is the one place that needs the flag cleared so render
-  // behavior reflects only the SystemCard chain state.
   hooks.beforeEach(function () {
-    window.sessionStorage.removeItem(FALLBACK_BANNER_DISMISSED_KEY);
     loader = getService('loader-service').loader;
   });
 
@@ -93,7 +84,7 @@ async function seedRealm(mockMatrixUtils: ReturnType<typeof setupMockMatrix>) {
     setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        '.realm.json': `{ "name": "Fallback Banner Test Realm" }`,
+        '.realm.json': `{ "name": "Fallback Warning Test Realm" }`,
         'SystemCard/default.json': SYSTEM_CARD_CONTENT,
       },
     }),
@@ -113,9 +104,9 @@ async function openAiAssistantPanel(): Promise<void> {
     },
   );
 
-  // Open the panel directly via the service rather than clicking the
-  // toggle button, because `openPanel` kicks off `loadRoomsTask` and the
-  // mock matrix backend has no rooms — settling the click can stall.
+  // Open the panel via the service rather than clicking the toggle button —
+  // `openPanel` kicks off `loadRoomsTask` and settling the click stalls
+  // against the empty mock matrix backend.
   let aiAssistantPanelService = getService(
     'ai-assistant-panel-service',
   ) as AiAssistantPanelService;
@@ -125,7 +116,7 @@ async function openAiAssistantPanel(): Promise<void> {
 }
 
 module(
-  'Integration | ai-assistant-panel | fallback-banner | broken chain (user pick fails + no env default)',
+  'Integration | ai-assistant-panel | fallback-warning | broken chain (user pick fails + no env default)',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -151,29 +142,18 @@ module(
       );
     });
 
-    test('banner renders and dismissing it writes sessionStorage', async function (assert) {
+    test('warning icon renders in the panel header', async function (assert) {
       await openAiAssistantPanel();
 
       assert
-        .dom('[data-test-fallback-banner]')
-        .exists('banner is rendered when the SystemCard chain is broken');
-
-      await click('[data-test-fallback-banner-dismiss]');
-
-      assert
-        .dom('[data-test-fallback-banner]')
-        .doesNotExist('banner is removed after dismiss');
-      assert.strictEqual(
-        window.sessionStorage.getItem(FALLBACK_BANNER_DISMISSED_KEY),
-        'true',
-        'sessionStorage flag is set',
-      );
+        .dom('[data-test-fallback-warning]')
+        .exists('warning icon is rendered when the SystemCard chain is broken');
     });
   },
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-banner | broken chain (env default fails)',
+  'Integration | ai-assistant-panel | fallback-warning | broken chain (env default fails)',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -201,7 +181,7 @@ module(
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-banner | silent env-default recovery',
+  'Integration | ai-assistant-panel | fallback-warning | silent env-default recovery',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -232,15 +212,15 @@ module(
       );
     });
 
-    test('banner does not render', async function (assert) {
+    test('warning icon does not render', async function (assert) {
       await openAiAssistantPanel();
-      assert.dom('[data-test-fallback-banner]').doesNotExist();
+      assert.dom('[data-test-fallback-warning]').doesNotExist();
     });
   },
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-banner | MVP steady state (no SystemCard configured)',
+  'Integration | ai-assistant-panel | fallback-warning | MVP steady state (no SystemCard configured)',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -265,15 +245,15 @@ module(
       );
     });
 
-    test('banner does not render', async function (assert) {
+    test('warning icon does not render', async function (assert) {
       await openAiAssistantPanel();
-      assert.dom('[data-test-fallback-banner]').doesNotExist();
+      assert.dom('[data-test-fallback-warning]').doesNotExist();
     });
   },
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-banner | healthy SystemCard',
+  'Integration | ai-assistant-panel | fallback-warning | healthy SystemCard',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -297,9 +277,9 @@ module(
       assert.strictEqual(matrixService.systemCard?.id, GOOD_SYSTEM_CARD_ID);
     });
 
-    test('banner does not render', async function (assert) {
+    test('warning icon does not render', async function (assert) {
       await openAiAssistantPanel();
-      assert.dom('[data-test-fallback-banner]').doesNotExist();
+      assert.dom('[data-test-fallback-warning]').doesNotExist();
     });
   },
 );
