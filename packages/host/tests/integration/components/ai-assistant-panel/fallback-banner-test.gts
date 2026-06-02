@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
@@ -17,6 +17,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import ENV from '@cardstack/host/config/environment';
 
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -70,7 +71,11 @@ function commonSetup(hooks: NestedHooks) {
   setupWindowMock(hooks);
   envDefaultGuard(hooks);
 
+  // setupRenderingTest pre-dismisses the banner for the wider suite; this
+  // test file is the one place that needs the flag cleared so render
+  // behavior reflects only the SystemCard chain state.
   hooks.beforeEach(function () {
+    window.sessionStorage.removeItem(FALLBACK_BANNER_DISMISSED_KEY);
     loader = getService('loader-service').loader;
   });
 
@@ -108,9 +113,15 @@ async function openAiAssistantPanel(): Promise<void> {
     },
   );
 
-  await waitFor('[data-test-open-ai-assistant]');
-  await click('[data-test-open-ai-assistant]');
-  await waitFor('[data-test-room-settled]');
+  // Open the panel directly via the service rather than clicking the
+  // toggle button, because `openPanel` kicks off `loadRoomsTask` and the
+  // mock matrix backend has no rooms — settling the click can stall.
+  let aiAssistantPanelService = getService(
+    'ai-assistant-panel-service',
+  ) as AiAssistantPanelService;
+  aiAssistantPanelService.openPanel();
+  await settled();
+  await waitFor('[data-test-close-ai-assistant]');
 }
 
 module(
