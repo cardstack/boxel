@@ -619,10 +619,12 @@ export default class SearchContent extends Component<Signature> {
         flex-wrap: nowrap;
         padding-inline: var(--boxel-sp-xs);
         /* `overflow-y: hidden` (needed so only the row scrolls
-           horizontally) would otherwise clip the Adorn outline stroke
-           and the type-label tab, which extend a few px outside each
-           card. Block padding keeps them inside the clip region. */
-        padding-block: var(--boxel-sp-xs);
+           horizontally) would clip the Adorn outline stroke and the
+           hover type-label tab, which flips below the card. Bias the
+           block padding toward the block-end so the tab has room below
+           (the block-start only needs to clear the outline stroke),
+           working with the taller prompt sheet (--search-sheet-prompt-height). */
+        padding-block: var(--boxel-sp-2xs) var(--boxel-sp);
         overflow-y: hidden;
         overflow-x: auto;
       }
