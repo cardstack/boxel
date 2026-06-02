@@ -1,5 +1,9 @@
 import { Deferred } from './deferred';
 import {
+  X_BOXEL_JOB_ID_HEADER,
+  sanitizePrerenderJobId,
+} from './prerender-headers';
+import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -231,6 +235,17 @@ const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
+
+// The `<jobId>.<reservationId>` job identity carried on inbound prerender
+// requests (`x-boxel-job-id`), normalized. Threaded into card-document opts so
+// the per-instance wire-format cache scopes its entries to one indexing job.
+// Undefined for live / external traffic, which never carries the header.
+function prerenderJobIdentity(request: Request): string | undefined {
+  return (
+    sanitizePrerenderJobId(request.headers.get(X_BOXEL_JOB_ID_HEADER)) ??
+    undefined
+  );
 }
 
 // Fields owned by the RealmConfig card instance at /realm.json. A PATCH
@@ -4287,6 +4302,7 @@ export class Realm {
       {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+        jobIdentity: prerenderJobIdentity(request),
       },
     );
     if (!entry || entry?.type === 'error') {
@@ -4453,6 +4469,7 @@ export class Realm {
           {
             loadLinks: true,
             skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+            jobIdentity: prerenderJobIdentity(request),
           },
         );
         if (entry && entry.type !== 'error') {
@@ -4563,6 +4580,7 @@ export class Realm {
         {
           loadLinks: true,
           skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+          jobIdentity: prerenderJobIdentity(request),
         },
       );
       let doc: SingleCardDocument;
@@ -4817,6 +4835,7 @@ export class Realm {
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+        jobIdentity: prerenderJobIdentity(request),
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
