@@ -130,7 +130,11 @@ module('Unit | index-writer', function (hooks) {
       },
     });
 
-    indexQueryEngine = new IndexQueryEngine(adapter, definitionLookup);
+    indexQueryEngine = new IndexQueryEngine(
+      adapter,
+      definitionLookup,
+      virtualNetwork,
+    );
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {

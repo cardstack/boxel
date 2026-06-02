@@ -261,7 +261,11 @@ module('Unit | query', function (hooks) {
         return this;
       },
     };
-    indexQueryEngine = new IndexQueryEngine(dbAdapter, mockDefinitionLookup);
+    indexQueryEngine = new IndexQueryEngine(
+      dbAdapter,
+      mockDefinitionLookup,
+      virtualNetwork,
+    );
   });
 
   test('can get all cards with empty filter', async function (assert) {
