@@ -143,7 +143,7 @@ export function isSpecCard(def: any) {
 // a scoped base) and would URL-join a bare specifier to `relativeTo`,
 // producing a nonexistent realm path. Match the deprecated throw exactly
 // for that case before delegating to `resolveURL`.
-function resolveModuleHref(
+export function resolveModuleHref(
   module: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   virtualNetwork: VirtualNetwork | undefined,

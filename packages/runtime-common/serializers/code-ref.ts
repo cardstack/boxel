@@ -8,6 +8,7 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
+import { resolveModuleHref } from '../code-ref';
 import {
   resolveCardReference,
   cardIdToURL,
@@ -93,23 +94,7 @@ function codeRefAdjustments(
     return {};
   }
   let vn = opts?.virtualNetwork;
-  let resolve = (ref: string) => {
-    if (vn) {
-      // The deprecated `resolveCardReference` throws on bare specifiers
-      // that don't match any registered prefix; callers (below) rely on
-      // that throw to leave the original reference unchanged. Mirror it
-      // here so a VN-aware caller doesn't silently URL-join a bare
-      // specifier like `@cardstack/boxel-host/commands/foo` to the
-      // serializer's `relativeTo` and produce a nonexistent realm path.
-      if (!isUrlLike(ref) && !vn.isRegisteredPrefix(ref)) {
-        throw new Error(
-          `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
-        );
-      }
-      return vn.resolveURL(ref, relativeTo).href;
-    }
-    return resolveCardReference(ref, relativeTo);
-  };
+  let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
