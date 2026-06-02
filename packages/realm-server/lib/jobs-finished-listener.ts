@@ -128,11 +128,12 @@ export class JobsFinishedListener {
 
   async #sweep(): Promise<void> {
     // Union the keys held by both job-scoped caches; a key may live in only
-    // one of them, and a finalized job should be cleared from both.
-    let searchKeys = await this.#deps.searchCache.jobIds();
-    let instanceKeys = this.#deps.instanceCache
-      ? await this.#deps.instanceCache.jobIds()
-      : [];
+    // one of them, and a finalized job should be cleared from both. The two
+    // reads hit independent tables, so run them concurrently.
+    let [searchKeys, instanceKeys] = await Promise.all([
+      this.#deps.searchCache.jobIds(),
+      this.#deps.instanceCache?.jobIds() ?? Promise.resolve<string[]>([]),
+    ]);
     let keys = [...new Set([...searchKeys, ...instanceKeys])];
     if (keys.length === 0) {
       return;
