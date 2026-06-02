@@ -212,20 +212,32 @@ export async function extractOggDurationFromStream(
         continue;
       }
       // Accumulate the head until we have enough to parse the first page.
+      // Cap what we keep at OGG_HEAD_BYTES and copy it (slice, not subarray)
+      // so a large first chunk isn't pinned in memory by the head view.
       if (headLen < OGG_HEAD_BYTES) {
-        headParts.push(value);
-        headLen += value.length;
+        let take = Math.min(value.length, OGG_HEAD_BYTES - headLen);
+        headParts.push(value.slice(0, take));
+        headLen += take;
       }
-      // Maintain a rolling window of the most recent bytes: drop a front chunk
-      // only while the remainder still covers a full tail window.
-      tailParts.push(value);
-      tailLen += value.length;
-      while (
-        tailParts.length > 1 &&
-        tailLen - tailParts[0]!.length >= OGG_TAIL_BYTES
-      ) {
-        tailLen -= tailParts[0]!.length;
-        tailParts.shift();
+      // Maintain a rolling window of the last OGG_TAIL_BYTES bytes. Keeping
+      // memory bounded by the window rather than the chunking requires handling
+      // a single oversized chunk explicitly: copy just its tail and drop the
+      // rest (a subarray would pin the whole chunk's buffer). Smaller chunks
+      // accumulate, dropping whole front chunks once the remainder still covers
+      // the window — so the tail stays under 2 * OGG_TAIL_BYTES.
+      if (value.length >= OGG_TAIL_BYTES) {
+        tailParts = [value.slice(value.length - OGG_TAIL_BYTES)];
+        tailLen = OGG_TAIL_BYTES;
+      } else {
+        tailParts.push(value);
+        tailLen += value.length;
+        while (
+          tailParts.length > 1 &&
+          tailLen - tailParts[0]!.length >= OGG_TAIL_BYTES
+        ) {
+          tailLen -= tailParts[0]!.length;
+          tailParts.shift();
+        }
       }
     }
   } finally {
