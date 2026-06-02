@@ -78,6 +78,17 @@ export function unregisterCardReferencePrefix(prefix: string): void {
 }
 
 /**
+ * Diagnostic helper: the prefixes currently registered in the
+ * module-level registry. The test harness reads this after each module
+ * to surface prefix mappings that leaked across tests — a leaked prefix
+ * makes `unresolveCardReference` rewrite indexed/resolved URLs into the
+ * prefix form, which corrupts sibling tests in hard-to-diagnose ways.
+ */
+export function registeredCardReferencePrefixes(): string[] {
+  return [...prefixMappings.keys()];
+}
+
+/**
  * @deprecated Use {@link VirtualNetwork.isRegisteredPrefix} instead.
  * Reads from the soon-to-be-removed module-level `prefixMappings`.
  */

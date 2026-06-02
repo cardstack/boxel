@@ -18,6 +18,7 @@ import type {
 } from '@cardstack/host/resources/module-contents';
 import type { Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 import {
   calculateTotalOwnFields,
@@ -151,6 +152,7 @@ export { SchemaEditorBadge };
 
 export default class SchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
+  @service declare network: NetworkService;
 
   private cardInheritanceChain = inheritanceChain(
     this,
@@ -170,7 +172,11 @@ export default class SchemaEditor extends Component<Signature> {
 
   @cached
   get moduleSyntax() {
-    return new ModuleSyntax(this.args.file.content, this.args.file.url);
+    return new ModuleSyntax(
+      this.args.file.content,
+      this.args.file.url,
+      this.network.virtualNetwork,
+    );
   }
 
   get isLoading() {

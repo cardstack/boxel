@@ -164,7 +164,7 @@ export class IndexRunner {
     onProgress?(event: IndexingProgressEvent): void;
   }) {
     this.#indexWriter = indexWriter;
-    this.#realmPaths = new RealmPaths(realmURL);
+    this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
     this.#reader = reader;
     this.#realmURL = realmURL;
     this.#virtualNetwork = virtualNetwork;

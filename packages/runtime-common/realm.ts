@@ -845,7 +845,7 @@ export class Realm {
     },
     opts?: Options,
   ) {
-    this.paths = new RealmPaths(new URL(url));
+    this.paths = new RealmPaths(new URL(url), virtualNetwork);
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;

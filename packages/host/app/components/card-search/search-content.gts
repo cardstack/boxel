@@ -28,6 +28,7 @@ import type { PrerenderedCard } from '@cardstack/host/components/prerendered-car
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
@@ -149,6 +150,7 @@ interface Signature {
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
 export default class SearchContent extends Component<Signature> {
+  @service declare network: NetworkService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service('recent-cards-service')
@@ -211,7 +213,7 @@ export default class SearchContent extends Component<Signature> {
     // Consume selectedTypeIds outside the ternary so the tracking
     // dependency is always established, even when the query is skipped.
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-      internalKeyFor(ref, undefined),
+      internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );
     return {
       query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
@@ -283,7 +285,7 @@ export default class SearchContent extends Component<Signature> {
         };
       }
       const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-        internalKeyFor(ref, undefined),
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
       );
       return {
         query: buildRecentsQuery(
@@ -602,7 +604,14 @@ export default class SearchContent extends Component<Signature> {
         overscroll-behavior: none;
         height: 100%;
         background-color: var(--boxel-light);
-        padding-right: var(--boxel-sp);
+        /* `overflow-y: auto` also clips horizontal overflow, so the
+           Adorn outline stroke and type-label tab (which extend a few
+           px outside each card) get cut off on the top/left edges
+           without room. Block + inline-start padding keeps them inside
+           the clip region; the larger inline-end padding is the
+           existing scrollbar gutter. */
+        padding-block: var(--boxel-sp-xs);
+        padding-inline: var(--boxel-sp-xs) var(--boxel-sp);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .search-sheet-content.compact {
@@ -610,10 +619,12 @@ export default class SearchContent extends Component<Signature> {
         flex-wrap: nowrap;
         padding-inline: var(--boxel-sp-xs);
         /* `overflow-y: hidden` (needed so only the row scrolls
-           horizontally) would otherwise clip the Adorn outline stroke
-           and the type-label tab, which extend a few px outside each
-           card. Block padding keeps them inside the clip region. */
-        padding-block: var(--boxel-sp-xs);
+           horizontally) would clip the Adorn outline stroke and the
+           hover type-label tab, which flips below the card. Bias the
+           block padding toward the block-end so the tab has room below
+           (the block-start only needs to clear the outline stroke),
+           working with the taller prompt sheet (--search-sheet-prompt-height). */
+        padding-block: var(--boxel-sp-2xs) var(--boxel-sp);
         overflow-y: hidden;
         overflow-x: auto;
       }

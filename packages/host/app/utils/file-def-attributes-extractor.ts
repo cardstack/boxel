@@ -194,7 +194,9 @@ export class FileDefAttributesExtractor {
       let searchDoc = await tryExtract(klass, missingMessage);
       if (searchDoc) {
         let typeCodeRefs = getTypes(klass);
-        let types = typeCodeRefs.map((type) => internalKeyFor(type, undefined));
+        let types = typeCodeRefs.map((type) =>
+          internalKeyFor(type, undefined, this.#network.virtualNetwork),
+        );
         let displayNames = getDisplayNames(klass);
         let adoptsFrom = typeCodeRefs[0] ?? this.#fileDefCodeRef;
         let queryFieldDefs = await this.extractQueryFieldDefs(klass);

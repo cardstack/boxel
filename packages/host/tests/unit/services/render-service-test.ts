@@ -32,7 +32,17 @@ function makeVN(): VirtualNetwork {
   return vn;
 }
 
-module('Unit | Service | render-service', function () {
+module('Unit | Service | render-service', function (hooks) {
+  // `makeVN()` calls `addRealmMapping`, which registers `@test-prefix/`
+  // in the module-level card-reference prefix registry (a global the
+  // VirtualNetwork bridges to). Without cleanup that mapping leaks into
+  // sibling test modules — e.g. realm indexing, whose server-side
+  // indexing would then unresolve indexed card URLs back to the
+  // `@test-prefix/` form and break its deepEqual assertions.
+  hooks.afterEach(function () {
+    new VirtualNetwork(globalThis.fetch).removeRealmMapping(prefix);
+  });
+
   test('CardStoreWithErrors resolves registered prefix ids for card and file lookups', function (assert) {
     let store = new CardStoreWithErrors(globalThis.fetch, makeVN());
     let card = {} as CardDef;

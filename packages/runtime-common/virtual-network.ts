@@ -323,10 +323,12 @@ export class VirtualNetwork {
     for (let [virtual, real] of this.urlMappings) {
       let sourcePath = new RealmPaths(
         new URL(direction === 'virtual-to-real' ? virtual : real),
+        this,
       );
       if (sourcePath.inRealm(absoluteURL)) {
         let toPath = new RealmPaths(
           new URL(direction === 'virtual-to-real' ? real : virtual),
+          this,
         );
         if (absoluteURL.href.endsWith('/')) {
           return toPath.directoryURL(sourcePath.local(absoluteURL)).href;

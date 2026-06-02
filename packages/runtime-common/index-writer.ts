@@ -425,7 +425,7 @@ export class Batch {
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
-    if (!new RealmPaths(this.realmURL).inRealm(url)) {
+    if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
       return;
@@ -1400,8 +1400,8 @@ export class Batch {
   }
 
   private copiedRealmURL(fromRealm: URL, file: URL): URL {
-    let source = new RealmPaths(fromRealm);
-    let dest = new RealmPaths(this.realmURL);
+    let source = new RealmPaths(fromRealm, this.virtualNetwork);
+    let dest = new RealmPaths(this.realmURL, this.virtualNetwork);
     if (!source.inRealm(file)) {
       return file;
     }

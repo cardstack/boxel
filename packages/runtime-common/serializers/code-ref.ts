@@ -8,12 +8,14 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
+import { resolveModuleHref } from '../code-ref';
 import {
   resolveCardReference,
   cardIdToURL,
   rri,
   type RealmResourceIdentifier,
 } from '../card-reference-resolver';
+import type { VirtualNetwork } from '../virtual-network';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -34,15 +36,17 @@ export function serialize(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
+    virtualNetwork?: VirtualNetwork;
   },
 ): ResolvedCodeRef | {} {
+  let vn = opts?.virtualNetwork;
   let baseURL: URL | undefined;
   if (opts?.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
   } else if (typeof opts?.relativeTo === 'string') {
-    baseURL = cardIdToURL(opts.relativeTo);
+    baseURL = vn ? vn.toURL(opts.relativeTo) : cardIdToURL(opts.relativeTo);
   } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = cardIdToURL(doc.data.id);
+    baseURL = vn ? vn.toURL(doc.data.id) : cardIdToURL(doc.data.id);
   }
   return {
     ...codeRef,
@@ -80,6 +84,7 @@ function codeRefAdjustments(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
+    virtualNetwork?: VirtualNetwork;
   },
 ) {
   if (!codeRef) {
@@ -88,10 +93,12 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
+  let vn = opts?.virtualNetwork;
+  let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
-      let resolved = resolveCardReference(codeRef.module, relativeTo);
+      let resolved = resolve(codeRef.module);
       if (resolved !== codeRef.module) {
         let module: string = resolved;
         if (opts?.trimExecutableExtension) {
@@ -108,7 +115,7 @@ function codeRefAdjustments(
     return {};
   }
   if (relativeTo) {
-    let module: string = resolveCardReference(codeRef.module, relativeTo);
+    let module: string = resolve(codeRef.module);
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
