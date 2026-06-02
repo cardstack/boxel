@@ -107,3 +107,7 @@ function responseWithWaiters(response: Response): Response {
     },
   });
 }
+
+// Re-exported for backwards compatibility – these were previously defined here
+// and may be consumed via deep imports from this module.
+export { useTestWaiters, type Waiters } from './test-waiters';
