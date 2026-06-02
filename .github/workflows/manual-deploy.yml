@@ -18,6 +18,31 @@ permissions:
   deployments: write
   id-token: write
 
+# Serialize deploys per environment so overlapping runs can't land out of
+# order. A deploy is a ~50-60 min serial chain that ends by pointing each ECS
+# service at a :<git-sha> image; when two runs overlap, whichever finishes last
+# wins, so an older commit's build can overwrite a newer one. For staging
+# (auto-deployed on every merge to main) we cancel any in-flight deploy when a
+# newer one starts, so the newest commit always wins — the superseding run is a
+# full deploy of every service, so it reconciles any partially-updated state
+# left by the cancelled run. Every other environment — production (manual only),
+# and any value we don't explicitly recognize — queues instead of cancelling, to
+# avoid interrupting a deliberate deploy mid-chain. Cancelling is opt-in per
+# environment (== 'staging') rather than opt-out (!= 'production') so an
+# unexpected env errs toward the safe behavior (queue), not the risky one.
+#
+# The environment is read with a fallback: `inputs.environment` for the
+# workflow_call path (merge-to-main auto deploy), then
+# `github.event.inputs.environment` for the workflow_dispatch path. The
+# fallback is required because the `inputs` context is NOT populated in a
+# workflow-level concurrency expression for workflow_dispatch — without it a
+# manual deploy would land in an empty-env group with cancel-in-progress
+# silently defaulting to false. The trailing 'staging' default keeps the group
+# non-empty and matches every caller's default.
+concurrency:
+  group: deploy-${{ inputs.environment || github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: ${{ (inputs.environment || github.event.inputs.environment || 'staging') == 'staging' }}
+
 jobs:
   create-deployment:
     name: Create GitHub deployment
