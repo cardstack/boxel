@@ -69,6 +69,29 @@ function makeMinimalM4a(): Uint8Array {
   return out;
 }
 
+// iPhone / Apple Voice Memos layout: the moov box trails a large mdat media
+// payload, so the duration is only reachable after streaming past (and
+// discarding) mdat. Reuses makeMinimalM4a's ftyp + moov and splices a chunky
+// mdat box between them.
+function makeM4aMoovAtEnd(): Uint8Array {
+  let fastStart = makeMinimalM4a(); // ftyp (16 bytes) + moov
+  let ftyp = fastStart.subarray(0, 16);
+  let moov = fastStart.subarray(16);
+
+  let mdatPayload = new Uint8Array(4096).fill(0xab);
+  let mdat = new Uint8Array(8 + mdatPayload.length);
+  let mdatView = new DataView(mdat.buffer);
+  mdatView.setUint32(0, mdat.length); // box size
+  mdat.set([0x6d, 0x64, 0x61, 0x74], 4); // "mdat"
+  mdat.set(mdatPayload, 8);
+
+  let out = new Uint8Array(ftyp.length + mdat.length + moov.length);
+  out.set(ftyp, 0);
+  out.set(mdat, ftyp.length);
+  out.set(moov, ftyp.length + mdat.length);
+  return out;
+}
+
 module('Acceptance | m4a audio def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -154,6 +177,7 @@ module('Acceptance | m4a audio def', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.m4a': m4aBytes,
+          'sample-moov-at-end.m4a': makeM4aMoovAtEnd(),
           'not-an-m4a.m4a': 'This is plain text, not an M4A file.',
         },
       }),
@@ -182,6 +206,27 @@ module('Acceptance | m4a audio def', function (hooks) {
     let isM4aCompatibleType =
       contentType.includes('mp4') || contentType.includes('m4a');
     assert.true(isM4aCompatibleType, 'sets m4a-compatible content type');
+  });
+
+  test('extracts duration from M4A with a trailing moov box', async function (assert) {
+    // Exercises the streaming walk's mdat-skipping: the moov box only appears
+    // after the media payload, as in iPhone / Voice Memo recordings.
+    let url = makeFileURL('sample-moov-at-end.m4a');
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: m4aDefCodeRef(),
+      }),
+    );
+
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      result.searchDoc?.duration,
+      2,
+      'extracts duration after skipping past mdat',
+    );
+    assert.strictEqual(result.searchDoc?.name, 'sample-moov-at-end.m4a');
   });
 
   test('falls back when M4aDef is used for non-M4A content', async function (assert) {

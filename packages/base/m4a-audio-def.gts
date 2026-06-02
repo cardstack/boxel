@@ -1,8 +1,7 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef from './audio-file-def';
 import { type ByteStream, type SerializedFile } from './file-api';
-import { extractM4aDuration } from './m4a-meta-extractor';
+import { extractM4aDurationFromStream } from './m4a-meta-extractor';
 
 export class M4aDef extends AudioDef {
   static displayName = 'M4A Audio';
@@ -12,20 +11,17 @@ export class M4aDef extends AudioDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string } = {},
+    options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile<{ duration: number }>> {
-    // M4A files written by iPhone / Apple Voice Memos place `moov` at the
-    // end of the file; fast-start optimised files place it near the start.
-    // Read the whole stream once so either layout works without seeking.
-    let bytesPromise: Promise<Uint8Array> | undefined;
-    let memoizedStream = async () => {
-      bytesPromise ??= byteStreamToUint8Array(await getStream());
-      return bytesPromise;
-    };
-
-    let base = await super.extractAttributes(url, memoizedStream, options);
-    let bytes = await memoizedStream();
-    let { duration } = extractM4aDuration(bytes);
+    // Duration lives in the small `moov` box; the bulk of an M4A file is the
+    // `mdat` media payload, which we never need. Walk the container off the
+    // stream, retaining only `moov` and discarding `mdat`, so even a long
+    // recording is parsed with a few KB resident rather than the whole file.
+    // `super` derives the hash/size from `options` (supplied by the indexer)
+    // without re-reading, so when those are present the stream is consumed
+    // exactly once — by this walk.
+    let base = await super.extractAttributes(url, getStream, options);
+    let { duration } = await extractM4aDurationFromStream(await getStream());
 
     return {
       ...base,
