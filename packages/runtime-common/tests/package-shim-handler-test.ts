@@ -294,6 +294,12 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
           /you may be importing from the wrong module ID/.test(message),
           `generic fallback advice is dropped when we have a concrete suggestion, got: ${message}`,
         );
+        // The JS-undefined rationale is also dropped — the concrete fix
+        // speaks for itself.
+        assert.notOk(
+          /silently produces `undefined`/.test(message),
+          `generic JS-undefined rationale is dropped when we have a concrete suggestion, got: ${message}`,
+        );
       }
     },
 
@@ -356,6 +362,12 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
         assert.notOk(
           /It is exported from/.test(message),
           `error does not fabricate a source when none matches, got: ${message}`,
+        );
+        // With no concrete fix to offer, the JS-undefined rationale is
+        // kept — it justifies why this surfaces as an error at all.
+        assert.ok(
+          /silently produces `undefined`/.test(message),
+          `JS-undefined rationale is kept in the fallback message, got: ${message}`,
         );
       }
     },

@@ -144,8 +144,11 @@ export function wrapWithStrictNamespace(
   });
 }
 
-// JS-undefined explanation appended to every missing-export error,
-// whether or not we found a better source to point at.
+// JS-undefined explanation appended only to the fallback message —
+// when no shimmed module owns the name, the author gets no concrete
+// fix, so we justify why this surfaces as an error instead of a
+// silent `undefined`. When we DO have a corrected-import suggestion
+// the fix speaks for itself and this rationale is just noise.
 const MISSING_EXPORT_TAIL =
   `(JavaScript silently produces \`undefined\` for missing named imports, ` +
   `which then surfaces as confusing downstream errors. This Proxy ` +
@@ -169,12 +172,12 @@ function buildMissingExportMessage(
   }
   // One or more shimmed modules export this name — point the author at
   // the correct subpath(s) and give a copy-pasteable corrected import
-  // using the first match.
+  // using the first match. The fix is self-explanatory, so we omit the
+  // generic JS-undefined rationale.
   return (
     head +
     `It is exported from ${formatModuleList(sources)} — try ` +
-    `\`import { ${prop} } from '${sources[0]}'\`. ` +
-    MISSING_EXPORT_TAIL
+    `\`import { ${prop} } from '${sources[0]}'\`.`
   );
 }
 
