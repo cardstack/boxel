@@ -170,6 +170,61 @@ export class ThemeTypographyField extends FieldDef {
     <template>{{this.text}}</template>
   };
 
+  static edit = class Edit extends Component<typeof ThemeTypographyField> {
+    <template>
+      <div class='theme-typography-edit'>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Heading</h4>
+          <@fields.heading />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Section Heading</h4>
+          <@fields.sectionHeading />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Subheading</h4>
+          <@fields.subheading />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Body</h4>
+          <@fields.body />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Caption</h4>
+          <@fields.caption />
+        </section>
+
+      </div>
+      <style scoped>
+        .theme-typography-edit {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+        }
+        .theme-typography-edit-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-typography-edit-heading {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        }
+      </style>
+    </template>
+  };
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <section class='theme-typography'>

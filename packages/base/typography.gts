@@ -3,6 +3,7 @@ import {
   sanitizeHtmlSafe,
   type CssVariableEntry,
 } from '@cardstack/boxel-ui/helpers';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   field,
@@ -114,6 +115,76 @@ export default class TypographyField extends FieldDef {
       `${fontFamily} ${fontWeight ?? 'regular'}, ${fontSize ?? '14px'}`,
     );
   }
+
+  static edit = class Edit extends Component<typeof TypographyField> {
+    private get styles() {
+      let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
+      let styles = [];
+      if (fontFamily) styles.push(`font-family: ${fontFamily}`);
+      if (fontSize) styles.push(`font-size: ${fontSize}`);
+      if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
+      if (lineHeight) styles.push(`line-height: ${lineHeight}`);
+      return sanitizeHtmlSafe(styles.join('; '));
+    }
+
+    <template>
+      <div class='typography-edit'>
+        <div class='typography-edit-preview' style={{this.styles}}>
+          {{#if @model.sampleText}}
+            {{@model.sampleText}}
+          {{else}}
+            The quick brown fox
+          {{/if}}
+        </div>
+        <div class='typography-edit-row typography-edit-row--2col'>
+          <FieldContainer @label='Font Family' @vertical={{true}}>
+            <@fields.fontFamily />
+          </FieldContainer>
+          <FieldContainer @label='Font Size' @vertical={{true}}>
+            <@fields.fontSize />
+          </FieldContainer>
+        </div>
+        <div class='typography-edit-row typography-edit-row--2col'>
+          <FieldContainer @label='Font Weight' @vertical={{true}}>
+            <@fields.fontWeight />
+          </FieldContainer>
+          <FieldContainer @label='Line Height' @vertical={{true}}>
+            <@fields.lineHeight />
+          </FieldContainer>
+        </div>
+        <FieldContainer @label='Sample Text' @vertical={{true}}>
+          <@fields.sampleText />
+        </FieldContainer>
+      </div>
+      <style scoped>
+        .typography-edit {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .typography-edit-preview {
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
+          background: var(--muted, var(--boxel-100));
+          border-radius: var(--boxel-border-radius-sm);
+          color: var(--foreground, var(--boxel-dark));
+          min-height: 2.5rem;
+          display: flex;
+          align-items: center;
+          word-break: break-word;
+        }
+        .typography-edit-row {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .typography-edit-row--2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp-sm);
+        }
+      </style>
+    </template>
+  };
 
   static embedded = TypographyEmbedded;
 
