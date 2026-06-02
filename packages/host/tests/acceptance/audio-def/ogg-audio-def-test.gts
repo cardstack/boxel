@@ -82,6 +82,27 @@ function makeMinimalOggOpus(): Uint8Array {
   return out;
 }
 
+// Same BOS/EOS pages as makeMinimalOggOpus, but with a large opaque payload
+// spliced between them so the file exceeds the streaming tail window. This
+// forces the head (first page) and tail (final page) to be parsed without the
+// middle ever being buffered — the streaming walk's whole point. Zero-filled
+// so it contains no stray "OggS" marker.
+function makeLargeOggOpus(): Uint8Array {
+  let minimal = makeMinimalOggOpus();
+  // makeMinimalOggOpus lays out page1 then page2. page1 = 27-byte header +
+  // 1 segment count + 19-byte OpusHead = 47 bytes; page2 follows.
+  const PAGE1_LEN = 47;
+  let page1 = minimal.subarray(0, PAGE1_LEN);
+  let page2 = minimal.subarray(PAGE1_LEN);
+  let middle = new Uint8Array(200 * 1024); // 200 KB, > tail window
+
+  let out = new Uint8Array(page1.length + middle.length + page2.length);
+  out.set(page1, 0);
+  out.set(middle, page1.length);
+  out.set(page2, page1.length + middle.length);
+  return out;
+}
+
 module('Acceptance | ogg audio def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -167,6 +188,7 @@ module('Acceptance | ogg audio def', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.ogg': oggBytes,
+          'large.ogg': makeLargeOggOpus(),
           'not-an-ogg.ogg': 'This is plain text, not an OGG file.',
         },
       }),
@@ -195,6 +217,28 @@ module('Acceptance | ogg audio def', function (hooks) {
       String(result.searchDoc?.contentType).includes('ogg'),
       'sets ogg content type',
     );
+  });
+
+  test('extracts duration from a large OGG (streams past the middle)', async function (assert) {
+    // The 200 KB payload between the first and final pages exceeds the
+    // streaming tail window, so this only passes if the walk parses the head
+    // and tail without buffering the middle.
+    let url = makeFileURL('large.ogg');
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: oggDefCodeRef(),
+      }),
+    );
+
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      result.searchDoc?.duration,
+      1,
+      'extracts duration from the trailing page of a large file',
+    );
+    assert.strictEqual(result.searchDoc?.name, 'large.ogg');
   });
 
   test('falls back when OggDef is used for non-OGG content', async function (assert) {

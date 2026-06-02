@@ -158,3 +158,115 @@ export function extractOggDuration(bytes: Uint8Array): { duration: number } {
   let playable = Math.max(0, granule - preSkipSamples);
   return { duration: playable / outputSampleRate };
 }
+
+// Enough of the file's start to cover the first page header (27 bytes + up to
+// 255 lacing values) plus the Vorbis/Opus identification packet that follows.
+const OGG_HEAD_BYTES = 4096;
+
+// The final page's "OggS" sits at most one max-size Ogg page (27 + 255 +
+// 255*255 = 65307 bytes) before EOF in a well-formed stream. A tail window at
+// least that large always contains the last page header and its granule
+// position. Files with more than this much trailing data after the last Ogg
+// page (non-standard) fall back to the buffered AudioDef path with no
+// duration, rather than being mis-parsed.
+const OGG_TAIL_BYTES = 65536;
+
+function concatParts(parts: Uint8Array[], length: number): Uint8Array {
+  if (parts.length === 1) {
+    return parts[0]!;
+  }
+  let out = new Uint8Array(length);
+  let offset = 0;
+  for (let part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+// Streaming counterpart to `extractOggDuration`. The duration only needs the
+// first page (codec id / sample rate) and the final page (granule position) —
+// the head and tail of the file. We retain a small head buffer and a rolling
+// tail window, letting the audio payload in between stream past without being
+// buffered, so peak memory is ~`OGG_TAIL_BYTES` rather than the whole file. A
+// `Uint8Array` input (already-buffered bytes) is parsed directly.
+export async function extractOggDurationFromStream(
+  stream: ReadableStream<Uint8Array> | Uint8Array,
+): Promise<{ duration: number }> {
+  if (stream instanceof Uint8Array) {
+    return extractOggDuration(stream);
+  }
+
+  let reader = stream.getReader();
+  let headParts: Uint8Array[] = [];
+  let headLen = 0;
+  let tailParts: Uint8Array[] = [];
+  let tailLen = 0;
+  try {
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value || value.length === 0) {
+        continue;
+      }
+      // Accumulate the head until we have enough to parse the first page.
+      if (headLen < OGG_HEAD_BYTES) {
+        headParts.push(value);
+        headLen += value.length;
+      }
+      // Maintain a rolling window of the most recent bytes: drop a front chunk
+      // only while the remainder still covers a full tail window.
+      tailParts.push(value);
+      tailLen += value.length;
+      while (
+        tailParts.length > 1 &&
+        tailLen - tailParts[0]!.length >= OGG_TAIL_BYTES
+      ) {
+        tailLen -= tailParts[0]!.length;
+        tailParts.shift();
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {
+      // Reader already drained to EOF (or released); cancelling is a no-op.
+    });
+  }
+
+  let head = concatParts(headParts, headLen);
+  let tail = concatParts(tailParts, tailLen);
+
+  if (!matchBytes(head, 0, OGGS)) {
+    throw new FileContentMismatchError(
+      'File does not start with an Ogg "OggS" page',
+    );
+  }
+
+  let dataOffset = firstPageDataOffset(head);
+  let { outputSampleRate, preSkipSamples } = readCodecInfo(head, dataOffset);
+
+  // The last "OggS" in the whole file is at or after the final page's start,
+  // which lies within the retained tail window — so scanning the window
+  // backward yields the same page the buffered parser would find.
+  let lastPageOffset = findLastOggSPage(tail);
+  if (lastPageOffset === undefined) {
+    throw new FileContentMismatchError(
+      'OGG file does not contain a parseable page header',
+    );
+  }
+  if (lastPageOffset + GRANULE_POSITION_OFFSET + 8 > tail.length) {
+    throw new FileContentMismatchError(
+      'OGG file final page header is truncated',
+    );
+  }
+
+  let view = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+  let granule = readUint64LEAsNumber(
+    view,
+    lastPageOffset + GRANULE_POSITION_OFFSET,
+  );
+
+  let playable = Math.max(0, granule - preSkipSamples);
+  return { duration: playable / outputSampleRate };
+}
