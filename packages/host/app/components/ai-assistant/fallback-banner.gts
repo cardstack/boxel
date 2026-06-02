@@ -14,9 +14,14 @@ interface Signature {
 }
 
 const FallbackBanner: TemplateOnlyComponent<Signature> = <template>
-  <div class='fallback-banner' role='status' data-test-fallback-banner ...attributes>
+  <div
+    class='fallback-banner'
+    role='status'
+    data-test-fallback-banner
+    ...attributes
+  >
     <Warning class='icon' />
-    <p class='message'>{{FALLBACK_BANNER_MESSAGE}}</p>
+    <p class='banner-message'>{{FALLBACK_BANNER_MESSAGE}}</p>
     {{#if @onDismiss}}
       <button
         type='button'
@@ -45,7 +50,7 @@ const FallbackBanner: TemplateOnlyComponent<Signature> = <template>
       width: 20px;
       height: 20px;
     }
-    .message {
+    .banner-message {
       margin: 0;
     }
     .dismiss {

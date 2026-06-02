@@ -17,9 +17,8 @@ import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import percySnapshot from '@percy/ember';
-
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -293,6 +292,53 @@ module(
     test('banner does not render', async function (assert) {
       await openAiAssistantPanel();
       assert.dom('[data-test-fallback-banner]').doesNotExist();
+    });
+  },
+);
+
+module(
+  'Integration | ai-assistant-panel | fallback-banner | live recovery when the user switches to a working SystemCard',
+  function (hooks) {
+    commonSetup(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: false,
+      systemCardAccountData: { id: BAD_SYSTEM_CARD_ID },
+    });
+
+    hooks.beforeEach(async function () {
+      ENV.defaultSystemCardId = undefined;
+      await seedRealm(mockMatrixUtils);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('banner disappears once the user picks a healthy SystemCard', async function (assert) {
+      await openAiAssistantPanel();
+      assert
+        .dom('[data-test-fallback-banner]')
+        .exists('banner is visible while the chain is broken');
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.setUserSystemCard(GOOD_SYSTEM_CARD_ID);
+      await settled();
+
+      assert
+        .dom('[data-test-fallback-banner]')
+        .doesNotExist(
+          'banner disappears reactively once the new SystemCard loads',
+        );
+      assert.false(
+        matrixService.isUsingFallbackSystemCard,
+        'chain is no longer marked as broken',
+      );
+      assert.strictEqual(
+        matrixService.systemCard?.id,
+        GOOD_SYSTEM_CARD_ID,
+        'the new user-chosen SystemCard is active',
+      );
     });
   },
 );

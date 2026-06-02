@@ -1,7 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -56,7 +56,7 @@ interface Signature {
 export default class AiAssistantPanel extends Component<Signature> {
   @tracked private copiedRoomId: string | null = null;
   @tracked private isFallbackBannerDismissed = false;
-  @tracked private bannerHeightPx: number | undefined;
+  @tracked private bannerBottomPx: number | undefined;
 
   <template>
     <Velcro
@@ -69,7 +69,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-ai-assistant-panel
         data-test-room-has-messages={{if this.roomResource.messages true false}}
         data-test-room-is-empty={{if this.roomResource.messages false true}}
-        style={{cssVar fallback-banner-height=this.bannerHeightCss}}
+        style={{cssVar chat-top-clearance=this.chatTopClearanceCss}}
         ...attributes
       >
         <@resizeHandle class='ai-assistant-panel-resize-handle' />
@@ -348,9 +348,9 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .room {
-        padding-top: calc(
-          var(--ai-assistant-panel-header-height) * 0.5 +
-            var(--fallback-banner-height, 0px)
+        padding-top: var(
+          --chat-top-clearance,
+          calc(var(--ai-assistant-panel-header-height) * 0.5)
         );
       }
 
@@ -442,18 +442,24 @@ export default class AiAssistantPanel extends Component<Signature> {
     );
   }
 
-  private get bannerHeightCss() {
-    return this.bannerHeightPx ? `${this.bannerHeightPx}px` : undefined;
+  private get chatTopClearanceCss() {
+    return this.bannerBottomPx ? `${this.bannerBottomPx}px` : undefined;
   }
 
+  // The banner is a flex child that can overflow its fixed-height container,
+  // so its bottom y in the panel — not its height — is what the room must clear.
   private measureBanner = modifier((el: HTMLElement) => {
-    let ro = new ResizeObserver(() => {
-      this.bannerHeightPx = el.offsetHeight;
-    });
+    let update = () => {
+      this.bannerBottomPx = el.offsetTop + el.offsetHeight;
+    };
+    let ro = new ResizeObserver(update);
     ro.observe(el);
+    if (el.parentElement) {
+      ro.observe(el.parentElement);
+    }
     return () => {
       ro.disconnect();
-      this.bannerHeightPx = undefined;
+      this.bannerBottomPx = undefined;
     };
   });
 
