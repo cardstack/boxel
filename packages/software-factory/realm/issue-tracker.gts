@@ -57,6 +57,7 @@ import {
   IssueTypeField,
   IssuePriorityField,
   ProjectStatusField,
+  GroupByField,
   type Column,
 } from './kanban-config';
 import { Comment } from './comment';
@@ -1047,7 +1048,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   @tracked uncategorizedCollapsed = false;
 
   get activeGroupBy(): string {
-    return this.args.model.groupBy ?? 'status';
+    const stored = this.args.model.groupBy;
+    return stored && defaultColumns.some((d) => d.key === stored)
+      ? stored
+      : 'status';
   }
 
   get groupByFieldName(): string {
@@ -1118,7 +1122,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       });
     }
 
-    if (this.args.model.groupByFallbackKey) return baseColumns;
+    let fallbackKey = this.args.model.groupByFallbackKey;
+    if (fallbackKey && optionKeys.has(fallbackKey)) return baseColumns;
     let hasOrphan = cards.some((card) => {
       let v = (card as any)[fieldName];
       return !v || !optionKeys.has(v);
@@ -1285,7 +1290,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let boardRealmURL: URL | undefined = model[realmURL];
     let projectId: string | null = model.project?.id ?? null;
     let fieldName = this.groupByFieldName;
-    let fieldValue = columnKey !== 'uncategorized' ? columnKey : null;
+    let fieldValue = columnKey !== 'uncategorized' ? columnKey : undefined;
     let cardId = await this.args.createCard?.(
       issueCodeRef,
       new URL(issueCodeRef.module),
@@ -1683,7 +1688,7 @@ export class IssueTracker extends KanbanBoard {
   static displayName = 'Issue Tracker Board';
 
   @field project = linksTo(() => Project);
-  @field groupBy = contains(StringField);
+  @field groupBy = contains(GroupByField);
   @field groupByFallbackKey = contains(StringField);
   @field cards = linksToMany(() => Issue, {
     computeVia: function (this: IssueTracker) {
