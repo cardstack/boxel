@@ -50,7 +50,7 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
 
   // --- brand-image-attachments section ---
 
-  test('brand-image-attachments section appears when brand image attachments are present', async function (this: RenderingTestContext, assert) {
+  test('attachment row renders thumbnail, var name, and url value', async function (this: RenderingTestContext, assert) {
     let image = makeImage(ImageDef, 'https://example.com/hero.png', 'hero.png');
     let card = new BrandGuide({
       brandImageAttachments: [
@@ -59,23 +59,9 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
     });
     await renderCard(loader, card, 'isolated');
 
-    assert
-      .dom('[data-test-brand-guide-section="brand-image-attachments"]')
-      .exists('brand-image-attachments section appears');
     assert
       .dom('[data-test-brand-image-attachment-var]')
-      .exists({ count: 1 }, 'one row is rendered in the dedicated section');
-  });
-
-  test('brand image attachment row renders thumbnail, dasherized variable name, and url() value', async function (this: RenderingTestContext, assert) {
-    let image = makeImage(ImageDef, 'https://example.com/hero.png', 'hero.png');
-    let card = new BrandGuide({
-      brandImageAttachments: [
-        new CompoundImageField({ name: 'heroBanner', image }),
-      ],
-    });
-    await renderCard(loader, card, 'isolated');
-
+      .exists({ count: 1 }, 'one row is rendered');
     assert
       .dom('[data-test-brand-image-attachment-thumb]')
       .hasAttribute(
@@ -91,26 +77,12 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
       );
     assert
       .dom('[data-test-brand-image-attachment-url]')
-      .hasText(
-        'url(https://example.com/hero.png)',
-        'url() value is rendered in the dd cell',
-      );
-  });
-
-  test('brand image attachments without a url are not rendered in the dedicated section', async function (this: RenderingTestContext, assert) {
-    let card = new BrandGuide({
-      brandImageAttachments: [new CompoundImageField({ name: 'missing' })],
-    });
-    await renderCard(loader, card, 'isolated');
-
-    assert
-      .dom('[data-test-brand-image-attachment-var]')
-      .doesNotExist('item with no image url is not rendered');
+      .hasText('url(https://example.com/hero.png)', 'url() value is rendered');
   });
 
   // --- custom-css section ---
 
-  test('custom-css section appears when only brand image attachments are present', async function (this: RenderingTestContext, assert) {
+  test('attachment appears in custom-css section with var name and url value', async function (this: RenderingTestContext, assert) {
     let image = makeImage(ImageDef, 'https://example.com/hero.png', 'hero.png');
     let card = new BrandGuide({
       brandImageAttachments: [
@@ -121,20 +93,7 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
 
     assert
       .dom('[data-test-brand-guide-section="custom-css"]')
-      .exists(
-        'custom-css section appears when only brand image attachments are present',
-      );
-  });
-
-  test('brand image attachments appear in custom-css section with var name and url value', async function (this: RenderingTestContext, assert) {
-    let image = makeImage(ImageDef, 'https://example.com/hero.png', 'hero.png');
-    let card = new BrandGuide({
-      brandImageAttachments: [
-        new CompoundImageField({ name: 'heroBanner', image }),
-      ],
-    });
-    await renderCard(loader, card, 'isolated');
-
+      .exists('custom-css section appears');
     assert
       .dom('[data-test-brand-guide-image-attachment-var]')
       .exists({ count: 1 }, 'one row appears in the custom-css section');
@@ -149,12 +108,17 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
       );
   });
 
-  test('brand image attachments without a url are excluded from custom-css section', async function (this: RenderingTestContext, assert) {
+  test('attachments without a url are excluded from both sections', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
       brandImageAttachments: [new CompoundImageField({ name: 'missing' })],
     });
     await renderCard(loader, card, 'isolated');
 
+    assert
+      .dom('[data-test-brand-image-attachment-var]')
+      .doesNotExist(
+        'item with no url is not rendered in brand-image-attachments',
+      );
     assert
       .dom('[data-test-brand-guide-section="custom-css"]')
       .doesNotExist(
@@ -162,7 +126,7 @@ module('Integration | brand-guide | brand image attachments', function (hooks) {
       );
     assert
       .dom('[data-test-brand-guide-image-attachment-var]')
-      .doesNotExist('no rows rendered for entries with no image url');
+      .doesNotExist('no rows rendered in custom-css section');
   });
 
   // --- CSS generation ---
