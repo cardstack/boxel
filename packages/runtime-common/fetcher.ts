@@ -1,4 +1,7 @@
+import { buildWaiter, waitForPromise } from './test-waiters';
 import type { VirtualNetwork } from './virtual-network';
+
+const fetcherWaiter = buildWaiter('fetcher');
 
 export type FetcherMiddlewareHandler = (
   req: Request,
@@ -42,11 +45,11 @@ export function fetcher(
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let token = beginAsync();
+    let token = fetcherWaiter.beginAsync();
     try {
       return responseWithWaiters(await buildNext(middlewareStack)(request));
     } finally {
-      endAsync(token);
+      fetcherWaiter.endAsync(token);
     }
   };
   return instance;
@@ -103,31 +106,4 @@ function responseWithWaiters(response: Response): Response {
       return value;
     },
   });
-}
-
-let waitForPromise: Waiters['waitForPromise'] = (p) => {
-  return p;
-};
-
-let beginAsync = (): unknown => {
-  return 'token';
-};
-
-let endAsync = (_token: unknown): void => {
-  // pass
-};
-
-export interface Waiters {
-  buildWaiter(label: string): {
-    beginAsync(): unknown;
-    endAsync(token: unknown): void;
-  };
-  waitForPromise<T>(promise: Promise<T>, label?: string): Promise<T>;
-}
-
-export function useTestWaiters(w: Waiters) {
-  ({ waitForPromise } = w);
-  let waiter = w.buildWaiter('fetcher');
-  beginAsync = waiter.beginAsync.bind(waiter);
-  endAsync = waiter.endAsync.bind(waiter);
 }

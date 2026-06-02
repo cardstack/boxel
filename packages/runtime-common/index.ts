@@ -695,6 +695,7 @@ export * from './stream';
 export * from './realm';
 export * from './realm-index-updater';
 export * from './fetcher';
+export * from './test-waiters';
 export * from './scoped-css';
 export * from './html-utils';
 export * from './utils';
