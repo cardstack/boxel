@@ -20,9 +20,7 @@ export async function getCreatedTime(
 }
 
 // Reads the content hash and size the realm persisted at write time in a
-// single row lookup. Callers that need both (e.g. the file-extract indexing
-// pass) should use this rather than calling getContentHash + getContentSize,
-// which would hit the same row twice.
+// single row lookup.
 export async function getContentMeta(
   db: DBAdapter,
   realmURL: string,
@@ -52,22 +50,6 @@ export async function getContentMeta(
           ? parseInt(contentSize)
           : Number(contentSize),
   };
-}
-
-export async function getContentHash(
-  db: DBAdapter,
-  realmURL: string,
-  localPath: string,
-): Promise<string | undefined> {
-  return (await getContentMeta(db, realmURL, localPath)).contentHash;
-}
-
-export async function getContentSize(
-  db: DBAdapter,
-  realmURL: string,
-  localPath: string,
-): Promise<number | undefined> {
-  return (await getContentMeta(db, realmURL, localPath)).contentSize;
 }
 
 // Ensures a created_at row exists for the given path; returns epoch seconds

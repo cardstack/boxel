@@ -30,8 +30,7 @@ import {
   persistFileMeta,
   removeFileMeta,
   getCreatedTime,
-  getContentHash,
-  getContentSize,
+  getContentMeta,
 } from './file-meta';
 import {
   systemError,
@@ -4014,14 +4013,13 @@ export class Realm {
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
     let realmInfo = await this.parseRealmInfo();
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
     let contentHash =
-      (this.#dbAdapter
-        ? await getContentHash(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentHashFromRef(fileRef));
+      persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef));
     let contentSize =
-      (this.#dbAdapter
-        ? await getContentSize(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentSizeFromRef(fileRef));
+      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -4066,18 +4064,21 @@ export class Realm {
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
     let realmInfo = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
-    let contentHash =
+    let searchHash =
       typeof searchDoc.contentHash === 'string'
         ? searchDoc.contentHash
-        : this.#dbAdapter
-          ? await getContentHash(this.#dbAdapter, this.url, localPath)
-          : undefined;
-    let contentSize =
+        : undefined;
+    let searchSize =
       typeof searchDoc.contentSize === 'number'
         ? searchDoc.contentSize
-        : this.#dbAdapter
-          ? await getContentSize(this.#dbAdapter, this.url, localPath)
-          : undefined;
+        : undefined;
+    // Only hit the DB when the indexed searchDoc is missing a value.
+    let persistedMeta =
+      (searchHash === undefined || searchSize === undefined) && this.#dbAdapter
+        ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+        : { contentHash: undefined, contentSize: undefined };
+    let contentHash = searchHash ?? persistedMeta.contentHash;
+    let contentSize = searchSize ?? persistedMeta.contentSize;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
