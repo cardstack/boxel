@@ -69,7 +69,9 @@ module('Unit | query', function (hooks) {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
     ]);
-    loader = new Loader(fetch, virtualNetwork.resolveImport);
+    loader = new Loader(fetch, virtualNetwork.resolveImport, {
+      virtualNetwork,
+    });
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

@@ -39,6 +39,7 @@ export default async function serialize({
   const codeRefOpts = {
     relativeTo,
     trimExecutableExtension: true as true,
+    virtualNetwork,
   };
   const metaCodeRefOpts = {
     ...codeRefOpts,
@@ -159,6 +160,7 @@ async function processAttributes({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };
@@ -479,6 +481,7 @@ function processMetaFields({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };
@@ -519,6 +522,7 @@ function processMetaField({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };

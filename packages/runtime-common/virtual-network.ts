@@ -171,6 +171,19 @@ export class VirtualNetwork {
     } else if (typeof relativeTo === 'string') {
       base = relativeTo as RealmResourceIdentifier;
     }
+    // `/`-rooted references are not valid RRI forms (resolveRRI rejects
+    // them), but they're a legitimate URL-form input — the deprecated
+    // resolver did a plain URL-join against an http(s) relativeTo.
+    // Preserve that for the URL-base case so card docs with root-relative
+    // module references keep deserializing as before.
+    if (
+      reference.startsWith('/') &&
+      !reference.startsWith('//') &&
+      typeof base === 'string' &&
+      (base.startsWith('http://') || base.startsWith('https://'))
+    ) {
+      return new URL(reference, base);
+    }
     // When `relativeTo` is a prefix-form string whose prefix isn't in
     // this VN's map, `resolveRRI` would throw because its
     // relative-against-prefix-form branches iterate VN's own mappings.
