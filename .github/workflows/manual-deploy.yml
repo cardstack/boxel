@@ -25,8 +25,11 @@ permissions:
 # (auto-deployed on every merge to main) we cancel any in-flight deploy when a
 # newer one starts, so the newest commit always wins — the superseding run is a
 # full deploy of every service, so it reconciles any partially-updated state
-# left by the cancelled run. For production (manual only) we queue instead of
-# cancel, to avoid interrupting a deliberate deploy mid-chain.
+# left by the cancelled run. Every other environment — production (manual only),
+# and any value we don't explicitly recognize — queues instead of cancelling, to
+# avoid interrupting a deliberate deploy mid-chain. Cancelling is opt-in per
+# environment (== 'staging') rather than opt-out (!= 'production') so an
+# unexpected env errs toward the safe behavior (queue), not the risky one.
 #
 # The environment is read with a fallback: `inputs.environment` for the
 # workflow_call path (merge-to-main auto deploy), then
@@ -38,7 +41,7 @@ permissions:
 # non-empty and matches every caller's default.
 concurrency:
   group: deploy-${{ inputs.environment || github.event.inputs.environment || 'staging' }}
-  cancel-in-progress: ${{ (inputs.environment || github.event.inputs.environment || 'staging') != 'production' }}
+  cancel-in-progress: ${{ (inputs.environment || github.event.inputs.environment || 'staging') == 'staging' }}
 
 jobs:
   create-deployment:
