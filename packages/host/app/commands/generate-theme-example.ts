@@ -14,6 +14,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import { createExampleInstanceFromPayload } from './generate-example-cards';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -23,6 +24,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
 
   static actionVerb = 'Create Theme Example';
 
@@ -92,6 +94,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
       examplePayload: examplePayload as Record<string, unknown>,
       realm,
       store: this.store,
+      network: this.network,
       defaultRealm: this.realm.defaultWritableRealm?.path,
       localDir: input.localDir ?? null,
     });

@@ -1,4 +1,5 @@
 import type { BaseDef, CardCrudFunctions, CardDef } from './card-api';
+import { virtualNetworkFor } from './card-api';
 import {
   copyCardURLToClipboard,
   type MenuItemOptions,
@@ -216,7 +217,11 @@ export function getDefaultCardMenuItems(
       menuItems.push({
         label: `Create Listing`,
         action: async () => {
-          const codeRef = resolveAdoptsFrom(card);
+          let vn = virtualNetworkFor(card);
+          if (!vn) {
+            throw new Error('No VirtualNetwork available to resolve codeRef');
+          }
+          const codeRef = resolveAdoptsFrom(card, vn);
           if (!codeRef) {
             throw new Error('Unable to resolve codeRef from card');
           }

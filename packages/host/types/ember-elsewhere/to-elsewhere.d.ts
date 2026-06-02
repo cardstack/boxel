@@ -1,6 +1,6 @@
 declare module 'ember-elsewhere/components/to-elsewhere' {
   import Component from '@glimmer/component';
-  import { ComponentLike } from '@glint/template';
+  import type { ComponentLike } from '@glint/template';
 
   type Signature = {
     Args: {

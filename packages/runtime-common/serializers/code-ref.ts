@@ -94,6 +94,11 @@ function codeRefAdjustments(
     return {};
   }
   let vn = opts?.virtualNetwork;
+  if (!vn) {
+    throw new Error(
+      `code-ref serializer requires opts.virtualNetwork to resolve module references`,
+    );
+  }
   let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)

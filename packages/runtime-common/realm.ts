@@ -6774,6 +6774,8 @@ export class Realm {
     let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#virtualNetwork,
     ) as ResolvedCodeRef;
     let definition =
       await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
