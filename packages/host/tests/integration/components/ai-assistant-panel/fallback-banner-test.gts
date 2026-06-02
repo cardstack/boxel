@@ -1,4 +1,4 @@
-import { settled, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
@@ -16,6 +16,8 @@ import ENV from '@cardstack/host/config/environment';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import percySnapshot from '@percy/ember';
 
 import {
   testRealmURL,
@@ -84,7 +86,7 @@ async function seedRealm(mockMatrixUtils: ReturnType<typeof setupMockMatrix>) {
     setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        '.realm.json': `{ "name": "Fallback Warning Test Realm" }`,
+        '.realm.json': `{ "name": "Fallback Banner Test Realm" }`,
         'SystemCard/default.json': SYSTEM_CARD_CONTENT,
       },
     }),
@@ -116,7 +118,7 @@ async function openAiAssistantPanel(): Promise<void> {
 }
 
 module(
-  'Integration | ai-assistant-panel | fallback-warning | broken chain (user pick fails + no env default)',
+  'Integration | ai-assistant-panel | fallback-banner | broken chain (user pick fails + no env default)',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -142,18 +144,29 @@ module(
       );
     });
 
-    test('warning icon renders in the panel header', async function (assert) {
+    test('banner renders in the panel', async function (assert) {
       await openAiAssistantPanel();
+      await percySnapshot(assert);
+      assert
+        .dom('[data-test-fallback-banner]')
+        .exists('banner is rendered when the SystemCard chain is broken');
+    });
+
+    test('clicking the dismiss button hides the banner', async function (assert) {
+      await openAiAssistantPanel();
+      assert.dom('[data-test-fallback-banner]').exists();
+
+      await click('[data-test-fallback-banner-dismiss]');
 
       assert
-        .dom('[data-test-fallback-warning]')
-        .exists('warning icon is rendered when the SystemCard chain is broken');
+        .dom('[data-test-fallback-banner]')
+        .doesNotExist('banner is removed after dismiss');
     });
   },
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-warning | broken chain (env default fails)',
+  'Integration | ai-assistant-panel | fallback-banner | broken chain (env default fails)',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -181,7 +194,7 @@ module(
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-warning | silent env-default recovery',
+  'Integration | ai-assistant-panel | fallback-banner | silent env-default recovery',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -212,15 +225,15 @@ module(
       );
     });
 
-    test('warning icon does not render', async function (assert) {
+    test('banner does not render', async function (assert) {
       await openAiAssistantPanel();
-      assert.dom('[data-test-fallback-warning]').doesNotExist();
+      assert.dom('[data-test-fallback-banner]').doesNotExist();
     });
   },
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-warning | MVP steady state (no SystemCard configured)',
+  'Integration | ai-assistant-panel | fallback-banner | MVP steady state (no SystemCard configured)',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -245,15 +258,15 @@ module(
       );
     });
 
-    test('warning icon does not render', async function (assert) {
+    test('banner does not render', async function (assert) {
       await openAiAssistantPanel();
-      assert.dom('[data-test-fallback-warning]').doesNotExist();
+      assert.dom('[data-test-fallback-banner]').doesNotExist();
     });
   },
 );
 
 module(
-  'Integration | ai-assistant-panel | fallback-warning | healthy SystemCard',
+  'Integration | ai-assistant-panel | fallback-banner | healthy SystemCard',
   function (hooks) {
     commonSetup(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -277,9 +290,9 @@ module(
       assert.strictEqual(matrixService.systemCard?.id, GOOD_SYSTEM_CARD_ID);
     });
 
-    test('warning icon does not render', async function (assert) {
+    test('banner does not render', async function (assert) {
       await openAiAssistantPanel();
-      assert.dom('[data-test-fallback-warning]').doesNotExist();
+      assert.dom('[data-test-fallback-banner]').doesNotExist();
     });
   },
 );
