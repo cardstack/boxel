@@ -3,6 +3,7 @@ import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  isJsonContentType,
   baseRealm,
   inferContentType,
   unixTime,
@@ -1121,6 +1122,7 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
+    linkContext?: Map<string, { fieldName: string }>,
   ): Promise<Map<string, CardResource<Saved>>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
@@ -1142,6 +1144,26 @@ export class RealmIndexQueryEngine {
             `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch failed for ${url} status=${response.status}`,
           );
           throw await CardError.fromFetchResponse(url, response);
+        }
+        // Gate on Content-Type before parsing. A relationship's
+        // `links.self` can point at a non-card URL (a raw image, a PDF);
+        // the server then returns binary, and handing those bytes to
+        // `response.json()` yields an opaque parse error whose message
+        // embeds the raw bytes. Fail fast with a structured, human-
+        // readable error that names the offending field, URL, and the
+        // actual content type — the common case being an author who
+        // confused an image-URL field with a card relationship.
+        let contentType = response.headers.get('content-type');
+        if (!isJsonContentType(contentType)) {
+          let fieldName = linkContext?.get(url)?.fieldName;
+          let fieldLabel = fieldName
+            ? `Relationship \`${fieldName}\``
+            : 'A relationship';
+          throw new Error(
+            `${fieldLabel} links to a non-card URL (${
+              contentType ?? 'unknown content type'
+            }): ${url}. The link should resolve to a card document; it likely points at a binary resource (e.g. an image) instead.`,
+          );
         }
         let json = await response.json();
         if (!isSingleCardDocument(json)) {
@@ -1335,6 +1357,10 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
+      // Remember which relationship field produced each cross-realm URL
+      // so a link that fails to resolve to a card can name the offending
+      // field in its error message.
+      let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1444,6 +1470,9 @@ export class RealmIndexQueryEngine {
             }
           } else {
             crossRealmURLs.add(linkURL.href);
+            if (!crossRealmFieldNames.has(linkURL.href)) {
+              crossRealmFieldNames.set(linkURL.href, { fieldName });
+            }
           }
 
           entries.push({
@@ -1491,6 +1520,7 @@ export class RealmIndexQueryEngine {
                 [...crossRealmURLs],
                 invocationId,
                 currentLayerIndex,
+                crossRealmFieldNames,
               )
             : Promise.resolve(new Map<string, CardResource<Saved>>()),
         ]);

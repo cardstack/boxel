@@ -33,7 +33,11 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import { clampSerializedError, type SerializedError } from './error';
+import {
+  clampSerializedError,
+  sanitizeForJsonb,
+  type SerializedError,
+} from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
@@ -455,11 +459,17 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    let diagnostics: Diagnostics = {
+    // Sanitize before persistence: an upstream failure can fold raw
+    // binary (e.g. a relationship link that returned image bytes) into a
+    // diagnostics string, and a single NUL / unpaired surrogate in any
+    // jsonb string aborts the whole upsert batch — taking every sibling
+    // row in the transaction down with it. Stripping those code points
+    // here keeps the batch survivable.
+    let diagnostics: Diagnostics = sanitizeForJsonb({
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    };
+    });
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -544,7 +554,10 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
+          // Same jsonb-safety treatment as `diagnostics` above: the error
+          // message itself is the most common carrier of the offending
+          // bytes, since a failed parse embeds the raw response in its text.
+          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
           has_error: true,
           diagnostics: diagnostics,
         };

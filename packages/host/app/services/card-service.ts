@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   formattedError,
+  isJsonContentType,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -179,6 +180,23 @@ export default class CardService extends Service {
       throw err;
     }
     if (response.status !== 204) {
+      // Gate on Content-Type before parsing. This path is reached when
+      // following a relationship's `links.self`, and an author can point
+      // that link at a non-card URL (e.g. an image). Such a response is
+      // not JSON, and handing its bytes to `response.json()` produces an
+      // opaque parse error whose message embeds the raw binary. Fail fast
+      // with a clean error naming the URL and the actual content type.
+      let contentType = response.headers.get('content-type');
+      if (!isJsonContentType(contentType)) {
+        let err = new Error(
+          `Expected a card document from ${urlString} but the response content type was ${
+            contentType ?? 'unknown'
+          }. If this is a relationship link, it likely points at a non-card URL (e.g. an image) rather than a card.`,
+        ) as any;
+        err.status = response.status;
+        err.responseHeaders = response.headers;
+        throw err;
+      }
       return await response.json();
     }
     return;
@@ -205,6 +223,7 @@ export default class CardService extends Service {
     return {
       status: response.status,
       content: await response.text(),
+      contentType: response.headers.get('content-type'),
     };
   }
 

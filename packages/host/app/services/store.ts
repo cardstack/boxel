@@ -1878,7 +1878,21 @@ export default class StoreService extends Service implements StoreInterface {
             vn.toURL(`${url}.json`),
           );
           if (result.status === 200) {
-            json = JSON.parse(result.content);
+            try {
+              json = JSON.parse(result.content);
+            } catch {
+              // A relationship's `links.self` can point at a non-card
+              // resource (e.g. an image URL). The fetch then returns
+              // binary / non-JSON bytes, and feeding them to JSON.parse
+              // yields an opaque "Unexpected token" error whose message
+              // embeds the raw bytes. Fail with a clean, human-readable
+              // error that names the URL and the response content type.
+              throw new Error(
+                `Could not load ${url} as a card: the response (content type ${
+                  result.contentType ?? 'unknown'
+                }) is not a card document. If this is a relationship link, it likely points at a non-card URL (e.g. an image) rather than a card.`,
+              );
+            }
           } else {
             throw new Error(
               `Received non-200 status fetching instance source ${url}.json: ${result.content}`,

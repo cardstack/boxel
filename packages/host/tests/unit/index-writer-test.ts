@@ -815,6 +815,70 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('strips jsonb-illegal code points from error_doc and diagnostics on write', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    // When a relationship link resolves to a binary resource, the failed
+    // JSON parse folds raw bytes into the error message — here a NUL
+    // (U+0000) and an unpaired UTF-16 surrogate (U+D800). Postgres rejects
+    // both inside a jsonb value, which would otherwise abort the whole
+    // batch transaction (taking every sibling render down with it). The
+    // writer must replace them so the row always persists.
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance-error',
+      error: {
+        message: 'Unexpected token \u0000\uD800 JFIF is not valid JSON',
+        status: 500,
+        additionalErrors: [
+          {
+            message: 'nested \u0000 binary',
+            status: 500,
+            additionalErrors: [],
+          } as any,
+        ],
+      },
+      diagnostics: { renderStage: 'load\u0000links' },
+    });
+    // Must not throw — the un-sanitized write rejected the upsert.
+    await batch.done();
+
+    let [row] = (await adapter.execute(
+      'SELECT * FROM boxel_index WHERE has_error = TRUE AND realm_version = 2',
+      { coerceTypes },
+    )) as unknown as BoxelIndexTable[];
+    assert.ok(row?.error_doc, 'error row persisted despite binary in message');
+
+    let nul = String.fromCharCode(0);
+    let hasIllegalCodePoint = (s: string) =>
+      s.includes(nul) ||
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(
+        s,
+      );
+    assert.notOk(
+      hasIllegalCodePoint(row.error_doc!.message),
+      'illegal code points stripped from the error message',
+    );
+    assert.true(
+      row.error_doc!.message.includes('JFIF'),
+      'the readable remainder of the message is preserved',
+    );
+    assert.notOk(
+      hasIllegalCodePoint(
+        (row.error_doc!.additionalErrors as any[])[0].message,
+      ),
+      'illegal code points stripped from nested additionalErrors too',
+    );
+    assert.strictEqual(
+      (row.diagnostics as any).renderStage,
+      'load\uFFFDlinks',
+      'illegal code points stripped from diagnostics strings too',
+    );
+  });
+
   test('error entry does not include last known good state when not available', async function (assert) {
     await setupIndex(
       adapter,
