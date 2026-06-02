@@ -1,9 +1,13 @@
 import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
+import { iconNotFoundMessage } from '@cardstack/runtime-common/error';
 
 const ICON_BASE =
   'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons';
+const LOCAL_ICON_BASE = 'http://localhost:4206/@cardstack/boxel-icons/v1/icons';
+const EXPECTED_MESSAGE =
+  'Icon "person-circle" was not found in @cardstack/boxel-icons. Check the import path against the available icons.';
 
 // Builds a bare Loader (no middleware) wrapping a fetch that returns the given
 // status. The host's loader-service has an icon-fallback middleware that
@@ -30,10 +34,7 @@ module('Unit | loader | missing boxel icon', function () {
       await loader.import(`${ICON_BASE}/person-circle.js`);
       assert.ok(false, 'expected the import to reject');
     } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        'Icon "person-circle" was not found in @cardstack/boxel-icons. Check the import path against the available icons.',
-      );
+      assert.strictEqual(err.message, EXPECTED_MESSAGE);
       assert.notOk(
         /AccessDenied/.test(err.message),
         'raw S3 XML does not leak into the message',
@@ -47,10 +48,58 @@ module('Unit | loader | missing boxel icon', function () {
       await loader.import(`${ICON_BASE}/person-circle.js`);
       assert.ok(false, 'expected the import to reject');
     } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        'Icon "person-circle" was not found in @cardstack/boxel-icons. Check the import path against the available icons.',
-      );
+      assert.strictEqual(err.message, EXPECTED_MESSAGE);
     }
+  });
+});
+
+module('Unit | loader | iconNotFoundMessage', function () {
+  test('translates a 403 from the production icon CDN', function (assert) {
+    assert.strictEqual(
+      iconNotFoundMessage(`${ICON_BASE}/person-circle.js`, 403),
+      EXPECTED_MESSAGE,
+    );
+  });
+
+  test('translates a 404 from the local icons server', function (assert) {
+    assert.strictEqual(
+      iconNotFoundMessage(`${LOCAL_ICON_BASE}/person-circle.js`, 404),
+      EXPECTED_MESSAGE,
+    );
+  });
+
+  test('ignores statuses other than 403/404', function (assert) {
+    assert.strictEqual(
+      iconNotFoundMessage(`${ICON_BASE}/person-circle.js`, 500),
+      undefined,
+    );
+  });
+
+  test('ignores non-icon module URLs', function (assert) {
+    assert.strictEqual(
+      iconNotFoundMessage('https://example.com/some/module.js', 403),
+      undefined,
+    );
+  });
+
+  test('ignores icon-path requests that are not .js modules', function (assert) {
+    // The meta manifest lives on the same CDN but is not an icon module.
+    assert.strictEqual(
+      iconNotFoundMessage(`${ICON_BASE}/../boxel-icons-meta.js`, 403),
+      // normalized URL drops the icons/ segment, so no match
+      undefined,
+    );
+    assert.strictEqual(
+      iconNotFoundMessage(`${ICON_BASE}/person-circle`, 403),
+      undefined,
+    );
+  });
+
+  test('ignores an empty icon name', function (assert) {
+    assert.strictEqual(iconNotFoundMessage(`${ICON_BASE}/.js`, 403), undefined);
+  });
+
+  test('ignores an unparseable URL', function (assert) {
+    assert.strictEqual(iconNotFoundMessage('not a url', 403), undefined);
   });
 });
