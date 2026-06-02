@@ -604,7 +604,14 @@ export default class SearchContent extends Component<Signature> {
         overscroll-behavior: none;
         height: 100%;
         background-color: var(--boxel-light);
-        padding-right: var(--boxel-sp);
+        /* `overflow-y: auto` also clips horizontal overflow, so the
+           Adorn outline stroke and type-label tab (which extend a few
+           px outside each card) get cut off on the top/left edges
+           without room. Block + inline-start padding keeps them inside
+           the clip region; the larger inline-end padding is the
+           existing scrollbar gutter. */
+        padding-block: var(--boxel-sp-xs);
+        padding-inline: var(--boxel-sp-xs) var(--boxel-sp);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .search-sheet-content.compact {
