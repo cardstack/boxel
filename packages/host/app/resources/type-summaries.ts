@@ -19,9 +19,10 @@ import {
 import {
   getBaseFilterTypeKeys,
   getFilterTypeRefs,
-  ROOT_TYPE_KEYS,
+  getRootTypeKeys,
 } from '../utils/card-search/type-filter';
 
+import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 
 /** Domain-level representation of a type option (no PickerOption dependency). */
@@ -48,6 +49,7 @@ export interface TypeSummariesArgs {
 }
 
 export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
+  @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
 
   static PAGE_SIZE = 25;
@@ -124,7 +126,10 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   }
 
   get hasNonRootBaseFilter(): boolean {
-    return getBaseFilterTypeKeys(this.#baseFilter) !== undefined;
+    return (
+      getBaseFilterTypeKeys(this.#baseFilter, this.network.virtualNetwork) !==
+      undefined
+    );
   }
 
   // -- Public methods --
@@ -143,7 +148,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
 
   updateSelected(selected: ResolvedCodeRef[]): void {
     this._previousSelectedKeys = new Set(
-      selected.map((ref) => internalKeyFor(ref, undefined)),
+      selected.map((ref) =>
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
+      ),
     );
     this._selected = selected;
   }
@@ -217,7 +224,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       const initialTypes = this.#initialSelectedTypes;
       if (initialTypes) {
         for (const ref of initialTypes) {
-          selectedIds.add(internalKeyFor(ref, undefined));
+          selectedIds.add(
+            internalKeyFor(ref, undefined, this.network.virtualNetwork),
+          );
         }
       }
 
@@ -278,7 +287,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   // -- Type filter computation --
 
   private recomputeTypeFilter(): void {
-    const allowedCodeRefs = getBaseFilterTypeKeys(this.#baseFilter);
+    const vn = this.network.virtualNetwork;
+    const allowedCodeRefs = getBaseFilterTypeKeys(this.#baseFilter, vn);
+    const rootTypeKeys = getRootTypeKeys(vn);
     const optionsById = new Map<string, TypeOption>();
 
     for (const item of this._typeSummariesData) {
@@ -289,7 +300,7 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       }
 
       // Never show root types — they are internal meta types
-      if (ROOT_TYPE_KEYS.has(codeRef)) {
+      if (rootTypeKeys.has(codeRef)) {
         continue;
       }
 
@@ -334,7 +345,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       const baseRefs =
         baseTypeRefs
           ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
-          .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
+          .map((r) =>
+            internalKeyFor(r.ref, undefined, this.network.virtualNetwork),
+          ) ?? [];
       if (baseRefs.length > 0) {
         const autoSelected = baseRefs
           .filter((ref) => optionsById.has(ref))
@@ -357,7 +370,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
     }
 
     this._previousSelectedKeys = new Set(
-      this._selected.map((ref) => internalKeyFor(ref, undefined)),
+      this._selected.map((ref) =>
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
+      ),
     );
   }
 }

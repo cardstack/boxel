@@ -11,6 +11,7 @@ import {
   resolveCardReference,
   trimJsonExtension,
   maybeRelativeReference,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from './card-api';
 import { CardContextConsumer } from './field-component';
@@ -86,9 +87,17 @@ function isInline(kind: string): boolean {
   return kind === 'inline';
 }
 
-function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+function resolveUrl(
+  raw: string,
+  baseUrl: string | null | undefined,
+  virtualNetwork?: VirtualNetwork,
+): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+    return trimJsonExtension(
+      virtualNetwork
+        ? virtualNetwork.resolveURL(raw, baseUrl || undefined).href
+        : resolveCardReference(raw, baseUrl || undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -100,7 +109,11 @@ function makeCardRef(
 ): string {
   if (!baseUrl) return cardUrl;
   try {
-    return maybeRelativeReference(new URL(cardUrl), new URL(baseUrl), undefined);
+    return maybeRelativeReference(
+      new URL(cardUrl),
+      new URL(baseUrl),
+      undefined,
+    );
   } catch {
     return cardUrl;
   }
@@ -118,6 +131,7 @@ interface CodeMirrorEditorSignature {
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    cardReferenceVirtualNetwork?: VirtualNetwork;
     /** When false, all syntax markers are visible (source mode). Default true. */
     livePreview?: boolean;
     getCards?: (
@@ -616,9 +630,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   get _resolvedCardUrls(): string[] {
     let baseUrl = this.args.cardReferenceBaseUrl;
+    let vn = this.args.cardReferenceVirtualNetwork;
     let urls = new Set<string>();
     for (let target of this._widgetTargets) {
-      urls.add(resolveUrl(target.cardId, baseUrl));
+      urls.add(resolveUrl(target.cardId, baseUrl, vn));
     }
     return [...urls];
   }
@@ -670,8 +685,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       }
     }
 
+    let vn = this.args.cardReferenceVirtualNetwork;
     return targets.map((target) => {
-      let resolvedUrl = resolveUrl(target.cardId, baseUrl);
+      let resolvedUrl = resolveUrl(target.cardId, baseUrl, vn);
       return {
         ...target,
         card: cardsByUrl.get(resolvedUrl) ?? null,

@@ -95,6 +95,7 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
             vn.toURL(reference),
@@ -166,7 +167,9 @@ export default class RenderMetaRoute extends Route<Model> {
     return {
       serialized,
       displayNames,
-      types: types.map((t) => internalKeyFor(t, undefined)),
+      types: types.map((t) =>
+        internalKeyFor(t, undefined, this.network.virtualNetwork),
+      ),
       searchDoc,
       deps,
       diagnostics,

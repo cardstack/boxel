@@ -75,23 +75,28 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let selectedCodeRef: ResolvedCodeRef | undefined;
     let skillCardId: string | undefined;
 
-    const builder = new PlanBuilder(realmIdentifier, listing);
+    const builder = new PlanBuilder(
+      realmIdentifier,
+      listing,
+      this.network.virtualNetwork,
+    );
 
+    let vn = this.network.virtualNetwork;
     builder
       .addIf(listing.specs?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planModuleInstall(listing.specs, resolver);
+        let r = planModuleInstall(listing.specs, resolver, vn);
         selectedCodeRef = r.modulesCopy[0].targetCodeRef;
         return r;
       })
       .addIf(examplesToInstall?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planInstanceInstall(examplesToInstall, resolver);
+        let r = planInstanceInstall(examplesToInstall, resolver, vn);
         let firstInstance = r.instancesCopy[0];
         exampleCardId = join(realmIdentifier, firstInstance.lid);
         selectedCodeRef = firstInstance.targetCodeRef;
         return r;
       })
       .addIf(listing.skills?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planInstanceInstall(listing.skills, resolver);
+        let r = planInstanceInstall(listing.skills, resolver, vn);
         skillCardId = join(realmIdentifier, r.instancesCopy[0].lid);
         return r;
       });

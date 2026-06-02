@@ -775,7 +775,9 @@ export default class StoreService extends Service implements StoreInterface {
     fileDef: FileDef,
   ): Promise<SingleFileMetaDocument> {
     let api = await this.cardService.getAPI();
-    return api.serializeFileDef(fileDef) as SingleFileMetaDocument;
+    return api.serializeFileDef(fileDef, {
+      virtualNetwork: this.network.virtualNetwork,
+    }) as SingleFileMetaDocument;
   }
 
   async delete(id: string): Promise<void> {
