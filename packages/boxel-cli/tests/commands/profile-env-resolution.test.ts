@@ -58,8 +58,8 @@ describe('resolveBoxelEnvironment', () => {
     process.env.BOXEL_ENVIRONMENT = 'cs-10998-foo';
     expect(resolveBoxelEnvironment()).toEqual({
       domain: 'cs-10998-foo.localhost',
-      matrixUrl: 'http://matrix.cs-10998-foo.localhost',
-      realmServerUrl: 'http://realm-server.cs-10998-foo.localhost/',
+      matrixUrl: 'https://matrix.cs-10998-foo.localhost',
+      realmServerUrl: 'https://realm-server.cs-10998-foo.localhost/',
     });
   });
 
@@ -67,8 +67,8 @@ describe('resolveBoxelEnvironment', () => {
     process.env.BOXEL_ENVIRONMENT = 'My/Branch_Name!';
     expect(resolveBoxelEnvironment()).toEqual({
       domain: 'my-branchname.localhost',
-      matrixUrl: 'http://matrix.my-branchname.localhost',
-      realmServerUrl: 'http://realm-server.my-branchname.localhost/',
+      matrixUrl: 'https://matrix.my-branchname.localhost',
+      realmServerUrl: 'https://realm-server.my-branchname.localhost/',
     });
   });
 });

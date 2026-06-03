@@ -103,8 +103,8 @@ export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
   }
   return {
     domain: `${slug}.localhost`,
-    matrixUrl: `http://matrix.${slug}.localhost`,
-    realmServerUrl: `http://realm-server.${slug}.localhost/`,
+    matrixUrl: `https://matrix.${slug}.localhost`,
+    realmServerUrl: `https://realm-server.${slug}.localhost/`,
   };
 }
 
