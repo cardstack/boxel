@@ -1214,7 +1214,7 @@ export class RealmIndexQueryEngine {
           return [url, linkResource] as const;
         }
         throw new Error(
-          `instance ${url} is not a card or file document. it is: ${JSON.stringify(
+          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
             json,
             null,
             2,
