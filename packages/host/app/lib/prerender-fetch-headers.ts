@@ -2,7 +2,7 @@ import {
   DURING_PRERENDER_HEADER,
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_JOB_ID_HEADER,
-  X_BOXEL_REQUEST_ID_HEADER,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 
 // Set by the prerender server's `evaluateOnNewDocument` before the
@@ -50,19 +50,19 @@ export function jobIdHeader(): Record<string, string> {
 
 // Per-search correlation id. Minted fresh for each `_federated-search`
 // fetch the SPA issues while rendering inside a prerender tab, and stamped
-// as `x-boxel-request-id`. The realm-server reads it back out and keys its
+// as `x-boxel-logging-correlation-id`. The realm-server reads it back out and keys its
 // `realm:search-timing` line on it, so a search the prerender observes as
 // slow (surfaced in its `queryLoadsInFlight` diagnostics) can be joined to
 // the realm-server's stage-by-stage view of the same request. Gated on the
 // prerender context — exactly like the job-id / consuming-realm headers —
 // so live SPA traffic is unaffected and emits no server-side timing line.
-export function requestIdHeader(): Record<string, string> {
+export function loggingCorrelationIdHeader(): Record<string, string> {
   let flag = (globalThis as unknown as { __boxelRenderContext?: boolean })
     .__boxelRenderContext;
   if (flag !== true) {
     return {};
   }
-  return { [X_BOXEL_REQUEST_ID_HEADER]: newCorrelationId() };
+  return { [X_BOXEL_LOGGING_CORRELATION_ID_HEADER]: newCorrelationId() };
 }
 
 function newCorrelationId(): string {

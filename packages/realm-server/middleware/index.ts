@@ -4,8 +4,8 @@ import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   logger as getLogger,
   webStreamToText,
-  sanitizeRequestId,
-  X_BOXEL_REQUEST_ID_HEADER,
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
@@ -173,10 +173,12 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   // joins to the realm-server's view of the same request. The matching
   // `realm:search-timing` line (emitted by `searchRealms`) is keyed by the
   // same value.
-  let requestId = sanitizeRequestId(ctxt.get(X_BOXEL_REQUEST_ID_HEADER));
-  let reqTag = requestId ? ` req=${requestId}` : '';
-  if (requestId) {
-    ctxt.set(X_BOXEL_REQUEST_ID_HEADER, requestId);
+  let loggingCorrelationId = sanitizeLoggingCorrelationId(
+    ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+  );
+  let corrTag = loggingCorrelationId ? ` corr=${loggingCorrelationId}` : '';
+  if (loggingCorrelationId) {
+    ctxt.set(X_BOXEL_LOGGING_CORRELATION_ID_HEADER, loggingCorrelationId);
   }
   let startedAt = Date.now();
 
@@ -199,7 +201,7 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   logger.info(
     `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
       fullRequestURL(ctxt).href
-    }${jobTag}${reqTag}`,
+    }${jobTag}${corrTag}`,
   );
 
   let onSettled = () => {
@@ -209,7 +211,7 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
     logger.info(
       `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
-      }: ${ctxt.status}${jobTag}${reqTag} dur=${Date.now() - startedAt}ms`,
+      }: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   };

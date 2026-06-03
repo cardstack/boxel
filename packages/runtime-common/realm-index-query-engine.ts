@@ -227,10 +227,19 @@ export function searchInFlightKey(
   // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
   // collide with the delimiter and cause unrelated searches to coalesce.
   try {
+    // `timings` is a per-request diagnostic collector, not part of the
+    // result-shaping opts. Exclude it from the key so it can't perturb the
+    // in-flight coalescing — two otherwise-identical searches must still
+    // dedupe even though each carries its own collector.
+    let keyOpts = opts;
+    if (opts && 'timings' in opts) {
+      let { timings: _omitTimings, ...rest } = opts;
+      keyOpts = rest;
+    }
     return JSON.stringify([
       realmURL,
       normalizeQueryForSignature(query),
-      opts ? sortKeysDeep(opts) : null,
+      keyOpts ? sortKeysDeep(keyOpts) : null,
     ]);
   } catch {
     return undefined;
@@ -341,7 +350,15 @@ export class RealmIndexQueryEngine {
     if (key !== undefined) {
       let existing = this.#inFlightSearch.get(key);
       if (existing) {
-        return await existing;
+        // A concurrent identical search is already running; this follower
+        // awaits its result instead of re-running the work. Record that wait
+        // as `coalescedWait` on the follower's own collector so its
+        // `realm:search-timing` line reflects the time spent — otherwise the
+        // follower would show no `sql`/`loadLinks` and look misleadingly
+        // instant exactly under the concurrent search load we're diagnosing.
+        return opts?.timings
+          ? await opts.timings.time('coalescedWait', () => existing)
+          : await existing;
       }
       let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
         // Identity-check before deletion: a concurrent invalidation path

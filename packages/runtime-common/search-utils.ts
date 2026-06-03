@@ -329,14 +329,14 @@ export type SearchOpts = {
   priority?: number;
   jobIdentity?: string;
   // Correlation id minted by the client (the prerendered host stamps
-  // `x-boxel-request-id` on its `_federated-search` fetch) and read back
+  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch) and read back
   // out by the request handler into opts. When present, `searchRealms`
   // instruments the server-side search pipeline and emits one
   // `realm:search-timing` line keyed by this id, so a client-observed
   // slow search can be joined to where the realm-server spent the time.
-  requestId?: string;
+  loggingCorrelationId?: string;
   // Per-request wall-clock collector. `searchRealms` creates it when a
-  // `requestId` is present and threads it down through `Realm.search` →
+  // `loggingCorrelationId` is present and threads it down through `Realm.search` →
   // `searchCards` → `loadLinks` so each post-SQL stage stamps its
   // elapsed time. Callers never supply this directly.
   timings?: RequestTimings;
@@ -384,9 +384,9 @@ export async function searchRealms(
   // Two callers: the realm-server's `handle-search` threads a collector it
   // owns (so it can emit one complete request→response line itself —
   // `opts.timings` is set, `ownsTimings` is false, we don't emit), and the
-  // host-test realm-server mock calls us with just a `requestId` (we create
+  // host-test realm-server mock calls us with just a `loggingCorrelationId` (we create
   // the collector and emit the line ourselves, which the host test observes).
-  let ownsTimings = Boolean(opts?.requestId) && !opts?.timings;
+  let ownsTimings = Boolean(opts?.loggingCorrelationId) && !opts?.timings;
   let timings =
     opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
   let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
@@ -425,7 +425,7 @@ export async function searchRealms(
   }
   if (ownsTimings && timings) {
     emitSearchTiming(
-      `req=${opts!.requestId}` +
+      `corr=${opts!.loggingCorrelationId}` +
         (opts!.jobIdentity ? ` job=${opts!.jobIdentity}` : '') +
         ` realms=${realmEntries.length}` +
         ` total=${Date.now() - startedAt}ms ` +

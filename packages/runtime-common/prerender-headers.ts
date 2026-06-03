@@ -102,14 +102,15 @@ export function sanitizeJobPriorityHeader(
 // can be joined to where the realm-server actually spent the time. Lives
 // here so the host SPA can import the header name without depending on
 // the realm-server package.
-export const X_BOXEL_REQUEST_ID_HEADER = 'x-boxel-request-id';
+export const X_BOXEL_LOGGING_CORRELATION_ID_HEADER =
+  'x-boxel-logging-correlation-id';
 
 // Sanitize the inbound request-id header. It's echoed into log lines, so
 // admit only a bounded run of URL-safe id characters (covers a UUID and
 // then some) and reject anything with whitespace or control characters
 // that could forge a log line.
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
-export function sanitizeRequestId(
+export function sanitizeLoggingCorrelationId(
   raw: string | null | undefined,
 ): string | null {
   if (typeof raw !== 'string') return null;

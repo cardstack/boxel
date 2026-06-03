@@ -8,7 +8,7 @@ import {
   baseRealm,
   rri,
   setSearchTimingSinkForTests,
-  X_BOXEL_REQUEST_ID_HEADER,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -26,14 +26,14 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 // End-to-end coverage for the search correlation id: the in-realm browser
-// (the prerendered host SPA) mints `x-boxel-request-id` on its
+// (the prerendered host SPA) mints `x-boxel-logging-correlation-id` on its
 // `_federated-search` fetch, and the realm-server's search path emits a
 // `realm:search-timing` line keyed by that same id. This proves the id
 // threads all the way from the client that originated it through to the
 // server log a triage would join against.
 //
 // The host test exercises the *real* code on both ends: the SPA's
-// `requestIdHeader()` stamps the header, and the realm-server-mock hands it
+// `loggingCorrelationIdHeader()` stamps the header, and the realm-server-mock hands it
 // to the real `searchRealms`, which emits the line. Only the prerender
 // context flag is simulated (the host normally sets it inside a prerender
 // tab).
@@ -108,7 +108,7 @@ module('Integration | search correlation id', function (hooks) {
     let sentRequestIds: string[] = [];
     let spy = async (request: Request) => {
       if (new URL(request.url).pathname.endsWith('/_federated-search')) {
-        let id = request.headers.get(X_BOXEL_REQUEST_ID_HEADER);
+        let id = request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER);
         if (id) {
           sentRequestIds.push(id);
         }
@@ -139,7 +139,9 @@ module('Integration | search correlation id', function (hooks) {
       `client-minted correlation id looks well-formed (${sentId})`,
     );
 
-    let matching = timingLines.filter((line) => line.includes(`req=${sentId}`));
+    let matching = timingLines.filter((line) =>
+      line.includes(`corr=${sentId}`),
+    );
     assert.strictEqual(
       matching.length,
       1,
@@ -168,7 +170,7 @@ module('Integration | search correlation id', function (hooks) {
     let spy = async (request: Request) => {
       if (
         new URL(request.url).pathname.endsWith('/_federated-search') &&
-        request.headers.get(X_BOXEL_REQUEST_ID_HEADER)
+        request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)
       ) {
         sawHeader = true;
       }
@@ -184,7 +186,7 @@ module('Integration | search correlation id', function (hooks) {
     assert.strictEqual(results.length, 2, 'the search still returns results');
     assert.false(
       sawHeader,
-      'live (non-prerender) traffic sends no x-boxel-request-id header',
+      'live (non-prerender) traffic sends no x-boxel-logging-correlation-id header',
     );
     assert.strictEqual(
       timingLines.length,

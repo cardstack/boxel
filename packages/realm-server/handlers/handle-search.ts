@@ -10,8 +10,8 @@ import {
   sanitizeConsumingRealmHeader,
   SearchRequestError,
   searchRealms,
-  sanitizeRequestId,
-  X_BOXEL_REQUEST_ID_HEADER,
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
   emitSearchTiming,
 } from '@cardstack/runtime-common';
@@ -47,8 +47,11 @@ export default function handleSearch(opts: {
     // outermost request→response bound (incl. body read + send) is the
     // `realm:requests` middleware's `dur=`, keyed by the same id.
     let handlerStart = Date.now();
-    let requestId = sanitizeRequestId(ctxt.get(X_BOXEL_REQUEST_ID_HEADER));
-    let timings = requestId !== null ? new RequestTimings() : undefined;
+    let loggingCorrelationId = sanitizeLoggingCorrelationId(
+      ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    let timings =
+      loggingCorrelationId !== null ? new RequestTimings() : undefined;
 
     let { realmList } = getMultiRealmAuthorization(ctxt);
 
@@ -123,7 +126,7 @@ export default function handleSearch(opts: {
     if (prerenderJobId) searchOpts.jobIdentity = prerenderJobId;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
-    // `requestId` / `timings` are deliberately kept OUT of `searchOpts`:
+    // `loggingCorrelationId` / `timings` are deliberately kept OUT of `searchOpts`:
     // that object is the job-scoped search cache's key material (see
     // `computeETag` / `getOrPopulate` below), and per-request values would
     // make every key unique and defeat the cache. They only need to reach
@@ -131,10 +134,10 @@ export default function handleSearch(opts: {
     // collector this handler emits), so they ride on the run-time opts and
     // never touch the cache key.
     let runSearchOpts =
-      requestId !== null
+      loggingCorrelationId !== null
         ? {
             ...(normalizedSearchOpts ?? {}),
-            requestId,
+            loggingCorrelationId,
             ...(timings ? { timings } : {}),
           }
         : normalizedSearchOpts;
@@ -168,11 +171,11 @@ export default function handleSearch(opts: {
     // error early returns above, which never reach here). No-op without a
     // correlation id.
     let emitTimeline = () => {
-      if (!timings || requestId === null) {
+      if (!timings || loggingCorrelationId === null) {
         return;
       }
       emitSearchTiming(
-        `req=${requestId}` +
+        `corr=${loggingCorrelationId}` +
           (prerenderJobId ? ` job=${prerenderJobId}` : '') +
           ` handler=${Date.now() - handlerStart}ms ` +
           timings.toLogFragment(),

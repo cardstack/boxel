@@ -7,11 +7,11 @@ import {
   parseSearchQueryFromPayload,
   parseSearchRequestPayload,
   SearchRequestError,
-  sanitizeRequestId,
+  sanitizeLoggingCorrelationId,
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
-  X_BOXEL_REQUEST_ID_HEADER,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
   type Query,
 } from '@cardstack/runtime-common';
@@ -124,13 +124,13 @@ function registerSearchRoutes() {
       // correlation id off the request and thread it into searchRealms, so
       // the real `realm:search-timing` line is emitted (and observable by
       // host integration tests) keyed by the id the client minted.
-      let requestId = sanitizeRequestId(
-        req.headers.get(X_BOXEL_REQUEST_ID_HEADER),
+      let loggingCorrelationId = sanitizeLoggingCorrelationId(
+        req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
       );
       let combined = await searchRealms(
         realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
         cardsQuery,
-        requestId ? { requestId } : undefined,
+        loggingCorrelationId ? { loggingCorrelationId } : undefined,
       );
 
       return new Response(JSON.stringify(combined), {
