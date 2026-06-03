@@ -69,9 +69,10 @@ module.exports = {
   },
   overrides: [
     {
-      // Files predating the "non-erasable TypeScript" lint rules added
-      // for the ts-node → Node-native-TypeScript migration. Refactor a
-      // grandfathered file to remove its entry as part of that migration.
+      // Files exempted from the erasable-TypeScript rules because they use
+      // TypeScript constructor parameter properties, which are not erasable.
+      // Do not add new files here; refactor a file to declare its fields
+      // explicitly to remove its entry.
       files: [
         'lib/matrix/response-event-data.ts',
         'lib/matrix/response-publisher.ts',

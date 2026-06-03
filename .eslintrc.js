@@ -1,9 +1,9 @@
 'use strict';
 
-// Selectors for TypeScript syntax that Node 24+ cannot run via
-// `--experimental-strip-types` (it only handles "erasable" TS). The
-// migration target — see Linear project "Migrate off ts-node to run
-// directly in node 24+" — requires keeping new code free of these.
+// Selectors for TypeScript syntax that Node cannot run via
+// `--experimental-strip-types`, which only handles "erasable" TS —
+// syntax that vanishes once type annotations are stripped. New code
+// must avoid these so it can run under Node natively, without ts-node.
 const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
   {
     selector: 'TSEnumDeclaration',
@@ -94,10 +94,10 @@ module.exports = {
       },
     },
     {
-      // Files predating the "non-erasable TypeScript" lint rules added for
-      // the ts-node → Node-native-TypeScript migration. New files MUST NOT
-      // be added to these lists; refactor a grandfathered file to remove
-      // its entry as part of that migration.
+      // Files exempted from the erasable-TypeScript rules because they use
+      // TypeScript constructor parameter properties, which are not erasable.
+      // Do not add new files here; refactor a file to declare its fields
+      // explicitly to remove its entry.
       files: [
         'packages/bot-runner/lib/command-runner.ts',
         'packages/bot-runner/lib/github.ts',
@@ -132,15 +132,21 @@ module.exports = {
       },
     },
     {
-      // Same grandfathering as above, but for the `enum` selector. The
-      // surrounding `data-test-*` selectors don't apply to these files,
-      // so it's safe to disable `no-restricted-syntax` wholesale here.
+      // Files exempted only for TypeScript `enum`, which is not erasable.
+      // The remaining erasable-syntax guards (`import =`, `export =`) still
+      // apply here — only the `enum` selector is lifted. Do not add new
+      // files here; replace the enum with a `const` object to remove the entry.
       files: [
         'packages/runtime-common/router.ts',
         'packages/runtime-common/supported-mime-type.ts',
       ],
       rules: {
-        'no-restricted-syntax': 'off',
+        'no-restricted-syntax': [
+          'error',
+          ...NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
+            (s) => s.selector !== 'TSEnumDeclaration',
+          ),
+        ],
       },
     },
   ],
