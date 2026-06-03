@@ -95,8 +95,10 @@ export function extractWebpDimensions(bytes: Uint8Array): {
         'VP8X chunk is too small to contain dimensions',
       );
     }
-    let width = (bytes[24]! | (bytes[25]! << 8) | (bytes[26]! << 16)) + 1;
-    let height = (bytes[27]! | (bytes[28]! << 8) | (bytes[29]! << 16)) + 1;
+    let width =
+      (bytes[24]! | (bytes[25]! << 8) | (bytes[26]! << 16)) + 1;
+    let height =
+      (bytes[27]! | (bytes[28]! << 8) | (bytes[29]! << 16)) + 1;
     return { width, height };
   }
 

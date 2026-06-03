@@ -74,11 +74,7 @@ export function extractJpgDimensions(bytes: Uint8Array): {
     }
 
     // Markers without a length field (standalone markers)
-    if (
-      marker === 0xd8 ||
-      marker === 0xd9 ||
-      (marker >= 0xd0 && marker <= 0xd7)
-    ) {
+    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
       continue;
     }
 
@@ -94,7 +90,9 @@ export function extractJpgDimensions(bytes: Uint8Array): {
       //   2 bytes — height (big-endian)
       //   2 bytes — width  (big-endian)
       if (offset + 2 + 5 > bytes.length) {
-        throw new FileContentMismatchError('JPEG SOF segment is truncated');
+        throw new FileContentMismatchError(
+          'JPEG SOF segment is truncated',
+        );
       }
       let height = view.getUint16(offset + 2 + 1);
       let width = view.getUint16(offset + 2 + 3);
