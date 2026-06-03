@@ -316,14 +316,22 @@ export function combinePrerenderedSearchResults(
   return combined;
 }
 
+// Shared opts contract for the federated-search path, kept in one place so
+// SearchableRealm.search, searchRealms, and Realm.search can't drift —
+// dropping a field here (e.g. priority / jobIdentity) silently breaks the
+// threading from the realm-server handler down to searchCards.
+export type SearchOpts = {
+  cacheOnlyDefinitions?: boolean;
+  skipQueryBackedExpansion?: boolean;
+  omitIncluded?: boolean;
+  priority?: number;
+  jobIdentity?: string;
+};
+
 type SearchableRealm = {
   search: (
     query: Query,
-    opts?: {
-      cacheOnlyDefinitions?: boolean;
-      skipQueryBackedExpansion?: boolean;
-      omitIncluded?: boolean;
-    },
+    opts?: SearchOpts,
   ) => Promise<LinkableCollectionDocument>;
   url?: string;
 };
@@ -331,12 +339,7 @@ type SearchableRealm = {
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
-  opts?: {
-    cacheOnlyDefinitions?: boolean;
-    skipQueryBackedExpansion?: boolean;
-    omitIncluded?: boolean;
-    jobIdentity?: string;
-  },
+  opts?: SearchOpts,
 ): Promise<LinkableCollectionDocument> {
   let realmEntries = realms
     .filter((realm): realm is SearchableRealm => Boolean(realm))
