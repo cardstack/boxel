@@ -1,7 +1,7 @@
 import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 
 import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
 
@@ -289,14 +289,18 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     // resolve to testRealmURL2 before the realm setup below indexes
     // `spec/animal.json` (whose `adoptsFrom` is `@test-realm/test2/animal`).
     // QUnit fires the outer `beforeEach` before any nested `beforeEach`,
-    // so the inner module can't add this mapping in time. Each test boots
-    // a fresh app + service container, so this is per-test scoped and
-    // harmless for the other nested modules — they just never look up
-    // anything under this prefix.
-    getService('network').virtualNetwork.addRealmMapping(
-      testPrefixRealmURL2,
-      testRealmURL2,
-    );
+    // so the inner module can't add this mapping in time. Register it
+    // only when the active module is that nested one — other sibling
+    // modules generate IDs whose canonical form depends on which mappings
+    // are present in the VN, so unconditional registration would shift
+    // them into prefix form and trip downstream realm-lookup paths.
+    let activeModuleName = QUnit.config.current?.module?.name ?? '';
+    if (activeModuleName.includes('uses a prefix-form ref')) {
+      getService('network').virtualNetwork.addRealmMapping(
+        testPrefixRealmURL2,
+        testRealmURL2,
+      );
+    }
     ({ adapter } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
