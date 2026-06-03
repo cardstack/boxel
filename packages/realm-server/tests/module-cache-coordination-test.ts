@@ -70,6 +70,7 @@ function buildModuleResponse(
   const definitionId = internalKeyFor(
     { module: rri(moduleURL), name },
     undefined,
+    stubVirtualNetwork,
   );
   return {
     id: moduleURL,
@@ -545,6 +546,7 @@ module(basename(__filename), function () {
           const definitionId = internalKeyFor(
             { module: rri(moduleURL), name: 'Foo' },
             undefined,
+            stubVirtualNetwork,
           );
           const defA = entryA?.definitions[definitionId];
           const defB = entryB?.definitions[definitionId];

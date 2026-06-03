@@ -5,8 +5,8 @@ import {
   FieldDef,
   Component,
   relativeTo,
+  virtualNetworkFor,
 } from 'https://cardstack.com/base/card-api';
-import { cardIdToURL } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import CurrencyIcon from '@cardstack/boxel-icons/currency';
 import CircleDotIcon from '@cardstack/boxel-icons/circle-dot';
@@ -23,7 +23,9 @@ export class Asset extends CardDef {
       }
       let rel = this[relativeTo] || this.id;
       let base =
-        typeof rel === 'string' ? cardIdToURL(rel) : rel;
+        typeof rel === 'string'
+          ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
+          : rel;
       return new URL(this.logoURL, base).href;
     },
   });
@@ -95,7 +97,9 @@ class AssetField extends FieldDef {
       }
       let rel = this[relativeTo] || this.id;
       let base =
-        typeof rel === 'string' ? cardIdToURL(rel) : rel;
+        typeof rel === 'string'
+          ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
+          : rel;
       return new URL(this.logoURL, base).href;
     },
   });

@@ -45,8 +45,9 @@ type RealmMetaValue = {
 };
 
 const internalKeysFor = (
+  vn: VirtualNetwork,
   ...refs: { module: RealmResourceIdentifier; name: string }[]
-) => refs.map((ref) => internalKeyFor(ref, testRealmURLObject));
+) => refs.map((ref) => internalKeyFor(ref, testRealmURLObject, vn));
 
 const makeCardResource = (
   id: string,
@@ -351,7 +352,7 @@ module('Unit | index-writer', function (hooks) {
           search_doc: { name: 'Mango' },
           deps: [`${testRealmURL}person`],
           types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
-            (i) => internalKeyFor(i, new URL(testRealmURL)),
+            (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
           ),
         },
       ],
@@ -390,7 +391,7 @@ module('Unit | index-writer', function (hooks) {
         },
         { module: rri(`./person`), name: 'Person' },
         baseCardRef,
-      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      ].map((i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork)),
     });
 
     let [liveVersion] = await adapter.execute(
@@ -426,7 +427,7 @@ module('Unit | index-writer', function (hooks) {
         search_doc: { name: 'Mango' },
         deps: [`${testRealmURL}person`],
         types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
-          (i) => internalKeyFor(i, new URL(testRealmURL)),
+          (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
         ),
       },
       'live version of the doc has not changed',
@@ -470,7 +471,7 @@ module('Unit | index-writer', function (hooks) {
           },
           { module: rri(`./person`), name: 'Person' },
           baseCardRef,
-        ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+        ].map((i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork)),
       },
       'WIP version of the doc exists',
     );
@@ -515,7 +516,7 @@ module('Unit | index-writer', function (hooks) {
           },
           { module: rri(`./person`), name: 'Person' },
           baseCardRef,
-        ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+        ].map((i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork)),
       },
       'final version of the doc exists',
     );
@@ -523,12 +524,12 @@ module('Unit | index-writer', function (hooks) {
 
   test('can copy index entries', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
-      (i) => internalKeyFor(i, new URL(testRealmURL)),
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
     );
     let destTypes = [
       { module: rri(`./person`), name: 'Person' },
       baseCardRef,
-    ].map((i) => internalKeyFor(i, new URL(testRealmURL2)));
+    ].map((i) => internalKeyFor(i, new URL(testRealmURL2), virtualNetwork));
     let modified = Date.now();
     let resource: CardResource = {
       id: testRRI('1'),
@@ -701,7 +702,7 @@ module('Unit | index-writer', function (hooks) {
 
   test('error entry includes last known good state when available', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
-      (i) => internalKeyFor(i, new URL(testRealmURL)),
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
     );
     let modified = Date.now();
     let resource: CardResource = {
@@ -1538,10 +1539,12 @@ module('Unit | index-writer', function (hooks) {
   test('update realm meta when indexing is done', async function (assert) {
     let iconHTML = '<svg>test icon</svg>';
     let personTypes = internalKeysFor(
+      virtualNetwork,
       { module: rri('./person'), name: 'Person' },
       baseCardRef,
     );
     let fancyPersonTypes = internalKeysFor(
+      virtualNetwork,
       {
         module: rri('./fancy-person'),
         name: 'FancyPerson',
@@ -1550,6 +1553,7 @@ module('Unit | index-writer', function (hooks) {
       baseCardRef,
     );
     let petTypes = internalKeysFor(
+      virtualNetwork,
       { module: rri('./pet'), name: 'Pet' },
       { module: rri('./card-api'), name: 'CardDef' },
       baseCardRef,
@@ -1726,11 +1730,12 @@ module('Unit | index-writer', function (hooks) {
     // independently of the cards group. This is what powers CardsGrid's
     // "All Files" sidebar leaves.
     let iconHTML = '<svg>file icon</svg>';
-    let baseFileTypes = internalKeysFor({
+    let baseFileTypes = internalKeysFor(virtualNetwork, {
       module: rri('./card-api'),
       name: 'FileDef',
     });
     let markdownTypes = internalKeysFor(
+      virtualNetwork,
       {
         module: rri('./markdown-file-def'),
         name: 'MarkdownDef',
@@ -1756,6 +1761,7 @@ module('Unit | index-writer', function (hooks) {
           display_names: ['Person'],
           deps: [`${testRealmURL}person`],
           types: internalKeysFor(
+            virtualNetwork,
             { module: rri('./person'), name: 'Person' },
             baseCardRef,
           ),
@@ -1855,6 +1861,7 @@ module('Unit | index-writer', function (hooks) {
     // searches and confuse the user.
     let iconHTML = '<svg>icon</svg>';
     let markdownTypes = internalKeysFor(
+      virtualNetwork,
       { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
       { module: rri('./card-api'), name: 'FileDef' },
     );
@@ -1920,6 +1927,7 @@ module('Unit | index-writer', function (hooks) {
     // physical row order happens to surface a legacy array-shape row.
     let iconHTML = '<svg>icon</svg>';
     let personTypes = internalKeysFor(
+      virtualNetwork,
       { module: rri('./person'), name: 'Person' },
       baseCardRef,
     );
@@ -2065,6 +2073,7 @@ module('Unit | index-writer', function (hooks) {
   test('update realm meta includes error entries with last known good state', async function (assert) {
     let iconHTML = '<svg>test icon</svg>';
     let personTypes = internalKeysFor(
+      virtualNetwork,
       { module: rri('./person'), name: 'Person' },
       baseCardRef,
     );

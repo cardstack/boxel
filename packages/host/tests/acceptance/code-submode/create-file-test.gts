@@ -3,14 +3,7 @@ import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  rri,
-  baseRRI,
-  Deferred,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-} from '@cardstack/runtime-common';
+import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
@@ -1347,22 +1340,25 @@ export class TestCard extends CardDef {
   });
 
   module('when a selected spec uses a prefix-form ref', function (hooks) {
-    // hooks.before (once-per-module) is intentional — the prefix needs
-    // to be registered before `setupAcceptanceTestRealm` indexes
-    // `spec/animal.json`, whose `adoptsFrom` ref is `@test-realm/test2/
-    // animal`. `hooks.beforeEach` runs *after* setupApplicationTest's
-    // own beforeEach (which is where the indexer fires), so registration
-    // would be too late. Uses the deprecated global registry directly
-    // because no VN is in scope at module-setup time (getService isn't
-    // usable in hooks.before). The VN.addRealmMapping bridge mirrors
-    // registrations into both stores, so the global form is observable
-    // on migrated paths too.
-    hooks.before(function () {
-      registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
+    // The prefix needs to be registered on the host's VirtualNetwork
+    // before `setupAcceptanceTestRealm` indexes `spec/animal.json`,
+    // whose `adoptsFrom` ref is `@test-realm/test2/animal`. The service
+    // container only exists once setupApplicationTest's beforeEach has
+    // booted the app, so register at the start of this module's
+    // beforeEach — qunit runs declared `hooks.beforeEach` callbacks in
+    // source order, so registering here before the outer beforeEach's
+    // realm setup body executes means the VN sees the mapping in time.
+    hooks.beforeEach(function () {
+      getService('network').virtualNetwork.addRealmMapping(
+        testPrefixRealmURL2,
+        testRealmURL2,
+      );
     });
 
-    hooks.after(function () {
-      unregisterCardReferencePrefix(testPrefixRealmURL2);
+    hooks.afterEach(function () {
+      getService('network').virtualNetwork.removeRealmMapping(
+        testPrefixRealmURL2,
+      );
     });
 
     test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {

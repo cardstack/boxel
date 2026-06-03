@@ -49,13 +49,14 @@ module('Unit | query', function (hooks) {
   let indexQueryEngine: IndexQueryEngine;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
+  let virtualNetwork: VirtualNetwork;
 
   hooks.before(async function () {
     dbAdapter = await getDbAdapter();
   });
 
   hooks.beforeEach(async function () {
-    let virtualNetwork = new VirtualNetwork();
+    virtualNetwork = new VirtualNetwork();
     virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
@@ -216,7 +217,7 @@ module('Unit | query', function (hooks) {
     await dbAdapter.reset();
     let mockDefinitionLookup = {
       async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-        let key = internalKeyFor(codeRef, undefined);
+        let key = internalKeyFor(codeRef, undefined, virtualNetwork);
         switch (key) {
           case `${testRealmURL}address/Address`:
             return await buildDefinition(Address as unknown as typeof CardDef);
@@ -674,7 +675,11 @@ module('Unit | query', function (hooks) {
         data: {
           search_doc: {
             cardTitle: stringFieldEntry.cardTitle,
-            ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
+            ref: internalKeyFor(
+              (stringFieldEntry as any).ref,
+              undefined,
+              virtualNetwork,
+            ),
           },
         },
       },
@@ -683,7 +688,11 @@ module('Unit | query', function (hooks) {
         data: {
           search_doc: {
             cardTitle: numberFieldEntry.cardTitle,
-            ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
+            ref: internalKeyFor(
+              (numberFieldEntry as any).ref,
+              undefined,
+              virtualNetwork,
+            ),
           },
         },
       },
@@ -3228,9 +3237,13 @@ module('Unit | query', function (hooks) {
 
   test('can get prerendered cards from the indexer', async function (assert) {
     let personCard = await personCardType(testCards);
-    let personKey = internalKeyFor(personCard, undefined);
+    let personKey = internalKeyFor(personCard, undefined, virtualNetwork);
     let fancyPersonCard = await fancyPersonCardType(testCards);
-    let fancyPersonKey = internalKeyFor(fancyPersonCard, undefined);
+    let fancyPersonKey = internalKeyFor(
+      fancyPersonCard,
+      undefined,
+      virtualNetwork,
+    );
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,
@@ -3468,9 +3481,13 @@ module('Unit | query', function (hooks) {
 
   test('can get prerendered cards in an error state from the indexer', async function (assert) {
     let personCard = await personCardType(testCards);
-    let personKey = internalKeyFor(personCard, undefined);
+    let personKey = internalKeyFor(personCard, undefined, virtualNetwork);
     let fancyPersonCard = await fancyPersonCardType(testCards);
-    let fancyPersonKey = internalKeyFor(fancyPersonCard, undefined);
+    let fancyPersonKey = internalKeyFor(
+      fancyPersonCard,
+      undefined,
+      virtualNetwork,
+    );
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,

@@ -1181,6 +1181,7 @@ module(basename(__filename), function () {
       let fileDefKey = internalKeyFor(
         { module: rri(fileDefModule), name: 'FileDef' },
         undefined,
+        realm.virtualNetwork,
       );
       await testDbAdapter.execute(
         `UPDATE boxel_index SET types = '${JSON.stringify([

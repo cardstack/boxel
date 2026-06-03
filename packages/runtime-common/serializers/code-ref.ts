@@ -9,12 +9,7 @@ import {
   executableExtensions,
 } from '../index';
 import { resolveModuleHref } from '../code-ref';
-import {
-  resolveCardReference,
-  cardIdToURL,
-  rri,
-  type RealmResourceIdentifier,
-} from '../card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from '../card-reference-resolver';
 import type { VirtualNetwork } from '../virtual-network';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
@@ -44,9 +39,9 @@ export function serialize(
   if (opts?.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
   } else if (typeof opts?.relativeTo === 'string') {
-    baseURL = vn ? vn.toURL(opts.relativeTo) : cardIdToURL(opts.relativeTo);
+    baseURL = vn ? vn.toURL(opts.relativeTo) : undefined;
   } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = vn ? vn.toURL(doc.data.id) : cardIdToURL(doc.data.id);
+    baseURL = vn ? vn.toURL(doc.data.id) : undefined;
   }
   return {
     ...codeRef,
@@ -151,15 +146,17 @@ function maybeSerializeCodeRef(
   if (codeRef && isResolvedCodeRef(codeRef)) {
     let base =
       stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
-    try {
-      let moduleHref = resolveCardReference(
-        codeRef.module,
-        base && typeof base === 'string' ? base : undefined,
-      );
-      return `${moduleHref}/${codeRef.name}`;
-    } catch {
-      return `${codeRef.module}/${codeRef.name}`;
+    // `queryableValue` / `formatQuery` don't receive a VirtualNetwork, so
+    // we can't resolve registered prefixes here. URL-like refs join
+    // against the base; bare specifiers and absolute URLs pass through.
+    if (isUrlLike(codeRef.module) && typeof base === 'string') {
+      try {
+        return `${new URL(codeRef.module, base).href}/${codeRef.name}`;
+      } catch {
+        // fall through to the as-is shape below
+      }
     }
+    return `${codeRef.module}/${codeRef.name}`;
   }
   return undefined;
 }
