@@ -36,6 +36,9 @@ const stubVirtualNetwork = {
   }) as typeof fetch,
   isRegisteredPrefix: () => false,
   toURL: (url: string) => new URL(url),
+  resolveURL: (reference: string, relativeTo: URL | string | undefined) =>
+    new URL(reference, relativeTo),
+  unresolveURL: (url: string) => url,
 } as unknown as VirtualNetwork;
 const stubCreatePrerenderAuth = (
   _userId: string,
