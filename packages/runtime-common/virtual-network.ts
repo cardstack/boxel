@@ -158,16 +158,23 @@ export class VirtualNetwork {
     }
     // `/`-rooted references are not valid RRI forms (resolveRRI rejects
     // them), but they're a legitimate URL-form input — the deprecated
-    // resolver did a plain URL-join against an http(s) relativeTo.
-    // Preserve that for the URL-base case so card docs with root-relative
-    // module references keep deserializing as before.
+    // resolver did a plain URL-join against the URL-form of `relativeTo`.
+    // Preserve that here: if the base is URL-form, join directly; if it's
+    // a registered prefix, resolve the prefix to its mapped URL first and
+    // then join. Unmapped prefix-form bases fall through to `resolveRRI`,
+    // which surfaces a "no matching prefix mapping" error.
     if (
       reference.startsWith('/') &&
       !reference.startsWith('//') &&
-      typeof base === 'string' &&
-      (base.startsWith('http://') || base.startsWith('https://'))
+      typeof base === 'string'
     ) {
-      return new URL(reference, base);
+      if (base.startsWith('http://') || base.startsWith('https://')) {
+        return new URL(reference, base);
+      }
+      let mapped = this.resolveRRIToURL(base);
+      if (mapped !== undefined) {
+        return new URL(reference, mapped);
+      }
     }
     return this.toURL(this.resolveRRI(reference, base));
   }
