@@ -49,7 +49,7 @@ const MENU_ENVIRONMENTS: Record<
   local: {
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
-    realmServerUrl: 'http://localhost:4201/',
+    realmServerUrl: 'https://localhost:4201/',
   },
 };
 
