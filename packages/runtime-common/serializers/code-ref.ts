@@ -93,16 +93,25 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
-  // Without a VirtualNetwork we can't normalize module identifiers — return
-  // empty adjustments so the caller's `{ ...codeRef, ...adjustments }` keeps
-  // the input ref intact. The `deserializeAbsolute` field-deserialize path
-  // hits this branch deliberately; the `serialize` entry points (in
-  // `card-service.ts` and `store.ts`) thread VN explicitly.
+  // The `deserializeAbsolute` field-deserialize path reaches this without
+  // opts (no VN, no `allowRelative`, no `maybeRelativeReference`). For
+  // URL-like refs we can still do a plain URL-join against `relativeTo`
+  // and apply `trimExecutableExtension`, matching the deprecated
+  // resolver's behavior. Bare specifiers (e.g. `@cardstack/boxel-host/…`)
+  // throw — `resolve` is wrapped in try/catch below, so the original
+  // ref stays intact for the loader's importMap shim.
   let vn = opts?.virtualNetwork;
-  if (!vn) {
-    return {};
-  }
-  let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
+  let resolve = (ref: string) => {
+    if (vn) {
+      return resolveModuleHref(ref, relativeTo, vn);
+    }
+    if (!isUrlLike(ref)) {
+      throw new Error(
+        `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
+      );
+    }
+    return new URL(ref, relativeTo).href;
+  };
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
