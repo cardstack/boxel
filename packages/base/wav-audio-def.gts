@@ -1,7 +1,7 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef from './audio-file-def';
-import { type ByteStream, type SerializedFile } from './file-api';
+import type { ByteStream, SerializedFile } from './file-api';
 import { extractWavDuration } from './wav-meta-extractor';
 
 // A WAVE file's `fmt ` and `data` chunk headers normally sit within the first

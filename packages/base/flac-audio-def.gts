@@ -1,7 +1,7 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef from './audio-file-def';
-import { type ByteStream, type SerializedFile } from './file-api';
+import type { ByteStream, SerializedFile } from './file-api';
 import { extractFlacDuration } from './flac-meta-extractor';
 
 // "fLaC" marker (4) + STREAMINFO block header (4) + STREAMINFO data (34) = 42.

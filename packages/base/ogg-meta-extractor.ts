@@ -12,7 +12,14 @@ const GRANULE_POSITION_OFFSET = 6;
 // Codec identification magics on the first page's data packet
 const VORBIS_ID_MAGIC = [0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73]; // "\x01vorbis"
 const OPUS_ID_MAGIC = [
-  0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64, // "OpusHead"
+  0x4f,
+  0x70,
+  0x75,
+  0x73,
+  0x48,
+  0x65,
+  0x61,
+  0x64, // "OpusHead"
 ];
 
 // Opus always outputs at 48 kHz, regardless of the encoder input sample rate
@@ -34,10 +41,7 @@ function matchBytes(
   return true;
 }
 
-function readUint64LEAsNumber(
-  view: DataView,
-  offset: number,
-): number {
+function readUint64LEAsNumber(view: DataView, offset: number): number {
   let low = view.getUint32(offset, true);
   let high = view.getUint32(offset + 4, true);
   // Granule positions for any plausible audio length fit in a JS number.

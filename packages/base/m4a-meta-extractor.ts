@@ -121,9 +121,7 @@ function parseMvhd(
   if (version === 0) {
     // creation(4) + modification(4) + timescale(4) + duration(4)
     if (cursor + 16 > mvhd.payloadEnd) {
-      throw new FileContentMismatchError(
-        'MP4 mvhd (v0) box is truncated',
-      );
+      throw new FileContentMismatchError('MP4 mvhd (v0) box is truncated');
     }
     let timescale = view.getUint32(cursor + 8);
     let duration = view.getUint32(cursor + 12);
@@ -133,9 +131,7 @@ function parseMvhd(
   if (version === 1) {
     // creation(8) + modification(8) + timescale(4) + duration(8)
     if (cursor + 28 > mvhd.payloadEnd) {
-      throw new FileContentMismatchError(
-        'MP4 mvhd (v1) box is truncated',
-      );
+      throw new FileContentMismatchError('MP4 mvhd (v1) box is truncated');
     }
     let timescale = view.getUint32(cursor + 16);
     let durHi = view.getUint32(cursor + 20);
@@ -168,9 +164,7 @@ export function extractM4aDuration(bytes: Uint8Array): { duration: number } {
 
   let moov = findChildBox(bytes, view, 0, bytes.length, MOOV);
   if (!moov) {
-    throw new FileContentMismatchError(
-      'MP4 file does not contain a moov box',
-    );
+    throw new FileContentMismatchError('MP4 file does not contain a moov box');
   }
   return durationFromMoov(bytes, view, moov);
 }
@@ -184,18 +178,20 @@ function durationFromMoov(
   view: DataView,
   moov: BoxLocation,
 ): { duration: number } {
-  let mvhd = findChildBox(bytes, view, moov.payloadOffset, moov.payloadEnd, MVHD);
+  let mvhd = findChildBox(
+    bytes,
+    view,
+    moov.payloadOffset,
+    moov.payloadEnd,
+    MVHD,
+  );
   if (!mvhd) {
-    throw new FileContentMismatchError(
-      'MP4 file does not contain a mvhd box',
-    );
+    throw new FileContentMismatchError('MP4 file does not contain a mvhd box');
   }
 
   let { timescale, duration } = parseMvhd(bytes, view, mvhd);
   if (timescale === 0) {
-    throw new FileContentMismatchError(
-      'MP4 mvhd reports a zero timescale',
-    );
+    throw new FileContentMismatchError('MP4 mvhd reports a zero timescale');
   }
   return { duration: duration / timescale };
 }
@@ -415,9 +411,7 @@ export async function extractM4aDurationFromStream(
         break;
       }
     }
-    throw new FileContentMismatchError(
-      'MP4 file does not contain a moov box',
-    );
+    throw new FileContentMismatchError('MP4 file does not contain a moov box');
   } finally {
     await reader.cancel();
   }

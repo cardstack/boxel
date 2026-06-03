@@ -272,14 +272,10 @@ export function markdownAudio(
   } catch {
     encodedHref = url;
   }
-  let attrSafeHref = encodedHref
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;');
+  let attrSafeHref = encodedHref.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   let attrSafeName = (name ?? '')
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;');
-  let ariaLabel = attrSafeName
-    ? ` aria-label="${attrSafeName}"`
-    : '';
+  let ariaLabel = attrSafeName ? ` aria-label="${attrSafeName}"` : '';
   return `<audio src="${attrSafeHref}" controls preload="metadata"${ariaLabel}></audio>`;
 }

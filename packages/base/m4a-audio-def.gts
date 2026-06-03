@@ -1,6 +1,6 @@
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef from './audio-file-def';
-import { type ByteStream, type SerializedFile } from './file-api';
+import type { ByteStream, SerializedFile } from './file-api';
 import { extractM4aDurationFromStream } from './m4a-meta-extractor';
 
 export class M4aDef extends AudioDef {

@@ -45,9 +45,7 @@ function validateWavSignature(bytes: Uint8Array): void {
     );
   }
   if (!matchTag(bytes, 8, WAVE)) {
-    throw new FileContentMismatchError(
-      'File is not a WAVE RIFF container',
-    );
+    throw new FileContentMismatchError('File is not a WAVE RIFF container');
   }
 }
 
@@ -81,9 +79,7 @@ export function extractWavDuration(bytes: Uint8Array): { duration: number } {
     let advance = CHUNK_HEADER_BYTES + chunkSize + (chunkSize & 1);
     if (advance <= CHUNK_HEADER_BYTES) {
       // Malformed (size makes us not advance) — bail rather than loop.
-      throw new FileContentMismatchError(
-        'WAV file contains a malformed chunk',
-      );
+      throw new FileContentMismatchError('WAV file contains a malformed chunk');
     }
     offset += advance;
   }
@@ -94,9 +90,7 @@ export function extractWavDuration(bytes: Uint8Array): { duration: number } {
     );
   }
   if (dataSize === undefined) {
-    throw new FileContentMismatchError(
-      'WAV file is missing a data chunk',
-    );
+    throw new FileContentMismatchError('WAV file is missing a data chunk');
   }
 
   return { duration: dataSize / byteRate };

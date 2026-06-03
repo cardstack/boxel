@@ -1,7 +1,7 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef from './audio-file-def';
-import { type ByteStream, type SerializedFile } from './file-api';
+import type { ByteStream, SerializedFile } from './file-api';
 import { extractMp3Duration } from './mp3-meta-extractor';
 
 // ID3v2 tags can be large (embedded artwork). 1 MB covers virtually all

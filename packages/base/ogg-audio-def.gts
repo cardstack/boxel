@@ -1,6 +1,6 @@
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef from './audio-file-def';
-import { type ByteStream, type SerializedFile } from './file-api';
+import type { ByteStream, SerializedFile } from './file-api';
 import { extractOggDurationFromStream } from './ogg-meta-extractor';
 
 export class OggDef extends AudioDef {
