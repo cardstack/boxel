@@ -36,7 +36,12 @@ type SearchCacheView = Pick<JobScopedSearchCache, 'jobIds' | 'clearJob'>;
 export interface JobsFinishedListenerDeps {
   dbAdapter: PgAdapter;
   searchCache: SearchCacheView;
-  // Test seam: given the job ids the cache currently holds entries for, return
+  // The per-instance wire-format cache (job_scoped_instance_cache). Swept on
+  // the same notification as the search cache — both are job-scoped and keyed
+  // by the same `<jobId>.<reservationId>` identity. Optional so deployments
+  // without the per-instance cache wired keep working unchanged.
+  instanceCache?: SearchCacheView;
+  // Test seam: given the job ids the caches currently hold entries for, return
   // the subset that have finalized. Defaults to a query against `jobs`.
   fetchFinalizedJobIds?: (candidateJobIds: number[]) => Promise<Set<number>>;
 }
@@ -122,7 +127,14 @@ export class JobsFinishedListener {
   }
 
   async #sweep(): Promise<void> {
-    let keys = await this.#deps.searchCache.jobIds();
+    // Union the keys held by both job-scoped caches; a key may live in only
+    // one of them, and a finalized job should be cleared from both. The two
+    // reads hit independent tables, so run them concurrently.
+    let [searchKeys, instanceKeys] = await Promise.all([
+      this.#deps.searchCache.jobIds(),
+      this.#deps.instanceCache?.jobIds() ?? Promise.resolve<string[]>([]),
+    ]);
+    let keys = [...new Set([...searchKeys, ...instanceKeys])];
     if (keys.length === 0) {
       return;
     }
@@ -147,7 +159,9 @@ export class JobsFinishedListener {
     let finalized = await this.#fetchFinalizedJobIds([...keysByJobId.keys()]);
     for (let jobId of finalized) {
       for (let key of keysByJobId.get(jobId) ?? []) {
+        // clearJob on a cache that doesn't hold the key is a no-op DELETE.
         await this.#deps.searchCache.clearJob(key);
+        await this.#deps.instanceCache?.clearJob(key);
       }
     }
   }

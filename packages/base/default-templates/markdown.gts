@@ -17,6 +17,7 @@ import {
   replaceMermaidSvgs,
   resolveCardReference,
   trimJsonExtension,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   hasCodeBlocks,
@@ -64,9 +65,17 @@ interface RenderSlot {
   typeName?: string; // present when state === 'unresolved'
 }
 
-function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+function resolveUrl(
+  raw: string,
+  baseUrl: string | null | undefined,
+  virtualNetwork?: VirtualNetwork,
+): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+    return trimJsonExtension(
+      virtualNetwork
+        ? virtualNetwork.resolveURL(raw, baseUrl || undefined).href
+        : resolveCardReference(raw, baseUrl || undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -77,6 +86,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     content: string | null | undefined;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    cardReferenceVirtualNetwork?: VirtualNetwork;
   };
 }> {
   @tracked monacoContextInternal: any = undefined;
@@ -173,6 +183,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     (element: HTMLElement, _positional: unknown[]) => {
       let linkedCards = this.args.linkedCards;
       let baseUrl = this.args.cardReferenceBaseUrl;
+      let virtualNetwork = this.args.cardReferenceVirtualNetwork;
       let pendingUpdate = false;
       let pendingToken: unknown = undefined;
       // On the very first modifier run linkedCards is likely still loading
@@ -197,9 +208,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         let slots: RenderSlot[] = [];
 
         for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-type="card"]',
-          ),
+          element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
         )) {
           let isInline = !!el.dataset.boxelBfmInlineRef;
           let rawUrl =
@@ -219,7 +228,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             sizeStyle = derived.sizeStyle;
           }
 
-          let card = cardsByUrl.get(resolveUrl(rawUrl, baseUrl));
+          let card = cardsByUrl.get(
+            resolveUrl(rawUrl, baseUrl, virtualNetwork),
+          );
           if (card) {
             let style: ReturnType<typeof htmlSafe> | undefined;
             if (format === 'fitted') {
@@ -430,7 +441,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     >
       {{this.renderedHtml}}
     </div>
-    {{#each this.renderSlots key="element" as |slot|}}
+    {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
         {{#if (eq slot.state 'resolved')}}
           <CardContextConsumer as |context|>
@@ -481,8 +492,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             />
           {{else}}
             <div
-              class='markdown-bfm-loading markdown-bfm-loading--block
-                markdown-bfm-loading--{{slot.format}}'
+              class='markdown-bfm-loading markdown-bfm-loading--block markdown-bfm-loading--{{slot.format}}'
               style={{slot.style}}
               aria-hidden='true'
               data-test-markdown-bfm-loading-block
@@ -502,8 +512,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             </span>
           {{else}}
             <div
-              class='markdown-bfm-broken markdown-bfm-broken--block
-                markdown-bfm-broken--{{slot.format}}'
+              class='markdown-bfm-broken markdown-bfm-broken--block markdown-bfm-broken--{{slot.format}}'
               style={{slot.style}}
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-block
@@ -921,7 +930,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           border: 1px solid var(--md-border);
           border-radius: var(--boxel-border-radius);
           background-color: var(--boxel-light-100);
-          background-image: linear-gradient(
+          background-image:
+            linear-gradient(
               to top right,
               transparent calc(50% - 0.5px),
               var(--md-border) calc(50% - 0.5px),

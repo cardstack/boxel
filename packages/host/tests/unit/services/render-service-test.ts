@@ -3,7 +3,6 @@ import { module, test } from 'qunit';
 import {
   Deferred,
   VirtualNetwork,
-  unregisterCardReferencePrefix,
   type RealmResourceIdentifier,
   type SingleCardDocument,
   type SingleFileMetaDocument,
@@ -34,14 +33,14 @@ function makeVN(): VirtualNetwork {
 }
 
 module('Unit | Service | render-service', function (hooks) {
-  // `makeVN()` registers `@test-prefix/` in the process-global card-reference
-  // prefix registry (via VirtualNetwork.addRealmMapping's backward-compat
-  // bridge). That registry outlives this module's throwaway VNs, so without
-  // cleanup the mapping leaks into sibling test modules — e.g. realm indexing
-  // then unresolves `http://test-realm/test/...` URLs back through the stale
-  // prefix and collects a spurious `@test-prefix/...` dependency alias.
+  // `makeVN()` calls `addRealmMapping`, which registers `@test-prefix/`
+  // in the module-level card-reference prefix registry (a global the
+  // VirtualNetwork bridges to). Without cleanup that mapping leaks into
+  // sibling test modules — e.g. realm indexing, whose server-side
+  // indexing would then unresolve indexed card URLs back to the
+  // `@test-prefix/` form and break its deepEqual assertions.
   hooks.afterEach(function () {
-    unregisterCardReferencePrefix(prefix);
+    new VirtualNetwork(globalThis.fetch).removeRealmMapping(prefix);
   });
 
   test('CardStoreWithErrors resolves registered prefix ids for card and file lookups', function (assert) {

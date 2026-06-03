@@ -34,6 +34,8 @@ import { SECTION_SHOW_MORE_INCREMENT } from './constants';
 import ItemButton from './item-button';
 import SearchSheetSectionHeader from './section-header';
 
+import type { ModifierLike } from '@glint/template';
+
 // Tracks which realm URLs we've already warned about to keep the diagnostic
 // to one-per-realm-per-test-run. Only populated under `isTesting()` (the
 // warning is silenced in production), so growth is bounded by realms
@@ -80,6 +82,19 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
+    // When true, ItemButton renders the Adorn visual treatment (teal hover
+    // type-label tab + teal selection chip) rather than the legacy grey
+    // hover/selection visuals.
+    adorn?: boolean;
+    // The outline class yielded by the enclosing <AdornContext>,
+    // threaded down to each ItemButton.
+    adornStrokeClass?: string;
+    // The pre-wired label positioner yielded by the enclosing
+    // <AdornContext>, threaded down to each ItemButton.
+    adornPositionLabel?: ModifierLike<{
+      Element: HTMLElement;
+      Args: { Positional: [cardEl: HTMLElement | undefined] };
+    }>;
   };
   Blocks: {};
 }
@@ -326,6 +341,9 @@ export default class SearchResultSection extends Component<Signature> {
               @multiSelect={{@multiSelect}}
               @onSelect={{@handleSelect}}
               @onSubmit={{@onSubmit}}
+              @adorn={{@adorn}}
+              @adornStrokeClass={{@adornStrokeClass}}
+              @adornPositionLabel={{@adornPositionLabel}}
             />
           {{/if}}
           {{#each this.displayedRealmCards as |card i|}}
@@ -337,6 +355,9 @@ export default class SearchResultSection extends Component<Signature> {
                 @multiSelect={{@multiSelect}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
+                @adorn={{@adorn}}
+                @adornStrokeClass={{@adornStrokeClass}}
+                @adornPositionLabel={{@adornPositionLabel}}
                 data-test-search-sheet-search-result={{i}}
               />
             {{/unless}}
@@ -377,6 +398,9 @@ export default class SearchResultSection extends Component<Signature> {
             @multiSelect={{@multiSelect}}
             @onSelect={{@handleSelect}}
             @onSubmit={{@onSubmit}}
+            @adorn={{@adorn}}
+            @adornStrokeClass={{@adornStrokeClass}}
+            @adornPositionLabel={{@adornPositionLabel}}
             data-test-search-sheet-search-result='0'
           />
         </GridContainer>
@@ -410,6 +434,9 @@ export default class SearchResultSection extends Component<Signature> {
                   @multiSelect={{@multiSelect}}
                   @onSelect={{@handleSelect}}
                   @onSubmit={{@onSubmit}}
+                  @adorn={{@adorn}}
+                  @adornStrokeClass={{@adornStrokeClass}}
+                  @adornPositionLabel={{@adornPositionLabel}}
                   data-test-recent-card-result={{removeFileExtension card.url}}
                 />
               </:default>
@@ -448,6 +475,9 @@ export default class SearchResultSection extends Component<Signature> {
                   @multiSelect={{@multiSelect}}
                   @onSelect={{@handleSelect}}
                   @onSubmit={{@onSubmit}}
+                  @adorn={{@adorn}}
+                  @adornStrokeClass={{@adornStrokeClass}}
+                  @adornPositionLabel={{@adornPositionLabel}}
                   data-test-recent-card-result={{card.id}}
                 />
               </:default>

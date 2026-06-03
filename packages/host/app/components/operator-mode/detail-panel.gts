@@ -55,6 +55,7 @@ import {
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -111,6 +112,7 @@ interface Signature {
 }
 
 export default class DetailPanel extends Component<Signature> {
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private commandService: CommandService;
@@ -497,7 +499,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get isRealmIndexCardInstance() {
-    return isRealmIndexCard(this.args.cardInstance);
+    return isRealmIndexCard(
+      this.args.cardInstance,
+      this.network.virtualNetwork,
+    );
   }
 
   private get isEmptyFile() {

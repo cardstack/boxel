@@ -19,7 +19,11 @@ import {
   type RealmIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
-import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
+import {
+  getCreatedTime,
+  ensureFileCreatedAt,
+  getContentMeta,
+} from './file-meta';
 import {
   type Expression,
   param,
@@ -303,6 +307,17 @@ export class Batch {
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
+  // Look up the content hash and size persisted at write time for a given file
+  // path, in a single row lookup. Either value is undefined when the realm has
+  // no recorded value (e.g. files written before file-meta hashing existed, or
+  // a no-op rewrite that left the columns untouched).
+  async getContentMeta(localPath: string): Promise<{
+    contentHash: string | undefined;
+    contentSize: number | undefined;
+  }> {
+    return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
   @Memoize()
   private get nodeResolvedInvalidations() {
     return [...this.invalidations].map((href) =>
@@ -410,7 +425,7 @@ export class Batch {
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
-    if (!new RealmPaths(this.realmURL).inRealm(url)) {
+    if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
       return;
@@ -1385,8 +1400,8 @@ export class Batch {
   }
 
   private copiedRealmURL(fromRealm: URL, file: URL): URL {
-    let source = new RealmPaths(fromRealm);
-    let dest = new RealmPaths(this.realmURL);
+    let source = new RealmPaths(fromRealm, this.virtualNetwork);
+    let dest = new RealmPaths(this.realmURL, this.virtualNetwork);
     if (!source.inRealm(file)) {
       return file;
     }

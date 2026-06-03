@@ -83,6 +83,9 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
@@ -98,6 +101,7 @@ export class RichMarkdownField extends FieldDef {
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -106,6 +110,9 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
@@ -121,6 +128,7 @@ export class RichMarkdownField extends FieldDef {
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -147,6 +155,9 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
@@ -197,6 +208,7 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
           </div>
         {{else}}
@@ -206,6 +218,7 @@ export class RichMarkdownField extends FieldDef {
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             />
