@@ -278,17 +278,36 @@ test.describe('Host mode', () => {
   let realm: PublishedHostModeRealm;
 
   test.beforeAll(async ({ browser }) => {
-    // `beforeAll` only has access to worker-scoped fixtures, so build a
-    // throwaway context by hand. Publishing is server-side state that
-    // outlives this context, so we close it once setup is done.
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await setRealmRedirects(page);
-    try {
-      realm = await createAndPublishHostModeRealm(page);
-    } finally {
-      await context.close();
+    // This shared setup does the work of several tests' setup, and a failure
+    // here fails the whole read-only group — so give it a longer budget and
+    // retry with a fresh context. Retrying in-hook (rather than leaning on
+    // Playwright's hook retry) avoids the failure mode where the hand-rolled
+    // context wedges and every subsequent retry times out closing it.
+    test.setTimeout(180_000);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      // `beforeAll` only has access to worker-scoped fixtures, so build a
+      // throwaway context by hand. Publishing is server-side state that
+      // outlives this context, so we close it once setup is done.
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      try {
+        await setRealmRedirects(page);
+        realm = await createAndPublishHostModeRealm(page);
+        // Don't let a wedged context's close error mask a successful setup.
+        await context.close().catch(() => {});
+        return;
+      } catch (e) {
+        lastError = e;
+        console.log(
+          `[host-mode beforeAll] setup attempt ${attempt}/3 failed: ${
+            (e as Error)?.message
+          }`,
+        );
+        await context.close().catch(() => {});
+      }
     }
+    throw lastError;
   });
 
   test('published card response includes isolated template markup', async ({
