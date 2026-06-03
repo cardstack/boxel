@@ -84,20 +84,6 @@ module('Acceptance | workspace-chooser', function (hooks) {
             },
           },
         },
-        'realm.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              hostRoutingRules: [],
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
-                name: 'RealmConfig',
-              },
-            },
-          },
-        },
       },
     });
 
