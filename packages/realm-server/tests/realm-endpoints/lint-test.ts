@@ -361,7 +361,12 @@ export class MyCard extends CardDef {
       // Warm up first so one-time, legitimately-retained initialization (eslint
       // rule definitions, prettier plugins, module caches) is established before
       // the baseline reading and isn't misattributed to the measured loop.
-      await lintOnce();
+      const warmup = await lintOnce();
+      assert.strictEqual(
+        warmup.status,
+        200,
+        'warm-up lint request should succeed so the baseline is a steady-state lint path',
+      );
 
       // Force a collection before each reading so the delta reflects retained
       // memory, not transient garbage that GC simply hasn't reclaimed yet.
@@ -392,18 +397,21 @@ export class MyCard extends CardDef {
       const memoryIncrease = finalMemory - initialMemory;
       const memoryIncreaseMb = memoryIncrease / 1024 / 1024;
 
-      // Diagnostic signal: if this assertion fails, the log shows the
-      // retained-growth number (and whether GC actually ran), so a CI failure
-      // distinguishes a real leak from measurement noise.
+      // Always record the retained-growth number (and whether GC actually ran)
+      // so a CI failure — or a passing run drifting toward the bound — can be
+      // told apart from measurement noise without another CI cycle.
       console.log(
         `[lint-memory-test] initial=${(initialMemory / 1024 / 1024).toFixed(2)}MB ` +
           `final=${(finalMemory / 1024 / 1024).toFixed(2)}MB ` +
           `retainedGrowth=${memoryIncreaseMb.toFixed(2)}MB gcForced=${gcForced}`,
       );
 
-      // With warm caches and a forced collection, ten idempotent lint operations
-      // retain almost nothing; this bound is a leak guard, not a tuned ceiling.
-      const thresholdMb = 20;
+      // The bound only means "retained memory" when a collection actually ran;
+      // with warm caches and a forced GC ten idempotent lint operations retain
+      // almost nothing, so 20MB is a generous leak guard. If GC could not be
+      // forced the delta still includes transient garbage, so fall back to the
+      // looser historical bound rather than flaking against the tight one.
+      const thresholdMb = gcForced ? 20 : 45;
       assert.ok(
         memoryIncrease < thresholdMb * 1024 * 1024,
         `Memory increase should be under ${thresholdMb}MB, got ${memoryIncreaseMb.toFixed(2)}MB (gcForced=${gcForced})`,

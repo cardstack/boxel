@@ -3,28 +3,49 @@ import { performance } from 'perf_hooks';
 import * as v8 from 'v8';
 import * as vm from 'vm';
 
+// Resolved once and cached: the test runner does not start Node with
+// `--expose-gc`, so `globalThis.gc` is normally absent and we synthesize the
+// function through the V8 flag API. Resolving lazily and caching means we
+// create at most one throwaway VM context for the whole suite rather than one
+// per `forceGc` call (a per-call context would itself allocate and perturb the
+// very heap reading the helper exists to make trustworthy). `null` records a
+// completed resolution that produced no usable function.
+let resolvedGc: (() => void) | null | undefined;
+
+function resolveGc(): (() => void) | null {
+  if (resolvedGc !== undefined) {
+    return resolvedGc;
+  }
+  let gc = (globalThis as { gc?: () => void }).gc;
+  if (typeof gc !== 'function') {
+    try {
+      v8.setFlagsFromString('--expose-gc');
+      // Evaluating `gc` throws ReferenceError if the flag didn't take effect
+      // (e.g. an unsupported V8 build); treat that as "no GC available".
+      gc = vm.runInNewContext('gc') as () => void;
+    } catch {
+      gc = undefined;
+    } finally {
+      v8.setFlagsFromString('--no-expose-gc');
+    }
+  }
+  resolvedGc = typeof gc === 'function' ? gc : null;
+  return resolvedGc;
+}
+
 /**
  * Forces a full garbage collection so that a subsequent
  * `process.memoryUsage().heapUsed` reading reflects retained memory rather
- * than uncollected transient garbage. The test runner does not start Node
- * with `--expose-gc`, so `global.gc` is normally absent; enable it at runtime
- * through the V8 flag API, then turn it back off so the rest of the process is
- * unaffected. Returns true if a collection was actually performed.
+ * than uncollected transient garbage. Returns true if a collection was
+ * actually performed, false if no GC function could be resolved — callers can
+ * branch on the result to decide how much to trust the measurement.
  *
  * Two passes: the first promotes/collects the young generation, the second
  * collects what the first pass made unreachable, so the reading settles.
  */
 export function forceGc(): boolean {
-  let gc = (globalThis as { gc?: () => void }).gc;
-  if (typeof gc !== 'function') {
-    try {
-      v8.setFlagsFromString('--expose-gc');
-      gc = vm.runInNewContext('gc') as () => void;
-    } finally {
-      v8.setFlagsFromString('--no-expose-gc');
-    }
-  }
-  if (typeof gc !== 'function') {
+  const gc = resolveGc();
+  if (!gc) {
     return false;
   }
   gc();
