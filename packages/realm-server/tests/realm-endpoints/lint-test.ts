@@ -8,6 +8,7 @@ import {
   createConcurrentTestData,
   createErrorTestCases,
   createPerformanceAssertion,
+  forceGc,
 } from '../helpers/prettier-test-utils';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -341,27 +342,38 @@ export class MyCard extends CardDef {
     });
 
     test('memory usage during lint operations', async function (assert) {
-      const initialMemory = process.memoryUsage().heapUsed;
-
       const testSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`;
 
+      const lintOnce = () =>
+        request
+          .post('/_lint')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+          )
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', 'application/json')
+          .send(testSource);
+
+      // Warm up first so one-time, legitimately-retained initialization (eslint
+      // rule definitions, prettier plugins, module caches) is established before
+      // the baseline reading and isn't misattributed to the measured loop.
+      await lintOnce();
+
+      // Force a collection before each reading so the delta reflects retained
+      // memory, not transient garbage that GC simply hasn't reclaimed yet.
+      // Without this the reading is dominated by collectible allocations from
+      // ten concurrent lint requests, which is noise, not a leak signal.
+      const gcForced = forceGc();
+      const initialMemory = process.memoryUsage().heapUsed;
+
       // Run multiple lint operations to test memory usage
       const operations = [];
       for (let i = 0; i < 10; i++) {
-        operations.push(
-          request
-            .post('/_lint')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-            )
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Accept', 'application/json')
-            .send(testSource),
-        );
+        operations.push(lintOnce());
       }
 
       const results = await Promise.all(operations);
@@ -375,13 +387,26 @@ export class MyCard extends CardDef {
         );
       });
 
+      forceGc();
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryIncrease = finalMemory - initialMemory;
+      const memoryIncreaseMb = memoryIncrease / 1024 / 1024;
 
-      // Memory increase should be reasonable (less than 45MB for lint operations)
+      // Diagnostic signal: if this assertion fails, the log shows the
+      // retained-growth number (and whether GC actually ran), so a CI failure
+      // distinguishes a real leak from measurement noise.
+      console.log(
+        `[lint-memory-test] initial=${(initialMemory / 1024 / 1024).toFixed(2)}MB ` +
+          `final=${(finalMemory / 1024 / 1024).toFixed(2)}MB ` +
+          `retainedGrowth=${memoryIncreaseMb.toFixed(2)}MB gcForced=${gcForced}`,
+      );
+
+      // With warm caches and a forced collection, ten idempotent lint operations
+      // retain almost nothing; this bound is a leak guard, not a tuned ceiling.
+      const thresholdMb = 20;
       assert.ok(
-        memoryIncrease < 45 * 1024 * 1024,
-        `Memory increase should be under 45MB, got ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
+        memoryIncrease < thresholdMb * 1024 * 1024,
+        `Memory increase should be under ${thresholdMb}MB, got ${memoryIncreaseMb.toFixed(2)}MB (gcForced=${gcForced})`,
       );
     });
 

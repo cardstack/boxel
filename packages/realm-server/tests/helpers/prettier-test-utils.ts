@@ -1,5 +1,36 @@
 // Test utilities for prettier formatting tests
 import { performance } from 'perf_hooks';
+import * as v8 from 'v8';
+import * as vm from 'vm';
+
+/**
+ * Forces a full garbage collection so that a subsequent
+ * `process.memoryUsage().heapUsed` reading reflects retained memory rather
+ * than uncollected transient garbage. The test runner does not start Node
+ * with `--expose-gc`, so `global.gc` is normally absent; enable it at runtime
+ * through the V8 flag API, then turn it back off so the rest of the process is
+ * unaffected. Returns true if a collection was actually performed.
+ *
+ * Two passes: the first promotes/collects the young generation, the second
+ * collects what the first pass made unreachable, so the reading settles.
+ */
+export function forceGc(): boolean {
+  let gc = (globalThis as { gc?: () => void }).gc;
+  if (typeof gc !== 'function') {
+    try {
+      v8.setFlagsFromString('--expose-gc');
+      gc = vm.runInNewContext('gc') as () => void;
+    } finally {
+      v8.setFlagsFromString('--no-expose-gc');
+    }
+  }
+  if (typeof gc !== 'function') {
+    return false;
+  }
+  gc();
+  gc();
+  return true;
+}
 
 interface FormattingTestCase {
   name: string;
