@@ -434,18 +434,26 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
-    // Pre-warm only the modules this batch's invalidations actually
-    // touch — the invalidated module files plus the per-row deps of the
-    // invalidated cards. The realm-wide `.gts`/`.gjs` sweep is reserved
-    // for from-scratch indexing, where the persistent module cache is
-    // cold by definition. On an incremental that cache is already
-    // populated by the prior from-scratch, so a sibling module a card
-    // references only by string resolves through the on-demand
-    // `lookupDefinition` read-through during the visit (PagePool-safe:
-    // the sub-prerender materializes its own tab) rather than paying an
-    // O(realm) sweep for a single-file edit. Passing an empty base set
-    // also skips the filesystem-mtimes walk this path would otherwise
-    // run only to build that sweep.
+    // Still pre-warm, but only the modules this batch will actually
+    // render. For each invalidation `preWarmModulesTable` primes the
+    // definition cache for the invalidated module file itself (when
+    // executable) plus the per-row `boxel_index` deps of the invalidated
+    // cards (and the `adoptsFrom` module of a novel `.json`). Front-
+    // loading those before the visit phase lets a dependent card's render
+    // hit the cache instead of firing a same-affinity sub-`prerenderModule`
+    // mid-render — the per-invalidation warming, bounded by invalidation
+    // size rather than realm size.
+    //
+    // The empty base set drops only the realm-wide `.gts`/`.gjs` sweep.
+    // That sweep exists to prime sibling modules a card references by
+    // string (which never appear in any instance's runtime deps) and is
+    // worth its O(realm) cost only on from-scratch, where the cache is
+    // cold by definition. On an incremental the cache is already warm from
+    // the prior from-scratch, and any miss resolves through the on-demand
+    // `lookupDefinition` read-through during the visit (PagePool-safe: the
+    // sub-prerender materializes its own tab). Skipping it also avoids the
+    // filesystem-mtimes walk this path would otherwise run only to build
+    // the sweep.
     // Pre-warm reports each warmed module as a `file-visited`; modules and
     // the files visited below share one `totalFiles` so the dashboard bar
     // spans both phases.
