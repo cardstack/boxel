@@ -1881,13 +1881,9 @@ export default class StoreService extends Service implements StoreInterface {
             vn.toURL(`${url}.json`),
           );
           if (result.status === 200) {
-            // A relationship's `links.self` can point at a non-card
-            // resource (e.g. an image URL). The fetch then returns binary
-            // / non-JSON bytes. Gate on Content-Type before parsing so we
-            // fail fast — instead of handing a large binary body to
-            // JSON.parse and getting an opaque "Unexpected token" error
-            // whose message embeds the raw bytes — and stay aligned with
-            // the other relationship-link fetch paths.
+            // A relationship link can point at a non-card URL (e.g. an
+            // image); gate on Content-Type so the binary body never
+            // reaches JSON.parse.
             if (!isJsonContentType(result.contentType)) {
               throw new Error(
                 `Could not load ${url} as a card: the response (content type ${

@@ -1167,14 +1167,9 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        // Gate on Content-Type before parsing. A relationship's
-        // `links.self` can point at a non-card URL (a raw image, a PDF);
-        // the server then returns binary, and handing those bytes to
-        // `response.json()` yields an opaque parse error whose message
-        // embeds the raw bytes. Fail fast with a structured, human-
-        // readable error that names the offending field, URL, and the
-        // actual content type — the common case being an author who
-        // confused an image-URL field with a card relationship.
+        // A relationship link can point at a non-card URL (e.g. an image);
+        // gate on Content-Type so the binary body never reaches JSON.parse,
+        // and name the offending field in the error.
         let contentType = response.headers.get('content-type');
         if (!isJsonContentType(contentType)) {
           let fieldName = linkContext?.get(url)?.fieldName;
@@ -1484,9 +1479,8 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
-      // Remember which relationship field produced each cross-realm URL
-      // so a link that fails to resolve to a card can name the offending
-      // field in its error message.
+      // Maps each cross-realm URL to the field that produced it, so a
+      // non-card link can name the offending field in its error.
       let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {

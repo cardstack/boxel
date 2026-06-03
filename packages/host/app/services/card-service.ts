@@ -180,12 +180,8 @@ export default class CardService extends Service {
       throw err;
     }
     if (response.status !== 204) {
-      // Gate on Content-Type before parsing. This path is reached when
-      // following a relationship's `links.self`, and an author can point
-      // that link at a non-card URL (e.g. an image). Such a response is
-      // not JSON, and handing its bytes to `response.json()` produces an
-      // opaque parse error whose message embeds the raw binary. Fail fast
-      // with a clean error naming the URL and the actual content type.
+      // A relationship link can point at a non-card URL (e.g. an image);
+      // gate on Content-Type so the binary body never reaches JSON.parse.
       let contentType = response.headers.get('content-type');
       if (!isJsonContentType(contentType)) {
         let err = new Error(

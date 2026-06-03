@@ -822,12 +822,9 @@ module('Unit | index-writer', function (hooks) {
       [],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    // When a relationship link resolves to a binary resource, the failed
-    // JSON parse folds raw bytes into the error message — here a NUL
-    // (U+0000) and an unpaired UTF-16 surrogate (U+D800). Postgres rejects
-    // both inside a jsonb value, which would otherwise abort the whole
-    // batch transaction (taking every sibling render down with it). The
-    // writer must replace them so the row always persists.
+    // A NUL and an unpaired surrogate in the error message + diagnostics:
+    // Postgres rejects both in jsonb, so without sanitization this write
+    // aborts the whole batch.
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance-error',
       error: {

@@ -2,12 +2,6 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { isJsonContentType } from '@cardstack/runtime-common';
 
-// `isJsonContentType` gates `response.json()` on the paths that follow a
-// relationship's `links.self`. A link pointing at a binary resource (an
-// image, a PDF) returns a non-JSON content type; recognizing that lets
-// the caller fail fast with a clean error instead of feeding raw bytes
-// to JSON.parse. These tests pin which media types count as JSON.
-
 module(basename(__filename), function () {
   test('accepts application/json and JSON-suffix media types', function (assert) {
     assert.true(isJsonContentType('application/json'));

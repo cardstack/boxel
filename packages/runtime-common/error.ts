@@ -62,16 +62,10 @@ export interface SerializedError {
 // The budget is set to 8 MiB: 32× under the jsonb limit, plenty of
 // debug headroom for healthy errors, and small enough to leave room
 // for the rest of the row (`pristine_doc` / `search_doc` etc.).
-// Postgres rejects two classes of code point inside a `jsonb` value's
-// text: the NUL character (U+0000 — `22P05 unsupported Unicode escape
-// sequence`) and unpaired UTF-16 surrogate halves (which can't be
-// re-encoded to valid UTF-8). When an upstream parse failure folds raw
-// binary into an error message (e.g. a relationship link returning JPEG
-// bytes), a single such code point in any string of the error_doc /
-// diagnostics payload aborts the whole upsert — taking down every
-// successfully-rendered sibling in the same batch. `sanitizeForJsonb`
-// walks a JSON-shaped value and replaces every offending code point with
-// the replacement character so the row can always be persisted.
+// Postgres rejects the NUL character (`22P05`) and unpaired UTF-16
+// surrogate halves inside a `jsonb` value's text. A single such code
+// point — e.g. raw binary folded into an error message — aborts the
+// whole upsert batch, so `sanitizeForJsonb` replaces them before write.
 /* eslint-disable no-control-regex -- matching the NUL control character is the whole point */
 const JSONB_ILLEGAL_CODE_POINTS =
   /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;

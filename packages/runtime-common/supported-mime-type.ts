@@ -20,12 +20,10 @@ export enum SupportedMimeType {
 }
 /* eslint-enable @typescript-eslint/no-duplicate-enum-values */
 
-// True when a `Content-Type` header denotes a JSON-family media type —
-// `application/json` or any structured-suffix variant (`+json`, e.g.
-// `application/vnd.api+json`, `application/vnd.card+json`). Used to gate
-// `response.json()` on paths that follow a relationship's `links.self`,
-// so a link that points at a binary resource (an image URL, a PDF) is
-// rejected with a clean error instead of feeding raw bytes to JSON.parse.
+// True for `application/json` or any `+json` structured-suffix type
+// (e.g. `application/vnd.api+json`). Used to gate `response.json()` when
+// following a relationship's `links.self`, so a link to a binary resource
+// fails cleanly instead of feeding raw bytes to JSON.parse.
 export function isJsonContentType(
   contentType: string | null | undefined,
 ): boolean {

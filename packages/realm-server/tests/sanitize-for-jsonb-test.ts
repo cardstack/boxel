@@ -2,15 +2,9 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { sanitizeForJsonb } from '@cardstack/runtime-common';
 
-// `sanitizeForJsonb` is the chokepoint that keeps an error_doc /
-// diagnostics payload writable to a Postgres `jsonb` column. Postgres
-// rejects the NUL character (U+0000 — `22P05 unsupported Unicode escape
-// sequence`) and unpaired UTF-16 surrogate halves inside jsonb text. A
-// single such code point — e.g. raw bytes folded into an error message
-// when a relationship link returns a binary response — would otherwise
-// abort the whole upsert batch, taking every sibling render down with
-// it. These tests pin the replacement behavior and the pass-through
-// guarantee for clean values.
+// `sanitizeForJsonb` replaces the code points Postgres rejects in a
+// `jsonb` value (NUL, unpaired UTF-16 surrogates) while leaving clean
+// values untouched.
 
 const NUL = String.fromCharCode(0x0000);
 const LONE_HIGH_SURROGATE = String.fromCharCode(0xd800);
