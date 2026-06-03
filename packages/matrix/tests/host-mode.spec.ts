@@ -296,7 +296,18 @@ async function createAndPublishHostModeRealm(
 // `_publish-realm` POST returns before the published realm has finished
 // re-indexing/prerendering, so navigating "cold" races that work and is the
 // source of the flaky `page.goto` timeouts this suite previously hit.
-async function waitForPublishedMarker(page: Page, url: string, marker: string) {
+//
+// Budget generously (not waitUntil's 10s default): this is the readiness gate
+// for a realm that may still be indexing under CI load, so a tight poll would
+// fail a slow-but-eventually-ready realm earlier than the old bare navigation
+// (which was bounded by the 60s test timeout). 45s stays under that test
+// timeout while leaving headroom for the navigation/assertions that follow.
+async function waitForPublishedMarker(
+  page: Page,
+  url: string,
+  marker: string,
+  timeout = 45_000,
+) {
   await waitUntil(async () => {
     let response = await page.request.get(url, {
       headers: { Accept: 'text/html' },
@@ -306,7 +317,7 @@ async function waitForPublishedMarker(page: Page, url: string, marker: string) {
     }
     let text = await response.text();
     return text.includes(marker);
-  });
+  }, timeout);
 }
 
 // Read-only tests share a single published realm created once per worker.
@@ -351,6 +362,8 @@ test.describe('Host mode', () => {
   test('published card response includes isolated template markup', async ({
     page,
   }) => {
+    // Same readiness-gate budget as waitForPublishedMarker (not waitUntil's
+    // 10s default) — the realm may still be indexing under CI load.
     let html = await waitUntil(async () => {
       let response = await page.request.get(realm.publishedCardURL, {
         headers: { Accept: 'text/html' },
@@ -362,7 +375,7 @@ test.describe('Host mode', () => {
 
       let text = await response.text();
       return text.includes('data-test-host-mode-isolated') ? text : false;
-    });
+    }, 45_000);
 
     expect(html).toContain('data-test-host-mode-isolated');
 
