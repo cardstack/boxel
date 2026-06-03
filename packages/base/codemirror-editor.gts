@@ -8,7 +8,6 @@ import { scheduleOnce } from '@ember/runloop';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
-  resolveCardReference,
   trimJsonExtension,
   maybeRelativeReference,
   type VirtualNetwork,
@@ -90,13 +89,14 @@ function isInline(kind: string): boolean {
 function resolveUrl(
   raw: string,
   baseUrl: string | null | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork | undefined,
 ): string {
+  if (!virtualNetwork) {
+    return trimJsonExtension(raw);
+  }
   try {
     return trimJsonExtension(
-      virtualNetwork
-        ? virtualNetwork.resolveURL(raw, baseUrl || undefined).href
-        : resolveCardReference(raw, baseUrl || undefined),
+      virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
     );
   } catch {
     return trimJsonExtension(raw);

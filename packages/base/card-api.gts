@@ -90,7 +90,6 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
-  resolveCardReference,
   rri,
   type RealmResourceIdentifier,
   type VirtualNetwork,
@@ -4654,17 +4653,19 @@ export function virtualNetworkFor(
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the store's VirtualNetwork when available, falling back to
-// the deprecated module-level resolver when it's absent.
+// string through the store's VirtualNetwork.
 function resolveRef(
   store: CardStore | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   let vn = store?.virtualNetwork;
-  return vn
-    ? vn.resolveURL(reference, relativeTo).href
-    : resolveCardReference(reference, relativeTo);
+  if (!vn) {
+    throw new Error(
+      `resolveRef requires a CardStore with a VirtualNetwork to resolve "${reference}"`,
+    );
+  }
+  return vn.resolveURL(reference, relativeTo).href;
 }
 
 function myLoader(): Loader {

@@ -1,5 +1,4 @@
 import {
-  cardIdToURL,
   extractCardReferenceUrls,
   fieldSerializer,
   relativeTo,
@@ -59,7 +58,7 @@ export class RichMarkdownField extends FieldDef {
       let rel = this[relativeTo];
       let baseUrl = rel
         ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? cardIdToURL(rel).href)
+          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
           : rel.href
         : '';
       return extractCardReferenceUrls(
@@ -94,7 +93,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     <template>
@@ -121,7 +120,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     <template>
@@ -166,7 +165,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     get linkedCards(): CardDef[] | null {

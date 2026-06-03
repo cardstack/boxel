@@ -36,7 +36,6 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  resolveCardReference,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -943,9 +942,10 @@ export class Spec extends CardDef {
         return undefined;
       }
       let vn = virtualNetworkFor(this);
-      return vn
-        ? vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href
-        : resolveCardReference(this.ref.module, this.id ?? this[relativeTo]);
+      if (!vn) {
+        return undefined;
+      }
+      return vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);

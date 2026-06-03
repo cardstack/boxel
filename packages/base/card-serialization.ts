@@ -30,8 +30,6 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
-  isRegisteredPrefix,
-  cardIdToURL,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
@@ -227,20 +225,19 @@ export function serializeCard(
     ...opts,
     ...{
       maybeRelativeReference(possibleReference: string) {
+        if (!opts?.virtualNetwork) {
+          throw new Error(
+            `serializeCard requires opts.virtualNetwork to relativize "${possibleReference}"`,
+          );
+        }
         // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
         // in their canonical portable form — return as-is
-        if (
-          opts?.virtualNetwork
-            ? opts.virtualNetwork.isRegisteredPrefix(possibleReference)
-            : isRegisteredPrefix(possibleReference)
-        ) {
+        if (opts.virtualNetwork.isRegisteredPrefix(possibleReference)) {
           return possibleReference;
         }
         let modelRelativeToForURL =
           typeof modelRelativeTo === 'string'
-            ? opts?.virtualNetwork
-              ? opts.virtualNetwork.toURL(modelRelativeTo)
-              : cardIdToURL(modelRelativeTo)
+            ? opts.virtualNetwork.toURL(modelRelativeTo)
             : modelRelativeTo;
         let url = maybeURL(possibleReference, modelRelativeToForURL);
         if (!url) {
@@ -335,20 +332,19 @@ export function serializeFileDef(
       ...opts,
       ...{
         maybeRelativeReference(possibleReference: string) {
+          if (!opts?.virtualNetwork) {
+            throw new Error(
+              `serializeFileDef requires opts.virtualNetwork to relativize "${possibleReference}"`,
+            );
+          }
           // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
           // in their canonical portable form — return as-is
-          if (
-            opts?.virtualNetwork
-              ? opts.virtualNetwork.isRegisteredPrefix(possibleReference)
-              : isRegisteredPrefix(possibleReference)
-          ) {
+          if (opts.virtualNetwork.isRegisteredPrefix(possibleReference)) {
             return possibleReference;
           }
           let modelRelativeToForURL =
             typeof modelRelativeTo === 'string'
-              ? opts?.virtualNetwork
-                ? opts.virtualNetwork.toURL(modelRelativeTo)
-                : cardIdToURL(modelRelativeTo)
+              ? opts.virtualNetwork.toURL(modelRelativeTo)
               : modelRelativeTo;
           let url = maybeURL(possibleReference, modelRelativeToForURL);
           if (!url) {
