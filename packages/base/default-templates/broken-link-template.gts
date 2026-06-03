@@ -34,6 +34,22 @@ interface NormalizedAdditionalError {
   stack?: string;
 }
 
+// Only http(s) references are navigable. The brokenUrl is a card reference
+// from trusted serialization, but a corrupted realm could ship a non-http
+// value; "Open anyway" forwards it into viewCard, so reject other protocols
+// (`javascript:`, `data:`, …) — the same reasoning that keeps the URL display
+// plain text rather than a link.
+function parseHttpUrl(url: string): URL | null {
+  try {
+    let parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // Solid amber warning triangle with a black "!" — a two-tone svg the
 // single-colour boxel icon can't express. Shared by the reveal trigger and the
 // overlay title; `@size` sets both svg dimensions so each caller can match its
@@ -145,29 +161,16 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
   // "Open anyway" navigates to the broken reference even though it failed to
   // load — the host's viewCard decides the destination per submode (a stack
   // visit in interact, a code-editor jump in code). Hidden when no viewCard is
-  // wired (e.g. a context that can't navigate) or the reference can't be parsed
-  // into a URL.
+  // wired (e.g. a context that can't navigate) or the reference isn't a
+  // navigable http(s) URL.
   private get canOpen(): boolean {
-    if (!this.args.viewCard) {
-      return false;
-    }
-    try {
-      new URL(this.args.brokenUrl);
-      return true;
-    } catch {
-      return false;
-    }
+    return !!this.args.viewCard && parseHttpUrl(this.args.brokenUrl) !== null;
   }
 
   private openAnyway = () => {
     let { viewCard, brokenUrl } = this.args;
-    if (!viewCard) {
-      return;
-    }
-    let url: URL;
-    try {
-      url = new URL(brokenUrl);
-    } catch {
+    let url = parseHttpUrl(brokenUrl);
+    if (!viewCard || !url) {
       return;
     }
     viewCard(url);
@@ -289,16 +292,15 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     this.tipCorner =
       `${above ? 'b' : 't'}${extendLeft ? 'r' : 'l'}` as TipCorner;
 
-    // Clamp the panel to the room actually available on the side it opens, so a
-    // tall error never spills past the card boundary — it scrolls inside
-    // instead. 600px stays the design ceiling; the 155px floor only relaxes when
-    // even that wouldn't fit, so the floor never forces a clip.
+    // Clamp the panel to the room available on the side it opens so a tall error
+    // scrolls inside the card instead of spilling past its boundary. 600px is
+    // the design ceiling; a small floor keeps the panel usable and never
+    // collapses it to nothing when the card is too short to fit it — it may then
+    // overflow, the accepted fallback for very small cards.
     let roomChosen = above ? roomAbove : roomBelow;
-    let available = Math.max(0, roomChosen - gap - edge);
-    let maxH = Math.min(600, available);
-    let minH = Math.min(155, maxH);
+    let maxH = Math.min(600, Math.max(roomChosen - gap - edge, 96));
     overlay.style.setProperty('--bl-max-h', `${maxH}px`);
-    overlay.style.setProperty('--bl-min-h', `${minH}px`);
+    overlay.style.setProperty('--bl-min-h', `${Math.min(155, maxH)}px`);
   };
 
   // Re-measure the corner if the layout shifts while the overlay is open.

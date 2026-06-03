@@ -240,6 +240,46 @@ module(
       );
     });
 
+    test('"Open anyway" is withheld for a non-http(s) reference', async function (assert) {
+      await setupRealm();
+      provideConsumeContext(CardCrudFunctionsContextName, {
+        createCard: () => {},
+        saveCard: () => {},
+        editCard: () => {},
+        deleteCard: async () => {},
+        viewCard: () => {},
+      });
+
+      // A corrupted realm could ship a non-http reference; the placeholder still
+      // renders it as text, but the navigate affordance must never forward a
+      // javascript:/data: URL into viewCard.
+      let person = await createPerson({});
+      getDataBucket(person).set('pet', {
+        type: 'link-error',
+        reference: 'javascript:alert(1)',
+        errorDoc: {
+          status: 500,
+          title: 'Internal Server Error',
+          message: 'boom',
+          additionalErrors: null,
+        } satisfies SerializedError,
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let embedded = `[data-test-slot='embedded']`;
+      await click(`${embedded} [data-test-broken-link-reveal]`);
+      assert
+        .dom(`${embedded} [data-test-broken-link-url]`)
+        .hasText('javascript:alert(1)', 'the reference is still shown as text');
+      assert
+        .dom(`${embedded} [data-test-broken-link-open-anyway]`)
+        .doesNotExist(
+          'no "Open anyway" affordance for a non-navigable reference',
+        );
+    });
+
     test('a link-error sentinel renders the error placeholder with its message', async function (assert) {
       await setupRealm();
       let person = await createPerson({});
