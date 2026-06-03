@@ -40,11 +40,6 @@ permissions:
 jobs:
   test-web-assets:
     name: Build test web assets
-    # TEMPORARY (host-mode flake stress run): disabled so this branch runs
-    # only ci.yaml's Matrix shard-1 ×10 stress jobs. This PR touches
-    # packages/matrix/** (host-mode.spec.ts), which would otherwise trigger
-    # the full Software Factory suite. Revert before merge.
-    if: false
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci-software-factory
@@ -52,7 +47,6 @@ jobs:
   software-factory-test:
     name: Software Factory Tests (shard ${{ matrix.shard.index }}/${{ matrix.shard.total }})
     needs: test-web-assets
-    if: false # TEMPORARY (host-mode flake stress run) — revert before merge
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
