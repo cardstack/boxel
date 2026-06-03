@@ -12,9 +12,7 @@ import {
   logger,
 } from './index';
 import {
-  isRegisteredPrefix as globalIsRegisteredPrefix,
   rri,
-  unresolveCardReference as globalUnresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -54,10 +52,10 @@ export class IndexWriter {
 
   async createBatch(
     realmURL: URL,
+    virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
-    virtualNetwork?: VirtualNetwork,
   ) {
-    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo, virtualNetwork);
+    let batch = new Batch(this.#dbAdapter, realmURL, virtualNetwork, jobInfo);
     await batch.ready;
     return batch;
   }
@@ -192,27 +190,20 @@ export class Batch {
   constructor(
     dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
+    private virtualNetwork: VirtualNetwork,
     private jobInfo?: JobInfo,
-    private virtualNetwork?: VirtualNetwork,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
   }
 
-  // Prefix checks and unresolution prefer the threaded VirtualNetwork, and
-  // fall back to the deprecated module-level resolver when a Batch is
-  // constructed without one (e.g. the worker-manager and copy-task paths).
   private isRegisteredPrefix(reference: string): boolean {
-    return this.virtualNetwork
-      ? this.virtualNetwork.isRegisteredPrefix(reference)
-      : globalIsRegisteredPrefix(reference);
+    return this.virtualNetwork.isRegisteredPrefix(reference);
   }
 
   private unresolveURL(url: string): string {
-    return this.virtualNetwork
-      ? this.virtualNetwork.unresolveURL(url)
-      : globalUnresolveCardReference(url);
+    return this.virtualNetwork.unresolveURL(url);
   }
 
   private async setupBatch(): Promise<void> {

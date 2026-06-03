@@ -119,9 +119,7 @@ export function extractAvifDimensions(bytes: Uint8Array): {
   // Walk the ISOBMFF box tree: top-level → meta → iprp → ipco → ispe
   let meta = findBox(view, bytes, 0, bytes.length, 'meta');
   if (!meta) {
-    throw new FileContentMismatchError(
-      'AVIF file does not contain a meta box',
-    );
+    throw new FileContentMismatchError('AVIF file does not contain a meta box');
   }
 
   // meta is a "full box": 8-byte header + 4-byte version/flags before children

@@ -3,6 +3,7 @@ import {
   extractCardReferenceUrls,
   fieldSerializer,
   relativeTo,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -64,7 +65,7 @@ export class RichMarkdownField extends FieldDef {
       return extractCardReferenceUrls(
         this.content,
         baseUrl,
-        virtualNetworkFor(this),
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },
   });

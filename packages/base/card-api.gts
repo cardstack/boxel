@@ -4746,7 +4746,13 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
+    let vn = this.virtualNetwork;
+    if (!vn) {
+      throw new Error(
+        `CardStore.loadCardDocument requires a Loader with a VirtualNetwork`,
+      );
+    }
+    let promise = loadCardDocument(fetch, url, vn);
     this.trackLoad(promise);
     return await promise;
   }
@@ -4756,7 +4762,13 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
+    let vn = this.virtualNetwork;
+    if (!vn) {
+      throw new Error(
+        `CardStore.loadFileMetaDocument requires a Loader with a VirtualNetwork`,
+      );
+    }
+    let promise = loadFileMetaDocument(fetch, url, vn);
     this.trackLoad(promise);
     return await promise;
   }

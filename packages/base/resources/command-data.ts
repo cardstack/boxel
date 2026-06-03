@@ -1,20 +1,20 @@
 import { tracked } from '@glimmer/tracking';
 
-import {
-  type CommandInvocation,
-  type Command,
-  type CardInstance,
+import type {
+  CommandInvocation,
+  Command,
+  CardInstance,
 } from '@cardstack/runtime-common';
 
-import { CommandContext } from '@cardstack/runtime-common';
+import type { CommandContext } from '@cardstack/runtime-common';
 
-import { CardContext, CardDefConstructor } from '../card-api';
+import type { CardContext, CardDefConstructor } from '../card-api';
 
 import { resource } from 'ember-resources';
 
-export class CommandExecutionState<CardResultType extends CardDefConstructor>
-  implements CommandInvocation<CardResultType>
-{
+export class CommandExecutionState<
+  CardResultType extends CardDefConstructor,
+> implements CommandInvocation<CardResultType> {
   @tracked status: 'pending' | 'success' | 'error' = 'pending';
   @tracked cardResult: CardInstance<CardResultType> | null = null;
   @tracked error: Error | null = null;

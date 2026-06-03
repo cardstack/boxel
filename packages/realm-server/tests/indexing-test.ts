@@ -5,6 +5,7 @@ import {
   SupportedMimeType,
   Deferred,
   IndexWriter,
+  VirtualNetwork,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
@@ -1363,6 +1364,11 @@ module(basename(__filename), function () {
       let queuePublisher: QueuePublisher;
       let queueRunner: QueueRunner;
       let testRealmServer: TestRealmServerResult | undefined;
+      let virtualNetwork: VirtualNetwork;
+
+      hooks.beforeEach(function () {
+        virtualNetwork = new VirtualNetwork();
+      });
 
       setupPermissionedRealmCached(hooks, {
         mode: 'beforeEach',
@@ -1407,6 +1413,7 @@ module(basename(__filename), function () {
       test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1418,6 +1425,7 @@ module(basename(__filename), function () {
 
         let jsonSeedBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await jsonSeedBatch.invalidate([new URL(`${testRealm}mango.json`)]);
         assert.ok(
@@ -1432,6 +1440,7 @@ module(basename(__filename), function () {
 
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await stagingBatch.updateEntry(stagedOnlyURL, {
           type: 'file',
@@ -1442,7 +1451,7 @@ module(basename(__filename), function () {
 
         let invalidationBatch = await new IndexWriter(
           testDbAdapter,
-        ).createBatch(new URL(realm.url));
+        ).createBatch(new URL(realm.url), virtualNetwork);
         await invalidationBatch.invalidate([stagedAliasURL]);
 
         assert.ok(
@@ -1454,6 +1463,7 @@ module(basename(__filename), function () {
       test('batch invalidation tombstones all rows that share a matching file_alias', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1497,6 +1507,7 @@ module(basename(__filename), function () {
         //    instance-error entry and committing the batch.
         let errorBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await errorBatch.updateEntry(mangoURL, {
           type: 'instance-error',
@@ -1526,6 +1537,7 @@ module(basename(__filename), function () {
         // 2. Tombstone the URL.
         let tombstoneBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await tombstoneBatch.invalidate([mangoURL]);
         await tombstoneBatch.done();
@@ -1564,6 +1576,7 @@ module(basename(__filename), function () {
         // instead of silently writing the unusable row.
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         for (let badError of [

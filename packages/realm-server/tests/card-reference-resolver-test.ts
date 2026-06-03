@@ -93,13 +93,11 @@ module(basename(__filename), function () {
   // prefix-form relativeTo strings internally.
   module('relativizeDocument with prefix-form IDs', function (hooks) {
     let prefix = '@test-rel/realm/';
+    let virtualNetwork: VirtualNetwork;
 
     hooks.beforeEach(function () {
-      registerCardReferencePrefix(prefix, 'http://test-host/my-realm/');
-    });
-
-    hooks.afterEach(function () {
-      unregisterCardReferencePrefix(prefix);
+      virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(prefix, 'http://test-host/my-realm/');
     });
 
     test('succeeds when resource ID is a registered prefix', async function (assert) {
@@ -131,7 +129,7 @@ module(basename(__filename), function () {
       // relativizeResource passes the prefix-form data.id directly
       // as a URL base to resolveCardReference.
       try {
-        relativizeDocument(doc, realmURL);
+        relativizeDocument(doc, realmURL, virtualNetwork);
         assert.ok(
           true,
           'relativizeDocument handles prefix-form resource ID without throwing',
@@ -173,7 +171,7 @@ module(basename(__filename), function () {
       };
 
       let realmURL = new URL('http://test-host/my-realm/');
-      relativizeDocument(doc, realmURL);
+      relativizeDocument(doc, realmURL, virtualNetwork);
 
       let rel = doc.data.relationships?.instructionsSource as any;
       assert.ok(rel, 'relationship exists after relativization');
@@ -212,7 +210,7 @@ module(basename(__filename), function () {
       };
 
       let realmURL = new URL('http://test-host/my-realm/');
-      relativizeDocument(doc, realmURL);
+      relativizeDocument(doc, realmURL, virtualNetwork);
 
       let rel = doc.data.relationships?.theme as any;
       assert.ok(rel, 'relationship exists after relativization');
@@ -243,7 +241,7 @@ module(basename(__filename), function () {
       let realmURL = new URL('http://test-host/my-realm/');
 
       try {
-        relativizeDocument(doc, realmURL);
+        relativizeDocument(doc, realmURL, virtualNetwork);
         assert.ok(true, 'relativizeDocument handles regular URL resource ID');
       } catch (err) {
         assert.ok(

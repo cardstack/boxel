@@ -99,6 +99,7 @@ module('Unit | index-writer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexWriter: IndexWriter;
   let indexQueryEngine: IndexQueryEngine;
+  let virtualNetwork: VirtualNetwork;
   setupTest(hooks);
 
   hooks.before(async function () {
@@ -111,7 +112,7 @@ module('Unit | index-writer', function (hooks) {
     let owner = (getContext() as TestContext).owner;
     await makeRenderer();
     let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
-    let virtualNetwork = new VirtualNetwork();
+    virtualNetwork = new VirtualNetwork();
 
     let definitionLookup = new CachingDefinitionLookup(
       adapter,
@@ -184,7 +185,10 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}4.json`)]);
     let invalidations = batch.invalidations;
 
@@ -278,7 +282,10 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
     let invalidations = batch.invalidations;
 
@@ -307,7 +314,10 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
     let invalidations = batch.invalidations;
 
@@ -360,7 +370,10 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -580,7 +593,10 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL2));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
     await batch.copyFrom(new URL(testRealmURL));
     await batch.done();
 
@@ -667,7 +683,10 @@ module('Unit | index-writer', function (hooks) {
       [{ realm_url: testRealmURL2, current_version: 1 }],
       [],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL2));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
     try {
       await batch.copyFrom(new URL(testRealmURL));
       throw new Error('Expected error to be thrown');
@@ -733,7 +752,10 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance-error',
       error: {
@@ -825,7 +847,10 @@ module('Unit | index-writer', function (hooks) {
       [{ realm_url: testRealmURL, current_version: 1 }],
       [],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance-error',
       error: {
@@ -903,7 +928,10 @@ module('Unit | index-writer', function (hooks) {
       [{ realm_url: testRealmURL, current_version: 1 }],
       [],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.updateEntry(new URL(`${testRealmURL}nested/1.json`), {
       type: 'instance-error',
       error: {
@@ -965,7 +993,10 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     };
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance-error',
       error: { ...inputError },
@@ -1031,7 +1062,10 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     }));
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance-error',
       error: {
@@ -1218,7 +1252,10 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -1306,7 +1343,10 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     let now = Date.now();
     await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
@@ -1383,7 +1423,10 @@ module('Unit | index-writer', function (hooks) {
     };
     let now = Date.now();
     let markdown = '# Van Gogh\n\n- email: vangogh@example.com';
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -1451,7 +1494,10 @@ module('Unit | index-writer', function (hooks) {
       indexRows,
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     let invalidations = batch.invalidations;
 
@@ -1542,7 +1588,10 @@ module('Unit | index-writer', function (hooks) {
       module: rri('./fancy-person'),
       name: 'FancyPerson',
     });
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
     let timestamp = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
@@ -1597,7 +1646,10 @@ module('Unit | index-writer', function (hooks) {
       'correct card type summary after indexing is done',
     );
 
-    batch = await indexWriter.createBatch(new URL(testRealmURL));
+    batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     let resource3 = makeCardResource('3', 'Van Gogh2', {
       module: rri('./fancy-person'),
       name: 'FancyPerson',
@@ -1745,7 +1797,10 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     // No new writes — just finalize so updateRealmMeta runs against the
     // working table that setupIndex seeded.
     await batch.done();
@@ -1834,7 +1889,10 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.done();
 
     let realmMeta = await fetchRealmMeta(adapter);
@@ -1893,7 +1951,10 @@ module('Unit | index-writer', function (hooks) {
 
     // Have the index writer aggregate v1 into realm_meta.value with the
     // new partitioned shape.
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.done();
 
     // Now plant a *stale* legacy-shape row at a HIGHER version number. This
@@ -1984,7 +2045,10 @@ module('Unit | index-writer', function (hooks) {
       'stale rows are seeded before the batch runs',
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.done();
 
     let rowsAfter = await adapter.execute(
@@ -2027,7 +2091,10 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance-error',
       error: {
@@ -2083,11 +2150,15 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+      },
+    );
     assert.strictEqual(
       batch.resumedRows.size,
       1,
@@ -2134,11 +2205,15 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+      },
+    );
     assert.strictEqual(
       batch.resumedRows.size,
       0,
@@ -2173,11 +2248,15 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+      },
+    );
     assert.strictEqual(
       batch.resumedRows.size,
       0,
@@ -2214,11 +2293,15 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+      },
+    );
     assert.strictEqual(
       batch.resumedRows.size,
       0,
@@ -2257,11 +2340,15 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+      },
+    );
     assert.true(
       batch.resumedRows.has(url),
       'precondition: row is initially resumed',
@@ -2311,11 +2398,15 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
-      jobId: 42,
-      reservationId: 1,
-      priority: 0,
-    });
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+      },
+    );
     // Note: no updateEntry / invalidate call — simulating a retry that
     // discovers all its work was already done by the previous attempt.
     await batch.done();
@@ -2361,7 +2452,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
         rows,
@@ -2392,7 +2486,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
         rows,
@@ -2433,7 +2530,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
         rows,
@@ -2474,7 +2574,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
         rows,
@@ -2505,7 +2608,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
         rows,
@@ -2567,7 +2673,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([
         workingOnlyUrl,
         productionOnlyUrl,
@@ -2625,7 +2734,10 @@ module('Unit | index-writer', function (hooks) {
         },
       );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.strictEqual(rows.length, 1, 'one row returned');
       let row = rows[0]!;

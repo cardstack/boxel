@@ -214,8 +214,8 @@ export class IndexRunner {
     );
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
-      current.#jobInfo,
       current.#virtualNetwork,
+      current.#jobInfo,
     );
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts
@@ -397,8 +397,8 @@ export class IndexRunner {
 
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
-      current.#jobInfo,
       current.#virtualNetwork,
+      current.#jobInfo,
     );
     // Announce the job at kickoff — before invalidation and pre-warm — so
     // the dashboard shows it immediately. The total starts at 0 and the
