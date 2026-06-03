@@ -128,7 +128,21 @@ class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   </template>
 }
 
-class RealmConfigEdit extends Component<typeof RealmConfig> {
+export class RealmConfigEdit extends Component<typeof RealmConfig> {
+  get duplicatePaths(): string[] {
+    let counts = new Map<string, number>();
+    for (let rule of this.args.model.hostRoutingRules ?? []) {
+      let path = rule?.path?.trim();
+      if (!path) continue;
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+    }
+    let dups: string[] = [];
+    for (let [path, count] of counts) {
+      if (count > 1) dups.push(path);
+    }
+    return dups;
+  }
+
   <template>
     <article class='realm-config-edit' data-test-realm-config-edit>
       <section class='section'>
@@ -148,6 +162,18 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
         <p class='help'>
           Map static paths within this realm to a card to render in host mode.
         </p>
+        {{#if this.duplicatePaths.length}}
+          <div
+            class='warning'
+            role='status'
+            data-test-duplicate-path-warning
+          >
+            Duplicate paths:
+            {{#each this.duplicatePaths as |p i|}}
+              {{#if i}}, {{/if}}<code>{{p}}</code>
+            {{/each}}
+          </div>
+        {{/if}}
         <div class='rules' data-test-host-routing-rules-edit>
           <@fields.hostRoutingRules />
         </div>
@@ -200,6 +226,20 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
         color: var(--boxel-450);
+      }
+      .warning {
+        background: #fef3c7;
+        color: #78350f;
+        border: 1px solid #fcd34d;
+        border-radius: var(--boxel-border-radius-sm, 6px);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .warning code {
+        font-family: var(--boxel-font-family-mono, monospace);
+        background: rgba(0, 0, 0, 0.05);
+        padding: 0 4px;
+        border-radius: 3px;
       }
     </style>
   </template>
@@ -311,5 +351,5 @@ export class RealmConfig extends CardDef {
 
   static embedded = RealmConfigEmbedded;
   static isolated = RealmConfigIsolated;
-  static edit = RealmConfigEdit;
+  // static edit = RealmConfigEdit; // commented for default-template A/B; uncomment to restore
 }
