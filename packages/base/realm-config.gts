@@ -39,18 +39,43 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 }
 
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
+  get pathWarning(): string | undefined {
+    let raw = this.args.model.path;
+    if (raw == null) return undefined;
+    let trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    if (!trimmed.startsWith('/')) {
+      return 'Path must start with /';
+    }
+    if (!/^\/[A-Za-z0-9._~/-]*$/.test(trimmed)) {
+      return 'Path may only contain letters, numbers, /, -, _, ., or ~';
+    }
+    return undefined;
+  }
+
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
-      <div class='path-cell'>
-        <@fields.path />
+      <div class='row'>
+        <div class='path-cell'>
+          <@fields.path />
+        </div>
+        <span class='arrow' aria-hidden='true'>→</span>
+        <div class='instance-cell'>
+          <@fields.instance @lockConsumingRealm={{true}} />
+        </div>
       </div>
-      <span class='arrow' aria-hidden='true'>→</span>
-      <div class='instance-cell'>
-        <@fields.instance @lockConsumingRealm={{true}} />
-      </div>
+      {{#if this.pathWarning}}
+        <div class='path-warning' role='status' data-test-path-warning>
+          {{this.pathWarning}}
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       .routing-rule-edit {
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+      }
+      .row {
         display: grid;
         grid-template-columns: minmax(8rem, 14rem) auto 1fr;
         align-items: center;
@@ -66,6 +91,11 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
       }
       .instance-cell {
         min-width: 0;
+      }
+      .path-warning {
+        font-size: var(--boxel-font-size-xs);
+        color: #92400e;
+        padding-left: var(--boxel-sp-xxs);
       }
     </style>
   </template>
