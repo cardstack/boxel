@@ -137,6 +137,13 @@ module('Acceptance | prerender | file-extract', function (hooks) {
           'filedef-missing.gts': `
           export const NotFileDef = {};
         `,
+          'filedef-passthrough.gts': `
+          import { FileDef as BaseFileDef } from "${baseRealm.url}file-api";
+
+          // Inherits the base extractAttributes unchanged, so it exercises the
+          // base hash/size handling (including the provided-options shortcut).
+          export class PassthroughDef extends BaseFileDef {}
+        `,
           'sample.txt': 'hello world',
           'mismatch.txt': 'mismatch content',
         },
@@ -195,6 +202,34 @@ module('Acceptance | prerender | file-extract', function (hooks) {
         fileDefCodeRef('filedef-success', 'SuccessDef').module,
       ),
       'deps include custom file def module',
+    );
+  });
+
+  test('uses the provided contentHash and contentSize without re-reading the file', async function (assert) {
+    // The indexer forwards the realm's already-persisted hash/size so the base
+    // FileDef.extractAttributes skips its buffered MD5/size pass. Sentinel
+    // values that deliberately do NOT match 'hello world' prove they are used
+    // verbatim — a recompute would yield the real md5 and a size of 11.
+    let url = fileURL('sample.txt');
+    await visit(
+      renderPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: fileDefCodeRef('filedef-passthrough', 'PassthroughDef'),
+        fileContentHash: 'sentinel-content-hash',
+        fileContentSize: 4242,
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      result.searchDoc?.contentHash,
+      'sentinel-content-hash',
+      'uses the provided content hash instead of recomputing it',
+    );
+    assert.strictEqual(
+      result.searchDoc?.contentSize,
+      4242,
+      'uses the provided content size instead of re-reading the file',
     );
   });
 
