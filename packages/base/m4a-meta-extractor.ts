@@ -172,6 +172,18 @@ export function extractM4aDuration(bytes: Uint8Array): { duration: number } {
       'MP4 file does not contain a moov box',
     );
   }
+  return durationFromMoov(bytes, view, moov);
+}
+
+// Given a located `moov` box, find its `mvhd` child and convert the
+// timescale/duration pair into seconds. Shared by the whole-buffer
+// (`extractM4aDuration`) and streaming (`extractM4aDurationFromStream`) entry
+// points so both agree on the parse.
+function durationFromMoov(
+  bytes: Uint8Array,
+  view: DataView,
+  moov: BoxLocation,
+): { duration: number } {
   let mvhd = findChildBox(bytes, view, moov.payloadOffset, moov.payloadEnd, MVHD);
   if (!mvhd) {
     throw new FileContentMismatchError(
@@ -186,4 +198,227 @@ export function extractM4aDuration(bytes: Uint8Array): { duration: number } {
     );
   }
   return { duration: duration / timescale };
+}
+
+// Pull reader over a byte stream: lets the box walk read exact-length headers
+// and reassemble the small `moov` box while skipping (discarding) the large
+// `mdat` payload, so a long recording never has to be buffered whole.
+class ChunkReader {
+  #reader: ReadableStreamDefaultReader<Uint8Array>;
+  #queue: Uint8Array[] = [];
+  #queued = 0;
+  #done = false;
+
+  constructor(stream: ReadableStream<Uint8Array>) {
+    this.#reader = stream.getReader();
+  }
+
+  // Pull one more chunk into the queue. Returns false at end of stream.
+  async #pull(): Promise<boolean> {
+    if (this.#done) {
+      return false;
+    }
+    let { done, value } = await this.#reader.read();
+    if (done) {
+      this.#done = true;
+      return false;
+    }
+    if (value && value.length) {
+      this.#queue.push(value);
+      this.#queued += value.length;
+    }
+    return true;
+  }
+
+  // Read exactly `n` bytes as a contiguous array, or null if the stream ends
+  // before `n` bytes are available.
+  async readExact(n: number): Promise<Uint8Array | null> {
+    while (this.#queued < n) {
+      if (!(await this.#pull())) {
+        return null;
+      }
+    }
+    return this.#take(n);
+  }
+
+  // Discard exactly `n` bytes without retaining them. Returns false if the
+  // stream ends first.
+  async skip(n: number): Promise<boolean> {
+    while (n > 0) {
+      if (this.#queued === 0 && !(await this.#pull())) {
+        return false;
+      }
+      let head = this.#queue[0]!;
+      if (head.length <= n) {
+        this.#queue.shift();
+        this.#queued -= head.length;
+        n -= head.length;
+      } else {
+        this.#queue[0] = head.subarray(n);
+        this.#queued -= n;
+        n = 0;
+      }
+    }
+    return true;
+  }
+
+  // Read whatever bytes remain in the stream (used for a `moov` box whose size
+  // field says "extends to end of file").
+  async readRemaining(): Promise<Uint8Array> {
+    while (await this.#pull()) {
+      // keep buffering
+    }
+    return this.#take(this.#queued);
+  }
+
+  #take(n: number): Uint8Array {
+    let out = new Uint8Array(n);
+    let off = 0;
+    while (off < n) {
+      let head = this.#queue[0]!;
+      let need = n - off;
+      if (head.length <= need) {
+        out.set(head, off);
+        off += head.length;
+        this.#queue.shift();
+        this.#queued -= head.length;
+      } else {
+        out.set(head.subarray(0, need), off);
+        off += need;
+        this.#queue[0] = head.subarray(need);
+        this.#queued -= need;
+      }
+    }
+    return out;
+  }
+
+  async cancel(): Promise<void> {
+    try {
+      await this.#reader.cancel();
+    } catch {
+      // A consumer that already finished reading may have released the lock;
+      // cancelling then is a harmless no-op.
+    }
+  }
+}
+
+// Parse duration from a standalone `moov` box (its own bytes, header at offset
+// 0) reassembled by the streaming walk.
+function durationFromMoovBox(moovBytes: Uint8Array): { duration: number } {
+  let view = new DataView(
+    moovBytes.buffer,
+    moovBytes.byteOffset,
+    moovBytes.byteLength,
+  );
+  let moov = readBoxAt(moovBytes, view, 0, moovBytes.length);
+  if (!moov || moov.type !== 'moov') {
+    throw new FileContentMismatchError('MP4 moov box is malformed');
+  }
+  return durationFromMoov(moovBytes, view, moov);
+}
+
+// Streaming counterpart to `extractM4aDuration`. Walks top-level boxes off the
+// stream, retaining only the `moov` box and discarding everything else (most
+// importantly the `mdat` media payload), so peak memory is ~`moov` rather than
+// the whole file. A `Uint8Array` input (already-buffered bytes) is parsed
+// directly. Works for both fast-start files (`moov` near the start, where the
+// walk stops early) and iPhone / Voice Memo files (`moov` at the end, where
+// the preceding `mdat` is skipped chunk by chunk).
+export async function extractM4aDurationFromStream(
+  stream: ReadableStream<Uint8Array> | Uint8Array,
+): Promise<{ duration: number }> {
+  if (stream instanceof Uint8Array) {
+    return extractM4aDuration(stream);
+  }
+
+  let reader = new ChunkReader(stream);
+  try {
+    let isFirstBox = true;
+    for (;;) {
+      let header = await reader.readExact(BOX_HEADER_BYTES);
+      if (!header) {
+        // Clean EOF on a box boundary with no `moov` seen.
+        break;
+      }
+      let headerView = new DataView(
+        header.buffer,
+        header.byteOffset,
+        header.byteLength,
+      );
+      let size = headerView.getUint32(0);
+      let type = typeAt(header, 4);
+      let headerSize = BOX_HEADER_BYTES;
+      let largeSize: Uint8Array | undefined;
+
+      if (size === 1) {
+        // 64-bit extended size lives in the next 8 bytes.
+        let ext = await reader.readExact(LARGE_SIZE_BYTES);
+        if (!ext) {
+          throw new FileContentMismatchError(
+            `MP4 ${type} box declares a 64-bit size but is truncated`,
+          );
+        }
+        largeSize = ext;
+        let largeView = new DataView(
+          ext.buffer,
+          ext.byteOffset,
+          ext.byteLength,
+        );
+        let hi = largeView.getUint32(0);
+        let lo = largeView.getUint32(4);
+        size = hi * 0x1_0000_0000 + lo;
+        headerSize = BOX_HEADER_BYTES + LARGE_SIZE_BYTES;
+      }
+
+      if (size !== 0 && size < headerSize) {
+        throw new FileContentMismatchError(
+          `MP4 ${type} box declares an impossible size`,
+        );
+      }
+
+      if (isFirstBox) {
+        // Match extractM4aDuration: a real MP4/M4A starts with `ftyp`, so a
+        // mismatch can fall back to a less specific FileDef gracefully.
+        if (type !== 'ftyp') {
+          throw new FileContentMismatchError(
+            'MP4 file does not start with an ftyp box',
+          );
+        }
+        isFirstBox = false;
+      }
+
+      if (type === 'moov') {
+        // Reassemble the box bytes (header + payload) so the offset-based
+        // parser can run against it directly.
+        let payload =
+          size === 0
+            ? await reader.readRemaining()
+            : await reader.readExact(size - headerSize);
+        if (!payload) {
+          throw new FileContentMismatchError('MP4 moov box is truncated');
+        }
+        let moovBytes = new Uint8Array(headerSize + payload.length);
+        moovBytes.set(header, 0);
+        if (largeSize) {
+          moovBytes.set(largeSize, BOX_HEADER_BYTES);
+        }
+        moovBytes.set(payload, headerSize);
+        return durationFromMoovBox(moovBytes);
+      }
+
+      if (size === 0) {
+        // A non-`moov` box that runs to end of file means no `moov` follows.
+        break;
+      }
+      if (!(await reader.skip(size - headerSize))) {
+        // Truncated mid-box: no `moov`.
+        break;
+      }
+    }
+    throw new FileContentMismatchError(
+      'MP4 file does not contain a moov box',
+    );
+  } finally {
+    await reader.cancel();
+  }
 }
