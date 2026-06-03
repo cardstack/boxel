@@ -4653,19 +4653,31 @@ export function virtualNetworkFor(
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the store's VirtualNetwork.
+// string through the store's VirtualNetwork. When the store doesn't carry
+// a VN (test stubs, detached instances), fall back to plain URL math: it
+// covers URL-form refs and relative refs against URL-form bases but can't
+// resolve prefix-form refs.
 function resolveRef(
   store: CardStore | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   let vn = store?.virtualNetwork;
-  if (!vn) {
-    throw new Error(
-      `resolveRef requires a CardStore with a VirtualNetwork to resolve "${reference}"`,
-    );
+  if (vn) {
+    return vn.resolveURL(reference, relativeTo).href;
   }
-  return vn.resolveURL(reference, relativeTo).href;
+  let base: URL | string | undefined;
+  if (relativeTo instanceof URL) {
+    base = relativeTo;
+  } else if (typeof relativeTo === 'string') {
+    if (
+      relativeTo.startsWith('http://') ||
+      relativeTo.startsWith('https://')
+    ) {
+      base = relativeTo;
+    }
+  }
+  return new URL(reference, base).href;
 }
 
 function myLoader(): Loader {
