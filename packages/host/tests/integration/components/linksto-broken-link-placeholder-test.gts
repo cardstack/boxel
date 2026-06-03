@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  CardCrudFunctionsContextName,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
@@ -188,6 +189,55 @@ module(
           .dom(`${slot} [data-test-pet]`)
           .doesNotExist(`${format} slot does not render a card`);
       }
+    });
+
+    test('the reveal overlay is non-linking and offers copy + "Open anyway"', async function (assert) {
+      await setupRealm();
+
+      // viewCard is normally provided by the host per-submode; a stub records
+      // where "Open anyway" tries to navigate.
+      let opened: string[] = [];
+      provideConsumeContext(CardCrudFunctionsContextName, {
+        createCard: () => {},
+        saveCard: () => {},
+        editCard: () => {},
+        deleteCard: async () => {},
+        viewCard: (cardOrURL: URL | { id: string } | string) => {
+          opened.push(
+            cardOrURL instanceof URL ? cardOrURL.href : String(cardOrURL),
+          );
+        },
+      });
+
+      let person = await createPerson({
+        pet: { links: { self: GHOST_URL } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      // The broken reference is informational only — never a clickable anchor.
+      assert
+        .dom('a[data-test-broken-link-url]')
+        .doesNotExist('the broken URL is rendered as text, not a link');
+
+      let embedded = `[data-test-slot='embedded']`;
+      await click(`${embedded} [data-test-broken-link-reveal]`);
+      assert
+        .dom(`${embedded} [data-test-broken-link-copy]`)
+        .exists(
+          'the overlay offers a copy-to-clipboard affordance for the URL',
+        );
+      assert
+        .dom(`${embedded} [data-test-broken-link-open-anyway]`)
+        .exists('the overlay offers an "Open anyway" affordance');
+
+      await click(`${embedded} [data-test-broken-link-open-anyway]`);
+      assert.deepEqual(
+        opened,
+        [GHOST_URL],
+        '"Open anyway" navigates to the broken reference via viewCard',
+      );
     });
 
     test('a link-error sentinel renders the error placeholder with its message', async function (assert) {

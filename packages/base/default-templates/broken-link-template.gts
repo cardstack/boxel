@@ -5,8 +5,10 @@ import { guidFor } from '@ember/object/internals';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
+import { Button, CopyButton } from '@cardstack/boxel-ui/components';
 import { cardTypeName } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common';
+import type { ViewCardFn } from '../card-api';
 
 type TipCorner = 'tl' | 'tr' | 'bl' | 'br';
 
@@ -18,6 +20,11 @@ export interface BrokenLinkTemplateArgs {
   errorDoc: SerializedError;
   state: BrokenLinkState;
   format: BrokenLinkFormat;
+  // Threaded from the field component's CardCrudFunctions. When present, the
+  // overlay offers an "Open anyway" affordance that navigates to the broken
+  // reference (a stack visit in interact mode, a code-editor jump in code
+  // mode — whatever the host's viewCard does for the current submode).
+  viewCard?: ViewCardFn;
 }
 
 interface NormalizedAdditionalError {
@@ -25,22 +32,6 @@ interface NormalizedAdditionalError {
   status?: number;
   title?: string;
   stack?: string;
-}
-
-// Only http(s) URLs are safe to drop into an <a href> — `javascript:` and
-// `data:` URLs in an anchor execute on click. The brokenUrl flows from
-// trusted card-serialization data, but a corrupted realm could still ship
-// a non-http reference; we fall back to plain text in that case.
-function isSafeHttpUrl(url: string): boolean {
-  if (typeof url !== 'string' || url.length === 0) {
-    return false;
-  }
-  try {
-    let parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 // Solid amber warning triangle with a black "!" — a two-tone svg the
@@ -151,9 +142,36 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return !this.isNotFound && this.errorMessage.length > 0;
   }
 
-  private get urlIsSafe(): boolean {
-    return isSafeHttpUrl(this.args.brokenUrl);
+  // "Open anyway" navigates to the broken reference even though it failed to
+  // load — the host's viewCard decides the destination per submode (a stack
+  // visit in interact, a code-editor jump in code). Hidden when no viewCard is
+  // wired (e.g. a context that can't navigate) or the reference can't be parsed
+  // into a URL.
+  private get canOpen(): boolean {
+    if (!this.args.viewCard) {
+      return false;
+    }
+    try {
+      new URL(this.args.brokenUrl);
+      return true;
+    } catch {
+      return false;
+    }
   }
+
+  private openAnyway = () => {
+    let { viewCard, brokenUrl } = this.args;
+    if (!viewCard) {
+      return;
+    }
+    let url: URL;
+    try {
+      url = new URL(brokenUrl);
+    } catch {
+      return;
+    }
+    viewCard(url);
+  };
 
   private get additionalErrorsLabel(): string {
     let n = this.additionalErrors.length;
@@ -235,7 +253,8 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       return;
     }
     // The card boundary is the overlay's containing block.
-    let cardEl = (overlay.offsetParent as HTMLElement) ?? document.documentElement;
+    let cardEl =
+      (overlay.offsetParent as HTMLElement) ?? document.documentElement;
     let card = cardEl.getBoundingClientRect();
     let o = overlay.getBoundingClientRect();
     let t = trigger.getBoundingClientRect();
@@ -267,7 +286,19 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         : roomRight >= w + edge
           ? false
           : roomLeft >= roomRight;
-    this.tipCorner = `${above ? 'b' : 't'}${extendLeft ? 'r' : 'l'}` as TipCorner;
+    this.tipCorner =
+      `${above ? 'b' : 't'}${extendLeft ? 'r' : 'l'}` as TipCorner;
+
+    // Clamp the panel to the room actually available on the side it opens, so a
+    // tall error never spills past the card boundary — it scrolls inside
+    // instead. 600px stays the design ceiling; the 155px floor only relaxes when
+    // even that wouldn't fit, so the floor never forces a clip.
+    let roomChosen = above ? roomAbove : roomBelow;
+    let available = Math.max(0, roomChosen - gap - edge);
+    let maxH = Math.min(600, available);
+    let minH = Math.min(155, maxH);
+    overlay.style.setProperty('--bl-max-h', `${maxH}px`);
+    overlay.style.setProperty('--bl-min-h', `${minH}px`);
   };
 
   // Re-measure the corner if the layout shifts while the overlay is open.
@@ -350,21 +381,24 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
               data-test-broken-link-overlay-close
             >×</label>
           </div>
-          {{#if this.urlIsSafe}}
-            <a
-              class='overlay-url'
-              href={{@brokenUrl}}
-              target='_blank'
-              rel='noopener noreferrer'
-              data-test-broken-link-url
-            >{{@brokenUrl}}</a>
-          {{else}}
-            {{! Unsafe protocol — render as text so a click cannot execute. }}
+          {{! The reference is informational only, never a clickable link. A
+              copy affordance to its left puts the URL on the clipboard (same
+              control the AI assistant uses for code blocks). }}
+          <div class='overlay-url-row'>
+            <CopyButton
+              class='overlay-url-copy'
+              @textToCopy={{@brokenUrl}}
+              @variant='text-only'
+              @width='14'
+              @height='14'
+              @tooltipText='Copy link'
+              data-test-broken-link-copy
+            />
             <span
               class='overlay-url'
               data-test-broken-link-url
             >{{@brokenUrl}}</span>
-          {{/if}}
+          </div>
         </div>
 
         <div class='overlay-panel'>
@@ -420,9 +454,9 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
                             class='additional-item'
                             data-test-broken-link-additional-error={{i}}
                           >
-                            <span
-                              class='additional-badge'
-                            >{{#if err.status}}{{err.status}} {{/if}}{{err.message}}</span>
+                            <span class='additional-badge'>{{#if
+                                err.status
+                              }}{{err.status}} {{/if}}{{err.message}}</span>
                             {{#if err.stack}}
                               <pre class='additional-stack'>{{err.stack}}</pre>
                             {{/if}}
@@ -436,6 +470,22 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
             </div>
           {{/if}}
         </div>
+
+        {{! Pinned below the scroller so it stays reachable however long the
+            diagnostics get. Navigates to the broken reference via the threaded
+            viewCard; the host resolves the destination for the current
+            submode. }}
+        {{#if this.canOpen}}
+          <div class='overlay-footer'>
+            <Button
+              class='open-anyway'
+              @kind='secondary'
+              @size='small'
+              {{on 'click' this.openAnyway}}
+              data-test-broken-link-open-anyway
+            >Open anyway</Button>
+          </div>
+        {{/if}}
       </div>
 
       {{! The tip: a solid-white right-triangle sitting ON TOP of the overlay's
@@ -498,7 +548,8 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light-100);
-        background-image: linear-gradient(
+        background-image:
+          linear-gradient(
             to top right,
             transparent calc(50% - 0.5px),
             var(--boxel-border-color) calc(50% - 0.5px),
@@ -515,10 +566,16 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         overflow: hidden;
       }
       .broken-link-template.atom .box {
-        min-height: 1.6em;
-        padding: 0 var(--boxel-sp-5xs);
-        gap: var(--boxel-sp-5xs);
+        min-height: 28px;
+        padding: 0 var(--boxel-sp-2xs);
+        /* 10px between the type text and the caution triangle (per design); the
+           label's own padding is zeroed below so this gap is measured from the
+           text edge, not the chip's padding box. */
+        gap: 10px;
         border-radius: var(--boxel-border-radius-sm);
+      }
+      .broken-link-template.atom .label {
+        padding: 0;
       }
 
       .label {
@@ -586,9 +643,16 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       .overlay {
         display: none;
         position: absolute;
-        width: 17rem;
-        max-width: min(20rem, 100%);
-        max-height: 18rem;
+        /* Fixed platter footprint per design (350 × 155–600). The tip anchors
+           to the overlay's own corner, so it tracks these dimensions without
+           any change to its geometry. */
+        width: 350px;
+        /* Floor/ceiling defaults; the geometry pass narrows --bl-max-h to the
+           room available inside the card so a tall panel scrolls rather than
+           clipping, and drops --bl-min-h in lockstep so the floor never forces
+           an overflow. */
+        min-height: var(--bl-min-h, 155px);
+        max-height: var(--bl-max-h, 600px);
         /* Placement is chosen on open (the `tip-{corner}` class on the root,
            set by a geometry measurement): the overlay extends into the open
            space and the tip sits on the corner facing the trigger. Anchored to
@@ -645,22 +709,44 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         background-color: var(--boxel-100);
         color: var(--boxel-dark);
       }
+      .overlay-url-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+      }
+      .overlay-url-copy {
+        flex: none;
+        --boxel-icon-button-width: 1.125rem;
+        --boxel-icon-button-height: 1.125rem;
+        color: var(--boxel-400);
+      }
+      .overlay-url-copy:hover {
+        color: var(--boxel-dark);
+      }
       .overlay-url {
-        display: block;
+        flex: 1 1 auto;
+        min-width: 0;
         font-family: var(--boxel-monospace-font-family, monospace);
         font-size: 0.8em;
+        line-height: 1.125rem;
         word-break: break-all;
         color: var(--boxel-500);
-        text-decoration: none;
-      }
-      .overlay-url:hover {
-        text-decoration: underline;
       }
       .overlay-panel {
         flex: 1 1 auto;
         min-height: 0;
         overflow: auto;
-        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
+        padding: 0 var(--boxel-sp-xxs);
+      }
+
+      /* Pinned action row — sits outside the scroller so the primary CTA stays
+         visible however tall the diagnostics get. Even vertical padding gives
+         the button a balanced top/bottom margin. */
+      .overlay-footer {
+        flex: none;
+        display: flex;
+        justify-content: flex-end;
+        padding: var(--boxel-sp-xs);
       }
 
       /* ── Overlay panel: status badge (not-found) ──────────────────────
