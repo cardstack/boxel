@@ -252,3 +252,34 @@ export function markdownImage(
   encodedHref = encodedHref.replace(/\(/g, '%28').replace(/\)/g, '%29');
   return `![${safeAlt}](${encodedHref})`;
 }
+
+// Build a markdown reference for an audio file. Markdown has no native audio
+// syntax, but CommonMark passes raw HTML through, so we emit a real
+// `<audio controls>` so renderers (Spec preview, docs, AI consumers) see a
+// player rather than a bare link. Missing URL falls back to a placeholder
+// that still names the file.
+export function markdownAudio(
+  name: string | null | undefined,
+  url: string | null | undefined,
+): string {
+  let safeName = markdownEscape(name ?? '');
+  if (!url) {
+    return safeName ? `[binary audio: ${safeName}]` : '[binary audio]';
+  }
+  let encodedHref: string;
+  try {
+    encodedHref = encodeURI(url);
+  } catch {
+    encodedHref = url;
+  }
+  let attrSafeHref = encodedHref
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+  let attrSafeName = (name ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+  let ariaLabel = attrSafeName
+    ? ` aria-label="${attrSafeName}"`
+    : '';
+  return `<audio src="${attrSafeHref}" controls preload="metadata"${ariaLabel}></audio>`;
+}
