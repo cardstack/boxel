@@ -1201,10 +1201,12 @@ export class RealmIndexQueryEngine {
   // field-tree walk that `populateQueryFields` would otherwise repeat.
 
   // Cache coordinates for a resource, or undefined when caching doesn't apply:
-  // no job identity (live / external traffic), no id, or a sparse-fieldset
-  // (partial) population that mustn't masquerade as a full assembly. The job
-  // identity is only stamped by indexer-driven prerender requests, so requiring
-  // it naturally scopes the cache to indexing and never touches live traffic.
+  // no job identity, no id, or a sparse-fieldset (partial) population that
+  // mustn't masquerade as a full assembly. `jobIdentity` is derived from the
+  // sanitized `x-boxel-job-id` header, which by design only indexer-driven
+  // prerender requests carry — so in normal operation this scopes the cache to
+  // indexing and live / external traffic skips it (it is an expectation about
+  // callers, not a property this layer enforces).
   #instanceCacheKey(
     resource: LooseCardResource | FileMetaResource,
     opts: Options | undefined,

@@ -8,8 +8,8 @@ import { setupPermissionedRealmCached } from './helpers';
 // Exercises the job-scoped per-instance wire-format cache
 // (job_scoped_instance_cache) that RealmIndexQueryEngine.loadLinks consults
 // per root resource. The cache activates only when a request carries a job
-// identity (stamped by indexer-driven prerender), so live traffic never
-// touches it.
+// identity (the `x-boxel-job-id` header) — which in normal operation only
+// indexer-driven prerender stamps, so live traffic skips it.
 
 const testRealm = new URL('http://127.0.0.1:4452/test/');
 const CACHE_TABLE = 'job_scoped_instance_cache';
