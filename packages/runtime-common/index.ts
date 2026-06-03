@@ -783,6 +783,7 @@ export type {
 export * from './code-ref';
 export * from './command-parsing-utils';
 export * from './serializers';
+export * from './host-routing-validation';
 
 export type {
   CardDocument,

@@ -9,6 +9,10 @@ import {
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
+import {
+  findDuplicateRoutingPaths,
+  validateRoutingPath,
+} from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
@@ -40,17 +44,7 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   get pathWarning(): string | undefined {
-    let raw = this.args.model.path;
-    if (raw == null) return undefined;
-    let trimmed = raw.trim();
-    if (!trimmed) return undefined;
-    if (!trimmed.startsWith('/')) {
-      return 'Path must start with /';
-    }
-    if (!/^\/(?:[A-Za-z0-9._~/-]|%[0-9A-Fa-f]{2})*$/.test(trimmed)) {
-      return 'Path may only contain letters, numbers, /, -, _, ., ~, or %XX-encoded characters';
-    }
-    return undefined;
+    return validateRoutingPath(this.args.model.path);
   }
 
   <template>
@@ -160,17 +154,7 @@ class RealmConfigEmbedded extends Component<typeof RealmConfig> {
 
 export class RealmConfigEdit extends Component<typeof RealmConfig> {
   get duplicatePaths(): string[] {
-    let counts = new Map<string, number>();
-    for (let rule of this.args.model.hostRoutingRules ?? []) {
-      let path = rule?.path?.trim();
-      if (!path) continue;
-      counts.set(path, (counts.get(path) ?? 0) + 1);
-    }
-    let dups: string[] = [];
-    for (let [path, count] of counts) {
-      if (count > 1) dups.push(path);
-    }
-    return dups;
+    return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
   <template>
