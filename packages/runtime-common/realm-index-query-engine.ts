@@ -81,19 +81,6 @@ const RECURSING_DEPTH = 3;
 
 const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
 
-// Feature flag for the job-scoped per-instance wire-format cache. Default off
-// so the indexing hot path is byte-for-byte unchanged until an operator opts
-// in; read live (not memoized) so tests can toggle it per-case. Only ever
-// consulted when a request also carries a job identity, so live / external
-// traffic is unaffected regardless of the flag.
-function instanceCacheEnabled(): boolean {
-  return (
-    typeof process !== 'undefined' &&
-    (process.env?.INDEXER_INSTANCE_CACHE === 'true' ||
-      process.env?.INDEXER_INSTANCE_CACHE === '1')
-  );
-}
-
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
@@ -1214,19 +1201,15 @@ export class RealmIndexQueryEngine {
   // field-tree walk that `populateQueryFields` would otherwise repeat.
 
   // Cache coordinates for a resource, or undefined when caching doesn't apply:
-  // no job identity (live / external traffic), no id, a sparse-fieldset
-  // (partial) population that mustn't masquerade as a full assembly, or the
-  // flag is off.
+  // no job identity (live / external traffic), no id, or a sparse-fieldset
+  // (partial) population that mustn't masquerade as a full assembly. The job
+  // identity is only stamped by indexer-driven prerender requests, so requiring
+  // it naturally scopes the cache to indexing and never touches live traffic.
   #instanceCacheKey(
     resource: LooseCardResource | FileMetaResource,
     opts: Options | undefined,
   ): { jobId: string; url: string } | undefined {
-    if (
-      !opts?.jobIdentity ||
-      !resource.id ||
-      opts.linkFields ||
-      !instanceCacheEnabled()
-    ) {
+    if (!opts?.jobIdentity || !resource.id || opts.linkFields) {
       return undefined;
     }
     return { jobId: opts.jobIdentity, url: resource.id };
