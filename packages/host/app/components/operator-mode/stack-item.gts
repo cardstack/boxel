@@ -28,6 +28,7 @@ import {
   CardContainer,
   CardHeader,
   LoadingIndicator,
+  SelectionCheckmark,
 } from '@cardstack/boxel-ui/components';
 import {
   MenuDivider,
@@ -79,7 +80,6 @@ import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
-import SelectionCheckmarkIcon from '../adorn/selection-checkmark-icon';
 import CardRenderer from '../card-renderer';
 
 import CardError from './card-error';
@@ -560,7 +560,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem({
         label: `${selectedCount} Selected`,
         action: () => {},
-        icon: SelectionCheckmarkIcon,
+        icon: SelectionCheckmark,
         header: true,
       }),
     );
