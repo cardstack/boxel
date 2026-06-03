@@ -434,20 +434,25 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
-    // Pre-warm: combine per-row deps with a realm-wide `.gts`/`.gjs`
-    // sweep. Incremental skips `discoverInvalidations` so the
-    // filesystem-mtimes walk hasn't happened yet — call it here.
-    // Typical realm sizes make this < 200 ms; one call per job.
-    let incrementalMtimes = await current.#reader.mtimes();
-    let allRealmCardModules =
-      Object.keys(incrementalMtimes).filter(hasCardExtension);
+    // Pre-warm only the modules this batch's invalidations actually
+    // touch — the invalidated module files plus the per-row deps of the
+    // invalidated cards. The realm-wide `.gts`/`.gjs` sweep is reserved
+    // for from-scratch indexing, where the persistent module cache is
+    // cold by definition. On an incremental that cache is already
+    // populated by the prior from-scratch, so a sibling module a card
+    // references only by string resolves through the on-demand
+    // `lookupDefinition` read-through during the visit (PagePool-safe:
+    // the sub-prerender materializes its own tab) rather than paying an
+    // O(realm) sweep for a single-file edit. Passing an empty base set
+    // also skips the filesystem-mtimes walk this path would otherwise
+    // run only to build that sweep.
     // Pre-warm reports each warmed module as a `file-visited`; modules and
     // the files visited below share one `totalFiles` so the dashboard bar
     // spans both phases.
     let filesCompleted = 0;
     let preWarmedCount = await current.preWarmModulesTable(
       invalidations,
-      allRealmCardModules,
+      [],
       ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
         filesCompleted = completed;
         current.#onProgress?.({
@@ -703,7 +708,10 @@ export class IndexRunner {
     // this layer the search fires a same-affinity `prerenderModule`
     // mid-card-render at lookup time, which is the wait-shape the
     // PagePool's tab-materialization for module/command callers is
-    // meant to relieve.
+    // meant to relieve. Populated only on from-scratch indexing, where
+    // the module cache is cold; incrementals pass an empty base set and
+    // rely on the cache the last from-scratch left warm (the cost of
+    // this sweep is O(realm module count), not O(files changed)).
     //
     // `.gts` / `.gjs` only is an optimization, not a correctness gate:
     // `.ts` / `.js` files CAN host `CardDef` (e.g. command-input

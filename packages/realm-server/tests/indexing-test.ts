@@ -2198,6 +2198,55 @@ module(basename(__filename), function () {
         );
       });
 
+      test('the full-realm module pre-warm sweep runs on from-scratch indexing but not on incrementals', async function (assert) {
+        // `fancy-person.gts` is an orphan card module: it defines a CardDef
+        // (FancyPerson) but no instance adopts it and no other module
+        // imports it. Because nothing ever invalidates it, the only code
+        // path that can land it in the module cache is the realm-wide
+        // pre-warm sweep — which runs on from-scratch indexing and is
+        // skipped on incrementals. Its presence in the `modules` table is
+        // therefore a deterministic signal of whether the sweep ran.
+        let orphanAlias = `${testRealm}fancy-person`;
+
+        async function isCached(moduleAlias: string): Promise<boolean> {
+          let rows = (await testDbAdapter.execute(
+            `SELECT url FROM modules WHERE url = $1 OR file_alias = $1`,
+            { bind: [moduleAlias] },
+          )) as { url: string }[];
+          return rows.length > 0;
+        }
+
+        // The realm was from-scratch indexed during setup; the realm-wide
+        // sweep warmed every card module, including the orphan that no
+        // instance references.
+        assert.true(
+          await isCached(orphanAlias),
+          'from-scratch pre-warm caches the orphan module via the full-realm sweep',
+        );
+
+        // Clear the cache, then run an incremental on an unrelated instance.
+        // The incremental has no realm-wide sweep, and the orphan is neither
+        // visited nor a dependency of the change, so it does not come back —
+        // only the realm-wide sweep (from-scratch) would re-cache a module
+        // that no instance consumes.
+        await testDbAdapter.execute('DELETE FROM modules');
+        await realm.write(
+          'vangogh.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Van Gogh', hourlyRate: 51 },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+        );
+        assert.false(
+          await isCached(orphanAlias),
+          'incremental skips the full-realm sweep, leaving the orphan module uncached',
+        );
+      });
+
       test('propagates module errors to dependent instances and recovers after missing modules are added', async function (assert) {
         await testDbAdapter.execute('DELETE FROM modules');
 
