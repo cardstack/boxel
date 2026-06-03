@@ -55,6 +55,7 @@ import {
 } from './code-ref';
 import {
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -1178,7 +1179,7 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
-  ): Promise<Map<string, CardResource<Saved>>> {
+  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
@@ -1201,20 +1202,24 @@ export class RealmIndexQueryEngine {
           throw await CardError.fromFetchResponse(url, response);
         }
         let json = await response.json();
-        if (!isSingleCardDocument(json)) {
-          throw new Error(
-            `instance ${url} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
-          );
+        // Cross-realm links can target either a card or a file (e.g. a card
+        // instantiated from a catalog still links to the catalog's image
+        // file). Both kinds are valid linked resources; only an unrecognized
+        // payload is an error.
+        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+          let linkResource: CardResource<Saved> | FileMetaResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
+          return [url, linkResource] as const;
         }
-        let linkResource: CardResource<Saved> = {
-          ...json.data,
-          ...{ links: { self: json.data.id } },
-        };
-        return [url, linkResource] as const;
+        throw new Error(
+          `instance ${url} is not a card or file document. it is: ${JSON.stringify(
+            json,
+            null,
+            2,
+          )}`,
+        );
       }),
     );
     return new Map(entries);
@@ -1635,7 +1640,7 @@ export class RealmIndexQueryEngine {
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved>>;
+      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
@@ -1656,7 +1661,9 @@ export class RealmIndexQueryEngine {
                 invocationId,
                 currentLayerIndex,
               )
-            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+            : Promise.resolve(
+                new Map<string, CardResource<Saved> | FileMetaResource>(),
+              ),
         ]);
       } catch (err: unknown) {
         let message =
