@@ -7,8 +7,9 @@ import { setupPermissionedRealmCached } from './helpers';
 
 // Exercises the job-scoped per-instance wire-format cache
 // (job_scoped_instance_cache) that RealmIndexQueryEngine.loadLinks consults
-// per root resource. The flag (INDEXER_INSTANCE_CACHE) gates it and a request
-// must carry a job identity, so the assertions toggle the env var per test.
+// per root resource. The cache activates only when a request carries a job
+// identity (the `x-boxel-job-id` header) — which in normal operation only
+// indexer-driven prerender stamps, so live traffic skips it.
 
 const testRealm = new URL('http://127.0.0.1:4452/test/');
 const CACHE_TABLE = 'job_scoped_instance_cache';
@@ -88,11 +89,6 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       await query(dbAdapter, [`DELETE FROM ${CACHE_TABLE}`] as Expression);
-      delete process.env.INDEXER_INSTANCE_CACHE;
-    });
-
-    hooks.afterEach(function () {
-      delete process.env.INDEXER_INSTANCE_CACHE;
     });
 
     async function queryLinkCount(jobIdentity?: string): Promise<number> {
@@ -117,28 +113,16 @@ module(basename(__filename), function () {
       return rows[0]?.count ?? 0;
     }
 
-    test('flag off: no cache rows written, query-backed field resolves live', async function (assert) {
-      assert.strictEqual(await queryLinkCount('1.1'), 3, 'three live matches');
-      assert.strictEqual(
-        await cacheRowCount('1.1'),
-        0,
-        'nothing cached when the flag is off',
-      );
-    });
-
-    test('flag on but no job identity: live traffic never touches the cache', async function (assert) {
-      process.env.INDEXER_INSTANCE_CACHE = 'true';
+    test('no job identity: live traffic resolves query fields live and never touches the cache', async function (assert) {
       assert.strictEqual(await queryLinkCount(), 3, 'three live matches');
       let rows = (await query(dbAdapter, [
         `SELECT COUNT(*)::int AS count FROM ${CACHE_TABLE}`,
       ] as Expression)) as { count: number }[];
       let total = rows[0]?.count ?? 0;
-      assert.strictEqual(total, 0, 'table untouched');
+      assert.strictEqual(total, 0, 'table untouched without a job identity');
     });
 
-    test('flag on + job identity: writes the assembled resource, and a hit is served from the cache', async function (assert) {
-      process.env.INDEXER_INSTANCE_CACHE = 'true';
-
+    test('with a job identity: writes the assembled resource, and a hit is served from the cache', async function (assert) {
       // First call assembles live and writes the cache.
       assert.strictEqual(await queryLinkCount('7.1'), 3, 'first call is live');
       assert.ok(
@@ -176,8 +160,6 @@ module(basename(__filename), function () {
     });
 
     test('cache is scoped per job identity', async function (assert) {
-      process.env.INDEXER_INSTANCE_CACHE = 'true';
-
       // Populate + poison job 8.1's cached consumer row.
       await queryLinkCount('8.1');
       await query(dbAdapter, [

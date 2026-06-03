@@ -385,10 +385,10 @@ const smokeTestHostApp = async () => {
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
   // Per-instance wire-format cache (job_scoped_instance_cache). Reads/writes
-  // happen in runtime-common's loadLinks; this process owns its eviction (via
-  // the JobsFinishedListener below) and the age-based janitor backstop. Inert
-  // until INDEXER_INSTANCE_CACHE is enabled (loadLinks never populates the
-  // table otherwise), so the janitor just sweeps an empty table.
+  // happen in runtime-common's loadLinks for requests carrying a job identity
+  // (the `x-boxel-job-id` header) — which in normal operation only indexer-
+  // driven prerender stamps; this process owns its eviction (via the
+  // JobsFinishedListener below) and the age-based janitor backstop.
   let instanceCache = new JobScopedInstanceCache(dbAdapter);
   instanceCache.startJanitor();
   let reconciler: RealmRegistryReconciler | undefined;
