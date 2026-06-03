@@ -300,6 +300,24 @@ module('Integration | card-catalog', function (hooks) {
         'http://test-realm/test/Spec/tree',
       ]);
     });
+
+    test('catalog items render with the Adorn visual treatment', async function (assert) {
+      await waitFor(
+        `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
+      );
+
+      // The card chooser opts in to the Adorn treatment (teal hover tab +
+      // chip + outline), so every catalog item button carries the `adorn`
+      // class — matching the operator-mode cards-grid look.
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .exists({ count: 5 }, 'catalog items are rendered');
+      assert
+        .dom(
+          `[data-test-realm="${realmName}"] [data-test-card-catalog-item]:not(.adorn)`,
+        )
+        .doesNotExist('every catalog item renders with the adorn class');
+    });
   });
 
   module('mouse and key events', function () {
