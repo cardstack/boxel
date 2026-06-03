@@ -460,8 +460,8 @@ export default class ItemButton extends Component<Signature> {
          decorative here, so no button wrapper. */
       .adorn-select-position {
         position: absolute;
-        bottom: 4px;
-        right: 4px;
+        bottom: 0.25rem;
+        right: 0.25rem;
         pointer-events: none;
         z-index: 1;
       }

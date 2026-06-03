@@ -139,10 +139,15 @@ export default class CardHeader extends Component<Signature> {
                         fill='none'
                         aria-hidden='true'
                       >
-                        <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
+                        <circle
+                          cx='7'
+                          cy='7'
+                          r='7'
+                          fill='var(--boxel-highlight-foreground)'
+                        />
                         <path
                           d='M3.5 7.5L5.5 9.5L10.5 4.5'
-                          stroke='var(--boxel-teal)'
+                          stroke='var(--boxel-highlight)'
                           stroke-width='1.5'
                           stroke-linecap='round'
                           stroke-linejoin='round'
@@ -315,7 +320,7 @@ export default class CardHeader extends Component<Signature> {
            only the pencil lights up (see submode-layout CSS). */
         header.is-editing {
           background-color: var(--boxel-highlight);
-          color: var(--boxel-dark);
+          color: var(--boxel-highlight-foreground);
         }
         .boxel-card-header__inner {
           width: 100%;
@@ -427,7 +432,7 @@ export default class CardHeader extends Component<Signature> {
            presence doesn't widen the actions column, which would otherwise
            shift the centered card title off-center. */
         .utility-menu-positioner {
-          --utility-menu-trigger-height: 26px;
+          --utility-menu-trigger-height: 1.625rem;
           position: absolute;
           right: calc(100% + var(--boxel-sp-5xs));
           top: 50%;
@@ -446,19 +451,19 @@ export default class CardHeader extends Component<Signature> {
           width: max-content;
           padding: 0 var(--boxel-sp-xs);
           border: none;
-          border-radius: 6px;
-          background-color: var(--boxel-teal);
-          color: var(--boxel-dark);
+          border-radius: 0.375rem;
+          background-color: var(--boxel-highlight);
+          color: var(--boxel-highlight-foreground);
           font: 700 var(--boxel-font-sm);
           cursor: pointer;
         }
         .utility-menu-trigger:hover:not(:disabled),
         .utility-menu-trigger:focus-visible:not(:disabled) {
-          background-color: #00da9f;
+          background-color: var(--boxel-highlight-hover);
         }
         .utility-menu-trigger-icon {
-          width: 14px;
-          height: 14px;
+          width: 0.875rem;
+          height: 0.875rem;
           flex-shrink: 0;
         }
         .utility-menu-trigger-text {
