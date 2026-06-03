@@ -141,22 +141,34 @@ export default class SearchResultHeader extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
 
+      /* Primary dropdown trigger (not a flat pill): the highlight fill
+         with its readable foreground, deepening on hover and while the
+         menu is open. Modeled on the boxel-ui primary button / highlight
+         ContextButton so it reads as a standard dropdown control rather
+         than a one-off chip. */
       .selection-dropdown-trigger {
         display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-5xs);
-        min-height: 1.625rem;
-        padding: 0 var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxs);
+        min-height: 2rem;
+        padding-inline: var(--boxel-sp-xs);
         border: none;
-        border-radius: 0.375rem;
+        border-radius: var(--boxel-border-radius-sm);
         background-color: var(--boxel-highlight);
-        color: var(--boxel-dark);
+        color: var(--boxel-highlight-foreground);
         font: 700 var(--boxel-font-sm);
         cursor: pointer;
+        transition: background-color var(--boxel-transition);
       }
       .selection-dropdown-trigger:hover,
-      .selection-dropdown-trigger:focus-visible {
+      .selection-dropdown-trigger[aria-expanded='true'] {
         background-color: var(--boxel-highlight-hover);
+      }
+      /* Keyboard focus shows a ring just outside the button; the fill is
+         not darkened on focus (deepening is reserved for hover / open). */
+      .selection-dropdown-trigger:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
       }
       .selection-trigger-icon {
         width: 0.875rem;
@@ -169,6 +181,12 @@ export default class SearchResultHeader extends Component<Signature> {
       }
       .dropdown-arrow {
         flex-shrink: 0;
+        transition: transform var(--boxel-transition);
+      }
+      /* Caret flips to point up while the menu is open, matching the
+         standard dropdown affordance. */
+      .selection-dropdown-trigger[aria-expanded='true'] .dropdown-arrow {
+        transform: rotate(180deg);
       }
       .selection-menu {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
