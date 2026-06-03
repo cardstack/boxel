@@ -47,8 +47,8 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     if (!trimmed.startsWith('/')) {
       return 'Path must start with /';
     }
-    if (!/^\/[A-Za-z0-9._~/-]*$/.test(trimmed)) {
-      return 'Path may only contain letters, numbers, /, -, _, ., or ~';
+    if (!/^\/(?:[A-Za-z0-9._~/-]|%[0-9A-Fa-f]{2})*$/.test(trimmed)) {
+      return 'Path may only contain letters, numbers, /, -, _, ., ~, or %XX-encoded characters';
     }
     return undefined;
   }
