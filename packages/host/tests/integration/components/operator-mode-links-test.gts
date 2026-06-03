@@ -1198,27 +1198,16 @@ module('Integration | operator-mode | links', function (hooks) {
 
     assert
       .dom('[data-test-selection-dropdown-trigger]')
-      .exists('selection dropdown trigger is visible in multi-select mode');
-    assert
-      .dom('[data-test-selection-dropdown-trigger]')
-      .containsText('0 Selected', 'shows 0 selected initially');
+      .doesNotExist('selection dropdown is hidden while nothing is selected');
 
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     assert
       .dom('[data-test-selection-dropdown-trigger]')
-      .containsText('2 Selected', 'count updates as cards are selected');
-
-    // Test Deselect All
-    await click('[data-test-selection-dropdown-trigger]');
-    await waitFor('[data-test-boxel-menu-item-text="Deselect All"]');
-    await click('[data-test-boxel-menu-item-text="Deselect All"]');
-    assert
-      .dom('[data-test-card-catalog-item-selected]')
-      .doesNotExist('all cards deselected after Deselect All');
+      .exists('selection dropdown appears once cards are selected');
     assert
       .dom('[data-test-selection-dropdown-trigger]')
-      .containsText('0 Selected', 'count resets to 0');
+      .hasText('2', 'trigger shows the selected count');
 
     // Test Select All
     await click('[data-test-selection-dropdown-trigger]');
@@ -1233,6 +1222,19 @@ module('Integration | operator-mode | links', function (hooks) {
       .exists(
         { count: totalItems },
         'all visible cards are selected after Select All',
+      );
+
+    // Test Deselect All — clears the selection and hides the dropdown again
+    await click('[data-test-selection-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Deselect All"]');
+    await click('[data-test-boxel-menu-item-text="Deselect All"]');
+    assert
+      .dom('[data-test-card-catalog-item-selected]')
+      .doesNotExist('all cards deselected after Deselect All');
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .doesNotExist(
+        'selection dropdown is hidden again once nothing is selected',
       );
   });
 });

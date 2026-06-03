@@ -19,6 +19,8 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
+import { DEFAULT_THEME_SCALE } from '../structured-theme-variables';
+
 function scrollToSection(sectionId: string, event: Event) {
   event.preventDefault();
   let navEl = event.currentTarget as HTMLElement;
@@ -146,9 +148,10 @@ export class CardContainerCss extends GlimmerComponent<{
   private get currentScale(): string {
     void this.args.cssVariables;
     let el = this.cardElement;
-    if (!el) return '1.333';
+    if (!el) return DEFAULT_THEME_SCALE;
     return (
-      getComputedStyle(el).getPropertyValue('--theme-scale').trim() || '1.333'
+      getComputedStyle(el).getPropertyValue('--theme-scale').trim() ||
+      DEFAULT_THEME_SCALE
     );
   }
 

@@ -152,6 +152,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @onSelectAll={{this.selectAll}}
                   @onDeselectAll={{this.deselectAll}}
                   @offerToCreate={{this.offerToCreateArg}}
+                  @adorn={{true}}
                 />
               </:content>
               <:footer>

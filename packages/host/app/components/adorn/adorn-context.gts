@@ -101,14 +101,18 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
       /* Token definitions live with the context, not in the global
          stylesheet. --boxel-teal is the light accent shipped by
          boxel-ui; the darker accent is exclusive to the Adorn
-         treatment and used when both hovered and selected. */
+         treatment and used when a selected card is hovered. */
       --adorn-accent-light: var(--boxel-teal);
       --adorn-accent: #00da9f;
     }
     /* Stroke utility. The consumer applies `.adorn-stroke` to
        whichever descendant should carry the outline (typically the
        card-like element itself), then drives `.selected` and either
-       the `:hover` pseudo-class or a `.hovered` class. */
+       the `:hover` pseudo-class or a `.hovered` class. Plain hover and
+       selection use the light accent; hovering a selected card shifts
+       both the stroke and the type-label background to the darker
+       accent — the label inherits `--adorn-label-bg` from the stroke
+       element it's rendered inside. */
     .adorn-context :deep(.adorn-stroke:hover:not(.selected)),
     .adorn-context :deep(.adorn-stroke.hovered:not(.selected)) {
       box-shadow: 0 0 0 2px var(--adorn-accent-light);
@@ -119,6 +123,7 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
     .adorn-context :deep(.adorn-stroke.selected:hover),
     .adorn-context :deep(.adorn-stroke.selected.hovered) {
       box-shadow: 0 0 0 4px var(--adorn-accent);
+      --adorn-label-bg: var(--adorn-accent);
     }
   </style>
 </template>;

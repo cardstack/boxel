@@ -1,5 +1,10 @@
 import { Deferred } from './deferred';
 import {
+  X_BOXEL_JOB_ID_HEADER,
+  sanitizePrerenderJobId,
+} from './prerender-headers';
+import type { SearchOpts } from './search-utils';
+import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -30,8 +35,7 @@ import {
   persistFileMeta,
   removeFileMeta,
   getCreatedTime,
-  getContentHash,
-  getContentSize,
+  getContentMeta,
 } from './file-meta';
 import {
   systemError,
@@ -231,6 +235,17 @@ const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
+
+// The `<jobId>.<reservationId>` job identity carried on inbound prerender
+// requests (`x-boxel-job-id`), normalized. Threaded into card-document opts so
+// the per-instance wire-format cache scopes its entries to one indexing job.
+// Undefined for live / external traffic, which never carries the header.
+function prerenderJobIdentity(request: Request): string | undefined {
+  return (
+    sanitizePrerenderJobId(request.headers.get(X_BOXEL_JOB_ID_HEADER)) ??
+    undefined
+  );
 }
 
 // Fields owned by the RealmConfig card instance at /realm.json. A PATCH
@@ -4014,14 +4029,13 @@ export class Realm {
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
     let realmInfo = await this.parseRealmInfo();
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
     let contentHash =
-      (this.#dbAdapter
-        ? await getContentHash(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentHashFromRef(fileRef));
+      persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef));
     let contentSize =
-      (this.#dbAdapter
-        ? await getContentSize(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentSizeFromRef(fileRef));
+      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -4066,18 +4080,21 @@ export class Realm {
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
     let realmInfo = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
-    let contentHash =
+    let searchHash =
       typeof searchDoc.contentHash === 'string'
         ? searchDoc.contentHash
-        : this.#dbAdapter
-          ? await getContentHash(this.#dbAdapter, this.url, localPath)
-          : undefined;
-    let contentSize =
+        : undefined;
+    let searchSize =
       typeof searchDoc.contentSize === 'number'
         ? searchDoc.contentSize
-        : this.#dbAdapter
-          ? await getContentSize(this.#dbAdapter, this.url, localPath)
-          : undefined;
+        : undefined;
+    // Only hit the DB when the indexed searchDoc is missing a value.
+    let persistedMeta =
+      (searchHash === undefined || searchSize === undefined) && this.#dbAdapter
+        ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+        : { contentHash: undefined, contentSize: undefined };
+    let contentHash = searchHash ?? persistedMeta.contentHash;
+    let contentSize = searchSize ?? persistedMeta.contentSize;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
@@ -4287,6 +4304,7 @@ export class Realm {
       {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+        jobIdentity: prerenderJobIdentity(request),
       },
     );
     if (!entry || entry?.type === 'error') {
@@ -4453,6 +4471,7 @@ export class Realm {
           {
             loadLinks: true,
             skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+            jobIdentity: prerenderJobIdentity(request),
           },
         );
         if (entry && entry.type !== 'error') {
@@ -4563,6 +4582,7 @@ export class Realm {
         {
           loadLinks: true,
           skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+          jobIdentity: prerenderJobIdentity(request),
         },
       );
       let doc: SingleCardDocument;
@@ -4817,6 +4837,7 @@ export class Realm {
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+        jobIdentity: prerenderJobIdentity(request),
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
@@ -5141,11 +5162,7 @@ export class Realm {
 
   public async search(
     query: Query,
-    opts?: {
-      cacheOnlyDefinitions?: boolean;
-      skipQueryBackedExpansion?: boolean;
-      omitIncluded?: boolean;
-    },
+    opts?: SearchOpts,
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
@@ -5155,6 +5172,9 @@ export class Realm {
         ? { skipQueryBackedExpansion: true }
         : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.jobIdentity ? { jobIdentity: opts.jobIdentity } : {}),
     });
   }
 

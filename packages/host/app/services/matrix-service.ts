@@ -146,7 +146,7 @@ import type {
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL, defaultSystemCardId } = ENV;
+const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 
 const realmEventsLogger = logger('realm:events');
@@ -212,6 +212,7 @@ export default class MatrixService extends Service {
   private initialSyncCompletedDeferred = new Deferred<void>();
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   @tracked private _systemCard: SystemCard | undefined;
+  @tracked private _systemCardLoadFailed = false;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -1484,6 +1485,7 @@ export default class MatrixService extends Service {
     this.initialSyncCompletedDeferred = new Deferred<void>();
     this.roomsWaitingForSync.clear();
     this._systemCard = undefined;
+    this._systemCardLoadFailed = false;
     this.startedAtTs = -1;
     this.#clientReadyDeferred = new Deferred<void>();
   }
@@ -2309,31 +2311,58 @@ export default class MatrixService extends Service {
     return this._systemCard;
   }
 
-  private async setSystemCard(systemCardId: string | undefined) {
-    // Set the system card to use
-    // If there is none, we fall back to the default
-    if (!systemCardId) {
-      systemCardId = defaultSystemCardId;
-    }
-    if (!systemCardId) {
-      this.store.dropReference(this._systemCard?.id);
-      this._systemCard = undefined;
-      return;
-    }
-    if (systemCardId === this._systemCard?.id) {
-      // it's OK to call this multiple times with the same system card id
-      // we shouldn't do anything.
-      return;
-    }
-    let systemCard = await this.store.get<SystemCard>(systemCardId);
-    if (isCardErrorJSONAPI(systemCard)) {
-      console.error('Error loading system card:', systemCard);
+  // True when the SystemCard chain itself is broken: an env-configured
+  // systemCardId failed to load, or the user's choice failed AND no env
+  // default is configured. Steady-state "no SystemCard at all" returns false.
+  get isUsingFallbackSystemCard(): boolean {
+    return this._systemCardLoadFailed;
+  }
+
+  private async setSystemCard(userChoiceId: string | undefined) {
+    let envDefaultId = ENV.defaultSystemCardId;
+
+    if (userChoiceId && userChoiceId === this._systemCard?.id) {
+      this._systemCardLoadFailed = false;
       return;
     }
 
-    this.store.dropReference(this._systemCard?.id);
-    this.store.addReference(systemCardId);
-    this._systemCard = systemCard;
+    let loadedCard: SystemCard | undefined;
+    let userChoiceFailed = false;
+    if (userChoiceId) {
+      let result = await this.store.get<SystemCard>(userChoiceId);
+      if (isCardErrorJSONAPI(result)) {
+        console.error('Error loading user-chosen system card:', result);
+        userChoiceFailed = true;
+      } else {
+        loadedCard = result;
+      }
+    }
+
+    let envDefaultFailed = false;
+    if (!loadedCard && envDefaultId) {
+      if (envDefaultId === this._systemCard?.id) {
+        loadedCard = this._systemCard;
+      } else {
+        let result = await this.store.get<SystemCard>(envDefaultId);
+        if (isCardErrorJSONAPI(result)) {
+          console.error('Error loading env default system card:', result);
+          envDefaultFailed = true;
+        } else {
+          loadedCard = result;
+        }
+      }
+    }
+
+    this._systemCardLoadFailed =
+      envDefaultFailed || (userChoiceFailed && !envDefaultId);
+
+    if (loadedCard?.id !== this._systemCard?.id) {
+      this.store.dropReference(this._systemCard?.id);
+      if (loadedCard) {
+        this.store.addReference(loadedCard.id);
+      }
+      this._systemCard = loadedCard;
+    }
   }
 
   async setUserSystemCard(systemCardId: string | undefined) {

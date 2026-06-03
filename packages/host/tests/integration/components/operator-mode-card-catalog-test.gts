@@ -1458,7 +1458,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
   });
 
-  test('selection-dropdown-trigger is visible in multi-select mode and hidden in single-select mode', async function (assert) {
+  test('selection-dropdown-trigger is hidden in single-select mode and until a card is selected in multi-select mode', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1486,6 +1486,16 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert
       .dom('[data-test-selection-dropdown-trigger]')
-      .exists('selection dropdown is visible in multi-select mode');
+      .doesNotExist(
+        'selection dropdown stays hidden in multi-select mode until a card is selected',
+      );
+
+    // Selecting a card reveals the dropdown
+    await waitFor('[data-test-card-catalog-item]');
+    await click('[data-test-card-catalog-item]');
+
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .exists('selection dropdown appears once a card is selected');
   });
 });
