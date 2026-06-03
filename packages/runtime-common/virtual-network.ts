@@ -1,13 +1,8 @@
 import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm } from './index';
-import {
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-  isRegisteredPrefix as globalIsRegisteredPrefix,
-  resolveCardReference as globalResolveCardReference,
-  unresolveCardReference as globalUnresolveCardReference,
-  type RealmIdentifier,
-  type RealmResourceIdentifier,
+import type {
+  RealmIdentifier,
+  RealmResourceIdentifier,
 } from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
@@ -78,24 +73,21 @@ export class VirtualNetwork {
   }
 
   /**
-   * Register a scoped realm prefix and its target URL. This populates the
-   * import map (for module loading) and global prefix mappings (for card
-   * reference resolution). It does NOT add a URL-to-URL mapping — use
-   * `addURLMapping` separately when a virtual URL (e.g.
-   * `https://cardstack.com/base/`) needs to map to a real URL.
+   * Register a scoped realm prefix and its target URL. Populates the
+   * realm mapping (used by `resolveURL` / `toURL` / `unresolveURL` /
+   * `isRegisteredPrefix`) and the import map (used by module loading).
+   * Does NOT add a URL-to-URL mapping — use `addURLMapping` separately
+   * when a virtual URL (e.g. `https://cardstack.com/base/`) needs to
+   * map to a real URL.
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
-
-    // Backward compat bridge: populate both existing registration systems
-    // so that resolveImport and resolveCardReference continue to work
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
     );
-    registerCardReferencePrefix(normalizedId, normalizedTarget);
   }
 
   /**
@@ -108,7 +100,6 @@ export class VirtualNetwork {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     this.realmMappings.delete(normalizedId);
     this.importMap.delete(normalizedId);
-    unregisterCardReferencePrefix(normalizedId);
   }
 
   knownRealms(): RealmIdentifier[] {
@@ -129,10 +120,7 @@ export class VirtualNetwork {
         return true;
       }
     }
-    // Also consult the deprecated module-level `prefixMappings` registry
-    // so VN-aware callers see prefixes that legacy code (and tests)
-    // register via `registerCardReferencePrefix`.
-    return globalIsRegisteredPrefix(reference);
+    return false;
   }
 
   /**
@@ -148,10 +136,7 @@ export class VirtualNetwork {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
       }
     }
-    // Defer to the deprecated module-level `unresolveCardReference` so
-    // prefixes registered globally (e.g. by legacy tests via
-    // `registerCardReferencePrefix`) still unresolve correctly.
-    return globalUnresolveCardReference(url) as RealmResourceIdentifier;
+    return url as RealmResourceIdentifier;
   }
 
   /**
@@ -184,29 +169,6 @@ export class VirtualNetwork {
     ) {
       return new URL(reference, base);
     }
-    // When `relativeTo` is a prefix-form string whose prefix isn't in
-    // this VN's map, `resolveRRI` would throw because its
-    // relative-against-prefix-form branches iterate VN's own mappings.
-    // Defer to the deprecated global resolver for that exact case so
-    // globally-registered prefixes still resolve. Other `resolveRRI`
-    // failures (e.g. its deliberate rejection of `/`-rooted and `~/`
-    // refs) propagate.
-    if (
-      typeof base === 'string' &&
-      !base.startsWith('http://') &&
-      !base.startsWith('https://')
-    ) {
-      let baseInVN = false;
-      for (let [prefix] of this.realmMappings) {
-        if (base.startsWith(prefix)) {
-          baseInVN = true;
-          break;
-        }
-      }
-      if (!baseInVN) {
-        return new URL(globalResolveCardReference(reference, relativeTo));
-      }
-    }
     return this.toURL(this.resolveRRI(reference, base));
   }
 
@@ -224,14 +186,7 @@ export class VirtualNetwork {
     if (resolved !== undefined) {
       return new URL(resolved);
     }
-    // Defer to the deprecated module-level `resolveCardReference` so
-    // prefixes registered globally still resolve.
-    try {
-      return new URL(globalResolveCardReference(rri, undefined));
-    } catch {
-      // Not a registered prefix anywhere; fall through to plain URL
-      // parsing (preserves the original throw for non-URL inputs).
-    }
+    // Not a registered prefix; parse as a plain URL.
     return new URL(rri);
   }
 
