@@ -5,7 +5,10 @@ import * as TestWaiters from '@ember/test-waiters';
 import * as QUnit from 'qunit';
 import { setup } from 'qunit-dom';
 
-import { useTestWaiters } from '@cardstack/runtime-common';
+import {
+  registeredCardReferencePrefixes,
+  useTestWaiters,
+} from '@cardstack/runtime-common';
 
 export function setupQUnit() {
   // ResizeObserver fires this when a callback causes a layout change that
@@ -46,6 +49,11 @@ export function setupQUnit() {
   // are tracked with a simple depth counter so we only probe top-level ones.
   let usedAtModuleStart = null;
   let moduleDepth = 0;
+  // The permanent base-realm prefix mappings (@cardstack/base/, etc.) are
+  // registered during boot/warmup and are expected for the whole suite.
+  // Captured after the first top-level module so the leak guard below only
+  // flags prefixes a test module added and failed to clean up.
+  let baselineCardReferencePrefixes = null;
   async function settledGc() {
     if (typeof globalThis.gc !== 'function') return;
     for (let i = 0; i < 3; i++) {
@@ -65,6 +73,33 @@ export function setupQUnit() {
     }
   });
   QUnit.moduleDone(async (details) => {
+    // Diagnostic: a card-reference prefix mapping a test module added but
+    // didn't clean up leaks into the global registry and corrupts later
+    // modules — `unresolveCardReference` rewrites their indexed/resolved
+    // URLs into the prefix form. The first top-level module establishes the
+    // permanent baseline (base-realm prefixes); after that, name any module
+    // that leaves an extra prefix so the next such failure is
+    // self-explanatory instead of an opaque deepEqual diff.
+    if (moduleDepth === 1) {
+      let current = registeredCardReferencePrefixes();
+      if (baselineCardReferencePrefixes === null) {
+        baselineCardReferencePrefixes = new Set(current);
+      } else {
+        let leaked = current.filter(
+          (p) => !baselineCardReferencePrefixes.has(p),
+        );
+        if (leaked.length > 0) {
+          console.warn(
+            `LEAKED_CARD_REFERENCE_PREFIXES module=${JSON.stringify(
+              details.name,
+            )} prefixes=${JSON.stringify(leaked)} — register/unregister must ` +
+              `be symmetric: clean up addRealmMapping/removeRealmMapping (or ` +
+              `register/unregister) in an afterEach, after, or try/finally, or ` +
+              `these mappings will unresolve URLs in sibling test modules.`,
+          );
+        }
+      }
+    }
     if (moduleDepth === 1) {
       await settledGc();
       try {

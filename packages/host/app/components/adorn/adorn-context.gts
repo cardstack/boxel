@@ -2,6 +2,10 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { hash } from '@ember/helper';
 
+import { makePositionAdornLabel } from '@cardstack/host/modifiers/position-adorn-label';
+
+import type { ModifierLike } from '@glint/template';
+
 // AdornContext: the entry point for the Adorn visual treatment.
 // Wraps the consumer's outer container of Adorn-decorated items
 // (the operator-mode overlay row, the search-results list, the card-
@@ -16,15 +20,15 @@ import { hash } from '@ember/helper';
 //     4px selected, darker teal selected+hover treatment (the rules
 //     respond to both `:hover` and an explicit `.hovered` class so
 //     consumers that drive hover from JS can opt in too).
-//   - Resolves the bounding region for dynamic label positioning via
-//     the yielded `getBoundaryElement` function. Given any descendant,
-//     it returns the visible container that bounds label growth (see
-//     the function below).
+//   - Positions Adorn type-label tabs via the yielded `positionLabel`
+//     modifier — `positionAdornLabel` with this context's boundary
+//     resolver already wired in, so consumers just attach it to a
+//     label and pass the anchor card: `{{adorn.positionLabel cardEl}}`.
 //
-// The stroke class and the boundary resolver are yielded as a
-// block-param hash (`strokeClass`, `getBoundaryElement`) so consumers
-// go through AdornContext rather than hard-coding its internal class
-// names or duplicating the boundary walk.
+// The stroke class and the label positioner are yielded as a
+// block-param hash (`strokeClass`, `positionLabel`) so consumers go
+// through AdornContext rather than hard-coding its internal class
+// names or re-deriving the boundary walk.
 //
 // Mount AdornContext as a child of whatever visible element should
 // bound label growth (operator-mode mounts it inside the stack
@@ -39,7 +43,9 @@ import { hash } from '@ember/helper';
 //     <AdornContext as |adorn|>
 //       {{#each cards as |card|}}
 //         <div class={{cn 'my-card' adorn.strokeClass selected=card.selected}}>
-//           <AdornLabel><:text>{{card.typeName}}</:text></AdornLabel>
+//           <AdornLabel {{adorn.positionLabel card.element}}>
+//             <:text>{{card.typeName}}</:text>
+//           </AdornLabel>
 //           <AdornSelectChip @selected={{card.selected}} />
 //         </div>
 //       {{/each}}
@@ -50,13 +56,18 @@ import { hash } from '@ember/helper';
 // that bounds Adorn label growth: the parent of the nearest context
 // wrapper. AdornContext renders as `display: contents`, so its own
 // rect is empty — its parent is the element the consumer mounted it
-// inside, which is the region we want. Yielded to consumers so the
-// `.adorn-context` marker stays an implementation detail of this
-// component.
+// inside, which is the region we want. Wired into the yielded
+// `positionLabel` modifier so the `.adorn-context` marker stays an
+// implementation detail of this component.
 function getBoundaryElement(el: HTMLElement): HTMLElement | null {
   let marker = el.closest<HTMLElement>('.adorn-context');
   return marker?.parentElement ?? null;
 }
+
+// The label positioner with this context's boundary resolver baked in,
+// yielded as `positionLabel` so consumers just attach it and pass the
+// anchor card.
+const positionLabel = makePositionAdornLabel(getBoundaryElement);
 
 interface AdornContextSignature {
   Element: HTMLDivElement;
@@ -64,7 +75,10 @@ interface AdornContextSignature {
     default: [
       {
         strokeClass: string;
-        getBoundaryElement: (el: HTMLElement) => HTMLElement | null;
+        positionLabel: ModifierLike<{
+          Element: HTMLElement;
+          Args: { Positional: [cardEl: HTMLElement | undefined] };
+        }>;
       },
     ];
   };
@@ -72,9 +86,7 @@ interface AdornContextSignature {
 
 const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
   <div class='adorn-context' ...attributes>
-    {{yield
-      (hash strokeClass='adorn-stroke' getBoundaryElement=getBoundaryElement)
-    }}
+    {{yield (hash strokeClass='adorn-stroke' positionLabel=positionLabel)}}
   </div>
   <style scoped>
     /* `display: contents` so the wrapper is not visually
@@ -89,14 +101,18 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
       /* Token definitions live with the context, not in the global
          stylesheet. --boxel-teal is the light accent shipped by
          boxel-ui; the darker accent is exclusive to the Adorn
-         treatment and used when both hovered and selected. */
+         treatment and used when a selected card is hovered. */
       --adorn-accent-light: var(--boxel-teal);
       --adorn-accent: #00da9f;
     }
     /* Stroke utility. The consumer applies `.adorn-stroke` to
        whichever descendant should carry the outline (typically the
        card-like element itself), then drives `.selected` and either
-       the `:hover` pseudo-class or a `.hovered` class. */
+       the `:hover` pseudo-class or a `.hovered` class. Plain hover and
+       selection use the light accent; hovering a selected card shifts
+       both the stroke and the type-label background to the darker
+       accent — the label inherits `--adorn-label-bg` from the stroke
+       element it's rendered inside. */
     .adorn-context :deep(.adorn-stroke:hover:not(.selected)),
     .adorn-context :deep(.adorn-stroke.hovered:not(.selected)) {
       box-shadow: 0 0 0 2px var(--adorn-accent-light);
@@ -107,6 +123,7 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
     .adorn-context :deep(.adorn-stroke.selected:hover),
     .adorn-context :deep(.adorn-stroke.selected.hovered) {
       box-shadow: 0 0 0 4px var(--adorn-accent);
+      --adorn-label-bg: var(--adorn-accent);
     }
   </style>
 </template>;

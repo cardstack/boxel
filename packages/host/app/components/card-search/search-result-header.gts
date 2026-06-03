@@ -5,7 +5,6 @@ import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 
 import {
   BoxelDropdown,
-  Button,
   Menu,
   SortDropdown,
   ViewSelector,
@@ -13,6 +12,7 @@ import {
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
+import SelectionCheckmarkIcon from '@cardstack/host/components/adorn/selection-checkmark-icon';
 import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
 import type { SortOption } from './constants';
@@ -42,31 +42,47 @@ export default class SearchResultHeader extends Component<Signature> {
     return this.args.selectedCards?.length ?? 0;
   }
 
+  // The selection menu only makes sense once something is selected — its
+  // trigger shows the count and its items act on the current selection.
+  get showSelectionMenu(): boolean {
+    return Boolean(this.args.multiSelect) && this.selectedCount > 0;
+  }
+
+  // The trigger's visible text is just the count, so spell the control out
+  // for assistive tech (and include the count it stands in for).
+  get selectionMenuLabel(): string {
+    let count = this.selectedCount;
+    return `Selection menu, ${count} card${count === 1 ? '' : 's'} selected`;
+  }
+
   <template>
     <header class='search-result-header' data-test-search-result-header>
       <div class='summary' data-test-search-label>{{@summaryText}}</div>
       <div class='controls'>
-        {{#if @multiSelect}}
+        {{#if this.showSelectionMenu}}
           <div class='selection-menu'>
             <BoxelDropdown
               @contentClass='selection-dropdown-content'
               @matchTriggerWidth={{false}}
             >
               <:trigger as |bindings|>
-                <Button
+                <button
+                  type='button'
                   class='selection-dropdown-trigger'
-                  @kind='secondary-light'
+                  aria-label={{this.selectionMenuLabel}}
                   {{bindings}}
                   data-test-selection-dropdown-trigger
                 >
-                  {{this.selectedCount}}
-                  Selected
+                  <SelectionCheckmarkIcon class='selection-trigger-icon' />
+                  <span class='selection-trigger-text'>
+                    {{this.selectedCount}}
+                  </span>
                   <DropdownArrowDown
                     class='dropdown-arrow'
-                    width='12'
-                    height='12'
+                    width='13px'
+                    height='13px'
                   />
-                </Button>
+                </button>
               </:trigger>
               <:content as |dd|>
                 <Menu
@@ -126,16 +142,32 @@ export default class SearchResultHeader extends Component<Signature> {
       }
 
       .selection-dropdown-trigger {
-        border-radius: var(--boxel-border-radius);
-        min-width: 140px;
-        justify-content: flex-start;
-        padding-left: var(--boxel-sp-sm);
-        padding-right: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-xs);
-        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        min-height: 26px;
+        padding: 0 var(--boxel-sp-xs);
+        border: none;
+        border-radius: 6px;
+        background-color: var(--boxel-teal);
+        color: var(--boxel-dark);
+        font: 700 var(--boxel-font-sm);
+        cursor: pointer;
+      }
+      .selection-dropdown-trigger:hover,
+      .selection-dropdown-trigger:focus-visible {
+        background-color: #00da9f;
+      }
+      .selection-trigger-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      .selection-trigger-text {
+        line-height: 1;
+        white-space: nowrap;
       }
       .dropdown-arrow {
-        margin-left: auto;
         flex-shrink: 0;
       }
       .selection-menu {
@@ -146,10 +178,13 @@ export default class SearchResultHeader extends Component<Signature> {
 
   private get selectionMenuItems() {
     return [
+      // Inert teal header echoing the trigger's count — uses the same
+      // dark-circle-with-teal-check artwork as the Adorn selection chip.
       new MenuItem({
-        label: 'Deselect All',
-        action: () => this.args.onDeselectAll?.(),
-        icon: DeselectIcon,
+        label: `${this.selectedCount} Selected`,
+        action: () => {},
+        icon: SelectionCheckmarkIcon,
+        header: true,
       }),
       new MenuItem({
         label: 'Select All',
@@ -159,6 +194,11 @@ export default class SearchResultHeader extends Component<Signature> {
           }
         },
         icon: SelectAllIcon,
+      }),
+      new MenuItem({
+        label: 'Deselect All',
+        action: () => this.args.onDeselectAll?.(),
+        icon: DeselectIcon,
       }),
     ];
   }

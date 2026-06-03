@@ -35,7 +35,12 @@ export interface AdornLabelSignature {
 }
 
 const AdornLabel: TemplateOnlyComponent<AdornLabelSignature> = <template>
-  <div class='adorn-label {{if @compact "compact"}}' ...attributes>
+  <div
+    class='adorn-label
+      {{if @compact "compact"}}
+      {{unless (has-block "dropdown") "no-menu"}}'
+    ...attributes
+  >
     {{#if (has-block 'icon')}}
       <span class='adorn-label-icon-slot'>{{yield to='icon'}}</span>
     {{/if}}
@@ -71,6 +76,15 @@ const AdornLabel: TemplateOnlyComponent<AdornLabelSignature> = <template>
       padding: 2px 10px 2px 5px;
       font-size: 9px;
       gap: 4px;
+    }
+    /* Without an in-tab menu filling the right side, the text would
+       crowd the flag's sloped right edge — add clearance so it clears
+       the slope. */
+    .adorn-label.no-menu {
+      padding-right: 18px;
+    }
+    .adorn-label.no-menu.compact {
+      padding-right: 15px;
     }
 
     .adorn-label-icon-slot {

@@ -11,11 +11,13 @@ import HostBaseCommand from '../lib/host-base-command';
 import WriteTextFileCommand from './write-text-file';
 
 import type CardService from '../services/card-service';
+import type NetworkService from '../services/network';
 
 export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
   typeof BaseCommandModule.AddFieldToCardDefinitionInput
 > {
   @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
 
   static actionVerb = 'Add';
 
@@ -42,6 +44,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
     let moduleSyntax = new ModuleSyntax(
       moduleSource,
       input.cardDefinitionToModify.module,
+      this.network.virtualNetwork,
     );
 
     moduleSyntax.addField({
