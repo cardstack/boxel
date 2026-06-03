@@ -2,7 +2,6 @@ import { expect, test } from './fixtures';
 import {
   createRealm,
   createSubscribedUserAndLogin,
-  login,
   logout,
   postCardSource,
   setRealmRedirects,
@@ -63,12 +62,19 @@ async function publishRealm(
 }
 
 // Create a fresh source realm, seed it with the host-mode fixture cards, and
-// publish it. Leaves the page logged out (matching the prior per-test setup)
-// so callers that mutate the realm can re-login explicitly. The `page` must
-// already have realm redirects registered (the per-test `page` fixture does
-// this; a hand-rolled context page must call `setRealmRedirects` first).
+// publish it. Leaves the page logged out. The `page` must already have realm
+// redirects registered (the per-test `page` fixture does this; a hand-rolled
+// context page must call `setRealmRedirects` first).
+//
+// `options.routingRulePath` seeds a `realm.json` host routing rule (mapping
+// that path to the white-paper card) BEFORE the single publish — so routing
+// tests don't have to publish, rewrite realm.json, and re-publish. Each
+// `_publish-realm` POST is the heaviest, contention-prone step in the suite,
+// so collapsing two publishes into one is what keeps the routing tests from
+// timing out on a first-attempt publish under shard load.
 async function createAndPublishHostModeRealm(
   page: Page,
+  options: { routingRulePath?: string } = {},
 ): Promise<PublishedHostModeRealm> {
   const serverIndexUrl = new URL(appURL).origin;
   const { username, password } = await createSubscribedUserAndLogin(
@@ -230,6 +236,38 @@ async function createAndPublishHostModeRealm(
       },
     }),
   );
+
+  if (options.routingRulePath) {
+    // Overwrite the auto-generated realm.json with a host routing rule that
+    // maps the given path to the white-paper card posted above. Seeding it
+    // here means the rule is present at the initial publish, so the routing
+    // tests need only one publish instead of publish-then-republish.
+    await postCardSource(
+      page,
+      realmURL,
+      'realm.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: `Routed Realm ${randomUUID()}` },
+            hostRoutingRules: [{ path: options.routingRulePath }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './white-paper' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      }),
+    );
+  }
 
   await page.reload();
   await page.locator('[data-test-host-mode-isolated]').waitFor();
@@ -456,15 +494,11 @@ test.describe('Host mode', () => {
   });
 });
 
-// These tests overwrite `realm.json` and re-publish, so each needs an isolated
-// realm — they keep the per-test `beforeEach` setup rather than sharing.
+// Each test gets its own realm, published once with the routing rule already
+// seeded into realm.json (see `createAndPublishHostModeRealm`) — no
+// rewrite-and-republish, which is what made these the suite's heaviest,
+// flakiest tests.
 test.describe('Host mode routing rules', () => {
-  let realm: PublishedHostModeRealm;
-
-  test.beforeEach(async ({ page }) => {
-    realm = await createAndPublishHostModeRealm(page);
-  });
-
   // CS-10054 + CS-10055: routing rules in the realm config card resolve a
   // bare path (no .json extension) to a target card and render it in host
   // mode. This test fails until the host-mode request handler reads the
@@ -472,59 +506,13 @@ test.describe('Host mode routing rules', () => {
   test('routing rule resolves a bare path to its target card', async ({
     page,
   }) => {
-    // beforeEach logged out — re-login so we can write to the source realm.
-    await login(page, realm.username, realm.password);
-    // Diagnostic: this interact-mode boot is the second observed flaky
-    // navigation. Log how long it takes so a future timeout shows whether
-    // the app boot or a subresource was the slow part.
-    let gotoStart = Date.now();
-    await page.goto(realm.realmURL, { waitUntil: 'domcontentloaded' });
-    console.log(
-      `[host-mode routing] interact-mode page.goto resolved after ${
-        Date.now() - gotoStart
-      }ms`,
-    );
-    await page.locator('[data-test-stack-item-content]').first().waitFor();
+    let realm = await createAndPublishHostModeRealm(page, {
+      routingRulePath: '/whitepaper',
+    });
 
-    // Overwrite realm.json with a routing rule mapping /whitepaper to the
-    // existing white-paper card. The auto-generated realm.json from
-    // createRealm has no rules; we replace it before re-publishing.
-    await postCardSource(
-      page,
-      realm.realmURL,
-      'realm.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            cardInfo: { name: `Routed Realm ${randomUUID()}` },
-            hostRoutingRules: [{ path: '/whitepaper' }],
-          },
-          relationships: {
-            'hostRoutingRules.0.instance': {
-              links: { self: './white-paper' },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
-              name: 'RealmConfig',
-            },
-          },
-        },
-      }),
-    );
-
-    // Re-publish so the routing rule lands in the published realm.
-    await publishRealm(page, realm.realmURL, realm.publishedRealmURL);
-
-    await logout(page);
-
-    // The _publish-realm POST returns 202 before the published realm has
-    // finished re-indexing the new realm.json. Poll the bare URL until the
-    // server-rendered HTML contains the target card's marker — that
-    // confirms the routing rule is indexed AND the server cardURL rewrite
-    // is applying it.
+    // Poll the bare URL until the server-rendered HTML contains the target
+    // card's marker — that confirms the routing rule is indexed in the
+    // published realm AND the server cardURL rewrite is applying it.
     let routedURL = `${realm.publishedRealmURL}whitepaper`;
     await waitForPublishedMarker(page, routedURL, 'data-test-white-paper');
 
@@ -545,39 +533,9 @@ test.describe('Host mode routing rules', () => {
     // match the client's `params.path === '<user>/<realm>'`, and
     // hydration would replace the SSR'd card with the bare-shell
     // fallback. This test pins the canonicalized comparator.
-    await login(page, realm.username, realm.password);
-    await page.goto(realm.realmURL, { waitUntil: 'domcontentloaded' });
-    await page.locator('[data-test-stack-item-content]').first().waitFor();
-
-    await postCardSource(
-      page,
-      realm.realmURL,
-      'realm.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            cardInfo: { name: `Routed Realm ${randomUUID()}` },
-            hostRoutingRules: [{ path: '/' }],
-          },
-          relationships: {
-            'hostRoutingRules.0.instance': {
-              links: { self: './white-paper' },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
-              name: 'RealmConfig',
-            },
-          },
-        },
-      }),
-    );
-
-    await publishRealm(page, realm.realmURL, realm.publishedRealmURL);
-
-    await logout(page);
+    let realm = await createAndPublishHostModeRealm(page, {
+      routingRulePath: '/',
+    });
 
     // Wait until the SSR HTML at the canonical (trailing-slash) URL
     // contains the routed card's marker, then navigate to the
