@@ -44,7 +44,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
-import { rri, type RealmResourceIdentifier } from './card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';

@@ -31,7 +31,7 @@ import {
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index';
-import { rri } from './card-reference-resolver';
+import { rri } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';

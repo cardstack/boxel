@@ -6,7 +6,7 @@ import {
   CardError,
   isCardError,
 } from './index';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 async function loadDocumentWithRequest(

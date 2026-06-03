@@ -1,7 +1,7 @@
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 
 interface LocalOptions {
   preserveQuerystring?: boolean;

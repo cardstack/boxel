@@ -2,7 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
 import type { ResolvedCodeRef } from './index';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import {
   type CardResource,
   type CodeRef,

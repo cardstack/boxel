@@ -1,7 +1,7 @@
 import camelCase from 'camelcase';
 
 import type { CodeRef, ResolvedCodeRef } from '../code-ref';
-import { rri } from '../card-reference-resolver';
+import { rri } from '../realm-identifiers';
 import { trimExecutableExtension } from '../index';
 import type { RealmPaths } from '../paths';
 

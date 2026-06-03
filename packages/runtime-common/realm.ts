@@ -8,7 +8,7 @@ import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,

@@ -1,4 +1,4 @@
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
 import {

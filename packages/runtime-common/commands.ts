@@ -3,7 +3,7 @@ import {
   isCardDef,
   codeRefWithAbsoluteIdentifier,
 } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';

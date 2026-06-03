@@ -3,7 +3,7 @@ import { type CodeRef, moduleFrom } from './code-ref';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 import type { Query } from './query';
 
@@ -151,7 +151,7 @@ export function isModuleResource(resource: any): resource is ModuleResource {
 
 // Pure shape predicates live in `card-document-shape.ts` so callers that
 // only need to recognize a JSON:API resource don't pull the transitive
-// runtime chain rooted in this file (`card-reference-resolver.ts` →
+// runtime chain rooted in this file (`realm-identifiers.ts` →
 // `loader.ts` → `realm.ts` → ...). Re-exported here for backward compat.
 export {
   isCardResource,

@@ -11,7 +11,7 @@ import type { VirtualNetwork } from './virtual-network';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
-import { rri, type RealmResourceIdentifier } from './card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -657,7 +657,7 @@ export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
-export * from './card-reference-resolver';
+export * from './realm-identifiers';
 export * from './bfm-card-references';
 export * from './bfm-math-render';
 export * from './bfm-mermaid-render';

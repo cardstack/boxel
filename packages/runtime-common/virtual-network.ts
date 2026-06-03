@@ -3,7 +3,7 @@ import { baseRealm } from './index';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,

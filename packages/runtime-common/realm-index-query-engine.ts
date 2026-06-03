@@ -35,8 +35,8 @@ import { RealmPaths } from './paths';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './card-reference-resolver';
-import { rri } from './card-reference-resolver';
+} from './realm-identifiers';
+import { rri } from './realm-identifiers';
 import {
   normalizeQueryForSignature,
   sortKeysDeep,

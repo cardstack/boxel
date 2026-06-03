@@ -20,7 +20,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import type { VirtualNetwork } from './virtual-network';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';

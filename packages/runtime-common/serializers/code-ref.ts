@@ -9,7 +9,7 @@ import {
   executableExtensions,
 } from '../index';
 import { resolveModuleHref } from '../code-ref';
-import { rri, type RealmResourceIdentifier } from '../card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers';
 import type { VirtualNetwork } from '../virtual-network';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.

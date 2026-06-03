@@ -1,4 +1,4 @@
-import { rri } from '../card-reference-resolver';
+import { rri } from '../realm-identifiers';
 import { trimExecutableExtension } from '../index';
 import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';

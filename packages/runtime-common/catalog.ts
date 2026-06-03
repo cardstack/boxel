@@ -8,8 +8,8 @@ import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
-import { rri } from './card-reference-resolver';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import { rri } from './realm-identifiers';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 // Local mirror of the boxel-catalog Listing shape — that repo isn't cloned in boxel CI. (CS-11166)

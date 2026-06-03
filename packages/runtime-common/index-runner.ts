@@ -32,7 +32,7 @@ import {
   type Diagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import type { VirtualNetwork } from './virtual-network';
 import { isCardError } from './error';

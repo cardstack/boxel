@@ -15,7 +15,7 @@ import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 import {
   getCreatedTime,
