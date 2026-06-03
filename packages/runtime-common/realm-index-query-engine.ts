@@ -1167,14 +1167,9 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        // A relationship's `links.self` is meant to resolve to a card
-        // document, but it can be authored pointing at a raw asset URL
-        // instead — most often by the AI bot writing card JSON, which
-        // conflates "link to an image" with a card relationship: e.g. a
-        // `heroImage` field modeled as a `linksTo` whose value is an image
-        // URL rather than a link to an Image card (a string/URL attribute
-        // is what that case actually wants). The fetch then returns binary,
-        // so gate on Content-Type before JSON.parse and name the field.
+        // `links.self` should resolve to a card document, but a mistake
+        // (human or AI-generated) can leave a non-card URL here. Gate on
+        // Content-Type so a binary body never reaches JSON.parse.
         let contentType = response.headers.get('content-type');
         if (!isJsonContentType(contentType)) {
           let fieldName = linkContext?.get(url)?.fieldName;
