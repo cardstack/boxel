@@ -335,6 +335,7 @@ export async function searchRealms(
     cacheOnlyDefinitions?: boolean;
     skipQueryBackedExpansion?: boolean;
     omitIncluded?: boolean;
+    jobIdentity?: string;
   },
 ): Promise<LinkableCollectionDocument> {
   let realmEntries = realms

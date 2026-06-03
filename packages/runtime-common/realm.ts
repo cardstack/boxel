@@ -5165,6 +5165,7 @@ export class Realm {
       cacheOnlyDefinitions?: boolean;
       skipQueryBackedExpansion?: boolean;
       omitIncluded?: boolean;
+      jobIdentity?: string;
     },
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
@@ -5175,6 +5176,7 @@ export class Realm {
         ? { skipQueryBackedExpansion: true }
         : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      ...(opts?.jobIdentity ? { jobIdentity: opts.jobIdentity } : {}),
     });
   }
 

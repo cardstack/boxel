@@ -68,6 +68,18 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
     },
   } as LooseSingleCardDocument;
 
+  // Extra Consumers so a `type: Consumer` search returns multiple data[]
+  // results, letting the search-path test assert every result instance is
+  // cached (not just that some row exists).
+  for (let i = 2; i <= 3; i++) {
+    fs[`consumer-${i}.json`] = {
+      data: {
+        attributes: { name: `C${i}` },
+        meta: { adoptsFrom: { module: rri('./consumer'), name: 'Consumer' } },
+      },
+    } as LooseSingleCardDocument;
+  }
+
   return fs;
 }
 
@@ -181,6 +193,64 @@ module(basename(__filename), function () {
         3,
         'job 9.1 assembles live, ignoring job 8.1 entries',
       );
+    });
+
+    // Regression for the real search path. Indexing funnels through
+    // `Realm.search`, which rebuilds the `searchCards` opts; if it drops
+    // `jobIdentity`, `loadLinks` never gets a cache key and the cache is
+    // silently never populated during indexing — even though the search itself
+    // runs fine. The `cardDocument`-based tests above cannot catch this because
+    // they pass `jobIdentity` straight into the engine, bypassing `Realm.search`.
+    //
+    // Precise assertion: every instance in the search's `data[]` is cached, by
+    // its own URL, with its assembled query-field umbrella (not merely that
+    // "some row" exists).
+    test('Realm.search caches every data[] result instance with its expanded query fields', async function (assert) {
+      let doc = await realm.search(
+        {
+          filter: {
+            type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
+          },
+        },
+        {
+          cacheOnlyDefinitions: true,
+          skipQueryBackedExpansion: true,
+          omitIncluded: true,
+          jobIdentity: '11.1',
+        },
+      );
+
+      let resultIds = (doc.data ?? [])
+        .map((r) => r.id)
+        .filter(Boolean) as string[];
+      assert.strictEqual(
+        resultIds.length,
+        3,
+        'search returned all three Consumer data[] results',
+      );
+
+      let rows = (await query(dbAdapter, [
+        `SELECT url, result FROM ${CACHE_TABLE} WHERE job_id =`,
+        param('11.1'),
+      ] as Expression)) as { url: string; result: string }[];
+      let cachedByUrl = new Map(rows.map((r) => [r.url, r.result]));
+
+      for (let id of resultIds) {
+        let cached = cachedByUrl.get(id);
+        assert.notStrictEqual(
+          cached,
+          undefined,
+          `data[] result ${id} is cached`,
+        );
+        let rels = JSON.parse(cached ?? '{}') as {
+          queryLinks?: { data?: unknown[] };
+        };
+        assert.strictEqual(
+          rels.queryLinks?.data?.length,
+          3,
+          `cached entry for ${id} holds its expanded queryLinks umbrella`,
+        );
+      }
     });
   });
 });

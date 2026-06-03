@@ -81,6 +81,41 @@ const RECURSING_DEPTH = 3;
 
 const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
 
+// Hit/miss observability for the per-instance cache. Counters are kept per job
+// identity and a running summary is emitted as cache traffic accumulates — a
+// low-volume aggregate (not one line per event) so an indexing run reports its
+// cache hit rate in the ordinary logs. The map is diagnostics-only and bounded.
+// Lazily created (not at module load): a top-level `logger()` call here races
+// the circular import that populates it, whereas first use happens well after.
+let instanceCacheLog: ReturnType<typeof logger> | undefined;
+const instanceCacheStats = new Map<string, { hits: number; misses: number }>();
+const INSTANCE_CACHE_LOG_EVERY = 200;
+
+function recordInstanceCacheEvent(jobId: string, hit: boolean): void {
+  let stat = instanceCacheStats.get(jobId);
+  if (!stat) {
+    // Bound memory without tracking job lifecycle here: drop the whole map if
+    // it grows past a sane number of concurrent jobs.
+    if (instanceCacheStats.size > 256) {
+      instanceCacheStats.clear();
+    }
+    stat = { hits: 0, misses: 0 };
+    instanceCacheStats.set(jobId, stat);
+  }
+  if (hit) {
+    stat.hits++;
+  } else {
+    stat.misses++;
+  }
+  let total = stat.hits + stat.misses;
+  if (total === 1 || total % INSTANCE_CACHE_LOG_EVERY === 0) {
+    (instanceCacheLog ??= logger('instance-cache')).info(
+      `job=${jobId} hits=${stat.hits} misses=${stat.misses} ` +
+        `hitRate=${Math.round((100 * stat.hits) / total)}%`,
+    );
+  }
+}
+
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
@@ -1345,6 +1380,7 @@ export class RealmIndexQueryEngine {
                 cacheKey.url,
               );
               if (cached !== undefined) {
+                recordInstanceCacheEvent(cacheKey.jobId, true);
                 // Hit: reuse this instance's assembled query-field
                 // relationships from an earlier occurrence in the same job,
                 // skipping the definition lookup + field-tree walk. The
@@ -1359,6 +1395,7 @@ export class RealmIndexQueryEngine {
                 }
                 return;
               }
+              recordInstanceCacheEvent(cacheKey.jobId, false);
             }
             let storedDefs = (
               resource.meta as {
