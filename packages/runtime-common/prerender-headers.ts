@@ -93,3 +93,27 @@ export function sanitizeJobPriorityHeader(
   if (!Number.isSafeInteger(n) || n < 0 || n > JOB_PRIORITY_MAX) return null;
   return n;
 }
+
+// Per-search correlation id minted by the host SPA on each
+// `_federated-search` fetch it issues while rendering inside a prerender
+// tab. The realm-server's search path reads it back out and emits a
+// `realm:search-timing` line keyed by it, so a client-observed slow
+// search (visible in the prerender's `queryLoadsInFlight` diagnostics)
+// can be joined to where the realm-server actually spent the time. Lives
+// here so the host SPA can import the header name without depending on
+// the realm-server package.
+export const X_BOXEL_REQUEST_ID_HEADER = 'x-boxel-request-id';
+
+// Sanitize the inbound request-id header. It's echoed into log lines, so
+// admit only a bounded run of URL-safe id characters (covers a UUID and
+// then some) and reject anything with whitespace or control characters
+// that could forge a log line.
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+export function sanitizeRequestId(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  return REQUEST_ID_PATTERN.test(trimmed) ? trimmed : null;
+}

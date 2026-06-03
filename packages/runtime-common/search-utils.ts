@@ -1,6 +1,8 @@
 import type { RealmResourceIdentifier } from './card-reference-resolver';
+import { logger } from './log';
 import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
+import { RequestTimings } from './request-timings';
 import {
   isValidPrerenderedHtmlFormat,
   PRERENDERED_HTML_FORMATS,
@@ -326,6 +328,18 @@ export type SearchOpts = {
   omitIncluded?: boolean;
   priority?: number;
   jobIdentity?: string;
+  // Correlation id minted by the client (the prerendered host stamps
+  // `x-boxel-request-id` on its `_federated-search` fetch) and read back
+  // out by the request handler into opts. When present, `searchRealms`
+  // instruments the server-side search pipeline and emits one
+  // `realm:search-timing` line keyed by this id, so a client-observed
+  // slow search can be joined to where the realm-server spent the time.
+  requestId?: string;
+  // Per-request wall-clock collector. `searchRealms` creates it when a
+  // `requestId` is present and threads it down through `Realm.search` →
+  // `searchCards` → `loadLinks` so each post-SQL stage stamps its
+  // elapsed time. Callers never supply this directly.
+  timings?: RequestTimings;
 };
 
 type SearchableRealm = {
@@ -336,11 +350,47 @@ type SearchableRealm = {
   url?: string;
 };
 
+// Indirection so a host integration test can deterministically capture
+// the emitted timing line: loglevel rebinds a logger's methods on every
+// `setLevel`, so a test that monkeypatches a direct logger handle would
+// race the next `logger('realm:search-timing')` call. A settable sink
+// sidesteps that. Defaults to the `realm:search-timing` logger.
+let searchTimingSink: ((line: string) => void) | undefined;
+let searchTimingLog: ReturnType<typeof logger> | undefined;
+export function setSearchTimingSinkForTests(
+  sink: ((line: string) => void) | undefined,
+): void {
+  searchTimingSink = sink;
+}
+export function emitSearchTiming(line: string): void {
+  if (searchTimingSink) {
+    searchTimingSink(line);
+    return;
+  }
+  // Lazy: a module-load `logger()` call races the circular import that
+  // installs the logger factory. First emission happens well after boot.
+  (searchTimingLog ??= logger('realm:search-timing')).info(line);
+}
+
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
   opts?: SearchOpts,
 ): Promise<LinkableCollectionDocument> {
+  // Instrument only when the caller threaded a correlation id. The
+  // prerendered host stamps one; live SPA / API traffic does not — so
+  // normal traffic allocates no collector and emits no line.
+  //
+  // Two callers: the realm-server's `handle-search` threads a collector it
+  // owns (so it can emit one complete request→response line itself —
+  // `opts.timings` is set, `ownsTimings` is false, we don't emit), and the
+  // host-test realm-server mock calls us with just a `requestId` (we create
+  // the collector and emit the line ourselves, which the host test observes).
+  let ownsTimings = Boolean(opts?.requestId) && !opts?.timings;
+  let timings =
+    opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
+  let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
+  let startedAt = ownsTimings ? Date.now() : 0;
   let realmEntries = realms
     .filter((realm): realm is SearchableRealm => Boolean(realm))
     .map((realm) => ({
@@ -348,7 +398,7 @@ export async function searchRealms(
       label: realm.url ? String(realm.url) : undefined,
     }));
   let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.search(query, opts)),
+    Promise.resolve().then(() => realm.search(query, perRealmOpts)),
   );
   let results = await Promise.allSettled(searchPromises);
   let queryLabel = '[unserializable query]';
@@ -369,7 +419,20 @@ export async function searchRealms(
   let docs = results.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   );
-  return combineSearchResults(docs);
+  let combined = combineSearchResults(docs);
+  if (timings) {
+    timings.incr('results', combined.data?.length ?? 0);
+  }
+  if (ownsTimings && timings) {
+    emitSearchTiming(
+      `req=${opts!.requestId}` +
+        (opts!.jobIdentity ? ` job=${opts!.jobIdentity}` : '') +
+        ` realms=${realmEntries.length}` +
+        ` total=${Date.now() - startedAt}ms ` +
+        timings.toLogFragment(),
+    );
+  }
+  return combined;
 }
 
 type PrerenderedSearchableRealm = {
