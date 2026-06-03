@@ -84,16 +84,26 @@ export default function handleSearch(opts: {
     let jobPriority = sanitizeJobPriorityHeader(
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
     );
+    // `<jobId>.<reservationId>` identity stamped by indexer-driven prerender
+    // requests. Threaded into searchOpts so the per-instance wire-format cache
+    // (`job_scoped_instance_cache`, consulted inside `loadLinks`) scopes its
+    // entries to one indexing job; also reused below as the query-level
+    // cache's job key. Absent for live / external callers.
+    let prerenderJobId = sanitizePrerenderJobId(
+      ctxt.get(PRERENDER_JOB_ID_HEADER),
+    );
     let searchOpts: {
       cacheOnlyDefinitions?: true;
       skipQueryBackedExpansion?: true;
       omitIncluded?: true;
       priority?: number;
+      jobIdentity?: string;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (skipQueryBackedExpansion) searchOpts.skipQueryBackedExpansion = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
+    if (prerenderJobId) searchOpts.jobIdentity = prerenderJobId;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
     // `consumingRealm` is read unconditionally — even when the
@@ -139,9 +149,7 @@ export default function handleSearch(opts: {
     // `multiRealmAuthorization` has already validated read access to
     // every entry of `realmList` for this caller, so the cache cannot
     // surface results across an authorization boundary.
-    let jobId = searchCache
-      ? sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER))
-      : null;
+    let jobId = searchCache ? prerenderJobId : null;
     let cacheable = searchCache && jobId && consumingRealm;
 
     if (cacheable) {

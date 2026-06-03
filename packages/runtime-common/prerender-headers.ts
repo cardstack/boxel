@@ -11,6 +11,24 @@
 // for backwards-compatibility with existing imports.
 export const X_BOXEL_JOB_ID_HEADER = 'x-boxel-job-id';
 
+// Sanitize the inbound job-id header. Format is `<digits>.<digits>`
+// (job.id + reservation.id, both bigint-shaped); accept up to 32 digits
+// per side (so up to 65 chars total including the separator) to be
+// defensive without admitting newlines or other log-injection. Lives
+// here alongside the header so both the realm-server search handlers and
+// the Realm class (card-GET assembly) normalize the identity the same way
+// before using it as a job-scoped cache key. realm-server's
+// `prerender-constants.ts` re-exports this as `sanitizePrerenderJobId`.
+const JOB_ID_PATTERN = /^[0-9]{1,32}\.[0-9]{1,32}$/;
+export function sanitizePrerenderJobId(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  return JOB_ID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 // HTTP header sent by the host's `_federated-search` fetch wrapper while
 // rendering inside a prerender tab. Carries the URL of the realm whose
 // card is currently being rendered (the "consuming" realm). The realm-

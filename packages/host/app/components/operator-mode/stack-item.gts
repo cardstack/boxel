@@ -1,4 +1,3 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -80,6 +79,7 @@ import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
+import SelectionCheckmarkIcon from '../adorn/selection-checkmark-icon';
 import CardRenderer from '../card-renderer';
 
 import CardError from './card-error';
@@ -92,28 +92,6 @@ import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
-
-// Inert "N Selected" header icon for the multi-select utility menu —
-// dark filled circle with a teal check, matching the per-card selection chip.
-const SelectionCheckmarkIcon: TemplateOnlyComponent<{
-  Element: SVGSVGElement;
-}> = <template>
-  <svg
-    viewBox='0 0 14 14'
-    fill='none'
-    xmlns='http://www.w3.org/2000/svg'
-    ...attributes
-  >
-    <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
-    <path
-      d='M3.5 7.5L5.5 9.5L10.5 4.5'
-      stroke='var(--boxel-teal)'
-      stroke-width='1.5'
-      stroke-linecap='round'
-      stroke-linejoin='round'
-    />
-  </svg>
-</template>;
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
