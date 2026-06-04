@@ -19,7 +19,7 @@ import SelectionMenu from '../selection-menu/index.gts';
 import Tooltip from '../tooltip/index.gts';
 
 export interface CardHeaderUtilityMenu {
-  // Accessible name for the trigger; SelectionMenu defaults to the count.
+  // Accessible name for the trigger; SelectionMenu defaults to `Selection menu, <count> selected`.
   label?: string;
   menuItems: (MenuItem | MenuDivider)[];
   selectedCount: number;
