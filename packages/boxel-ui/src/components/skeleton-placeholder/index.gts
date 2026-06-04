@@ -14,7 +14,7 @@ export default class SkeletonPlaceholder extends Component<Signature> {
 
   <template>
     <div
-      class="boxel-skeleton-placeholder {{this.animationClass}}"
+      class='boxel-skeleton-placeholder {{this.animationClass}}'
       data-test-boxel-skeleton-placeholder
       ...attributes
     />
@@ -44,7 +44,7 @@ export default class SkeletonPlaceholder extends Component<Signature> {
       }
 
       .wave::after {
-        content: "";
+        content: '';
         position: absolute;
         top: 0;
         right: 0;

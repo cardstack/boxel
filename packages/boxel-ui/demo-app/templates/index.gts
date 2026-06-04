@@ -28,21 +28,21 @@ interface UsageComponent {
 
 class IndexComponent extends Component {
   <template>
-    {{pageTitle "Boxel Components"}}
+    {{pageTitle 'Boxel Components'}}
     <BasicDropdownWormhole />
 
-    <h1 class="boxel-sr-only">Boxel Components Documentation</h1>
+    <h1 class='boxel-sr-only'>Boxel Components Documentation</h1>
     <FreestyleGuide
-      class="boxel-freestyle-guide"
-      @title="Boxel UI Components"
-      @subtitle="Living Component Documentation"
+      class='boxel-freestyle-guide'
+      @title='Boxel UI Components'
+      @subtitle='Living Component Documentation'
       style={{this.theme.styles}}
     >
-      <BoxelContainer @display="flex">
-        <FieldContainer @label="Theme" @tag="label">
+      <BoxelContainer @display='flex'>
+        <FieldContainer @label='Theme' @tag='label'>
           <BoxelSelect
-            class="theme-selector"
-            @placeholder="Select Theme"
+            class='theme-selector'
+            @placeholder='Select Theme'
             @selected={{this.theme}}
             @options={{this.themes}}
             @onChange={{this.selectTheme}}
@@ -51,9 +51,9 @@ class IndexComponent extends Component {
             {{theme.name}}
           </BoxelSelect>
         </FieldContainer>
-        <FieldContainer @label="Cycle Themes" @tag="label">
+        <FieldContainer @label='Cycle Themes' @tag='label'>
           <Switch
-            @label="Cycle Themes"
+            @label='Cycle Themes'
             @isEnabled={{this.isCycleThemesEnabled}}
             @onChange={{this.toggleCycling}}
           />
@@ -61,8 +61,8 @@ class IndexComponent extends Component {
       </BoxelContainer>
 
       <FreestyleSection
-        @name="Components"
-        class="freestyle-components-section"
+        @name='Components'
+        class='freestyle-components-section'
         as |Section|
       >
         {{#each this.usageComponents as |c|}}
@@ -72,8 +72,8 @@ class IndexComponent extends Component {
         {{/each}}
       </FreestyleSection>
       <FreestyleSection
-        @name="boxel-icons"
-        class="freestyle-components-section"
+        @name='boxel-icons'
+        class='freestyle-components-section'
       >
         <IconsGrid />
       </FreestyleSection>

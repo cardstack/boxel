@@ -5,33 +5,33 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="20"
-    height="18"
-    viewBox="0 0 20 18"
+    xmlns='http://www.w3.org/2000/svg'
+    width='20'
+    height='18'
+    viewBox='0 0 20 18'
     ...attributes
   ><g
-      fill="none"
-      stroke="var(--icon-color, currentColor)"
-      stroke-width="1.4"
-    ><rect width="20" height="4" y="1" stroke="none" rx="2" /><rect
-        width="18.6"
-        height="2.6"
-        x=".7"
-        y="1.7"
-        rx="1.3"
-      /><rect width="20" height="4" y="7" stroke="none" rx="2" /><rect
-        width="18.6"
-        height="2.6"
-        x=".7"
-        y="7.7"
-        rx="1.3"
-      /><rect width="20" height="4" y="13" stroke="none" rx="2" /><rect
-        width="18.6"
-        height="2.6"
-        x=".7"
-        y="13.7"
-        rx="1.3"
+      fill='none'
+      stroke='var(--icon-color, currentColor)'
+      stroke-width='1.4'
+    ><rect width='20' height='4' y='1' stroke='none' rx='2' /><rect
+        width='18.6'
+        height='2.6'
+        x='.7'
+        y='1.7'
+        rx='1.3'
+      /><rect width='20' height='4' y='7' stroke='none' rx='2' /><rect
+        width='18.6'
+        height='2.6'
+        x='.7'
+        y='7.7'
+        rx='1.3'
+      /><rect width='20' height='4' y='13' stroke='none' rx='2' /><rect
+        width='18.6'
+        height='2.6'
+        x='.7'
+        y='13.7'
+        rx='1.3'
       /></g></svg>
 </template>;
 

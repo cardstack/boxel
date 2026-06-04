@@ -147,33 +147,33 @@ export default class Tooltip extends Component<Signature> {
 
   <template>
     <Velcro
-      @placement={{if @placement @placement "top"}}
+      @placement={{if @placement @placement 'top'}}
       @offsetOptions={{if @offset @offset 6}}
       as |velcro|
     >
       <div
-        class="trigger"
+        class='trigger'
         {{! @glint-ignore velcro.hook }}
         {{velcro.hook}}
-        {{on "mouseenter" this.onMouseEnter}}
-        {{on "mouseleave" this.onMouseLeave}}
-        data-tooltip-trigger="true"
+        {{on 'mouseenter' this.onMouseEnter}}
+        {{on 'mouseleave' this.onMouseLeave}}
+        data-tooltip-trigger='true'
         ...attributes
       >
-        {{yield to="trigger"}}
+        {{yield to='trigger'}}
       </div>
       {{#if this.isHoverOnTrigger}}
         {{#in-element this.tooltipOverlay}}
           {{! @glint-ignore velcro.loop }}
           <div
             class={{cn
-              "tooltip"
-              (if @variant (concat "variant-" @variant) "variant-default")
+              'tooltip'
+              (if @variant (concat 'variant-' @variant) 'variant-default')
             }}
             {{velcro.loop}}
             data-test-tooltip-content
           >
-            {{yield to="content"}}
+            {{yield to='content'}}
           </div>
         {{/in-element}}
       {{/if}}

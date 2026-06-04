@@ -46,8 +46,8 @@ export default class MessageUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="ThreadMessage"
-      @description="Single chat/thread message bubble with an author avatar, timestamp, and content area — used in conversation views, comment threads, and chat-style activity logs."
+      @name='ThreadMessage'
+      @description='Single chat/thread message bubble with an author avatar, timestamp, and content area — used in conversation views, comment threads, and chat-style activity logs.'
     >
       <:example>
         <BoxelMessage
@@ -72,82 +72,82 @@ export default class MessageUsage extends Component {
         </BoxelMessage>
       </:example>
       <:api as |Args|>
-        <Args.Yield @description="Message content" @required={{true}} />
+        <Args.Yield @description='Message content' @required={{true}} />
         <Args.String
-          @name="name"
-          @description="The name displayed above the message"
+          @name='name'
+          @description='The name displayed above the message'
           @value={{this.name}}
           @onInput={{fn (mut this.name)}}
           @required={{true}}
         />
         <Args.String
-          @name="imgURL"
-          @description="URL for the user avatar"
+          @name='imgURL'
+          @description='URL for the user avatar'
           @value={{this.imgURL}}
           @onInput={{fn (mut this.imgURL)}}
         />
         <Args.String
-          @name="datetime"
-          @description="Message timestamp"
-          @defaultValue="(now)"
+          @name='datetime'
+          @description='Message timestamp'
+          @defaultValue='(now)'
           @value={{this.datetime}}
           @onInput={{fn (mut this.datetime)}}
         />
         <Args.Bool
-          @name="notRound"
+          @name='notRound'
           @value={{this.notRound}}
           @description="Avatar is not circle-shaped. This will only work if an 'imgURL' arg is provided"
           @defaultValue={{false}}
           @onInput={{fn (mut this.notRound)}}
         />
         <Args.Bool
-          @name="hideMeta"
+          @name='hideMeta'
           @value={{this.hideMeta}}
-          @description="Visually hides the user avatar, name, and message timestamp"
+          @description='Visually hides the user avatar, name, and message timestamp'
           @defaultValue={{false}}
           @onInput={{fn (mut this.hideMeta)}}
         />
         <Args.Bool
-          @name="hideName"
+          @name='hideName'
           @value={{this.hideName}}
-          @description="Visually hides the user name"
+          @description='Visually hides the user name'
           @defaultValue={{false}}
           @onInput={{fn (mut this.hideName)}}
         />
         <Args.Bool
-          @name="fullWidth"
+          @name='fullWidth'
           @value={{this.fullWidth}}
-          @description="Whether to allocate the full width to the content"
+          @description='Whether to allocate the full width to the content'
           @defaultValue={{false}}
           @onInput={{fn (mut this.fullWidth)}}
         />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="boxel-message-avatar-size"
-          @type="dimension"
+          @name='boxel-message-avatar-size'
+          @type='dimension'
           @defaultValue={{this.boxelMessageAvatarSize.defaults}}
           @value={{this.boxelMessageAvatarSize.value}}
           @onInput={{this.boxelMessageAvatarSize.update}}
         />
         <Css.Basic
-          @name="boxel-message-meta-height"
-          @type="dimension"
+          @name='boxel-message-meta-height'
+          @type='dimension'
           @defaultValue={{this.boxelMessageMetaHeight.defaults}}
           @value={{this.boxelMessageMetaHeight.value}}
           @onInput={{this.boxelMessageMetaHeight.update}}
         />
         <Css.Basic
-          @name="boxel-message-gap"
-          @type="dimension"
-          @description="gap after avatar"
+          @name='boxel-message-gap'
+          @type='dimension'
+          @description='gap after avatar'
           @defaultValue={{this.boxelMessageGap.defaults}}
           @value={{this.boxelMessageGap.value}}
           @onInput={{this.boxelMessageGap.update}}
         />
         <Css.Basic
-          @name="boxel-message-margin-left"
-          @type="dimension"
+          @name='boxel-message-margin-left'
+          @type='dimension'
           @defaultValue={{this.boxelMessageMarginLeft.defaults}}
           @value={{this.boxelMessageMarginLeft.value}}
           @onInput={{this.boxelMessageMarginLeft.update}}
@@ -155,13 +155,13 @@ export default class MessageUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
 
-    <FreestyleUsage @slug="Message-array">
+    <FreestyleUsage @slug='Message-array'>
       <:example>
-        <div role="list">
+        <div role='list'>
           {{#each this.messageArray as |message i|}}
             <BoxelMessage
-              role="listitem"
-              @name="Cardbot"
+              role='listitem'
+              @name='Cardbot'
               @hideMeta={{gt i 0}}
               @hideName={{true}}
               @datetime={{this.datetime}}
@@ -173,7 +173,7 @@ export default class MessageUsage extends Component {
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage @slug="with-cards">
+    <FreestyleUsage @slug='with-cards'>
       <:description>
         <p>
           These examples with embedded cards are using the
@@ -197,7 +197,7 @@ export default class MessageUsage extends Component {
       <:example>
         <BoxelCardContainer @displayBoundaries={{true}}>
           <BoxelMessage
-            @name="Cardbot"
+            @name='Cardbot'
             @hideName={{true}}
             @datetime={{this.datetime}}
           >
@@ -206,7 +206,7 @@ export default class MessageUsage extends Component {
             </p>
           </BoxelMessage>
           <BoxelMessage
-            @name="Cardbot"
+            @name='Cardbot'
             @hideName={{true}}
             @hideMeta={{true}}
             @datetime={{this.datetime}}
@@ -216,7 +216,7 @@ export default class MessageUsage extends Component {
             </p>
           </BoxelMessage>
           <BoxelMessage
-            @name="Cardbot"
+            @name='Cardbot'
             @hideName={{true}}
             @datetime={{this.datetime}}
           >
@@ -226,36 +226,36 @@ export default class MessageUsage extends Component {
             </p>
           </BoxelMessage>
           <BoxelMessage
-            @name="Cardbot"
+            @name='Cardbot'
             @hideName={{true}}
             @hideMeta={{true}}
             @fullWidth={{true}}
             @datetime={{this.datetime}}
           >
             <BoxelCardContainer @displayBoundaries={{true}}>
-              <BoxelHeader @title="Card 1" />
+              <BoxelHeader @title='Card 1' />
               <p>Card 1 Content...</p>
             </BoxelCardContainer>
           </BoxelMessage>
           <BoxelMessage
-            @name="Cardbot"
+            @name='Cardbot'
             @hideName={{true}}
             @fullWidth={{true}}
             @datetime={{this.datetime}}
           >
             <BoxelCardContainer @displayBoundaries={{true}}>
-              <BoxelHeader @title="Card 2" />
+              <BoxelHeader @title='Card 2' />
               <p>Card 2 Content...</p>
             </BoxelCardContainer>
           </BoxelMessage>
           <BoxelMessage
-            @name="Cardbot"
+            @name='Cardbot'
             @hideName={{true}}
             @fullWidth={{true}}
             @datetime={{this.datetime}}
           >
             <BoxelCardContainer @displayBoundaries={{true}}>
-              <BoxelHeader @title="Card 3" />
+              <BoxelHeader @title='Card 3' />
               <p>Card 3 Content...</p>
             </BoxelCardContainer>
           </BoxelMessage>

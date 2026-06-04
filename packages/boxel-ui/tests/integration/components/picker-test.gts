@@ -63,8 +63,8 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test Label"
-          @placeholder="Select items"
+          @label='Test Label'
+          @placeholder='Select items'
         />
       </template>,
     );
@@ -82,7 +82,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -132,7 +132,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -156,7 +156,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -205,7 +205,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -272,8 +272,8 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
-          @searchPlaceholder="Search..."
+          @label='Test'
+          @searchPlaceholder='Search...'
         />
       </template>,
     );
@@ -296,8 +296,8 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
-          @searchPlaceholder="Search..."
+          @label='Test'
+          @searchPlaceholder='Search...'
         />
       </template>,
     );
@@ -337,7 +337,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -388,7 +388,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -426,7 +426,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selecteOptions}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -455,7 +455,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -501,7 +501,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -546,7 +546,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -573,7 +573,7 @@ module('Integration | Component | picker', function (hooks) {
             @options={{testOptions}}
             @selected={{emptyArray}}
             @onChange={{noop}}
-            @label="Test"
+            @label='Test'
           />
         </template>,
       );
@@ -591,7 +591,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
           @maxSelectedDisplay={{2}}
         />
       </template>,
@@ -615,7 +615,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
           @maxSelectedDisplay={{2}}
         />
       </template>,
@@ -636,7 +636,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
           @maxSelectedDisplay={{3}}
         />
       </template>,
@@ -661,7 +661,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
           @maxSelectedDisplay={{2}}
         />
       </template>,
@@ -693,7 +693,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -720,7 +720,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -779,7 +779,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -835,7 +835,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -875,7 +875,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -909,7 +909,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -939,7 +939,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -983,7 +983,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1050,7 +1050,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1101,7 +1101,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1145,7 +1145,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1188,7 +1188,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{optionsWithDisabled}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1230,7 +1230,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1281,7 +1281,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1322,7 +1322,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1370,7 +1370,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );
@@ -1413,7 +1413,7 @@ module('Integration | Component | picker', function (hooks) {
           @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
-          @label="Test"
+          @label='Test'
         />
       </template>,
     );

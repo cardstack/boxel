@@ -29,7 +29,7 @@ export default class FittedCardContainerUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="FittedCardContainer">
+    <FreestyleUsage @name='FittedCardContainer'>
       <:description>
         Constrains card to fitted height and optionally responsive width.
       </:description>
@@ -59,21 +59,21 @@ export default class FittedCardContainerUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="size"
-          @description="Fitted size id from the fitted formats list."
+          @name='size'
+          @description='Fitted size id from the fitted formats list.'
           @options={{this.usageFormatOptions}}
           @value={{this.selectedSize}}
           @onInput={{fn (mut this.selectedSize)}}
         />
         <Args.Bool
-          @name="fullWidth"
-          @description="Whether item should have 100% width (height is restricted)."
+          @name='fullWidth'
+          @description='Whether item should have 100% width (height is restricted).'
           @value={{this.fullWidth}}
           @onInput={{fn (mut this.fullWidth)}}
           @defaultValue={{false}}
         />
         <Args.Yield
-          @description="Card content rendered inside the sized container."
+          @description='Card content rendered inside the sized container.'
         />
       </:api>
     </FreestyleUsage>

@@ -5,21 +5,21 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16.5"
-    height="17.536"
-    viewBox="0 0 16.5 17.536"
+    xmlns='http://www.w3.org/2000/svg'
+    width='16.5'
+    height='17.536'
+    viewBox='0 0 16.5 17.536'
     ...attributes
-  ><g data-name="Group 168"><path
-        d="M5 12h14"
-        data-name="Path 47"
-        style="fill:none;stroke:var(--icon-color, #000);stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px"
-        transform="translate(-3.75 -3.232)"
+  ><g data-name='Group 168'><path
+        d='M5 12h14'
+        data-name='Path 47'
+        style='fill:none;stroke:var(--icon-color, #000);stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px'
+        transform='translate(-3.75 -3.232)'
       /><path
-        d="m12 5 7 7-7 7"
-        data-name="Path 48"
-        style="fill:none;stroke:var(--icon-color, #000);stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px"
-        transform="translate(-3.75 -3.232)"
+        d='m12 5 7 7-7 7'
+        data-name='Path 48'
+        style='fill:none;stroke:var(--icon-color, #000);stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5px'
+        transform='translate(-3.75 -3.232)'
       /></g></svg>
 </template>;
 

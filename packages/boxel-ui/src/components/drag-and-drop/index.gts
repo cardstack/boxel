@@ -117,44 +117,44 @@ export default class DndKanbanBoard extends Component<
   }
 
   <template>
-    <div class="draggable-container" {{on "dragend" this.onDragEnd}}>
+    <div class='draggable-container' {{on 'dragend' this.onDragEnd}}>
       {{#each @columns as |column|}}
         <div
-          class="column"
+          class='column'
           {{DropTargetModifier
-            group="cards"
+            group='cards'
             data=(hash parent=column)
             onDrop=this.moveCard
           }}
         >
-          {{#if (has-block "header")}}
-            <div class="column-header">
-              {{yield column to="header"}}
+          {{#if (has-block 'header')}}
+            <div class='column-header'>
+              {{yield column to='header'}}
             </div>
           {{/if}}
 
-          <div class="column-drop-zone">
+          <div class='column-drop-zone'>
             {{#each column.cards as |card|}}
               {{#if (this.displayCard card)}}
                 <div
-                  class="draggable-card {{if @isLoading 'is-loading'}}"
+                  class='draggable-card {{if @isLoading "is-loading"}}'
                   {{SortableItemModifier
-                    group="cards"
+                    group='cards'
                     data=(hash item=card parent=column)
                     onDrop=this.moveCard
-                    isOnTargetClass="is-on-target"
+                    isOnTargetClass='is-on-target'
                     onDragStart=(fn this.onDragStart card)
                   }}
                 >
                   {{#if (and @isLoading (eq card this.draggedCard))}}
-                    <div class="overlay"></div>
-                    {{yield card column to="card"}}
+                    <div class='overlay'></div>
+                    {{yield card column to='card'}}
                     <LoadingIndicator
-                      @color="var(--boxel-light)"
-                      class="loader loader--small"
+                      @color='var(--boxel-light)'
+                      class='loader loader--small'
                     />
                   {{else}}
-                    {{yield card column to="card"}}
+                    {{yield card column to='card'}}
                   {{/if}}
                 </div>
               {{/if}}

@@ -31,47 +31,47 @@ interface Signature {
 
 const KanbanColumnConfigSidebarRow: TemplateOnlyComponent<Signature> =
   <template>
-    <li class="col-row" data-test-col-config-row={{@rowId}} ...attributes>
+    <li class='col-row' data-test-col-config-row={{@rowId}} ...attributes>
       {{#if @onReorder}}
-        <div class="col-row-order">
+        <div class='col-row-order'>
           <IconButton
             @icon={{ChevronUp}}
-            @size="extra-small"
+            @size='extra-small'
             @disabled={{@isFirst}}
-            aria-label="Move column up"
+            aria-label='Move column up'
             data-test-move-col-up-btn={{@rowId}}
-            {{on "click" (fn @onReorder "up")}}
+            {{on 'click' (fn @onReorder 'up')}}
           />
           <IconButton
             @icon={{ChevronDown}}
-            @size="extra-small"
+            @size='extra-small'
             @disabled={{@isLast}}
-            aria-label="Move column down"
+            aria-label='Move column down'
             data-test-move-col-down-btn={{@rowId}}
-            {{on "click" (fn @onReorder "down")}}
+            {{on 'click' (fn @onReorder 'down')}}
           />
         </div>
       {{/if}}
       {{#if @onColorChange}}
-        <label class="col-color-wrap">
-          <span class="boxel-sr-only">Color</span>
+        <label class='col-color-wrap'>
+          <span class='boxel-sr-only'>Color</span>
           <BoxelInput
-            @type="color"
-            @value={{if @column.color @column.color "#94a3b8"}}
+            @type='color'
+            @value={{if @column.color @column.color '#94a3b8'}}
             @onInput={{@onColorChange}}
             data-test-col-config-color={{@rowId}}
           />
         </label>
       {{else if @column.color}}
-        <span class="col-dot" style={{cssVar col-dot-bg=@column.color}}></span>
+        <span class='col-dot' style={{cssVar col-dot-bg=@column.color}}></span>
       {{/if}}
       {{#if @onLabelChange}}
         <BoxelInput
-          class="col-label-input"
-          @value={{if @column.label @column.label ""}}
-          @placeholder="Label"
+          class='col-label-input'
+          @value={{if @column.label @column.label ''}}
+          @placeholder='Label'
           @onInput={{@onLabelChange}}
-          aria-label="Column label"
+          aria-label='Column label'
           data-test-col-config-label={{@rowId}}
         />
       {{else}}
@@ -79,14 +79,14 @@ const KanbanColumnConfigSidebarRow: TemplateOnlyComponent<Signature> =
       {{/if}}
       {{#if @onWipLimitChange}}
         <FieldContainer
-          class="col-wip-field"
-          @tag="label"
-          @label="Max"
+          class='col-wip-field'
+          @tag='label'
+          @label='Max'
           @inline={{true}}
         >
           <BoxelInput
             @value={{if @column.wipLimit @column.wipLimit 0}}
-            @type="number"
+            @type='number'
             @min={{0}}
             @onInput={{@onWipLimitChange}}
             data-test-col-config-wip={{@rowId}}
@@ -95,16 +95,16 @@ const KanbanColumnConfigSidebarRow: TemplateOnlyComponent<Signature> =
       {{/if}}
       {{#if @onToggleCollapsed}}
         <ContextButton
-          class={{cn "col-visible-btn" is-hidden=@column.collapsed}}
+          class={{cn 'col-visible-btn' is-hidden=@column.collapsed}}
           @isActive={{bool @column.collapsed}}
           @isToggle={{true}}
           @icon={{if @column.collapsed EyeOff Eye}}
-          @size="extra-small"
-          @label={{if @column.collapsed "Show column" "Hide column"}}
-          @variant="ghost"
+          @size='extra-small'
+          @label={{if @column.collapsed 'Show column' 'Hide column'}}
+          @variant='ghost'
           @disabled={{@disableToggle}}
           data-test-col-config-toggle-visible={{@rowId}}
-          {{on "click" @onToggleCollapsed}}
+          {{on 'click' @onToggleCollapsed}}
         />
       {{/if}}
     </li>

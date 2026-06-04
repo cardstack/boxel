@@ -20,7 +20,7 @@ export default class HeaderUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="Header">
+    <FreestyleUsage @name='Header'>
       <:description>
         Usually shown at the top of card containers
       </:description>
@@ -39,9 +39,9 @@ export default class HeaderUsage extends Component {
               <:trigger as |bindings|>
                 <IconButton
                   @icon={{ThreeDotsHorizontal}}
-                  @width="20px"
-                  @height="20px"
-                  aria-label="Options"
+                  @width='20px'
+                  @height='20px'
+                  aria-label='Options'
                   {{bindings}}
                 />
               </:trigger>
@@ -54,46 +54,46 @@ export default class HeaderUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="title"
-          @description="Title"
+          @name='title'
+          @description='Title'
           @value={{this.title}}
           @onInput={{fn (mut this.title)}}
         />
         <Args.String
-          @name="size"
-          @description="large header and title option"
+          @name='size'
+          @description='large header and title option'
           @options={{this.sizes}}
           @value={{this.size}}
           @onInput={{fn (mut this.size)}}
         />
         <Args.Bool
-          @name="hasBackground"
-          @description="(styling) Adds muted background"
+          @name='hasBackground'
+          @description='(styling) Adds muted background'
           @defaultValue={{false}}
           @value={{this.hasBackground}}
           @onInput={{fn (mut this.hasBackground)}}
         />
         <Args.Bool
-          @name="hasBottomBorder"
-          @description="Adds bottom-border"
+          @name='hasBottomBorder'
+          @description='Adds bottom-border'
           @defaultValue={{false}}
           @value={{this.hasBottomBorder}}
           @onInput={{fn (mut this.hasBottomBorder)}}
         />
         <Args.Yield
-          @name="icon"
-          @description="Content for the icon of the header"
+          @name='icon'
+          @description='Content for the icon of the header'
         />
         <Args.Yield
-          @name="detail"
-          @description="Content aligned to the end of the container"
+          @name='detail'
+          @description='Content aligned to the end of the container'
         />
       </:api>
     </FreestyleUsage>
 
-    <FreestyleUsage @name="Definition Usage">
+    <FreestyleUsage @name='Definition Usage'>
       <:example>
-        <BoxelHeader @title="Definition" class="definition-container">
+        <BoxelHeader @title='Definition' class='definition-container'>
           <:detail>
             .gts
           </:detail>

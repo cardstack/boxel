@@ -43,21 +43,21 @@ export default class BoxelSelectedItem<ItemT> extends Component<
   }
 
   <template>
-    <div class="ember-power-select-multiple-option">
-      <Pill class="boxel-selected-option">
+    <div class='ember-power-select-multiple-option'>
+      <Pill class='boxel-selected-option'>
         <:default>
           {{yield @option @select}}
         </:default>
         <:iconRight>
           {{! TODO: Replace with icon button }}
           <button
-            type="button"
-            class="boxel-multi-select__remove-button"
-            {{on "click" (fn this.remove @option)}}
-            aria-label="Remove item"
+            type='button'
+            class='boxel-multi-select__remove-button'
+            {{on 'click' (fn this.remove @option)}}
+            aria-label='Remove item'
           >
 
-            <IconX class="boxel-multi-select__icon--remove" />
+            <IconX class='boxel-multi-select__icon--remove' />
           </button>
         </:iconRight>
       </Pill>

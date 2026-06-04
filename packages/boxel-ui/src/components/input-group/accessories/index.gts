@@ -22,7 +22,7 @@ interface ButtonSignature {
 
 export const Button: TemplateOnlyComponent<ButtonSignature> = <template>
   <BoxelButton
-    class="accessory button-accessory"
+    class='accessory button-accessory'
     @kind={{@kind}}
     @disabled={{@disabled}}
     data-test-boxel-input-group-button-accessory
@@ -45,7 +45,7 @@ interface IconButtonSignature {
 
 export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
   <BoxelIconButton
-    class="accessory icon-button-accessory"
+    class='accessory icon-button-accessory'
     @icon={{@icon}}
     @height={{@height}}
     @width={{@width}}
@@ -63,7 +63,7 @@ interface TextSignature {
 
 export const Text: TemplateOnlyComponent<TextSignature> = <template>
   <span
-    class="text-accessory"
+    class='text-accessory'
     data-test-boxel-input-group-text-accessory
     ...attributes
   >{{yield}}</span>
@@ -95,18 +95,18 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
   <template>
     <div
       class={{cn
-        "accessory"
-        "boxel-input-group__accessory"
-        "boxel-input-group__select-accessory"
+        'accessory'
+        'boxel-input-group__accessory'
+        'boxel-input-group__select-accessory'
         boxel-input-group__select-accessory--disabled=@disabled
       }}
       data-test-boxel-input-group-select-accessory
-      {{setCssVar boxel-form-control-border-color="transparent"}}
+      {{setCssVar boxel-form-control-border-color='transparent'}}
     >
       <BoxelSelect
         @disabled={{@disabled}}
         @dropdownClass={{cn
-          "boxel-input-group__select-accessory__dropdown"
+          'boxel-input-group__select-accessory__dropdown'
           @dropdownClass
         }}
         @placeholder={{@placeholder}}
@@ -156,7 +156,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         font-weight: 600;
       }
       .boxel-input-group__select-accessory
-        :deep([aria-expanded="true"] .ember-power-select-status-icon) {
+        :deep([aria-expanded='true'] .ember-power-select-status-icon) {
         transform: rotate(180deg);
       }
 

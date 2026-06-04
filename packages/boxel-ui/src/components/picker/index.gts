@@ -108,8 +108,8 @@ class PickerLoadingOverlay extends Component<PickerAfterOptionsSignature> {
 
   <template>
     {{#if this.isLoading}}
-      <div class="picker-full-loading-overlay" data-test-picker-loading>
-        <LoadingIndicator class="picker-full-loading-spinner" />
+      <div class='picker-full-loading-overlay' data-test-picker-loading>
+        <LoadingIndicator class='picker-full-loading-spinner' />
       </div>
     {{/if}}
 
@@ -331,7 +331,7 @@ export default class Picker extends Component<PickerSignature> {
       @matchTriggerWidth={{@matchTriggerWidth}}
       @searchEnabled={{true}}
       @closeOnSelect={{false}}
-      @eventType="click"
+      @eventType='click'
       @ariaLabel={{@label}}
       @extra={{this.extra}}
       @triggerComponent={{component this.triggerComponent}}
@@ -349,13 +349,13 @@ export default class Picker extends Component<PickerSignature> {
       {{#if (this.isLastOption option)}}
         {{#if @hasMore}}
           <div
-            class="picker-load-more-sentinel"
+            class='picker-load-more-sentinel'
             {{loadMoreSentinel @onLoadMore @isLoadingMore enabled=@hasMore}}
             data-test-picker-infinite-scroll
           >
             {{#if @isLoadingMore}}
-              <div class="picker-bottom-loading" data-test-picker-loading-more>
-                <LoadingIndicator class="picker-loading-spinner" />
+              <div class='picker-bottom-loading' data-test-picker-loading-more>
+                <LoadingIndicator class='picker-loading-spinner' />
               </div>
             {{/if}}
           </div>
@@ -400,8 +400,8 @@ export default class Picker extends Component<PickerSignature> {
         flex-direction: column;
         gap: 0;
       }
-      .boxel-picker__dropdown .ember-power-select-option[aria-current="true"],
-      .boxel-picker__dropdown .ember-power-select-option[aria-selected="true"] {
+      .boxel-picker__dropdown .ember-power-select-option[aria-current='true'],
+      .boxel-picker__dropdown .ember-power-select-option[aria-selected='true'] {
         background-color: transparent;
         color: var(--boxel-dark);
       }

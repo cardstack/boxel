@@ -82,7 +82,7 @@ export class KanbanPlane extends Component<{
   <template>
     {{#if @columns.length}}
       <KanbanPlaneInner
-        class="kanban-plane"
+        class='kanban-plane'
         @boardLabel={{@boardLabel}}
         @cardSize={{@cardSize}}
         @columns={{@columns}}
@@ -95,16 +95,16 @@ export class KanbanPlane extends Component<{
         ...attributes
       >
         <:card as |placement|>
-          {{yield placement to="card"}}
+          {{yield placement to='card'}}
         </:card>
         <:ghost as |dragIndex|>
-          {{yield dragIndex to="ghost"}}
+          {{yield dragIndex to='ghost'}}
         </:ghost>
       </KanbanPlaneInner>
     {{else}}
-      <div class="kanban-empty-state">
+      <div class='kanban-empty-state'>
         <SquareKanban />
-        <div class="kanban-empty-copy">
+        <div class='kanban-empty-copy'>
           <h2>No content yet</h2>
           <p>
             Add columns and cards to this board to start organizing work.

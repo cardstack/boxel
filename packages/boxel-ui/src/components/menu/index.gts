@@ -24,9 +24,9 @@ class MenuItemRenderer extends Component<{
   }
   <template>
     {{#if @menuItem.isDivider}}
-      {{yield to="divider"}}
+      {{yield to='divider'}}
     {{else}}
-      {{yield this.asMenuItem to="item"}}
+      {{yield this.asMenuItem to='item'}}
     {{/if}}
   </template>
 }
@@ -50,11 +50,11 @@ export default class Menu extends Component<Signature> {
   }
 
   <template>
-    <ul role="menu" class={{cn "boxel-menu" @class}} ...attributes>
+    <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
       {{#if @loading}}
-        <li role="none" class="boxel-menu__item" data-test-boxel-menu-loading>
-          <div class="boxel-menu__item__content">
-            <span class="menu-item">
+        <li role='none' class='boxel-menu__item' data-test-boxel-menu-loading>
+          <div class='boxel-menu__item__content'>
+            <span class='menu-item'>
               <LoadingIndicator />
               Loading...
             </span>
@@ -65,15 +65,15 @@ export default class Menu extends Component<Signature> {
           <MenuItemRenderer @menuItem={{menuItem}}>
             <:divider>
               <hr
-                class="boxel-menu__separator"
+                class='boxel-menu__separator'
                 data-test-boxel-menu-separator
               />
             </:divider>
             <:item as |menuItem|>
               <li
-                role="none"
+                role='none'
                 class={{cn
-                  "boxel-menu__item"
+                  'boxel-menu__item'
                   @itemClass
                   boxel-menu__item--dangerous=menuItem.dangerous
                   boxel-menu__item--has-icon=(if menuItem.icon true false)
@@ -87,43 +87,43 @@ export default class Menu extends Component<Signature> {
               >
                 {{! template-lint-disable require-context-role }}
                 <button
-                  type="button"
-                  class="boxel-menu__item__content"
-                  role="menuitem"
+                  type='button'
+                  class='boxel-menu__item__content'
+                  role='menuitem'
                   data-test-boxel-menu-item-text={{menuItem.label}}
-                  {{on "click" (fn this.invokeMenuItemAction menuItem.action)}}
+                  {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
                   disabled={{menuItem.disabled}}
                 >
-                  <span class="menu-item">
+                  <span class='menu-item'>
                     {{#if menuItem.icon}}
-                      <menuItem.icon width="16" height="16" />
+                      <menuItem.icon width='16' height='16' />
                     {{else if menuItem.iconURL}}
                       <span
-                        class="menu-item__icon-url"
-                        style={{cssUrl "background-image" menuItem.iconURL}}
+                        class='menu-item__icon-url'
+                        style={{cssUrl 'background-image' menuItem.iconURL}}
                       />
                     {{/if}}
                     {{menuItem.label}}
                     {{#if menuItem.subtext}}
-                      <span class="subtext">
+                      <span class='subtext'>
                         {{menuItem.subtext}}
                       </span>
                     {{else if menuItem.subtextComponent}}
-                      <span class="subtext">
+                      <span class='subtext'>
                         <menuItem.subtextComponent />
                       </span>
                     {{/if}}
                   </span>
                   {{#if menuItem.postscript}}
-                    <span class="postscript">{{menuItem.postscript}}</span>
+                    <span class='postscript'>{{menuItem.postscript}}</span>
                   {{/if}}
                   <span
                     class={{cn
-                      "check-icon"
+                      'check-icon'
                       check-icon--selected=menuItem.checked
                     }}
                   >
-                    <CheckMark class="checkmark" width="12" height="12" />
+                    <CheckMark class='checkmark' width='12' height='12' />
                   </span>
                 </button>
               </li>

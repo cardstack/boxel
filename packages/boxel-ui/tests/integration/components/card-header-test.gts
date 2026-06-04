@@ -36,15 +36,15 @@ module('Integration | Component | card-header', function (hooks) {
     await render(
       <template>
         {{! template-lint-disable no-inline-styles }}
-        <div style="width: 600px">
+        <div style='width: 600px'>
           <CardHeader
-            @cardTitle="A Centered Card Title"
+            @cardTitle='A Centered Card Title'
             @realmInfo={{realmInfo}}
             @isTopCard={{true}}
             @onEdit={{noop}}
             @onExpand={{noop}}
             @onClose={{noop}}
-            style="--boxel-card-header-icon-container-min-width: 95px; --boxel-card-header-actions-min-width: 95px;"
+            style='--boxel-card-header-icon-container-min-width: 95px; --boxel-card-header-actions-min-width: 95px;'
           />
         </div>
       </template>,
@@ -57,16 +57,16 @@ module('Integration | Component | card-header', function (hooks) {
     await render(
       <template>
         {{! template-lint-disable no-inline-styles }}
-        <div style="width: 600px">
+        <div style='width: 600px'>
           <CardHeader
-            @cardTitle="A Centered Card Title"
+            @cardTitle='A Centered Card Title'
             @realmInfo={{realmInfo}}
             @isTopCard={{true}}
             @utilityMenu={{utilityMenu}}
             @onEdit={{noop}}
             @onExpand={{noop}}
             @onClose={{noop}}
-            style="--boxel-card-header-icon-container-min-width: 95px; --boxel-card-header-actions-min-width: 95px;"
+            style='--boxel-card-header-icon-container-min-width: 95px; --boxel-card-header-actions-min-width: 95px;'
           />
         </div>
       </template>,

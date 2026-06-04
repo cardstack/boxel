@@ -70,28 +70,28 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
   }
 
   <template>
-    <aside class="col-config-sidebar" ...attributes>
-      <header class="sidebar-header">
-        <h2 class="sidebar-title">Configure Columns</h2>
+    <aside class='col-config-sidebar' ...attributes>
+      <header class='sidebar-header'>
+        <h2 class='sidebar-title'>Configure Columns</h2>
         {{#if @onClose}}
           <IconButton
-            class="sidebar-close"
+            class='sidebar-close'
             @icon={{XIcon}}
-            @size="extra-small"
-            aria-label="Close column settings"
-            {{on "click" @onClose}}
+            @size='extra-small'
+            aria-label='Close column settings'
+            {{on 'click' @onClose}}
           />
         {{/if}}
       </header>
 
       {{#if @onHideEmptyChange}}
         <FieldContainer
-          @tag="label"
-          @label="Hide empty columns"
-          class="hide-empty-row"
+          @tag='label'
+          @label='Hide empty columns'
+          class='hide-empty-row'
         >
           <Switch
-            @label="Hide empty columns"
+            @label='Hide empty columns'
             @isEnabled={{if @hideEmpty true false}}
             @onChange={{@onHideEmptyChange}}
             data-test-sidebar-hide-empty-switch
@@ -100,8 +100,8 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
       {{/if}}
 
       {{#if this.columnRows.length}}
-        <ul class="col-list">
-          {{#each this.columnRows key="column.key" as |row i|}}
+        <ul class='col-list'>
+          {{#each this.columnRows key='column.key' as |row i|}}
             <ColumnConfigRow
               @rowId={{if row.column.key row.column.key i}}
               @column={{row.column}}
@@ -129,7 +129,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
           {{/each}}
         </ul>
       {{else}}
-        <p class="empty-sidebar"><em>No columns available.</em></p>
+        <p class='empty-sidebar'><em>No columns available.</em></p>
       {{/if}}
     </aside>
 

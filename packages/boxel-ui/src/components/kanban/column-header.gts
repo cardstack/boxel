@@ -20,26 +20,26 @@ interface Signature {
 }
 
 const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
-  <div class={{cn "col-header" is-target=@isTarget}} ...attributes>
-    <div class="col-header-left">
-      <span class="col-dot" style={{cssVar col-dot-bg=@column.color}}></span>
-      <span class="col-name" data-test-boxel-kanban-col-name>{{if
+  <div class={{cn 'col-header' is-target=@isTarget}} ...attributes>
+    <div class='col-header-left'>
+      <span class='col-dot' style={{cssVar col-dot-bg=@column.color}}></span>
+      <span class='col-name' data-test-boxel-kanban-col-name>{{if
           @column.label
           @column.label
-          "Untitled"
+          'Untitled'
         }}</span>
-      <span class="col-count">{{@cardCount}}</span>
+      <span class='col-count'>{{@cardCount}}</span>
     </div>
-    <div class="col-header-right">
+    <div class='col-header-right'>
       {{#if @column.wipLimit}}
         <span
-          class={{cn "col-wip" over=@isOverWip}}
+          class={{cn 'col-wip' over=@isOverWip}}
           aria-label={{if
             @isOverWip
-            (concat "WIP limit " @column.wipLimit ", exceeded")
-            (concat "WIP limit " @column.wipLimit)
+            (concat 'WIP limit ' @column.wipLimit ', exceeded')
+            (concat 'WIP limit ' @column.wipLimit)
           }}
-          aria-live="polite"
+          aria-live='polite'
           data-test-kanban-col-wip={{@isOverWip}}
         >
           Max
@@ -48,29 +48,29 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       {{/if}}
       {{#if @onCollapse}}
         <ContextButton
-          class="col-collapse-btn"
+          class='col-collapse-btn'
           @icon={{EyeOff}}
-          @variant="ghost"
+          @variant='ghost'
           @label={{if
             @column.label
-            (concat "Hide " @column.label)
-            "Hide column"
+            (concat 'Hide ' @column.label)
+            'Hide column'
           }}
-          {{on "click" @onCollapse}}
+          {{on 'click' @onCollapse}}
           data-test-column-collapse-button={{@column.key}}
         />
       {{/if}}
       {{#if @onAddCard}}
         <ContextButton
-          class="col-add-btn"
+          class='col-add-btn'
           @label={{if
             @column.label
-            (concat "Add card to " @column.label)
-            "Add card to column"
+            (concat 'Add card to ' @column.label)
+            'Add card to column'
           }}
-          @icon="add"
-          @variant="ghost"
-          {{on "click" @onAddCard}}
+          @icon='add'
+          @variant='ghost'
+          {{on 'click' @onAddCard}}
           data-test-column-add-button={{@column.key}}
         />
       {{/if}}

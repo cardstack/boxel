@@ -234,12 +234,12 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                       @collapsible={{panel.collapsible}}
                     >
                       <div
-                        class="panel"
+                        class='panel'
                         style={{htmlSafe
                           (if
                             panel.outerContainerStyle
                             panel.outerContainerStyle
-                            ""
+                            ''
                           )
                         }}
                         data-test-panel-index={{index}}

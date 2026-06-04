@@ -41,16 +41,16 @@ interface Signature {
 
 const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
   {{#each @messages as |message i|}}
-    <div class="alert">
-      {{#if (eq @type "error")}}
-        <FailureBordered class="alert-icon failure-icon" />
-      {{else if (eq @type "warning")}}
-        <Warning class="alert-icon" />
+    <div class='alert'>
+      {{#if (eq @type 'error')}}
+        <FailureBordered class='alert-icon failure-icon' />
+      {{else if (eq @type 'warning')}}
+        <Warning class='alert-icon' />
       {{/if}}
       <p
-        class="message"
-        data-test-alert-message="{{i}}"
-        data-test-card-error={{eq @type "error"}}
+        class='message'
+        data-test-alert-message='{{i}}'
+        data-test-card-error={{eq @type 'error'}}
       >
         {{message}}
       </p>
@@ -86,9 +86,9 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
 const Action: TemplateOnlyComponent<ActionSignature> = <template>
   {{#if @action}}
     <Button
-      {{on "click" @action}}
-      class="action-button"
-      @size="extra-small"
+      {{on 'click' @action}}
+      class='action-button'
+      @size='extra-small'
       @kind={{@kind}}
       data-test-alert-action-button={{@actionName}}
     >
@@ -107,9 +107,9 @@ const Action: TemplateOnlyComponent<ActionSignature> = <template>
 const Alert: TemplateOnlyComponent<Signature> = <template>
   <div
     class={{cn
-      "alert-container"
-      error-container=(eq @type "error")
-      warning-container=(eq @type "warning")
+      'alert-container'
+      error-container=(eq @type 'error')
+      warning-container=(eq @type 'warning')
     }}
     data-test-boxel-alert={{@type}}
     ...attributes
@@ -118,7 +118,7 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       (hash
         Messages=(component Messages type=@type)
         Action=(component
-          Action kind=(if (eq @type "warning") "primary-dark" "primary")
+          Action kind=(if (eq @type 'warning') 'primary-dark' 'primary')
         )
       )
     }}

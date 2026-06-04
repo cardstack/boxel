@@ -36,7 +36,7 @@ export default class DndUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Dnd Kanban Board"
+      @name='Dnd Kanban Board'
       style={{cssVar
         dnd-container-gap=this.dndContainerGap.value
         dnd-column-border-radius=this.dndColumnBorderRadius.value
@@ -53,7 +53,7 @@ export default class DndUsage extends Component {
         designs with custom styles.
       </:description>
       <:example>
-        <div class="dnd-wrapper">
+        <div class='dnd-wrapper'>
           <DndKanbanBoard
             @columns={{this.columns}}
             @isLoading={{this.isLoading}}
@@ -62,12 +62,12 @@ export default class DndUsage extends Component {
               {{column.title}}
             </:header>
             <:card as |card column|>
-              <div class="custom-card">
-                <Pill @kind="default" class="column-info">
+              <div class='custom-card'>
+                <Pill @kind='default' class='column-info'>
                   {{column.title}}
                 </Pill>
-                <h3>{{get card "assignee"}}</h3>
-                <p>{{get card "task"}}</p>
+                <h3>{{get card 'assignee'}}</h3>
+                <p>{{get card 'task'}}</p>
               </div>
             </:card>
           </DndKanbanBoard>
@@ -75,51 +75,51 @@ export default class DndUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Array
-          @name="columns"
-          @description="Array of Column objects representing the kanban board columns"
+          @name='columns'
+          @description='Array of Column objects representing the kanban board columns'
           @required={{true}}
         />
         <Args.Bool
-          @name="isLoading"
-          @description="Indicates if the card is in a loading state. You can also use onMove arguments to experiment with the loading state, allowing for dynamic updates during card movements."
+          @name='isLoading'
+          @description='Indicates if the card is in a loading state. You can also use onMove arguments to experiment with the loading state, allowing for dynamic updates during card movements.'
           @optional={{true}}
           @onInput={{fn (mut this.isLoading)}}
           @value={{this.isLoading}}
         />
         <Args.Action
-          @name="onMove"
-          @description="Custom callback function triggered when a card is moved"
+          @name='onMove'
+          @description='Custom callback function triggered when a card is moved'
         />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="dnd-container-gap"
-          @type="length"
-          @description="Gap between columns in the kanban board - px"
+          @name='dnd-container-gap'
+          @type='length'
+          @description='Gap between columns in the kanban board - px'
           @defaultValue={{this.dndContainerGap.defaults}}
           @value={{this.dndContainerGap.value}}
           @onInput={{this.dndContainerGap.update}}
         />
         <Css.Basic
-          @name="dnd-column-border-radius"
-          @type="length"
-          @description="Border radius for kanban board columns"
+          @name='dnd-column-border-radius'
+          @type='length'
+          @description='Border radius for kanban board columns'
           @defaultValue={{this.dndColumnBorderRadius.defaults}}
           @value={{this.dndColumnBorderRadius.value}}
           @onInput={{this.dndColumnBorderRadius.update}}
         />
         <Css.Basic
-          @name="dnd-header-bg"
-          @type="color"
-          @description="Background color for kanban board headers"
+          @name='dnd-header-bg'
+          @type='color'
+          @description='Background color for kanban board headers'
           @defaultValue={{this.dndHeaderBg.defaults}}
           @value={{this.dndHeaderBg.value}}
           @onInput={{this.dndHeaderBg.update}}
         />
         <Css.Basic
-          @name="dnd-drop-zone-bg"
-          @type="color"
-          @description="Background color for kanban board drop zones"
+          @name='dnd-drop-zone-bg'
+          @type='color'
+          @description='Background color for kanban board drop zones'
           @defaultValue={{this.dndDropZoneBg.defaults}}
           @value={{this.dndDropZoneBg.value}}
           @onInput={{this.dndDropZoneBg.update}}

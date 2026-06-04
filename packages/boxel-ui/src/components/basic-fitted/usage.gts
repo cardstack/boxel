@@ -47,12 +47,12 @@ const FittedItemContainer: TemplateOnlyComponent<FittedItemContainerSignature> =
   <template>
     <div
       class={{cn
-        "item"
+        'item'
         wide=(gt @spec.width 300)
         full-width=(gte @spec.width 400)
       }}
     >
-      <div class="desc">
+      <div class='desc'>
         <h4>{{@spec.title}} {{@spec.width}}px &times; {{@spec.height}}px</h4>
         Aspect Ratio
         {{calcRatio @spec}}
@@ -109,7 +109,7 @@ interface PreviewTemplateSignature {
 
 const FittedUsagePreview: TemplateOnlyComponent<PreviewTemplateSignature> =
   <template>
-    <div class="scroller" tabindex="0">
+    <div class='scroller' tabindex='0'>
       <h3>Standard Fitted Sizes</h3>
       {{#each @specs as |specGroup|}}
         <h3>{{specGroup.title}}</h3>
@@ -165,7 +165,7 @@ export default class BasicFittedUsage extends Component {
 
   <template>
     {{! template-lint-disable no-inline-styles style-concatenation }}
-    <FreestyleUsage @name="BasicFitted">
+    <FreestyleUsage @name='BasicFitted'>
       <:description>
         Designed to render well inside a CSS container with the following
         properties specified:
@@ -193,32 +193,32 @@ export default class BasicFittedUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="primary"
-          @description="string to display as the primary text"
+          @name='primary'
+          @description='string to display as the primary text'
           @value={{this.primary}}
           @onInput={{fn (mut this.primary)}}
         />
         <Args.String
-          @name="secondary"
-          @description="string to display as the secondary text"
+          @name='secondary'
+          @description='string to display as the secondary text'
           @value={{this.secondary}}
           @onInput={{fn (mut this.secondary)}}
         />
         <Args.String
-          @name="description"
-          @description="string to display as the secondary text"
+          @name='description'
+          @description='string to display as the secondary text'
           @value={{this.description}}
           @onInput={{fn (mut this.description)}}
         />
         <Args.String
-          @name="thumbnailURL"
-          @description="URL of the thumbnail to display"
+          @name='thumbnailURL'
+          @description='URL of the thumbnail to display'
           @value={{this.thumbnailURL}}
           @onInput={{fn (mut this.thumbnailURL)}}
         />
         <Args.Component
-          @name="iconComponent"
-          @description="Component for the thumbnail icon"
+          @name='iconComponent'
+          @description='Component for the thumbnail icon'
           @value={{this.iconComponent}}
         />
       </:api>

@@ -66,28 +66,28 @@ export default class CardHeader extends Component<Signature> {
         }}
         ...attributes
       >
-        <div class="boxel-card-header__inner">
+        <div class='boxel-card-header__inner'>
           <div
-            class="realm-icon-container"
+            class='realm-icon-container'
             style={{if
               @headerColor
               (cssVar
                 boxel-realm-icon-background-color=(getContrastColor
-                  @headerColor "transparent"
+                  @headerColor 'transparent'
                 )
                 boxel-realm-icon-border-color=(getContrastColor
-                  @headerColor "rgba(0, 0, 0, 0.15)"
+                  @headerColor 'rgba(0, 0, 0, 0.15)'
                 )
               )
             }}
           >
             {{#if @realmInfo.iconURL}}
-              <Tooltip @placement="right">
+              <Tooltip @placement='right'>
                 <:trigger>
                   <RealmIcon
                     @canAnimate={{@isTopCard}}
                     @realmInfo={{@realmInfo}}
-                    class="realm-icon"
+                    class='realm-icon'
                     data-test-card-header-realm-icon={{@realmInfo.iconURL}}
                   />
                 </:trigger>
@@ -99,23 +99,23 @@ export default class CardHeader extends Component<Signature> {
             {{/if}}
           </div>
 
-          <div class="card-type-display-name" data-test-boxel-card-header-title>
+          <div class='card-type-display-name' data-test-boxel-card-header-title>
             {{#if @cardTypeIcon}}<@cardTypeIcon />{{/if}}
             {{#if @cardTypeDisplayName}}<span
-                class="card-type-display-name-text"
+                class='card-type-display-name-text'
               >{{@cardTypeDisplayName}}</span>{{/if}}
             {{#if (and @cardTypeDisplayName @cardTitle)}}<span
-                class="card-title-text"
+                class='card-title-text'
               >-</span>
             {{/if}}
-            {{#if @cardTitle}}<span class="card-title-text">
+            {{#if @cardTitle}}<span class='card-title-text'>
                 {{@cardTitle}}</span>{{/if}}
             {{#if (or @isSaving (bool @lastSavedMessage))}}
-              <div class="save-indicator" data-test-auto-save-indicator>
+              <div class='save-indicator' data-test-auto-save-indicator>
                 {{#if @isSaving}}
                   Saving…
                 {{else if (bool @lastSavedMessage)}}
-                  <div class="boxel-contents-only" data-test-last-saved>
+                  <div class='boxel-contents-only' data-test-last-saved>
                     {{@lastSavedMessage}}
                   </div>
                 {{/if}}
@@ -123,38 +123,38 @@ export default class CardHeader extends Component<Signature> {
             {{/if}}
           </div>
 
-          <div class="actions" data-test-boxel-card-header-actions>
+          <div class='actions' data-test-boxel-card-header-actions>
             {{#if @utilityMenu}}
-              <div class="utility-menu-positioner">
+              <div class='utility-menu-positioner'>
                 <BoxelDropdown @autoClose={{true}}>
                   <:trigger as |ddModifier|>
                     <button
-                      type="button"
-                      class="utility-menu-trigger"
+                      type='button'
+                      class='utility-menu-trigger'
                       {{ddModifier}}
                     >
                       <svg
-                        class="utility-menu-trigger-icon"
-                        viewBox="0 0 14 14"
-                        fill="none"
-                        aria-hidden="true"
+                        class='utility-menu-trigger-icon'
+                        viewBox='0 0 14 14'
+                        fill='none'
+                        aria-hidden='true'
                       >
-                        <circle cx="7" cy="7" r="7" fill="#0a2e1c" />
+                        <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
                         <path
-                          d="M3.5 7.5L5.5 9.5L10.5 4.5"
-                          stroke="var(--boxel-teal)"
-                          stroke-width="1.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
+                          d='M3.5 7.5L5.5 9.5L10.5 4.5'
+                          stroke='var(--boxel-teal)'
+                          stroke-width='1.5'
+                          stroke-linecap='round'
+                          stroke-linejoin='round'
                         />
                       </svg>
-                      <span class="utility-menu-trigger-text">
+                      <span class='utility-menu-trigger-text'>
                         {{@utilityMenu.triggerText}}
                       </span>
                       <DropdownArrowDown
-                        class="utility-menu-dropdown-arrow"
-                        width="13px"
-                        height="13px"
+                        class='utility-menu-dropdown-arrow'
+                        width='13px'
+                        height='13px'
                       />
                     </button>
                   </:trigger>
@@ -168,35 +168,35 @@ export default class CardHeader extends Component<Signature> {
               </div>
             {{/if}}
             {{#if @onExpand}}
-              <Tooltip class="expand-button-tooltip" @placement="top">
+              <Tooltip class='expand-button-tooltip' @placement='top'>
                 <:trigger>
                   <ContextButton
-                    class="icon-button icon-button--maximize"
+                    class='icon-button icon-button--maximize'
                     @icon={{Maximize}}
                     @isActive={{@isExpanded}}
                     @isToggle={{true}}
-                    @label={{if @isExpanded "Restore" "Expand"}}
-                    {{on "click" @onExpand}}
+                    @label={{if @isExpanded 'Restore' 'Expand'}}
+                    {{on 'click' @onExpand}}
                     data-test-expand-button={{if
                       @isExpanded
-                      "active"
-                      "not-active"
+                      'active'
+                      'not-active'
                     }}
                   />
                 </:trigger>
                 <:content>
-                  {{if @isExpanded "Restore" "Expand to Full Width"}}
+                  {{if @isExpanded 'Restore' 'Expand to Full Width'}}
                 </:content>
               </Tooltip>
             {{/if}}
             {{#if @onEdit}}
-              <Tooltip @placement="top">
+              <Tooltip @placement='top'>
                 <:trigger>
                   <ContextButton
-                    class="icon-button"
-                    @icon="edit"
-                    @label="Edit"
-                    {{on "click" @onEdit}}
+                    class='icon-button'
+                    @icon='edit'
+                    @label='Edit'
+                    {{on 'click' @onEdit}}
                     data-test-edit-button
                   />
                 </:trigger>
@@ -208,13 +208,13 @@ export default class CardHeader extends Component<Signature> {
               </Tooltip>
             {{/if}}
             {{#if @onFinishEditing}}
-              <Tooltip @placement="top">
+              <Tooltip @placement='top'>
                 <:trigger>
                   <ContextButton
-                    class="icon-button icon-save"
-                    @icon="edit"
-                    @label="Finish Editing"
-                    {{on "click" @onFinishEditing}}
+                    class='icon-button icon-save'
+                    @icon='edit'
+                    @label='Finish Editing'
+                    {{on 'click' @onFinishEditing}}
                     data-test-edit-button
                   />
                 </:trigger>
@@ -229,12 +229,12 @@ export default class CardHeader extends Component<Signature> {
               <div>
                 <BoxelDropdown>
                   <:trigger as |bindings|>
-                    <Tooltip @placement="top">
+                    <Tooltip @placement='top'>
                       <:trigger>
                         <ContextButton
-                          class="icon-button"
-                          @variant={{if isEditing "ghost"}}
-                          @label="Options"
+                          class='icon-button'
+                          @variant={{if isEditing 'ghost'}}
+                          @label='Options'
                           data-test-more-options-button
                           {{bindings}}
                         />
@@ -255,16 +255,16 @@ export default class CardHeader extends Component<Signature> {
             {{/if}}
 
             {{#if @onClose}}
-              <Tooltip @placement="top">
+              <Tooltip @placement='top'>
                 <:trigger>
                   <ContextButton
-                    class="icon-button"
-                    @icon="close"
-                    @variant={{if isEditing "ghost"}}
-                    @label="Close"
-                    @width="24"
-                    @height="24"
-                    {{on "click" @onClose}}
+                    class='icon-button'
+                    @icon='close'
+                    @variant={{if isEditing 'ghost'}}
+                    @label='Close'
+                    @width='24'
+                    @height='24'
+                    {{on 'click' @onClose}}
                     data-test-close-button
                   />
                 </:trigger>

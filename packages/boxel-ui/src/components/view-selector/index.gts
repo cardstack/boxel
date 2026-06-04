@@ -44,32 +44,32 @@ export default class ViewSelector extends Component<Signature> {
   }
 
   <template>
-    <div class={{cn "view-options-group" is-disabled=@disabled}} ...attributes>
+    <div class={{cn 'view-options-group' is-disabled=@disabled}} ...attributes>
       {{! TODO: refactor styling of RadioInput component to display legend instead of repeating it here }}
-      <span class="view-options-label">View as</span>
+      <span class='view-options-label'>View as</span>
       <RadioInput
-        class="view-options"
-        @groupDescription="View as"
-        @name="view-options"
+        class='view-options'
+        @groupDescription='View as'
+        @name='view-options'
         @items={{this.viewOptions}}
-        @spacing="compact"
+        @spacing='compact'
         @hideRadio={{true}}
         @hideBorder={{true}}
         as |item|
       >
         {{#let item.data.id as |id|}}
           <item.component
-            class={{cn "view-option" is-selected=(eq this.selectedId id)}}
+            class={{cn 'view-option' is-selected=(eq this.selectedId id)}}
             @checked={{eq this.selectedId id}}
             @onChange={{fn @onChange id}}
             @disabled={{if @disabled @disabled item.data.disabled}}
             aria-label={{id}}
           >
             <item.data.icon
-              width="20"
-              height="20"
+              width='20'
+              height='20'
               alt={{id}}
-              role="presentation"
+              role='presentation'
             />
           </item.component>
         {{/let}}

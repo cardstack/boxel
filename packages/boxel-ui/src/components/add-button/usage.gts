@@ -18,12 +18,12 @@ export default class AddButtonUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="AddButton"
-      @description="Affordance button for adding new items to a list or collection — shows a plus icon and a label, with a hover/active state that signals \"create new\"."
+      @name='AddButton'
+      @description='Affordance button for adding new items to a list or collection — shows a plus icon and a label, with a hover/active state that signals "create new".'
     >
       <:example>
         <BoxelAddButton
-          {{on "click" (fn this.log "button clicked")}}
+          {{on 'click' (fn this.log 'button clicked')}}
           @iconWidth={{this.iconWidth}}
           @iconHeight={{this.iconHeight}}
           @loading={{this.loading}}
@@ -31,21 +31,21 @@ export default class AddButtonUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="iconWidth"
-          @defaultValue="40px"
+          @name='iconWidth'
+          @defaultValue='40px'
           @optional={{true}}
           @onInput={{fn (mut this.iconWidth)}}
           @value={{this.iconWidth}}
         />
         <Args.String
-          @name="iconHeight"
-          @defaultValue="40px"
+          @name='iconHeight'
+          @defaultValue='40px'
           @optional={{true}}
           @onInput={{fn (mut this.iconHeight)}}
           @value={{this.iconHeight}}
         />
         <Args.Bool
-          @name="loading"
+          @name='loading'
           @defaultValue={{false}}
           @optional={{true}}
           @onInput={{fn (mut this.loading)}}

@@ -47,8 +47,8 @@ export default class SortDropdownUsage extends Component<Signature> {
 
   <template>
     <FreestyleUsage
-      @name="SortDropdown"
-      @description="Dropdown for choosing a sort order from a list of named options — common at the top of a list/table view; emits the chosen sort key on change."
+      @name='SortDropdown'
+      @description='Dropdown for choosing a sort order from a list of named options — common at the top of a list/table view; emits the chosen sort key on change.'
     >
       <:example>
         <SortDropdown
@@ -59,19 +59,19 @@ export default class SortDropdownUsage extends Component<Signature> {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name="options"
-          @description="SortOption objects"
+          @name='options'
+          @description='SortOption objects'
           @value={{this.options}}
           @required={{true}}
         />
         <Args.Action
-          @name="onSelect"
-          @description="Action on select"
+          @name='onSelect'
+          @description='Action on select'
           @required={{true}}
         />
         <Args.Object
-          @name="selectedOption"
-          @description="Selected SortOption"
+          @name='selectedOption'
+          @description='Selected SortOption'
           @value={{this.selectedOption}}
         />
       </:api>

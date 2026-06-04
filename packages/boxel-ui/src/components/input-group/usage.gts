@@ -116,13 +116,13 @@ export default class BoxelInputGroupUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="InputGroup">
+    <FreestyleUsage @name='InputGroup'>
       <:description>
         Extend inputs by adding text, buttons, etc on either side of textual
         inputs.
       </:description>
       <:example>
-        <label for={{this.id}} class="boxel-sr-only">Label</label>
+        <label for={{this.id}} class='boxel-sr-only'>Label</label>
         <BoxelInputGroup
           @id={{this.id}}
           @disabled={{this.disabled}}
@@ -152,123 +152,123 @@ export default class BoxelInputGroupUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="id"
-          @description="The id of the input"
+          @name='id'
+          @description='The id of the input'
           @onInput={{fn (mut this.id)}}
           @value={{this.id}}
         />
         <Args.Bool
-          @name="disabled"
-          @description="Whether the input is disabled"
+          @name='disabled'
+          @description='Whether the input is disabled'
           @defaultValue={{false}}
           @onInput={{fn (mut this.disabled)}}
           @value={{this.disabled}}
         />
         <Args.String
-          @name="state"
-          @description="The validation state of the input"
+          @name='state'
+          @description='The validation state of the input'
           @options={{validStates}}
           @onInput={{fn (mut this.state)}}
           @value={{this.state}}
         />
         <Args.String
-          @name="validIcon"
-          @description="Override the default valid icon"
+          @name='validIcon'
+          @description='Override the default valid icon'
           @options={{validIconDescriptions}}
           @onInput={{this.onChooseValidIcon}}
           @value={{this.validIconDescription}}
         />
         <Args.String
-          @name="invalidIcon"
-          @description="Override the default invalid icon"
+          @name='invalidIcon'
+          @description='Override the default invalid icon'
           @options={{invalidIconDescriptions}}
           @onInput={{this.onChooseInvalidIcon}}
           @value={{this.invalidIconDescription}}
         />
         <Args.String
-          @name="helperText"
-          @description="Helper message to display below the input"
+          @name='helperText'
+          @description='Helper message to display below the input'
           @value={{this.helperText}}
           @onInput={{fn (mut this.helperText)}}
         />
         <Args.String
-          @name="errorMessage"
-          @description="Error message to display when the input is invalid"
+          @name='errorMessage'
+          @description='Error message to display when the input is invalid'
           @value={{this.errorMessage}}
           @onInput={{fn (mut this.errorMessage)}}
         />
         <Args.String
-          @name="placeholder"
-          @description="The placeholder text for the input (ignored when a default block is supplied)"
+          @name='placeholder'
+          @description='The placeholder text for the input (ignored when a default block is supplied)'
           @value={{this.placeholder}}
           @onInput={{fn (mut this.placeholder)}}
         />
         <Args.String
-          @name="autocomplete"
-          @description="The autocomplete attribute value for the input (ignored when a default block is supplied)"
+          @name='autocomplete'
+          @description='The autocomplete attribute value for the input (ignored when a default block is supplied)'
           @value={{this.autocomplete}}
           @onInput={{fn (mut this.autocomplete)}}
         />
         <Args.String
-          @name="inputmode"
-          @description="The inputmode attribute value for the input (ignored when a default block is supplied)"
+          @name='inputmode'
+          @description='The inputmode attribute value for the input (ignored when a default block is supplied)'
           @value={{this.inputmode}}
           @onInput={{fn (mut this.inputmode)}}
         />
         <Args.String
-          @name="name"
-          @description="The name attribute value for the input (ignored when a default block is supplied)"
+          @name='name'
+          @description='The name attribute value for the input (ignored when a default block is supplied)'
           @value={{this.name}}
           @onInput={{fn (mut this.name)}}
         />
         <Args.String
-          @name="value"
-          @description="The value of the input"
+          @name='value'
+          @description='The value of the input'
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
         />
         <Args.Action
-          @name="onInput"
-          @description="Action to call when the input value changes"
+          @name='onInput'
+          @description='Action to call when the input value changes'
         />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="boxel-input-group-padding-x"
-          @type="dimension"
-          @description="Horizontal padding"
+          @name='boxel-input-group-padding-x'
+          @type='dimension'
+          @description='Horizontal padding'
           @defaultValue={{this.boxelInputGroupPaddingX.defaults}}
           @value={{this.boxelInputGroupPaddingX.value}}
           @onInput={{this.boxelInputGroupPaddingX.update}}
         />
         <Css.Basic
-          @name="boxel-input-group-padding-y"
-          @type="dimension"
-          @description="Vertical padding"
+          @name='boxel-input-group-padding-y'
+          @type='dimension'
+          @description='Vertical padding'
           @defaultValue={{this.boxelInputGroupPaddingY.defaults}}
           @value={{this.boxelInputGroupPaddingY.value}}
           @onInput={{this.boxelInputGroupPaddingY.update}}
         />
         <Css.Basic
-          @name="boxel-input-group-border-color"
-          @type="color"
-          @description="Border color"
+          @name='boxel-input-group-border-color'
+          @type='color'
+          @description='Border color'
           @defaultValue={{this.boxelInputGroupBorderColor.defaults}}
           @value={{this.boxelInputGroupBorderColor.value}}
           @onInput={{this.boxelInputGroupBorderColor.update}}
         />
         <Css.Basic
-          @name="boxel-input-group-border-radius"
-          @type="dimension"
-          @description="Border radius"
+          @name='boxel-input-group-border-radius'
+          @type='dimension'
+          @description='Border radius'
           @defaultValue={{this.boxelInputGroupBorderRadius.defaults}}
           @value={{this.boxelInputGroupBorderRadius.value}}
           @onInput={{this.boxelInputGroupBorderRadius.update}}
         />
         <Css.Basic
-          @name="boxel-input-group-interior-border-width"
-          @type="dimension"
-          @description="Interior border width (CSS Variable). Set to zero for no interior borders"
+          @name='boxel-input-group-interior-border-width'
+          @type='dimension'
+          @description='Interior border width (CSS Variable). Set to zero for no interior borders'
           @defaultValue={{this.boxelInputGroupInteriorBorderWidth.defaults}}
           @value={{this.boxelInputGroupInteriorBorderWidth.value}}
           @onInput={{this.boxelInputGroupInteriorBorderWidth.update}}
@@ -281,12 +281,12 @@ export default class BoxelInputGroupUsage extends Component {
       }
     </style>
     <FreestyleUsage
-      @name="InputGroupExamples"
-      class="boxel-input-usage-examples"
+      @name='InputGroupExamples'
+      class='boxel-input-usage-examples'
     >
       <:example>
         <BoxelInputGroup
-          @placeholder="Username"
+          @placeholder='Username'
           @state={{this.state}}
           @disabled={{this.disabled}}
         >
@@ -305,7 +305,7 @@ export default class BoxelInputGroupUsage extends Component {
           </:after>
         </BoxelInputGroup>
 
-        <BoxelField @tag="label" @label="Your vanity URL" @vertical={{true}}>
+        <BoxelField @tag='label' @label='Your vanity URL' @vertical={{true}}>
           <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
             <:before as |Accessories|>
               <Accessories.Text>https://example.com/users/</Accessories.Text>
@@ -314,7 +314,7 @@ export default class BoxelInputGroupUsage extends Component {
         </BoxelField>
 
         <BoxelInputGroup
-          @placeholder="Amount"
+          @placeholder='Amount'
           @state={{this.state}}
           @disabled={{this.disabled}}
         >
@@ -328,9 +328,9 @@ export default class BoxelInputGroupUsage extends Component {
 
         <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
           <:default as |Controls Accessories|>
-            <Controls.Input @placeholder="Username" />
+            <Controls.Input @placeholder='Username' />
             <Accessories.Text>@</Accessories.Text>
-            <Controls.Input @placeholder="Server" />
+            <Controls.Input @placeholder='Server' />
           </:default>
         </BoxelInputGroup>
 
@@ -386,12 +386,12 @@ export default class BoxelInputGroupUsage extends Component {
           @disabled={{this.disabled}}
         >
           <:after as |Accessories|>
-            <Accessories.Button @kind="primary">Button</Accessories.Button>
+            <Accessories.Button @kind='primary'>Button</Accessories.Button>
           </:after>
         </BoxelInputGroup>
 
         <BoxelInputGroup
-          @placeholder="Example with two buttons before"
+          @placeholder='Example with two buttons before'
           @state={{this.state}}
           @disabled={{this.disabled}}
         >
@@ -402,7 +402,7 @@ export default class BoxelInputGroupUsage extends Component {
         </BoxelInputGroup>
 
         <BoxelInputGroup
-          @placeholder="Example with two buttons after"
+          @placeholder='Example with two buttons after'
           @state={{this.state}}
           @disabled={{this.disabled}}
         >
@@ -412,7 +412,7 @@ export default class BoxelInputGroupUsage extends Component {
           </:after>
         </BoxelInputGroup>
         <BoxelInputGroup
-          @placeholder="Input with a select menu"
+          @placeholder='Input with a select menu'
           @state={{this.state}}
           @disabled={{this.disabled}}
         >
@@ -423,8 +423,8 @@ export default class BoxelInputGroupUsage extends Component {
               @onChange={{this.selectExampleOnSelectItem}}
               @options={{this.selectExampleItems}}
               @disabled={{this.disabled}}
-              @dropdownClass="boxel-select-usage-dropdown"
-              aria-label="Select an item"
+              @dropdownClass='boxel-select-usage-dropdown'
+              aria-label='Select an item'
               as |item|
             >
               <div>{{item}}</div>

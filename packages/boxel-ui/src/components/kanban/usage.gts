@@ -234,7 +234,7 @@ export default class KanbanUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="Kanban Plane">
+    <FreestyleUsage @name='Kanban Plane'>
       <:description>
         <p>
           <code>KanbanPlane</code>
@@ -257,40 +257,40 @@ export default class KanbanUsage extends Component {
         </p>
       </:description>
       <:example>
-        <div class="kanban-usage">
-          <div class="kanban-usage-toolbar">
+        <div class='kanban-usage'>
+          <div class='kanban-usage-toolbar'>
             <ViewSelector
-              class="kanban-size-picker"
+              class='kanban-size-picker'
               @items={{this.sizeViewOptions}}
               @selectedId={{this.cardSizeView}}
               @onChange={{this.updateCardSizeView}}
             />
-            <label class="kanban-toggle">
-              <span class="kanban-toggle-label">Show sidebar</span>
+            <label class='kanban-toggle'>
+              <span class='kanban-toggle-label'>Show sidebar</span>
               <Switch
-                @label="Toggle column config sidebar"
+                @label='Toggle column config sidebar'
                 @isEnabled={{this.showSidebar}}
                 @onChange={{this.toggleSidebar}}
               />
             </label>
             {{#if this.selectedCard}}
-              <span class="kanban-meta">
+              <span class='kanban-meta'>
                 Selected:
                 {{this.selectedCard.title}}
               </span>
             {{/if}}
             {{#if this.openedCard}}
-              <span class="kanban-meta">
+              <span class='kanban-meta'>
                 Opened:
                 {{this.openedCard.title}}
               </span>
             {{/if}}
           </div>
 
-          <div class="kanban-plane-demo">
+          <div class='kanban-plane-demo'>
             <KanbanPlane
-              class="demo-plane"
-              @boardLabel="Kanban plane demo"
+              class='demo-plane'
+              @boardLabel='Kanban plane demo'
               @columns={{this.columns}}
               @placements={{this.placements}}
               @onChange={{this.handlePlacementsChange}}
@@ -303,22 +303,22 @@ export default class KanbanUsage extends Component {
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
-                  <CardContainer class="demo-card">
-                    <div class="demo-card-kind">{{card.kind}}</div>
+                  <CardContainer class='demo-card'>
+                    <div class='demo-card-kind'>{{card.kind}}</div>
                     <h3>{{card.title}}</h3>
                   </CardContainer>
                 {{/let}}
               </:card>
               <:ghost as |dragIndex|>
                 {{#let (get this.cards dragIndex) as |card|}}
-                  <CardContainer class="demo-card demo-card--ghost">
-                    <div class="demo-card-kind">{{card.kind}}</div>
+                  <CardContainer class='demo-card demo-card--ghost'>
+                    <div class='demo-card-kind'>{{card.kind}}</div>
                     <h3>{{card.title}}</h3>
                   </CardContainer>
                 {{/let}}
               </:ghost>
             </KanbanPlane>
-            <div class={{cn "demo-sidebar-wrap" is-open=this.showSidebar}}>
+            <div class={{cn 'demo-sidebar-wrap' is-open=this.showSidebar}}>
               <KanbanColumnConfigSidebar
                 @columns={{this.columns}}
                 @cardCounts={{this.columnCardCounts}}
@@ -337,63 +337,63 @@ export default class KanbanUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name="columns"
-          @description="Column definitions including key, label, color, WIP limit, and collapse state."
+          @name='columns'
+          @description='Column definitions including key, label, color, WIP limit, and collapse state.'
           @required={{true}}
           @value={{this.columns}}
         />
         <Args.Object
-          @name="placements"
-          @description="Card placement records that map each card index to a column and sort order."
+          @name='placements'
+          @description='Card placement records that map each card index to a column and sort order.'
           @required={{true}}
           @value={{this.placements}}
         />
         <Args.String
-          @name="cardSize"
-          @description="Fitted card size id used for the card wrapper and for column sizing within the kanban plane."
+          @name='cardSize'
+          @description='Fitted card size id used for the card wrapper and for column sizing within the kanban plane.'
           @options={{this.fittedFormats}}
           @value={{this.cardSize}}
           @onInput={{fn (mut this.cardSize)}}
-          @defaultValue="regular-tile"
+          @defaultValue='regular-tile'
         />
         <Args.Action
-          @name="onChange"
-          @description="Invoked with updated placements when the internally owned drag manager commits a move."
+          @name='onChange'
+          @description='Invoked with updated placements when the internally owned drag manager commits a move.'
         />
         <Args.Bool
-          @name="hideEmpty"
-          @description="When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns."
+          @name='hideEmpty'
+          @description='When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns.'
           @value={{this.hideEmpty}}
           @onInput={{fn (mut this.hideEmpty)}}
         />
         <Args.Action
-          @name="onToggleCollapsed"
-          @description="Invoked with the KanbanColumnConfig object when a column is collapsed via its header button or restored from the Hidden Columns tray. The caller is responsible for toggling the collapsed state on that column."
+          @name='onToggleCollapsed'
+          @description='Invoked with the KanbanColumnConfig object when a column is collapsed via its header button or restored from the Hidden Columns tray. The caller is responsible for toggling the collapsed state on that column.'
         />
         <Args.Action
-          @name="onOpen"
-          @description="Invoked with a card index when the internally owned drag manager treats a pointer interaction as open."
+          @name='onOpen'
+          @description='Invoked with a card index when the internally owned drag manager treats a pointer interaction as open.'
         />
         <Args.Action
-          @name="onSelect"
-          @description="Invoked with the selected card index, or null when selection clears, for the internally owned drag manager."
+          @name='onSelect'
+          @description='Invoked with the selected card index, or null when selection clears, for the internally owned drag manager.'
         />
         <Args.Action
-          @name="onAddCard"
-          @description="Optional callback invoked with the target column key when the add-card affordance is used."
+          @name='onAddCard'
+          @description='Optional callback invoked with the target column key when the add-card affordance is used.'
         />
         <Args.Yield
-          @name="placement"
-          @description="Yielded to the card block so callers can render card content for a specific placement."
+          @name='placement'
+          @description='Yielded to the card block so callers can render card content for a specific placement.'
         />
         <Args.Yield
-          @name="dragIndex"
-          @description="Yielded to the ghost block so callers can render drag preview content for the active card index."
+          @name='dragIndex'
+          @description='Yielded to the ghost block so callers can render drag preview content for the active card index.'
         />
       </:api>
     </FreestyleUsage>
 
-    <FreestyleUsage @name="Kanban Column Config Sidebar">
+    <FreestyleUsage @name='Kanban Column Config Sidebar'>
       <:description>
         <p>
           <code>KanbanColumnConfigSidebar</code>
@@ -426,44 +426,44 @@ export default class KanbanUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name="columns"
-          @description="Array of KanbanColumnConfig objects to display and edit."
+          @name='columns'
+          @description='Array of KanbanColumnConfig objects to display and edit.'
           @required={{true}}
           @value={{this.columns}}
         />
         <Args.Bool
-          @name="hideEmpty"
-          @description="When true, the Hide empty columns switch is toggled on."
+          @name='hideEmpty'
+          @description='When true, the Hide empty columns switch is toggled on.'
           @value={{this.hideEmpty}}
           @onInput={{fn (mut this.hideEmpty)}}
         />
         <Args.Action
-          @name="onHideEmptyChange"
-          @description="Invoked when the Hide empty columns switch is toggled. If omitted the switch is hidden."
+          @name='onHideEmptyChange'
+          @description='Invoked when the Hide empty columns switch is toggled. If omitted the switch is hidden.'
         />
         <Args.Action
-          @name="onClose"
-          @description="Optional callback invoked when the close button is clicked. If omitted the close button is hidden."
+          @name='onClose'
+          @description='Optional callback invoked when the close button is clicked. If omitted the close button is hidden.'
         />
         <Args.Action
-          @name="onToggleCollapsed"
-          @description="Optional callback invoked with the column when its visibility toggle is clicked."
+          @name='onToggleCollapsed'
+          @description='Optional callback invoked with the column when its visibility toggle is clicked.'
         />
         <Args.Action
-          @name="onLabelChange"
-          @description="Optional callback invoked with the column and new label string when the label input changes."
+          @name='onLabelChange'
+          @description='Optional callback invoked with the column and new label string when the label input changes.'
         />
         <Args.Action
-          @name="onColorChange"
-          @description="Optional callback invoked with the column and new color hex string when the color picker changes."
+          @name='onColorChange'
+          @description='Optional callback invoked with the column and new color hex string when the color picker changes.'
         />
         <Args.Action
-          @name="onWipLimitChange"
-          @description="Optional callback invoked with the column and new value string when the WIP limit input changes."
+          @name='onWipLimitChange'
+          @description='Optional callback invoked with the column and new value string when the WIP limit input changes.'
         />
         <Args.Action
-          @name="onReorder"
-          @description="Optional callback invoked with the full reordered KanbanColumnConfig[] after a column is moved up or down. The caller is responsible for applying the new order to its own state."
+          @name='onReorder'
+          @description='Optional callback invoked with the full reordered KanbanColumnConfig[] after a column is moved up or down. The caller is responsible for applying the new order to its own state.'
         />
       </:api>
     </FreestyleUsage>

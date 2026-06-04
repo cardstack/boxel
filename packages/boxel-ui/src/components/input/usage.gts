@@ -89,11 +89,11 @@ export default class InputUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Input"
-      @description="Form text input field with validation states, helper/error text, and support for text, email, password, number, search, textarea, and checkbox types."
+      @name='Input'
+      @description='Form text input field with validation states, helper/error text, and support for text, email, password, number, search, textarea, and checkbox types.'
     >
       <:example>
-        <label for={{this.id}} class="boxel-sr-only">Label for example input
+        <label for={{this.id}} class='boxel-sr-only'>Label for example input
           component</label>
         <BoxelInput
           @id={{this.id}}
@@ -114,133 +114,133 @@ export default class InputUsage extends Component {
           style={{cssVar boxel-input-height=this.boxelInputHeight.value}}
           @onBlur={{this.validate}}
           @onFocus={{this.logValue}}
-          {{on "input" this.set}}
+          {{on 'input' this.set}}
         />
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="id"
+          @name='id'
           @value={{this.id}}
           @onInput={{fn (mut this.id)}}
         />
         <Args.String
-          @name="type"
+          @name='type'
           @options={{validTypes}}
           @defaultValue={{this.defaultType}}
           @onInput={{fn (mut this.type)}}
           @value={{this.type}}
         />
         <Args.String
-          @name="value"
+          @name='value'
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
         />
         <Args.String
-          @name="state"
-          @description="The validation state of the input"
+          @name='state'
+          @description='The validation state of the input'
           @options={{validStates}}
           @onInput={{fn (mut this.state)}}
           @value={{this.state}}
         />
         <Args.Bool
-          @name="disabled"
+          @name='disabled'
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
         />
         <Args.Bool
-          @name="readonly"
+          @name='readonly'
           @value={{this.readonly}}
           @onInput={{fn (mut this.readonly)}}
         />
         <Args.Bool
-          @name="required"
+          @name='required'
           @value={{this.required}}
           @onInput={{fn (mut this.required)}}
         />
         <Args.Bool
-          @name="optional"
+          @name='optional'
           @value={{this.optional}}
           @onInput={{fn (mut this.optional)}}
-          @description="Displays optional label, unless @required=true"
+          @description='Displays optional label, unless @required=true'
         />
         <Args.String
-          @name="errorMessage"
+          @name='errorMessage'
           @value={{this.errorMessage}}
           @onInput={{fn (mut this.errorMessage)}}
           @description="Only shows with @state='invalid'"
         />
         <Args.String
-          @name="helperText"
+          @name='helperText'
           @value={{this.helperText}}
           @onInput={{fn (mut this.helperText)}}
         />
         <Args.String
-          @name="min"
+          @name='min'
           @value={{this.min}}
           @onInput={{fn (mut this.min)}}
-          @description="Native <input> attribute, works with number, range, date, datetime-local, month, time and week types"
+          @description='Native <input> attribute, works with number, range, date, datetime-local, month, time and week types'
         />
         <Args.String
-          @name="max"
+          @name='max'
           @value={{this.max}}
           @onInput={{fn (mut this.max)}}
-          @description="Native <input> attribute, works with number, range, date, datetime-local, month, time and week types"
+          @description='Native <input> attribute, works with number, range, date, datetime-local, month, time and week types'
         />
         <Args.String
-          @name="placeholder"
-          @description="Placeholder text"
+          @name='placeholder'
+          @description='Placeholder text'
           @onInput={{fn (mut this.placeholder)}}
           @value={{this.placeholder}}
         />
         <Args.String
-          @name="bottomTreatment"
-          @description="The visual shape of the bottom of the input"
+          @name='bottomTreatment'
+          @description='The visual shape of the bottom of the input'
           @onInput={{fn (mut this.bottomTreatment)}}
           @options={{validBottomTreatments}}
           @value={{this.bottomTreatment}}
           @defaultValue={{this.defaultBottomTreatment}}
         />
         <Args.String
-          @name="size"
-          @description="Input size: large increases height, auto sets container width to fit-content"
+          @name='size'
+          @description='Input size: large increases height, auto sets container width to fit-content'
           @onInput={{fn (mut this.size)}}
           @options={{validSizes}}
           @value={{this.size}}
           @defaultValue={{this.size}}
         />
         <Args.Action
-          @name="onInput"
-          @description="Receives the changed value as a string"
+          @name='onInput'
+          @description='Receives the changed value as a string'
         />
-        <Args.Action @name="onKeyPress" @description="Action on key press" />
-        <Args.Action @name="onFocus" @description="Action on focus" />
-        <Args.Action @name="onBlur" @description="Action on blur" />
+        <Args.Action @name='onKeyPress' @description='Action on key press' />
+        <Args.Action @name='onFocus' @description='Action on focus' />
+        <Args.Action @name='onBlur' @description='Action on blur' />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="--boxel-input-height"
-          @type="min-height"
-          @description="Used to set the min-height of the field"
+          @name='--boxel-input-height'
+          @type='min-height'
+          @description='Used to set the min-height of the field'
         />
         <Css.Basic
-          @name="--boxel-input-search-color"
-          @type="color"
-          @description="Search input text color"
+          @name='--boxel-input-search-color'
+          @type='color'
+          @description='Search input text color'
         />
         <Css.Basic
-          @name="--boxel-input-search-background-color"
-          @type="background-color"
-          @description="Search input background-color"
+          @name='--boxel-input-search-background-color'
+          @type='background-color'
+          @description='Search input background-color'
         />
         <Css.Basic
-          @name="--boxel-input-search-icon-color"
-          @type="color"
-          @description="Search icon svg color"
+          @name='--boxel-input-search-icon-color'
+          @type='color'
+          @description='Search icon svg color'
         />
       </:cssVars>
     </FreestyleUsage>
 
-    <FreestyleUsage @name="Checkbox">
+    <FreestyleUsage @name='Checkbox'>
       <:description>
         Use
         <code>@type='checkbox'</code>
@@ -251,9 +251,9 @@ export default class InputUsage extends Component {
         to handle state changes.
       </:description>
       <:example>
-        <label class="checkbox-example-label">
+        <label class='checkbox-example-label'>
           <BoxelInput
-            @type="checkbox"
+            @type='checkbox'
             @value={{this.isChecked}}
             @disabled={{this.disabled}}
             @onChange={{this.toggleChecked}}
@@ -263,70 +263,70 @@ export default class InputUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Bool
-          @name="value (checked)"
+          @name='value (checked)'
           @value={{this.isChecked}}
           @onInput={{fn (mut this.isChecked)}}
-          @description="Whether the checkbox is checked"
+          @description='Whether the checkbox is checked'
         />
         <Args.Bool
-          @name="disabled"
+          @name='disabled'
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
         />
         <Args.Action
-          @name="onChange"
-          @description="Receives the change Event"
+          @name='onChange'
+          @description='Receives the change Event'
         />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="--boxel-checkbox-size"
-          @type="dimension"
-          @description="Checkbox width and height (default: 18px)"
+          @name='--boxel-checkbox-size'
+          @type='dimension'
+          @description='Checkbox width and height (default: 18px)'
         />
         <Css.Basic
-          @name="--boxel-checkbox-border-radius"
-          @type="dimension"
-          @description="Border radius (default: 3px)"
+          @name='--boxel-checkbox-border-radius'
+          @type='dimension'
+          @description='Border radius (default: 3px)'
         />
         <Css.Basic
-          @name="--boxel-checkbox-border-color"
-          @type="color"
-          @description="Unchecked border color"
+          @name='--boxel-checkbox-border-color'
+          @type='color'
+          @description='Unchecked border color'
         />
         <Css.Basic
-          @name="--boxel-checkbox-background-color"
-          @type="color"
-          @description="Unchecked background color"
+          @name='--boxel-checkbox-background-color'
+          @type='color'
+          @description='Unchecked background color'
         />
         <Css.Basic
-          @name="--boxel-checkbox-checked-background-color"
-          @type="color"
-          @description="Checked background color"
+          @name='--boxel-checkbox-checked-background-color'
+          @type='color'
+          @description='Checked background color'
         />
         <Css.Basic
-          @name="--boxel-checkbox-checked-border-color"
-          @type="color"
-          @description="Checked border color"
+          @name='--boxel-checkbox-checked-border-color'
+          @type='color'
+          @description='Checked border color'
         />
         <Css.Basic
-          @name="--boxel-checkbox-checkmark-color"
-          @type="color"
-          @description="Checkmark stroke color (default: #333)"
+          @name='--boxel-checkbox-checkmark-color'
+          @type='color'
+          @description='Checkmark stroke color (default: #333)'
         />
       </:cssVars>
     </FreestyleUsage>
 
-    <FreestyleUsage class="remove-in-percy" @name="Usage on nested card">
+    <FreestyleUsage class='remove-in-percy' @name='Usage on nested card'>
       <:example>
         <CardContainer @displayBoundaries={{true}}>
-          <BoxelContainer @display="grid">
+          <BoxelContainer @display='grid'>
             Nested card:
             <CardContainer @displayBoundaries={{true}}>
-              <BoxelContainer @display="grid">
-                <label for="usage-input-card" class="boxel-sr-only">Sample label</label>
+              <BoxelContainer @display='grid'>
+                <label for='usage-input-card' class='boxel-sr-only'>Sample label</label>
                 <BoxelInput
-                  @id="usage-input-card"
+                  @id='usage-input-card'
                   @value={{this.value}}
                   @disabled={{this.disabled}}
                   @required={{this.required}}
@@ -339,17 +339,17 @@ export default class InputUsage extends Component {
                   @errorMessage={{this.errorMessage}}
                   @helperText={{this.helperText}}
                   @onBlur={{this.validate}}
-                  {{on "input" this.set}}
+                  {{on 'input' this.set}}
                 />
                 <label
-                  for="usage-input-card-disabled"
-                  class="boxel-sr-only"
+                  for='usage-input-card-disabled'
+                  class='boxel-sr-only'
                 >Sample label</label>
                 <BoxelInput
-                  @id="usage-input-card-disabled"
+                  @id='usage-input-card-disabled'
                   @size={{this.size}}
                   disabled
-                  @value="Disabled state"
+                  @value='Disabled state'
                 />
               </BoxelContainer>
             </CardContainer>
@@ -358,12 +358,12 @@ export default class InputUsage extends Component {
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage class="remove-in-percy" @name="Usage on sidebar">
+    <FreestyleUsage class='remove-in-percy' @name='Usage on sidebar'>
       <:example>
-        <BoxelContainer @tag="aside" @display="grid" class="sidebar-container">
+        <BoxelContainer @tag='aside' @display='grid' class='sidebar-container'>
           Sidebar:
           <BoxelInput
-            @id="usage-input-sidebar"
+            @id='usage-input-sidebar'
             @value={{this.value}}
             @disabled={{this.disabled}}
             @required={{this.required}}
@@ -376,13 +376,13 @@ export default class InputUsage extends Component {
             @errorMessage={{this.errorMessage}}
             @helperText={{this.helperText}}
             @onBlur={{this.validate}}
-            {{on "input" this.set}}
+            {{on 'input' this.set}}
           />
-          <label for="usage-input-sidebar-d" class="boxel-sr-only">Sample label</label>
+          <label for='usage-input-sidebar-d' class='boxel-sr-only'>Sample label</label>
           <BoxelInput
-            @id="usage-input-sidebar-d"
+            @id='usage-input-sidebar-d'
             @size={{this.size}}
-            @value="Disabled state"
+            @value='Disabled state'
             disabled
           />
         </BoxelContainer>
@@ -390,44 +390,44 @@ export default class InputUsage extends Component {
     </FreestyleUsage>
 
     <FreestyleUsage
-      class="remove-in-percy"
-      @name="Configure a multiline input using textarea attributes"
+      class='remove-in-percy'
+      @name='Configure a multiline input using textarea attributes'
     >
       <:example>
-        <label for="multilineExample" class="boxel-sr-only">event example input</label>
+        <label for='multilineExample' class='boxel-sr-only'>event example input</label>
         <BoxelInput
-          @id="multilineExample"
-          @value=""
-          @type="textarea"
-          rows="10"
-          cols="20"
+          @id='multilineExample'
+          @value=''
+          @type='textarea'
+          rows='10'
+          cols='20'
         />
       </:example>
     </FreestyleUsage>
 
     <FreestyleUsage
-      class="remove-in-percy"
+      class='remove-in-percy'
       @name="Use the @onInput argument to access the input's value in the callback directly."
     >
       <:example>
-        <label for="onInputExample" class="boxel-sr-only">onInput example input</label>
-        <BoxelInput @id="onInputExample" @value="" @onInput={{this.logValue}} />
+        <label for='onInputExample' class='boxel-sr-only'>onInput example input</label>
+        <BoxelInput @id='onInputExample' @value='' @onInput={{this.logValue}} />
       </:example>
     </FreestyleUsage>
 
     <FreestyleUsage
-      class="remove-in-percy"
+      class='remove-in-percy'
       @name="Use 'on &ldquo;input&rdquo; your-function-here' as an escape hatch to get the input event"
     >
       <:description>
 
       </:description>
       <:example>
-        <label for="modifierExample" class="boxel-sr-only">event example input</label>
+        <label for='modifierExample' class='boxel-sr-only'>event example input</label>
         <BoxelInput
-          @id="modifierExample"
-          @value=""
-          {{on "input" this.logValue}}
+          @id='modifierExample'
+          @value=''
+          {{on 'input' this.logValue}}
         />
       </:example>
     </FreestyleUsage>

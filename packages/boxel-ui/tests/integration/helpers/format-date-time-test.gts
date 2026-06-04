@@ -118,7 +118,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   test('defaults to medium date style', async function (assert) {
     await render(
       <template>
-        {{formatDateTime BASE_DATE locale="en-US" timeZone="UTC"}}
+        {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC'}}
       </template>,
     );
 
@@ -154,9 +154,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          preset="short"
+          locale='en-US'
+          timeZone='UTC'
+          preset='short'
         }}
       </template>,
     );
@@ -164,7 +164,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
     await render(
       <template>
-        {{formatDateTime BASE_DATE locale="en-US" timeZone="UTC" preset="long"}}
+        {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC' preset='long'}}
       </template>,
     );
     assert.dom().hasText('March 15, 2024', 'long preset uses long date style');
@@ -175,10 +175,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          dateStyle="medium"
-          timeStyle="short"
-          timeZone="America/New_York"
+          locale='en-US'
+          dateStyle='medium'
+          timeStyle='short'
+          timeZone='America/New_York'
           hour12=false
         }}
       </template>,
@@ -195,7 +195,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   test('kind variants format partial dates', async function (assert) {
     await render(
       <template>
-        {{formatDateTime BASE_DATE kind="month" locale="en-US" timeZone="UTC"}}
+        {{formatDateTime BASE_DATE kind='month' locale='en-US' timeZone='UTC'}}
       </template>,
     );
     assert.dom().hasText('March', 'formats month');
@@ -204,9 +204,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="monthDay"
-          locale="en-US"
-          timeZone="UTC"
+          kind='monthDay'
+          locale='en-US'
+          timeZone='UTC'
         }}
       </template>,
     );
@@ -216,10 +216,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="monthYear"
-          locale="en-US"
-          timeZone="UTC"
-          monthDisplay="long"
+          kind='monthYear'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='long'
         }}
       </template>,
     );
@@ -227,7 +227,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
     await render(
       <template>
-        {{formatDateTime BASE_DATE kind="year" locale="en-US" timeZone="UTC"}}
+        {{formatDateTime BASE_DATE kind='year' locale='en-US' timeZone='UTC'}}
       </template>,
     );
     assert.dom().hasText('2024', 'formats year');
@@ -236,10 +236,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="month"
-          locale="en-US"
-          timeZone="UTC"
-          monthDisplay="narrow"
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='narrow'
         }}
       </template>,
     );
@@ -247,7 +247,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
     await render(
       <template>
-        {{formatDateTime BASE_DATE kind="time" locale="en-US" timeZone="UTC"}}
+        {{formatDateTime BASE_DATE kind='time' locale='en-US' timeZone='UTC'}}
       </template>,
     );
     assert.dom().hasText('3:45 PM', 'formats time-only output');
@@ -256,7 +256,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   test('date and datetime kinds include the expected fields', async function (assert) {
     await render(
       <template>
-        {{formatDateTime BASE_DATE kind="date" locale="en-US" timeZone="UTC"}}
+        {{formatDateTime BASE_DATE kind='date' locale='en-US' timeZone='UTC'}}
       </template>,
     );
     assert.dom().hasText('Mar 15, 2024', 'kind="date" renders date only');
@@ -265,9 +265,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="datetime"
-          locale="en-US"
-          timeZone="UTC"
+          kind='datetime'
+          locale='en-US'
+          timeZone='UTC'
         }}
       </template>,
     );
@@ -281,10 +281,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="month"
-          locale="en-US"
-          timeZone="UTC"
-          monthDisplay="numeric"
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='numeric'
         }}
       </template>,
     );
@@ -294,10 +294,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="month"
-          locale="en-US"
-          timeZone="UTC"
-          monthDisplay="2-digit"
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='2-digit'
         }}
       </template>,
     );
@@ -307,10 +307,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="month"
-          locale="en-US"
-          timeZone="UTC"
-          monthDisplay="short"
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='short'
         }}
       </template>,
     );
@@ -320,10 +320,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="monthYear"
-          locale="en-US"
-          timeZone="UTC"
-          monthDisplay="long"
+          kind='monthYear'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='long'
         }}
       </template>,
     );
@@ -335,9 +335,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          dateStyle="full"
+          locale='en-US'
+          timeZone='UTC'
+          dateStyle='full'
         }}
       </template>,
     );
@@ -349,9 +349,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          timeStyle="medium"
+          locale='en-US'
+          timeZone='UTC'
+          timeStyle='medium'
         }}
       </template>,
     );
@@ -361,9 +361,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          timeStyle="long"
+          locale='en-US'
+          timeZone='UTC'
+          timeStyle='long'
         }}
       </template>,
     );
@@ -375,10 +375,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          dateStyle="long"
-          timeStyle="short"
+          locale='en-US'
+          timeZone='UTC'
+          dateStyle='long'
+          timeStyle='short'
         }}
       </template>,
     );
@@ -391,9 +391,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          kind="time"
+          locale='en-US'
+          timeZone='UTC'
+          kind='time'
           hour12=true
         }}
       </template>,
@@ -404,10 +404,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="UTC"
-          kind="time"
-          hourCycle="h23"
+          locale='en-US'
+          timeZone='UTC'
+          kind='time'
+          hourCycle='h23'
         }}
       </template>,
     );
@@ -418,10 +418,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           MIDNIGHT
-          locale="en-US"
-          timeZone="UTC"
-          kind="time"
-          hourCycle="h11"
+          locale='en-US'
+          timeZone='UTC'
+          kind='time'
+          hourCycle='h11'
         }}
       </template>,
     );
@@ -481,9 +481,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en"
-          timeZone="UTC"
-          format="dddd, MMMM Do, YYYY [at] h:mm A"
+          locale='en'
+          timeZone='UTC'
+          format='dddd, MMMM Do, YYYY [at] h:mm A'
         }}
       </template>,
     );
@@ -501,9 +501,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="es-ES"
-          timeZone="Europe/Madrid"
-          dateStyle="long"
+          locale='es-ES'
+          timeZone='Europe/Madrid'
+          dateStyle='long'
         }}
       </template>,
     );
@@ -518,9 +518,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="fr-FR"
-          timeZone="Europe/Paris"
-          dateStyle="long"
+          locale='fr-FR'
+          timeZone='Europe/Paris'
+          dateStyle='long'
         }}
       </template>,
     );
@@ -532,11 +532,11 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="Asia/Tokyo"
-          kind="datetime"
-          dateStyle="long"
-          timeStyle="short"
+          locale='en-US'
+          timeZone='Asia/Tokyo'
+          kind='datetime'
+          dateStyle='long'
+          timeStyle='short'
         }}
       </template>,
     );
@@ -549,11 +549,11 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en-US"
-          timeZone="America/Los_Angeles"
-          kind="datetime"
-          dateStyle="long"
-          timeStyle="short"
+          locale='en-US'
+          timeZone='America/Los_Angeles'
+          kind='datetime'
+          dateStyle='long'
+          timeStyle='short'
         }}
       </template>,
     );
@@ -568,7 +568,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   test('week and quarter formatting', async function (assert) {
     await render(
       <template>
-        {{formatDateTime BASE_DATE kind="week" locale="en-US" timeZone="UTC"}}
+        {{formatDateTime BASE_DATE kind='week' locale='en-US' timeZone='UTC'}}
       </template>,
     );
     assert.dom().hasText('2024-W11', 'formats ISO week');
@@ -577,10 +577,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="week"
-          locale="en-US"
-          timeZone="UTC"
-          weekFormat="label"
+          kind='week'
+          locale='en-US'
+          timeZone='UTC'
+          weekFormat='label'
         }}
       </template>,
     );
@@ -590,9 +590,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="quarter"
-          locale="en-US"
-          timeZone="UTC"
+          kind='quarter'
+          locale='en-US'
+          timeZone='UTC'
         }}
       </template>,
     );
@@ -602,10 +602,10 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          kind="quarter"
-          locale="en-US"
-          timeZone="UTC"
-          quarterFormat="long"
+          kind='quarter'
+          locale='en-US'
+          timeZone='UTC'
+          quarterFormat='long'
         }}
       </template>,
     );
@@ -617,9 +617,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           BASE_DATE
-          locale="en"
-          timeZone="UTC"
-          format="YYYY/MM/DD"
+          locale='en'
+          timeZone='UTC'
+          format='YYYY/MM/DD'
         }}
       </template>,
     );
@@ -635,9 +635,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       <template>
         {{formatDateTime
           secondsTimestamp
-          locale="en-US"
-          timeZone="UTC"
-          unit="s"
+          locale='en-US'
+          timeZone='UTC'
+          unit='s'
         }}
       </template>,
     );
@@ -647,14 +647,14 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
     await render(
       <template>
-        {{formatDateTime excelSerial parse=(hash serialOrigin="excel1900")}}
+        {{formatDateTime excelSerial parse=(hash serialOrigin='excel1900')}}
       </template>,
     );
     assert.dom().hasText('Mar 14, 2024', 'parses Excel 1900 serial dates');
 
     await render(
       <template>
-        {{formatDateTime excelSerial parse=(hash serialOrigin="excel1904")}}
+        {{formatDateTime excelSerial parse=(hash serialOrigin='excel1904')}}
       </template>,
     );
     assert.dom().hasText('Mar 15, 2028', 'parses Excel 1904 serial dates');
@@ -690,13 +690,13 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   test('falls back when value cannot be parsed', async function (assert) {
     await render(
       <template>
-        {{formatDateTime "not-a-date" fallback="Invalid date"}}
+        {{formatDateTime 'not-a-date' fallback='Invalid date'}}
       </template>,
     );
     assert.dom().hasText('Invalid date', 'uses fallback for invalid string');
 
     await render(
-      <template>{{formatDateTime null fallback="Missing"}}</template>,
+      <template>{{formatDateTime null fallback='Missing'}}</template>,
     );
     assert.dom().hasText('Missing', 'uses fallback for null value');
   });

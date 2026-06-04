@@ -17,39 +17,39 @@ interface Signature {
 }
 
 const BasicFitted: TemplateOnlyComponent<Signature> = <template>
-  <div class="fitted-template" ...attributes>
+  <div class='fitted-template' ...attributes>
     {{#if @isEmpty}}
       {{! empty links-to field }}
-      <div data-test-empty-field class="empty-field">
-        {{yield to="empty"}}
+      <div data-test-empty-field class='empty-field'>
+        {{yield to='empty'}}
       </div>
     {{else}}
-      <div class="thumbnail-section">
-        {{#if (has-block "thumbnail")}}
-          {{yield to="thumbnail"}}
+      <div class='thumbnail-section'>
+        {{#if (has-block 'thumbnail')}}
+          {{yield to='thumbnail'}}
         {{else}}
           {{#if @thumbnailURL}}
             <div
-              class="card-thumbnail"
-              style={{cssUrl "background-image" @thumbnailURL}}
+              class='card-thumbnail'
+              style={{cssUrl 'background-image' @thumbnailURL}}
             />
           {{else}}
-            <@iconComponent data-test-card-type-icon class="card-type-icon" />
+            <@iconComponent data-test-card-type-icon class='card-type-icon' />
           {{/if}}
         {{/if}}
       </div>
-      {{#if (has-block "content")}}
-        {{yield to="content"}}
+      {{#if (has-block 'content')}}
+        {{yield to='content'}}
       {{else}}
-        <div class="info-section">
-          <h3 class="card-title" data-test-card-title>{{@primary}}</h3>
-          <h4 class="card-display-name" data-test-card-display-name>
+        <div class='info-section'>
+          <h3 class='card-title' data-test-card-title>{{@primary}}</h3>
+          <h4 class='card-display-name' data-test-card-display-name>
             {{@secondary}}
           </h4>
         </div>
       {{/if}}
       {{#if @description}}
-        <div class="card-description" data-test-card-description>
+        <div class='card-description' data-test-card-description>
           {{@description}}
         </div>
       {{/if}}

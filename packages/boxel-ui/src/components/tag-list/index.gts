@@ -26,15 +26,15 @@ export default class TagList extends Component<TagListSignature> {
   }
 
   <template>
-    <div class="tag-list" ...attributes>
+    <div class='tag-list' ...attributes>
       {{#each @tags as |tag|}}
         <Pill
-          @kind="button"
+          @kind='button'
           class={{concat
-            "tag-list-pill"
-            (if (this.isTagSelected tag.id) " selected")
+            'tag-list-pill'
+            (if (this.isTagSelected tag.id) ' selected')
           }}
-          {{on "click" (fn @onTagSelect tag)}}
+          {{on 'click' (fn @onTagSelect tag)}}
           data-test-tag-list-pill={{tag.id}}
         >
           <:default>

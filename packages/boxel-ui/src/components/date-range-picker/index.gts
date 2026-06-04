@@ -102,20 +102,20 @@ export default class DateRangePicker extends Component<Signature> {
     <PowerCalendarRange
       @selected={{@selected}}
       @onSelect={{@onSelect}}
-      @locale="en-US"
+      @locale='en-US'
       ...attributes
       as |calendar|
     >
-      <div class="months-container {{if @disabled 'disabled'}}">
-        <div class="month-calendar">
+      <div class='months-container {{if @disabled "disabled"}}'>
+        <div class='month-calendar'>
           <calendar.Nav>
-            <div class="nav-container">
+            <div class='nav-container'>
               <IconButton
                 @icon={{TriangleLeftIcon}}
-                aria-label="Previous month"
-                {{on "click" (fn this.onNavigate "left" "previous")}}
+                aria-label='Previous month'
+                {{on 'click' (fn this.onNavigate 'left' 'previous')}}
               />
-              <div class="month-name">
+              <div class='month-name'>
                 {{powerCalendarFormatDate
                   this.leftCenter
                   dateFormat
@@ -124,8 +124,8 @@ export default class DateRangePicker extends Component<Signature> {
               </div>
               <IconButton
                 @icon={{TriangleRightIcon}}
-                aria-label="Next month"
-                {{on "click" (fn this.onNavigate "left" "next")}}
+                aria-label='Next month'
+                {{on 'click' (fn this.onNavigate 'left' 'next')}}
               />
             </div>
           </calendar.Nav>
@@ -135,15 +135,15 @@ export default class DateRangePicker extends Component<Signature> {
           />
         </div>
 
-        <div class="month-calendar">
+        <div class='month-calendar'>
           <calendar.Nav>
-            <div class="nav-container">
+            <div class='nav-container'>
               <IconButton
                 @icon={{TriangleLeftIcon}}
-                aria-label="Previous month"
-                {{on "click" (fn this.onNavigate "right" "previous")}}
+                aria-label='Previous month'
+                {{on 'click' (fn this.onNavigate 'right' 'previous')}}
               />
-              <div class="month-name">
+              <div class='month-name'>
                 {{powerCalendarFormatDate
                   this.rightCenter
                   dateFormat
@@ -152,8 +152,8 @@ export default class DateRangePicker extends Component<Signature> {
               </div>
               <IconButton
                 @icon={{TriangleRightIcon}}
-                aria-label="Next month"
-                {{on "click" (fn this.onNavigate "right" "next")}}
+                aria-label='Next month'
+                {{on 'click' (fn this.onNavigate 'right' 'next')}}
               />
             </div>
           </calendar.Nav>

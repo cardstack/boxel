@@ -5,28 +5,28 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.25"
-    viewBox="0 0 18 16"
+    fill='none'
+    stroke='currentColor'
+    stroke-width='1.25'
+    viewBox='0 0 18 16'
     ...attributes
   ><rect
-      width="15.5"
-      height="9"
-      x="1.25"
-      y="3.5"
-      fill="currentColor"
-      fill-opacity=".18"
-      rx="2"
-    /><rect width="15.5" height="9" x="1.25" y="3.5" rx="2" /><rect
-      width="5"
-      height="5.5"
-      x="3"
-      y="5.25"
-      fill="currentColor"
-      stroke="none"
-      rx=".75"
-    /><path d="M9.5 6.75h5.25M9.5 8.5h5.25M9.5 10.25h3.25" /></svg>
+      width='15.5'
+      height='9'
+      x='1.25'
+      y='3.5'
+      fill='currentColor'
+      fill-opacity='.18'
+      rx='2'
+    /><rect width='15.5' height='9' x='1.25' y='3.5' rx='2' /><rect
+      width='5'
+      height='5.5'
+      x='3'
+      y='5.25'
+      fill='currentColor'
+      stroke='none'
+      rx='.75'
+    /><path d='M9.5 6.75h5.25M9.5 8.5h5.25M9.5 10.25h3.25' /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently

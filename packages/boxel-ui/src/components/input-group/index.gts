@@ -81,9 +81,9 @@ export default class InputGroup extends Component<Signature> {
 
   <template>
     {{#let
-      (and (eq @state "invalid") (bool @errorMessage))
+      (and (eq @state 'invalid') (bool @errorMessage))
       (hash
-        Button=(component ButtonAccessory kind="secondary" disabled=@disabled)
+        Button=(component ButtonAccessory kind='secondary' disabled=@disabled)
         IconButton=IconButtonAccessory
         Select=SelectAccessory
         Text=TextAccessory
@@ -91,12 +91,12 @@ export default class InputGroup extends Component<Signature> {
       (hash Input=InputControl Textarea=TextareaControl)
       as |shouldShowErrorMessage Accessories Controls|
     }}
-      <div class="container">
+      <div class='container'>
         <div
           class={{cn
-            "boxel-input-group"
-            boxel-input-group--invalid=(eq @state "invalid")
-            boxel-input-group--disabled=(or @disabled (eq @state "loading"))
+            'boxel-input-group'
+            boxel-input-group--invalid=(eq @state 'invalid')
+            boxel-input-group--disabled=(or @disabled (eq @state 'loading'))
           }}
           data-test-boxel-input-group
           data-test-boxel-input-group-validation-state={{if
@@ -106,7 +106,7 @@ export default class InputGroup extends Component<Signature> {
           }}
           ...attributes
         >
-          {{yield Accessories this.inputGroupBlockArg to="before"}}
+          {{yield Accessories this.inputGroupBlockArg to='before'}}
           {{#if (has-block)}}
             {{yield Controls Accessories this.inputGroupBlockArg}}
           {{else}}
@@ -126,39 +126,39 @@ export default class InputGroup extends Component<Signature> {
               inputmode={{@inputmode}}
               aria-describedby={{if
                 @helperText
-                (concat "helper-text-" this.elementId)
+                (concat 'helper-text-' this.elementId)
                 false
               }}
-              aria-invalid={{if (eq @state "invalid") "true"}}
+              aria-invalid={{if (eq @state 'invalid') 'true'}}
               aria-errormessage={{if
                 shouldShowErrorMessage
-                (concat "error-message-" this.elementId)
+                (concat 'error-message-' this.elementId)
                 false
               }}
             />
           {{/if}}
-          {{yield Accessories this.inputGroupBlockArg to="after"}}
+          {{yield Accessories this.inputGroupBlockArg to='after'}}
           {{#if this.validationIcon}}
-            <div class={{cn "validation-icon-container" @state}}>
+            <div class={{cn 'validation-icon-container' @state}}>
               <this.validationIcon />
             </div>
-          {{else if (eq @state "loading")}}
-            <div class={{cn "validation-icon-container" @state}}>
+          {{else if (eq @state 'loading')}}
+            <div class={{cn 'validation-icon-container' @state}}>
               <LoadingIndicator />
             </div>
           {{/if}}
         </div>
         {{#if shouldShowErrorMessage}}
           <div
-            id={{concat "error-message-" this.elementId}}
-            class="error-message"
+            id={{concat 'error-message-' this.elementId}}
+            class='error-message'
             data-test-boxel-input-group-error-message
           >{{@errorMessage}}</div>
         {{/if}}
         {{#if @helperText}}
           <div
-            id={{concat "helper-text-" this.elementId}}
-            class="helper-text"
+            id={{concat 'helper-text-' this.elementId}}
+            class='helper-text'
             data-test-boxel-input-group-helper-text
           >{{@helperText}}</div>
         {{/if}}

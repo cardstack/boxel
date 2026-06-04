@@ -20,8 +20,8 @@ export default class ColorPaletteUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="ColorPalette"
-      @description="A color palette component that provides predefined colors and a custom color input."
+      @name='ColorPalette'
+      @description='A color palette component that provides predefined colors and a custom color input.'
     >
       <:example>
         <ColorPalette
@@ -34,27 +34,27 @@ export default class ColorPaletteUsage extends Component {
 
       <:api as |Args|>
         <Args.String
-          @name="color"
+          @name='color'
           @optional={{false}}
-          @description="Currently selected color."
+          @description='Currently selected color.'
           @value={{this.color}}
           @onInput={{fn (mut this.color)}}
         />
         <Args.Action
-          @name="onChange"
-          @description="Callback function that receives the newly selected color value."
+          @name='onChange'
+          @description='Callback function that receives the newly selected color value.'
           @value={{this.handleColorChange}}
           @onInput={{fn (mut this.handleColorChange)}}
         />
         <Args.Bool
-          @name="disabled"
-          @description="Selection is disabled"
+          @name='disabled'
+          @description='Selection is disabled'
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
         />
         <Args.Object
-          @name="paletteColors"
-          @description="An array of colors (optional)"
+          @name='paletteColors'
+          @description='An array of colors (optional)'
           @value={{this.paletteColors}}
           @defaultValue={{DEFAULT_PALETTE_COLORS}}
         />

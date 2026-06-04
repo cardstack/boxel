@@ -35,7 +35,7 @@ export default class GridContainer extends Component<Signature> {
   <template>
     {{#let (element @tag) as |TagName|}}
       <TagName
-        class="boxel-grid-container"
+        class='boxel-grid-container'
         style={{this.containerStyle}}
         ...attributes
       >

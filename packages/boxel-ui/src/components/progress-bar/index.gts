@@ -34,15 +34,15 @@ export default class ProgressBar extends Component<Signature> {
 
   <template>
     <div
-      class="boxel-progress-bar"
+      class='boxel-progress-bar'
       data-test-boxel-progress-bar
       aria-label={{@label}}
       ...attributes
     >
-      <div class="progress-bar-container">
-        <div class="progress-bar-value" style={{this.progressWidth}}>
-          <div class="progress-bar-info {{this.progressBarPosition}}">
-            <div class="progress-bar-label">
+      <div class='progress-bar-container'>
+        <div class='progress-bar-value' style={{this.progressWidth}}>
+          <div class='progress-bar-info {{this.progressBarPosition}}'>
+            <div class='progress-bar-label'>
               {{#if @label}}
                 {{@label}}
               {{/if}}

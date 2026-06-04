@@ -80,78 +80,78 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
   <template>
     <div
       class={{cn
-        "picker-option-row"
+        'picker-option-row'
         picker-option-row--selected=@isSelected
         picker-option-row--disabled=@option.disabled
         picker-option-row--highlighted=@isHighlighted
       }}
-      data-test-boxel-picker-option-selected={{if @isSelected "true" "false"}}
+      data-test-boxel-picker-option-selected={{if @isSelected 'true' 'false'}}
       data-test-boxel-picker-option-disabled={{if
         @option.disabled
-        "true"
-        "false"
+        'true'
+        'false'
       }}
       data-test-boxel-picker-option-row={{@option.id}}
       data-test-boxel-picker-option-label={{@option.label}}
       {{! template-lint-disable no-invalid-interactive }}
-      {{on "click" this.handleClick}}
-      {{on "keydown" this.handleKeydown}}
+      {{on 'click' this.handleClick}}
+      {{on 'keydown' this.handleKeydown}}
       ...attributes
     >
       <div
         class={{cn
-          "picker-option-row__checkbox"
+          'picker-option-row__checkbox'
           picker-option-row__checkbox--selected=@isSelected
         }}
       >
         <span
           class={{cn
-            "picker-option-row__check-icon"
+            'picker-option-row__check-icon'
             picker-option-row__check-icon--selected=@isSelected
           }}
         >
-          <CheckMark width="16" height="16" />
+          <CheckMark width='16' height='16' />
         </span>
       </div>
       {{#if this.icon}}
-        <div class="picker-option-row__icon">
+        <div class='picker-option-row__icon'>
           {{#if this.isIconURL}}
             {{#let this.iconString as |iconUrl|}}
               <img
                 src={{iconUrl}}
-                alt=""
-                class="picker-option-row__icon-image"
+                alt=''
+                class='picker-option-row__icon-image'
               />
             {{/let}}
           {{else if this.isIconSVG}}
             {{#let this.iconString as |iconSvg|}}
               {{#if iconSvg}}
                 {{sanitizeHtmlSafe
-                  (addClassToSVG iconSvg "picker-option-row__icon-image")
+                  (addClassToSVG iconSvg 'picker-option-row__icon-image')
                 }}
               {{/if}}
             {{/let}}
           {{else if this.iconComponent}}
             {{#let this.iconComponent as |IconComponent|}}
               <IconComponent
-                class="picker-option-row__icon-component"
-                role="presentation"
+                class='picker-option-row__icon-component'
+                role='presentation'
               />
             {{/let}}
           {{/if}}
         </div>
       {{/if}}
       {{#if @option.tooltip}}
-        <Tooltip @placement="right" class="picker-option-row__tooltip-trigger">
+        <Tooltip @placement='right' class='picker-option-row__tooltip-trigger'>
           <:trigger>
-            <div class="picker-option-row__label">{{@option.label}}</div>
+            <div class='picker-option-row__label'>{{@option.label}}</div>
           </:trigger>
           <:content>
             {{@option.tooltip}}
           </:content>
         </Tooltip>
       {{else}}
-        <div class="picker-option-row__label">{{@option.label}}</div>
+        <div class='picker-option-row__label'>{{@option.label}}</div>
       {{/if}}
     </div>
 
@@ -174,7 +174,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
 
       .picker-option-row:hover,
       .picker-option-row--highlighted,
-      .ember-power-select-option[aria-current="true"] .picker-option-row {
+      .ember-power-select-option[aria-current='true'] .picker-option-row {
         color: var(--boxel-dark);
         background-color: var(--boxel-100);
         border-radius: 4px;

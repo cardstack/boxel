@@ -171,8 +171,8 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   }}
   <label
     class={{cn
-      "boxel-radio-option"
-      (if @variant (concat "variant-" @variant) "variant-default")
+      'boxel-radio-option'
+      (if @variant (concat 'variant-' @variant) 'variant-default')
       boxel-radio-option--checked=@checked
       boxel-radio-option--disabled=@disabled
       boxel-radio-option--hidden-border=@hideBorder
@@ -191,15 +191,15 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   >
     <input
       class={{cn
-        "boxel-radio-option__input"
+        'boxel-radio-option__input'
         boxel-radio-option__input--hidden-radio=@hideRadio
         boxel-radio-option__input--checked=@checked
       }}
-      type="radio"
+      type='radio'
       checked={{@checked}}
       disabled={{@disabled}}
       name={{@name}}
-      {{on "change" @onChange}}
+      {{on 'change' @onChange}}
     />
     <div>
       {{yield}}

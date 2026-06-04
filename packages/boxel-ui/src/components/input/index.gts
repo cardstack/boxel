@@ -158,30 +158,30 @@ export default class BoxelInput extends Component<Signature> {
   <template>
     <div
       class={{cn
-        "input-container"
+        'input-container'
         has-validation=this.hasValidation
         is-multiline=this.isMultiline
         is-checkbox=this.isCheckbox
       }}
     >
       {{#if (and (not @required) @optional)}}
-        <div class="optional">Optional</div>
+        <div class='optional'>Optional</div>
       {{/if}}
-      {{#let (element (if this.isMultiline "textarea" "input")) as |InputTag|}}
+      {{#let (element (if this.isMultiline 'textarea' 'input')) as |InputTag|}}
         <InputTag
           class={{cn
-            "boxel-input"
+            'boxel-input'
             has-validation=this.hasValidation
             invalid=this.isInvalid
             search=this.isSearch
-            loading=(eq @state "loading")
-            boxel-input--large=(eq @size "large")
-            boxel-input--bottom-flat=(eq @bottomTreatment "flat")
+            loading=(eq @state 'loading')
+            boxel-input--large=(eq @size 'large')
+            boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
           }}
           id={{this.id}}
           type={{this.type}}
           value={{unless this.isCheckbox @value}}
-          checked={{if (and (eq @type "checkbox") (bool @value)) @value}}
+          checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
           placeholder={{@placeholder}}
           min={{@min}}
           max={{@max}}
@@ -191,58 +191,58 @@ export default class BoxelInput extends Component<Signature> {
           autocomplete={{@autocomplete}}
           aria-describedby={{if
             @helperText
-            (concat "helper-text-" this.guid)
+            (concat 'helper-text-' this.guid)
             false
           }}
-          aria-invalid={{if this.isInvalid "true"}}
+          aria-invalid={{if this.isInvalid 'true'}}
           aria-errormessage={{if
             this.shouldShowErrorMessage
-            (concat "error-message-" this.guid)
+            (concat 'error-message-' this.guid)
             false
           }}
           data-test-boxel-input
           data-test-boxel-input-id={{@id}}
           data-test-boxel-input-validation-state={{if @disabled false @state}}
-          {{on "input" (pick this.onInputPath (optional @onInput))}}
-          {{on "blur" (optional @onBlur)}}
-          {{on "keypress" this.onKeyPress}}
-          {{on "focus" (optional @onFocus)}}
-          {{on "change" (optional @onChange)}}
+          {{on 'input' (pick this.onInputPath (optional @onInput))}}
+          {{on 'blur' (optional @onBlur)}}
+          {{on 'keypress' this.onKeyPress}}
+          {{on 'focus' (optional @onFocus)}}
+          {{on 'change' (optional @onChange)}}
           ...attributes
         />
         {{#if (and this.isCheckbox (bool @value))}}
-          <CheckMark class="checkbox-checkmark-icon" />
+          <CheckMark class='checkbox-checkmark-icon' />
         {{/if}}
         {{#if this.isSearch}}
           <div
             class={{cn
-              "search-icon-container"
+              'search-icon-container'
               has-validation=this.hasValidation
             }}
           >
-            <IconSearch class="search-icon" width="20" height="20" />
+            <IconSearch class='search-icon' width='20' height='20' />
           </div>
         {{/if}}
         {{#if this.validationIcon}}
-          <div class="validation-icon-container">
+          <div class='validation-icon-container'>
             <this.validationIcon
-              class="validation-icon-{{@state}}"
-              role="presentation"
+              class='validation-icon-{{@state}}'
+              role='presentation'
             />
           </div>
         {{/if}}
         {{#if this.shouldShowErrorMessage}}
           <div
-            id={{concat "error-message-" this.guid}}
-            class="error-message"
-            aria-live="polite"
+            id={{concat 'error-message-' this.guid}}
+            class='error-message'
+            aria-live='polite'
             data-test-boxel-input-error-message
           >{{@errorMessage}}</div>
         {{/if}}
         {{#if @helperText}}
           <div
-            id={{concat "helper-text-" this.guid}}
-            class="helper-text"
+            id={{concat 'helper-text-' this.guid}}
+            class='helper-text'
             data-test-boxel-input-helper-text
           >{{@helperText}}</div>
         {{/if}}
@@ -264,10 +264,10 @@ export default class BoxelInput extends Component<Signature> {
             1fr
             var(--_icon-full-length);
           grid-template-areas:
-            "optional optional optional"
-            "pre-icon input post-icon"
-            "error error error"
-            "helper helper helper";
+            'optional optional optional'
+            'pre-icon input post-icon'
+            'error error error'
+            'helper helper helper';
           width: 100%;
         }
 
@@ -307,17 +307,17 @@ export default class BoxelInput extends Component<Signature> {
           overflow: auto;
         }
 
-        .input-container:has([type="color"]) {
+        .input-container:has([type='color']) {
           --boxel-input-icon-size: 0;
         }
 
-        .input-container:has([type="color"]) .validation-icon-container,
-        .input-container:has([type="color"]) .error-message,
-        .input-container:has([type="color"]) .helper-text {
+        .input-container:has([type='color']) .validation-icon-container,
+        .input-container:has([type='color']) .error-message,
+        .input-container:has([type='color']) .helper-text {
           display: none;
         }
 
-        .boxel-input[type="color"] {
+        .boxel-input[type='color'] {
           width: 1.5rem;
           height: 1.5rem;
           min-height: unset;
@@ -327,21 +327,21 @@ export default class BoxelInput extends Component<Signature> {
           cursor: pointer;
         }
 
-        .boxel-input[type="color"]::-webkit-color-swatch-wrapper {
+        .boxel-input[type='color']::-webkit-color-swatch-wrapper {
           padding: 0;
         }
 
-        .boxel-input[type="color"]::-webkit-color-swatch {
+        .boxel-input[type='color']::-webkit-color-swatch {
           border: none;
           border-radius: calc(var(--boxel-border-radius-sm) - 1px);
         }
 
-        .boxel-input:not([type="color"]):disabled {
+        .boxel-input:not([type='color']):disabled {
           opacity: 0.5;
           resize: none; /* do not display resize toggle since it's disabled */
         }
 
-        .boxel-input:not([type="color"])[readonly] {
+        .boxel-input:not([type='color'])[readonly] {
           opacity: 0.5;
         }
 
@@ -528,7 +528,7 @@ export default class BoxelInput extends Component<Signature> {
 
           display: inline-grid;
           grid-template-columns: auto;
-          grid-template-areas: "input";
+          grid-template-areas: 'input';
           width: auto;
           align-items: center;
           justify-items: center;
@@ -551,7 +551,7 @@ export default class BoxelInput extends Component<Signature> {
           --icon-color: var(--checkbox-checkmark-color);
         }
 
-        .boxel-input[type="checkbox"] {
+        .boxel-input[type='checkbox'] {
           grid-area: input;
           appearance: none;
           /* stylelint-disable-next-line property-no-vendor-prefix */
@@ -573,26 +573,26 @@ export default class BoxelInput extends Component<Signature> {
           flex-shrink: 0;
         }
 
-        .boxel-input[type="checkbox"]:checked {
+        .boxel-input[type='checkbox']:checked {
           background-color: var(--checkbox-checked-background);
           border-color: var(--checkbox-checked-border-color);
         }
 
-        .boxel-input[type="checkbox"]:focus-visible {
+        .boxel-input[type='checkbox']:focus-visible {
           outline: 2px solid var(--ring, var(--boxel-highlight));
           outline-offset: 2px;
           border-color: var(--checkbox-border-color);
         }
 
-        .boxel-input[type="checkbox"]:hover:not(:disabled):not(:checked) {
+        .boxel-input[type='checkbox']:hover:not(:disabled):not(:checked) {
           border-color: var(--boxel-dark);
         }
 
-        .boxel-input[type="checkbox"]:hover:not(:disabled):checked {
+        .boxel-input[type='checkbox']:hover:not(:disabled):checked {
           border-color: var(--checkbox-checked-border-color);
         }
 
-        .boxel-input[type="checkbox"]:disabled {
+        .boxel-input[type='checkbox']:disabled {
           opacity: 0.5;
           cursor: default;
         }

@@ -10,15 +10,15 @@ export default class CopyButtonUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="CopyButton"
-      @description="Button that copies a string to the clipboard on click and surfaces a brief confirmation — common in code blocks, share-link rows, and developer tools."
+      @name='CopyButton'
+      @description='Button that copies a string to the clipboard on click and surfaces a brief confirmation — common in code blocks, share-link rows, and developer tools.'
     >
       <:example>
         <CopyButton @textToCopy={{this.textToCopy}} />
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="text"
+          @name='text'
           @onInput={{fn (mut this.textToCopy)}}
           @value={{this.textToCopy}}
         />

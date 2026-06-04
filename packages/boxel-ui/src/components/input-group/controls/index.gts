@@ -22,15 +22,15 @@ interface InputSignature {
 
 export const Input: TemplateOnlyComponent<InputSignature> = <template>
   <input
-    class="form-control"
+    class='form-control'
     placeholder={{@placeholder}}
     value={{@value}}
     disabled={{@disabled}}
     readonly={{@readonly}}
     required={{@required}}
-    {{on "input" (pick "target.value" (optional @onInput))}}
-    {{on "focus" (optional @onFocus)}}
-    {{on "blur" (optional @onBlur)}}
+    {{on 'input' (pick 'target.value' (optional @onInput))}}
+    {{on 'focus' (optional @onFocus)}}
+    {{on 'blur' (optional @onBlur)}}
     ...attributes
   />
 </template>;
@@ -45,7 +45,7 @@ interface TextareaSignature {
 }
 
 export const Textarea: TemplateOnlyComponent<TextareaSignature> = <template>
-  <textarea class="form-control" ...attributes></textarea>
+  <textarea class='form-control' ...attributes></textarea>
 </template>;
 
 export interface ControlsBlockArg {

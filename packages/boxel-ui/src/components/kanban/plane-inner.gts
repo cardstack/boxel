@@ -189,40 +189,40 @@ export class KanbanPlaneInner extends Component<{
 
   <template>
     <div
-      class={{cn "board" is-dragging=this.isDragging}}
-      role={{if @boardLabel "region"}}
+      class={{cn 'board' is-dragging=this.isDragging}}
+      role={{if @boardLabel 'region'}}
       aria-label={{@boardLabel}}
       data-test-kanban-board
       {{CaptureElement this.captureRef}}
       {{BindPointerDown this.manager.onPointerDown}}
-      {{on "pointermove" this.manager.onPointerMove}}
-      {{on "pointerup" this.manager.onPointerUp}}
-      {{on "pointercancel" this.manager.onPointerCancel}}
-      {{on "lostpointercapture" this.manager.onLostPointerCapture}}
-      {{on "keydown" this.manager.onKeyDown}}
-      tabindex="0"
+      {{on 'pointermove' this.manager.onPointerMove}}
+      {{on 'pointerup' this.manager.onPointerUp}}
+      {{on 'pointercancel' this.manager.onPointerCancel}}
+      {{on 'lostpointercapture' this.manager.onLostPointerCapture}}
+      {{on 'keydown' this.manager.onKeyDown}}
+      tabindex='0'
       ...attributes
     >
       <div
-        class="boxel-sr-only"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
+        class='boxel-sr-only'
+        role='status'
+        aria-live='polite'
+        aria-atomic='true'
       >{{this.manager.announcement}}</div>
 
       {{#each this.columns as |column i|}}
         {{#unless column.collapsed}}
           <div
             class={{cn
-              "column"
+              'column'
               is-target=(this.isTargetColumn column.key)
               is-over-wip=(this.isOverWip column)
             }}
-            role="group"
-            aria-label={{if column.label column.label "Untitled"}}
+            role='group'
+            aria-label={{if column.label column.label 'Untitled'}}
             style={{this.columnStyle}}
             data-kanban-column={{column.key}}
-            data-kanban-column-index="{{i}}"
+            data-kanban-column-index='{{i}}'
             data-test-column-is-over-wip={{this.isOverWip column}}
           >
             <KanbanColumnHeader
@@ -237,10 +237,10 @@ export class KanbanPlaneInner extends Component<{
               }}
             />
 
-            <div class="col-body" role="list" data-kanban-col-body>
+            <div class='col-body' role='list' data-kanban-col-body>
               {{#if (this.showInsertionBox column.key)}}
                 <div
-                  class="insertion-box"
+                  class='insertion-box'
                   style={{this.insertionBoxStyle column.key}}
                 ></div>
               {{/if}}
@@ -255,14 +255,14 @@ export class KanbanPlaneInner extends Component<{
                   @shiftStyle={{this.cardShiftStyle placement}}
                   @isDragging={{this.isDragging}}
                 >
-                  {{yield placement to="card"}}
+                  {{yield placement to='card'}}
                 </KanbanCard>
               {{/each}}
 
               {{#unless (this.columnCardCount column.key)}}
                 <div
-                  class="empty-col"
-                  aria-hidden="true"
+                  class='empty-col'
+                  aria-hidden='true'
                   data-test-empty-column={{column.key}}
                 >No cards</div>
               {{/unless}}
@@ -273,45 +273,45 @@ export class KanbanPlaneInner extends Component<{
 
       {{#if this.hiddenColumns.length}}
         <div
-          class="hidden-columns-tray"
+          class='hidden-columns-tray'
           style={{this.columnStyle}}
           data-test-hidden-columns
         >
-          <div class="hidden-tray-header">
-            <span class="hidden-tray-title">Hidden</span>
+          <div class='hidden-tray-header'>
+            <span class='hidden-tray-title'>Hidden</span>
             <span
-              class="hidden-tray-count"
+              class='hidden-tray-count'
               data-test-hidden-column-count
             >{{this.hiddenColumns.length}}</span>
           </div>
-          <div class="hidden-tray-body">
+          <div class='hidden-tray-body'>
             {{#each this.hiddenColumns as |hc i|}}
               <button
-                class="hidden-col-row"
-                type="button"
+                class='hidden-col-row'
+                type='button'
                 disabled={{hc.isEmptyLocked}}
                 aria-label={{if
                   hc.config.label
-                  (concat "Show " hc.config.label)
-                  "Show column"
+                  (concat 'Show ' hc.config.label)
+                  'Show column'
                 }}
-                {{on "click" (fn @onToggleCollapsed hc.config)}}
+                {{on 'click' (fn @onToggleCollapsed hc.config)}}
                 data-test-hidden-column-row={{i}}
                 data-test-show-hidden-column={{hc.config.key}}
               >
                 <span
-                  class="hidden-col-dot"
+                  class='hidden-col-dot'
                   style={{cssVar col-dot-bg=hc.config.color}}
                 ></span>
-                <span class="hidden-col-label">{{if
+                <span class='hidden-col-label'>{{if
                     hc.config.label
                     hc.config.label
-                    "Untitled"
+                    'Untitled'
                   }}</span>
                 {{#unless hc.isEmptyLocked}}
-                  <Eye class="hidden-col-restore-icon" />
+                  <Eye class='hidden-col-restore-icon' />
                 {{/unless}}
-                <span class="hidden-col-count">{{hc.cardCount}}</span>
+                <span class='hidden-col-count'>{{hc.cardCount}}</span>
               </button>
             {{/each}}
           </div>
@@ -321,7 +321,7 @@ export class KanbanPlaneInner extends Component<{
 
     {{#if this.showGhost}}
       <KanbanGhost @style={{this.ghostStyle}} @isSettling={{this.isSettling}}>
-        {{yield this.ghostIndex to="ghost"}}
+        {{yield this.ghostIndex to='ghost'}}
       </KanbanGhost>
     {{/if}}
 

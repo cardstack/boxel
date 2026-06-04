@@ -16,13 +16,13 @@ module('Integration | helpers | currencyFormat test', function (hooks) {
   });
 
   test('it handles custom currencies', async function (assert) {
-    await render(<template>{{currencyFormat 100 "EUR"}}</template>);
+    await render(<template>{{currencyFormat 100 'EUR'}}</template>);
     assert.dom().hasText('€100.00', 'formats as euros');
 
-    await render(<template>{{currencyFormat 100 "JPY"}}</template>);
+    await render(<template>{{currencyFormat 100 'JPY'}}</template>);
     assert.dom().hasText('¥100', 'formats as yen');
 
-    await render(<template>{{currencyFormat 100 "GBP"}}</template>);
+    await render(<template>{{currencyFormat 100 'GBP'}}</template>);
     assert.dom().hasText('£100.00', 'formats as pounds');
   });
 

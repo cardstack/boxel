@@ -29,7 +29,7 @@ module('Integration | Component | dropdown', function (hooks) {
           <:content as |dd|>
             <div
               data-test-boxel-dropdown-content-1
-              class="boxel-dropdown__content"
+              class='boxel-dropdown__content'
             >
               <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
             </div>
@@ -60,7 +60,7 @@ module('Integration | Component | dropdown', function (hooks) {
           <:content as |dd|>
             <div
               data-test-boxel-dropdown-content-2
-              class="boxel-dropdown__content"
+              class='boxel-dropdown__content'
             >
               <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
             </div>

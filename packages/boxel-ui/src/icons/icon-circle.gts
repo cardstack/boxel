@@ -5,18 +5,18 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="2.5 2.5 45 45"
+    xmlns='http://www.w3.org/2000/svg'
+    viewBox='2.5 2.5 45 45'
     ...attributes
   ><circle
-      cx="25"
-      cy="25"
-      r="20"
-      fill="var(--icon-fill-color, none)"
-      stroke="var(--icon-color, #000)"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      stroke-width="var(--icon-stroke-width, 5)"
+      cx='25'
+      cy='25'
+      r='20'
+      fill='var(--icon-fill-color, none)'
+      stroke='var(--icon-color, #000)'
+      stroke-linecap='round'
+      stroke-linejoin='round'
+      stroke-width='var(--icon-stroke-width, 5)'
     /></svg>
 </template>;
 

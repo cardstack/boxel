@@ -125,7 +125,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         {{/let}}
 
         {{#if this.hasMoreItems}}
-          <Pill class="boxel-multi-select-has-more-item">
+          <Pill class='boxel-multi-select-has-more-item'>
             <:default>
               +
               {{this.remainingItemsCount}}
@@ -134,10 +134,10 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
             <:iconRight>
               {{! TODO: Replace with icon button }}
               <button
-                class="boxel-multi-select__remove-button"
-                {{on "click" this.removeExcessItems}}
+                class='boxel-multi-select__remove-button'
+                {{on 'click' this.removeExcessItems}}
               >
-                <IconX class="boxel-multi-select__icon--remove" />
+                <IconX class='boxel-multi-select__icon--remove' />
               </button>
             </:iconRight>
           </Pill>
@@ -145,17 +145,17 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
       </:default>
       <:icon>
         {{#if this.hasSelectedItems}}
-          <div class="has-selections">
+          <div class='has-selections'>
             {{! TODO: Replace with icon button }}
             <button
-              class="boxel-multi-select__remove-button"
-              {{on "click" this.onClearAll}}
+              class='boxel-multi-select__remove-button'
+              {{on 'click' this.onClearAll}}
             >
-              <IconX class="boxel-multi-select__remove" />
+              <IconX class='boxel-multi-select__remove' />
             </button>
           </div>
         {{else}}
-          <CaretDown class={{cn "icon" (if @select.isOpen "is-open")}} />
+          <CaretDown class={{cn 'icon' (if @select.isOpen 'is-open')}} />
         {{/if}}
       </:icon>
     </BoxelTriggerWrapper>

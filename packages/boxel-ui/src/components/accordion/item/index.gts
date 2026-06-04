@@ -23,36 +23,36 @@ export interface AccordionItemSignature {
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <div
-    class={{cn "boxel-accordion-item" @className open=@isOpen}}
+    class={{cn 'boxel-accordion-item' @className open=@isOpen}}
     ...attributes
   >
-    <h3 class="boxel-accordion-item-title">
+    <h3 class='boxel-accordion-item-title'>
       <button
-        class="boxel-accordion-item-trigger"
-        {{on "click" (optional @onClick)}}
+        class='boxel-accordion-item-trigger'
+        {{on 'click' (optional @onClick)}}
         id={{@id}}
-        aria-controls="section-{{@id}}"
+        aria-controls='section-{{@id}}'
         aria-expanded={{@isOpen}}
         disabled={{@disabled}}
       >
         <ChevronRight
-          class="boxel-accordion-item-icon"
-          width="14"
-          height="14"
+          class='boxel-accordion-item-icon'
+          width='14'
+          height='14'
         />
-        {{yield to="title"}}
+        {{yield to='title'}}
       </button>
     </h3>
     <div
-      class={{cn "boxel-accordion-item-content" @contentClass}}
-      data-state={{if @isOpen "open" "closed"}}
-      id="section-{{@id}}"
-      role="region"
+      class={{cn 'boxel-accordion-item-content' @contentClass}}
+      data-state={{if @isOpen 'open' 'closed'}}
+      id='section-{{@id}}'
+      role='region'
       aria-labelledby={{@id}}
-      aria-hidden={{if @isOpen "false" "true"}}
+      aria-hidden={{if @isOpen 'false' 'true'}}
     >
-      <div class="boxel-accordion-item-content-inner">
-        {{yield to="content"}}
+      <div class='boxel-accordion-item-content-inner'>
+        {{yield to='content'}}
       </div>
     </div>
   </div>
@@ -121,7 +121,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
         display: grid;
         grid-template-rows: 0fr;
       }
-      .boxel-accordion-item-content[data-state="open"] {
+      .boxel-accordion-item-content[data-state='open'] {
         grid-template-rows: 1fr;
       }
       .boxel-accordion-item-content-inner {
@@ -144,7 +144,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
           transition: opacity var(--_bai-transition);
           opacity: 0;
         }
-        .boxel-accordion-item-content[data-state="open"]
+        .boxel-accordion-item-content[data-state='open']
           .boxel-accordion-item-content-inner {
           opacity: 1;
         }

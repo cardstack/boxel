@@ -32,14 +32,14 @@ export default class RealmIcon extends Component<Signature> {
   }
   <template>
     <div
-      role="img"
+      role='img'
       aria-label={{if
         this.showAnimation
-        (concat "indexing " @realmInfo.name)
+        (concat 'indexing ' @realmInfo.name)
         @realmInfo.name
       }}
       class={{cn
-        "realm-icon-img"
+        'realm-icon-img'
         can-animate=@canAnimate
         indexing=this.showAnimation
       }}
@@ -78,7 +78,7 @@ export default class RealmIcon extends Component<Signature> {
           border-color: var(--boxel-realm-icon-border-color, transparent);
         }
         .can-animate::after {
-          content: "";
+          content: '';
           background-color: var(--boxel-dark);
           opacity: 0;
           display: block;

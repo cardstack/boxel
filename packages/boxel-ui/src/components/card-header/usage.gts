@@ -22,19 +22,19 @@ interface CardTypeIconSignature {
 }
 const Captions: TemplateOnlyComponent<CardTypeIconSignature> = <template>
   <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    fill="none"
-    stroke="currentColor"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    stroke-width="2"
-    class="lucide lucide-captions"
-    viewBox="0 0 24 24"
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    class='lucide lucide-captions'
+    viewBox='0 0 24 24'
     ...attributes
-  ><rect width="18" height="14" x="3" y="5" rx="2" ry="2" /><path
-      d="M7 15h4m4 0h2M7 11h2m4 0h4"
+  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
+      d='M7 15h4m4 0h2M7 11h2m4 0h4'
     /></svg>
 </template>;
 
@@ -126,7 +126,7 @@ export default class CardHeaderUsage extends Component {
 
   <template>
     <div
-      class="header-freestyle-container"
+      class='header-freestyle-container'
       style={{cssVar
         boxel-card-header-text-font=this.cardHeaderTextFont.value
         boxel-card-header-text-transform=this.cardHeaderTextTransform.value
@@ -135,7 +135,7 @@ export default class CardHeaderUsage extends Component {
         boxel-card-header-actions-min-width=this.cardHeaderActionsMinWidth.value
       }}
     >
-      <FreestyleUsage @name="CardHeader">
+      <FreestyleUsage @name='CardHeader'>
         <:description>
           Usually shown at the top of card containers
         </:description>
@@ -162,123 +162,123 @@ export default class CardHeaderUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.String
-            @name="cardTitle"
-            @description="optional card title shown after the card type display name"
+            @name='cardTitle'
+            @description='optional card title shown after the card type display name'
             @value={{this.cardTitle}}
             @onInput={{fn (mut this.cardTitle)}}
           />
           <Args.String
-            @name="cardTypeDisplayName"
-            @description="card type display name, shown in the center of the header"
+            @name='cardTypeDisplayName'
+            @description='card type display name, shown in the center of the header'
             @value={{this.cardTypeDisplayName}}
             @onInput={{fn (mut this.cardTypeDisplayName)}}
           />
           <Args.Component
-            @name="cardTypeIcon"
-            @description="The card type icon. Shown next to the card type display name."
+            @name='cardTypeIcon'
+            @description='The card type icon. Shown next to the card type display name.'
             @value={{this.cardTypeIcon}}
             @options={{array Captions}}
             @onChange={{fn (mut this.cardTypeIcon)}}
           />
           <Args.String
-            @name="headerColor"
-            @description="background color of the header"
+            @name='headerColor'
+            @description='background color of the header'
             @value={{this.headerColor}}
             @onInput={{fn (mut this.headerColor)}}
           />
           <Args.Bool
-            @name="isExpanded"
-            @description="controls the visual active state of the expand/restore button"
+            @name='isExpanded'
+            @description='controls the visual active state of the expand/restore button'
             @value={{this.isExpanded}}
             @onInput={{fn (mut this.isExpanded)}}
           />
           <Args.Bool
-            @name="isSaving"
-            @description="whether the card is currently saving"
+            @name='isSaving'
+            @description='whether the card is currently saving'
             @value={{this.isSaving}}
             @onInput={{fn (mut this.isSaving)}}
           />
           <Args.Bool
-            @name="isTopCard"
-            @description="whether the card is the top card -- affects whether realm icon will animate while indexing is occurring"
+            @name='isTopCard'
+            @description='whether the card is the top card -- affects whether realm icon will animate while indexing is occurring'
             @value={{this.isTopCard}}
             @onInput={{fn (mut this.isTopCard)}}
           />
           <Args.String
-            @name="lastSavedMessage"
-            @description="message to show when the card was last saved"
+            @name='lastSavedMessage'
+            @description='message to show when the card was last saved'
             @value={{this.lastSavedMessage}}
             @onInput={{fn (mut this.lastSavedMessage)}}
           />
           <Args.Object
-            @name="moreOptionsMenuItems"
-            @description="items to show in the more options menu"
+            @name='moreOptionsMenuItems'
+            @description='items to show in the more options menu'
             @value={{this.moreOptionsMenuItems}}
           />
           <Args.Object
-            @name="realmInfo"
-            @description="realm information"
+            @name='realmInfo'
+            @description='realm information'
             @value={{this.realmInfo}}
           />
           <Args.Object
-            @name="utilityMenu"
-            @description="when present, renders a utility dropdown with { triggerText, menuItems }"
+            @name='utilityMenu'
+            @description='when present, renders a utility dropdown with { triggerText, menuItems }'
             @value={{this.utilityMenu}}
           />
           <Args.Action
-            @name="onExpand"
-            @description="when present, renders an expand/restore button and invokes this action when clicked"
+            @name='onExpand'
+            @description='when present, renders an expand/restore button and invokes this action when clicked'
           />
           <Args.Action
-            @name="onEdit"
-            @description="when present, renders the edit button"
+            @name='onEdit'
+            @description='when present, renders the edit button'
           />
           <Args.Action
-            @name="onFinishEditing"
-            @description="when present, renders the finish editing button instead of relying only on @onEdit"
+            @name='onFinishEditing'
+            @description='when present, renders the finish editing button instead of relying only on @onEdit'
           />
           <Args.Action
-            @name="onClose"
-            @description="when present, renders the close button"
+            @name='onClose'
+            @description='when present, renders the close button'
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name="boxel-card-header-text-font"
-            @type="font"
-            @description="some font"
+            @name='boxel-card-header-text-font'
+            @type='font'
+            @description='some font'
             @defaultValue={{this.cardHeaderTextFont.defaults}}
             @value={{this.cardHeaderTextFont.value}}
             @onInput={{this.cardHeaderTextFont.update}}
           />
           <Css.Basic
-            @name="boxel-card-header-text-transform"
-            @type="text-transform"
-            @description="e.g. uppercase, lowercase"
+            @name='boxel-card-header-text-transform'
+            @type='text-transform'
+            @description='e.g. uppercase, lowercase'
             @defaultValue={{this.cardHeaderTextTransform.defaults}}
             @value={{this.cardHeaderTextTransform.value}}
             @onInput={{this.cardHeaderTextTransform.update}}
           />
           <Css.Basic
-            @name="boxel-card-header-card-type-icon-size"
-            @type="length"
-            @description="width and height of the title icon"
+            @name='boxel-card-header-card-type-icon-size'
+            @type='length'
+            @description='width and height of the title icon'
             @defaultValue={{this.cardHeaderCardTypeIconSize.defaults}}
             @value={{this.cardHeaderCardTypeIconSize.value}}
             @onInput={{this.cardHeaderCardTypeIconSize.update}}
           />
           <Css.Basic
-            @name="boxel-card-header-icon-container-min-width"
-            @type="length"
-            @description="minimum width of the icon container; useful to set matching boxel-card-header-actions-min-width to keep the title centered overall"
+            @name='boxel-card-header-icon-container-min-width'
+            @type='length'
+            @description='minimum width of the icon container; useful to set matching boxel-card-header-actions-min-width to keep the title centered overall'
             @defaultValue={{this.cardHeaderIconContainerMinWidth.defaults}}
             @value={{this.cardHeaderIconContainerMinWidth.value}}
             @onInput={{this.cardHeaderIconContainerMinWidth.update}}
           />
           <Css.Basic
-            @name="boxel-card-header-actions-min-width"
-            @type="length"
-            @description="minimum width of the actions container; useful to set matching boxel-card-header-icon-container-min-width to keep the title centered overall"
+            @name='boxel-card-header-actions-min-width'
+            @type='length'
+            @description='minimum width of the actions container; useful to set matching boxel-card-header-icon-container-min-width to keep the title centered overall'
             @defaultValue={{this.cardHeaderActionsMinWidth.defaults}}
             @value={{this.cardHeaderActionsMinWidth.value}}
             @onInput={{this.cardHeaderActionsMinWidth.update}}

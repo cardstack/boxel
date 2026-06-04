@@ -42,19 +42,19 @@ export default class MenuUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Menu"
-      @description="Vertical list of clickable menu items for dropdowns and context menus. Each item supports icons, separators, and disabled states."
+      @name='Menu'
+      @description='Vertical list of clickable menu items for dropdowns and context menus. Each item supports icons, separators, and disabled states.'
     >
       <:example>
         <BoxelMenu
           @closeMenu={{this.closeMenu}}
           @items={{array
-            (menuItem "Duplicate" (fn this.log "Duplicate menu item clicked"))
-            (menuItem "Share" (fn this.log "Share menu item clicked"))
+            (menuItem 'Duplicate' (fn this.log 'Duplicate menu item clicked'))
+            (menuItem 'Share' (fn this.log 'Share menu item clicked'))
             (menuDivider)
             (menuItem
-              "Remove"
-              (fn this.log "Remove menu item clicked")
+              'Remove'
+              (fn this.log 'Remove menu item clicked')
               icon=IconTrash
               dangerous=true
             )
@@ -64,30 +64,30 @@ export default class MenuUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name="items"
+          @name='items'
           @description="An array of MenuItems, created using the 'menu-item' helper. The menu-item helper accepts the menu item text as its first argument, and an action as the second argument."
         />
         <Args.Action
-          @name="closeMenu"
-          @description="Invoke this action to close the menu (e.g. when it is displayed as part of a dropdown"
+          @name='closeMenu'
+          @description='Invoke this action to close the menu (e.g. when it is displayed as part of a dropdown'
         />
         <Args.String
-          @name="itemClass"
-          @description="CSS class to be added to the menu item."
+          @name='itemClass'
+          @description='CSS class to be added to the menu item.'
         />
         <Args.Bool
-          @name="loading"
-          @description="Shows a loading indicator instead of menu items when true."
+          @name='loading'
+          @description='Shows a loading indicator instead of menu items when true.'
           @onInput={{fn (mut this.isLoading)}}
           @value={{this.isLoading}}
         />
       </:api>
     </FreestyleUsage>
-    <FreestyleUsage @name="Menu (Fetch Use Case)">
+    <FreestyleUsage @name='Menu (Fetch Use Case)'>
       <:example>
         <button
-          type="button"
-          {{on "click" this.simulatedFetch}}
+          type='button'
+          {{on 'click' this.simulatedFetch}}
           disabled={{this.isLoading}}
         >
           Simulate Fetch

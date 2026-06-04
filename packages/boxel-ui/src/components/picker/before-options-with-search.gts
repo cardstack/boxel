@@ -225,22 +225,22 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
   }
 
   <template>
-    <div class="picker-before-options" data-test-boxel-picker-before-options>
-      <div class="picker-before-options__search" data-test-boxel-picker-search>
+    <div class='picker-before-options' data-test-boxel-picker-before-options>
+      <div class='picker-before-options__search' data-test-boxel-picker-search>
         <BoxelInput
-          @type="search"
+          @type='search'
           @value={{this.searchTerm}}
           @onInput={{this.updateSearchTerm}}
           @placeholder={{this.searchPlaceholder}}
-          @autocomplete="off"
-          class="picker-before-options__search-input"
+          @autocomplete='off'
+          class='picker-before-options__search-input'
           {{autoFocus}}
-          {{on "keydown" this.handleKeydown}}
+          {{on 'keydown' this.handleKeydown}}
         />
       </div>
 
       <div
-        class="picker-before-options__selected-summary"
+        class='picker-before-options__selected-summary'
         data-test-boxel-picker-selected-summary
       >
         {{#if this.selectAllOption}}
@@ -252,7 +252,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
               this.selectAllOption.id
             }}
             @select={{@select}}
-            class="picker-before-options__option"
+            class='picker-before-options__option'
             data-test-boxel-picker-select-all
           />
         {{/if}}
@@ -262,14 +262,14 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
             @isSelected={{true}}
             @isHighlighted={{eq this.summaryHighlightId item.id}}
             @select={{@select}}
-            class="picker-before-options__option"
+            class='picker-before-options__option'
             data-boxel-picker-summary-item={{item.id}}
             data-test-boxel-picker-summary-item={{item.id}}
           />
         {{/each}}
       </div>
 
-      <div class="picker-divider" data-test-boxel-picker-divider></div>
+      <div class='picker-divider' data-test-boxel-picker-divider></div>
     </div>
 
     <style scoped>

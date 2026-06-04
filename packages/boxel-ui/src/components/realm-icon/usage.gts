@@ -19,8 +19,8 @@ export default class RealmIconUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Realm Icon"
-      @description="Visual identifier for a Boxel realm — shows its configured icon (or a fallback) at a consistent size, used in workspace pickers, headers, and search results."
+      @name='Realm Icon'
+      @description='Visual identifier for a Boxel realm — shows its configured icon (or a fallback) at a consistent size, used in workspace pickers, headers, and search results.'
     >
       <:example>
         <RealmIcon
@@ -33,17 +33,17 @@ export default class RealmIconUsage extends Component {
           <label>
             Preview animation
             <input
-              type="checkbox"
+              type='checkbox'
               checked={{this.realmInfo.isIndexing}}
-              name="animate"
-              {{on "input" this.animate}}
+              name='animate'
+              {{on 'input' this.animate}}
             />
           </label>
         {{/if}}
       </:example>
       <:api as |Args|>
         <Args.Bool
-          @name="canAnimate"
+          @name='canAnimate'
           @optional={{true}}
           @defaultValue={{false}}
           @onInput={{fn (mut this.canAnimate)}}
@@ -51,8 +51,8 @@ export default class RealmIconUsage extends Component {
         />
         <Args.Object
           @required={{true}}
-          @name="realmInfo"
-          @description="realm information"
+          @name='realmInfo'
+          @description='realm information'
           @value={{this.realmInfo}}
         />
       </:api>

@@ -47,7 +47,7 @@ export default class TagListUsage extends Component {
 
   <template>
     <div
-      class="tag-list-usage"
+      class='tag-list-usage'
       style={{cssVar
         tag-list-gap=this.tagListGap.value
         tag-list-pill-background-color=this.tagListPillBackgroundColor.value
@@ -56,7 +56,7 @@ export default class TagListUsage extends Component {
         tag-list-pill-selected-font-color=this.tagListPillSelectedFontColor.value
       }}
     >
-      <FreestyleUsage @name="Tag List">
+      <FreestyleUsage @name='Tag List'>
         <:description>
           A simple list of selectable tags using Pill components. Supports
           multiple selection.
@@ -70,55 +70,55 @@ export default class TagListUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.Object
-            @name="tags"
-            @description="Array of tag items with id and displayName"
+            @name='tags'
+            @description='Array of tag items with id and displayName'
             @value={{this.tagItems}}
-            @defaultValue="[]"
+            @defaultValue='[]'
           />
           <Args.Object
-            @name="selectedTags"
-            @description="Array of selected tag objects"
+            @name='selectedTags'
+            @description='Array of selected tag objects'
             @value={{this.selectedTags}}
-            @defaultValue="[]"
+            @defaultValue='[]'
           />
           <Args.Action
-            @name="onTagSelect"
-            @description="Callback when a tag is clicked"
+            @name='onTagSelect'
+            @description='Callback when a tag is clicked'
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name="tag-list-gap"
-            @type="dimension"
-            @description="Gap between tags"
+            @name='tag-list-gap'
+            @type='dimension'
+            @description='Gap between tags'
             @value={{this.tagListGap.value}}
             @onInput={{this.tagListGap.update}}
           />
           <Css.Basic
-            @name="tag-list-pill-background-color"
-            @type="color"
-            @description="Background color of unselected tags"
+            @name='tag-list-pill-background-color'
+            @type='color'
+            @description='Background color of unselected tags'
             @value={{this.tagListPillBackgroundColor.value}}
             @onInput={{this.tagListPillBackgroundColor.update}}
           />
           <Css.Basic
-            @name="tag-list-pill-selected-background-color"
-            @type="color"
-            @description="Background color of selected tags"
+            @name='tag-list-pill-selected-background-color'
+            @type='color'
+            @description='Background color of selected tags'
             @value={{this.tagListPillSelectedBackgroundColor.value}}
             @onInput={{this.tagListPillSelectedBackgroundColor.update}}
           />
           <Css.Basic
-            @name="tag-list-pill-font-color"
-            @type="color"
-            @description="Font color of unselected tags"
+            @name='tag-list-pill-font-color'
+            @type='color'
+            @description='Font color of unselected tags'
             @value={{this.tagListPillFontColor.value}}
             @onInput={{this.tagListPillFontColor.update}}
           />
           <Css.Basic
-            @name="tag-list-pill-selected-font-color"
-            @type="color"
-            @description="Font color of selected tags"
+            @name='tag-list-pill-selected-font-color'
+            @type='color'
+            @description='Font color of selected tags'
             @value={{this.tagListPillSelectedFontColor.value}}
             @onInput={{this.tagListPillSelectedFontColor.update}}
           />

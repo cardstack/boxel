@@ -49,12 +49,12 @@ export default class ResizablePanelUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Horizontal ResizablePanelGroup"
-      @description="Split-pane layout with horizontal or vertical orientation and draggable dividers between panels — used to build resizable IDE-style or master-detail layouts."
+      @name='Horizontal ResizablePanelGroup'
+      @description='Split-pane layout with horizontal or vertical orientation and draggable dividers between panels — used to build resizable IDE-style or master-detail layouts.'
     >
       <:example>
         <ResizablePanelGroup
-          @orientation="horizontal"
+          @orientation='horizontal'
           style={{cssVar
             boxel-panel-resize-handle-height=this.boxelPanelResizeHandleHeight.value
             boxel-panel-resize-handle-background-color=this.boxelPanelResizeHandleBackgroundColor.value
@@ -63,7 +63,7 @@ export default class ResizablePanelUsage extends Component {
           as |ResizablePanel ResizeHandle|
         >
           <ResizablePanel
-            class="panel"
+            class='panel'
             @defaultSize={{this.horizontalPanel1DefaultSize}}
             @minSize={{this.horizontalPanel1MinSize}}
             @maxSize={{this.horizontalPanel1MaxSize}}
@@ -73,7 +73,7 @@ export default class ResizablePanelUsage extends Component {
           </ResizablePanel>
           <ResizeHandle />
           <ResizablePanel
-            class="panel"
+            class='panel'
             @defaultSize={{this.horizontalPanel2DefaultSize}}
             @minSize={{this.horizontalPanel2MinSize}}
             @maxSize={{this.horizontalPanel2MaxSize}}
@@ -84,7 +84,7 @@ export default class ResizablePanelUsage extends Component {
           {{#if (not this.horizontalPanel3IsHidden)}}
             <ResizeHandle />
             <ResizablePanel
-              class="panel"
+              class='panel'
               @defaultSize={{this.horizontalPanel3DefaultSize}}
               @minSize={{this.horizontalPanel3MinSize}}
               @maxSize={{this.horizontalPanel3MaxSize}}
@@ -97,91 +97,91 @@ export default class ResizablePanelUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Number
-          @name="defaultSize - Panel 1"
-          @description="The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='defaultSize - Panel 1'
+          @description='The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel1DefaultSize}}
           @onInput={{fn (mut this.horizontalPanel1DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
-          @name="minSize - Panel 1"
-          @description="The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible."
+          @name='minSize - Panel 1'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
           @value={{this.horizontalPanel1MinSize}}
           @onInput={{fn (mut this.horizontalPanel1MinSize)}}
           @required={{false}}
         />
         <Args.Number
-          @name="maxSize - Panel 1"
-          @description="The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='maxSize - Panel 1'
+          @description='The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel1MaxSize}}
           @onInput={{fn (mut this.horizontalPanel1MaxSize)}}
           @required={{false}}
         />
         <Args.Bool
-          @name="collapsible - Panel 1"
-          @description="Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false."
+          @name='collapsible - Panel 1'
+          @description='Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false.'
           @value={{this.horizontalPanel1Collapsible}}
           @onInput={{fn (mut this.horizontalPanel1Collapsible)}}
           @required={{false}}
         />
         <Args.Number
-          @name="defaultSize - Panel 2"
-          @description="The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='defaultSize - Panel 2'
+          @description='The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel2DefaultSize}}
           @onInput={{fn (mut this.horizontalPanel2DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
-          @name="minSize - Panel 2"
-          @description="The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible."
+          @name='minSize - Panel 2'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
           @value={{this.horizontalPanel2MinSize}}
           @onInput={{fn (mut this.horizontalPanel2MinSize)}}
           @required={{false}}
         />
         <Args.Number
-          @name="maxSize - Panel 2"
-          @description="The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='maxSize - Panel 2'
+          @description='The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel2MaxSize}}
           @onInput={{fn (mut this.horizontalPanel2MaxSize)}}
           @required={{false}}
         />
         <Args.Bool
-          @name="collapsible - Panel 2"
-          @description="Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false."
+          @name='collapsible - Panel 2'
+          @description='Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false.'
           @value={{this.horizontalPanel2Collapsible}}
           @onInput={{fn (mut this.horizontalPanel2Collapsible)}}
           @required={{false}}
         />
         <Args.Number
-          @name="defaultSize - Panel 3"
-          @description="The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='defaultSize - Panel 3'
+          @description='The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel3DefaultSize}}
           @onInput={{fn (mut this.horizontalPanel3DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
-          @name="minSize - Panel 3"
-          @description="The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible."
+          @name='minSize - Panel 3'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
           @value={{this.horizontalPanel3MinSize}}
           @onInput={{fn (mut this.horizontalPanel3MinSize)}}
           @required={{false}}
         />
         <Args.Number
-          @name="maxSize - Panel 3"
-          @description="The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='maxSize - Panel 3'
+          @description='The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel3MaxSize}}
           @onInput={{fn (mut this.horizontalPanel3MaxSize)}}
           @required={{false}}
         />
         <Args.Bool
-          @name="collapsible - Panel 2"
-          @description="Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false."
+          @name='collapsible - Panel 2'
+          @description='Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false.'
           @value={{this.horizontalPanel3Collapsible}}
           @onInput={{fn (mut this.horizontalPanel3Collapsible)}}
           @required={{false}}
         />
         <Args.Bool
-          @name="isHidden"
+          @name='isHidden'
           @optional={{true}}
           @onInput={{fn (mut this.horizontalPanel3IsHidden)}}
           @value={{this.horizontalPanel3IsHidden}}
@@ -189,22 +189,22 @@ export default class ResizablePanelUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="boxel-panel-resize-handle-height"
-          @type="dimension"
+          @name='boxel-panel-resize-handle-height'
+          @type='dimension'
           @defaultValue={{this.boxelPanelResizeHandleHeight.defaults}}
           @value={{this.boxelPanelResizeHandleHeight.value}}
           @onInput={{this.boxelPanelResizeHandleHeight.update}}
         />
         <Css.Basic
-          @name="boxel-panel-resize-handle-background-color"
-          @type="color"
+          @name='boxel-panel-resize-handle-background-color'
+          @type='color'
           @defaultValue={{this.boxelPanelResizeHandleBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandleBackgroundColor.update}}
         />
         <Css.Basic
-          @name="boxel-panel-resize-handle-hover-background-color"
-          @type="color"
+          @name='boxel-panel-resize-handle-hover-background-color'
+          @type='color'
           @defaultValue={{this.boxelPanelResizeHandleHoverBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleHoverBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandleHoverBackgroundColor.update}}
@@ -212,15 +212,15 @@ export default class ResizablePanelUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
     <FreestyleUsage
-      @name="Two-panel vertical ResizablePanelGroup with reversed collapse"
+      @name='Two-panel vertical ResizablePanelGroup with reversed collapse'
     >
       <:description>
         @reverseCollapse
       </:description>
       <:example>
-        <div class="vertical-container">
+        <div class='vertical-container'>
           <ResizablePanelGroup
-            @orientation="vertical"
+            @orientation='vertical'
             @reverseCollapse={{this.verticalReverseCollapse}}
             style={{cssVar
               boxel-panel-resize-handle-width=this.boxelPanelResizeHandleWidth.value
@@ -230,7 +230,7 @@ export default class ResizablePanelUsage extends Component {
             as |ResizablePanel ResizeHandle|
           >
             <ResizablePanel
-              class="panel"
+              class='panel'
               @defaultSize={{this.verticalPanel1DefaultSize}}
               @minSize={{this.verticalPanel1MinSize}}
               @maxSize={{this.verticalPanel1MaxSize}}
@@ -240,7 +240,7 @@ export default class ResizablePanelUsage extends Component {
             </ResizablePanel>
             <ResizeHandle />
             <ResizablePanel
-              class="panel"
+              class='panel'
               @defaultSize={{this.verticalPanel2DefaultSize}}
               @minSize={{this.verticalPanel2MinSize}}
               @maxSize={{this.verticalPanel2MaxSize}}
@@ -254,63 +254,63 @@ export default class ResizablePanelUsage extends Component {
 
       <:api as |Args|>
         <Args.Bool
-          @name="reverseCollapse"
-          @description="Double-clicking the handle to collapse a panel will default to collapsing outward, this reverses it, which may be preferable in a two-panel setup."
+          @name='reverseCollapse'
+          @description='Double-clicking the handle to collapse a panel will default to collapsing outward, this reverses it, which may be preferable in a two-panel setup.'
           @value={{this.verticalReverseCollapse}}
           @onInput={{fn (mut this.verticalReverseCollapse)}}
         />
         <Args.Number
-          @name="defaultSize - Panel 1"
-          @description="The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='defaultSize - Panel 1'
+          @description='The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.verticalPanel1DefaultSize}}
           @onInput={{fn (mut this.verticalPanel1DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
-          @name="minSize - Panel 1"
-          @description="The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible."
+          @name='minSize - Panel 1'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
           @value={{this.verticalPanel1MinSize}}
           @onInput={{fn (mut this.verticalPanel1MinSize)}}
           @required={{false}}
         />
         <Args.Number
-          @name="maxSize - Panel 1"
-          @description="The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='maxSize - Panel 1'
+          @description='The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.verticalPanel1MaxSize}}
           @onInput={{fn (mut this.verticalPanel1MaxSize)}}
           @required={{false}}
         />
         <Args.Number
-          @name="collapsible - Panel 1"
-          @description="Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false."
+          @name='collapsible - Panel 1'
+          @description='Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false.'
           @value={{this.verticalPanel1Collapsible}}
           @onInput={{fn (mut this.verticalPanel1Collapsible)}}
           @required={{false}}
         />
         <Args.Number
-          @name="defaultSize - Panel 2"
-          @description="The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='defaultSize - Panel 2'
+          @description='The default width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.verticalPanel2DefaultSize}}
           @onInput={{fn (mut this.verticalPanel2DefaultSize)}}
           @required={{true}}
         />
         <Args.Number
-          @name="minSize - Panel 2"
-          @description="The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible."
+          @name='minSize - Panel 2'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
           @value={{this.verticalPanel2MinSize}}
           @onInput={{fn (mut this.verticalPanel2MinSize)}}
           @required={{false}}
         />
         <Args.Number
-          @name="maxSize - Panel 2"
-          @description="The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage."
+          @name='maxSize - Panel 2'
+          @description='The maximum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.verticalPanel2MaxSize}}
           @onInput={{fn (mut this.verticalPanel2MaxSize)}}
           @required={{false}}
         />
         <Args.Bool
-          @name="collapsible - Panel 2"
-          @description="Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false."
+          @name='collapsible - Panel 2'
+          @description='Before collapsing a panel, this argument will be checked. The default value for this argument is true. Please also define minSize if you set the value of this argument to false.'
           @value={{this.verticalPanel2Collapsible}}
           @onInput={{fn (mut this.verticalPanel2Collapsible)}}
           @required={{false}}
@@ -318,22 +318,22 @@ export default class ResizablePanelUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name="boxel-panel-resize-handle-width"
-          @type="dimension"
+          @name='boxel-panel-resize-handle-width'
+          @type='dimension'
           @defaultValue={{this.boxelPanelResizeHandleWidth.defaults}}
           @value={{this.boxelPanelResizeHandleWidth.value}}
           @onInput={{this.boxelPanelResizeHandleWidth.update}}
         />
         <Css.Basic
-          @name="boxel-panel-resize-handle-background-color"
-          @type="color"
+          @name='boxel-panel-resize-handle-background-color'
+          @type='color'
           @defaultValue={{this.boxelPanelResizeHandleBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandleBackgroundColor.update}}
         />
         <Css.Basic
-          @name="boxel-panel-resize-handle-hover-background-color"
-          @type="color"
+          @name='boxel-panel-resize-handle-hover-background-color'
+          @type='color'
           @defaultValue={{this.boxelPanelResizeHandleHoverBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleHoverBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandleHoverBackgroundColor.update}}

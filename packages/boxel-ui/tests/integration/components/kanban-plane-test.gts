@@ -134,7 +134,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
 
     await render(
       <template>
-        <button type="button" {{on "click" state.toggleHideEmpty}}>
+        <button type='button' {{on 'click' state.toggleHideEmpty}}>
           Toggle hide empty
         </button>
         <KanbanPlane

@@ -14,30 +14,30 @@ module('Integration | helpers | formatNumber', function (hooks) {
   });
 
   test('number size variants', async function (assert) {
-    await render(<template>{{formatNumber 1234567 size="tiny"}}</template>);
+    await render(<template>{{formatNumber 1234567 size='tiny'}}</template>);
     assert.dom().hasText('1.2M', 'tiny size uses compact notation');
 
-    await render(<template>{{formatNumber 1234567 size="short"}}</template>);
+    await render(<template>{{formatNumber 1234567 size='short'}}</template>);
     assert.dom().hasText('1,234,567', 'short size full number');
 
-    await render(<template>{{formatNumber 1234567 size="medium"}}</template>);
+    await render(<template>{{formatNumber 1234567 size='medium'}}</template>);
     assert.dom().hasText('1,234,567.00', 'medium size with decimals');
 
-    await render(<template>{{formatNumber 1234567 size="long"}}</template>);
+    await render(<template>{{formatNumber 1234567 size='long'}}</template>);
     assert.dom().hasText('1,234,567.0000', 'long size with more decimals');
   });
 
   test('percentage formatting', async function (assert) {
-    await render(<template>{{formatNumber 0.1235 style="percent"}}</template>);
+    await render(<template>{{formatNumber 0.1235 style='percent'}}</template>);
     assert.dom().hasText('12.35%', 'formats as percentage');
 
     await render(
-      <template>{{formatNumber 0.1235 style="percent" size="tiny"}}</template>,
+      <template>{{formatNumber 0.1235 style='percent' size='tiny'}}</template>,
     );
     assert.dom().hasText('12%', 'tiny percentage without decimals');
 
     await render(
-      <template>{{formatNumber 0.1235 style="percent" size="short"}}</template>,
+      <template>{{formatNumber 0.1235 style='percent' size='short'}}</template>,
     );
     assert.dom().hasText('12.4%', 'short percentage with minimal decimals');
   });
@@ -62,7 +62,7 @@ module('Integration | helpers | formatNumber', function (hooks) {
     assert.dom().hasText('-1,234.56', 'handles negative numbers');
 
     await render(
-      <template>{{formatNumber null fallback="No number"}}</template>,
+      <template>{{formatNumber null fallback='No number'}}</template>,
     );
     assert.dom().hasText('No number', 'uses fallback for null');
   });
@@ -70,18 +70,18 @@ module('Integration | helpers | formatNumber', function (hooks) {
   test('number localization', async function (assert) {
     const number = 1234567.89;
 
-    await render(<template>{{formatNumber number locale="en-US"}}</template>);
+    await render(<template>{{formatNumber number locale='en-US'}}</template>);
     assert.dom().hasText('1,234,567.89', 'US number formatting');
 
-    await render(<template>{{formatNumber number locale="de-DE"}}</template>);
+    await render(<template>{{formatNumber number locale='de-DE'}}</template>);
     assert.dom().hasText('1.234.567,89', 'German number formatting');
 
-    await render(<template>{{formatNumber number locale="fr-FR"}}</template>);
+    await render(<template>{{formatNumber number locale='fr-FR'}}</template>);
     assert.dom().hasText('1\u202F234\u202F567,89', 'French number formatting');
 
     await render(
       <template>
-        {{formatNumber 0.1235 style="percent" locale="tr-TR"}}
+        {{formatNumber 0.1235 style='percent' locale='tr-TR'}}
       </template>,
     );
     assert.dom().hasText('%12,35', 'Turkish percentage format');
@@ -91,21 +91,21 @@ module('Integration | helpers | formatNumber', function (hooks) {
     await render(
       <template>
         {{! @glint-expect-error: invalid input type }}
-        {{formatNumber "not-a-number" fallback="Invalid number"}}
+        {{formatNumber 'not-a-number' fallback='Invalid number'}}
       </template>,
     );
     assert.dom().hasText('Invalid number', 'handles non-numeric strings');
 
     await render(
       <template>
-        {{formatNumber (array 1 2 3) fallback="Array input"}}
+        {{formatNumber (array 1 2 3) fallback='Array input'}}
       </template>,
     );
     assert.dom().hasText('Array input', 'handles array input');
 
     await render(
       <template>
-        {{formatNumber undefined fallback="Undefined input"}}
+        {{formatNumber undefined fallback='Undefined input'}}
       </template>,
     );
     assert.dom().hasText('Undefined input', 'handles undefined input');
@@ -114,14 +114,14 @@ module('Integration | helpers | formatNumber', function (hooks) {
   test('currency style formatting', async function (assert) {
     await render(
       <template>
-        {{formatNumber 1234.56 style="currency" currency="USD" locale="en-US"}}
+        {{formatNumber 1234.56 style='currency' currency='USD' locale='en-US'}}
       </template>,
     );
     assert.dom().hasText('$1,234.56', 'formats currency style USD');
 
     await render(
       <template>
-        {{formatNumber 1234.56 style="currency" currency="EUR" locale="de-DE"}}
+        {{formatNumber 1234.56 style='currency' currency='EUR' locale='de-DE'}}
       </template>,
     );
     assert.dom().hasText('1.234,56\u00A0€', 'formats currency style EUR');
@@ -129,13 +129,13 @@ module('Integration | helpers | formatNumber', function (hooks) {
 
   test('decimal style formatting', async function (assert) {
     await render(
-      <template>{{formatNumber 1234.567 style="decimal"}}</template>,
+      <template>{{formatNumber 1234.567 style='decimal'}}</template>,
     );
     assert.dom().hasText('1,234.567', 'formats decimal style');
 
     await render(
       <template>
-        {{formatNumber 1234.567 style="decimal" maximumFractionDigits=1}}
+        {{formatNumber 1234.567 style='decimal' maximumFractionDigits=1}}
       </template>,
     );
     assert.dom().hasText('1,234.6', 'formats decimal with precision limit');

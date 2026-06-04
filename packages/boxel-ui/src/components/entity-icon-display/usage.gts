@@ -13,8 +13,8 @@ export default class EntityIconDisplayUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="EntityDisplayWithIcon"
-      @description="A component that displays an entity with an icon."
+      @name='EntityDisplayWithIcon'
+      @description='A component that displays an entity with an icon.'
     >
       <:example>
         <EntityDisplayWithIcon @underline={{false}}>
@@ -22,28 +22,28 @@ export default class EntityIconDisplayUsage extends Component {
             +60123456789
           </:title>
           <:icon>
-            <PhoneIcon class="icon" />
+            <PhoneIcon class='icon' />
           </:icon>
         </EntityDisplayWithIcon>
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="title"
+          @name='title'
           @optional={{false}}
-          @description="Entity display title."
+          @description='Entity display title.'
           @value={{this.title}}
           @onInput={{fn (mut this.title)}}
         />
         <Args.Bool
-          @name="center"
-          @description="Whether to center the entity display."
+          @name='center'
+          @description='Whether to center the entity display.'
           @value={{this.center}}
           @onInput={{fn (mut this.center)}}
           @defaultValue={{false}}
         />
         <Args.Bool
-          @name="underline"
-          @description="Whether to underline the entity display title."
+          @name='underline'
+          @description='Whether to underline the entity display title.'
           @value={{this.underline}}
           @onInput={{fn (mut this.underline)}}
           @defaultValue={{false}}

@@ -14,8 +14,8 @@ export default class SwatchUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Swatch"
-      @description="Visual color or material sample displayed as a circle or chip — used in color pickers, theme galleries, and style previews."
+      @name='Swatch'
+      @description='Visual color or material sample displayed as a circle or chip — used in color pickers, theme galleries, and style previews.'
     >
       <:example>
         <Swatch
@@ -27,32 +27,32 @@ export default class SwatchUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="color"
+          @name='color'
           @defaultValue={{null}}
           @onInput={{fn (mut this.color)}}
           @value={{this.color}}
         />
         <Args.String
-          @name="label"
-          @description="optional additional label"
+          @name='label'
+          @description='optional additional label'
           @defaultValue={{null}}
           @onInput={{fn (mut this.label)}}
           @value={{this.label}}
         />
         <Args.Bool
-          @name="hideLabel"
+          @name='hideLabel'
           @optional={{true}}
           @defaultValue={{false}}
           @onInput={{fn (mut this.hideLabel)}}
           @value={{this.hideLabel}}
         />
         <Args.String
-          @name="style"
-          @description="round or default"
+          @name='style'
+          @description='round or default'
           @options={{this.swatchStyles}}
           @onInput={{fn (mut this.style)}}
           @value={{this.style}}
-          @defaultValue=""
+          @defaultValue=''
         />
       </:api>
     </FreestyleUsage>

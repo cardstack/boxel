@@ -5,39 +5,39 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    fill="none"
-    viewBox="0 0 24 24"
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    viewBox='0 0 24 24'
     ...attributes
   ><rect
-      width="18"
-      height="6"
-      x="3"
-      y="4"
-      fill="transparent"
-      stroke="currentColor"
-      stroke-width="1.5"
-      rx="2"
+      width='18'
+      height='6'
+      x='3'
+      y='4'
+      fill='transparent'
+      stroke='currentColor'
+      stroke-width='1.5'
+      rx='2'
     /><rect
-      width="8"
-      height="6"
-      x="3"
-      y="14"
-      fill="transparent"
-      stroke="currentColor"
-      stroke-width="1.5"
-      rx="2"
+      width='8'
+      height='6'
+      x='3'
+      y='14'
+      fill='transparent'
+      stroke='currentColor'
+      stroke-width='1.5'
+      rx='2'
     /><rect
-      width="8"
-      height="6"
-      x="13"
-      y="14"
-      fill="transparent"
-      stroke="currentColor"
-      stroke-width="1.5"
-      rx="2"
+      width='8'
+      height='6'
+      x='13'
+      y='14'
+      fill='transparent'
+      stroke='currentColor'
+      stroke-width='1.5'
+      rx='2'
     /></svg>
 </template>;
 

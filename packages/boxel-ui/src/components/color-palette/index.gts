@@ -48,22 +48,22 @@ export default class ColorPalette extends Component<Signature> {
   ).map((c) => c?.toUpperCase());
 
   <template>
-    <div class="color-palette-group" ...attributes>
+    <div class='color-palette-group' ...attributes>
       <ColorPicker
         @color={{@color}}
         @onChange={{@onChange}}
-        @placeholder="Custom hex color (#ff00ff)"
+        @placeholder='Custom hex color (#ff00ff)'
         @disabled={{@disabled}}
       />
       {{#unless @disabled}}
-        <div class="color-palette">
+        <div class='color-palette'>
           {{#each this.colors as |color|}}
-            <Tooltip @placement="top">
+            <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  class={{cn "swatch-button" selected=(eq color this.color)}}
+                  class={{cn 'swatch-button' selected=(eq color this.color)}}
                   style={{cssVar swatch-color=color}}
-                  {{on "click" (fn @onChange color)}}
+                  {{on 'click' (fn @onChange color)}}
                   aria-label={{color}}
                 />
               </:trigger>
@@ -110,7 +110,7 @@ export default class ColorPalette extends Component<Signature> {
           background-color: transparent;
         }
         .swatch-button::before {
-          content: "";
+          content: '';
           display: block;
           width: 100%;
           height: 100%;

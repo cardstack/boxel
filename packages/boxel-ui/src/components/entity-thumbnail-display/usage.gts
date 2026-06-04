@@ -14,22 +14,22 @@ export default class EntityThumbnailDisplayUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="EntityDisplayWithThumbnail"
-      @description="A component that displays an entity with a thumbnail."
+      @name='EntityDisplayWithThumbnail'
+      @description='A component that displays an entity with a thumbnail.'
     >
       <:example>
         <EntityDisplayWithThumbnail @title={{this.title}}>
           <:thumbnail>
             <Avatar
-              @userId="user123"
+              @userId='user123'
               @displayName={{this.title}}
-              @thumbnailURL="https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1"
+              @thumbnailURL='https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1'
               @isReady={{true}}
-              class="avatar"
+              class='avatar'
             />
           </:thumbnail>
           <:tag>
-            <Pill class="primary-tag" @pillBackgroundColor="#e8e8e8">
+            <Pill class='primary-tag' @pillBackgroundColor='#e8e8e8'>
               Primary
             </Pill>
           </:tag>
@@ -37,22 +37,22 @@ export default class EntityThumbnailDisplayUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="title"
+          @name='title'
           @optional={{false}}
-          @description="Entity display title."
+          @description='Entity display title.'
           @value={{this.title}}
           @onInput={{fn (mut this.title)}}
         />
         <Args.Bool
-          @name="center"
-          @description="Whether to center the entity display."
+          @name='center'
+          @description='Whether to center the entity display.'
           @value={{this.center}}
           @onInput={{fn (mut this.center)}}
           @defaultValue={{false}}
         />
         <Args.Bool
-          @name="underline"
-          @description="Whether to underline the entity display title."
+          @name='underline'
+          @description='Whether to underline the entity display title.'
           @value={{this.underline}}
           @onInput={{fn (mut this.underline)}}
           @defaultValue={{false}}

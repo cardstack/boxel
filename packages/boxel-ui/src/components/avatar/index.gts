@@ -26,7 +26,7 @@ export default class Avatar extends Component<Signature> {
   <template>
     {{#let (deterministicColorFromString @userId) as |bgColor|}}
       <div
-        class="profile-icon"
+        class='profile-icon'
         style={{if
           @thumbnailURL
           (setBackgroundImage @thumbnailURL)
@@ -37,7 +37,7 @@ export default class Avatar extends Component<Signature> {
         }}
         data-test-profile-icon={{@isReady}}
         data-test-profile-icon-userId={{@userId}}
-        role={{if @thumbnailURL "img" "presentation"}}
+        role={{if @thumbnailURL 'img' 'presentation'}}
         aria-label={{if @displayName @displayName @userId}}
         ...attributes
       >

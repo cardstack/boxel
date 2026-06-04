@@ -23,21 +23,21 @@ export class BoxelAfterOptionsComponent extends Component<BoxelAfterOptionCompon
     this.args.select.actions.close();
   }
   <template>
-    <div class="control-buttons">
+    <div class='control-buttons'>
       <BoxelButton
-        @kind="secondary-light"
-        @size="extra-small"
-        class="control-button"
-        {{on "click" this.onClearAll}}
+        @kind='secondary-light'
+        @size='extra-small'
+        class='control-button'
+        {{on 'click' this.onClearAll}}
       >
         Clear
       </BoxelButton>
 
       <BoxelButton
-        @kind="secondary-light"
-        @size="extra-small"
-        class="control-button"
-        {{on "click" this.onClose}}
+        @kind='secondary-light'
+        @size='extra-small'
+        class='control-button'
+        {{on 'click' this.onClose}}
       >
         Close
       </BoxelButton>

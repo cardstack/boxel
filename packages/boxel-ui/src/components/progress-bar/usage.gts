@@ -33,7 +33,7 @@ export default class ProgressBarUsage extends Component {
 
   <template>
     <div
-      class="progress-bar-freestyle-container"
+      class='progress-bar-freestyle-container'
       style={{cssVar
         boxel-progress-bar-background-color=this.boxelProgressBarBackgroundColor.value
         boxel-progress-bar-fill-color=this.boxelProgressBarFillColor.value
@@ -41,7 +41,7 @@ export default class ProgressBarUsage extends Component {
         boxel-progress-bar-font-color=this.boxelProgressBarFontColor.value
       }}
     >
-      <FreestyleUsage @name="Progress">
+      <FreestyleUsage @name='Progress'>
         <:description>
           A progress bar component to show completion of a task
         </:description>
@@ -55,60 +55,60 @@ export default class ProgressBarUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.Number
-            @name="value"
-            @description="Current value of the progress"
+            @name='value'
+            @description='Current value of the progress'
             @value={{this.value}}
             @onInput={{fn (mut this.value)}}
           />
           <Args.Number
-            @name="max"
-            @description="Maximum value of the progress"
+            @name='max'
+            @description='Maximum value of the progress'
             @value={{this.max}}
             @onInput={{fn (mut this.max)}}
           />
           <Args.String
-            @name="label"
-            @description="Custom label for the progress bar"
+            @name='label'
+            @description='Custom label for the progress bar'
             @value={{this.label}}
             @onInput={{fn (mut this.label)}}
           />
           <Args.String
-            @name="position"
+            @name='position'
             @value={{this.position}}
-            @options={{array "start" "center" "end"}}
-            @description="Position of the progress bar info"
+            @options={{array 'start' 'center' 'end'}}
+            @description='Position of the progress bar info'
             @onInput={{fn (mut this.position)}}
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name="boxel-progress-bar-background-color"
-            @type="color"
-            @description="Background color of the progress bar"
+            @name='boxel-progress-bar-background-color'
+            @type='color'
+            @description='Background color of the progress bar'
             @defaultValue={{this.boxelProgressBarBackgroundColor.defaults}}
             @value={{this.boxelProgressBarBackgroundColor.value}}
             @onInput={{this.boxelProgressBarBackgroundColor.update}}
           />
           <Css.Basic
-            @name="boxel-progress-bar-fill-color"
-            @type="color"
-            @description="Color of the progress value"
+            @name='boxel-progress-bar-fill-color'
+            @type='color'
+            @description='Color of the progress value'
             @defaultValue={{this.boxelProgressBarFillColor.defaults}}
             @value={{this.boxelProgressBarFillColor.value}}
             @onInput={{this.boxelProgressBarFillColor.update}}
           />
           <Css.Basic
-            @name="boxel-progress-bar-border-radius"
-            @type="length"
-            @description="Border radius of the progress bar"
+            @name='boxel-progress-bar-border-radius'
+            @type='length'
+            @description='Border radius of the progress bar'
             @defaultValue={{this.boxelProgressBarBorderRadius.defaults}}
             @value={{this.boxelProgressBarBorderRadius.value}}
             @onInput={{this.boxelProgressBarBorderRadius.update}}
           />
           <Css.Basic
-            @name="boxel-progress-bar-font-color"
-            @type="color"
-            @description="Font color of the progress bar label"
+            @name='boxel-progress-bar-font-color'
+            @type='color'
+            @description='Font color of the progress bar label'
             @defaultValue={{this.boxelProgressBarFontColor.defaults}}
             @value={{this.boxelProgressBarFontColor.value}}
             @onInput={{this.boxelProgressBarFontColor.update}}
@@ -116,7 +116,7 @@ export default class ProgressBarUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name="Horizontal progress bar with value">
+      <FreestyleUsage @name='Horizontal progress bar with value'>
         <:example>
           <BoxelProgressBar
             @value={{this.value}}

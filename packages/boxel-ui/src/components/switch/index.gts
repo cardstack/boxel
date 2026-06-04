@@ -18,20 +18,20 @@ interface SwitchArgs {
 export default class Switch extends Component<SwitchSiganture> {
   <template>
     <label
-      class={{cn "switch" checked=@isEnabled disabled=@disabled}}
-      data-test-switch-checked={{if @isEnabled "on" "off"}}
+      class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
+      data-test-switch-checked={{if @isEnabled 'on' 'off'}}
       ...attributes
     >
-      <span class="boxel-sr-only">{{@label}}</span>
+      <span class='boxel-sr-only'>{{@label}}</span>
       <input
-        {{on "click" @onChange}}
-        {{on "keypress" @onChange}}
-        class="switch-input"
-        type="checkbox"
+        {{on 'click' @onChange}}
+        {{on 'keypress' @onChange}}
+        class='switch-input'
+        type='checkbox'
         checked={{@isEnabled}}
         disabled={{@disabled}}
         aria-checked={{@isEnabled}}
-        role="switch"
+        role='switch'
       />
     </label>
 
@@ -54,7 +54,7 @@ export default class Switch extends Component<SwitchSiganture> {
           background-color: var(--switch-bg-color);
         }
 
-        input[type="checkbox"] {
+        input[type='checkbox'] {
           appearance: none;
         }
 

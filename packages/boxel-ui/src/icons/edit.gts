@@ -4,8 +4,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
-  <svg fill="currentColor" viewBox="2.5 2.5 18.75 18.75" ...attributes><path
-      d="M4 20.75a.75.75 0 0 1-.75-.75v-4.181a.76.76 0 0 1 .22-.53L14.711 4.05a2.72 2.72 0 0 1 3.848 0l1.391 1.391a2.72 2.72 0 0 1 0 3.848L8.712 20.53a.75.75 0 0 1-.531.22zm.75-4.621v3.121h3.12l7.91-7.91-3.12-3.12zm12.091-5.849 2.051-2.051a1.223 1.223 0 0 0 0-1.727l-1.393-1.394a1.22 1.22 0 0 0-1.727 0L13.72 7.16z"
+  <svg fill='currentColor' viewBox='2.5 2.5 18.75 18.75' ...attributes><path
+      d='M4 20.75a.75.75 0 0 1-.75-.75v-4.181a.76.76 0 0 1 .22-.53L14.711 4.05a2.72 2.72 0 0 1 3.848 0l1.391 1.391a2.72 2.72 0 0 1 0 3.848L8.712 20.53a.75.75 0 0 1-.531.22zm.75-4.621v3.121h3.12l7.91-7.91-3.12-3.12zm12.091-5.849 2.051-2.051a1.223 1.223 0 0 0 0-1.727l-1.393-1.394a1.22 1.22 0 0 0-1.727 0L13.72 7.16z'
     /></svg>
 </template>;
 

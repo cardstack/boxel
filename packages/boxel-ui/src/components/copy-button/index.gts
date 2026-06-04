@@ -45,22 +45,22 @@ export default class CopyButton extends Component<Signature> {
     <Tooltip
       @placement={{@placement}}
       @offset={{@offset}}
-      class="boxel-copy-button-tooltip"
+      class='boxel-copy-button-tooltip'
       ...attributes
     >
       <:trigger>
         <IconButton
           @icon={{Copy}}
           @variant={{@variant}}
-          @size={{if @size @size "base"}}
-          @width={{if @width @width "18"}}
-          @height={{if @height @height "18"}}
-          {{on "click" this.copyToClipboard}}
-          class="boxel-copy-button"
+          @size={{if @size @size 'base'}}
+          @width={{if @width @width '18'}}
+          @height={{if @height @height '18'}}
+          {{on 'click' this.copyToClipboard}}
+          class='boxel-copy-button'
           aria-label={{if
             this.recentlyCopied
-            "Copied"
-            (if @ariaLabel @ariaLabel "Copy to clipboard")
+            'Copied'
+            (if @ariaLabel @ariaLabel 'Copy to clipboard')
           }}
           data-test-boxel-copy-button
         />
@@ -69,8 +69,8 @@ export default class CopyButton extends Component<Signature> {
         <span>
           {{if
             this.recentlyCopied
-            "Copied!"
-            (if @tooltipText @tooltipText "Copy to clipboard")
+            'Copied!'
+            (if @tooltipText @tooltipText 'Copy to clipboard')
           }}
         </span>
       </:content>

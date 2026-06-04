@@ -215,22 +215,22 @@ class BoxelDropdown extends Component<Signature> {
           this.dropdownModifier
           dropdown=dd
           id=this.dropdownId
-          eventType="click"
+          eventType='click'
           stopPropagation=false
         )
         as |ddModifier|
       }}
         {{! @glint-ignore }}
-        {{yield ddModifier to="trigger"}}
+        {{yield ddModifier to='trigger'}}
       {{/let}}
 
       <dd.Content
         @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
         class={{cn
-          "boxel-dropdown__content"
+          'boxel-dropdown__content'
           @contentClass
-          (if @variant (concat "variant-" @variant) "variant-default")
+          (if @variant (concat 'variant-' @variant) 'variant-default')
         }}
         {{focusTrap
           isActive=dd.isOpen
@@ -240,11 +240,11 @@ class BoxelDropdown extends Component<Signature> {
             )
             onDeactivate=dd.actions.close
             allowOutsideClick=true
-            fallbackFocus=(concat "#ember-basic-dropdown-content-" dd.uniqueId)
+            fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
           )
         }}
       >
-        {{yield (hash close=dd.actions.close) to="content"}}
+        {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
     </BasicDropdown>
 
@@ -306,7 +306,7 @@ class BoxelDropdown extends Component<Signature> {
           border-bottom-color: var(--dropdown-border-color) !important;
         }
 
-        .boxel-dropdown__content[class*="variant-"] {
+        .boxel-dropdown__content[class*='variant-'] {
           --dropdown-highlight-color: var(
             --boxel-dropdown-highlight-color,
             var(--theme-highlight, var(--boxel-highlight))

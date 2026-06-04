@@ -43,15 +43,15 @@ export default class ButtonUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name="Button"
-      @description="Interactive button for actions, links, and form submission. Renders as a button, anchor, or LinkTo depending on the @as argument, with primary, secondary, and danger color variants."
-      class="boxel-button-usage"
+      @name='Button'
+      @description='Interactive button for actions, links, and form submission. Renders as a button, anchor, or LinkTo depending on the @as argument, with primary, secondary, and danger color variants.'
+      class='boxel-button-usage'
     >
       <:example>
         <div
           class={{cn
-            "usage-button-centers-component"
-            usage-button-dark-mode-background=(eq this.kind "secondary-dark")
+            'usage-button-centers-component'
+            usage-button-dark-mode-background=(eq this.kind 'secondary-dark')
           }}
         >
           <BoxelButton
@@ -63,7 +63,7 @@ export default class ButtonUsage extends Component {
             @href={{this.href}}
             @route={{this.route}}
             @rectangular={{this.rectangular}}
-            {{on "click" this.alert}}
+            {{on 'click' this.alert}}
           >
             Sample CTA
           </BoxelButton>
@@ -71,84 +71,84 @@ export default class ButtonUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="as"
+          @name='as'
           @optional={{true}}
           @value={{this.as}}
-          @options={{array "button" "anchor" "link-to"}}
+          @options={{array 'button' 'anchor' 'link-to'}}
           @description="Determines the component/tag that is used to render the element. 'button' renders a 'button', 'anchor' renders an 'a', and 'link-to' renders a 'LinkTo'. Note that for accessibility purposes, you should be careful about adding aria/other attributes to a disabled link."
           @onInput={{fn (mut this.as)}}
         />
         <Args.String
-          @name="route"
+          @name='route'
           @optional={{true}}
-          @description="The route argument for LinkTo"
+          @description='The route argument for LinkTo'
           @onInput={{fn (mut this.route)}}
           @value={{this.route}}
         />
         <Args.Object
-          @name="models"
-          @description="The models argument for LinkTo"
+          @name='models'
+          @description='The models argument for LinkTo'
           @optional={{true}}
-          @defaultValue="[]"
+          @defaultValue='[]'
         />
         <Args.String
-          @name="query"
-          @description="The query argument for LinkTo"
+          @name='query'
+          @description='The query argument for LinkTo'
           @optional={{true}}
         />
         <Args.String
-          @name="href"
+          @name='href'
           @optional={{true}}
-          @description="A url that the button can lead to"
+          @description='A url that the button can lead to'
           @onInput={{fn (mut this.href)}}
           @value={{this.href}}
         />
         <Args.String
-          @name="kind"
+          @name='kind'
           @optional={{true}}
-          @description="Controls the colors of the button"
-          @defaultValue="secondary"
+          @description='Controls the colors of the button'
+          @defaultValue='secondary'
           @options={{this.kindVariants}}
           @onInput={{fn (mut this.kind)}}
           @value={{this.kind}}
         />
         <Args.String
-          @name="size"
+          @name='size'
           @optional={{true}}
-          @description="Controls the size of the button"
-          @defaultValue="base"
+          @description='Controls the size of the button'
+          @defaultValue='base'
           @options={{this.sizeVariants}}
           @onInput={{fn (mut this.size)}}
           @value={{this.size}}
         />
         <Args.Bool
-          @name="rectangular"
+          @name='rectangular'
           @optional={{true}}
-          @description="Changes the level of border-radius roundness"
+          @description='Changes the level of border-radius roundness'
           @onInput={{fn (mut this.rectangular)}}
           @value={{this.rectangular}}
           @defaultValue={{false}}
         />
         <Args.Bool
-          @name="disabled"
+          @name='disabled'
           @optional={{true}}
-          @description="Controls whether the button is disabled"
+          @description='Controls whether the button is disabled'
           @onInput={{fn (mut this.disabled)}}
           @value={{this.disabled}}
         />
         <Args.Bool
-          @name="loading"
+          @name='loading'
           @optional={{true}}
-          @description="Controls whether the button is loading"
+          @description='Controls whether the button is loading'
           @onInput={{fn (mut this.loading)}}
           @value={{this.loading}}
         />
-        <Args.Yield @description="Contents of the button" />
+        <Args.Yield @description='Contents of the button' />
       </:api>
       <:description>
         Depending on the value of
         <code>@as</code>, the button will accept different arguments.
-        <table class="usage-button-explanation">
+        <table class='usage-button-explanation'>
           <tbody>
             <tr>
               <td>
@@ -226,63 +226,63 @@ export default class ButtonUsage extends Component {
         <p>Note: All css-variables below can be set at the top-level element.</p>
       </:description>
       <:cssVars as |Css|>
-        <Css.Basic @name="--boxel-button-text-color" @type="color" />
-        <Css.Basic @name="--boxel-button-color" @type="background-color" />
+        <Css.Basic @name='--boxel-button-text-color' @type='color' />
+        <Css.Basic @name='--boxel-button-color' @type='background-color' />
         <Css.Basic
-          @name="--boxel-button-border"
-          @type="border"
-          @description="(css shorthand property)"
+          @name='--boxel-button-border'
+          @type='border'
+          @description='(css shorthand property)'
         />
-        <Css.Basic @name="--boxel-button-border-radius" @type="border-radius" />
+        <Css.Basic @name='--boxel-button-border-radius' @type='border-radius' />
         <Css.Basic
-          @name="--boxel-button-font"
-          @type="font"
-          @description="(css shorthand property)"
-        />
-        <Css.Basic
-          @name="--boxel-button-letter-spacing"
-          @type="letter-spacing"
+          @name='--boxel-button-font'
+          @type='font'
+          @description='(css shorthand property)'
         />
         <Css.Basic
-          @name="--boxel-button-transition"
-          @type="transition"
-          @description="(css shorthand property)"
-        />
-        <Css.Basic @name="--boxel-button-min-height" @type="min-height" />
-        <Css.Basic @name="--boxel-button-min-width" @type="min-width" />
-        <Css.Basic @name="--boxel-button-padding" @type="padding" />
-        <Css.Basic @name="--boxel-button-box-shadow" @type="box-shadow" />
-        <Css.Basic
-          @name="--boxel-button-loading-icon-size"
-          @type="width, height"
-          @description="loading-indicator size"
+          @name='--boxel-button-letter-spacing'
+          @type='letter-spacing'
         />
         <Css.Basic
-          @name="--boxel-button-loading-indicator-gap"
-          @type="margin-right"
-          @description="for loading-indicator icon"
+          @name='--boxel-button-transition'
+          @type='transition'
+          @description='(css shorthand property)'
+        />
+        <Css.Basic @name='--boxel-button-min-height' @type='min-height' />
+        <Css.Basic @name='--boxel-button-min-width' @type='min-width' />
+        <Css.Basic @name='--boxel-button-padding' @type='padding' />
+        <Css.Basic @name='--boxel-button-box-shadow' @type='box-shadow' />
+        <Css.Basic
+          @name='--boxel-button-loading-icon-size'
+          @type='width, height'
+          @description='loading-indicator size'
+        />
+        <Css.Basic
+          @name='--boxel-button-loading-indicator-gap'
+          @type='margin-right'
+          @description='for loading-indicator icon'
         />
       </:cssVars>
     </FreestyleUsage>
 
     <FreestyleUsage
-      @name="LinkTo button"
-      @description="This button links you to the index page"
-      class="boxel-button-usage"
+      @name='LinkTo button'
+      @description='This button links you to the index page'
+      class='boxel-button-usage'
     >
       <:example>
         <div
           class={{cn
-            "usage-button-centers-component"
-            usage-button-dark-mode-background=(eq this.kind "secondary-dark")
+            'usage-button-centers-component'
+            usage-button-dark-mode-background=(eq this.kind 'secondary-dark')
           }}
         >
           <BoxelButton
-            @as="link-to"
+            @as='link-to'
             @kind={{this.kind}}
             @size={{this.size}}
-            @route="index"
-            @query=""
+            @route='index'
+            @query=''
           >
             Link CTA
           </BoxelButton>

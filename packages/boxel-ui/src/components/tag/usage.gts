@@ -14,67 +14,67 @@ export default class TagUsage extends Component {
   @tracked private htmlTag?: keyof HTMLElementTagNameMap;
 
   <template>
-    <FreestyleUsage @name="Tag List">
+    <FreestyleUsage @name='Tag List'>
       <:description>
         Styled pill component.
       </:description>
       <:example>
-        <div class="tag-usage-container">
+        <div class='tag-usage-container'>
           <Tag
             @name={{this.name}}
             @pillColor={{this.pillColor}}
             @borderColor={{this.borderColor}}
             @fontColor={{this.fontColor}}
-            @htmlTag={{if this.htmlTag this.htmlTag "div"}}
+            @htmlTag={{if this.htmlTag this.htmlTag 'div'}}
             @ellipsize={{this.ellipsize}}
           />
         </div>
       </:example>
       <:api as |Args|>
         <Args.String
-          @name="name"
-          @description="title of the tag"
+          @name='name'
+          @description='title of the tag'
           @value={{this.name}}
-          @defaultValue=""
+          @defaultValue=''
           @onInput={{fn (mut this.name)}}
         />
         <Args.String
-          @name="pillColor"
-          @description="Background color of the pill"
+          @name='pillColor'
+          @description='Background color of the pill'
           @value={{this.pillColor}}
-          @defaultValue="#ffffff"
+          @defaultValue='#ffffff'
           @optional={{true}}
           @onInput={{fn (mut this.pillColor)}}
         />
         <Args.String
-          @name="borderColor"
-          @description="Border color for the pill"
+          @name='borderColor'
+          @description='Border color for the pill'
           @value={{this.borderColor}}
-          @defaultValue="pillColor, #afafb7"
+          @defaultValue='pillColor, #afafb7'
           @optional={{true}}
           @onInput={{fn (mut this.borderColor)}}
         />
         <Args.String
-          @name="fontColor"
-          @description="Font color for the pill"
+          @name='fontColor'
+          @description='Font color for the pill'
           @value={{this.fontColor}}
-          @defaultValue=" #000000 or #ffffff based on contrast if pillColor is undefined or a hex value"
+          @defaultValue=' #000000 or #ffffff based on contrast if pillColor is undefined or a hex value'
           @optional={{true}}
           @onInput={{fn (mut this.fontColor)}}
         />
         <Args.Bool
-          @name="ellipsize"
-          @description="Ellipsize text-overflow instead of wrapping text"
+          @name='ellipsize'
+          @description='Ellipsize text-overflow instead of wrapping text'
           @value={{this.ellipsize}}
           @defaultValue={{false}}
           @optional={{true}}
           @onInput={{fn (mut this.ellipsize)}}
         />
         <Args.String
-          @name="htmlTag"
-          @description="HTML element tag name"
+          @name='htmlTag'
+          @description='HTML element tag name'
           @value={{this.htmlTag}}
-          @defaultValue="div"
+          @defaultValue='div'
           @optional={{true}}
           @onInput={{fn (mut this.htmlTag)}}
         />

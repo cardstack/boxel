@@ -30,43 +30,43 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
   <template>
     <div
       class={{concat
-        "entity-thumbnail-display"
-        (if this.shouldAlignCenter " center")
+        'entity-thumbnail-display'
+        (if this.shouldAlignCenter ' center')
       }}
       ...attributes
     >
-      {{#if (has-block "thumbnail")}}
-        <div class="entity-thumbnail">
-          {{yield to="thumbnail"}}
+      {{#if (has-block 'thumbnail')}}
+        <div class='entity-thumbnail'>
+          {{yield to='thumbnail'}}
         </div>
       {{/if}}
 
-      <div class="entity-info">
+      <div class='entity-info'>
         {{! Title and tag }}
-        <div class="entity-title-tag-container">
+        <div class='entity-title-tag-container'>
           {{! this guard clause is already priotize yield to 'title' instead of using args.title if both are provided}}
-          {{#if (has-block "title")}}
-            {{yield to="title"}}
+          {{#if (has-block 'title')}}
+            {{yield to='title'}}
           {{else if @title}}
             <span
               class={{concat
-                "entity-title"
-                (if this.shouldUnderlineText " underline")
+                'entity-title'
+                (if this.shouldUnderlineText ' underline')
               }}
             >
               {{@title}}
             </span>
           {{/if}}
 
-          {{#if (has-block "tag")}}
-            {{yield to="tag"}}
+          {{#if (has-block 'tag')}}
+            {{yield to='tag'}}
           {{/if}}
         </div>
 
         {{! Extra Content }}
-        {{#if (has-block "content")}}
-          <div class="entity-content">
-            {{yield to="content"}}
+        {{#if (has-block 'content')}}
+          <div class='entity-content'>
+            {{yield to='content'}}
           </div>
         {{/if}}
       </div>

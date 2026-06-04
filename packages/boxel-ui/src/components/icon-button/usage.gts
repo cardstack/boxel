@@ -45,10 +45,10 @@ export default class IconButtonUsage extends Component {
   }
 
   <template>
-    <div class={{cn dark-background=(eq this.variant "secondary-dark")}}>
+    <div class={{cn dark-background=(eq this.variant 'secondary-dark')}}>
       <FreestyleUsage
-        @name="IconButton"
-        @description="Button rendered as a single icon with no text — used in toolbars, table-row actions, and tight UI spots where a labelled button would not fit."
+        @name='IconButton'
+        @description='Button rendered as a single icon with no text — used in toolbars, table-row actions, and tight UI spots where a labelled button would not fit.'
       >
         <:example>
           <BoxelIconButton
@@ -60,134 +60,134 @@ export default class IconButtonUsage extends Component {
             @height={{this.height}}
             @round={{this.isRound}}
             @disabled={{this.isDisabled}}
-            aria-label="Special Button"
-            {{on "click" (fn this.log "Button clicked")}}
+            aria-label='Special Button'
+            {{on 'click' (fn this.log 'Button clicked')}}
           />
         </:example>
 
         <:api as |Args|>
           <Args.Component
-            @name="icon"
-            @description="Icon component reference"
+            @name='icon'
+            @description='Icon component reference'
             @value={{this.icon}}
             @options={{ALL_ICON_COMPONENTS}}
             @onChange={{fn (mut this.icon)}}
           />
           <Args.String
-            @name="variant"
+            @name='variant'
             @optional={{true}}
             @value={{this.variant}}
             @options={{this.variants}}
             @onInput={{fn (mut this.variant)}}
-            @defaultValue="default"
+            @defaultValue='default'
           />
           <Args.String
-            @name="size"
+            @name='size'
             @optional={{true}}
             @value={{this.size}}
             @options={{this.sizeVariants}}
             @onInput={{fn (mut this.size)}}
-            @defaultValue="auto"
+            @defaultValue='auto'
           />
           <Args.Bool
-            @name="loading"
+            @name='loading'
             @optional={{true}}
             @value={{this.isLoading}}
             @onInput={{fn (mut this.isLoading)}}
-            @defaultValue="false"
+            @defaultValue='false'
           />
           <Args.Bool
-            @name="round"
+            @name='round'
             @optional={{true}}
             @value={{this.isRound}}
             @onInput={{fn (mut this.isRound)}}
-            @defaultValue="false"
+            @defaultValue='false'
           />
           <Args.Bool
-            @name="disabled"
+            @name='disabled'
             @optional={{true}}
             @value={{this.isDisabled}}
             @onInput={{fn (mut this.isDisabled)}}
-            @defaultValue="false"
+            @defaultValue='false'
           />
           <Args.String
-            @name="width"
+            @name='width'
             @optional={{true}}
-            @description="icon size"
+            @description='icon size'
             @defaultValue={{getIconSize this.size}}
             @value={{this.width}}
             @onInput={{fn (mut this.width)}}
           />
           <Args.String
-            @name="height"
-            @description="icon size"
+            @name='height'
+            @description='icon size'
             @defaultValue={{getIconSize this.size}}
             @value={{this.height}}
             @onInput={{fn (mut this.height)}}
           />
-          <Args.Yield @description="Yield for button content" />
+          <Args.Yield @description='Yield for button content' />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name="--boxel-icon-button-width"
-            @type="width"
-            @description="width of the button"
-            @defaultValue="30px"
+            @name='--boxel-icon-button-width'
+            @type='width'
+            @description='width of the button'
+            @defaultValue='30px'
           />
           <Css.Basic
-            @name="--boxel-icon-button-height"
-            @type="height"
-            @description="height of the button"
-            @defaultValue="30px"
+            @name='--boxel-icon-button-height'
+            @type='height'
+            @description='height of the button'
+            @defaultValue='30px'
           />
           <Css.Basic
-            @name="--boxel-icon-button-padding"
-            @type="padding"
-            @defaultValue="0"
+            @name='--boxel-icon-button-padding'
+            @type='padding'
+            @defaultValue='0'
           />
           <Css.Basic
-            @name="--boxel-icon-button-background"
-            @type="background-color"
+            @name='--boxel-icon-button-background'
+            @type='background-color'
           />
           <Css.Basic
-            @name="--boxel-icon-button-color"
-            @type="color"
-            @description="font color"
-            @defaultValue="#000"
+            @name='--boxel-icon-button-color'
+            @type='color'
+            @description='font color'
+            @defaultValue='#000'
           />
           <Css.Basic
-            @name="--boxel-icon-button-icon-color"
-            @type="color"
-            @description="icon color"
-            @defaultValue="currentColor"
+            @name='--boxel-icon-button-icon-color'
+            @type='color'
+            @description='icon color'
+            @defaultValue='currentColor'
           />
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name="All Icons">
+      <FreestyleUsage @name='All Icons'>
         <:example>
-          <label class="checkbox-label">
+          <label class='checkbox-label'>
             <input
-              type="checkbox"
+              type='checkbox'
               checked={{this.showIconBorders}}
-              {{on "change" this.toggleShowIconBorders}}
+              {{on 'change' this.toggleShowIconBorders}}
             />
             Show icon bounds
           </label>
-          <label class="checkbox-label">
+          <label class='checkbox-label'>
             <input
-              type="checkbox"
+              type='checkbox'
               checked={{this.hideIconOverflow}}
-              {{on "change" this.toggleHideIconOverflow}}
+              {{on 'change' this.toggleHideIconOverflow}}
             />
             Hide icon overflow
           </label>
-          <section class="all-icons">
+          <section class='all-icons'>
             {{#each ALL_ICON_COMPONENTS as |icon|}}
               <div
-                class="icon-and-label
-                  {{if this.showIconBorders 'show-borders'}}
-                  {{if this.hideIconOverflow 'hide-icon-overflow'}}"
+                class='icon-and-label
+                  {{if this.showIconBorders "show-borders"}}
+                  {{if this.hideIconOverflow "hide-icon-overflow"}}'
               >
                 <BoxelIconButton
                   @icon={{icon}}
@@ -197,11 +197,11 @@ export default class IconButtonUsage extends Component {
                   @height={{this.height}}
                   @round={{this.isRound}}
                   @disabled={{this.isDisabled}}
-                  aria-label="Special Button"
-                  {{on "click" (fn this.log "Button clicked")}}
-                  class="icon"
+                  aria-label='Special Button'
+                  {{on 'click' (fn this.log 'Button clicked')}}
+                  class='icon'
                 />
-                <span class="label">{{icon.name}}</span>
+                <span class='label'>{{icon.name}}</span>
               </div>
             {{/each}}
           </section>

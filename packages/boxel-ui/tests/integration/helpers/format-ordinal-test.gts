@@ -41,12 +41,12 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
     assert.dom().hasText('-1st', 'handles negative numbers');
 
     await render(
-      <template>{{formatOrdinal null fallback="No position"}}</template>,
+      <template>{{formatOrdinal null fallback='No position'}}</template>,
     );
     assert.dom().hasText('No position', 'uses fallback for null');
 
     await render(
-      <template>{{formatOrdinal undefined fallback="No ordinal"}}</template>,
+      <template>{{formatOrdinal undefined fallback='No ordinal'}}</template>,
     );
     assert.dom().hasText('No ordinal', 'uses fallback for undefined');
   });
@@ -85,16 +85,16 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
   });
 
   test('localization', async function (assert) {
-    await render(<template>{{formatOrdinal 1 locale="en-US"}}</template>);
+    await render(<template>{{formatOrdinal 1 locale='en-US'}}</template>);
     assert.dom().hasText('1st', 'English first');
 
-    await render(<template>{{formatOrdinal 2 locale="es-ES"}}</template>);
+    await render(<template>{{formatOrdinal 2 locale='es-ES'}}</template>);
     assert.dom().hasText('2º', 'Spanish second');
 
-    await render(<template>{{formatOrdinal 3 locale="fr-FR"}}</template>);
+    await render(<template>{{formatOrdinal 3 locale='fr-FR'}}</template>);
     assert.dom().hasText('3e', 'French third');
 
-    await render(<template>{{formatOrdinal 4 locale="de-DE"}}</template>);
+    await render(<template>{{formatOrdinal 4 locale='de-DE'}}</template>);
     assert.dom().hasText('4.', 'German fourth');
   });
 
@@ -102,20 +102,20 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
     await render(
       <template>
         {{! @glint-expect-error: invalid input type }}
-        {{formatOrdinal "not-a-number" fallback="Invalid ordinal"}}
+        {{formatOrdinal 'not-a-number' fallback='Invalid ordinal'}}
       </template>,
     );
     assert.dom().hasText('Invalid ordinal', 'handles non-numeric input');
 
     await render(
-      <template>{{formatOrdinal 123.45 fallback="Decimal ordinal"}}</template>,
+      <template>{{formatOrdinal 123.45 fallback='Decimal ordinal'}}</template>,
     );
     assert.dom().hasText('Decimal ordinal', 'handles decimal numbers');
 
     let PosInfinity = Number.POSITIVE_INFINITY;
     await render(
       <template>
-        {{formatOrdinal PosInfinity fallback="Infinite ordinal"}}
+        {{formatOrdinal PosInfinity fallback='Infinite ordinal'}}
       </template>,
     );
     assert.dom().hasText('Infinite ordinal', 'handles infinity');
@@ -137,10 +137,10 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
   });
 
   test('RTL locale support', async function (assert) {
-    await render(<template>{{formatOrdinal 1 locale="ar-SA"}}</template>);
+    await render(<template>{{formatOrdinal 1 locale='ar-SA'}}</template>);
     assert.dom().hasText('١.', 'Arabic ordinal formatting');
 
-    await render(<template>{{formatOrdinal 2 locale="he-IL"}}</template>);
+    await render(<template>{{formatOrdinal 2 locale='he-IL'}}</template>);
     assert.dom().hasText('2.', 'Hebrew ordinal formatting');
   });
 

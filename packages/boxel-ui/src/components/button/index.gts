@@ -68,19 +68,19 @@ interface Signature {
 const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
   {{#let
     (cn
-      "boxel-button"
+      'boxel-button'
       @class
-      (concat "size-" (if @size @size "base"))
-      (concat "kind-" (if @kind @kind "default"))
+      (concat 'size-' (if @size @size 'base'))
+      (concat 'kind-' (if @kind @kind 'default'))
       loading=@loading
       rectangular=@rectangular
     )
     as |classes|
   }}
-    {{#if (or (not @as) (eq @as "button"))}}
+    {{#if (or (not @as) (eq @as 'button'))}}
       <button
         class={{classes}}
-        aria-label={{if @loading "loading"}}
+        aria-label={{if @loading 'loading'}}
         aria-disabled={{@disabled}}
         disabled={{@disabled}}
         data-test-boxel-button
@@ -88,14 +88,14 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       >
         {{#if @loading}}
           <LoadingIndicator
-            class="loading-indicator"
-            @color="var(--boxel-button-text-color)"
+            class='loading-indicator'
+            @color='var(--boxel-button-text-color)'
             data-test-boxel-button-loading-indicator
           />
         {{/if}}
         {{yield}}
       </button>
-    {{else if (eq @as "anchor")}}
+    {{else if (eq @as 'anchor')}}
       <a
         class={{classes}}
         href={{unless @disabled (if @href (sanitizeHtml @href))}}
@@ -104,7 +104,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       >
         {{yield}}
       </a>
-    {{else if (eq @as "link-to")}}
+    {{else if (eq @as 'link-to')}}
       <LinkTo
         class={{classes}}
         @route={{@route}}
@@ -186,7 +186,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       */
       .boxel-button:disabled,
       a.boxel-button:not([href]),
-      a.boxel-button[href=""],
+      a.boxel-button[href=''],
       a.boxel-button.disabled-link {
         --boxel-button-color: var(--boxel-border-color);
         --boxel-button-border: 1px solid var(--boxel-button-color);
@@ -198,7 +198,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
 
       /* the a element does not have a disabled attribute. Clicking will still trigger event listeners */
       a.boxel-button:not([href]),
-      a.boxel-button[href=""],
+      a.boxel-button[href=''],
       a.boxel-button.disabled-link {
         pointer-events: none;
       }

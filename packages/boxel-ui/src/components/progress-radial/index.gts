@@ -24,17 +24,17 @@ export default class ProgressRadial extends Component<Signature> {
 
   <template>
     <div
-      class="boxel-progress-radial"
+      class='boxel-progress-radial'
       data-test-boxel-progress-radial
-      aria-label="progress-radial"
+      aria-label='progress-radial'
       ...attributes
     >
       <div
-        class="progress-radial-circle-outer"
+        class='progress-radial-circle-outer'
         style={{cssVar progressPercentage=this.progressPercentage}}
       >
-        <div class="progress-radial-circle-inner">
-          <span class="progress-percentage">{{this.progressPercentage}}</span>
+        <div class='progress-radial-circle-inner'>
+          <span class='progress-percentage'>{{this.progressPercentage}}</span>
         </div>
       </div>
     </div>

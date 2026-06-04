@@ -17,7 +17,7 @@ module('Integration | Component | input', function (hooks) {
 
   test('it passes through the value and does not render missing optional properties', async function (assert) {
     await render(
-      <template><BoxelInput data-test-input @value="hello" /></template>,
+      <template><BoxelInput data-test-input @value='hello' /></template>,
     );
 
     assert.dom('[data-test-input]').hasValue('hello');
@@ -71,7 +71,7 @@ module('Integration | Component | input', function (hooks) {
           @onFocus={{onFocus}}
           @onBlur={{onBlur}}
           @onKeyPress={{onKeyPress}}
-          @value=""
+          @value=''
         />
       </template>,
     );
@@ -88,7 +88,7 @@ module('Integration | Component | input', function (hooks) {
   test('textarea @type produces a textarea', async function (assert) {
     await render(
       <template>
-        <BoxelInput data-test-input @type="textarea" @value="" />
+        <BoxelInput data-test-input @type='textarea' @value='' />
       </template>,
     );
 
@@ -99,7 +99,7 @@ module('Integration | Component | input', function (hooks) {
   test('other @type passes through', async function (assert) {
     await render(
       <template>
-        <BoxelInput data-test-input @type="number" @value="" />
+        <BoxelInput data-test-input @type='number' @value='' />
       </template>,
     );
 
@@ -109,7 +109,7 @@ module('Integration | Component | input', function (hooks) {
   test('@helperText shows', async function (assert) {
     await render(
       <template>
-        <BoxelInput data-test-input @helperText="help!" @value="" />
+        <BoxelInput data-test-input @helperText='help!' @value='' />
       </template>,
     );
 
@@ -124,7 +124,7 @@ module('Integration | Component | input', function (hooks) {
   test('@placeholder shows', async function (assert) {
     await render(
       <template>
-        <BoxelInput data-test-input @placeholder="a placeholder" @value="" />
+        <BoxelInput data-test-input @placeholder='a placeholder' @value='' />
       </template>,
     );
 
@@ -134,12 +134,12 @@ module('Integration | Component | input', function (hooks) {
   test('it indicates @optional status but @required takes priority', async function (assert) {
     await render(
       <template>
-        <BoxelInput data-test-optional-input @optional={{true}} @value="" />
+        <BoxelInput data-test-optional-input @optional={{true}} @value='' />
         <BoxelInput
           data-test-required-input
           @required={{true}}
           @optional={{true}}
-          @value=""
+          @value=''
         />
       </template>,
     );
@@ -168,7 +168,7 @@ module('Integration | Component | input', function (hooks) {
           @state={{stateObject.state}}
           @disabled={{stateObject.disabled}}
           @errorMessage={{stateObject.errorMessage}}
-          @value=""
+          @value=''
         />
       </template>,
     );

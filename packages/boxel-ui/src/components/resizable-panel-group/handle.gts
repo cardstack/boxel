@@ -45,14 +45,14 @@ let manageHandleRegistration = modifier((element, [handle]: [Handle]) => {
 export default class Handle extends Component<Signature> {
   <template>
     <button
-      class="separator separator-{{@orientation}} {{if this.isHover 'hover'}}"
-      aria-label="Resize handle"
+      class='separator separator-{{@orientation}} {{if this.isHover "hover"}}'
+      aria-label='Resize handle'
       data-boxel-panel-group-id={{@groupId}}
       data-boxel-panel-resize-handle-id={{this.id}}
       {{manageHandleRegistration this}}
       ...attributes
     >
-      <div class="resize-handle {{@orientation}}" data-test-resize-handle />
+      <div class='resize-handle {{@orientation}}' data-test-resize-handle />
     </button>
     <style scoped>
       .separator {
