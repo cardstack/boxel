@@ -91,13 +91,19 @@ function resolveUrl(
   baseUrl: string | null | undefined,
   virtualNetwork: VirtualNetwork | undefined,
 ): string {
-  if (!virtualNetwork) {
-    return trimJsonExtension(raw);
-  }
+  // With a VN, resolve through it so prefix-form bases and registered
+  // prefix-form refs round-trip correctly. Without a VN, plain
+  // `new URL(raw, baseUrl)` still handles the common case — URL-form
+  // refs (with or without a base) and relative refs against a URL-form
+  // base. Prefix-form bases need a VN; `new URL()` throws on those and
+  // we fall back to the raw ref.
   try {
-    return trimJsonExtension(
-      virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
-    );
+    if (virtualNetwork) {
+      return trimJsonExtension(
+        virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
+      );
+    }
+    return trimJsonExtension(new URL(raw, baseUrl || undefined).href);
   } catch {
     return trimJsonExtension(raw);
   }
