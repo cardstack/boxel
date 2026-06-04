@@ -5175,6 +5175,7 @@ export class Realm {
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.jobIdentity ? { jobIdentity: opts.jobIdentity } : {}),
+      ...(opts?.timings ? { timings: opts.timings } : {}),
     });
   }
 

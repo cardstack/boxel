@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), and (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -12,17 +12,19 @@ Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on th
 - **A reindex that was slow but succeeded** — attribute wall-clock across the cards that got re-rendered, find the real culprit in the fan-out.
 - **Which cards have broken links** — enumerate cards with a broken `linksTo` / `linksToMany` target straight from the column; those cards index cleanly, so `diagnostics.brokenLinks` is the only indexed signal. See [Mode E](#mode-e--enumerate-cards-with-broken-links).
 - **Whether module pre-warm is effective** — confirm the pre-warm phase populates the definition cache under a key the indexer / on-demand reads actually hit (not a silent no-op), using the `definition-cache-key` hit/miss log channel. This one isn't about the `diagnostics` column — it reads the logs. See [Mode F](#mode-f--module-pre-warm-and-definition-cache-hitmiss).
+- **Why an in-render `_search` was slow to come back** — when a render stalls in `waiting-stability` waiting on a query-backed `linksTo` / `linksToMany` search (the `boxel_index.diagnostics` shows it client-side as `queryLoadsInFlight` aging) but the SQL is fast, attribute the realm-server's request→response time across its stages (parse / SQL / loadLinks / serialize) and tell handler-time from queued-before-handler / event-loop saturation. Log-based, keyed by the correlation id. See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
 
-The first three read from the same `diagnostics` column; the difference is the query you start with. Mode F is log-based.
+The first three read from the same `diagnostics` column; the difference is the query you start with. Modes F and G are log-based.
 
 ## Where the diagnostics live
 
 Four places, all correlated:
 
-1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about *timing*: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference.
+1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference.
 2. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
 3. **`error_doc.diagnostics`** — derived copy of `diagnostics`, written only for error rows on `boxel_index`. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
 4. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same `requestId` lands on both `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'`, so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
+5. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `diagnostics` column directly.
 
@@ -41,7 +43,7 @@ Every slow or timed-out render falls into one of:
 
 - **Launch stall**: the request waited in the render-semaphore or tab queue and never got a real render attempt. Fix is capacity, not host code.
 - **Loader stall**: the render started but was still pulling `.gts` modules when the timer fired. Fix is module graph / network.
-- **Data stall**: the render got past module load but is still fetching cards, file-meta, or query-field results. Fix is the host data layer or the backend search.
+- **Data stall**: the render got past module load but is still fetching cards, file-meta, or query-field results. Fix is the host data layer or the backend search. When it's a query-field `_search` (`queryLoadsInFlight` aging), [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing) attributes the backend search to the realm-server's own request→response stages.
 - **Render stall**: the render is in DOM rendering / stability-wait but nothing is in flight. Fix is Glimmer / template side.
 
 If you pick the wrong category you waste a day. The diagnostic fields in the [Classify in one pass](#classify-in-one-pass) table below pick it for you.
@@ -588,7 +590,7 @@ A short rubric for the most common shapes:
 
 Module renders (`prerenderModule`, used by `getDefinition` to convert filter JSON into SQL on `_federated-search`, plus everywhere else a card definition is needed without a card render) go through the same prerender pipeline as card renders, but they land in the `modules` table — not `boxel_index`. The `diagnostics` JSONB column on `modules` carries the same `RenderTimeoutDiagnostics`-with-`requestId` shape, so the field-by-field reading and the [Classify in one pass](#classify-in-one-pass) table apply unchanged. Only the lookup queries differ.
 
-**When to use this mode:** a card render hung waiting on `getDefinition` (Mode A captured `cardDocLoadsInFlight = 0`, `queryLoadsInFlight = 0`, but the realm-server's reply to `_federated-search` itself was slow); an investigation needs to attribute time across both card renders and the module renders they triggered; or you want to find the slowest module renders fleet-wide. Same payload shape, queryable via SQL.
+**When to use this mode:** a card render hung waiting on `getDefinition` (Mode A captured `cardDocLoadsInFlight = 0`, `queryLoadsInFlight = 0`, but the realm-server's reply to `_federated-search` itself was slow — and if the stall was on a query-field search rather than a definition lookup, i.e. `queryLoadsInFlight > 0`, use [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing) instead); an investigation needs to attribute time across both card renders and the module renders they triggered; or you want to find the slowest module renders fleet-wide. Same payload shape, queryable via SQL.
 
 **Step 1 — slowest module renders in a realm.**
 
@@ -647,7 +649,7 @@ WHERE diagnostics->>'requestId' = '<request-id>';
 
 ## Mode E — enumerate cards with broken links
 
-Unlike Modes A–D, this isn't a perf investigation: it's a realm-health / content-integrity query. A card whose `linksTo` / `linksToMany` target is unreachable (deleted, 404, upstream 5xx, network failure) **still indexes as a clean `type='instance'`** — the broken slot renders the placeholder template and the broken reference is preserved on the wire as `relationships.<field>.links.self`, identical to a not-yet-loaded link. So `has_error` is `false` and `error_doc` is `null`; nothing in the row's *status* tells you the link is broken.
+Unlike Modes A–D, this isn't a perf investigation: it's a realm-health / content-integrity query. A card whose `linksTo` / `linksToMany` target is unreachable (deleted, 404, upstream 5xx, network failure) **still indexes as a clean `type='instance'`** — the broken slot renders the placeholder template and the broken reference is preserved on the wire as `relationships.<field>.links.self`, identical to a not-yet-loaded link. So `has_error` is `false` and `error_doc` is `null`; nothing in the row's _status_ tells you the link is broken.
 
 What records it is `diagnostics.brokenLinks` — an array the host's `render.meta` route builds by running `getBrokenLinks(instance)` on the settled instance and attaching the findings to the diagnostics block. Each finding is the minimal queryable summary:
 
@@ -702,13 +704,13 @@ Caveats:
 
 ## Mode F — module pre-warm and definition-cache hit/miss
 
-Use this when you're asking *"is the module pre-warm actually populating the definition cache, and are the indexer / prerender reads hitting it — or silently re-computing?"* This is about **cache effectiveness**, not render timing.
+Use this when you're asking _"is the module pre-warm actually populating the definition cache, and are the indexer / prerender reads hitting it — or silently re-computing?"_ This is about **cache effectiveness**, not render timing.
 
 ### What pre-warm is
 
 A from-scratch (and incremental) index runs a **pre-warm phase** before the visit phase: `IndexRunner.preWarmModulesTable` walks the realm's modules and calls `definitionLookup.populateDefinitionCacheEntry(...)`, which prerenders each module's definitions and persists them to the `modules` table. The intent is that the subsequent **visit phase** (indexing instances) and **on-demand reads** (the realm-server serving `getDefinition` to prerender tabs) then find those rows already cached instead of re-prerendering them.
 
-The original failure this guards against: a worker pre-warm that ran with a self-resolved *null* cache context wrote nothing (or wrote under a key nobody reads), so pre-warm was a silent no-op. The diagnostic below tells you definitively whether that's happening.
+The original failure this guards against: a worker pre-warm that ran with a self-resolved _null_ cache context wrote nothing (or wrote under a key nobody reads), so pre-warm was a silent no-op. The diagnostic below tells you definitively whether that's happening.
 
 ### The cache key
 
@@ -736,21 +738,22 @@ Deployed: set `LOG_LEVELS` in the worker's SSM param and redeploy (same mechanic
 
 Three events are emitted (all via the framework `logger`, so the lines carry **no `[category]` prefix** — grep the message text, not the word `definition-cache-key`):
 
-| Line | Where | Meaning |
-| --- | --- | --- |
-| `WRITE module=<u> scope=<s> user=<id\|(empty)> realm=<r>` | `persistDefinitionCacheEntry` | A definition was persisted. The `user=` shown is the **normalized stored key** (public → `(empty)`), not the render identity. |
-| `HIT module=<u> scope=<s> user=<…> realm=<r> alias=<a>` | `readFromDatabaseCache` | A DB read found the row. Always a real hit (logged at the read choke point, covers worker + realm-server). |
-| `MISS source=pre-warm\|on-demand module=<u> …` | `loadDefinitionCacheEntryUncached` | A lookup **exhausted the cache** (primary URL + every alias/extension candidate) and committed to a prerender. Logged **once per logical lookup** — not per alias probe. `source=pre-warm` is the pre-warm phase's own cold probe; `source=on-demand` is a visit-phase / live read. |
+| Line                                                      | Where                              | Meaning                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WRITE module=<u> scope=<s> user=<id\|(empty)> realm=<r>` | `persistDefinitionCacheEntry`      | A definition was persisted. The `user=` shown is the **normalized stored key** (public → `(empty)`), not the render identity.                                                                                                                                                       |
+| `HIT module=<u> scope=<s> user=<…> realm=<r> alias=<a>`   | `readFromDatabaseCache`            | A DB read found the row. Always a real hit (logged at the read choke point, covers worker + realm-server).                                                                                                                                                                          |
+| `MISS source=pre-warm\|on-demand module=<u> …`            | `loadDefinitionCacheEntryUncached` | A lookup **exhausted the cache** (primary URL + every alias/extension candidate) and committed to a prerender. Logged **once per logical lookup** — not per alias probe. `source=pre-warm` is the pre-warm phase's own cold probe; `source=on-demand` is a visit-phase / live read. |
 
 > Two logging facts that will mislead you if you don't know them:
-> 1. **Category overrides only take effect because `setup-logger.ts` calls `reapplyLogLevels()`** after installing `_logDefinitions`. Module-scope `logger()` calls (like this one) are evaluated during the barrel import *before* `_logDefinitions` exists, so without the re-apply they stay stuck at loglevel's default and `definition-cache-key=debug` silently no-ops. If you add a new module-scope category and it won't emit, this is why.
+>
+> 1. **Category overrides only take effect because `setup-logger.ts` calls `reapplyLogLevels()`** after installing `_logDefinitions`. Module-scope `logger()` calls (like this one) are evaluated during the barrel import _before_ `_logDefinitions` exists, so without the re-apply they stay stuck at loglevel's default and `definition-cache-key=debug` silently no-ops. If you add a new module-scope category and it won't emit, this is why.
 > 2. A bare `readFromDatabaseCache` returning no rows is **not** a real miss — it's one probe (the reader tries `foo`, `foo.ts`, `foo.js`, `foo.gts`, `foo.gjs`). Counting those as misses inflates the number ~5×. The `MISS source=…` line is the de-duplicated, real signal; trust it over raw DB-read counts.
 
 ### The healthy shape
 
 For a cold from-scratch of a single realm, healthy looks like:
 
-- `MISS source=pre-warm` ≈ one per module being warmed. **These are expected** — they *are* the warming (probe cold → prerender → `WRITE`).
+- `MISS source=pre-warm` ≈ one per module being warmed. **These are expected** — they _are_ the warming (probe cold → prerender → `WRITE`).
 - `MISS source=on-demand` = **0**.
 - Realm-server on-demand reads = all HIT, **0 miss**, after the pre-warm phase.
 
@@ -789,11 +792,75 @@ Run it once on a **private** realm and once on a **public** realm — the public
 
 ### Pre-warm concurrency
 
-Pre-warm is **serial by default** (`INDEXER_PREWARM_CONCURRENCY=1`). It's opt-in tunable — a bounded worker pool over `populateDefinitionCacheEntry`. On a cold / shared prerender pool, raising it can be *slower* (tab materialization cost vs warm-tab reuse), so measure the pre-warm-phase wall-clock (the `modules.created_at` min→max window for the realm) before and after rather than assuming parallel wins. Align the ceiling with the prerender affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`); beyond that you just queue inside the prerender server.
+Pre-warm is **serial by default** (`INDEXER_PREWARM_CONCURRENCY=1`). It's opt-in tunable — a bounded worker pool over `populateDefinitionCacheEntry`. On a cold / shared prerender pool, raising it can be _slower_ (tab materialization cost vs warm-tab reuse), so measure the pre-warm-phase wall-clock (the `modules.created_at` min→max window for the realm) before and after rather than assuming parallel wins. Align the ceiling with the prerender affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`); beyond that you just queue inside the prerender server.
 
 ### What Mode F can't tell you
 
-Pre-warm only populates module **definitions**. A realm whose card-authored modules fail to *evaluate* (e.g. a circular-dependency TDZ in a bundled module — `Cannot access 'X' before initialization`) will still fail the **visit phase** instance renders regardless of a clean pre-warm; those show up as `boxel_index` error rows, not cache misses. Mode F confirms the cache is keyed and populated correctly; it says nothing about whether the modules themselves render.
+Pre-warm only populates module **definitions**. A realm whose card-authored modules fail to _evaluate_ (e.g. a circular-dependency TDZ in a bundled module — `Cannot access 'X' before initialization`) will still fail the **visit phase** instance renders regardless of a clean pre-warm; those show up as `boxel_index` error rows, not cache misses. Mode F confirms the cache is keyed and populated correctly; it says nothing about whether the modules themselves render.
+
+## Mode G — an in-render `_search` was slow (server-side search timing)
+
+**When to use this mode.** Mode A classified a timed-out (or slow-but-succeeded) card render as a **data stall on a `_search`**: `renderStage=waiting-stability`, `cardDocLoadsInFlight=0`, and a `queryLoadsInFlight` entry whose `ageMs` is most of the render's wall-clock. The card is blocked waiting for the realm-server to answer a query-backed `linksTo` / `linksToMany` search (e.g. a `policies` getter). The `boxel_index.diagnostics` blob is the **client's** view — it tells you the host waited N ms on query Q, but nothing about where the realm-server spent that time. The decisive tell: if `pg_stat_activity` shows no SQL running longer than ~1s while the host waited tens of seconds, the wait is realm-server _delivery_, not query execution — and that's invisible without this mode. Mode G is the server-side complement that localizes it. (Also the right mode for "a slow `_federated-search` whose SQL is fast" in general, even outside a timeout.)
+
+**The correlation id.** The prerendered host stamps `x-boxel-logging-correlation-id` on each `_federated-search` fetch it issues — prerender-gated, so live SPA / external traffic never stamps it and never emits these lines. The realm-server reads it back out and keys two lines on `corr=<id>`:
+
+- `realm:search-timing` — the request→response stage breakdown.
+- `realm:requests` `-->` — the total round-trip `dur=` (includes body read + send, i.e. the outer bound).
+
+It is **not** persisted in `boxel_index.diagnostics` (that's the client side). So bridge a stuck card to its server lines by **job + time window + the query** in `queryLoadsInFlight[].query`, then use `corr=` to tie the server's own lines together once you've found the request.
+
+**The lines.**
+
+```
+corr=<id> job=<jobId> handler=Nms parse=… resolveRealms=… sql=… loadLinks=… populate=… stringify=… coalescedWait=… | results=… cacheHit=… cacheMiss=…    (realm:search-timing)
+--> QUERY <accept> <url>: 200 [job: <jobId>] corr=<id> dur=Nms                                                                                            (realm:requests)
+eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… heapMB=…                                                                                              (realm:health)
+```
+
+Stage meanings (wall-clock ms, accumulated across the request):
+
+- `parse` — request body → Query parse.
+- `resolveRealms` — federated realm resolution / lazy-mount.
+- `sql` — the `IndexQueryEngine.searchCards` query (the actual SQL).
+- `loadLinks` — the post-SQL relationship-assembly pass over the result set.
+- `populate` — within loadLinks, the per-instance query-field assembly (definition lookup + field-tree walk).
+- `cacheRead` / `cacheWrite` + `cacheHit` / `cacheMiss` — the per-instance wire-format cache (`job_scoped_instance_cache`) round-trips.
+- `stringify` — `JSON.stringify` of the response wire-format.
+- `coalescedWait` — this request coalesced onto an already-in-flight identical search (CS-11121 dedup) and waited for it; the real sql/loadLinks work is on the **leader's** line, not this one.
+- `handler=` — handler entry → response assembled (≈ the sum of the stages above).
+
+**Reading it — the decision tree.**
+
+1. **`sql=` is the bulk of `handler`** → a genuinely slow query. Rare here (the premise is fast SQL); confirm with `pg_stat_activity` / `EXPLAIN`. Fast SQL but large `sql=` means lock / connection-pool wait inside the query call.
+2. **`loadLinks` / `populate` dominate** → the post-SQL relationship/query-field assembly is the cost (the per-instance wire-format work). Check `cacheHit` / `cacheMiss`: a low hit rate means the instance cache isn't helping (e.g. unique-per-card queries).
+3. **`stringify` dominates** → serializing a large federated response. Look at `results=` for a fat result set.
+4. **`dur` (realm:requests) ≫ `handler` (realm:search-timing)** → the time is NOT inside the handler. It was spent **queued before the handler ran** (or sending). This is the saturation fingerprint: cross-reference `realm:health` near the same timestamp — if `eventLoopLagMs` spiked into the hundreds/thousands with `inFlightSearch` high, the single-threaded realm-server's event loop was starved (synchronous post-SQL serialization across many concurrent searches), so the request sat unserviced even though, once it ran, the handler was fast. That is the CS-10820 saturation class seen from the server side.
+5. **`coalescedWait` dominates** → this follower waited on another in-flight identical search. Find the leader (same job + query, overlapping time); its line carries the real breakdown.
+
+**Getting the logs.** These emit from the **realm-server** process (`handle-search` → `searchRealms`). Reach them with the `tail-logs` skill (Loki, realm-server family) or, for staging/prod CloudWatch, the `aws-access` skill:
+
+```sh
+# CloudWatch (staging), via an aws-access session.
+# All search-timing lines for the run (corr ids + stage breakdowns):
+aws --profile claude-staging logs filter-log-events \
+  --log-group-name ecs-boxel-realm-server-staging \
+  --filter-pattern 'handler=' --start-time <epoch-ms> \
+  --query 'events[*].message' --output text
+
+# Event-loop saturation windows during the same run:
+aws --profile claude-staging logs filter-log-events \
+  --log-group-name ecs-boxel-realm-server-staging \
+  --filter-pattern 'eventLoopLagMs' --start-time <epoch-ms> \
+  --query 'events[*].message' --output text
+```
+
+The boxel logger does **not** print the namespace, so the on-disk line is the bare `corr=… handler=…` / `eventLoopLagMs=…` text — grep the _content_ (`corr=`, `handler=`, `eventLoopLagMs`, `dur=`), not a `realm:search-timing` prefix. `LOG_LEVELS` unset resolves to `*=info`, so these emit by default.
+
+### What Mode G can't tell you
+
+- It only fires for **prerender / indexer** traffic — the correlation id is prerender-gated. A slow `_search` from a live SPA or external API caller emits nothing, by design, to keep normal traffic silent.
+- The correlation id isn't in `boxel_index.diagnostics`, so there's no SQL join from a stuck card row to its server line; bridge by job + time + query as above.
+- `realm:health` is sampled and emitted only during saturation windows (lag over threshold OR a search in flight). A quiet period legitimately produces no line — silence means "not saturated," not "no data."
 
 ## Field-by-field reading
 
