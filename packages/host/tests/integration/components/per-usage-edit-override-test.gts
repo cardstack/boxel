@@ -1,4 +1,4 @@
-import GlimmerComponent from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -57,11 +57,11 @@ module('Integration | per-usage edit override', function (hooks) {
   });
 
   test('a contains field can override its edit component per usage', async function (assert) {
-    class CustomEditor extends GlimmerComponent<{ Args: { model: unknown } }> {
-      <template>
-        <div data-test-custom-contains-editor>custom</div>
-      </template>
-    }
+    const CustomEditor: TemplateOnlyComponent<{
+      Args: { model: unknown };
+    }> = <template>
+      <div data-test-custom-contains-editor>custom</div>
+    </template>;
 
     class Card extends CardDef {
       @field nickname = contains(StringField, { edit: CustomEditor });
@@ -82,13 +82,11 @@ module('Integration | per-usage edit override', function (hooks) {
       @field name = contains(StringField);
     }
 
-    class CustomLinksToEditor extends GlimmerComponent<{
+    const CustomLinksToEditor: TemplateOnlyComponent<{
       Args: { model: unknown };
-    }> {
-      <template>
-        <div data-test-custom-links-to-editor>custom</div>
-      </template>
-    }
+    }> = <template>
+      <div data-test-custom-links-to-editor>custom</div>
+    </template>;
 
     class Person extends CardDef {
       @field bestFriend = linksTo(Friend, { edit: CustomLinksToEditor });
@@ -105,28 +103,22 @@ module('Integration | per-usage edit override', function (hooks) {
   });
 
   test('a containsMany override receives @defaultEditor for the wrap contract', async function (assert) {
-    class WrapEditor extends GlimmerComponent<{
+    const WrapEditor: TemplateOnlyComponent<{
       Args: { model: unknown; values: unknown; defaultEditor: unknown };
-    }> {
-      <template>
-        <div data-test-wrap>
-          <div data-test-wrap-banner>wrap banner</div>
-          {{#let @defaultEditor as |DefaultEditor|}}
-            <DefaultEditor />
-          {{/let}}
-        </div>
-      </template>
-    }
+    }> = <template>
+      <div data-test-wrap>
+        <div data-test-wrap-banner>wrap banner</div>
+        {{#let @defaultEditor as |DefaultEditor|}}
+          <DefaultEditor />
+        {{/let}}
+      </div>
+    </template>;
 
     class Tagged extends CardDef {
       @field tags = containsMany(StringField, { edit: WrapEditor });
     }
 
-    await renderCard(
-      loader,
-      new Tagged({ tags: ['alpha', 'beta'] }),
-      'edit',
-    );
+    await renderCard(loader, new Tagged({ tags: ['alpha', 'beta'] }), 'edit');
 
     assert.dom('[data-test-wrap]').exists('the wrap override renders');
     assert
@@ -137,10 +129,7 @@ module('Integration | per-usage edit override', function (hooks) {
       .exists('rendering @defaultEditor produces the standard editor');
     assert
       .dom('[data-test-wrap] [data-test-contains-many="tags"] [data-test-item]')
-      .exists(
-        { count: 2 },
-        'all values flow through the default iteration',
-      );
+      .exists({ count: 2 }, 'all values flow through the default iteration');
   });
 
   test('a linksToMany override receives @defaultEditor for the wrap contract', async function (assert) {
@@ -148,18 +137,16 @@ module('Integration | per-usage edit override', function (hooks) {
       @field name = contains(StringField);
     }
 
-    class WrapEditor extends GlimmerComponent<{
+    const WrapEditor: TemplateOnlyComponent<{
       Args: { model: unknown; values: unknown; defaultEditor: unknown };
-    }> {
-      <template>
-        <div data-test-wrap-many>
-          <div data-test-wrap-many-banner>wrap banner</div>
-          {{#let @defaultEditor as |DefaultEditor|}}
-            <DefaultEditor />
-          {{/let}}
-        </div>
-      </template>
-    }
+    }> = <template>
+      <div data-test-wrap-many>
+        <div data-test-wrap-many-banner>wrap banner</div>
+        {{#let @defaultEditor as |DefaultEditor|}}
+          <DefaultEditor />
+        {{/let}}
+      </div>
+    </template>;
 
     class Owner extends CardDef {
       @field pets = linksToMany(Pet, { edit: WrapEditor });
