@@ -233,15 +233,15 @@ export default class OperatorModeOverlays extends Overlays {
         z-index: 1;
       }
       .overlay-label-menu {
-        width: 18px;
-        height: 18px;
+        width: 1.125rem;
+        height: 1.125rem;
         margin-inline-start: 0;
-        padding: 2px;
-        border-radius: 4px;
-        --icon-bg: #0a2e1c;
-        --icon-color: #0a2e1c;
-        --boxel-icon-button-width: 18px;
-        --boxel-icon-button-height: 18px;
+        padding: 0.125rem;
+        border-radius: 0.25rem;
+        --icon-bg: var(--boxel-highlight-foreground);
+        --icon-color: var(--boxel-highlight-foreground);
+        --boxel-icon-button-width: 1.125rem;
+        --boxel-icon-button-height: 1.125rem;
       }
       .overlay-label-menu:hover {
         background: rgba(0, 0, 0, 0.12);
@@ -251,8 +251,8 @@ export default class OperatorModeOverlays extends Overlays {
          interactive control. */
       .overlay-select-button {
         position: absolute;
-        bottom: 4px;
-        right: 4px;
+        bottom: 0.25rem;
+        right: 0.25rem;
         padding: 0;
         border: none;
         background: none;
@@ -271,14 +271,14 @@ export default class OperatorModeOverlays extends Overlays {
          AdornSelectChip primitives get their compact variant from
          the `@compact` arg we pass to each of them directly. */
       .actions-overlay.compact .overlay-label-menu {
-        width: 14px;
-        height: 14px;
-        --boxel-icon-button-width: 14px;
-        --boxel-icon-button-height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
+        --boxel-icon-button-width: 0.875rem;
+        --boxel-icon-button-height: 0.875rem;
       }
       .actions-overlay.compact .overlay-select-button {
-        bottom: 2px;
-        right: 2px;
+        bottom: 0.125rem;
+        right: 0.125rem;
       }
     </style>
   </template>

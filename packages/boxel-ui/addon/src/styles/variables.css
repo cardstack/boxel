@@ -170,7 +170,7 @@
 
   --boxel-cyan: #00ebe5;
   --boxel-teal: #00ffba;
-  --boxel-dark-teal: #00ebac;
+  --boxel-dark-teal: #00da9f; /* darker teal; feeds --boxel-highlight-hover */
   --boxel-red: #ff5050;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
@@ -196,6 +196,7 @@
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
+  --boxel-highlight-foreground: #0a2e1c; /* readable dark-green foreground for text/icons on a --boxel-highlight surface */
   --boxel-danger: var(
     --boxel-red
   ); /* formerly boxel-error-100: the latest design docs (8/16/2023) use this color for danger instead */

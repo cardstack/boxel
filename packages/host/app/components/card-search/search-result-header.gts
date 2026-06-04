@@ -145,22 +145,22 @@ export default class SearchResultHeader extends Component<Signature> {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-5xs);
-        min-height: 26px;
+        min-height: 1.625rem;
         padding: 0 var(--boxel-sp-xs);
         border: none;
-        border-radius: 6px;
-        background-color: var(--boxel-teal);
+        border-radius: 0.375rem;
+        background-color: var(--boxel-highlight);
         color: var(--boxel-dark);
         font: 700 var(--boxel-font-sm);
         cursor: pointer;
       }
       .selection-dropdown-trigger:hover,
       .selection-dropdown-trigger:focus-visible {
-        background-color: #00da9f;
+        background-color: var(--boxel-highlight-hover);
       }
       .selection-trigger-icon {
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
         flex-shrink: 0;
       }
       .selection-trigger-text {
