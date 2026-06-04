@@ -159,7 +159,7 @@ class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   </template>
 }
 
-export class RealmConfigEdit extends Component<typeof RealmConfig> {
+class RealmConfigEdit extends Component<typeof RealmConfig> {
   get duplicatePaths(): string[] {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
@@ -409,5 +409,5 @@ export class RealmConfig extends CardDef {
 
   static embedded = RealmConfigEmbedded;
   static isolated = RealmConfigIsolated;
-  // static edit = RealmConfigEdit; // commented for default-template A/B; uncomment to restore
+  static edit = RealmConfigEdit;
 }
