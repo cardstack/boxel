@@ -1,4 +1,4 @@
-import { waitFor, click } from '@ember/test-helpers';
+import { waitFor, click, fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -151,6 +151,48 @@ module(
       assert
         .dom('[data-test-duplicate-path-warning]')
         .containsText('/docs', 'the duplicate banner names the repeated path');
+    });
+
+    test('the containsMany override wraps the default editor via @defaultEditor', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }, { path: '/about' }]);
+
+      assert.dom('[data-test-host-routing-rules-edit-wrap]').doesNotExist();
+      // The custom override renders its own banner-bearing template AND
+      // the default ContainsManyEditor (via @defaultEditor) below it —
+      // both must be present to prove the wrap contract is honoured.
+      assert
+        .dom('[data-test-contains-many="hostRoutingRules"]')
+        .exists('the default ContainsManyEditor renders via @defaultEditor');
+      assert
+        .dom('[data-test-contains-many="hostRoutingRules"] [data-test-item]')
+        .exists({ count: 2 }, 'all rules render through the default iteration');
+    });
+
+    test('typing into the path input always stores a leading slash', async function (assert) {
+      await renderRealmConfigEdit([{}]);
+
+      assert
+        .dom('[data-test-path-warning]')
+        .doesNotExist('no warning before any input');
+
+      await fillIn('[data-test-path-input] input', 'docs');
+      assert
+        .dom('[data-test-path-warning]')
+        .doesNotExist(
+          'typed text is stored with a leading slash, so the missing-slash warning does not fire',
+        );
+
+      await fillIn('[data-test-path-input] input', '/foo');
+      assert
+        .dom('[data-test-path-warning]')
+        .doesNotExist(
+          'a typed leading slash is not doubled — the accessory remains the only slash',
+        );
+
+      await fillIn('[data-test-path-input] input', '//foo');
+      assert
+        .dom('[data-test-path-warning]')
+        .doesNotExist('multiple leading slashes collapse to one');
     });
   },
 );

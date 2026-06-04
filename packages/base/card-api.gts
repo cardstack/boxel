@@ -643,6 +643,7 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
+  readonly edit?: ComponentLike<any>;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   configuration: ConfigurationInput<any> | undefined;
@@ -970,6 +971,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
+  readonly edit?: ComponentLike<any>;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   configuration: ConfigurationInput<any> | undefined;
@@ -1198,6 +1200,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
+  readonly edit?: ComponentLike<any>;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
@@ -1591,15 +1594,30 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
               {{#if
                 (shouldRenderEditor @format defaultFormats.cardDef isComputed)
               }}
-                <LinksToEditor
-                  @model={{(getInnerModel)}}
-                  @field={{linksToField}}
-                  @brokenLink={{broken}}
-                  @typeConstraint={{@typeConstraint}}
-                  @lockConsumingRealm={{@lockConsumingRealm}}
-                  @createCard={{cardCrudFunctions.createCard}}
-                  ...attributes
-                />
+                {{#if linksToField.edit}}
+                  {{!-- Per-usage `edit:` override on a linksTo field
+                        replaces the default LinksToEditor for this
+                        specific usage. --}}
+                  <linksToField.edit
+                    @model={{(getInnerModel)}}
+                    @field={{linksToField}}
+                    @brokenLink={{broken}}
+                    @typeConstraint={{@typeConstraint}}
+                    @lockConsumingRealm={{@lockConsumingRealm}}
+                    @createCard={{cardCrudFunctions.createCard}}
+                    ...attributes
+                  />
+                {{else}}
+                  <LinksToEditor
+                    @model={{(getInnerModel)}}
+                    @field={{linksToField}}
+                    @brokenLink={{broken}}
+                    @typeConstraint={{@typeConstraint}}
+                    @lockConsumingRealm={{@lockConsumingRealm}}
+                    @createCard={{cardCrudFunctions.createCard}}
+                    ...attributes
+                  />
+                {{/if}}
               {{else if broken}}
                 <BrokenLinkTemplate
                   @brokenUrl={{broken.reference}}
