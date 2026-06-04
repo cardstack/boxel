@@ -165,8 +165,12 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
           transparent
         );
       }
+      /* Keyboard focus ring sits just outside the button. Set the full
+         outline shorthand (not just the color) so the ring renders
+         regardless of the UA's default outline-style. */
       .boxel-button:focus-visible {
-        outline-color: var(--ring, var(--boxel-highlight));
+        outline: var(--boxel-outline-width) var(--boxel-outline-style)
+          var(--ring, var(--boxel-highlight));
         outline-offset: 2px;
       }
 
@@ -249,6 +253,11 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       .kind-primary:not(:disabled):hover,
       .kind-primary:not(:disabled):active {
         --boxel-button-color: var(--primary, var(--boxel-highlight-hover));
+      }
+      /* When the fill darkens, the focus ring darkens to match. */
+      .kind-primary:not(:disabled):focus-visible:hover,
+      .kind-primary:not(:disabled):focus-visible:active {
+        outline-color: var(--ring, var(--boxel-highlight-hover));
       }
 
       .kind-secondary {

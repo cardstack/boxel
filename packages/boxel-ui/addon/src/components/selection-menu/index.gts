@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
-import { DropdownArrowDown } from '../../icons.gts';
+import CaretDown from '../../icons/caret-down.gts';
 import BoxelButton from '../button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
@@ -66,7 +66,7 @@ export default class SelectionMenu extends Component<Signature> {
           >
             <SelectionCheckmark class='selection-menu-icon' />
             <span class='selection-menu-count'>{{@selectedCount}}</span>
-            <DropdownArrowDown
+            <CaretDown
               class='selection-menu-caret'
               width='13px'
               height='13px'
@@ -102,16 +102,16 @@ export default class SelectionMenu extends Component<Signature> {
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-width: 0;
       }
-      /* Keyboard focus ring just outside the button. (Set explicitly so it
-         renders regardless of the global button outline setup.) */
-      .selection-menu-trigger:focus-visible {
-        outline: var(--boxel-outline-width) var(--boxel-outline-style)
-          var(--boxel-highlight);
-        outline-offset: 2px;
-      }
+      /* Focus ring comes from BoxelButton's standard :focus-visible (full
+         outline, 2px outside). */
       /* Deepen the fill while the menu is open, matching Button's hover. */
       .selection-menu-trigger[aria-expanded='true'] {
         --boxel-button-color: var(--boxel-highlight-hover);
+      }
+      /* When open-and-keyboard-focused, darken the ring to match the fill,
+         mirroring Button's hover/active focus behavior. */
+      .selection-menu-trigger[aria-expanded='true']:focus-visible {
+        outline-color: var(--ring, var(--boxel-highlight-hover));
       }
       .selection-menu-icon {
         width: 0.875rem;
@@ -121,6 +121,12 @@ export default class SelectionMenu extends Component<Signature> {
       .selection-menu-count {
         line-height: 1;
         white-space: nowrap;
+        /* Reserve a stable width (and equal-width digits) so the trigger
+           doesn't shift when the count crosses 1↔2 digits, e.g. during a
+           Select All that jumps 9→10. */
+        min-width: 2ch;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
       }
       .selection-menu-caret {
         flex-shrink: 0;
