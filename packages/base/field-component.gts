@@ -241,14 +241,20 @@ export function getBoxComponent(
     ) {
       viewSlot = 'embedded';
     }
-    // Per-usage `edit` override on the field declaration wins over the
-    // FieldDef's `static edit`, letting a parent card customize the
-    // editor for a single field without subclassing or replacing its
-    // own `static edit`. Only honoured for the edit slot — the
-    // viewSlot collapse (isolated/embedded sharing a reference with
-    // edit) is intentionally left to the FieldDef.
+    // Per-usage `edit` override on an atomic field wins over the
+    // FieldDef's `static edit`. Restricted to `contains` / `linksTo`
+    // here — collection fields (`containsMany` / `linksToMany`) carry
+    // their own override path in their component files, where the
+    // wrap-style contract can pass `@defaultEditor`. Without this
+    // gate the collection's field descriptor would also reach each
+    // iterated item and replace its template, blanking the item rows.
+    let isAtomicFieldType =
+      field?.fieldType === 'contains' || field?.fieldType === 'linksTo';
     let CardOrFieldFormatComponent: BaseDefComponent =
-      effectiveFormat === 'edit' && !viewSlot && field?.edit
+      effectiveFormat === 'edit' &&
+      !viewSlot &&
+      isAtomicFieldType &&
+      field?.edit
         ? field.edit
         : viewSlot
           ? componentClass[viewSlot]
