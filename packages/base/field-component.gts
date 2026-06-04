@@ -234,9 +234,18 @@ export function getBoxComponent(
     ) {
       viewSlot = 'embedded';
     }
-    let CardOrFieldFormatComponent: BaseDefComponent = viewSlot
-      ? componentClass[viewSlot]
-      : componentClass[effectiveFormat];
+    // Per-usage `edit` override on the field declaration wins over the
+    // FieldDef's `static edit`, letting a parent card customize the
+    // editor for a single field without subclassing or replacing its
+    // own `static edit`. Only honoured for the edit slot — the
+    // viewSlot collapse (isolated/embedded sharing a reference with
+    // edit) is intentionally left to the FieldDef.
+    let CardOrFieldFormatComponent: BaseDefComponent =
+      effectiveFormat === 'edit' && !viewSlot && field?.edit
+        ? field.edit
+        : viewSlot
+          ? componentClass[viewSlot]
+          : componentClass[effectiveFormat];
     return {
       CardOrFieldFormatComponent,
       fields,
