@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
-import { DropdownArrowDown } from '../../icons.gts';
+import { DropdownArrowDown } from '../../icons.ts';
 import BoxelButton from '../button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
