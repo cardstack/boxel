@@ -4655,8 +4655,11 @@ export function virtualNetworkFor(
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
 // string through the store's VirtualNetwork. When the store doesn't carry
 // a VN (test stubs, detached instances), fall back to plain URL math: it
-// covers URL-form refs and relative refs against URL-form bases but can't
-// resolve prefix-form refs.
+// covers URL-form refs and relative refs against URL-form bases. Prefix-form
+// refs and refs against prefix-form bases can't be resolved without a VN —
+// `new URL()` throws on those, so we return the raw reference unchanged
+// instead of bubbling the error to callers (e.g. relationship deserialize
+// uses the returned string as a "did this resolve?" signal).
 function resolveRef(
   store: CardStore | undefined,
   reference: string,
@@ -4677,7 +4680,11 @@ function resolveRef(
       base = relativeTo;
     }
   }
-  return new URL(reference, base).href;
+  try {
+    return new URL(reference, base).href;
+  } catch {
+    return reference;
+  }
 }
 
 function myLoader(): Loader {
