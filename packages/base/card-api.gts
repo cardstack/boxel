@@ -3631,6 +3631,81 @@ function lazilyLoadLink(
   })();
 }
 
+// The live loading state of a `linksTo` / `linksToMany` relationship.
+// `isLoading` is a getter, not a snapshot: each read re-evaluates against
+// the tracked source — card tracking for declared links, the search
+// resource's running state for query-backed fields — so a template bound to
+// `result.isLoading` updates as the load resolves, whether the caller reads
+// it inline or holds the object across renders.
+export interface FieldLoadingState {
+  readonly isLoading: boolean;
+}
+
+// Report whether a `linksTo` / `linksToMany` relationship's data is in
+// flight, collapsed to a single boolean for a template to drive a spinner.
+// Sits alongside `getRelationship`, with the same `(instance, fieldName)`
+// input, and is valid for the same field types — including query-backed
+// ones.
+//
+// Reading the result warms the field: it kicks the lazy load for a declared
+// link, or ensures the search resource for a query-backed field, so asking
+// "is this loading?" starts the work a template is about to wait on.
+//
+// "loading" means in flight specifically. `present`, `not-set`, and the
+// terminal `error` / `not-found` states all read as `false`, and a
+// terminally-failed link is never retried — a relationship being unresolved
+// does not by itself mean a fetch is running. For `linksToMany` the slots
+// collapse to one value: `isLoading` is true while ANY element is in flight.
+export function isFieldLoading(
+  instance: CardDef,
+  fieldName: string,
+): FieldLoadingState {
+  let field = getField(instance, fieldName);
+  if (!field) {
+    throw new Error(
+      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
+    );
+  }
+  if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
+    throw new Error(
+      `isFieldLoading requires a 'linksTo' or 'linksToMany' field; '${fieldName}' on ${instance.constructor.name} is '${field.fieldType}'`,
+    );
+  }
+  return {
+    get isLoading() {
+      return computeFieldLoading(instance, field);
+    },
+  };
+}
+
+function computeFieldLoading(instance: CardDef, field: Field): boolean {
+  // Warm the field through its own getter — the same path a render takes. For
+  // a declared link this kicks `lazilyLoadLink` for any not-loaded slot; for a
+  // query-backed field it reads `searchResource.instances`, which is the
+  // consumption that schedules the search (the resource performs after the
+  // getter returns — merely creating it never runs the query). Both also
+  // entangle card tracking, so this read re-fires when the load settles.
+  field.getter(instance);
+
+  if (field.queryDefinition) {
+    // A query-backed field is driven by one search resource standing in for
+    // the whole field — there are no per-element states to inspect. Reading
+    // `isLoading` entangles with the resource's tracked running state.
+    let resource = ensureQueryFieldSearchResource(
+      getStore(instance),
+      instance,
+      field,
+    );
+    return resource?.isLoading ?? false;
+  }
+
+  let relationship = getRelationship(instance, field.name);
+  if (Array.isArray(relationship)) {
+    return relationship.some((slot) => slot.kind === 'not-loaded');
+  }
+  return relationship.kind === 'not-loaded';
+}
+
 // Replace any linksTo / linksToMany bucket entry on `consumer` that points
 // to `deletedRef` with a `link-not-found` sentinel, and notify subscribers
 // so the placeholder render takes over the slot. Returns true when at
