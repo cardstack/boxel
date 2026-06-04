@@ -317,6 +317,16 @@ interface Options {
   isUsed?: true;
   // Optional: per-usage configuration provider merged with FieldDef-level configuration
   configuration?: ConfigurationInput<any>;
+  // Optional: per-usage edit component that overrides the FieldDef's
+  // `static edit` for this specific field declaration. Lets a parent
+  // card customize the editor for one of its fields without having
+  // to subclass the FieldDef or replace its own `static edit`.
+  // ComponentLike<any> rather than BaseDefComponent so that wrap-style
+  // overrides on collection fields (containsMany / linksToMany) can
+  // declare their own Args shape — e.g. accepting `@values` and
+  // `@defaultEditor`. The runtime contract per field type is documented
+  // at the rendering sites.
+  edit?: ComponentLike<any>;
 }
 
 interface RelationshipOptions extends Options {
@@ -539,6 +549,15 @@ export interface Field<
   computeVia: undefined | (() => unknown);
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
+  // Optional per-usage edit component override — when set, the field
+  // renders with this Component in edit format instead of the
+  // FieldDef's `static edit`.
+  // ComponentLike<any> rather than BaseDefComponent so that wrap-style
+  // overrides on collection fields (containsMany / linksToMany) can
+  // declare their own Args shape — e.g. accepting `@values` and
+  // `@defaultEditor`. The runtime contract per field type is documented
+  // at the rendering sites.
+  edit?: ComponentLike<any>;
   // Declarative relationship query definition, if provided
   queryDefinition?: QueryWithInterpolations;
   captureQueryFieldSeedData?(
@@ -2292,6 +2311,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
+      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2312,6 +2332,7 @@ export function contains<FieldT extends FieldDefConstructor>(
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
+      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2338,6 +2359,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
+      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2364,6 +2386,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
+      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
