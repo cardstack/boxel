@@ -848,7 +848,10 @@ module('Unit | index-writer', function (hooks) {
       [{ realm_url: testRealmURL, current_version: 1 }],
       [],
     );
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
     // A NUL and an unpaired surrogate in the error message + diagnostics:
     // Postgres rejects both in jsonb, so without sanitization this write
     // aborts the whole batch.

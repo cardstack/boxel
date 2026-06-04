@@ -515,7 +515,10 @@ module(basename(__filename), function () {
         // base must round-trip through the catalog mapping, not base.
         let vn = makeVN();
         assert.strictEqual(
-          vn.resolveRRI('./Component', rri('@cardstack/catalog/components/Card')),
+          vn.resolveRRI(
+            './Component',
+            rri('@cardstack/catalog/components/Card'),
+          ),
           '@cardstack/catalog/components/Component',
         );
       });
@@ -531,7 +534,10 @@ module(basename(__filename), function () {
       test('resolves a dot-dot-slash relative against a URL-form base with subdirectory', function (assert) {
         let vn = makeVN();
         assert.strictEqual(
-          vn.resolveRRI('../card', rri('http://localhost:4201/realm/directory/')),
+          vn.resolveRRI(
+            '../card',
+            rri('http://localhost:4201/realm/directory/'),
+          ),
           'http://localhost:4201/realm/card',
         );
       });
