@@ -62,6 +62,32 @@ export interface SerializedError {
 // The budget is set to 8 MiB: 32× under the jsonb limit, plenty of
 // debug headroom for healthy errors, and small enough to leave room
 // for the rest of the row (`pristine_doc` / `search_doc` etc.).
+// Postgres rejects the NUL character (`22P05`) and unpaired UTF-16
+// surrogate halves inside a `jsonb` value's text. A single such code
+// point — e.g. raw binary folded into an error message — aborts the
+// whole upsert batch, so `sanitizeForJsonb` replaces them before write.
+/* eslint-disable no-control-regex -- matching the NUL control character is the whole point */
+const JSONB_ILLEGAL_CODE_POINTS =
+  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/* eslint-enable no-control-regex */
+
+export function sanitizeForJsonb<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(JSONB_ILLEGAL_CODE_POINTS, '\uFFFD') as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForJsonb(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    let result: Record<string, unknown> = {};
+    for (let [key, val] of Object.entries(value)) {
+      result[sanitizeForJsonb(key)] = sanitizeForJsonb(val);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 export const ERROR_DOC_MAX_BYTES = 8 * 1024 * 1024;
 export const ERROR_DOC_MAX_ADDITIONAL_ERRORS = 200;
 const ENTRY_STACK_BUDGET = 64 * 1024;
