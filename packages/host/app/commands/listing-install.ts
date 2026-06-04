@@ -36,6 +36,35 @@ import type NetworkService from '../services/network';
 
 const log = logger('catalog:install');
 
+export type InstanceOperation = {
+  op: 'add';
+  href: string;
+  data: LooseCardResource;
+};
+
+// file-meta resources are JSON projections of binary files in the source
+// realm. The atomic endpoint only accepts card/source types; binaries continue
+// to resolve cross-realm via the parent card's relationship data.id, so we
+// drop file-meta documents rather than try to copy them.
+export function buildInstanceOperation(
+  doc: unknown,
+  copyInstanceMeta: CopyInstanceMeta,
+  realmIdentifier: string,
+): InstanceOperation | undefined {
+  if (!doc || typeof doc !== 'object' || !('data' in doc)) {
+    throw new Error('We are only expecting single documents returned');
+  }
+  let data = (doc as { data: { type?: string } }).data;
+  if (data?.type === 'file-meta') {
+    return undefined;
+  }
+  delete (doc as any).data.id;
+  delete (doc as any).included;
+  let cardResource = (doc as any).data as LooseCardResource;
+  let href = join(realmIdentifier, copyInstanceMeta.lid) + '.json';
+  return { op: 'add', href, data: cardResource };
+}
+
 export default class ListingInstallCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput,
   typeof BaseCommandModule.ListingInstallResult
@@ -125,19 +154,16 @@ export default class ListingInstallCommand extends HostBaseCommand<
         let { document: doc } = await new FetchCardJsonCommand(
           this.commandContext,
         ).execute({ cardIdentifier: sourceCard.id });
-        if (!doc || !('data' in doc)) {
-          throw new Error('We are only expecting single documents returned');
-        }
-        delete (doc as any).data.id;
-        delete (doc as any).included;
-        let cardResource: LooseCardResource = (doc as any)
-          .data as LooseCardResource;
-        let href = join(realmIdentifier, copyInstanceMeta.lid) + '.json';
-        return { op: 'add' as const, href, data: cardResource };
+        return buildInstanceOperation(doc, copyInstanceMeta, realmIdentifier);
       }),
     );
 
-    const operations = [...sourceOperations, ...instanceOperations];
+    const operations = [
+      ...sourceOperations,
+      ...instanceOperations.filter(
+        (op): op is InstanceOperation => op !== undefined,
+      ),
+    ];
 
     let atomicResults;
     try {
