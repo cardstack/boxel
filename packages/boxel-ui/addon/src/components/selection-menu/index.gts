@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
-import { DropdownArrowDown } from '../../icons.gts';
+import CaretDown from '../../icons/caret-down.gts';
 import BoxelButton from '../button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
@@ -66,7 +66,7 @@ export default class SelectionMenu extends Component<Signature> {
           >
             <SelectionCheckmark class='selection-menu-icon' />
             <span class='selection-menu-count'>{{@selectedCount}}</span>
-            <DropdownArrowDown
+            <CaretDown
               class='selection-menu-caret'
               width='13px'
               height='13px'
