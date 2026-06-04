@@ -22,11 +22,21 @@ export class Asset extends CardDef {
         return null;
       }
       let rel = this[relativeTo] || this.id;
-      let base =
-        typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
-          : rel;
-      return new URL(this.logoURL, base).href;
+      // The instance may have no store-attached VirtualNetwork (detached
+      // / static-parse contexts), and `rel` may be a prefix-form RRI
+      // (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse on
+      // its own. If we can't resolve a base, return `logoURL` raw so the
+      // <img src> binding still has a string to render rather than
+      // letting the compute throw.
+      try {
+        let base =
+          typeof rel === 'string'
+            ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
+            : rel;
+        return new URL(this.logoURL, base).href;
+      } catch {
+        return this.logoURL;
+      }
     },
   });
   @field cardTitle = contains(StringField, {
@@ -96,11 +106,21 @@ class AssetField extends FieldDef {
         return null;
       }
       let rel = this[relativeTo] || this.id;
-      let base =
-        typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
-          : rel;
-      return new URL(this.logoURL, base).href;
+      // The instance may have no store-attached VirtualNetwork (detached
+      // / static-parse contexts), and `rel` may be a prefix-form RRI
+      // (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse on
+      // its own. If we can't resolve a base, return `logoURL` raw so the
+      // <img src> binding still has a string to render rather than
+      // letting the compute throw.
+      try {
+        let base =
+          typeof rel === 'string'
+            ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
+            : rel;
+        return new URL(this.logoURL, base).href;
+      } catch {
+        return this.logoURL;
+      }
     },
   });
   @field cardTitle = contains(StringField, {
