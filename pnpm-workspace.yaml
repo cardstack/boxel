@@ -143,7 +143,7 @@ catalog:
   eslint: ^8.57.1
   eslint-config-prettier: ^9.1.2
   eslint-doc-generator: ^1.7.1
-  eslint-plugin-ember: ^12.5.0
+  eslint-plugin-ember: ^13.3.2
   eslint-plugin-eslint-comments: ^3.2.0
   eslint-plugin-eslint-plugin: ^5.5.1
   eslint-plugin-filenames: ^1.3.2
@@ -258,33 +258,33 @@ minimumReleaseAgeExclude:
 allowedDeprecatedVersions:
   babel-eslint: 10.1.0
 overrides:
-  '@types/eslint': 8.56.5
-  '@embroider/util': 1.13.1
-  '@glimmer/tracking>@glimmer/validator': 0.84.3
-  '@glimmer/component': ^2.0.0
+  "@types/eslint": 8.56.5
+  "@embroider/util": 1.13.1
+  "@glimmer/tracking>@glimmer/validator": 0.84.3
+  "@glimmer/component": ^2.0.0
   jsesc: ^3.0.0
   ember-modifier: ^4.1.0
   tracked-built-ins: ^4.1.2
 peerDependencyRules:
   allowedVersions:
-    mustache: '3'
-    ember-qunit@5.1.2>ember-source: '*'
+    mustache: "3"
+    ember-qunit@5.1.2>ember-source: "*"
 patchedDependencies:
   magic-string@0.25.9: patches/magic-string@0.25.9.patch
   style-loader@2.0.0: patches/style-loader@2.0.0.patch
   ember-css-url@1.0.0: patches/ember-css-url@1.0.0.patch
   ember-basic-dropdown@8.0.4: patches/ember-basic-dropdown@8.0.4.patch
   monaco-editor@0.52.2: patches/monaco-editor@0.52.2.patch
-  '@embroider/compat@3.9.4': patches/@embroider__compat.patch
+  "@embroider/compat@3.9.4": patches/@embroider__compat.patch
   ember-eslint-parser: patches/ember-eslint-parser.patch
   openai: patches/openai.patch
   matrix-js-sdk@38.3.0: patches/matrix-js-sdk@38.3.0.patch
-  '@embroider/webpack': patches/@embroider__webpack.patch
+  "@embroider/webpack": patches/@embroider__webpack.patch
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
 allowBuilds:
-  '@percy/core': true
-  '@vscode/vsce-sign': true
+  "@percy/core": true
+  "@vscode/vsce-sign": true
   aws-sdk: true
   core-js: false
   esbuild: true

@@ -3,6 +3,7 @@ import {
   X_BOXEL_JOB_ID_HEADER,
   sanitizePrerenderJobId,
 } from './prerender-headers';
+import type { SearchOpts } from './search-utils';
 import {
   rri,
   type RealmResourceIdentifier,
@@ -5161,11 +5162,7 @@ export class Realm {
 
   public async search(
     query: Query,
-    opts?: {
-      cacheOnlyDefinitions?: boolean;
-      skipQueryBackedExpansion?: boolean;
-      omitIncluded?: boolean;
-    },
+    opts?: SearchOpts,
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
@@ -5175,6 +5172,9 @@ export class Realm {
         ? { skipQueryBackedExpansion: true }
         : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.jobIdentity ? { jobIdentity: opts.jobIdentity } : {}),
     });
   }
 

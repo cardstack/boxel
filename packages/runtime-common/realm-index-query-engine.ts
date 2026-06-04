@@ -56,6 +56,7 @@ import {
 } from './code-ref';
 import {
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -81,6 +82,41 @@ import {
 const RECURSING_DEPTH = 3;
 
 const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
+
+// Hit/miss observability for the per-instance cache. Counters are kept per job
+// identity and a running summary is emitted as cache traffic accumulates — a
+// low-volume aggregate (not one line per event) so an indexing run reports its
+// cache hit rate in the ordinary logs. The map is diagnostics-only and bounded.
+// Lazily created (not at module load): a top-level `logger()` call here races
+// the circular import that populates it, whereas first use happens well after.
+let instanceCacheLog: ReturnType<typeof logger> | undefined;
+const instanceCacheStats = new Map<string, { hits: number; misses: number }>();
+const INSTANCE_CACHE_LOG_EVERY = 200;
+
+function recordInstanceCacheEvent(jobId: string, hit: boolean): void {
+  let stat = instanceCacheStats.get(jobId);
+  if (!stat) {
+    // Bound memory without tracking job lifecycle here: drop the whole map if
+    // it grows past a sane number of concurrent jobs.
+    if (instanceCacheStats.size > 256) {
+      instanceCacheStats.clear();
+    }
+    stat = { hits: 0, misses: 0 };
+    instanceCacheStats.set(jobId, stat);
+  }
+  if (hit) {
+    stat.hits++;
+  } else {
+    stat.misses++;
+  }
+  let total = stat.hits + stat.misses;
+  if (total === 1 || total % INSTANCE_CACHE_LOG_EVERY === 0) {
+    (instanceCacheLog ??= logger('instance-cache')).info(
+      `job=${jobId} hits=${stat.hits} misses=${stat.misses} ` +
+        `hitRate=${Math.round((100 * stat.hits) / total)}%`,
+    );
+  }
+}
 
 type Options = {
   loadLinks?: true;
@@ -1145,7 +1181,7 @@ export class RealmIndexQueryEngine {
     invocationId: string,
     layerIndex: number,
     linkContext?: Map<string, { fieldName: string }>,
-  ): Promise<Map<string, CardResource<Saved>>> {
+  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
@@ -1167,9 +1203,9 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        // `links.self` should resolve to a card document, but a mistake
-        // (human or AI-generated) can leave a non-card URL here. Gate on
-        // Content-Type so a binary body never reaches JSON.parse.
+        // `links.self` should resolve to a card or file document, but a
+        // mistake (human or AI-generated) can leave a non-card URL here.
+        // Gate on Content-Type so a binary body never reaches JSON.parse.
         let contentType = response.headers.get('content-type');
         if (!isJsonContentType(contentType)) {
           let fieldName = linkContext?.get(url)?.fieldName;
@@ -1179,24 +1215,28 @@ export class RealmIndexQueryEngine {
           throw new Error(
             `${fieldLabel} links to a non-card URL (${
               contentType ?? 'unknown content type'
-            }): ${url}. The link should resolve to a card document; it likely points at a binary resource (e.g. an image) instead.`,
+            }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
           );
         }
         let json = await response.json();
-        if (!isSingleCardDocument(json)) {
-          throw new Error(
-            `instance ${url} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
-          );
+        // Cross-realm links can target either a card or a file (e.g. a card
+        // instantiated from a catalog still links to the catalog's image
+        // file). Both kinds are valid linked resources; only an unrecognized
+        // payload is an error.
+        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+          let linkResource: CardResource<Saved> | FileMetaResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
+          return [url, linkResource] as const;
         }
-        let linkResource: CardResource<Saved> = {
-          ...json.data,
-          ...{ links: { self: json.data.id } },
-        };
-        return [url, linkResource] as const;
+        throw new Error(
+          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
+            json,
+            null,
+            2,
+          )}`,
+        );
       }),
     );
     return new Map(entries);
@@ -1362,6 +1402,7 @@ export class RealmIndexQueryEngine {
                 cacheKey.url,
               );
               if (cached !== undefined) {
+                recordInstanceCacheEvent(cacheKey.jobId, true);
                 // Hit: reuse this instance's assembled query-field
                 // relationships from an earlier occurrence in the same job,
                 // skipping the definition lookup + field-tree walk. The
@@ -1376,6 +1417,7 @@ export class RealmIndexQueryEngine {
                 }
                 return;
               }
+              recordInstanceCacheEvent(cacheKey.jobId, false);
             }
             let storedDefs = (
               resource.meta as {
@@ -1621,7 +1663,7 @@ export class RealmIndexQueryEngine {
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved>>;
+      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
@@ -1643,7 +1685,9 @@ export class RealmIndexQueryEngine {
                 currentLayerIndex,
                 crossRealmFieldNames,
               )
-            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+            : Promise.resolve(
+                new Map<string, CardResource<Saved> | FileMetaResource>(),
+              ),
         ]);
       } catch (err: unknown) {
         let message =

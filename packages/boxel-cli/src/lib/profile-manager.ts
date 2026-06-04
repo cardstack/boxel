@@ -245,7 +245,7 @@ export class ProfileManager implements RealmAuthenticator {
       defaultRealmUrl = 'https://app.boxel.ai/';
     } else if (env === 'local') {
       defaultMatrixUrl = 'http://localhost:8008';
-      defaultRealmUrl = 'http://localhost:4201/';
+      defaultRealmUrl = 'https://localhost:4201/';
     } else {
       defaultMatrixUrl = 'https://matrix-staging.stack.cards';
       defaultRealmUrl = 'https://realms-staging.stack.cards/';
