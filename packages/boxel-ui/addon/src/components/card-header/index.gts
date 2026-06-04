@@ -1,6 +1,5 @@
 import Maximize from '@cardstack/boxel-icons/maximize';
 import type { MenuDivider } from '@cardstack/boxel-ui/helpers.ts';
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -16,11 +15,14 @@ import ContextButton from '../context-button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
 import RealmIcon, { type RealmDisplayInfo } from '../realm-icon/index.gts';
+import SelectionMenu from '../selection-menu/index.gts';
 import Tooltip from '../tooltip/index.gts';
 
 export interface CardHeaderUtilityMenu {
+  // Accessible name for the trigger; SelectionMenu defaults to `Selection menu, <count> selected`.
+  label?: string;
   menuItems: (MenuItem | MenuDivider)[];
-  triggerText: string;
+  selectedCount: number;
 }
 
 interface Signature {
@@ -126,50 +128,11 @@ export default class CardHeader extends Component<Signature> {
           <div class='actions' data-test-boxel-card-header-actions>
             {{#if @utilityMenu}}
               <div class='utility-menu-positioner'>
-                <BoxelDropdown @autoClose={{true}}>
-                  <:trigger as |ddModifier|>
-                    <button
-                      type='button'
-                      class='utility-menu-trigger'
-                      {{ddModifier}}
-                    >
-                      <svg
-                        class='utility-menu-trigger-icon'
-                        viewBox='0 0 14 14'
-                        fill='none'
-                        aria-hidden='true'
-                      >
-                        <circle
-                          cx='7'
-                          cy='7'
-                          r='7'
-                          fill='var(--boxel-highlight-foreground)'
-                        />
-                        <path
-                          d='M3.5 7.5L5.5 9.5L10.5 4.5'
-                          stroke='var(--boxel-highlight)'
-                          stroke-width='1.5'
-                          stroke-linecap='round'
-                          stroke-linejoin='round'
-                        />
-                      </svg>
-                      <span class='utility-menu-trigger-text'>
-                        {{@utilityMenu.triggerText}}
-                      </span>
-                      <DropdownArrowDown
-                        class='utility-menu-dropdown-arrow'
-                        width='13px'
-                        height='13px'
-                      />
-                    </button>
-                  </:trigger>
-                  <:content as |dd|>
-                    <Menu
-                      @items={{@utilityMenu.menuItems}}
-                      @closeMenu={{dd.close}}
-                    />
-                  </:content>
-                </BoxelDropdown>
+                <SelectionMenu
+                  @selectedCount={{@utilityMenu.selectedCount}}
+                  @items={{@utilityMenu.menuItems}}
+                  @label={{@utilityMenu.label}}
+                />
               </div>
             {{/if}}
             {{#if @onExpand}}
@@ -427,51 +390,17 @@ export default class CardHeader extends Component<Signature> {
           background-color: var(--boxel-light);
         }
 
-        /* The selection pill floats out of the actions flex flow, anchored
+        /* The selection menu floats out of the actions flex flow, anchored
            just left of the action buttons. Keeping it out of flow means its
            presence doesn't widen the actions column, which would otherwise
-           shift the centered card title off-center. */
+           shift the centered card title off-center. With only `right` set
+           (no width/left), the box shrinks to its content and grows leftward
+           from that anchor. */
         .utility-menu-positioner {
-          --utility-menu-trigger-height: 1.625rem;
           position: absolute;
           right: calc(100% + var(--boxel-sp-5xs));
           top: 50%;
           transform: translateY(-50%);
-          width: 1px;
-          height: var(--utility-menu-trigger-height);
-        }
-        .utility-menu-trigger {
-          position: absolute;
-          top: 0;
-          right: 0;
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-5xs);
-          min-height: var(--utility-menu-trigger-height);
-          width: max-content;
-          padding: 0 var(--boxel-sp-xs);
-          border: none;
-          border-radius: 0.375rem;
-          background-color: var(--boxel-highlight);
-          color: var(--boxel-highlight-foreground);
-          font: 700 var(--boxel-font-sm);
-          cursor: pointer;
-        }
-        .utility-menu-trigger:hover:not(:disabled),
-        .utility-menu-trigger:focus-visible:not(:disabled) {
-          background-color: var(--boxel-highlight-hover);
-        }
-        .utility-menu-trigger-icon {
-          width: 0.875rem;
-          height: 0.875rem;
-          flex-shrink: 0;
-        }
-        .utility-menu-trigger-text {
-          line-height: 1;
-        }
-        .utility-menu-dropdown-arrow {
-          margin-left: 0;
-          vertical-align: middle;
         }
         @container card-header (min-width: 30rem) {
           .card-type-display-name {
