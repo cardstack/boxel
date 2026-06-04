@@ -1,5 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { cn } from '@cardstack/boxel-ui/helpers';
+
 // AdornSelectChip: small teal rounded-square selection chip shown at
 // the bottom-right corner of an Adorn-treated card. Renders an
 // unfilled circle outline by default and a filled-with-check icon
@@ -22,7 +24,7 @@ export interface AdornSelectChipSignature {
 
 const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
   <template>
-    <span class='adorn-select-chip {{if @compact "compact"}}' ...attributes>
+    <span class={{cn 'adorn-select-chip' compact=@compact}} ...attributes>
       {{#if @selected}}
         <svg
           class='adorn-select-icon'
@@ -30,7 +32,12 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
           fill='none'
           aria-hidden='true'
         >
-          <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
+          <circle
+            cx='7'
+            cy='7'
+            r='7'
+            fill='var(--boxel-highlight-foreground)'
+          />
           <path
             d='M3.5 7.5L5.5 9.5L10.5 4.5'
             stroke='currentColor'
@@ -46,7 +53,13 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
           fill='none'
           aria-hidden='true'
         >
-          <circle cx='7' cy='7' r='6.5' stroke='#0a2e1c' stroke-width='1.5' />
+          <circle
+            cx='7'
+            cy='7'
+            r='6.5'
+            stroke='var(--boxel-highlight-foreground)'
+            stroke-width='1.5'
+          />
         </svg>
       {{/if}}
     </span>
@@ -55,10 +68,10 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
-        padding: 3px;
-        border-radius: 5px;
+        width: 1.25rem;
+        height: 1.25rem;
+        padding: 0.1875rem;
+        border-radius: 0.3125rem;
         /* Chip-specific token so the chip can be themed independently
            of the label — reading the label's `--adorn-label-bg` here
            would let a label-selection override (operator-mode sets it
@@ -68,18 +81,18 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
         z-index: 1;
       }
       .adorn-select-chip.compact {
-        width: 16px;
-        height: 16px;
-        padding: 2px;
+        width: 1rem;
+        height: 1rem;
+        padding: 0.125rem;
       }
       .adorn-select-icon {
         display: block;
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
       }
       .adorn-select-chip.compact .adorn-select-icon {
-        width: 12px;
-        height: 12px;
+        width: 0.75rem;
+        height: 0.75rem;
       }
     </style>
   </template>;

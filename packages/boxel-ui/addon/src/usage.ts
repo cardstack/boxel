@@ -45,6 +45,7 @@ import RadioInputUsage from './components/radio-input/usage.gts';
 import RealmIconUsage from './components/realm-icon/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
+import SelectionMenuUsage from './components/selection-menu/usage.gts';
 import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gts';
 import SortDropdownUsage from './components/sort-dropdown/usage.gts';
 import SwatchUsage from './components/swatch/usage.gts';
@@ -100,6 +101,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['RealmIcon', RealmIconUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['SelectionMenu', SelectionMenuUsage],
   ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
   ['SortDropdown', SortDropdownUsage],
   ['Swatch', SwatchUsage],
