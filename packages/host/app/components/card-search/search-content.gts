@@ -10,7 +10,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
@@ -509,7 +509,7 @@ export default class SearchContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
-      class='search-sheet-content {{if @isCompact "compact"}}'
+      class={{cn 'search-sheet-content' compact=@isCompact}}
       ...attributes
     >
       {{! AdornContext aligns with this search-sheet-content div as

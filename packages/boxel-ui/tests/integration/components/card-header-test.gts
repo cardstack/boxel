@@ -29,7 +29,7 @@ module('Integration | Component | card-header', function (hooks) {
   };
   const noop = () => {};
   const utilityMenu = {
-    triggerText: '2',
+    selectedCount: 2,
     menuItems: [new MenuItem({ label: 'Deselect All', action: noop })],
   };
 
@@ -78,7 +78,7 @@ module('Integration | Component | card-header', function (hooks) {
     let offsetWithMenu = titleCenterWithMenu - headerCenterWithMenu;
 
     assert
-      .dom('[data-test-card-header] .utility-menu-trigger')
+      .dom('[data-test-card-header] [data-test-selection-dropdown-trigger]')
       .exists('the selection utility menu pill is rendered');
 
     assert.ok(

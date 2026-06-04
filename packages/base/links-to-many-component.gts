@@ -21,6 +21,7 @@ import { getRelationship, type RelationshipState } from './field-support';
 import { rawArrayValues } from './watched-array';
 import {
   BoxComponentSignature,
+  CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
   getBoxComponent,
@@ -293,13 +294,16 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 />
               {{/if}}
               {{#if entry.broken}}
-                <BrokenLinkTemplate
-                  @brokenUrl={{entry.broken.reference}}
-                  @errorDoc={{entry.broken.errorDoc}}
-                  @state={{entry.broken.kind}}
-                  @format='fitted'
-                  data-test-plural-view-item={{entry.index}}
-                />
+                <CardCrudFunctionsConsumer as |crud|>
+                  <BrokenLinkTemplate
+                    @brokenUrl={{entry.broken.reference}}
+                    @errorDoc={{entry.broken.errorDoc}}
+                    @state={{entry.broken.kind}}
+                    @format='fitted'
+                    @viewCard={{crud.viewCard}}
+                    data-test-plural-view-item={{entry.index}}
+                  />
+                </CardCrudFunctionsConsumer>
               {{else}}
                 {{#let
                   (getBoxComponent
@@ -446,13 +450,16 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           {{#let (get brokenSlots i) as |broken|}}
             {{#if broken}}
               <Pill class='item-pill' data-test-pill-item={{i}}>
-                <BrokenLinkTemplate
-                  @brokenUrl={{broken.reference}}
-                  @errorDoc={{broken.errorDoc}}
-                  @state={{broken.kind}}
-                  @format='atom'
-                  data-test-plural-view-item={{i}}
-                />
+                <CardCrudFunctionsConsumer as |crud|>
+                  <BrokenLinkTemplate
+                    @brokenUrl={{broken.reference}}
+                    @errorDoc={{broken.errorDoc}}
+                    @state={{broken.kind}}
+                    @format='atom'
+                    @viewCard={{crud.viewCard}}
+                    data-test-plural-view-item={{i}}
+                  />
+                </CardCrudFunctionsConsumer>
                 <IconButton
                   @icon={{IconX}}
                   @width='10px'
@@ -686,16 +693,19 @@ export function getLinksToManyComponent({
                   <div class='linksToMany-itemContainer'>
                     {{#let (get brokenSlots i) as |broken|}}
                       {{#if broken}}
-                        <BrokenLinkTemplate
-                          @brokenUrl={{broken.reference}}
-                          @errorDoc={{broken.errorDoc}}
-                          @state={{broken.kind}}
-                          @format={{brokenLinkFormat
-                            effectiveFormat
-                            effectiveFormat
-                          }}
-                          data-test-plural-view-item={{i}}
-                        />
+                        <CardCrudFunctionsConsumer as |crud|>
+                          <BrokenLinkTemplate
+                            @brokenUrl={{broken.reference}}
+                            @errorDoc={{broken.errorDoc}}
+                            @state={{broken.kind}}
+                            @format={{brokenLinkFormat
+                              effectiveFormat
+                              effectiveFormat
+                            }}
+                            @viewCard={{crud.viewCard}}
+                            data-test-plural-view-item={{i}}
+                          />
+                        </CardCrudFunctionsConsumer>
                       {{else}}
                         <Item
                           @format={{getPluralChildFormat

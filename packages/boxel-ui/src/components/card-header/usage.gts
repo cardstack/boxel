@@ -77,7 +77,7 @@ export default class CardHeaderUsage extends Component {
   };
 
   @tracked utilityMenu?: CardHeaderUtilityMenu = {
-    triggerText: '2 Selected',
+    selectedCount: 2,
     menuItems: [
       new MenuItem({
         label: 'Deselect All',
@@ -222,7 +222,7 @@ export default class CardHeaderUsage extends Component {
           />
           <Args.Object
             @name='utilityMenu'
-            @description='when present, renders a utility dropdown with { triggerText, menuItems }'
+            @description='when present, renders a SelectionMenu built from { selectedCount, menuItems, label }'
             @value={{this.utilityMenu}}
           />
           <Args.Action
