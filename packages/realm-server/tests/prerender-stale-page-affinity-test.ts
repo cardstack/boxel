@@ -145,40 +145,33 @@ module(basename(__filename), function () {
       );
     });
 
-    // Desired behavior once revalidation is allowed to escape affinity
-    // pinning (recycle the stale page, or route the retry to a healthy
-    // one). Today every same-affinity render reuses the stale page, so no
-    // amount of revalidation recovers while a healthy page sits idle —
-    // this is expected to fail until that fix lands, at which point QUnit
-    // flags it for promotion to a normal test.
-    test.todo(
-      'revalidation recovers via a healthy page while one page is stale',
-      async function (assert) {
-        let first = await renderModule();
-        let poisonedPageId = first.pool.pageId;
-        prerenderer.__test_poisonPage(poisonedPageId, moduleURL);
+    // The realm should not stay stuck on a stale page when a healthy one
+    // is available: revalidation should escape the pin — whether by
+    // recycling the stale page or routing the retry elsewhere — and
+    // recover on its own. Today every same-affinity render reuses the
+    // stale page, so none of the revalidations recover while a healthy
+    // page sits idle, and this fails. It is expected to fail until
+    // revalidation can escape affinity pinning.
+    test('revalidation recovers while a healthy page is available', async function (assert) {
+      let first = await renderModule();
+      let poisonedPageId = first.pool.pageId;
+      prerenderer.__test_poisonPage(poisonedPageId, moduleURL);
 
-        let recovered = false;
-        let recoveredPageId: string | undefined;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          let result = await renderModule();
-          if (result.response.status === 'ready') {
-            recovered = true;
-            recoveredPageId = result.pool.pageId;
-            break;
-          }
+      let statuses: string[] = [];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let result = await renderModule();
+        statuses.push(result.response.status);
+        if (result.response.status === 'ready') {
+          break;
         }
+      }
 
-        assert.true(
-          recovered,
-          'a revalidation eventually renders cleanly without manual intervention',
-        );
-        assert.notStrictEqual(
-          recoveredPageId,
-          poisonedPageId,
-          'recovery is served by a different page than the stale one',
-        );
-      },
-    );
+      assert.ok(
+        statuses.includes('ready'),
+        `a revalidation should recover without manual intervention; got statuses: ${statuses.join(
+          ', ',
+        )}`,
+      );
+    });
   });
 });
