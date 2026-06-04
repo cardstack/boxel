@@ -453,10 +453,26 @@ module(basename(__filename), function () {
         );
       });
 
+      test('returns prefix-form references as-is even when relativeTo is supplied', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('@cardstack/base/string', rri('@cardstack/catalog/')),
+          '@cardstack/base/string',
+        );
+      });
+
       test('returns URL-form references as-is', function (assert) {
         let vn = makeVN();
         assert.strictEqual(
           vn.resolveRRI('http://example.com/card'),
+          'http://example.com/card',
+        );
+      });
+
+      test('returns URL-form references as-is even when relativeTo is supplied', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('http://example.com/card', rri('@cardstack/base/')),
           'http://example.com/card',
         );
       });
@@ -469,10 +485,61 @@ module(basename(__filename), function () {
         );
       });
 
+      test('resolves a dot-slash relative against a scoped base with trailing slash', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('./string', rri('@cardstack/base/')),
+          '@cardstack/base/string',
+        );
+      });
+
+      test('resolves a bare name against a scoped base', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('card', rri('@cardstack/base/card-api')),
+          '@cardstack/base/card',
+        );
+      });
+
+      test('resolves a dot-dot-slash relative against a scoped base with subdirectory', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('../card', rri('@cardstack/base/fields/number')),
+          '@cardstack/base/card',
+        );
+      });
+
+      test('resolves a relative reference against a different prefix-form base than another registered realm', function (assert) {
+        // Multi-prefix disambiguation: with both `@cardstack/base/` and
+        // `@cardstack/catalog/` mapped, resolving against a `catalog`-form
+        // base must round-trip through the catalog mapping, not base.
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('./Component', rri('@cardstack/catalog/components/Card')),
+          '@cardstack/catalog/components/Component',
+        );
+      });
+
       test('resolves a relative reference against a URL-form base', function (assert) {
         let vn = makeVN();
         assert.strictEqual(
           vn.resolveRRI('./card', rri('http://localhost:4201/realm/')),
+          'http://localhost:4201/realm/card',
+        );
+      });
+
+      test('resolves a dot-dot-slash relative against a URL-form base with subdirectory', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('../card', rri('http://localhost:4201/realm/directory/')),
+          'http://localhost:4201/realm/card',
+        );
+      });
+
+      test('resolves a bare name against a URL-form base', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI('card', rri('http://localhost:4201/realm/')),
           'http://localhost:4201/realm/card',
         );
       });
@@ -485,11 +552,75 @@ module(basename(__filename), function () {
         );
       });
 
-      test('throws for "/" prefix', function (assert) {
+      test('resolves $REALM/ against a URL-form base', function (assert) {
+        let vn = new VirtualNetwork();
+        vn.addRealmMapping('@test/contact/', 'https://home.boxel.ai/contact/');
+        assert.strictEqual(
+          vn.resolveRRI(
+            '$REALM/card',
+            rri('https://home.boxel.ai/contact/users/'),
+          ),
+          'https://home.boxel.ai/contact/card',
+        );
+      });
+
+      test('throws for "/" prefix against a scoped base', function (assert) {
         let vn = makeVN();
         assert.throws(
           () => vn.resolveRRI('/string', rri('@cardstack/base/')),
           /"\/" and "~\/" prefixes are not supported/,
+        );
+      });
+
+      test('throws for "~/" prefix against a scoped base', function (assert) {
+        let vn = makeVN();
+        assert.throws(
+          () => vn.resolveRRI('~/card', rri('@cardstack/base/')),
+          /"\/" and "~\/" prefixes are not supported/,
+        );
+      });
+
+      test('throws for "/" prefix against a URL-form base', function (assert) {
+        // `VN.resolveURL` has a URL-join shortcut for this case (root-relative
+        // against a URL base), but `VN.resolveRRI` is strict — `/`-prefixed
+        // and `~/`-prefixed references are not valid RRI inputs regardless of
+        // base form.
+        let vn = makeVN();
+        assert.throws(
+          () =>
+            vn.resolveRRI(
+              '/card',
+              rri('http://localhost:4201/realm/directory/'),
+            ),
+          /"\/" and "~\/" prefixes are not supported/,
+        );
+      });
+
+      test('throws for "~/" prefix against a URL-form base', function (assert) {
+        let vn = makeVN();
+        assert.throws(
+          () =>
+            vn.resolveRRI(
+              '~/card',
+              rri('http://localhost:4201/realm/directory/'),
+            ),
+          /"\/" and "~\/" prefixes are not supported/,
+        );
+      });
+
+      test('throws when relativeTo is missing for a dot-slash reference', function (assert) {
+        let vn = makeVN();
+        assert.throws(
+          () => vn.resolveRRI('./foo'),
+          /Cannot resolve "\.\/foo" without a relativeTo/,
+        );
+      });
+
+      test('throws when relativeTo is missing for a bare name', function (assert) {
+        let vn = makeVN();
+        assert.throws(
+          () => vn.resolveRRI('card'),
+          /Cannot resolve "card" without a relativeTo/,
         );
       });
 
