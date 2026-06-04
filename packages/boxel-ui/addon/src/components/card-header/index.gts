@@ -16,6 +16,7 @@ import ContextButton from '../context-button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
 import RealmIcon, { type RealmDisplayInfo } from '../realm-icon/index.gts';
+import SelectionCheckmark from '../selection-checkmark/index.gts';
 import Tooltip from '../tooltip/index.gts';
 
 export interface CardHeaderUtilityMenu {
@@ -133,26 +134,7 @@ export default class CardHeader extends Component<Signature> {
                       class='utility-menu-trigger'
                       {{ddModifier}}
                     >
-                      <svg
-                        class='utility-menu-trigger-icon'
-                        viewBox='0 0 14 14'
-                        fill='none'
-                        aria-hidden='true'
-                      >
-                        <circle
-                          cx='7'
-                          cy='7'
-                          r='7'
-                          fill='var(--boxel-highlight-foreground)'
-                        />
-                        <path
-                          d='M3.5 7.5L5.5 9.5L10.5 4.5'
-                          stroke='var(--boxel-highlight)'
-                          stroke-width='1.5'
-                          stroke-linecap='round'
-                          stroke-linejoin='round'
-                        />
-                      </svg>
+                      <SelectionCheckmark class='utility-menu-trigger-icon' />
                       <span class='utility-menu-trigger-text'>
                         {{@utilityMenu.triggerText}}
                       </span>
