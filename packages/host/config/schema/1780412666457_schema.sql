@@ -88,6 +88,14 @@
    PRIMARY KEY ( id ) 
 );
 
+ CREATE TABLE IF NOT EXISTS job_scoped_instance_cache (
+   job_id TEXT NOT NULL,
+   url TEXT NOT NULL,
+   result TEXT NOT NULL,
+   created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   PRIMARY KEY ( job_id, url ) 
+);
+
  CREATE TABLE IF NOT EXISTS module_transpile_cache (
    realm_url TEXT NOT NULL,
    canonical_path TEXT NOT NULL,

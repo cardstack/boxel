@@ -1,10 +1,10 @@
 import {
   click,
   fillIn,
+  settled,
   triggerEvent,
   triggerKeyEvent,
   visit,
-  waitFor,
   waitUntil,
 } from '@ember/test-helpers';
 
@@ -336,7 +336,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-test.md`,
     });
 
-    await waitFor('[data-test-pet-atom]', { timeout: 10000 });
+    await settled();
 
     assert
       .dom('[data-test-pet-atom]')
@@ -388,12 +388,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-fallback.md`,
     });
 
-    await waitUntil(
-      () =>
-        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
-        null,
-      { timeout: 10000 },
-    );
+    await settled();
 
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
@@ -427,9 +422,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-test.md`,
     });
 
-    await waitFor('[data-test-markdown-bfm-inline-card]', { timeout: 10000 });
-    await waitFor('[data-test-markdown-bfm-block-card]', { timeout: 10000 });
-    await waitFor('[data-test-card-url-bar-input]');
+    await settled();
 
     let urlInput = document.querySelector(
       '[data-test-card-url-bar-input]',
@@ -452,16 +445,17 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     await click('[data-test-markdown-bfm-inline-card]');
 
-    await waitUntil(() => {
-      let currentValue =
-        (
-          document.querySelector(
-            '[data-test-card-url-bar-input]',
-          ) as HTMLInputElement | null
-        )?.value ?? '';
-      return currentValue !== startingValue;
-    });
-
+    let navigatedValue =
+      (
+        document.querySelector(
+          '[data-test-card-url-bar-input]',
+        ) as HTMLInputElement | null
+      )?.value ?? '';
+    assert.notStrictEqual(
+      navigatedValue,
+      startingValue,
+      'clicking the inline card reference navigates the URL bar',
+    );
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
@@ -473,44 +467,29 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-test.md`,
     });
 
-    await waitFor('[data-test-pet-atom]', { timeout: 10000 });
-    await waitFor('[data-test-pet-embedded]', { timeout: 10000 });
-    await waitFor('[data-test-card-url-bar-input]');
+    await settled();
 
-    // Wait for the overlay click handler to be bound (cursor: pointer is set
-    // by the Overlays component). CI runners under load need longer for the
-    // render cycles before the handler binds.
-    await waitUntil(
-      () => {
-        let el = document.querySelector(
+    // The overlay click handler (cursor: pointer set by the Overlays component)
+    // is bound once the card-reference slots resolve, which the markdown
+    // rendering waiter now tracks — so `settled()` above is sufficient.
+    assert.strictEqual(
+      (
+        document.querySelector(
           '[data-test-markdown-bfm-inline-card]',
-        ) as HTMLElement | null;
-        return el?.style.cursor === 'pointer';
-      },
-      {
-        timeout: 15000,
-        timeoutMessage: 'overlay click handler (cursor:pointer) was not bound',
-      },
+        ) as HTMLElement | null
+      )?.style.cursor,
+      'pointer',
+      'overlay click handler (cursor:pointer) is bound',
     );
 
     await click('[data-test-markdown-bfm-inline-card]');
 
-    await waitUntil(
-      () => {
-        let currentValue =
-          (
-            document.querySelector(
-              '[data-test-card-url-bar-input]',
-            ) as HTMLInputElement | null
-          )?.value ?? '';
-        return currentValue === `${testRealmURL}Pet/mango.json`;
-      },
-      {
-        timeout: 15000,
-        timeoutMessage:
-          'URL bar did not navigate to Pet/mango.json after click',
-      },
-    );
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(
+        `${testRealmURL}Pet/mango.json`,
+        'URL bar navigates to Pet/mango.json after click',
+      );
 
     // Navigate back to the markdown file via the URL bar (code-mode navigation
     // uses replaceState, so history.back() has no entry to return to).
@@ -523,9 +502,6 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       'keypress',
       'Enter',
     );
-
-    await waitFor('[data-test-pet-atom]', { timeout: 10000 });
-    await waitFor('[data-test-pet-embedded]', { timeout: 10000 });
 
     assert
       .dom('[data-test-pet-atom]')
@@ -552,8 +528,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       ],
     });
 
-    await waitFor('[data-test-markdown-bfm-inline-card]', { timeout: 10000 });
-    await waitFor('[data-test-markdown-bfm-block-card]', { timeout: 10000 });
+    await settled();
 
     await triggerEvent('[data-test-markdown-bfm-inline-card]', 'mouseenter');
     assert
@@ -584,11 +559,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}mermaid-test.md`,
     });
 
-    // Wait for mermaid to lazy-load and render the diagram into an SVG.
-    await waitUntil(() => document.querySelector('pre.mermaid svg') !== null, {
-      timeout: 15000,
-      timeoutMessage: 'Mermaid diagram was not rendered as SVG within timeout',
-    });
+    await settled();
 
     assert
       .dom('pre.mermaid svg')
@@ -608,14 +579,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}math-test.md`,
     });
 
-    // Wait for KaTeX to lazy-load and render the math expressions.
-    await waitUntil(
-      () => document.querySelector('.math-placeholder .katex') !== null,
-      {
-        timeout: 15000,
-        timeoutMessage: 'KaTeX did not render math expressions within timeout',
-      },
-    );
+    await settled();
 
     assert
       .dom('.math-placeholder .katex')

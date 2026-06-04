@@ -68,19 +68,11 @@ export {
 // Re-exported here for the host fetch wrapper's import-locality.
 export { DURING_PRERENDER_HEADER } from '@cardstack/runtime-common';
 
-// Sanitize the inbound job-id header. Format is `<digits>.<digits>`
-// (job.id + reservation.id, both bigint-shaped); accept up to 32
-// digits per side (so up to 65 chars total including the separator)
-// to be defensive without admitting newlines or other log-injection.
-const JOB_ID_PATTERN = /^[0-9]{1,32}\.[0-9]{1,32}$/;
-export function sanitizePrerenderJobId(
-  raw: string | null | undefined,
-): string | null {
-  if (typeof raw !== 'string') return null;
-  let trimmed = raw.trim();
-  if (!trimmed) return null;
-  return JOB_ID_PATTERN.test(trimmed) ? trimmed : null;
-}
+// Sanitize the inbound job-id header (`<digits>.<digits>` = job.id +
+// reservation.id). Defined in runtime-common alongside
+// `X_BOXEL_JOB_ID_HEADER` so the Realm class can normalize the identity
+// without depending on realm-server; re-exported here for import-locality.
+export { sanitizePrerenderJobId } from '@cardstack/runtime-common';
 
 // Base timeout for a single prerender capture on the prerender server
 // (DOM rendering + data loading inside the headless browser).

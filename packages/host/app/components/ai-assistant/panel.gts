@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -8,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import HistoryIcon from '@cardstack/boxel-icons/history';
 
 import { restartableTask } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 import { Velcro } from 'ember-velcro';
 
 import type { ResizeHandle } from '@cardstack/boxel-ui/components';
@@ -15,7 +17,7 @@ import {
   ContextButton,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { cssVar, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { aiBotUsername } from '@cardstack/runtime-common';
@@ -32,6 +34,7 @@ import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
 import assistantIcon from './ai-assist-icon.webp';
+import FallbackBanner from './fallback-banner';
 import NewSessionButton from './new-session-button';
 
 import type MatrixService from '../../services/matrix-service';
@@ -52,6 +55,8 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   @tracked private copiedRoomId: string | null = null;
+  @tracked private isFallbackBannerDismissed = false;
+  @tracked private bannerBottomPx: number | undefined;
 
   <template>
     <Velcro
@@ -64,63 +69,76 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-ai-assistant-panel
         data-test-room-has-messages={{if this.roomResource.messages true false}}
         data-test-room-is-empty={{if this.roomResource.messages false true}}
+        style={{cssVar chat-top-clearance=this.chatTopClearanceCss}}
         ...attributes
       >
         <@resizeHandle class='ai-assistant-panel-resize-handle' />
-        <header class='panel-header'>
-          <img
-            alt='AI Assistant'
-            src={{assistantIcon}}
-            width='20'
-            height='20'
-          />
-          {{#let
-            (if this.roomResource.name this.roomResource.name 'Assistant')
-            as |title|
-          }}
-            <h3 title={{title}} class='panel-title-text' data-test-chat-title>
-              {{title}}
-            </h3>
-          {{/let}}
-          <NewSessionButton
-            @disabled={{not this.roomResource.messages.length}}
-            @onCreateNewSession={{this.aiAssistantPanelService.createNewSession}}
-          />
-          {{#let
-            this.aiAssistantPanelService.loadingRooms
-            as |pastSessionsLoading|
-          }}
-            <ContextButton
-              title='Past Sessions'
-              class='button past-sessions-button
-                {{if this.hasOtherActiveSessions "has-other-active-sessions"}}'
-              @icon={{HistoryIcon}}
-              @label='Past Sessions'
-              @size='extra-small'
-              @variant='highlight-icon'
-              @width='14'
-              @height='14'
-              @loading={{pastSessionsLoading}}
-              @disabled={{this.aiAssistantPanelService.displayRoomError}}
-              {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
-              data-test-past-sessions-button
-              data-test-has-active-sessions={{this.hasOtherActiveSessions}}
-              aria-expanded='{{this.aiAssistantPanelService.isShowingPastSessions}}'
+        <div class='panel-header-container'>
+          <header class='panel-header'>
+            <img
+              alt='AI Assistant'
+              src={{assistantIcon}}
+              width='20'
+              height='20'
             />
-          {{/let}}
-          <ContextButton
-            title='Close AI Assistant'
-            @icon='close'
-            @size='extra-small'
-            @width='18'
-            @height='18'
-            @label='close ai assistant'
-            @variant='highlight-icon'
-            class='button'
-            {{on 'click' @onClose}}
-            data-test-close-ai-assistant
-          />
-        </header>
+            {{#let
+              (if this.roomResource.name this.roomResource.name 'Assistant')
+              as |title|
+            }}
+              <h3 title={{title}} class='panel-title-text' data-test-chat-title>
+                {{title}}
+              </h3>
+            {{/let}}
+            <NewSessionButton
+              @disabled={{not this.roomResource.messages.length}}
+              @onCreateNewSession={{this.aiAssistantPanelService.createNewSession}}
+            />
+            {{#let
+              this.aiAssistantPanelService.loadingRooms
+              as |pastSessionsLoading|
+            }}
+              <ContextButton
+                title='Past Sessions'
+                class='button past-sessions-button
+                  {{if
+                    this.hasOtherActiveSessions
+                    "has-other-active-sessions"
+                  }}'
+                @icon={{HistoryIcon}}
+                @label='Past Sessions'
+                @size='extra-small'
+                @variant='highlight-icon'
+                @width='14'
+                @height='14'
+                @loading={{pastSessionsLoading}}
+                @disabled={{this.aiAssistantPanelService.displayRoomError}}
+                {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
+                data-test-past-sessions-button
+                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
+                aria-expanded='{{this.aiAssistantPanelService.isShowingPastSessions}}'
+              />
+            {{/let}}
+            <ContextButton
+              title='Close AI Assistant'
+              @icon='close'
+              @size='extra-small'
+              @width='18'
+              @height='18'
+              @label='close ai assistant'
+              @variant='highlight-icon'
+              class='button'
+              {{on 'click' @onClose}}
+              data-test-close-ai-assistant
+            />
+          </header>
+
+          {{#if this.shouldShowFallbackBanner}}
+            <FallbackBanner
+              @onDismiss={{this.dismissFallbackBanner}}
+              {{this.measureBanner}}
+            />
+          {{/if}}
+        </div>
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
           <AiAssistantPastSessionsList
@@ -243,21 +261,28 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.room-actions) {
         z-index: 1;
       }
-      .panel-header {
+      .panel-header-container {
         position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
         height: var(--ai-assistant-panel-header-height);
+
+        background: var(--top-gradient-hidden);
+
+        animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
+        animation-timeline: --ai-assistant-chat-scroll-timeline;
+      }
+
+      .panel-header {
         padding: var(--ai-assistant-panel-padding);
 
         display: grid;
         grid-template-columns: 20px auto 20px 20px 20px;
         gap: var(--boxel-sp-xxxs);
-
-        z-index: 10;
-        background: var(--top-gradient-hidden);
-
-        animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
-        animation-timeline: --ai-assistant-chat-scroll-timeline;
       }
 
       .panel-title-text {
@@ -323,7 +348,10 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .room {
-        padding-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
+        padding-top: var(
+          --chat-top-clearance,
+          calc(var(--ai-assistant-panel-header-height) * 0.5)
+        );
       }
 
       @keyframes cycle-color-to-background {
@@ -405,6 +433,39 @@ export default class AiAssistantPanel extends Component<Signature> {
 
         return isSessionActive && !hasSeenLastMessage;
       });
+  }
+
+  private get shouldShowFallbackBanner() {
+    return (
+      this.matrixService.isUsingFallbackSystemCard &&
+      !this.isFallbackBannerDismissed
+    );
+  }
+
+  private get chatTopClearanceCss() {
+    return this.bannerBottomPx ? `${this.bannerBottomPx}px` : undefined;
+  }
+
+  // The banner is a flex child that can overflow its fixed-height container,
+  // so its bottom y in the panel — not its height — is what the room must clear.
+  private measureBanner = modifier((el: HTMLElement) => {
+    let update = () => {
+      this.bannerBottomPx = el.offsetTop + el.offsetHeight;
+    };
+    let ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.parentElement) {
+      ro.observe(el.parentElement);
+    }
+    return () => {
+      ro.disconnect();
+      this.bannerBottomPx = undefined;
+    };
+  });
+
+  @action
+  private dismissFallbackBanner() {
+    this.isFallbackBannerDismissed = true;
   }
 
   private get roomResource() {

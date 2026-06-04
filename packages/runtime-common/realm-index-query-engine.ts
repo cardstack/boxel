@@ -3,6 +3,7 @@ import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  isJsonContentType,
   baseRealm,
   inferContentType,
   unixTime,
@@ -27,6 +28,9 @@ import {
   visitInstanceURLs,
   maybeRelativeReference,
   codeRefFromInternalKey,
+  query,
+  param,
+  type Expression,
 } from '.';
 import type { Realm } from './realm';
 import type { VirtualNetwork } from './virtual-network';
@@ -52,6 +56,7 @@ import {
 } from './code-ref';
 import {
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -75,6 +80,43 @@ import {
 // indexing time (`getFieldDefinitions` in `runtime-common/definitions.ts`
 // uses the same depth for repeated card types).
 const RECURSING_DEPTH = 3;
+
+const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
+
+// Hit/miss observability for the per-instance cache. Counters are kept per job
+// identity and a running summary is emitted as cache traffic accumulates — a
+// low-volume aggregate (not one line per event) so an indexing run reports its
+// cache hit rate in the ordinary logs. The map is diagnostics-only and bounded.
+// Lazily created (not at module load): a top-level `logger()` call here races
+// the circular import that populates it, whereas first use happens well after.
+let instanceCacheLog: ReturnType<typeof logger> | undefined;
+const instanceCacheStats = new Map<string, { hits: number; misses: number }>();
+const INSTANCE_CACHE_LOG_EVERY = 200;
+
+function recordInstanceCacheEvent(jobId: string, hit: boolean): void {
+  let stat = instanceCacheStats.get(jobId);
+  if (!stat) {
+    // Bound memory without tracking job lifecycle here: drop the whole map if
+    // it grows past a sane number of concurrent jobs.
+    if (instanceCacheStats.size > 256) {
+      instanceCacheStats.clear();
+    }
+    stat = { hits: 0, misses: 0 };
+    instanceCacheStats.set(jobId, stat);
+  }
+  if (hit) {
+    stat.hits++;
+  } else {
+    stat.misses++;
+  }
+  let total = stat.hits + stat.misses;
+  if (total === 1 || total % INSTANCE_CACHE_LOG_EVERY === 0) {
+    (instanceCacheLog ??= logger('instance-cache')).info(
+      `job=${jobId} hits=${stat.hits} misses=${stat.misses} ` +
+        `hitRate=${Math.round((100 * stat.hits) / total)}%`,
+    );
+  }
+}
 
 type Options = {
   loadLinks?: true;
@@ -117,6 +159,17 @@ type Options = {
   // Implies the query-backed `${field}.N` sub-entry stripping
   // (see `skipQueryBackedExpansion`) so the seeded roots stay orphan-free.
   omitIncluded?: boolean;
+  // The `<jobId>.<reservationId>` job identity (from the `x-boxel-job-id`
+  // header), threaded by the realm-server search / card-GET handlers when a
+  // request originates inside an indexing prerender. Enables the per-instance
+  // wire-format cache (`job_scoped_instance_cache`): within one job
+  // `boxel_index` is frozen, so an instance's assembled query-field
+  // relationships are stable and can be reused across every search / GET that
+  // touches it. The reservation is part of the key because a job can re-run
+  // under a new reservation, between which committed state may move. Absent
+  // for live / external callers, which therefore never read or write the
+  // cache.
+  jobIdentity?: string;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -209,6 +262,7 @@ export class RealmIndexQueryEngine {
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
+  #dbAdapter: DBAdapter;
   #log = logger('realm:index-query-engine');
   // In-flight dedup for searchCards: concurrent callers asking for the same
   // (realm, query, opts) share one in-flight promise instead of each running
@@ -263,6 +317,7 @@ export class RealmIndexQueryEngine {
     }
     this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
     this.#definitionLookup = definitionLookup;
+    this.#dbAdapter = dbAdapter;
     this.#realm = realm;
     this.#fetch = fetch;
   }
@@ -1125,7 +1180,8 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
-  ): Promise<Map<string, CardResource<Saved>>> {
+    linkContext?: Map<string, { fieldName: string }>,
+  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
@@ -1147,21 +1203,40 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
+        // `links.self` should resolve to a card or file document, but a
+        // mistake (human or AI-generated) can leave a non-card URL here.
+        // Gate on Content-Type so a binary body never reaches JSON.parse.
+        let contentType = response.headers.get('content-type');
+        if (!isJsonContentType(contentType)) {
+          let fieldName = linkContext?.get(url)?.fieldName;
+          let fieldLabel = fieldName
+            ? `Relationship \`${fieldName}\``
+            : 'A relationship';
           throw new Error(
-            `instance ${url} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
+            `${fieldLabel} links to a non-card URL (${
+              contentType ?? 'unknown content type'
+            }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
           );
         }
-        let linkResource: CardResource<Saved> = {
-          ...json.data,
-          ...{ links: { self: json.data.id } },
-        };
-        return [url, linkResource] as const;
+        let json = await response.json();
+        // Cross-realm links can target either a card or a file (e.g. a card
+        // instantiated from a catalog still links to the catalog's image
+        // file). Both kinds are valid linked resources; only an unrecognized
+        // payload is an error.
+        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+          let linkResource: CardResource<Saved> | FileMetaResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
+          return [url, linkResource] as const;
+        }
+        throw new Error(
+          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
+            json,
+            null,
+            2,
+          )}`,
+        );
       }),
     );
     return new Map(entries);
@@ -1175,6 +1250,82 @@ export class RealmIndexQueryEngine {
   // in-realm cards and one for in-realm file-meta resources, alongside
   // Promise.all-fanout cross-realm fetches, all running concurrently
   // regardless of how many siblings reference links at that depth.
+  // ── Job-scoped per-instance wire-format cache (job_scoped_instance_cache) ──
+  // Within one indexing job `boxel_index` is frozen, so an instance's assembled
+  // query-field relationships are stable. Caching them per (jobIdentity, url)
+  // lets every later occurrence of the instance in the job — another search
+  // result, a per-URL card GET, a linked target — skip the definition lookup +
+  // field-tree walk that `populateQueryFields` would otherwise repeat.
+
+  // Cache coordinates for a resource, or undefined when caching doesn't apply:
+  // no job identity, no id, or a sparse-fieldset (partial) population that
+  // mustn't masquerade as a full assembly. `jobIdentity` is derived from the
+  // sanitized `x-boxel-job-id` header, which by design only indexer-driven
+  // prerender requests carry — so in normal operation this scopes the cache to
+  // indexing and live / external traffic skips it (it is an expectation about
+  // callers, not a property this layer enforces).
+  #instanceCacheKey(
+    resource: LooseCardResource | FileMetaResource,
+    opts: Options | undefined,
+  ): { jobId: string; url: string } | undefined {
+    if (!opts?.jobIdentity || !resource.id || opts.linkFields) {
+      return undefined;
+    }
+    return { jobId: opts.jobIdentity, url: resource.id };
+  }
+
+  // `undefined` = cache miss (no row); `null` = cached "no relationships";
+  // object = cached relationships map. Best-effort: a read failure degrades to
+  // a recompute, never an error.
+  async #readCachedRelationships(
+    jobId: string,
+    url: string,
+  ): Promise<Record<string, unknown> | null | undefined> {
+    try {
+      let rows = (await query(this.#dbAdapter, [
+        `SELECT result FROM ${INSTANCE_CACHE_TABLE} WHERE job_id =`,
+        param(jobId),
+        ` AND url =`,
+        param(url),
+      ] as Expression)) as { result: string }[];
+      if (!rows.length) {
+        return undefined;
+      }
+      return JSON.parse(rows[0].result) as Record<string, unknown> | null;
+    } catch (err: unknown) {
+      this.#log.warn(
+        `per-instance cache read failed for ${url} (job ${jobId}): ${String(err)}`,
+      );
+      return undefined;
+    }
+  }
+
+  // First write wins (ON CONFLICT DO NOTHING) — concurrent populates of the
+  // same instance in one job produce equivalent results against the frozen
+  // index, so either is valid. Best-effort: a write failure is logged, never
+  // thrown.
+  async #writeCachedRelationships(
+    jobId: string,
+    url: string,
+    relationships: unknown,
+  ): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `INSERT INTO ${INSTANCE_CACHE_TABLE} (job_id, url, result) VALUES (`,
+        param(jobId),
+        `,`,
+        param(url),
+        `,`,
+        param(JSON.stringify(relationships ?? null)),
+        `) ON CONFLICT (job_id, url) DO NOTHING`,
+      ] as Expression);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `per-instance cache write failed for ${url} (job ${jobId}): ${String(err)}`,
+      );
+    }
+  }
+
   private async loadLinks(
     {
       realmURL,
@@ -1244,6 +1395,30 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
+            let cacheKey = this.#instanceCacheKey(resource, popOpts);
+            if (cacheKey) {
+              let cached = await this.#readCachedRelationships(
+                cacheKey.jobId,
+                cacheKey.url,
+              );
+              if (cached !== undefined) {
+                recordInstanceCacheEvent(cacheKey.jobId, true);
+                // Hit: reuse this instance's assembled query-field
+                // relationships from an earlier occurrence in the same job,
+                // skipping the definition lookup + field-tree walk. The
+                // cached value is pre-strip; the `${field}.N` /
+                // included-omission steps below run uniformly on hit and miss.
+                if (cached === null) {
+                  delete (resource as { relationships?: unknown })
+                    .relationships;
+                } else {
+                  (resource as { relationships?: unknown }).relationships =
+                    cached;
+                }
+                return;
+              }
+              recordInstanceCacheEvent(cacheKey.jobId, false);
+            }
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
@@ -1258,6 +1433,13 @@ export class RealmIndexQueryEngine {
               );
             } else {
               await this.populateQueryFields(resource, realmURL, popOpts);
+            }
+            if (cacheKey) {
+              await this.#writeCachedRelationships(
+                cacheKey.jobId,
+                cacheKey.url,
+                (resource as { relationships?: unknown }).relationships,
+              );
             }
           }),
         );
@@ -1339,6 +1521,9 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
+      // Maps each cross-realm URL to the field that produced it, so a
+      // non-card link can name the offending field in its error.
+      let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1448,6 +1633,9 @@ export class RealmIndexQueryEngine {
             }
           } else {
             crossRealmURLs.add(linkURL.href);
+            if (!crossRealmFieldNames.has(linkURL.href)) {
+              crossRealmFieldNames.set(linkURL.href, { fieldName });
+            }
           }
 
           entries.push({
@@ -1475,7 +1663,7 @@ export class RealmIndexQueryEngine {
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved>>;
+      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
@@ -1495,8 +1683,11 @@ export class RealmIndexQueryEngine {
                 [...crossRealmURLs],
                 invocationId,
                 currentLayerIndex,
+                crossRealmFieldNames,
               )
-            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+            : Promise.resolve(
+                new Map<string, CardResource<Saved> | FileMetaResource>(),
+              ),
         ]);
       } catch (err: unknown) {
         let message =

@@ -10,6 +10,7 @@ import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
   bfmBlockFormatAndSize,
+  buildWaiter,
   cardTypeName,
   extractMermaidBlocks,
   processKatexPlaceholders,
@@ -41,6 +42,11 @@ function wrapTablesHtml(html: string | null | undefined): string {
   });
   return doc.body.innerHTML;
 }
+
+// Lets `settled()` wait for the async markdown rendering work (Mermaid/KaTeX
+// lazy-loading and the deferred card-slot collection) that is kicked off by
+// modifiers and ember-concurrency tasks after the initial render settles.
+const markdownRenderingWaiter = buildWaiter('markdown-rendering');
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type SlotState = 'resolved' | 'loading' | 'unresolved';
@@ -179,6 +185,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       let baseUrl = this.args.cardReferenceBaseUrl;
       let virtualNetwork = this.args.cardReferenceVirtualNetwork;
       let pendingUpdate = false;
+      let pendingToken: unknown = undefined;
       // On the very first modifier run linkedCards is likely still loading
       // (empty []) so we skip unresolved Pills to avoid flashing them for
       // refs that will soon resolve. On subsequent runs (linkedCards changed)
@@ -280,22 +287,28 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       // re-render → observer fires again.
       let updateSlots = () => {
         pendingUpdate = false;
-        let nextSlots = collectSlots();
-        let didChange =
-          nextSlots.length !== this.renderSlots.length ||
-          nextSlots.some((slot, index) => {
-            let current = this.renderSlots[index];
-            if (!current || current.element !== slot.element) return true;
-            if (current.kind !== slot.kind) return true;
-            if (current.state !== slot.state) return true;
-            if (current.format !== slot.format) return true;
-            if (current.card !== slot.card) return true;
-            if (current.url !== slot.url) return true;
-            return String(current.style ?? '') !== String(slot.style ?? '');
-          });
+        let token = pendingToken;
+        pendingToken = undefined;
+        try {
+          let nextSlots = collectSlots();
+          let didChange =
+            nextSlots.length !== this.renderSlots.length ||
+            nextSlots.some((slot, index) => {
+              let current = this.renderSlots[index];
+              if (!current || current.element !== slot.element) return true;
+              if (current.kind !== slot.kind) return true;
+              if (current.state !== slot.state) return true;
+              if (current.format !== slot.format) return true;
+              if (current.card !== slot.card) return true;
+              if (current.url !== slot.url) return true;
+              return String(current.style ?? '') !== String(slot.style ?? '');
+            });
 
-        if (didChange) {
-          this.renderSlots = nextSlots;
+          if (didChange) {
+            this.renderSlots = nextSlots;
+          }
+        } finally {
+          markdownRenderingWaiter.endAsync(token);
         }
       };
 
@@ -304,15 +317,26 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           return;
         }
         pendingUpdate = true;
+        pendingToken = markdownRenderingWaiter.beginAsync();
         scheduleOnce('afterRender', this, updateSlots);
       };
 
       scheduleUpdate();
 
+      // End any in-flight waiter token on teardown so a destroyed modifier
+      // (e.g. the scheduled update never flushed) cannot leave `settled()`
+      // hanging. `updateSlots` clears `pendingToken` first, so this only fires
+      // for a still-pending update.
+      let endPendingToken = () => {
+        let token = pendingToken;
+        pendingToken = undefined;
+        markdownRenderingWaiter.endAsync(token);
+      };
+
       // MutationObserver re-collects slots when the DOM is reconstructed
       // (e.g. after browser back-navigation rebuilds the element's children).
       if (typeof MutationObserver === 'undefined') {
-        return;
+        return endPendingToken;
       }
 
       let observer = new MutationObserver(scheduleUpdate);
@@ -321,7 +345,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         subtree: true,
       });
 
-      return () => observer.disconnect();
+      return () => {
+        observer.disconnect();
+        endPendingToken();
+      };
     },
   );
 
@@ -339,11 +366,16 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   }
 
   _loadKatexTask = task({ drop: true }, async () => {
-    let loadKatex = (globalThis as any).__loadKatex;
-    if (typeof loadKatex !== 'function') {
-      return;
+    let token = markdownRenderingWaiter.beginAsync();
+    try {
+      let loadKatex = (globalThis as any).__loadKatex;
+      if (typeof loadKatex !== 'function') {
+        return;
+      }
+      this._katex = await loadKatex();
+    } finally {
+      markdownRenderingWaiter.endAsync(token);
     }
-    this._katex = await loadKatex();
   });
 
   // ── Mermaid lazy loading + pre-rendering ──
@@ -372,27 +404,32 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       return;
     }
 
-    let mermaid = await loadMermaid();
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'default',
-    });
+    let token = markdownRenderingWaiter.beginAsync();
+    try {
+      let mermaid = await loadMermaid();
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'default',
+      });
 
-    let svgs = new Map<string, string>();
-    for (let block of blocks) {
-      try {
-        let { svg } = await mermaid.render(
-          `mermaid-${++this._mermaidIdCounter}`,
-          block,
-        );
-        svgs.set(block, svg);
-      } catch {
-        // skip failed blocks
+      let svgs = new Map<string, string>();
+      for (let block of blocks) {
+        try {
+          let { svg } = await mermaid.render(
+            `mermaid-${++this._mermaidIdCounter}`,
+            block,
+          );
+          svgs.set(block, svg);
+        } catch {
+          // skip failed blocks
+        }
       }
-    }
 
-    this._mermaidSvgs = svgs;
+      this._mermaidSvgs = svgs;
+    } finally {
+      markdownRenderingWaiter.endAsync(token);
+    }
   });
 
   getCardComponent = (card: BaseDef) => getComponent(card);

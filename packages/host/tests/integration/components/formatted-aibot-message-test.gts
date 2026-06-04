@@ -45,6 +45,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
     cardService.getSource = async () => {
       return Promise.resolve({
         status: 200,
+        contentType: 'application/vnd.card+source',
         content: 'let a = 1;\nlet b = 2;',
       });
     };

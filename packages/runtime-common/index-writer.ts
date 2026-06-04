@@ -19,7 +19,11 @@ import {
   type RealmIdentifier,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
-import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
+import {
+  getCreatedTime,
+  ensureFileCreatedAt,
+  getContentMeta,
+} from './file-meta';
 import {
   type Expression,
   param,
@@ -33,7 +37,11 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import { clampSerializedError, type SerializedError } from './error';
+import {
+  clampSerializedError,
+  sanitizeForJsonb,
+  type SerializedError,
+} from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
@@ -303,6 +311,17 @@ export class Batch {
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
+  // Look up the content hash and size persisted at write time for a given file
+  // path, in a single row lookup. Either value is undefined when the realm has
+  // no recorded value (e.g. files written before file-meta hashing existed, or
+  // a no-op rewrite that left the columns untouched).
+  async getContentMeta(localPath: string): Promise<{
+    contentHash: string | undefined;
+    contentSize: number | undefined;
+  }> {
+    return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
   @Memoize()
   private get nodeResolvedInvalidations() {
     return [...this.invalidations].map((href) =>
@@ -455,11 +474,12 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    let diagnostics: Diagnostics = {
+    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
+    let diagnostics: Diagnostics = sanitizeForJsonb({
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    };
+    });
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -544,7 +564,7 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
+          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
           has_error: true,
           diagnostics: diagnostics,
         };

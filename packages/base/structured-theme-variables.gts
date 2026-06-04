@@ -1,9 +1,14 @@
-import { CopyButton, Swatch } from '@cardstack/boxel-ui/components';
+import {
+  CopyButton,
+  FieldContainer,
+  Swatch,
+} from '@cardstack/boxel-ui/components';
 import {
   buildCssVariableName,
   dasherize,
   entriesToCssRuleMap,
   markdownEscape,
+  sanitizeHtmlSafe,
   type CssVariableEntry,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
@@ -36,12 +41,14 @@ export type CssVariableField = Record<string, any>;
 const COLOR_VALUE_INPUT_HELP =
   'Use CSS color values such as hex (#ff00ff), rgb(...), hsl(...), or okhcl(...).';
 
+export const DEFAULT_THEME_SCALE = '1.333';
+
 const TYPESCALE_OPTIONS = [
   { value: '1.067', label: 'Minor Second (1.067)' },
   { value: '1.125', label: 'Major Second (1.125)' },
   { value: '1.200', label: 'Minor Third (1.200)' },
   { value: '1.250', label: 'Major Third (1.250)' },
-  { value: '1.333', label: 'Perfect Fourth (1.333)' },
+  { value: DEFAULT_THEME_SCALE, label: 'Perfect Fourth (1.333)' },
   { value: '1.414', label: 'Augmented Fourth (1.414)' },
   { value: '1.500', label: 'Perfect Fifth (1.500)' },
   { value: '1.618', label: 'Golden Ratio (1.618)' },
@@ -161,13 +168,66 @@ export class ThemeTypographyField extends FieldDef {
       let rows: string[] = [];
       for (let { name, value } of entries) {
         if (!value) continue;
-        rows.push(
-          `- ${markdownEscape(name ?? '')}: \`${value}\``,
-        );
+        rows.push(`- ${markdownEscape(name ?? '')}: \`${value}\``);
       }
       return rows.join('\n');
     }
     <template>{{this.text}}</template>
+  };
+
+  static edit = class Edit extends Component<typeof ThemeTypographyField> {
+    <template>
+      <div class='theme-typography-edit'>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Heading</h4>
+          <@fields.heading />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Section Heading</h4>
+          <@fields.sectionHeading />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Subheading</h4>
+          <@fields.subheading />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Body</h4>
+          <@fields.body />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Caption</h4>
+          <@fields.caption />
+        </section>
+
+      </div>
+      <style scoped>
+        .theme-typography-edit {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+        }
+        .theme-typography-edit-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-typography-edit-heading {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        }
+      </style>
+    </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -495,8 +555,7 @@ export default class ThemeVarField extends FieldDef {
   @field themeScale = contains(
     enumField(StringField, { options: TYPESCALE_OPTIONS }),
     {
-      description:
-        'Typescale ratio used to derive --boxel-fs-* (font-size) steps and --boxel-sp-* (spacing) steps from the base --boxel-font-size and --boxel-sp values, respectively (both default to 1rem - 16px). Scale defaults to Perfect Fourth (1.333).',
+      description: `Typescale ratio used to derive --boxel-fs-* (font-size) steps and --boxel-sp-* (spacing) steps from the base --boxel-font-size and --boxel-sp values, respectively (both default to 1rem - 16px). Scale defaults to Perfect Fourth (${DEFAULT_THEME_SCALE}).`,
     },
   );
   @field trackingNormal = contains(CSSValueField, {
@@ -630,6 +689,502 @@ export default class ThemeVarField extends FieldDef {
     }
     return entriesToCssRuleMap(this.cssVariableFields);
   }
+
+  static edit = class Edit extends Component<typeof ThemeVarField> {
+    private get fontSansStyle() {
+      let v = this.args.model.fontSans;
+      return v ? sanitizeHtmlSafe(`font-family: ${v}`) : undefined;
+    }
+    private get fontSerifStyle() {
+      let v = this.args.model.fontSerif;
+      return v ? sanitizeHtmlSafe(`font-family: ${v}`) : undefined;
+    }
+    private get fontMonoStyle() {
+      let v = this.args.model.fontMono;
+      return v ? sanitizeHtmlSafe(`font-family: ${v}`) : undefined;
+    }
+
+    private get typescaleSteps() {
+      let baseStr = this.args.model.themeFontSize;
+      let scaleStr = this.args.model.themeScale;
+      if (!baseStr && !scaleStr) return [];
+      let base = 1;
+      if (baseStr) {
+        let remMatch = baseStr.match(/^([\d.]+)rem$/);
+        let pxMatch = baseStr.match(/^([\d.]+)px$/);
+        if (remMatch) base = parseFloat(remMatch[1]);
+        else if (pxMatch) base = parseFloat(pxMatch[1]) / 16;
+      }
+      let scale = parseFloat(scaleStr ?? DEFAULT_THEME_SCALE);
+      return [
+        { label: '2xs', exp: -3 },
+        { label: 'xs', exp: -2 },
+        { label: 'sm', exp: -1 },
+        { label: 'base', exp: 0 },
+        { label: 'md', exp: 1 },
+        { label: 'lg', exp: 2 },
+        { label: 'xl', exp: 3 },
+        { label: '2xl', exp: 4 },
+      ].map(({ label, exp }) => {
+        let size = base * Math.pow(scale, exp);
+        return {
+          label,
+          remLabel: `${parseFloat(size.toFixed(2))}rem`,
+          pxLabel: `${parseFloat((size * 16).toFixed(2))}px`,
+          style: sanitizeHtmlSafe(`font-size: ${size.toFixed(3)}rem`),
+        };
+      });
+    }
+
+    private shadowStyle(value: string | undefined) {
+      return value ? sanitizeHtmlSafe(`box-shadow: ${value}`) : undefined;
+    }
+    private get shadows() {
+      let m = this.args.model;
+      return [
+        { label: '2xs', value: m.shadow2xs },
+        { label: 'xs', value: m.shadowXs },
+        { label: 'sm', value: m.shadowSm },
+        { label: 'Base', value: m.shadow },
+        { label: 'md', value: m.shadowMd },
+        { label: 'lg', value: m.shadowLg },
+        { label: 'xl', value: m.shadowXl },
+        { label: '2xl', value: m.shadow2xl },
+      ].filter((s) => s.value);
+    }
+
+    <template>
+      <div class='theme-var-edit'>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Main</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Background' @vertical={{true}} data-test-field='background'>
+              <@fields.background />
+            </FieldContainer>
+            <FieldContainer @label='Foreground' @vertical={{true}} data-test-field='foreground'>
+              <@fields.foreground />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Primary</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Primary' @vertical={{true}} data-test-field='primary'>
+              <@fields.primary />
+            </FieldContainer>
+            <FieldContainer @label='Primary Foreground' @vertical={{true}} data-test-field='primaryForeground'>
+              <@fields.primaryForeground />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Secondary & Accent</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Secondary' @vertical={{true}} data-test-field='secondary'>
+              <@fields.secondary />
+            </FieldContainer>
+            <FieldContainer @label='Secondary Foreground' @vertical={{true}} data-test-field='secondaryForeground'>
+              <@fields.secondaryForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Accent' @vertical={{true}} data-test-field='accent'>
+              <@fields.accent />
+            </FieldContainer>
+            <FieldContainer @label='Accent Foreground' @vertical={{true}} data-test-field='accentForeground'>
+              <@fields.accentForeground />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>UI Components</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Card' @vertical={{true}} data-test-field='card'>
+              <@fields.card />
+            </FieldContainer>
+            <FieldContainer @label='Card Foreground' @vertical={{true}} data-test-field='cardForeground'>
+              <@fields.cardForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Popover' @vertical={{true}} data-test-field='popover'>
+              <@fields.popover />
+            </FieldContainer>
+            <FieldContainer @label='Popover Foreground' @vertical={{true}} data-test-field='popoverForeground'>
+              <@fields.popoverForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Muted' @vertical={{true}} data-test-field='muted'>
+              <@fields.muted />
+            </FieldContainer>
+            <FieldContainer @label='Muted Foreground' @vertical={{true}} data-test-field='mutedForeground'>
+              <@fields.mutedForeground />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Form & Feedback</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Border' @vertical={{true}} data-test-field='border'>
+              <@fields.border />
+            </FieldContainer>
+            <FieldContainer @label='Input' @vertical={{true}} data-test-field='input'>
+              <@fields.input />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Ring' @vertical={{true}} data-test-field='ring'>
+              <@fields.ring />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Destructive' @vertical={{true}} data-test-field='destructive'>
+              <@fields.destructive />
+            </FieldContainer>
+            <FieldContainer @label='Destructive Foreground' @vertical={{true}} data-test-field='destructiveForeground'>
+              <@fields.destructiveForeground />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Chart Colors</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Chart 1' @vertical={{true}} data-test-field='chart1'>
+              <@fields.chart1 />
+            </FieldContainer>
+            <FieldContainer @label='Chart 2' @vertical={{true}} data-test-field='chart2'>
+              <@fields.chart2 />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Chart 3' @vertical={{true}} data-test-field='chart3'>
+              <@fields.chart3 />
+            </FieldContainer>
+            <FieldContainer @label='Chart 4' @vertical={{true}} data-test-field='chart4'>
+              <@fields.chart4 />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Chart 5' @vertical={{true}} data-test-field='chart5'>
+              <@fields.chart5 />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Sidebar</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Sidebar' @vertical={{true}} data-test-field='sidebar'>
+              <@fields.sidebar />
+            </FieldContainer>
+            <FieldContainer @label='Sidebar Foreground' @vertical={{true}} data-test-field='sidebarForeground'>
+              <@fields.sidebarForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Sidebar Primary' @vertical={{true}} data-test-field='sidebarPrimary'>
+              <@fields.sidebarPrimary />
+            </FieldContainer>
+            <FieldContainer
+              @label='Sidebar Primary Foreground'
+              @vertical={{true}}
+              data-test-field='sidebarPrimaryForeground'
+            >
+              <@fields.sidebarPrimaryForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Sidebar Accent' @vertical={{true}} data-test-field='sidebarAccent'>
+              <@fields.sidebarAccent />
+            </FieldContainer>
+            <FieldContainer
+              @label='Sidebar Accent Foreground'
+              @vertical={{true}}
+              data-test-field='sidebarAccentForeground'
+            >
+              <@fields.sidebarAccentForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Sidebar Border' @vertical={{true}} data-test-field='sidebarBorder'>
+              <@fields.sidebarBorder />
+            </FieldContainer>
+            <FieldContainer @label='Sidebar Ring' @vertical={{true}} data-test-field='sidebarRing'>
+              <@fields.sidebarRing />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Fonts</h4>
+          <p class='theme-var-edit-hint'>
+            Custom font family links must be added to the
+            <strong>CSS Imports</strong>
+            section (e.g. a Google Fonts url) before they will render correctly.
+          </p>
+          <div class='theme-var-font-previews'>
+            {{#if @model.fontSans}}
+              <div class='theme-var-font-preview' style={{this.fontSansStyle}}>
+                <span class='theme-var-font-label'>Sans-serif</span>
+                The quick brown fox
+              </div>
+            {{/if}}
+            {{#if @model.fontSerif}}
+              <div class='theme-var-font-preview' style={{this.fontSerifStyle}}>
+                <span class='theme-var-font-label'>Serif</span>
+                The quick brown fox
+              </div>
+            {{/if}}
+            {{#if @model.fontMono}}
+              <div
+                class='theme-var-font-preview theme-var-font-preview--mono'
+                style={{this.fontMonoStyle}}
+              >
+                <span class='theme-var-font-label'>Monospace</span>
+                const hello = "world"
+              </div>
+            {{/if}}
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Sans-serif' @vertical={{true}} data-test-field='fontSans'>
+              <@fields.fontSans />
+            </FieldContainer>
+            <FieldContainer @label='Serif' @vertical={{true}} data-test-field='fontSerif'>
+              <@fields.fontSerif />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Monospace' @vertical={{true}} data-test-field='fontMono'>
+              <@fields.fontMono />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Geometry</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Border Radius' @vertical={{true}} data-test-field='radius'>
+              <@fields.radius />
+            </FieldContainer>
+            <FieldContainer @label='Spacing' @vertical={{true}} data-test-field='spacing'>
+              <@fields.spacing />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Base Font Size' @vertical={{true}} data-test-field='themeFontSize'>
+              <@fields.themeFontSize />
+            </FieldContainer>
+            <FieldContainer @label='Typescale' @vertical={{true}} data-test-field='themeScale'>
+              <@fields.themeScale />
+            </FieldContainer>
+          </div>
+          {{#if this.typescaleSteps.length}}
+            <div class='theme-var-typescale-preview'>
+              {{#each this.typescaleSteps as |step|}}
+                <div class='theme-var-typescale-step'>
+                  <span
+                    class='theme-var-typescale-sample'
+                    style={{step.style}}
+                  >Aa</span>
+                  <span class='theme-var-typescale-label'>{{step.label}}</span>
+                  <span
+                    class='theme-var-typescale-size'
+                  >{{step.remLabel}}</span>
+                  <span class='theme-var-typescale-size'>{{step.pxLabel}}</span>
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Letter Spacing' @vertical={{true}} data-test-field='trackingNormal'>
+              <@fields.trackingNormal />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Box Shadows</h4>
+          {{#if this.shadows.length}}
+            <div class='theme-var-shadow-previews'>
+              {{#each this.shadows as |s|}}
+                <div class='theme-var-shadow-preview'>
+                  <div
+                    class='theme-var-shadow-swatch'
+                    style={{this.shadowStyle s.value}}
+                  ></div>
+                  <span class='theme-var-shadow-label'>{{s.label}}</span>
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='2xs' @vertical={{true}} data-test-field='shadow2xs'>
+              <@fields.shadow2xs />
+            </FieldContainer>
+            <FieldContainer @label='xs' @vertical={{true}} data-test-field='shadowXs'>
+              <@fields.shadowXs />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='sm' @vertical={{true}} data-test-field='shadowSm'>
+              <@fields.shadowSm />
+            </FieldContainer>
+            <FieldContainer @label='Base' @vertical={{true}} data-test-field='shadow'>
+              <@fields.shadow />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='md' @vertical={{true}} data-test-field='shadowMd'>
+              <@fields.shadowMd />
+            </FieldContainer>
+            <FieldContainer @label='lg' @vertical={{true}} data-test-field='shadowLg'>
+              <@fields.shadowLg />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='xl' @vertical={{true}} data-test-field='shadowXl'>
+              <@fields.shadowXl />
+            </FieldContainer>
+            <FieldContainer @label='2xl' @vertical={{true}} data-test-field='shadow2xl'>
+              <@fields.shadow2xl />
+            </FieldContainer>
+          </div>
+        </section>
+
+      </div>
+      <style scoped>
+        .theme-var-edit {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+        }
+        .theme-var-edit-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-var-edit-heading {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        }
+        .theme-var-edit-row {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-var-edit-row--2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-var-edit-hint {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          color: var(--muted-foreground, var(--boxel-400));
+        }
+        .theme-var-typescale-preview {
+          display: flex;
+          align-items: flex-end;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
+          background: var(--muted, var(--boxel-100));
+          border-radius: var(--boxel-border-radius-sm);
+          overflow-x: auto;
+        }
+        .theme-var-typescale-step {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          flex-shrink: 0;
+        }
+        .theme-var-typescale-sample {
+          color: var(--foreground, var(--boxel-dark));
+          line-height: 1;
+        }
+        .theme-var-typescale-label {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .theme-var-typescale-size {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        .theme-var-shadow-previews {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-lg) var(--boxel-sp);
+          padding: var(--boxel-sp) var(--boxel-sp-sm);
+          background: var(--muted, var(--boxel-100));
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .theme-var-shadow-preview {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .theme-var-shadow-swatch {
+          width: 2.5rem;
+          height: 2.5rem;
+          background: var(--card, var(--boxel-light));
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .theme-var-shadow-label {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .theme-var-font-previews {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-2xs);
+        }
+        .theme-var-font-preview {
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
+          background: var(--muted, var(--boxel-100));
+          border-radius: var(--boxel-border-radius-sm);
+          color: var(--foreground, var(--boxel-dark));
+          font-size: 1rem;
+          word-break: break-word;
+        }
+        .theme-var-font-preview--mono {
+          font-size: 0.875rem;
+        }
+        .theme-var-font-label {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          font-family: var(--boxel-font);
+        }
+      </style>
+    </template>
+  };
 
   static embedded: BaseDefComponent = Embedded;
 
