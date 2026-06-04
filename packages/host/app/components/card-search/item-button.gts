@@ -450,8 +450,11 @@ export default class ItemButton extends Component<Signature> {
          4px whether or not the item is hovered, darkening on hover to match
          the rest of the Adorn treatment. `transition: none` makes the ring
          appear in lockstep with the selection tag/chip (which render
-         instantly) instead of fading in ~0.2s later. */
-      .catalog-item.adorn.selected {
+         instantly) instead of fading in ~0.2s later — and it's needed on the
+         hover variant too, since a card is normally hovered at the moment
+         it's clicked to select, so that rule governs the ring's first paint. */
+      .catalog-item.adorn.selected,
+      .catalog-item.adorn.selected:hover {
         box-shadow: 0 0 0 0.25rem var(--boxel-highlight);
         transition: none;
       }
