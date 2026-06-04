@@ -682,6 +682,7 @@ export function getLinksToManyComponent({
                 )
                 typeConstraint=@typeConstraint
               }}
+              ...attributes
             />
           {{else}}
             <LinksToManyEditor

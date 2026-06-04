@@ -19,6 +19,7 @@ import {
 } from '../../helpers';
 import {
   CardDef,
+  Component,
   contains,
   containsMany,
   field,
@@ -198,5 +199,33 @@ module('Integration | per-usage edit override', function (hooks) {
       .exists(
         'the standard LinksToManyEditor add affordance is rendered through the wrap',
       );
+  });
+
+  test('a linksToMany override receives splattributes from the caller', async function (assert) {
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    const WrapEditor: TemplateOnlyComponent<{
+      Args: { model: unknown; values: unknown; defaultEditor: unknown };
+      Element: HTMLDivElement;
+    }> = <template>
+      <div data-test-attr-wrap ...attributes>wrap</div>
+    </template>;
+
+    class Owner extends CardDef {
+      @field pets = linksToMany(Pet, { edit: WrapEditor });
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.pets data-test-from-caller='yes' />
+        </template>
+      };
+    }
+
+    await renderCard(loader, new Owner(), 'edit');
+
+    assert
+      .dom('[data-test-attr-wrap][data-test-from-caller="yes"]')
+      .exists('attributes from the field site reach the override');
   });
 });
