@@ -812,27 +812,32 @@ It is **not** persisted in `boxel_index.diagnostics` (that's the client side). S
 **The lines.**
 
 ```
-corr=<id> job=<jobId> handler=Nms parse=… resolveRealms=… sql=… loadLinks=… populate=… stringify=… coalescedWait=… | results=… cacheHit=… cacheMiss=…    (realm:search-timing)
+corr=<id> job=<jobId> handler=Nms parse=… resolveRealms=… sql=… loadLinks=… stringify=… coalescedWait=… | busyMs(parallel-sum) populate=… cacheRead=… cacheWrite=… | results=… cacheHit=… cacheMiss=…    (realm:search-timing)
 --> QUERY <accept> <url>: 200 [job: <jobId>] corr=<id> dur=Nms                                                                                            (realm:requests)
 eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… heapMB=…                                                                                              (realm:health)
 ```
 
-Stage meanings (wall-clock ms, accumulated across the request):
+The first `|`-section is the **sequential wall-clock timeline** (these sum to ≈ `handler`). The `busyMs(parallel-sum)` section is the inner per-result work that runs **concurrently** inside `loadLinks`'s `Promise.all`, so it is summed across N parallel ops and is **NOT wall-clock** — `populate` can read as millions of ms on a large result set. Read it as a **ratio** (which sub-step dominates within `loadLinks`) or divide by `results` for a per-item average; never add it to the timeline.
+
+Wall-clock timeline stages:
 
 - `parse` — request body → Query parse.
 - `resolveRealms` — federated realm resolution / lazy-mount.
 - `sql` — the `IndexQueryEngine.searchCards` query (the actual SQL).
-- `loadLinks` — the post-SQL relationship-assembly pass over the result set.
-- `populate` — within loadLinks, the per-instance query-field assembly (definition lookup + field-tree walk).
-- `cacheRead` / `cacheWrite` + `cacheHit` / `cacheMiss` — the per-instance wire-format cache (`job_scoped_instance_cache`) round-trips.
+- `loadLinks` — the post-SQL relationship-assembly pass over the whole result set (the wall-clock of the parallel `populate`/cache work below).
 - `stringify` — `JSON.stringify` of the response wire-format.
 - `coalescedWait` — this request coalesced onto an already-in-flight identical search (CS-11121 dedup) and waited for it; the real sql/loadLinks work is on the **leader's** line, not this one.
-- `handler=` — handler entry → response assembled (≈ the sum of the stages above).
+- `handler=` — handler entry → response assembled (≈ the sum of the wall-clock stages).
+
+Busy-time (parallel-sum, NOT wall-clock):
+
+- `populate` — the per-instance query-field assembly (definition lookup + field-tree walk), summed across all results.
+- `cacheRead` / `cacheWrite` (+ `cacheHit` / `cacheMiss` counters) — the per-instance wire-format cache (`job_scoped_instance_cache`) round-trips, summed across all results.
 
 **Reading it — the decision tree.**
 
 1. **`sql=` is the bulk of `handler`** → a genuinely slow query. Rare here (the premise is fast SQL); confirm with `pg_stat_activity` / `EXPLAIN`. Fast SQL but large `sql=` means lock / connection-pool wait inside the query call.
-2. **`loadLinks` / `populate` dominate** → the post-SQL relationship/query-field assembly is the cost (the per-instance wire-format work). Check `cacheHit` / `cacheMiss`: a low hit rate means the instance cache isn't helping (e.g. unique-per-card queries).
+2. **`loadLinks` dominates `handler`** → the post-SQL relationship/query-field assembly is the cost (the per-instance wire-format work). Use the `busyMs(parallel-sum)` ratio to see what _inside_ loadLinks dominates: `populate ≫ cacheRead/cacheWrite` means it's the CPU field-walk, not the cache DB round-trips. Check `cacheHit` / `cacheMiss`: a low hit rate means the instance cache isn't helping (e.g. unique-per-card queries) so every result is assembled from scratch.
 3. **`stringify` dominates** → serializing a large federated response. Look at `results=` for a fat result set.
 4. **`dur` (realm:requests) ≫ `handler` (realm:search-timing)** → the time is NOT inside the handler. It was spent **queued before the handler ran** (or sending). This is the saturation fingerprint: cross-reference `realm:health` near the same timestamp — if `eventLoopLagMs` spiked into the hundreds/thousands with `inFlightSearch` high, the single-threaded realm-server's event loop was starved (synchronous post-SQL serialization across many concurrent searches), so the request sat unserviced even though, once it ran, the handler was fast. That is the CS-10820 saturation class seen from the server side.
 5. **`coalescedWait` dominates** → this follower waited on another in-flight identical search. Find the leader (same job + query, overlapping time); its line carries the real breakdown.

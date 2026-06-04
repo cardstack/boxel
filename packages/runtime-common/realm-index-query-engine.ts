@@ -1432,8 +1432,12 @@ export class RealmIndexQueryEngine {
             let cacheKey = this.#instanceCacheKey(resource, popOpts);
             if (cacheKey) {
               let ck = cacheKey;
+              // `busyTime`, not `time`: this callback is one of N running
+              // concurrently in the layer's `Promise.all`, so summing each
+              // op's elapsed would overcount wall-clock. Recorded as
+              // aggregate busy-time instead (see RequestTimings).
               let cached = timings
-                ? await timings.time('cacheRead', () =>
+                ? await timings.busyTime('cacheRead', () =>
                     this.#readCachedRelationships(ck.jobId, ck.url),
                   )
                 : await this.#readCachedRelationships(ck.jobId, ck.url);
@@ -1464,7 +1468,9 @@ export class RealmIndexQueryEngine {
             )?.queryFieldDefs;
             // The relationship/query-field assembly — the definition lookup +
             // field-tree walk — is the post-SQL "wire-format prep" the timeline
-            // attributes under `populate`.
+            // attributes under `populate`. Recorded as busy-time (this runs
+            // concurrently across the layer); the wall-clock of the whole pass
+            // is the outer `loadLinks` stage.
             let runPopulate = () =>
               popOpts?.cacheOnlyDefinitions && storedDefs
                 ? this.populateQueryFieldsFromMeta(
@@ -1475,7 +1481,7 @@ export class RealmIndexQueryEngine {
                   )
                 : this.populateQueryFields(resource, realmURL, popOpts);
             if (timings) {
-              await timings.time('populate', runPopulate);
+              await timings.busyTime('populate', runPopulate);
             } else {
               await runPopulate();
             }
@@ -1488,7 +1494,7 @@ export class RealmIndexQueryEngine {
                   (resource as { relationships?: unknown }).relationships,
                 );
               if (timings) {
-                await timings.time('cacheWrite', writeCache);
+                await timings.busyTime('cacheWrite', writeCache);
               } else {
                 await writeCache();
               }
