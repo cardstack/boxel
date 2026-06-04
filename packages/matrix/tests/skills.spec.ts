@@ -15,7 +15,7 @@ import {
   createSubscribedUserAndLogin,
   createRealm,
 } from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server';
 import { randomUUID } from 'crypto';
 
 test.describe('Skills', () => {

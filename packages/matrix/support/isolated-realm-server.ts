@@ -5,7 +5,7 @@ import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
-import type { SynapseInstance } from '../docker/synapse';
+import type { SynapseInstance } from './synapse';
 
 setGracefulCleanup();
 

@@ -1,10 +1,10 @@
-import { synapseStart } from '../docker/synapse';
-import { dockerStop } from '../docker';
+import { synapseStart } from '../support/synapse';
+import { dockerStop } from '../support/docker';
 import { resolve } from 'path';
 import {
   getSynapseContainerName,
   deregisterSynapseFromTraefik,
-} from '../helpers/environment-config';
+} from '../support/environment-config';
 
 const [command] = process.argv.slice(2);
 let dataDir = process.env.SYNAPSE_DATA_DIR

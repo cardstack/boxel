@@ -1,0 +1,6 @@
+{% extends "_base.html" %} {% block title %}Registration failure{% endblock %}
+{% block body %}
+<p style="margin: 0">
+  Validation failed for the following reason: {{ failure_reason }}.
+</p>
+{% endblock %}

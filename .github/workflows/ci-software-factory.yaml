@@ -13,6 +13,7 @@ on:
       - "packages/base/**"
       - "packages/boxel-icons/**"
       - "packages/host/**"
+      - "packages/matrix/support/**"
       - "packages/postgres/**"
       - "packages/realm-server/**"
       - "packages/realm-test-harness/**"

@@ -1,4 +1,4 @@
-import { createRegistrationToken, loginUser } from '../docker/synapse';
+import { createRegistrationToken, loginUser } from '../support/synapse';
 import { adminUsername, adminPassword } from './register-test-user';
 
 (async () => {

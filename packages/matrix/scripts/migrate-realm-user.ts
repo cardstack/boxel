@@ -1,4 +1,4 @@
-import { loginUser, updateUser } from '../docker/synapse';
+import { loginUser, updateUser } from '../support/synapse';
 
 import { realmPassword } from '../helpers/realm-credentials';
 
