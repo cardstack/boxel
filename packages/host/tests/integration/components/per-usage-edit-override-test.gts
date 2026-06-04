@@ -216,9 +216,7 @@ module('Integration | per-usage edit override', function (hooks) {
     class Owner extends CardDef {
       @field pets = linksToMany(Pet, { edit: WrapEditor });
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.pets data-test-from-caller='yes' />
-        </template>
+        <template><@fields.pets data-test-from-caller='yes' /></template>
       };
     }
 
