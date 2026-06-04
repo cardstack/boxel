@@ -102,14 +102,19 @@ export default class SelectionMenu extends Component<Signature> {
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-width: 0;
       }
-      /* Keyboard focus ring just outside the button. (Set explicitly so it
-         renders regardless of the global button outline setup.) */
+      /* Keyboard focus ring: a lighter tint of the current fill, so it stays
+         visible against the highlight button (a highlight-colored ring would
+         blend into it) while tracking the fill as it darkens. Sits snug
+         against the button (1px) rather than floating off it. Defined here
+         rather than on BoxelButton because boxel-ui's unlayered global
+         `button:focus` rule overrides the button's own layered focus styles. */
       .selection-menu-trigger:focus-visible {
         outline: var(--boxel-outline-width) var(--boxel-outline-style)
-          var(--boxel-highlight);
-        outline-offset: 2px;
+          color-mix(in oklab, var(--boxel-button-color) 70%, white);
+        outline-offset: 1px;
       }
-      /* Deepen the fill while the menu is open, matching Button's hover. */
+      /* Deepen the fill while the menu is open, matching Button's hover; the
+         focus ring's color-mix tracks the fill, so it darkens to match. */
       .selection-menu-trigger[aria-expanded='true'] {
         --boxel-button-color: var(--boxel-highlight-hover);
       }
