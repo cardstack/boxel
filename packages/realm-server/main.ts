@@ -43,6 +43,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { JobsFinishedListener } from './lib/jobs-finished-listener';
 import { JobScopedSearchCache } from './job-scoped-search-cache';
 import { JobScopedInstanceCache } from './job-scoped-instance-cache';
+import { startHealthSampler } from './health-sampler';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
@@ -391,6 +392,11 @@ const smokeTestHostApp = async () => {
   // JobsFinishedListener below) and the age-based janitor backstop.
   let instanceCache = new JobScopedInstanceCache(dbAdapter);
   instanceCache.startJanitor();
+  // Periodic event-loop-lag + in-flight-search sampler. Emits a
+  // `realm:health` line only during saturation windows, so a stalled
+  // `_search` can be checked against whether the process's event loop was
+  // starved at the time.
+  let stopHealthSampler = startHealthSampler();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -642,6 +648,7 @@ const smokeTestHostApp = async () => {
     }
     searchCache.stopJanitor();
     instanceCache.stopJanitor();
+    stopHealthSampler();
     httpServer.close(() => {
       (async () => {
         await Promise.all([

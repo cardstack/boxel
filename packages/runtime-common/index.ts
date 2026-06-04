@@ -691,6 +691,7 @@ export * from './resource-types';
 export * from './prerender-headers';
 export * from './query';
 export * from './search-utils';
+export * from './request-timings';
 export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';

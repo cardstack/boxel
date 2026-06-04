@@ -90,6 +90,7 @@ import {
   consumingRealmHeader,
   duringPrerenderHeaders,
   jobIdHeader,
+  loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
@@ -1154,6 +1155,7 @@ export default class StoreService extends Service implements StoreInterface {
           ...consumingRealmHeader(),
           ...jobIdHeader(),
           ...jobPriorityHeader(),
+          ...loggingCorrelationIdHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },

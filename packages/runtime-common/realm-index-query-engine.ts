@@ -33,6 +33,7 @@ import type { Realm } from './realm';
 import type { VirtualNetwork } from './virtual-network';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
+import type { RequestTimings } from './request-timings';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
@@ -167,6 +168,13 @@ type Options = {
   // for live / external callers, which therefore never read or write the
   // cache.
   jobIdentity?: string;
+  // Per-request wall-clock collector, threaded from `searchRealms` when a
+  // request carries a correlation id. The post-SQL stages here — the SQL
+  // query, the `loadLinks` relationship assembly, and the per-instance
+  // cache reads/writes — stamp their elapsed time on it so the handler can
+  // attribute the request's server-side time across stages. Absent (and so
+  // a no-op) for everything except instrumented `_federated-search` calls.
+  timings?: RequestTimings;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -218,10 +226,19 @@ export function searchInFlightKey(
   // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
   // collide with the delimiter and cause unrelated searches to coalesce.
   try {
+    // `timings` is a per-request diagnostic collector, not part of the
+    // result-shaping opts. Exclude it from the key so it can't perturb the
+    // in-flight coalescing — two otherwise-identical searches must still
+    // dedupe even though each carries its own collector.
+    let keyOpts = opts;
+    if (opts && 'timings' in opts) {
+      let { timings: _omitTimings, ...rest } = opts;
+      keyOpts = rest;
+    }
     return JSON.stringify([
       realmURL,
       normalizeQueryForSignature(query),
-      opts ? sortKeysDeep(opts) : null,
+      keyOpts ? sortKeysDeep(keyOpts) : null,
     ]);
   } catch {
     return undefined;
@@ -328,7 +345,15 @@ export class RealmIndexQueryEngine {
     if (key !== undefined) {
       let existing = this.#inFlightSearch.get(key);
       if (existing) {
-        return await existing;
+        // A concurrent identical search is already running; this follower
+        // awaits its result instead of re-running the work. Record that wait
+        // as `coalescedWait` on the follower's own collector so its
+        // `realm:search-timing` line reflects the time spent — otherwise the
+        // follower would show no `sql`/`loadLinks` and look misleadingly
+        // instant exactly under the concurrent search load we're diagnosing.
+        return opts?.timings
+          ? await opts.timings.time('coalescedWait', () => existing)
+          : await existing;
       }
       let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
         // Identity-check before deletion: a concurrent invalidation path
@@ -371,11 +396,15 @@ export class RealmIndexQueryEngine {
         meta,
       };
     } else {
-      let { cards, meta } = await this.#indexQueryEngine.searchCards(
-        new URL(this.#realm.url),
-        query,
-        opts,
-      );
+      let runCardSql = () =>
+        this.#indexQueryEngine.searchCards(
+          new URL(this.#realm.url),
+          query,
+          opts,
+        );
+      let { cards, meta } = opts?.timings
+        ? await opts.timings.time('sql', runCardSql)
+        : await runCardSql();
       let cardResources = cards.map((resource) => ({
         ...resource,
         ...{ links: { self: resource.id } },
@@ -403,14 +432,18 @@ export class RealmIndexQueryEngine {
       // Process all root resources together so a single batched DB query
       // resolves their first-level links (1+1 instead of N+M sequential
       // round-trips). See CS-11038.
-      let included = await this.loadLinks(
-        {
-          realmURL: this.realmURL,
-          rootResources: doc.data,
-          omit,
-        },
-        linkOpts,
-      );
+      let runLoadLinks = () =>
+        this.loadLinks(
+          {
+            realmURL: this.realmURL,
+            rootResources: doc.data,
+            omit,
+          },
+          linkOpts,
+        );
+      let included = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
       if (included.length > 0) {
         doc.included = included;
       }
@@ -1388,14 +1421,18 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
+            let timings = popOpts?.timings;
             let cacheKey = this.#instanceCacheKey(resource, popOpts);
             if (cacheKey) {
-              let cached = await this.#readCachedRelationships(
-                cacheKey.jobId,
-                cacheKey.url,
-              );
+              let ck = cacheKey;
+              let cached = timings
+                ? await timings.time('cacheRead', () =>
+                    this.#readCachedRelationships(ck.jobId, ck.url),
+                  )
+                : await this.#readCachedRelationships(ck.jobId, ck.url);
               if (cached !== undefined) {
                 recordInstanceCacheEvent(cacheKey.jobId, true);
+                timings?.incr('cacheHit');
                 // Hit: reuse this instance's assembled query-field
                 // relationships from an earlier occurrence in the same job,
                 // skipping the definition lookup + field-tree walk. The
@@ -1411,28 +1448,43 @@ export class RealmIndexQueryEngine {
                 return;
               }
               recordInstanceCacheEvent(cacheKey.jobId, false);
+              timings?.incr('cacheMiss');
             }
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
               }
             )?.queryFieldDefs;
-            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
-              await this.populateQueryFieldsFromMeta(
-                resource,
-                realmURL,
-                storedDefs,
-                popOpts,
-              );
+            // The relationship/query-field assembly — the definition lookup +
+            // field-tree walk — is the post-SQL "wire-format prep" the timeline
+            // attributes under `populate`.
+            let runPopulate = () =>
+              popOpts?.cacheOnlyDefinitions && storedDefs
+                ? this.populateQueryFieldsFromMeta(
+                    resource,
+                    realmURL,
+                    storedDefs,
+                    popOpts,
+                  )
+                : this.populateQueryFields(resource, realmURL, popOpts);
+            if (timings) {
+              await timings.time('populate', runPopulate);
             } else {
-              await this.populateQueryFields(resource, realmURL, popOpts);
+              await runPopulate();
             }
             if (cacheKey) {
-              await this.#writeCachedRelationships(
-                cacheKey.jobId,
-                cacheKey.url,
-                (resource as { relationships?: unknown }).relationships,
-              );
+              let ck = cacheKey;
+              let writeCache = () =>
+                this.#writeCachedRelationships(
+                  ck.jobId,
+                  ck.url,
+                  (resource as { relationships?: unknown }).relationships,
+                );
+              if (timings) {
+                await timings.time('cacheWrite', writeCache);
+              } else {
+                await writeCache();
+              }
             }
           }),
         );

@@ -10,6 +10,10 @@ import {
   sanitizeConsumingRealmHeader,
   SearchRequestError,
   searchRealms,
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+  RequestTimings,
+  emitSearchTiming,
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
@@ -36,16 +40,32 @@ export default function handleSearch(opts: {
 }): (ctxt: Koa.Context) => Promise<void> {
   let { reconciler, searchCache } = opts;
   return async function (ctxt: Koa.Context) {
+    // Hoof-to-snout server-side timing for one search: from the moment the
+    // handler is entered through to the response being assembled. Stamped
+    // only when the client supplied a correlation id (prerender traffic);
+    // live / external callers allocate nothing and emit no line. The
+    // outermost request→response bound (incl. body read + send) is the
+    // `realm:requests` middleware's `dur=`, keyed by the same id.
+    let handlerStart = Date.now();
+    let loggingCorrelationId = sanitizeLoggingCorrelationId(
+      ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    let timings =
+      loggingCorrelationId !== null ? new RequestTimings() : undefined;
+
     let { realmList } = getMultiRealmAuthorization(ctxt);
 
     let cardsQuery;
     let request = await fetchRequestFromContext(ctxt);
     try {
       let payload = getSearchRequestPayload(ctxt);
-      cardsQuery =
+      let parseQuery = async () =>
         payload !== undefined
           ? parseSearchQueryFromPayload(payload)
           : await parseSearchQueryFromRequest(request);
+      cardsQuery = timings
+        ? await timings.time('parse', parseQuery)
+        : await parseQuery();
     } catch (e) {
       if (e instanceof SearchRequestError) {
         if (e.code === 'invalid-query') {
@@ -106,6 +126,21 @@ export default function handleSearch(opts: {
     if (prerenderJobId) searchOpts.jobIdentity = prerenderJobId;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
+    // `loggingCorrelationId` / `timings` are deliberately kept OUT of `searchOpts`:
+    // that object is the job-scoped search cache's key material (see
+    // `computeETag` / `getOrPopulate` below), and per-request values would
+    // make every key unique and defeat the cache. They only need to reach
+    // `searchRealms` (which stamps the SQL + loadLinks stages onto the same
+    // collector this handler emits), so they ride on the run-time opts and
+    // never touch the cache key.
+    let runSearchOpts =
+      loggingCorrelationId !== null
+        ? {
+            ...(normalizedSearchOpts ?? {}),
+            loggingCorrelationId,
+            ...(timings ? { timings } : {}),
+          }
+        : normalizedSearchOpts;
     // `consumingRealm` is read unconditionally — even when the
     // job-scoped search cache is disabled, `resolveRealmsForFederatedRequest`
     // uses it to scope CS-11259's self-mount fast-path. The cache gate
@@ -116,15 +151,34 @@ export default function handleSearch(opts: {
     // Lazy-mount inside runSearch so cache hits (304 / cached body)
     // skip the lazy-mount work entirely.
     let runSearch = async () => {
-      let realmInstances = await resolveRealmsForFederatedRequest(
-        reconciler,
-        realmList,
-        { consumingRealm },
-      );
-      return JSON.stringify(
-        await searchRealms(realmInstances, cardsQuery, normalizedSearchOpts),
-        null,
-        2,
+      let resolveRealms = () =>
+        resolveRealmsForFederatedRequest(reconciler, realmList, {
+          consumingRealm,
+        });
+      let realmInstances = timings
+        ? await timings.time('resolveRealms', resolveRealms)
+        : await resolveRealms();
+      // `searchRealms` stamps `sql` / `loadLinks` / `populate` / cache stages
+      // onto `runSearchOpts.timings`; because the handler passed a collector
+      // it won't emit its own line — this handler emits the complete one.
+      let doc = await searchRealms(realmInstances, cardsQuery, runSearchOpts);
+      let stringify = async () => JSON.stringify(doc, null, 2);
+      return timings ? await timings.time('stringify', stringify) : stringify();
+    };
+
+    // Emit the complete request→response stage breakdown. Called on every
+    // terminal path that produced a response (skipped only on the parse-
+    // error early returns above, which never reach here). No-op without a
+    // correlation id.
+    let emitTimeline = () => {
+      if (!timings || loggingCorrelationId === null) {
+        return;
+      }
+      emitSearchTiming(
+        `corr=${loggingCorrelationId}` +
+          (prerenderJobId ? ` job=${prerenderJobId}` : '') +
+          ` handler=${Date.now() - handlerStart}ms ` +
+          timings.toLogFragment(),
       );
     };
 
@@ -181,6 +235,7 @@ export default function handleSearch(opts: {
         if (cached !== undefined) {
           ctxt.status = 304;
           ctxt.set('ETag', expectedEtag);
+          emitTimeline();
           return;
         }
       }
@@ -200,6 +255,7 @@ export default function handleSearch(opts: {
           },
         }),
       );
+      emitTimeline();
       return;
     }
 
@@ -210,5 +266,6 @@ export default function handleSearch(opts: {
         headers: { 'content-type': SupportedMimeType.CardJson },
       }),
     );
+    emitTimeline();
   };
 }

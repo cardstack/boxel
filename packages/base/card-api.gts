@@ -1584,6 +1584,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
               {{else}}
