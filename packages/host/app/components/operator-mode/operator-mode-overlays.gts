@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
-import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
@@ -12,7 +11,7 @@ import { TrackedSet } from 'tracked-built-ins';
 import type { BoxelDropdownAPI } from '@cardstack/boxel-ui/components';
 import {
   BoxelDropdown,
-  IconButton,
+  ContextButton,
   Menu,
 } from '@cardstack/boxel-ui/components';
 
@@ -45,7 +44,10 @@ import {
 
 import AdornContext from '@cardstack/host/components/adorn/adorn-context';
 import AdornLabel from '@cardstack/host/components/adorn/adorn-label';
-import AdornSelectChip from '@cardstack/host/components/adorn/adorn-select-chip';
+import {
+  AdornCheckmarkEmpty,
+  AdornCheckmarkSelected,
+} from '@cardstack/host/components/adorn/adorn-select-checkmark';
 
 import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 
@@ -156,10 +158,11 @@ export default class OperatorModeOverlays extends Overlays {
                       @onClose={{this.handleMenuClose}}
                     >
                       <:trigger as |bindings|>
-                        <IconButton
-                          @icon={{DotsVertical}}
-                          class='overlay-label-menu'
-                          aria-label='Options'
+                        <ContextButton
+                          @icon='context-menu-vertical'
+                          @variant='ghost'
+                          @size='extra-small'
+                          @label='Options'
                           data-test-overlay-more-options
                           {{bindings}}
                           {{on
@@ -182,23 +185,29 @@ export default class OperatorModeOverlays extends Overlays {
                 </AdornLabel>
               {{/if}}
 
-              {{! Selection indicator — wrap the chip in a button so
-                  it can be clicked to toggle selection. }}
+              {{! Selection toggle — a ContextButton in toggle mode showing
+                  the Adorn selection-chip artwork (empty vs. checked) via
+                  @icon, so it picks up the shared standard sizing and
+                  toggle (aria-pressed) chrome while keeping the chip look. }}
               {{#if (this.isButtonDisplayed 'select' renderedCard)}}
-                <button
-                  type='button'
+                <ContextButton
+                  @isToggle={{true}}
+                  @isActive={{isSelected}}
+                  @variant='ghost'
+                  @size='extra-small'
+                  @width='1.25rem'
+                  @height='1.25rem'
+                  @icon={{if
+                    isSelected
+                    AdornCheckmarkSelected
+                    AdornCheckmarkEmpty
+                  }}
+                  @label='select card'
                   class='overlay-select-button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
                   {{on 'click' (fn @toggleSelect cardDefOrId)}}
-                  aria-label='select card'
-                  aria-pressed={{if isSelected 'true' 'false'}}
                   data-test-overlay-select={{removeFileExtension cardId}}
-                >
-                  <AdornSelectChip
-                    @selected={{isSelected}}
-                    @compact={{isCompact}}
-                  />
-                </button>
+                />
               {{/if}}
             </div>
           {{/if}}
@@ -232,31 +241,15 @@ export default class OperatorModeOverlays extends Overlays {
         pointer-events: auto;
         z-index: 1;
       }
-      .overlay-label-menu {
-        width: 1.125rem;
-        height: 1.125rem;
-        margin-inline-start: 0;
-        padding: 0.125rem;
-        border-radius: 0.25rem;
-        --icon-bg: var(--boxel-highlight-foreground);
-        --icon-color: var(--boxel-highlight-foreground);
-        --boxel-icon-button-width: 1.125rem;
-        --boxel-icon-button-height: 1.125rem;
-      }
-      .overlay-label-menu:hover {
-        background: rgba(0, 0, 0, 0.12);
-      }
-      /* Selection-toggle button: positions the AdornSelectChip in
-         the bottom-right corner of the overlay and turns it into an
-         interactive control. */
+      /* The "..." menu trigger and the selection toggle are now shared
+         ContextButtons (extra-small size, ghost variant). The menu icon
+         inherits the teal label's highlight-foreground color and the
+         hover/active background comes from the ghost variant, so the
+         rules below only carry the consumer's placement concerns. */
       .overlay-select-button {
         position: absolute;
         bottom: 0.25rem;
         right: 0.25rem;
-        padding: 0;
-        border: none;
-        background: none;
-        cursor: pointer;
         pointer-events: auto;
         z-index: 1;
       }
@@ -265,16 +258,6 @@ export default class OperatorModeOverlays extends Overlays {
          still useful so it stays. */
       .actions-overlay.field .overlay-select-button {
         display: none;
-      }
-      /* Compact-mode sizing for the operator-mode-specific elements
-         (the menu trigger and the select button). The AdornLabel /
-         AdornSelectChip primitives get their compact variant from
-         the `@compact` arg we pass to each of them directly. */
-      .actions-overlay.compact .overlay-label-menu {
-        width: 0.875rem;
-        height: 0.875rem;
-        --boxel-icon-button-width: 0.875rem;
-        --boxel-icon-button-height: 0.875rem;
       }
       .actions-overlay.compact .overlay-select-button {
         bottom: 0.125rem;
