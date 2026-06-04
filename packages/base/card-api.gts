@@ -469,10 +469,10 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 
 export interface CardStore {
   // The VirtualNetwork that owns this store's realm mappings, used for
-  // prefix/RRI resolution during (de)serialization. Optional so test doubles
-  // don't need to implement it; resolution sites degrade — URL-form refs
-  // still URL-join, prefix-form refs pass through unchanged.
-  virtualNetwork?: VirtualNetwork;
+  // prefix/RRI resolution during (de)serialization. Required — every store
+  // implementation must supply one (production stores, test stubs, the
+  // FallbackCardStore).
+  virtualNetwork: VirtualNetwork;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -4653,12 +4653,17 @@ function getStore(instance: BaseDef): CardStore {
 }
 
 // The VirtualNetwork associated with an instance's store, for prefix/RRI
-// resolution outside this module. Returns undefined when the store can't
-// supply one — callers handle that by degrading to URL math or throwing.
+// resolution outside this module. Returns undefined when the instance is
+// detached (no store, no loader-attached VN) — callers handle that by
+// degrading to URL math or throwing.
 export function virtualNetworkFor(
   instance: BaseDef,
 ): VirtualNetwork | undefined {
-  return getStore(instance).virtualNetwork;
+  try {
+    return getStore(instance).virtualNetwork;
+  } catch {
+    return undefined;
+  }
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
@@ -4712,8 +4717,14 @@ class FallbackCardStore implements CardStore {
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
-  get virtualNetwork(): VirtualNetwork | undefined {
-    return myLoader().getVirtualNetwork();
+  get virtualNetwork(): VirtualNetwork {
+    let vn = myLoader().getVirtualNetwork();
+    if (!vn) {
+      throw new Error(
+        `FallbackCardStore.virtualNetwork requires the active Loader to have a VirtualNetwork`,
+      );
+    }
+    return vn;
   }
 
   getCard(id: string) {
@@ -4774,13 +4785,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let vn = this.virtualNetwork;
-    if (!vn) {
-      throw new Error(
-        `CardStore.loadCardDocument requires a Loader with a VirtualNetwork`,
-      );
-    }
-    let promise = loadCardDocument(fetch, url, vn);
+    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }
@@ -4790,13 +4795,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let vn = this.virtualNetwork;
-    if (!vn) {
-      throw new Error(
-        `CardStore.loadFileMetaDocument requires a Loader with a VirtualNetwork`,
-      );
-    }
-    let promise = loadFileMetaDocument(fetch, url, vn);
+    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }
