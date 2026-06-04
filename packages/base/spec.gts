@@ -767,6 +767,11 @@ class Fitted extends Component<typeof Spec> {
         .spec-fitted {
           align-items: center;
         }
+        @container fitted-card (aspect-ratio <= 1 / 1) and (150px <= width) and (170px <= height <= 250px) {
+          .spec-fitted :deep(.thumbnail-section) {
+            flex: 1;
+          }
+        }
       }
     </style>
   </template>
