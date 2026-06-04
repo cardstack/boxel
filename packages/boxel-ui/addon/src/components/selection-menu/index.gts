@@ -121,6 +121,12 @@ export default class SelectionMenu extends Component<Signature> {
       .selection-menu-count {
         line-height: 1;
         white-space: nowrap;
+        /* Reserve a stable width (and equal-width digits) so the trigger
+           doesn't shift when the count crosses 1↔2 digits, e.g. during a
+           Select All that jumps 9→10. */
+        min-width: 2ch;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
       }
       .selection-menu-caret {
         flex-shrink: 0;
