@@ -12,8 +12,9 @@ import {
 } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 function makeColumns(): TrackedArray<KanbanColumnConfig> {
   return new TrackedArray([
@@ -175,6 +176,7 @@ module(
       );
 
       state.cols = makeColumns();
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
       await new Promise((r) => requestAnimationFrame(r));
 
       await click(
@@ -348,6 +350,7 @@ module(
         }) as KanbanColumnConfig,
         ...state.cols.slice(1),
       ]);
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
       await new Promise((r) => requestAnimationFrame(r));
 
       assert.dom('[data-test-col-config-label="backlog"]').hasValue('Queue');
