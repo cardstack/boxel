@@ -200,7 +200,7 @@ export default class CardService extends Service {
 
   async serializeCard(
     card: CardDef,
-    opts?: SerializeOpts & { withIncluded?: true },
+    opts?: Omit<SerializeOpts, 'virtualNetwork'> & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
     let serialized = api.serializeCard(card, {

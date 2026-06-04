@@ -26,7 +26,7 @@ export function serialize(
   codeRef: ResolvedCodeRef | {},
   doc: any,
   _visited?: Set<string>,
-  opts?: SerializeOpts & {
+  opts?: Omit<SerializeOpts, 'virtualNetwork'> & {
     relativeTo?: RealmResourceIdentifier | URL;
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
@@ -75,7 +75,7 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 function codeRefAdjustments(
   codeRef: any,
   relativeTo?: RealmResourceIdentifier | URL,
-  opts?: SerializeOpts & {
+  opts?: Omit<SerializeOpts, 'virtualNetwork'> & {
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
