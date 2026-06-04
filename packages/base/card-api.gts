@@ -11,6 +11,7 @@ import {
 import {
   getBoxComponent,
   type BoxComponent,
+  CardContextConsumer,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
 } from './field-component';
@@ -2858,12 +2859,26 @@ export class MarkdownField extends StringField {
   static embedded = class MarkdownViewTemplate extends Component<
     typeof MarkdownField
   > {
-    <template><MarkdownTemplate @content={{@model}} /></template>
+    <template>
+      <CardContextConsumer as |context|>
+        <MarkdownTemplate
+          @content={{@model}}
+          @cardReferenceVirtualNetwork={{context.store.virtualNetwork}}
+        />
+      </CardContextConsumer>
+    </template>
   };
   static atom = class MarkdownViewTemplate extends Component<
     typeof MarkdownField
   > {
-    <template><MarkdownTemplate @content={{@model}} /></template>
+    <template>
+      <CardContextConsumer as |context|>
+        <MarkdownTemplate
+          @content={{@model}}
+          @cardReferenceVirtualNetwork={{context.store.virtualNetwork}}
+        />
+      </CardContextConsumer>
+    </template>
   };
 
   static edit = class Edit extends Component<typeof this> {

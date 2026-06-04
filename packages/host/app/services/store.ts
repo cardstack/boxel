@@ -302,6 +302,10 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
+  get virtualNetwork() {
+    return this.network.virtualNetwork;
+  }
+
   protected renderContextBlocksPersistence() {
     return (
       this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)

@@ -83,8 +83,15 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    get virtualNetwork(): VirtualNetwork {
+      // Detached models (no store-attached VN) fall back to an empty VN
+      // so MarkdownTemplate's required cardReferenceVirtualNetwork is
+      // satisfied; prefix-form refs in such contexts just won't resolve
+      // since there are no realm mappings.
+      return (
+        (this.args.model ? virtualNetworkFor(this.args.model) : undefined) ??
+        new VirtualNetwork()
+      );
     }
     get baseUrl(): string | null {
       let model = this.args.model;
@@ -110,8 +117,15 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    get virtualNetwork(): VirtualNetwork {
+      // Detached models (no store-attached VN) fall back to an empty VN
+      // so MarkdownTemplate's required cardReferenceVirtualNetwork is
+      // satisfied; prefix-form refs in such contexts just won't resolve
+      // since there are no realm mappings.
+      return (
+        (this.args.model ? virtualNetworkFor(this.args.model) : undefined) ??
+        new VirtualNetwork()
+      );
     }
     get baseUrl(): string | null {
       let model = this.args.model;
@@ -155,8 +169,15 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    get virtualNetwork(): VirtualNetwork {
+      // Detached models (no store-attached VN) fall back to an empty VN
+      // so MarkdownTemplate's required cardReferenceVirtualNetwork is
+      // satisfied; prefix-form refs in such contexts just won't resolve
+      // since there are no realm mappings.
+      return (
+        (this.args.model ? virtualNetworkFor(this.args.model) : undefined) ??
+        new VirtualNetwork()
+      );
     }
     get baseUrl(): string | null {
       let model = this.args.model;

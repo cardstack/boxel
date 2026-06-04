@@ -130,6 +130,17 @@ class Isolated extends Component<typeof MarkdownDef> {
     return Boolean(this.args.model?.content?.trim());
   }
 
+  get virtualNetwork(): VirtualNetwork {
+    // Detached models (no store-attached VN) fall back to an empty VN
+    // so MarkdownTemplate's required cardReferenceVirtualNetwork is
+    // satisfied; prefix-form refs in such contexts just won't resolve
+    // since there are no realm mappings.
+    return (
+      (this.args.model ? virtualNetworkFor(this.args.model) : undefined) ??
+      new VirtualNetwork()
+    );
+  }
+
   <template>
     <article class='markdown-isolated' data-test-markdown-isolated>
       {{#if this.hasContent}}
@@ -137,6 +148,7 @@ class Isolated extends Component<typeof MarkdownDef> {
           @content={{this.content}}
           @linkedCards={{@model.linkedCards}}
           @cardReferenceBaseUrl={{@model.id}}
+          @cardReferenceVirtualNetwork={{this.virtualNetwork}}
         />
       {{else}}
         <header class='markdown-isolated__title'>{{this.title}}</header>
@@ -189,6 +201,17 @@ class Embedded extends Component<typeof MarkdownDef> {
     return headingText === this.title;
   }
 
+  get virtualNetwork(): VirtualNetwork {
+    // Detached models (no store-attached VN) fall back to an empty VN
+    // so MarkdownTemplate's required cardReferenceVirtualNetwork is
+    // satisfied; prefix-form refs in such contexts just won't resolve
+    // since there are no realm mappings.
+    return (
+      (this.args.model ? virtualNetworkFor(this.args.model) : undefined) ??
+      new VirtualNetwork()
+    );
+  }
+
   <template>
     <article class='markdown-embedded' data-test-markdown-embedded>
       {{#unless this.contentStartsWithTitle}}
@@ -199,6 +222,7 @@ class Embedded extends Component<typeof MarkdownDef> {
           @content={{this.content}}
           @linkedCards={{@model.linkedCards}}
           @cardReferenceBaseUrl={{@model.id}}
+          @cardReferenceVirtualNetwork={{this.virtualNetwork}}
         />
       </div>
     </article>

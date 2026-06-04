@@ -992,6 +992,10 @@ export interface AddOptions extends CreateOptions {
 export type StoreReadType = 'card' | 'file-meta';
 
 export interface Store {
+  // The VirtualNetwork that owns the store's realm mappings — used by
+  // store consumers (e.g. field templates obtaining VN through
+  // CardContext) for prefix/RRI resolution at render time.
+  virtualNetwork: VirtualNetwork;
   save(id: string): void;
   create(
     doc: LooseSingleCardDocument,
