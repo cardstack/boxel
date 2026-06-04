@@ -13,10 +13,12 @@ import {
   findDuplicateRoutingPaths,
   validateRoutingPath,
 } from '@cardstack/runtime-common';
+import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import GlimmerComponent from '@glimmer/component';
+import { action } from '@ember/object';
 import type { ComponentLike } from '@glint/template';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
@@ -49,11 +51,36 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     return validateRoutingPath(this.args.model.path);
   }
 
+  // The stored path always carries a leading "/", but the input only
+  // ever shows what comes after it — the "/" is rendered as a fixed
+  // accessory in front of the input. Users can't backspace through it
+  // because it's not part of the editable text.
+  get pathInputValue(): string {
+    let raw = this.args.model.path ?? '';
+    return raw.startsWith('/') ? raw.slice(1) : raw;
+  }
+
+  @action
+  setPathFromInput(value: string) {
+    // Strip any extra leading slashes from typed/pasted input — the
+    // accessory already provides exactly one.
+    let trimmed = (value ?? '').replace(/^\/+/, '');
+    this.args.model.path = `/${trimmed}`;
+  }
+
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
       <div class='row'>
         <div class='path-cell'>
-          <@fields.path />
+          <BoxelInputGroup
+            @value={{this.pathInputValue}}
+            @onInput={{this.setPathFromInput}}
+            data-test-path-input
+          >
+            <:before as |Accessories|>
+              <Accessories.Text>/</Accessories.Text>
+            </:before>
+          </BoxelInputGroup>
         </div>
         <span class='arrow' aria-hidden='true'>→</span>
         <div class='instance-cell'>
