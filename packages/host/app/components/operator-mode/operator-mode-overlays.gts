@@ -163,6 +163,7 @@ export default class OperatorModeOverlays extends Overlays {
                           @variant='ghost'
                           @size='extra-small'
                           @label='Options'
+                          type='button'
                           data-test-overlay-more-options
                           {{bindings}}
                           {{on
@@ -203,6 +204,7 @@ export default class OperatorModeOverlays extends Overlays {
                     AdornCheckmarkEmpty
                   }}
                   @label='select card'
+                  type='button'
                   class='overlay-select-button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
                   {{on 'click' (fn @toggleSelect cardDefOrId)}}
