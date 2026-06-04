@@ -3,6 +3,7 @@ import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  isJsonContentType,
   baseRealm,
   inferContentType,
   unixTime,
@@ -35,6 +36,7 @@ import type { Realm } from './realm';
 import type { VirtualNetwork } from './virtual-network';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
+import type { RequestTimings } from './request-timings';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
@@ -55,6 +57,7 @@ import {
 } from './code-ref';
 import {
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -168,6 +171,13 @@ type Options = {
   // for live / external callers, which therefore never read or write the
   // cache.
   jobIdentity?: string;
+  // Per-request wall-clock collector, threaded from `searchRealms` when a
+  // request carries a correlation id. The post-SQL stages here — the SQL
+  // query, the `loadLinks` relationship assembly, and the per-instance
+  // cache reads/writes — stamp their elapsed time on it so the handler can
+  // attribute the request's server-side time across stages. Absent (and so
+  // a no-op) for everything except instrumented `_federated-search` calls.
+  timings?: RequestTimings;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -219,10 +229,19 @@ export function searchInFlightKey(
   // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
   // collide with the delimiter and cause unrelated searches to coalesce.
   try {
+    // `timings` is a per-request diagnostic collector, not part of the
+    // result-shaping opts. Exclude it from the key so it can't perturb the
+    // in-flight coalescing — two otherwise-identical searches must still
+    // dedupe even though each carries its own collector.
+    let keyOpts = opts;
+    if (opts && 'timings' in opts) {
+      let { timings: _omitTimings, ...rest } = opts;
+      keyOpts = rest;
+    }
     return JSON.stringify([
       realmURL,
       normalizeQueryForSignature(query),
-      opts ? sortKeysDeep(opts) : null,
+      keyOpts ? sortKeysDeep(keyOpts) : null,
     ]);
   } catch {
     return undefined;
@@ -333,7 +352,15 @@ export class RealmIndexQueryEngine {
     if (key !== undefined) {
       let existing = this.#inFlightSearch.get(key);
       if (existing) {
-        return await existing;
+        // A concurrent identical search is already running; this follower
+        // awaits its result instead of re-running the work. Record that wait
+        // as `coalescedWait` on the follower's own collector so its
+        // `realm:search-timing` line reflects the time spent — otherwise the
+        // follower would show no `sql`/`loadLinks` and look misleadingly
+        // instant exactly under the concurrent search load we're diagnosing.
+        return opts?.timings
+          ? await opts.timings.time('coalescedWait', () => existing)
+          : await existing;
       }
       let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
         // Identity-check before deletion: a concurrent invalidation path
@@ -376,11 +403,15 @@ export class RealmIndexQueryEngine {
         meta,
       };
     } else {
-      let { cards, meta } = await this.#indexQueryEngine.searchCards(
-        new URL(this.#realm.url),
-        query,
-        opts,
-      );
+      let runCardSql = () =>
+        this.#indexQueryEngine.searchCards(
+          new URL(this.#realm.url),
+          query,
+          opts,
+        );
+      let { cards, meta } = opts?.timings
+        ? await opts.timings.time('sql', runCardSql)
+        : await runCardSql();
       let cardResources = cards.map((resource) => ({
         ...resource,
         ...{ links: { self: resource.id } },
@@ -408,14 +439,18 @@ export class RealmIndexQueryEngine {
       // Process all root resources together so a single batched DB query
       // resolves their first-level links (1+1 instead of N+M sequential
       // round-trips). See CS-11038.
-      let included = await this.loadLinks(
-        {
-          realmURL: this.realmURL,
-          rootResources: doc.data,
-          omit,
-        },
-        linkOpts,
-      );
+      let runLoadLinks = () =>
+        this.loadLinks(
+          {
+            realmURL: this.realmURL,
+            rootResources: doc.data,
+            omit,
+          },
+          linkOpts,
+        );
+      let included = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
       if (included.length > 0) {
         doc.included = included;
       }
@@ -1178,7 +1213,8 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
-  ): Promise<Map<string, CardResource<Saved>>> {
+    linkContext?: Map<string, { fieldName: string }>,
+  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
@@ -1200,21 +1236,40 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
+        // `links.self` should resolve to a card or file document, but a
+        // mistake (human or AI-generated) can leave a non-card URL here.
+        // Gate on Content-Type so a binary body never reaches JSON.parse.
+        let contentType = response.headers.get('content-type');
+        if (!isJsonContentType(contentType)) {
+          let fieldName = linkContext?.get(url)?.fieldName;
+          let fieldLabel = fieldName
+            ? `Relationship \`${fieldName}\``
+            : 'A relationship';
           throw new Error(
-            `instance ${url} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
+            `${fieldLabel} links to a non-card URL (${
+              contentType ?? 'unknown content type'
+            }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
           );
         }
-        let linkResource: CardResource<Saved> = {
-          ...json.data,
-          ...{ links: { self: json.data.id } },
-        };
-        return [url, linkResource] as const;
+        let json = await response.json();
+        // Cross-realm links can target either a card or a file (e.g. a card
+        // instantiated from a catalog still links to the catalog's image
+        // file). Both kinds are valid linked resources; only an unrecognized
+        // payload is an error.
+        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+          let linkResource: CardResource<Saved> | FileMetaResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
+          return [url, linkResource] as const;
+        }
+        throw new Error(
+          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
+            json,
+            null,
+            2,
+          )}`,
+        );
       }),
     );
     return new Map(entries);
@@ -1373,14 +1428,18 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
+            let timings = popOpts?.timings;
             let cacheKey = this.#instanceCacheKey(resource, popOpts);
             if (cacheKey) {
-              let cached = await this.#readCachedRelationships(
-                cacheKey.jobId,
-                cacheKey.url,
-              );
+              let ck = cacheKey;
+              let cached = timings
+                ? await timings.time('cacheRead', () =>
+                    this.#readCachedRelationships(ck.jobId, ck.url),
+                  )
+                : await this.#readCachedRelationships(ck.jobId, ck.url);
               if (cached !== undefined) {
                 recordInstanceCacheEvent(cacheKey.jobId, true);
+                timings?.incr('cacheHit');
                 // Hit: reuse this instance's assembled query-field
                 // relationships from an earlier occurrence in the same job,
                 // skipping the definition lookup + field-tree walk. The
@@ -1396,28 +1455,43 @@ export class RealmIndexQueryEngine {
                 return;
               }
               recordInstanceCacheEvent(cacheKey.jobId, false);
+              timings?.incr('cacheMiss');
             }
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
               }
             )?.queryFieldDefs;
-            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
-              await this.populateQueryFieldsFromMeta(
-                resource,
-                realmURL,
-                storedDefs,
-                popOpts,
-              );
+            // The relationship/query-field assembly — the definition lookup +
+            // field-tree walk — is the post-SQL "wire-format prep" the timeline
+            // attributes under `populate`.
+            let runPopulate = () =>
+              popOpts?.cacheOnlyDefinitions && storedDefs
+                ? this.populateQueryFieldsFromMeta(
+                    resource,
+                    realmURL,
+                    storedDefs,
+                    popOpts,
+                  )
+                : this.populateQueryFields(resource, realmURL, popOpts);
+            if (timings) {
+              await timings.time('populate', runPopulate);
             } else {
-              await this.populateQueryFields(resource, realmURL, popOpts);
+              await runPopulate();
             }
             if (cacheKey) {
-              await this.#writeCachedRelationships(
-                cacheKey.jobId,
-                cacheKey.url,
-                (resource as { relationships?: unknown }).relationships,
-              );
+              let ck = cacheKey;
+              let writeCache = () =>
+                this.#writeCachedRelationships(
+                  ck.jobId,
+                  ck.url,
+                  (resource as { relationships?: unknown }).relationships,
+                );
+              if (timings) {
+                await timings.time('cacheWrite', writeCache);
+              } else {
+                await writeCache();
+              }
             }
           }),
         );
@@ -1499,6 +1573,9 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
+      // Maps each cross-realm URL to the field that produced it, so a
+      // non-card link can name the offending field in its error.
+      let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1608,6 +1685,9 @@ export class RealmIndexQueryEngine {
             }
           } else {
             crossRealmURLs.add(linkURL.href);
+            if (!crossRealmFieldNames.has(linkURL.href)) {
+              crossRealmFieldNames.set(linkURL.href, { fieldName });
+            }
           }
 
           entries.push({
@@ -1635,7 +1715,7 @@ export class RealmIndexQueryEngine {
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved>>;
+      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
@@ -1655,8 +1735,11 @@ export class RealmIndexQueryEngine {
                 [...crossRealmURLs],
                 invocationId,
                 currentLayerIndex,
+                crossRealmFieldNames,
               )
-            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+            : Promise.resolve(
+                new Map<string, CardResource<Saved> | FileMetaResource>(),
+              ),
         ]);
       } catch (err: unknown) {
         let message =

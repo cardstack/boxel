@@ -200,6 +200,8 @@ const ALL_TEST_FILES: string[] = [
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
+  './sanitize-for-jsonb-test',
+  './is-json-content-type-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
   './queue-test',

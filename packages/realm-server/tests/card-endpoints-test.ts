@@ -4363,6 +4363,120 @@ module(basename(__filename), function () {
     });
   });
 
+  module('cross-realm file links', function (hooks) {
+    // A card instantiated from the catalog (e.g. a blackjack game) keeps a
+    // linksTo(FileDef) reference to an image file that lives in the catalog
+    // realm. When the card is served from a different realm, loadLinks resolves
+    // that reference via the cross-realm fetch path. Regression for CS-11344:
+    // that path used to assume every cross-realm link target was a card and
+    // threw "instance ... is not a card document" on a file-meta target,
+    // surfacing as an HTTP 500.
+    const providerRealmURL = 'http://127.0.0.1:5531/test/';
+    const consumerRealmURL = 'http://127.0.0.1:5532/test/';
+    let consumerRequest: RealmRequest;
+
+    setupPermissionedRealmsCached(hooks, {
+      realms: [
+        {
+          realmURL: providerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSystem: {
+            'instructions.md': '# Cross-realm instructions',
+          },
+        },
+        {
+          realmURL: consumerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSystem: {
+            'skill-card.gts': `
+              import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+
+              export class SkillCard extends CardDef {
+                @field cardTitle = contains(StringField);
+                @field instructionsSource = linksTo(MarkdownDef);
+              }
+            `,
+            'skill.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Cross-realm skill',
+                },
+                relationships: {
+                  instructionsSource: {
+                    links: {
+                      self: `${providerRealmURL}instructions.md`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skill-card'),
+                    name: 'SkillCard',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms }) {
+        let latestRealms = realms.slice(-2);
+        consumerRequest = withRealmPath(
+          supertest(latestRealms[1].realmHttpServer),
+          new URL(consumerRealmURL),
+        );
+      },
+    });
+
+    hooks.afterEach(() => {
+      resetCatalogRealms();
+    });
+
+    test('serves a card linking to a file in another realm', async function (assert) {
+      let response = await consumerRequest
+        .get('/skill')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let doc = response.body as LooseSingleCardDocument;
+      let relationship = doc.data.relationships
+        ?.instructionsSource as Relationship;
+      assert.deepEqual(
+        relationship?.data,
+        {
+          type: 'file-meta',
+          id: `${providerRealmURL}instructions.md`,
+        },
+        'cross-realm file relationship references the file-meta target',
+      );
+
+      let included = doc.included ?? [];
+      let linkedFile = included.find(
+        (resource) => resource.id === `${providerRealmURL}instructions.md`,
+      );
+      assert.ok(linkedFile, 'includes the cross-realm file-meta resource');
+      assert.strictEqual(
+        linkedFile?.type,
+        'file-meta',
+        'cross-realm linked resource is a file-meta resource',
+      );
+      assert.strictEqual(linkedFile?.attributes?.name, 'instructions.md');
+    });
+  });
+
   module('Query-backed relationships runtime resolver', function (hooks) {
     const providerRealmURL = 'http://127.0.0.1:5521/test/';
     const consumerRealmURL = 'http://127.0.0.1:5522/test/';
