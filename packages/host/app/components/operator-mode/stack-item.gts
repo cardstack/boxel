@@ -599,8 +599,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
 
     return {
-      triggerText: `${selectedCount}`,
+      selectedCount,
       menuItems,
+      label: `Selection menu, ${selectedCount} card${
+        selectedCount === 1 ? '' : 's'
+      } selected`,
     };
   }
 
