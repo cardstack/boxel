@@ -255,6 +255,7 @@ class IssueIsolated extends Component<typeof Issue> {
       .issue-isolated {
         height: 100%;
         overflow-y: auto;
+        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         background: var(--background, var(--boxel-light));
@@ -318,6 +319,7 @@ class IssueIsolated extends Component<typeof Issue> {
         gap: var(--boxel-sp-xl);
         align-content: start;
         overflow-y: auto;
+        overflow-x: hidden;
       }
       .content-section {
         display: grid;
@@ -380,6 +382,7 @@ class IssueIsolated extends Component<typeof Issue> {
         gap: var(--boxel-sp-lg);
         align-content: start;
         overflow-y: auto;
+        overflow-x: hidden;
         height: 100%;
         box-sizing: border-box;
       }
@@ -1562,6 +1565,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
         height: 100%;
         overflow-y: auto;
+        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         background-color: var(--board-bg);
@@ -1657,6 +1661,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         min-height: 0;
         display: flex;
         overflow: hidden;
+        position: relative;
       }
       .kanban-area {
         flex: 1;
@@ -1670,10 +1675,14 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         border-radius: inherit;
       }
       .kanban-config-sidebar-wrap {
-        flex-shrink: 0;
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
         width: 0;
         overflow: hidden;
         transition: width var(--boxel-transition);
+        z-index: 1;
       }
       .kanban-config-sidebar-wrap.is-open {
         width: 19rem;
@@ -1685,7 +1694,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 // ── IssueTracker ──────────────────────────────────────────────────────
 
 export class IssueTracker extends KanbanBoard {
-  static displayName = 'Issue Tracker Board';
+  static displayName = 'Issue Tracker';
 
   @field project = linksTo(() => Project);
   @field groupBy = contains(GroupByField);
