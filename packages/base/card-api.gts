@@ -470,8 +470,8 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 export interface CardStore {
   // The VirtualNetwork that owns this store's realm mappings, used for
   // prefix/RRI resolution during (de)serialization. Optional so test doubles
-  // don't need to implement it; resolution sites fall back to the deprecated
-  // module-level resolver when it's absent.
+  // don't need to implement it; resolution sites degrade — URL-form refs
+  // still URL-join, prefix-form refs pass through unchanged.
   virtualNetwork?: VirtualNetwork;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
@@ -4645,7 +4645,7 @@ function getStore(instance: BaseDef): CardStore {
 
 // The VirtualNetwork associated with an instance's store, for prefix/RRI
 // resolution outside this module. Returns undefined when the store can't
-// supply one, so callers fall back to the deprecated module-level resolver.
+// supply one — callers handle that by degrading to URL math or throwing.
 export function virtualNetworkFor(
   instance: BaseDef,
 ): VirtualNetwork | undefined {

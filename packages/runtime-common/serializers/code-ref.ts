@@ -91,10 +91,10 @@ function codeRefAdjustments(
   // The `deserializeAbsolute` field-deserialize path reaches this without
   // opts (no VN, no `allowRelative`, no `maybeRelativeReference`). For
   // URL-like refs we can still do a plain URL-join against `relativeTo`
-  // and apply `trimExecutableExtension`, matching the deprecated
-  // resolver's behavior. Bare specifiers (e.g. `@cardstack/boxel-host/…`)
-  // throw — `resolve` is wrapped in try/catch below, so the original
-  // ref stays intact for the loader's importMap shim.
+  // and apply `trimExecutableExtension`. Bare specifiers (e.g.
+  // `@cardstack/boxel-host/…`) throw — `resolve` is wrapped in try/catch
+  // below, so the original ref stays intact for the loader's importMap
+  // shim.
   let vn = opts?.virtualNetwork;
   let resolve = (ref: string) => {
     if (vn) {

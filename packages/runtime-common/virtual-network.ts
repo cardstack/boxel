@@ -110,9 +110,6 @@ export class VirtualNetwork {
    * Whether `reference` starts with one of this VN's registered realm
    * prefixes (e.g. `@cardstack/base/foo` against a registered
    * `@cardstack/base/` mapping).
-   *
-   * Replacement for the deprecated module-level `isRegisteredPrefix()`
-   * (which reads from the soon-to-be-removed global `prefixMappings`).
    */
   isRegisteredPrefix(reference: string): boolean {
     for (let [prefix] of this.realmMappings) {
@@ -127,8 +124,6 @@ export class VirtualNetwork {
    * Convert a resolved URL back to its registered prefix form when one
    * matches, e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
    * URLs that don't match any registered prefix are returned as-is.
-   *
-   * Replacement for the deprecated `unresolveCardReference()`.
    */
   unresolveURL(url: string): RealmResourceIdentifier {
     for (let [prefix, target] of this.realmMappings) {
@@ -142,12 +137,9 @@ export class VirtualNetwork {
   /**
    * Resolve `reference` (relative path, prefix-form RRI, or URL string)
    * to a canonical URL object using `relativeTo` as the base when
-   * `reference` is relative. Replacement for the deprecated module-level
-   * `resolveCardReference()` for callers that need URL form.
-   *
-   * Composes `resolveRRI` + `toURL` and falls back to the deprecated
-   * resolver if VN-aware resolution can't see the relevant prefix (e.g.
-   * a global-only registration).
+   * `reference` is relative. Composes `resolveRRI` + `toURL`, with a
+   * direct URL-join path for the `/`-rooted-reference cases that
+   * `resolveRRI` declines to handle (see the body comment below).
    */
   resolveURL(reference: string, relativeTo: URL | string | undefined): URL {
     let base: RealmResourceIdentifier | undefined;
@@ -156,13 +148,12 @@ export class VirtualNetwork {
     } else if (typeof relativeTo === 'string') {
       base = relativeTo as RealmResourceIdentifier;
     }
-    // `/`-rooted references are not valid RRI forms (resolveRRI rejects
-    // them), but they're a legitimate URL-form input — the deprecated
-    // resolver did a plain URL-join against the URL-form of `relativeTo`.
-    // Preserve that here: if the base is URL-form, join directly; if it's
-    // a registered prefix, resolve the prefix to its mapped URL first and
-    // then join. Unmapped prefix-form bases fall through to `resolveRRI`,
-    // which surfaces a "no matching prefix mapping" error.
+    // `/`-rooted references are not valid RRI forms — `resolveRRI`
+    // rejects them — but they're legitimate URL-form inputs. Handle
+    // them here: if the base is URL-form, URL-join directly; if it's a
+    // registered prefix, resolve the prefix to its mapped URL first
+    // and then join. Unmapped prefix-form bases fall through to
+    // `resolveRRI`, which raises "no matching prefix mapping".
     if (
       reference.startsWith('/') &&
       !reference.startsWith('//') &&
@@ -185,8 +176,6 @@ export class VirtualNetwork {
    * directly. Throws if the prefix is unregistered and the value isn't a
    * parseable URL — that's intentional: bare local identifiers can't be
    * resolved to a realm location.
-   *
-   * Replacement for the deprecated `cardIdToURL()`.
    */
   toURL(rri: string): URL {
     let resolved = this.resolveRRIToURL(rri);
@@ -205,8 +194,6 @@ export class VirtualNetwork {
    * - Relative (`./`, `../`, bare name) → resolve against `relativeTo`
    * - `$REALM/` → resolve against the realm root of `relativeTo`
    * - `/` or `~/` prefixed → throw (not valid RRI forms)
-   *
-   * Replacement for the deprecated module-level `resolveRRI()`.
    */
   resolveRRI(
     reference: string,

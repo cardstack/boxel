@@ -73,8 +73,9 @@ export interface SerializeOpts {
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
   // The VirtualNetwork to consult for prefix/RRI resolution during
-  // serialization. Optional; sites fall back to the deprecated module-level
-  // resolver when absent.
+  // serialization. Optional: when absent, the `maybeRelativeReference`
+  // closures degrade — prefix-form refs pass through unchanged and only
+  // URL-form bases support URL math.
   virtualNetwork?: VirtualNetwork;
 }
 
