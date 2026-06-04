@@ -1,6 +1,7 @@
 import type {
   BaseDefConstructor,
   BaseInstanceType,
+  CardStore,
 } from 'https://cardstack.com/base/card-api';
 import {
   type ResolvedCodeRef,
@@ -31,17 +32,20 @@ export function serialize(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
-    virtualNetwork?: VirtualNetwork;
+    virtualNetwork: VirtualNetwork;
   },
 ): ResolvedCodeRef | {} {
-  let vn = opts?.virtualNetwork;
+  if (!opts) {
+    return { ...codeRef };
+  }
+  let vn = opts.virtualNetwork;
   let baseURL: URL | undefined;
-  if (opts?.relativeTo instanceof URL) {
+  if (opts.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
-  } else if (typeof opts?.relativeTo === 'string') {
-    baseURL = vn ? vn.toURL(opts.relativeTo) : undefined;
+  } else if (typeof opts.relativeTo === 'string') {
+    baseURL = vn.toURL(opts.relativeTo);
   } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = vn ? vn.toURL(doc.data.id) : undefined;
+    baseURL = vn.toURL(doc.data.id);
   }
   return {
     ...codeRef,
@@ -65,21 +69,33 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
   this: T,
   codeRef: ResolvedCodeRef | {},
   relativeTo: RealmResourceIdentifier | URL | undefined,
+  _doc?: unknown,
+  store?: CardStore,
 ): Promise<BaseInstanceType<T>> {
+  if (!store) {
+    // Reached only by direct test callers that bypass the framework
+    // protocol; the framework's field-deserialize path always supplies
+    // a store. Without a VN we can't resolve prefix-form refs or
+    // round-trip URL-form refs through registered mappings, so leave
+    // the codeRef untouched.
+    return { ...codeRef } as BaseInstanceType<T>;
+  }
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, relativeTo),
+    ...codeRefAdjustments(codeRef, relativeTo, {
+      virtualNetwork: store.virtualNetwork,
+    }),
   } as BaseInstanceType<T>;
 }
 
 function codeRefAdjustments(
   codeRef: any,
-  relativeTo?: RealmResourceIdentifier | URL,
-  opts?: Omit<SerializeOpts, 'virtualNetwork'> & {
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  opts: Omit<SerializeOpts, 'virtualNetwork'> & {
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
-    virtualNetwork?: VirtualNetwork;
+    virtualNetwork: VirtualNetwork;
   },
 ) {
   if (!codeRef) {
@@ -88,35 +104,18 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
-  // The `deserializeAbsolute` field-deserialize path reaches this without
-  // opts (no VN, no `allowRelative`, no `maybeRelativeReference`). For
-  // URL-like refs we can still do a plain URL-join against `relativeTo`
-  // and apply `trimExecutableExtension`. Bare specifiers (e.g.
-  // `@cardstack/boxel-host/…`) throw — `resolve` is wrapped in try/catch
-  // below, so the original ref stays intact for the loader's importMap
-  // shim.
-  let vn = opts?.virtualNetwork;
-  let resolve = (ref: string) => {
-    if (vn) {
-      return resolveModuleHref(ref, relativeTo, vn);
-    }
-    if (!isUrlLike(ref)) {
-      throw new Error(
-        `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
-      );
-    }
-    return new URL(ref, relativeTo).href;
-  };
+  let vn = opts.virtualNetwork;
+  let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
       let resolved = resolve(codeRef.module);
       if (resolved !== codeRef.module) {
         let module: string = resolved;
-        if (opts?.trimExecutableExtension) {
+        if (opts.trimExecutableExtension) {
           module = trimExecutableExtension(rri(module));
         }
-        if (opts?.allowRelative && opts?.maybeRelativeReference) {
+        if (opts.allowRelative && opts.maybeRelativeReference) {
           module = opts.maybeRelativeReference(module);
         }
         return { module };
@@ -128,10 +127,10 @@ function codeRefAdjustments(
   }
   if (relativeTo) {
     let module: string = resolve(codeRef.module);
-    if (opts?.trimExecutableExtension) {
+    if (opts.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
-    if (opts?.allowRelative && opts?.maybeRelativeReference) {
+    if (opts.allowRelative && opts.maybeRelativeReference) {
       module = opts.maybeRelativeReference(module);
     }
     return { module };
