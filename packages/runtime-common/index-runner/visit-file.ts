@@ -16,10 +16,11 @@ import {
   type RealmPaths,
   type RenderRouteOptions,
   type RenderVisitResponse,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from '../index';
 import { CardError } from '../error';
 import { resolveFileDefCodeRef } from '../file-def-code-ref';
+import type { VirtualNetwork } from '../virtual-network';
 
 interface VisitFileFusedOptions {
   url: URL;
@@ -41,6 +42,7 @@ interface VisitFileFusedOptions {
   // traffic that happens to land on the same warm tab.
   batchId: string;
   prerenderer: Prerenderer;
+  virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
   logDebug(message: string): void;
   logWarn(message: string): void;
@@ -52,9 +54,9 @@ interface VisitFileFusedOptions {
     renderResult: NonNullable<RenderVisitResponse['card']>;
     // Timing / diagnostic payload flattened from the fused visit's
     // `response.meta` (server timings + host-side breadcrumbs +
-    // HTTP requestId). Persisted onto `boxel_index.timing_diagnostics`
+    // HTTP requestId). Persisted onto `boxel_index.diagnostics`
     // so operators can investigate slow renders after the fact.
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void>;
   indexFileWithResults(args: {
     path: LocalPath;
@@ -63,7 +65,7 @@ interface VisitFileFusedOptions {
     hasModulePrerender?: boolean;
     extractResult?: RenderVisitResponse['fileExtract'];
     renderResult?: RenderVisitResponse['fileRender'];
-    timingDiagnostics?: TimingDiagnostics;
+    diagnostics?: Diagnostics;
   }): Promise<void>;
 }
 
@@ -83,6 +85,7 @@ export async function visitFileForIndexingFused({
   auth,
   batchId,
   prerenderer,
+  virtualNetwork,
   consumeClearCacheForRender,
   logDebug,
   logWarn,
@@ -157,15 +160,37 @@ export async function visitFileForIndexingFused({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   let clearCache = consumeClearCacheForRender();
+
+  // The file-extract pass runs `FileDef.extractAttributes` in the prerenderer,
+  // which otherwise buffers the entire file just to MD5 it and measure its
+  // size. The realm already persisted both values at write time (computed over
+  // the exact bytes it wrote, which is what the prerenderer would re-fetch), so
+  // hand them through and let `extractAttributes` skip the buffer entirely.
+  // Only forwarded when BOTH are present — `extractAttributes` re-reads the
+  // stream unless it has the hash and the size — so a partial lookup buys
+  // nothing. Absent values (pre-hashing files, no-op rewrites) fall back to the
+  // prerenderer's own buffered read.
+  let fileContentHash: string | undefined;
+  let fileContentSize: number | undefined;
+  if (needFileExtract) {
+    let { contentHash, contentSize } = await batch.getContentMeta(localPath);
+    if (contentHash !== undefined && contentSize !== undefined) {
+      fileContentHash = contentHash;
+      fileContentSize = contentSize;
+    }
+  }
+
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
     ...(needCardRender ? { cardRender: true } : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
     ...(clearCache ? { clearCache } : {}),
+    ...(fileContentHash !== undefined ? { fileContentHash } : {}),
+    ...(fileContentSize !== undefined ? { fileContentSize } : {}),
   };
 
   let visitResponse: RenderVisitResponse;
@@ -227,7 +252,7 @@ export async function visitFileForIndexingFused({
       resourceCreatedAt,
       resource: parsedCardResource,
       renderResult: cardResult,
-      timingDiagnostics: flattenPrerenderMeta(visitResponse.meta),
+      diagnostics: flattenPrerenderMeta(visitResponse.meta),
     });
   }
 
@@ -241,7 +266,7 @@ export async function visitFileForIndexingFused({
     hasModulePrerender: isModule,
     extractResult: visitResponse.fileExtract,
     renderResult: visitResponse.fileRender,
-    timingDiagnostics: flattenPrerenderMeta(visitResponse.meta),
+    diagnostics: flattenPrerenderMeta(visitResponse.meta),
   });
 
   logDebug(

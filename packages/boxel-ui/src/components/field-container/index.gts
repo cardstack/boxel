@@ -14,6 +14,7 @@ export interface Signature {
     icon?: Icon;
     iconHeight?: string;
     iconWidth?: string;
+    inline?: boolean;
     label: string;
     labelFontSize?: BoxelLabelFontSize;
     tag?: keyof HTMLElementTagNameMap;
@@ -33,6 +34,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         "boxel-field"
         vertical=(or @vertical @centeredDisplay)
         horizontal=(not (or @vertical @centeredDisplay))
+        inline=@inline
         small-label=(eq @horizontalLabelSize "small")
         centered-display=@centeredDisplay
         with-icon=(bool @icon)
@@ -111,6 +113,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         ); /* necessary for our various overlays utilizing box-shadow */
         word-break: break-word;
       }
+      .content:not(:has(input)) {
+        text-box-trim: trim-both;
+      }
 
       .horizontal {
         grid-template-columns:
@@ -125,6 +130,30 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       .horizontal > .content {
         align-self: center;
+      }
+
+      .horizontal.inline {
+        --boxel-field-label-size: auto;
+        --boxel-field-content-size: auto;
+        display: inline-grid;
+        grid-template-columns:
+          var(--boxel-field-label-size)
+          var(--boxel-field-content-size);
+        width: fit-content;
+        min-height: unset;
+        gap: var(--boxel-sp-2xs);
+      }
+
+      .horizontal.inline > .label-container {
+        padding-top: 0;
+        align-self: start;
+        display: flex;
+        align-items: center;
+        height: var(--boxel-form-control-height);
+      }
+
+      .horizontal.inline > .content {
+        overflow: clip;
       }
 
       .vertical {

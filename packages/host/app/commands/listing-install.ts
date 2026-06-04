@@ -1,3 +1,5 @@
+import { service } from '@ember/service';
+
 import {
   type ResolvedCodeRef,
   join,
@@ -30,12 +32,16 @@ import ReadSourceCommand from './read-source';
 import SerializeCardCommand from './serialize-card';
 import ValidateRealmCommand from './validate-realm';
 
+import type NetworkService from '../services/network';
+
 const log = logger('catalog:install');
 
 export default class ListingInstallCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput,
   typeof BaseCommandModule.ListingInstallResult
 > {
+  @service declare private network: NetworkService;
+
   description =
     'Install catalog listing with bringing them to code mode, and then remixing them via AI';
 
@@ -69,23 +75,28 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let selectedCodeRef: ResolvedCodeRef | undefined;
     let skillCardId: string | undefined;
 
-    const builder = new PlanBuilder(realmIdentifier, listing);
+    const builder = new PlanBuilder(
+      realmIdentifier,
+      listing,
+      this.network.virtualNetwork,
+    );
 
+    let vn = this.network.virtualNetwork;
     builder
       .addIf(listing.specs?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planModuleInstall(listing.specs, resolver);
+        let r = planModuleInstall(listing.specs, resolver, vn);
         selectedCodeRef = r.modulesCopy[0].targetCodeRef;
         return r;
       })
       .addIf(examplesToInstall?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planInstanceInstall(examplesToInstall, resolver);
+        let r = planInstanceInstall(examplesToInstall, resolver, vn);
         let firstInstance = r.instancesCopy[0];
         exampleCardId = join(realmIdentifier, firstInstance.lid);
         selectedCodeRef = firstInstance.targetCodeRef;
         return r;
       })
       .addIf(listing.skills?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planInstanceInstall(listing.skills, resolver);
+        let r = planInstanceInstall(listing.skills, resolver, vn);
         skillCardId = join(realmIdentifier, r.instancesCopy[0].lid);
         return r;
       });
@@ -211,7 +222,11 @@ export default class ListingInstallCommand extends HostBaseCommand<
       for (let rel of Object.values(relationships)) {
         let rels = Array.isArray(rel) ? rel : [rel];
         for (let relationship of rels) {
-          let relatedIds = extractRelationshipIds(relationship, baseUrl);
+          let relatedIds = extractRelationshipIds(
+            relationship,
+            baseUrl,
+            this.network.virtualNetwork,
+          );
           for (let relatedId of relatedIds) {
             if (!visited.has(relatedId)) {
               queue.push(relatedId);

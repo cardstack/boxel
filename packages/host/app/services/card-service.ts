@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   formattedError,
+  isJsonContentType,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -179,6 +180,19 @@ export default class CardService extends Service {
       throw err;
     }
     if (response.status !== 204) {
+      // A relationship link can point at a non-card URL (e.g. an image);
+      // gate on Content-Type so the binary body never reaches JSON.parse.
+      let contentType = response.headers.get('content-type');
+      if (!isJsonContentType(contentType)) {
+        let err = new Error(
+          `Expected a card document from ${urlString} but the response content type was ${
+            contentType ?? 'unknown'
+          }. If this is a relationship link, it likely points at a non-card URL (e.g. an image) rather than a card.`,
+        ) as any;
+        err.status = response.status;
+        err.responseHeaders = response.headers;
+        throw err;
+      }
       return await response.json();
     }
     return;
@@ -189,7 +203,10 @@ export default class CardService extends Service {
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
-    let serialized = api.serializeCard(card, opts);
+    let serialized = api.serializeCard(card, {
+      virtualNetwork: this.network.virtualNetwork,
+      ...opts,
+    });
     if (!opts?.withIncluded) {
       delete serialized.included;
     }
@@ -205,6 +222,7 @@ export default class CardService extends Service {
     return {
       status: response.status,
       content: await response.text(),
+      contentType: response.headers.get('content-type'),
     };
   }
 

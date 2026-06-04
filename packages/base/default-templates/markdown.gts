@@ -5,17 +5,19 @@ import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 
-import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
+  bfmBlockFormatAndSize,
+  buildWaiter,
   cardTypeName,
   extractMermaidBlocks,
   processKatexPlaceholders,
   replaceMermaidSvgs,
   resolveCardReference,
   trimJsonExtension,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   hasCodeBlocks,
@@ -41,30 +43,39 @@ function wrapTablesHtml(html: string | null | undefined): string {
   return doc.body.innerHTML;
 }
 
+// Lets `settled()` wait for the async markdown rendering work (Mermaid/KaTeX
+// lazy-loading and the deferred card-slot collection) that is kicked off by
+// modifiers and ember-concurrency tasks after the initial render settles.
+const markdownRenderingWaiter = buildWaiter('markdown-rendering');
+
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
+type SlotState = 'resolved' | 'loading' | 'unresolved';
 
-interface ResolvedSlot {
+interface RenderSlot {
   element: HTMLElement;
-  card: CardDef;
+  kind: 'inline' | 'block';
+  state: SlotState;
   format: CardSlotFormat;
-  kind: 'inline' | 'block';
+  // Inline sizing (width/height) so loading and broken placeholders match the
+  // eventual card's footprint; also carries `overflow: hidden` for resolved
+  // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
+  card?: CardDef; // present when state === 'resolved'
+  url?: string; // present when state === 'loading' | 'unresolved'
+  typeName?: string; // present when state === 'unresolved'
 }
 
-interface UnresolvedSlot {
-  element: HTMLElement;
-  url: string;
-  typeName: string;
-  kind: 'inline' | 'block';
-}
-
-type RenderSlot =
-  | (ResolvedSlot & { card: CardDef })
-  | (UnresolvedSlot & { card?: undefined });
-
-function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+function resolveUrl(
+  raw: string,
+  baseUrl: string | null | undefined,
+  virtualNetwork?: VirtualNetwork,
+): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+    return trimJsonExtension(
+      virtualNetwork
+        ? virtualNetwork.resolveURL(raw, baseUrl || undefined).href
+        : resolveCardReference(raw, baseUrl || undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -75,6 +86,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     content: string | null | undefined;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    cardReferenceVirtualNetwork?: VirtualNetwork;
   };
 }> {
   @tracked monacoContextInternal: any = undefined;
@@ -171,7 +183,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     (element: HTMLElement, _positional: unknown[]) => {
       let linkedCards = this.args.linkedCards;
       let baseUrl = this.args.cardReferenceBaseUrl;
+      let virtualNetwork = this.args.cardReferenceVirtualNetwork;
       let pendingUpdate = false;
+      let pendingToken: unknown = undefined;
       // On the very first modifier run linkedCards is likely still loading
       // (empty []) so we skip unresolved Pills to avoid flashing them for
       // refs that will soon resolve. On subsequent runs (linkedCards changed)
@@ -192,87 +206,74 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
 
         let slots: RenderSlot[] = [];
-        let resolvedEls = new Set<HTMLElement>();
 
         for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
-          ),
+          element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
         )) {
-          let rawUrl = el.dataset.boxelBfmInlineRef;
+          let isInline = !!el.dataset.boxelBfmInlineRef;
+          let rawUrl =
+            el.dataset.boxelBfmInlineRef ?? el.dataset.boxelBfmBlockRef ?? '';
           if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
-          let card = cardsByUrl.get(resolved);
-          if (card) {
-            resolvedEls.add(el);
-            slots.push({ element: el, card, format: 'atom', kind: 'inline' });
+          let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
+
+          let format: CardSlotFormat = 'atom';
+          let sizeStyle: string | undefined;
+          if (!isInline) {
+            let derived = bfmBlockFormatAndSize(
+              el.dataset.boxelBfmFormat,
+              el.dataset.boxelBfmWidth,
+              el.dataset.boxelBfmHeight,
+            );
+            format = derived.format;
+            sizeStyle = derived.sizeStyle;
           }
-        }
 
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
-          ),
-        )) {
-          let rawUrl = el.dataset.boxelBfmBlockRef;
-          if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
-          let card = cardsByUrl.get(resolved);
+          let card = cardsByUrl.get(
+            resolveUrl(rawUrl, baseUrl, virtualNetwork),
+          );
           if (card) {
-            let bfmFormat = el.dataset.boxelBfmFormat;
-            let format: CardSlotFormat =
-              bfmFormat === 'fitted' || bfmFormat === 'isolated'
-                ? bfmFormat
-                : 'embedded';
-
             let style: ReturnType<typeof htmlSafe> | undefined;
             if (format === 'fitted') {
-              let w = el.dataset.boxelBfmWidth;
-              let h = el.dataset.boxelBfmHeight;
-              let parts: string[] = [];
-              if (w && /^\d+%$/.test(w)) {
-                parts.push(`width: ${w}`);
-              } else if (w && /^\d+$/.test(w)) {
-                parts.push(`width: ${w}px`);
-              }
-              if (h && /^\d+$/.test(h)) {
-                parts.push(`height: ${h}px`);
-              }
-              parts.push('overflow: hidden');
-              style = htmlSafe(parts.join('; '));
+              style = htmlSafe(
+                sizeStyle
+                  ? `${sizeStyle}; overflow: hidden`
+                  : 'overflow: hidden',
+              );
             }
-
-            resolvedEls.add(el);
             slots.push({
               element: el,
-              card,
+              kind,
+              state: 'resolved',
               format,
-              kind: 'block',
+              card,
               style,
             });
+            continue;
           }
-        }
 
-        // Build unresolved slots for card refs that could not be matched to a
-        // linkedCard. Skipped on the first modifier run (showFallback=false)
-        // to avoid flashing Pills while linkedCards is still loading.
-        if (!showFallback) return slots;
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-type="card"]',
-          ),
-        )) {
-          let url =
-            el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
-          if (!resolvedEls.has(el) && url) {
-            let kind: 'inline' | 'block' = el.dataset.boxelBfmInlineRef
-              ? 'inline'
-              : 'block';
+          // No matching linkedCard yet: show the sized loading shimmer until
+          // linkedCards has settled (showFallback), then fall back to the
+          // broken-link box. Skipping the broken state on the first modifier
+          // run avoids flashing it for refs that will soon resolve.
+          let style = sizeStyle ? htmlSafe(sizeStyle) : undefined;
+          if (!showFallback) {
             slots.push({
               element: el,
-              url,
-              typeName: cardTypeName(url),
               kind,
+              state: 'loading',
+              format,
+              style,
+              url: rawUrl,
+            });
+          } else {
+            slots.push({
+              element: el,
+              kind,
+              state: 'unresolved',
+              format,
+              style,
+              url: rawUrl,
+              typeName: cardTypeName(rawUrl),
             });
           }
         }
@@ -286,35 +287,28 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       // re-render → observer fires again.
       let updateSlots = () => {
         pendingUpdate = false;
-        let nextSlots = collectSlots();
-        let didChange =
-          nextSlots.length !== this.renderSlots.length ||
-          nextSlots.some((slot, index) => {
-            let current = this.renderSlots[index];
-            if (!current || current.element !== slot.element) return true;
-            if (current.kind !== slot.kind) return true;
-            // Resolved ↔ unresolved transition
-            if (!!current.card !== !!slot.card) return true;
-            if (current.card && slot.card) {
-              return (
-                current.card !== slot.card ||
-                (current as ResolvedSlot).format !==
-                  (slot as ResolvedSlot).format ||
-                String((current as ResolvedSlot).style ?? '') !==
-                  String((slot as ResolvedSlot).style ?? '')
-              );
-            }
-            if (!current.card && !slot.card) {
-              return (
-                (current as UnresolvedSlot).url !==
-                (slot as UnresolvedSlot).url
-              );
-            }
-            return false;
-          });
+        let token = pendingToken;
+        pendingToken = undefined;
+        try {
+          let nextSlots = collectSlots();
+          let didChange =
+            nextSlots.length !== this.renderSlots.length ||
+            nextSlots.some((slot, index) => {
+              let current = this.renderSlots[index];
+              if (!current || current.element !== slot.element) return true;
+              if (current.kind !== slot.kind) return true;
+              if (current.state !== slot.state) return true;
+              if (current.format !== slot.format) return true;
+              if (current.card !== slot.card) return true;
+              if (current.url !== slot.url) return true;
+              return String(current.style ?? '') !== String(slot.style ?? '');
+            });
 
-        if (didChange) {
-          this.renderSlots = nextSlots;
+          if (didChange) {
+            this.renderSlots = nextSlots;
+          }
+        } finally {
+          markdownRenderingWaiter.endAsync(token);
         }
       };
 
@@ -323,15 +317,26 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           return;
         }
         pendingUpdate = true;
+        pendingToken = markdownRenderingWaiter.beginAsync();
         scheduleOnce('afterRender', this, updateSlots);
       };
 
       scheduleUpdate();
 
+      // End any in-flight waiter token on teardown so a destroyed modifier
+      // (e.g. the scheduled update never flushed) cannot leave `settled()`
+      // hanging. `updateSlots` clears `pendingToken` first, so this only fires
+      // for a still-pending update.
+      let endPendingToken = () => {
+        let token = pendingToken;
+        pendingToken = undefined;
+        markdownRenderingWaiter.endAsync(token);
+      };
+
       // MutationObserver re-collects slots when the DOM is reconstructed
       // (e.g. after browser back-navigation rebuilds the element's children).
       if (typeof MutationObserver === 'undefined') {
-        return;
+        return endPendingToken;
       }
 
       let observer = new MutationObserver(scheduleUpdate);
@@ -340,7 +345,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         subtree: true,
       });
 
-      return () => observer.disconnect();
+      return () => {
+        observer.disconnect();
+        endPendingToken();
+      };
     },
   );
 
@@ -358,11 +366,16 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   }
 
   _loadKatexTask = task({ drop: true }, async () => {
-    let loadKatex = (globalThis as any).__loadKatex;
-    if (typeof loadKatex !== 'function') {
-      return;
+    let token = markdownRenderingWaiter.beginAsync();
+    try {
+      let loadKatex = (globalThis as any).__loadKatex;
+      if (typeof loadKatex !== 'function') {
+        return;
+      }
+      this._katex = await loadKatex();
+    } finally {
+      markdownRenderingWaiter.endAsync(token);
     }
-    this._katex = await loadKatex();
   });
 
   // ── Mermaid lazy loading + pre-rendering ──
@@ -391,27 +404,32 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       return;
     }
 
-    let mermaid = await loadMermaid();
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'default',
-    });
+    let token = markdownRenderingWaiter.beginAsync();
+    try {
+      let mermaid = await loadMermaid();
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'default',
+      });
 
-    let svgs = new Map<string, string>();
-    for (let block of blocks) {
-      try {
-        let { svg } = await mermaid.render(
-          `mermaid-${++this._mermaidIdCounter}`,
-          block,
-        );
-        svgs.set(block, svg);
-      } catch {
-        // skip failed blocks
+      let svgs = new Map<string, string>();
+      for (let block of blocks) {
+        try {
+          let { svg } = await mermaid.render(
+            `mermaid-${++this._mermaidIdCounter}`,
+            block,
+          );
+          svgs.set(block, svg);
+        } catch {
+          // skip failed blocks
+        }
       }
-    }
 
-    this._mermaidSvgs = svgs;
+      this._mermaidSvgs = svgs;
+    } finally {
+      markdownRenderingWaiter.endAsync(token);
+    }
   });
 
   getCardComponent = (card: BaseDef) => getComponent(card);
@@ -423,9 +441,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     >
       {{this.renderedHtml}}
     </div>
-    {{#each this.renderSlots key="element" as |slot|}}
+    {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
-        {{#if slot.card}}
+        {{#if (eq slot.state 'resolved')}}
           <CardContextConsumer as |context|>
             {{#let (this.getCardComponent slot.card) as |CardComponent|}}
               {{#if (eq slot.kind 'inline')}}
@@ -465,27 +483,44 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               {{/if}}
             {{/let}}
           </CardContextConsumer>
+        {{else if (eq slot.state 'loading')}}
+          {{#if (eq slot.kind 'inline')}}
+            <span
+              class='markdown-bfm-loading markdown-bfm-loading--inline'
+              aria-hidden='true'
+              data-test-markdown-bfm-loading-inline
+            />
+          {{else}}
+            <div
+              class='markdown-bfm-loading markdown-bfm-loading--block markdown-bfm-loading--{{slot.format}}'
+              style={{slot.style}}
+              aria-hidden='true'
+              data-test-markdown-bfm-loading-block
+            />
+          {{/if}}
         {{else}}
           {{#if (eq slot.kind 'inline')}}
-            <Pill
-              @variant='muted'
-              @size='extra-small'
+            <span
+              class='markdown-bfm-broken markdown-bfm-broken--inline'
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-inline
             >
-              <:iconLeft><LinkOffIcon width='12' height='12' /></:iconLeft>
-              <:default>{{slot.typeName}}</:default>
-            </Pill>
+              <span class='markdown-bfm-broken-label'>
+                <LinkOffIcon width='12' height='12' />
+                {{slot.typeName}}
+              </span>
+            </span>
           {{else}}
             <div
-              class='markdown-bfm-unresolved--block'
+              class='markdown-bfm-broken markdown-bfm-broken--block markdown-bfm-broken--{{slot.format}}'
+              style={{slot.style}}
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-block
             >
-              <Pill @variant='muted' @size='small'>
-                <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
-                <:default>{{slot.typeName}}</:default>
-              </Pill>
+              <span class='markdown-bfm-broken-label'>
+                <LinkOffIcon width='14' height='14' />
+                {{slot.typeName}}
+              </span>
             </div>
           {{/if}}
         {{/if}}
@@ -825,14 +860,45 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           border-radius: var(--boxel-border-radius);
         }
 
+        /* Placeholder footprint shared by loading + broken states. The
+           default block sizes approximate the eventual card so the layout does
+           not jump when the card resolves; explicit fitted dimensions arrive
+           as an inline style that overrides these. */
+        .markdown-bfm-loading--embedded,
+        .markdown-bfm-broken--embedded {
+          width: 100%;
+          min-height: 9.375rem;
+        }
+        .markdown-bfm-loading--isolated,
+        .markdown-bfm-broken--isolated {
+          width: 100%;
+          min-height: 18.75rem;
+        }
+        .markdown-bfm-loading--fitted,
+        .markdown-bfm-broken--fitted {
+          width: 15.625rem;
+          height: 10.625rem;
+        }
+
         /* Loading shimmer for card refs before content is rendered */
-        .markdown-content :deep([data-boxel-bfm-type='card']:empty) {
-          background-color: var(--boxel-light-200);
-          border-radius: var(--boxel-border-radius-sm);
+        .markdown-bfm-loading {
           position: relative;
           overflow: hidden;
+          max-width: 100%;
+          background-color: var(--boxel-light-200);
+          border-radius: var(--boxel-border-radius);
         }
-        .markdown-content :deep([data-boxel-bfm-type='card']:empty::after) {
+        .markdown-bfm-loading--inline {
+          display: inline-block;
+          width: 6em;
+          height: 1.2em;
+          vertical-align: middle;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .markdown-bfm-loading--block {
+          display: block;
+        }
+        .markdown-bfm-loading::after {
           content: '';
           position: absolute;
           inset: 0;
@@ -842,21 +908,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             var(--boxel-light-100),
             transparent
           );
-          animation: bfm-shimmer 1.6s linear 0.5s infinite;
           transform: translateX(-100%);
-        }
-        /* Inline shimmer sizing */
-        .markdown-content :deep([data-boxel-bfm-inline-ref]:empty) {
-          display: inline-block;
-          width: 6em;
-          height: 1.2em;
-          vertical-align: middle;
-        }
-        /* Block shimmer sizing */
-        .markdown-content :deep([data-boxel-bfm-block-ref]:empty) {
-          display: block;
-          width: 100%;
-          height: 3em;
+          animation: bfm-shimmer 1.6s linear 0.5s infinite;
         }
         @keyframes bfm-shimmer {
           0% {
@@ -867,10 +920,59 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           }
         }
 
-        /* Unresolved block indicator */
-        .markdown-bfm-unresolved--block {
-          display: block;
+        /* Broken-link placeholder: a card-sized box with a faint diagonal
+           cross and a centered icon + type-name label (no chip). */
+        .markdown-bfm-broken {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          max-width: 100%;
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--boxel-light-100);
+          background-image:
+            linear-gradient(
+              to top right,
+              transparent calc(50% - 0.5px),
+              var(--md-border) calc(50% - 0.5px),
+              var(--md-border) calc(50% + 0.5px),
+              transparent calc(50% + 0.5px)
+            ),
+            linear-gradient(
+              to bottom right,
+              transparent calc(50% - 0.5px),
+              var(--md-border) calc(50% - 0.5px),
+              var(--md-border) calc(50% + 0.5px),
+              transparent calc(50% + 0.5px)
+            );
+          overflow: hidden;
+        }
+        .markdown-bfm-broken--inline {
+          display: inline-flex;
+          min-height: 1.6em;
+          padding: 0 var(--boxel-sp-5xs);
+          vertical-align: middle;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .markdown-bfm-broken--block {
+          display: flex;
           margin: var(--boxel-sp-xxxs) 0;
+        }
+        .markdown-bfm-broken-label {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs);
+          padding: 0 var(--boxel-sp-4xs);
+          /* Match the box fill so the cross does not slice through the text. */
+          background-color: var(--boxel-light-100);
+          color: var(--boxel-500);
+          font-size: 0.75rem;
+          font-weight: 500;
+          line-height: 1.5;
+          white-space: nowrap;
+        }
+        .markdown-bfm-broken-label svg {
+          flex: none;
         }
       }
     </style>

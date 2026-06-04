@@ -17,7 +17,10 @@ export default class AddButtonUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="AddButton">
+    <FreestyleUsage
+      @name="AddButton"
+      @description="Affordance button for adding new items to a list or collection — shows a plus icon and a label, with a hover/active state that signals \"create new\"."
+    >
       <:example>
         <BoxelAddButton
           {{on "click" (fn this.log "button clicked")}}

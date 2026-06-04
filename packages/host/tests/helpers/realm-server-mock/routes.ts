@@ -471,6 +471,11 @@ function getSearchableRealmForURL(
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm not in the registry: there is no real server to search,
+    // so treat it as unavailable. searchRealms() drops undefined entries.
+    return undefined;
+  }
   let remoteRealm: SearchableRealm = {
     url: resolvedRealmURL,
     // pass thru for live realms on localhost:4201 (base, skills, catalog)
@@ -542,6 +547,13 @@ async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm that isn't (yet) in the registry — e.g. its setup
+    // hasn't run, or a prior test's destroyed-owner entry was just evicted.
+    // There is no real server to fall back to, so report it as unavailable
+    // rather than fetching a non-existent host.
+    return null;
+  }
   try {
     let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
       method: 'QUERY',
@@ -561,12 +573,26 @@ async function readRealmConfigFromAdapter(
   adapter: TestRealmAdapter,
 ): Promise<Record<string, unknown> | null> {
   await adapter.ready;
-  let fileRef = await adapter.openFile('.realm.json');
+  let fileRef = await adapter.openFile('realm.json');
   if (!fileRef || typeof fileRef.content !== 'string') {
     return null;
   }
   try {
-    return JSON.parse(fileRef.content) as Record<string, unknown>;
+    let card = JSON.parse(fileRef.content) as {
+      data?: { attributes?: Record<string, unknown> };
+    };
+    let attrs = card?.data?.attributes ?? {};
+    // Flatten the card shape into the legacy sidecar key-set so the
+    // overrides applier doesn't need to know about cardInfo. `name`
+    // lives under cardInfo on the card (matching the CardDef slot),
+    // every other migrated key sits on attributes directly.
+    let cardInfo = (attrs as { cardInfo?: { name?: unknown } }).cardInfo;
+    return {
+      ...attrs,
+      ...(cardInfo && typeof cardInfo.name === 'string'
+        ? { name: cardInfo.name }
+        : {}),
+    } as Record<string, unknown>;
   } catch (error) {
     console.warn(
       `[realm-server-mock] _info invalid realm config ${JSON.stringify({
@@ -609,4 +635,21 @@ function resolveRemoteRealmURL(realmURL: string): string {
     return ensureTrailingSlash(ENV.resolvedBaseRealmURL);
   }
   return normalizedRealmURL;
+}
+
+// The realm server is mocked at ENV.realmServerURL (http://test-realm); realms
+// under that origin are served in-process via the test-realm registry and have
+// no listener on the real network. Only realms that resolve to a genuinely
+// served origin — the base and skills realms on localhost:4201 — can be reached
+// with a real fetch. A `globalThis.fetch` against an in-process realm always
+// rejects with `TypeError: Failed to fetch`; besides the noise, that rejection
+// can escape as an uncaught error and red an unrelated sibling test.
+function isInProcessRealmURL(resolvedRealmURL: string): boolean {
+  try {
+    return (
+      new URL(resolvedRealmURL).origin === new URL(ENV.realmServerURL).origin
+    );
+  } catch {
+    return false;
+  }
 }

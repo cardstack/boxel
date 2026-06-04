@@ -45,7 +45,10 @@ export default class MessageUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="ThreadMessage">
+    <FreestyleUsage
+      @name="ThreadMessage"
+      @description="Single chat/thread message bubble with an author avatar, timestamp, and content area — used in conversation views, comment threads, and chat-style activity logs."
+    >
       <:example>
         <BoxelMessage
           @name={{this.name}}

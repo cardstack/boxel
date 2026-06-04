@@ -20,8 +20,6 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import consumeContext from '../../helpers/consume-context';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -29,9 +27,9 @@ import type RealmService from '../../services/realm';
 
 interface Signature {
   Args: {
-    selectedCards: CardDef[][]; // the selected cards for each stack
+    selectedCardIds: string[][]; // the selected card ids for each stack
     copy: (
-      sources: CardDef[],
+      sourceIds: string[],
       sourceItem: StackItem,
       destinationItem: StackItem,
     ) => void;
@@ -189,7 +187,7 @@ export default class CopyButton extends Component<Signature> {
         // if only one of the top most cards are index cards, and the index card
         // has no selections, then the copy state reflects the copy of the top most
         // card to the index card
-        if (this.args.selectedCards[indexCardIndicies[0]].length) {
+        if (this.args.selectedCardIds[indexCardIndicies[0]].length) {
           // the index card should be the destination card--if it has any
           // selections then don't show the copy button
           return undefined;
@@ -214,7 +212,7 @@ export default class CopyButton extends Component<Signature> {
 
         return {
           direction: indexCardIndicies[0] === LEFT ? 'left' : 'right',
-          sources: [sourceCard],
+          sources: [sourceCard.id],
           destinationItem,
           sourceItem,
         };
@@ -230,7 +228,7 @@ export default class CopyButton extends Component<Signature> {
         for (let [
           index,
           stackSelections,
-        ] of this.args.selectedCards.entries()) {
+        ] of this.args.selectedCardIds.entries()) {
           // both stacks have selections--in this case don't show a copy button
           if (stackSelections.length > 0 && sourceStack != null) {
             return undefined;
@@ -263,7 +261,7 @@ export default class CopyButton extends Component<Signature> {
 
         return {
           direction: sourceStack === LEFT ? 'right' : 'left',
-          sources: this.args.selectedCards[sourceStack],
+          sources: this.args.selectedCardIds[sourceStack],
           sourceItem,
           destinationItem,
         };

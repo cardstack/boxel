@@ -36,8 +36,7 @@ export class KanbanPlaneInner extends Component<{
     hideEmpty?: boolean;
     manager: KanbanDragManager;
     onAddCard?: (columnKey: string | null) => void;
-    onShowEmptyColumns?: () => void;
-    onToggleCollapsed?: (columnKey: string | null, collapsed: boolean) => void;
+    onToggleCollapsed?: (column: KanbanColumnConfig) => void;
     placements: KanbanPlacement[];
   };
   Blocks: {
@@ -51,7 +50,7 @@ export class KanbanPlaneInner extends Component<{
   }
 
   get columns(): KanbanColumnConfig[] {
-    return this.args.columns;
+    return [...this.args.columns].sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   get cardSize(): FittedFormatId {
@@ -74,61 +73,14 @@ export class KanbanPlaneInner extends Component<{
     this.manager.registerContainer(el);
   };
 
-  columnCards = (colIndex: number): KanbanPlacement[] =>
-    cardsInColumn(colIndex, this.args.placements);
-  columnCardCount = (colIndex: number): number =>
-    colCount(colIndex, this.args.placements);
+  columnCards = (colId: string): KanbanPlacement[] =>
+    cardsInColumn(colId, this.args.placements);
+  columnCardCount = (colId: string): number =>
+    colCount(colId, this.args.placements);
 
-  isColumnVisible = (column: KanbanColumnConfig, colIndex: number): boolean => {
-    if (column.collapsed) {
-      return false;
-    }
-    if (!this.args.hideEmpty) {
-      return true;
-    }
-    return this.columnCardCount(colIndex) > 0;
-  };
-
-  isOverWip = (column: KanbanColumnConfig, colIndex: number): boolean => {
+  isOverWip = (column: KanbanColumnConfig): boolean => {
     const limit = column.wipLimit ?? 0;
-    return limit > 0 && this.columnCardCount(colIndex) > limit;
-  };
-
-  get hiddenColumns(): Array<{
-    cardCount: number;
-    colIndex: number;
-    config: KanbanColumnConfig;
-    reason: 'collapsed' | 'empty';
-  }> {
-    return this.columns
-      .map((config, colIndex) => ({
-        config,
-        colIndex,
-        cardCount: this.columnCardCount(colIndex),
-        reason: (config.collapsed ? 'collapsed' : 'empty') as
-          | 'collapsed'
-          | 'empty',
-      }))
-      .filter(
-        ({ config, colIndex }) => !this.isColumnVisible(config, colIndex),
-      );
-  }
-
-  restoreColumn = (hc: {
-    cardCount: number;
-    config: KanbanColumnConfig;
-    reason: 'collapsed' | 'empty';
-  }): void => {
-    if (hc.reason === 'collapsed') {
-      this.args.onToggleCollapsed?.(hc.config.key, false);
-      // A collapsed-and-empty column stays hidden after uncollapsing when
-      // hideEmpty is on — clear the empty filter too so the column appears.
-      if (this.args.hideEmpty && hc.cardCount === 0) {
-        this.args.onShowEmptyColumns?.();
-      }
-    } else {
-      this.args.onShowEmptyColumns?.();
-    }
+    return limit > 0 && this.columnCardCount(column.key) > limit;
   };
 
   get isDragging(): boolean {
@@ -151,14 +103,15 @@ export class KanbanPlaneInner extends Component<{
   isSource = (p: KanbanPlacement): boolean =>
     p.index === this.manager.collapseIndex;
 
-  isTargetColumn = (colIndex: number): boolean => {
+  isTargetColumn = (colId: string): boolean => {
     const ins = this.manager.insertion;
-    return ins !== null && ins.column === colIndex && this.isActivelyMoving;
+    return ins !== null && ins.columnId === colId && this.isActivelyMoving;
   };
 
   shouldShiftDown = (p: KanbanPlacement): boolean => {
     const ins = this.manager.insertion;
-    if (!ins || !this.isActivelyMoving || p.column !== ins.column) return false;
+    if (!ins || !this.isActivelyMoving || p.columnId !== ins.columnId)
+      return false;
     if (p.index === this.manager.activeDragIndex) return false;
     return p.sortOrder >= ins.position;
   };
@@ -173,17 +126,16 @@ export class KanbanPlaneInner extends Component<{
     return sanitizeHtmlSafe('');
   };
 
-  showInsertionBox = (colIndex: number): boolean => {
+  showInsertionBox = (colId: string): boolean => {
     return (
       this.manager.insertion !== null &&
-      this.manager.insertion.column === colIndex &&
+      this.manager.insertion.columnId === colId &&
       this.isActivelyMoving
     );
   };
 
-  insertionBoxStyle = (colIndex: number): SafeString => {
-    if (!this.showInsertionBox(colIndex))
-      return sanitizeHtmlSafe('display: none');
+  insertionBoxStyle = (colId: string): SafeString => {
+    if (!this.showInsertionBox(colId)) return sanitizeHtmlSafe('display: none');
     const off = this.manager.insertionBoxOffset;
     if (!off) return sanitizeHtmlSafe('display: none');
     const height = off.height > 0 ? off.height : this.cardFormat.height;
@@ -211,18 +163,36 @@ export class KanbanPlaneInner extends Component<{
   get roverIndex(): number | null {
     const sel = this.manager.selectedIndex;
     if (sel !== null) return sel;
-    for (let colIdx = 0; colIdx < this.columns.length; colIdx++) {
-      const cards = this.columnCards(colIdx);
+    for (const col of this.columns) {
+      const cards = this.columnCards(col.key);
       if (cards.length > 0) return cards[0]!.index;
     }
     return null;
   }
 
+  get hiddenColumns(): Array<{
+    cardCount: number;
+    config: KanbanColumnConfig;
+    isEmptyLocked: boolean;
+  }> {
+    return this.columns
+      .filter((config) => config.collapsed)
+      .map((config) => {
+        let cardCount = this.columnCardCount(config.key);
+        return {
+          config,
+          cardCount,
+          isEmptyLocked: !!this.args.hideEmpty && cardCount === 0,
+        };
+      });
+  }
+
   <template>
     <div
       class={{cn "board" is-dragging=this.isDragging}}
-      role="region"
-      aria-label={{if @boardLabel @boardLabel "Kanban board"}}
+      role={{if @boardLabel "region"}}
+      aria-label={{@boardLabel}}
+      data-test-kanban-board
       {{CaptureElement this.captureRef}}
       {{BindPointerDown this.manager.onPointerDown}}
       {{on "pointermove" this.manager.onPointerMove}}
@@ -240,41 +210,42 @@ export class KanbanPlaneInner extends Component<{
         aria-atomic="true"
       >{{this.manager.announcement}}</div>
 
-      {{#each this.columns as |column colIdx|}}
-        {{#if (this.isColumnVisible column colIdx)}}
+      {{#each this.columns as |column i|}}
+        {{#unless column.collapsed}}
           <div
             class={{cn
               "column"
-              is-target=(this.isTargetColumn colIdx)
-              is-over-wip=(this.isOverWip column colIdx)
+              is-target=(this.isTargetColumn column.key)
+              is-over-wip=(this.isOverWip column)
             }}
             role="group"
             aria-label={{if column.label column.label "Untitled"}}
             style={{this.columnStyle}}
-            data-kanban-column={{colIdx}}
-            data-test-column-is-over-wip={{this.isOverWip column colIdx}}
+            data-kanban-column={{column.key}}
+            data-kanban-column-index="{{i}}"
+            data-test-column-is-over-wip={{this.isOverWip column}}
           >
             <KanbanColumnHeader
               @column={{column}}
-              @cardCount={{this.columnCardCount colIdx}}
-              @isOverWip={{this.isOverWip column colIdx}}
-              @isTarget={{this.isTargetColumn colIdx}}
+              @cardCount={{this.columnCardCount column.key}}
+              @isOverWip={{this.isOverWip column}}
+              @isTarget={{this.isTargetColumn column.key}}
               @onAddCard={{if @onAddCard (fn @onAddCard column.key)}}
               @onCollapse={{if
                 @onToggleCollapsed
-                (fn @onToggleCollapsed column.key true)
+                (fn @onToggleCollapsed column)
               }}
             />
 
             <div class="col-body" role="list" data-kanban-col-body>
-              {{#if (this.showInsertionBox colIdx)}}
+              {{#if (this.showInsertionBox column.key)}}
                 <div
                   class="insertion-box"
-                  style={{this.insertionBoxStyle colIdx}}
+                  style={{this.insertionBoxStyle column.key}}
                 ></div>
               {{/if}}
 
-              {{#each (this.columnCards colIdx) as |placement|}}
+              {{#each (this.columnCards column.key) as |placement|}}
                 <KanbanCard
                   @placement={{placement}}
                   @isSelected={{eq placement.index this.manager.selectedIndex}}
@@ -288,16 +259,16 @@ export class KanbanPlaneInner extends Component<{
                 </KanbanCard>
               {{/each}}
 
-              {{#unless (this.columnCardCount colIdx)}}
+              {{#unless (this.columnCardCount column.key)}}
                 <div
                   class="empty-col"
                   aria-hidden="true"
-                  data-test-empty-column={{colIdx}}
+                  data-test-empty-column={{column.key}}
                 >No cards</div>
               {{/unless}}
             </div>
           </div>
-        {{/if}}
+        {{/unless}}
       {{/each}}
 
       {{#if this.hiddenColumns.length}}
@@ -318,13 +289,15 @@ export class KanbanPlaneInner extends Component<{
               <button
                 class="hidden-col-row"
                 type="button"
+                disabled={{hc.isEmptyLocked}}
                 aria-label={{if
                   hc.config.label
                   (concat "Show " hc.config.label)
                   "Show column"
                 }}
-                {{on "click" (fn this.restoreColumn hc)}}
+                {{on "click" (fn @onToggleCollapsed hc.config)}}
                 data-test-hidden-column-row={{i}}
+                data-test-show-hidden-column={{hc.config.key}}
               >
                 <span
                   class="hidden-col-dot"
@@ -335,8 +308,10 @@ export class KanbanPlaneInner extends Component<{
                     hc.config.label
                     "Untitled"
                   }}</span>
+                {{#unless hc.isEmptyLocked}}
+                  <Eye class="hidden-col-restore-icon" />
+                {{/unless}}
                 <span class="hidden-col-count">{{hc.cardCount}}</span>
-                <Eye class="hidden-col-restore-icon" />
               </button>
             {{/each}}
           </div>
@@ -481,7 +456,11 @@ export class KanbanPlaneInner extends Component<{
         transition: background 120ms ease;
       }
 
-      .hidden-col-row:hover {
+      .hidden-col-row:disabled {
+        cursor: default;
+      }
+
+      .hidden-col-row:hover:not(:disabled) {
         background: color-mix(in oklch, var(--_kanban-col-fg) 10%, transparent);
       }
 
@@ -517,7 +496,7 @@ export class KanbanPlaneInner extends Component<{
         color: var(--_kanban-muted-fg);
       }
 
-      .hidden-col-row:hover .hidden-col-restore-icon {
+      .hidden-col-row:hover:not(:disabled) .hidden-col-restore-icon {
         opacity: 1;
       }
     </style>

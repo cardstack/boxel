@@ -8,7 +8,6 @@ import { isEqual } from 'lodash';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
-  cardIdToURL,
   identifyCard,
   internalKeyFor,
   logger,
@@ -23,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 import type {
   BaseDef,
@@ -40,6 +40,7 @@ const computePerfLog = logger('host:computed-perf');
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
+  @service declare private network: NetworkService;
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
@@ -91,12 +92,14 @@ export default class RenderMetaRoute extends Route<Model> {
     let passSnapshot: ComputePassSnapshot | undefined;
     try {
       let serializeStart = performance.now();
+      let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
-            cardIdToURL(reference),
-            cardIdToURL(instance.id),
+            vn.toURL(reference),
+            vn.toURL(instance.id),
             instance[realmURL],
           ),
       }) as SingleCardDocument;
@@ -136,6 +139,27 @@ export default class RenderMetaRoute extends Route<Model> {
       serializeMs: Math.round(serializeMs * 100) / 100,
       searchDocMs: Math.round(searchDocMs * 100) / 100,
     };
+
+    // Record broken `linksTo` / `linksToMany` targets as searchable
+    // metadata on the success entry. We awaited `readyPromise` above, so
+    // the store has settled: every lazy link the render pulled on has
+    // resolved and any failure has planted its sentinel. `getBrokenLinks`
+    // reads that terminal state through `getRelationship` without
+    // retriggering a load. The card still indexes as `type='instance'`
+    // (the broken slot renders a placeholder); this block is the only
+    // direct, indexed signal of which slots are broken, persisted to
+    // `boxel_index.diagnostics.brokenLinks`. Guarded like the
+    // compute-pass hooks above: a stale base/card-api build loaded during
+    // a cold boot may predate the export, in which case we omit the
+    // findings and the render still produces a correct meta doc.
+    if (typeof api.getBrokenLinks === 'function') {
+      let brokenLinks = api.getBrokenLinks(instance);
+      if (brokenLinks.length > 0) {
+        diagnostics.brokenLinks = brokenLinks.map(
+          ({ fieldName, reference, kind }) => ({ fieldName, reference, kind }),
+        );
+      }
+    }
     computePerfLog.debug(
       `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls ?? 'n/a'} cacheHits=${diagnostics.computedCacheHits ?? 'n/a'} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs}`,
     );
@@ -143,7 +167,9 @@ export default class RenderMetaRoute extends Route<Model> {
     return {
       serialized,
       displayNames,
-      types: types.map((t) => internalKeyFor(t, undefined)),
+      types: types.map((t) =>
+        internalKeyFor(t, undefined, this.network.virtualNetwork),
+      ),
       searchDoc,
       deps,
       diagnostics,

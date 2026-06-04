@@ -39,6 +39,7 @@ export {
   type InputValidationState as BoxelInputValidationState,
 } from './components/input/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
+import { KanbanColumnConfigSidebar } from './components/kanban/column-config-sidebar.gts';
 import { KanbanDragManager } from './components/kanban/drag.gts';
 import {
   type InsertionPoint,
@@ -136,6 +137,7 @@ export {
   GridContainer,
   Header,
   IconButton,
+  KanbanColumnConfigSidebar,
   kanbanColumnCount,
   KanbanDragManager,
   KanbanPlane,

@@ -246,6 +246,11 @@ module(basename(__filename), function () {
     });
 
     test('lookupDefinition', async function (assert) {
+      // Start from a cold modules cache: the fixture realm's indexing
+      // pre-warms its card modules (including person.gts), so without this
+      // reset the first lookup below would hit a populated row and never
+      // reach the prerenderer, breaking the call-count assertions.
+      await dbAdapter.execute('DELETE FROM modules');
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -271,6 +276,8 @@ module(basename(__filename), function () {
     });
 
     test('invalidation', async function (assert) {
+      // Start from a cold modules cache; see lookupDefinition above.
+      await dbAdapter.execute('DELETE FROM modules');
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -310,6 +317,8 @@ module(basename(__filename), function () {
     });
 
     test('invalidates module cache entries without file extensions', async function (assert) {
+      // Start from a cold modules cache; see lookupDefinition above.
+      await dbAdapter.execute('DELETE FROM modules');
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -2303,7 +2312,7 @@ module(basename(__filename), function () {
       nextPrerenderMeta = undefined;
     });
 
-    test('persists timing_diagnostics from prerender meta on module rows', async function (assert) {
+    test('persists diagnostics from prerender meta on module rows', async function (assert) {
       nextPrerenderMeta = {
         requestId: 'req-test-123',
         diagnostics: {
@@ -2320,11 +2329,11 @@ module(basename(__filename), function () {
       assert.strictEqual(definition?.displayName, 'Person');
 
       let rows = (await adapter.execute(
-        `SELECT timing_diagnostics FROM modules WHERE url = $1`,
+        `SELECT diagnostics FROM modules WHERE url = $1`,
         { bind: [`${realmURL}person.gts`] },
-      )) as { timing_diagnostics: unknown }[];
+      )) as { diagnostics: unknown }[];
       assert.strictEqual(rows.length, 1, 'one modules row was written');
-      let raw = rows[0].timing_diagnostics;
+      let raw = rows[0].diagnostics;
       let persisted =
         typeof raw === 'string'
           ? (JSON.parse(raw) as Record<string, any>)
@@ -2336,7 +2345,7 @@ module(basename(__filename), function () {
       assert.strictEqual(persisted?.totalElapsedMs, 4334);
     });
 
-    test('persists null timing_diagnostics when prerender returns no meta', async function (assert) {
+    test('persists null diagnostics when prerender returns no meta', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -2344,14 +2353,263 @@ module(basename(__filename), function () {
       assert.strictEqual(definition?.displayName, 'Person');
 
       let rows = (await adapter.execute(
-        `SELECT timing_diagnostics FROM modules WHERE url = $1`,
+        `SELECT diagnostics FROM modules WHERE url = $1`,
         { bind: [`${realmURL}person.gts`] },
-      )) as { timing_diagnostics: unknown }[];
+      )) as { diagnostics: unknown }[];
       assert.strictEqual(rows.length, 1, 'one modules row was written');
       assert.strictEqual(
-        rows[0].timing_diagnostics,
+        rows[0].diagnostics,
         null,
-        'timing_diagnostics is null when meta is absent',
+        'diagnostics is null when meta is absent',
+      );
+    });
+  });
+
+  // Lightweight tests for the worker pre-warm path. Like the timing
+  // diagnostics module above, these use createTestPgAdapter + an in-memory
+  // CachingDefinitionLookup rather than the heavier
+  // setupPermissionedRealmsCached fixture — pre-warm runs in the worker,
+  // which has no realm-server / prerender / Chromium, so we only need a pg
+  // adapter, a fake registered realm for the reader, and a mock prerenderer.
+  module('module pre-warm (worker bare lookup)', function (hooks) {
+    let adapter: PgAdapter;
+    let realmURL = 'http://127.0.0.1:4452/';
+    let testUserId = '@user1:localhost';
+    let prerenderModuleCalls = 0;
+    let prerenderModulePriorities: (number | undefined)[] = [];
+
+    function buildMockPrerenderer(): Prerenderer {
+      return {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderModuleCalls++;
+          prerenderModulePriorities.push(args.priority);
+          let moduleURL = new URL(args.url);
+          let modulePathWithoutExtension = moduleURL.href.replace(/\.gts$/, '');
+          return Promise.resolve({
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {
+              [`${modulePathWithoutExtension}/Person`]: {
+                type: 'definition',
+                moduleURL: moduleURL.href,
+                definition: {
+                  type: 'card-def',
+                  codeRef: { module: rri(moduleURL.href), name: 'Person' },
+                  displayName: 'Person',
+                  fields: {},
+                  fieldDefs: {},
+                },
+                types: [],
+              },
+            },
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+    }
+
+    let fakeRealm = {
+      url: realmURL,
+      async getRealmOwnerUserId() {
+        return testUserId;
+      },
+      async visibility(): Promise<'private'> {
+        return 'private';
+      },
+    };
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      prerenderModuleCalls = 0;
+      prerenderModulePriorities = [];
+      // The reader's prerender (on a cache miss) resolves permissions for
+      // the realm owner; the populate path likewise prerenders as the owner.
+      await adapter.execute(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+         VALUES ($1, $2, true, true, true)`,
+        { bind: [realmURL, testUserId] },
+      );
+    });
+
+    hooks.afterEach(async function () {
+      await adapter.close();
+    });
+
+    test('explicit-context populate persists where the self-resolving lookup no-ops', async function (assert) {
+      let virtualNetwork = createVirtualNetwork();
+
+      // The indexer worker constructs a bare CachingDefinitionLookup and
+      // never registers the realm — registerRealm is only reached via
+      // forRealm, which the realm-server alone calls. Reproduce that.
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        buildMockPrerenderer(),
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+
+      // Self-resolving path: with no registered realm and no requesting
+      // realm, buildLookupContext returns null, so getCachedDefinitions is a
+      // silent no-op — it never reaches the prerenderer and persists
+      // nothing. This is the bug pre-warm was silently hitting.
+      let noOp = await workerLookup.getCachedDefinitions(
+        `${realmURL}person.gts`,
+      );
+      assert.strictEqual(
+        noOp,
+        undefined,
+        'self-resolving lookup on a bare worker lookup returns undefined',
+      );
+      assert.strictEqual(
+        prerenderModuleCalls,
+        0,
+        'no-op path never reached the prerenderer',
+      );
+      let afterNoOp = await adapter.execute('SELECT url FROM modules');
+      assert.strictEqual(
+        afterNoOp.length,
+        0,
+        'no-op path persisted zero module rows',
+      );
+
+      // Explicit-context path: pre-warm supplies the same context the
+      // visit-phase reader produces (realm-auth / realm-owner user id), so
+      // the read-through populate persists a row.
+      let entry = await workerLookup.populateDefinitionCacheEntry({
+        moduleURL: `${realmURL}person.gts`,
+        realmURL,
+        resolvedRealmURL: realmURL,
+        cacheScope: 'realm-auth',
+        cacheUserId: testUserId,
+        prerenderUserId: testUserId,
+        priority: 10,
+      });
+      assert.ok(entry, 'explicit-context populate returned an entry');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'explicit-context populate fired the prerenderer once',
+      );
+      assert.deepEqual(
+        prerenderModulePriorities,
+        [10],
+        'job priority forwarded to the prerenderer',
+      );
+      let afterPopulate = await adapter.execute(
+        `SELECT url FROM modules WHERE resolved_realm_url = $1`,
+        { bind: [realmURL] },
+      );
+      assert.ok(
+        afterPopulate.length > 0,
+        'explicit-context populate persisted module rows',
+      );
+
+      // The key it wrote must be the one the visit-phase reader reads. A
+      // realm-scoped reader (registered realm, same realm-auth/owner key)
+      // reads the pre-warmed row without re-firing the prerenderer —
+      // proving the warm key matches the read key (no silent mismatch).
+      let readerLookup = new CachingDefinitionLookup(
+        adapter,
+        buildMockPrerenderer(),
+        createVirtualNetwork(),
+        testCreatePrerenderAuth,
+      );
+      readerLookup.registerRealm(fakeRealm);
+      let cached = await readerLookup.getCachedDefinitions(
+        `${realmURL}person.gts`,
+      );
+      assert.ok(cached, 'realm-scoped reader read the pre-warmed row');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'reader hit the cache the pre-warm wrote — no second prerender',
+      );
+    });
+
+    test('pre-warm does not persist error entries for modules that fail to prerender', async function (assert) {
+      // The realm-wide `.gts`/`.gjs` sweep speculatively warms every card
+      // module, so it also touches `.gts` files that aren't cards and fail
+      // to prerender (a non-card `realm.gts`). A non-missing prerender
+      // error must NOT be persisted — that would pollute the modules cache
+      // with error rows no reader asked for.
+      let erroringModule = `${realmURL}realm.gts`;
+      let errorPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderModuleCalls++;
+          return Promise.resolve({
+            id: args.url,
+            status: 'error',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {},
+            error: {
+              type: 'module-error',
+              error: {
+                id: args.url,
+                message: 'simulated non-card module render failure',
+                status: 500,
+                title: 'Module error',
+                deps: [],
+                additionalErrors: null,
+              },
+            },
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        errorPrerenderer,
+        createVirtualNetwork(),
+        testCreatePrerenderAuth,
+      );
+
+      let entry = await workerLookup.populateDefinitionCacheEntry({
+        moduleURL: erroringModule,
+        realmURL,
+        resolvedRealmURL: realmURL,
+        cacheScope: 'realm-auth',
+        cacheUserId: testUserId,
+        prerenderUserId: testUserId,
+        priority: 0,
+      });
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'pre-warm did attempt the prerender',
+      );
+      assert.strictEqual(
+        entry,
+        undefined,
+        'pre-warm returns undefined for a module that failed to prerender',
+      );
+      let rows = await adapter.execute(
+        `SELECT url, error_doc FROM modules WHERE url = $1`,
+        { bind: [erroringModule] },
+      );
+      assert.strictEqual(
+        rows.length,
+        0,
+        'pre-warm persisted no row (no error_doc) for the failed module',
       );
     });
   });

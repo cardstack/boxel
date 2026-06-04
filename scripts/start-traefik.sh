@@ -8,15 +8,23 @@ set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # If a Traefik container exists but its dynamic-config bind mount points
-# at a directory other than this worktree's traefik/dynamic (e.g. the
-# originating worktree was deleted), remove it so the compose-up branch
-# below recreates it from the current worktree.
+# at a worktree that no longer exists on disk, remove it so the compose-up
+# branch below recreates it from the current worktree. When the originating
+# worktree is still around (i.e. another env is running there), leave the
+# container alone — dev-service-registry.ts and traefik-helpers.js both
+# discover the mount via `docker inspect` and write into whichever dir is
+# currently mounted, so this worktree's services register alongside the
+# other's instead of clobbering them.
 if docker ps -a --format '{{.Names}}' | grep -q '^boxel-traefik$'; then
   MOUNTED="$(docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
   EXPECTED="$REPO_ROOT/traefik/dynamic"
   if [ -n "$MOUNTED" ] && [ "$MOUNTED" != "$EXPECTED" ]; then
-    echo "Traefik dynamic-config mount is stale ($MOUNTED); recreating from $EXPECTED"
-    docker rm -f boxel-traefik >/dev/null
+    if [ -d "$MOUNTED" ]; then
+      echo "Traefik is mounted from another worktree ($MOUNTED); reusing it so services already registered there keep routing. This worktree's per-service configs will be written into that shared dir."
+    else
+      echo "Traefik dynamic-config mount is stale ($MOUNTED no longer exists); recreating from $EXPECTED"
+      docker rm -f boxel-traefik >/dev/null
+    fi
   fi
 fi
 

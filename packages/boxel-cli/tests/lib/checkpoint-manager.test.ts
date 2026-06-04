@@ -285,20 +285,20 @@ describe('CheckpointManager', () => {
       expect(fs.existsSync(path.join(workspaceDir, 'b.gts'))).toBe(false);
     });
 
-    it('does not remove protected files during restore', async () => {
+    it('does not remove dotfiles during restore', async () => {
       writeFile(workspaceDir, 'a.gts', 'a');
       const first = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'added' },
       ]);
 
-      // .realm.json is a protected file but is a dotfile, so it would not be
-      // picked up by the workspace scan. Put it there anyway — restore must
-      // not delete it even though it is not in the target checkpoint.
-      writeFile(workspaceDir, '.realm.json', '{"name":"x"}');
+      // Dotfiles are excluded from the workspace scan. Put one there
+      // anyway — restore must not delete it even though it is not in
+      // the target checkpoint.
+      writeFile(workspaceDir, '.gitkeep', 'marker');
 
       await cm.restore(first!.hash);
 
-      expect(fs.existsSync(path.join(workspaceDir, '.realm.json'))).toBe(true);
+      expect(fs.existsSync(path.join(workspaceDir, '.gitkeep'))).toBe(true);
     });
   });
 

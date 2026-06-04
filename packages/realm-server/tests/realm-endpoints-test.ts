@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
@@ -25,6 +25,8 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
+  acquireBaseRealmTemplate,
+  withIndexProgressHeartbeat,
   setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
@@ -355,7 +357,7 @@ module(basename(__filename), function () {
           dir.name,
           'realm_server_1',
           'test',
-          '.realm.json',
+          'realm.json',
         );
         initialConfig = existsSync(realmConfigPath)
           ? readJSONSync(realmConfigPath)
@@ -382,7 +384,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json was not modified',
+            'realm.json card was not modified',
           );
         }
       });
@@ -517,7 +519,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json sidecar is untouched by a publishable PATCH',
+            'realm.json card is untouched by a publishable PATCH',
           );
         }
 
@@ -548,7 +550,7 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after disallowed property',
+            'realm.json card remains unchanged after disallowed property',
           );
         }
       });
@@ -680,12 +682,12 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after invalid request',
+            'realm.json card remains unchanged after invalid request',
           );
         } else {
           assert.false(
             existsSync(realmConfigPath),
-            '.realm.json is not created on invalid request',
+            'realm.json card is not created on invalid request',
           );
         }
       });
@@ -733,12 +735,12 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after malformed requests',
+            'realm.json card remains unchanged after malformed requests',
           );
         } else {
           assert.false(
             existsSync(realmConfigPath),
-            '.realm.json is not created when payloads are malformed',
+            'realm.json card is not created when payloads are malformed',
           );
         }
       });
@@ -772,26 +774,25 @@ module(basename(__filename), function () {
           assert.deepEqual(
             readJSONSync(realmConfigPath),
             initialConfig,
-            '.realm.json remains unchanged after empty property name',
+            'realm.json card remains unchanged after empty property name',
           );
         } else {
           assert.false(
             existsSync(realmConfigPath),
-            '.realm.json is not created when property name is empty',
+            'realm.json card is not created when property name is empty',
           );
         }
       });
 
-      test('returns error when existing .realm.json cannot be parsed', async function (assert) {
-        let invalidContent = '{ "name": "realm" ';
+      test('returns error when the existing RealmConfig card cannot be parsed', async function (assert) {
+        let invalidContent = '{ "data": { "type": "card" ';
         writeFileSync(realmConfigPath, invalidContent);
 
         try {
-          // interactHome is sidecar-owned, so this exercises the sidecar
-          // JSON-parse error path. Card-owned fields (name, backgroundURL,
-          // iconURL, hostRoutingRules) go to realm.json and metadata-owned
-          // fields (publishable) go to realm_metadata; neither would
-          // surface an error from a malformed .realm.json.
+          // `name` is a card-owned field, so a PATCH that targets it
+          // reaches the card-read/parse path in patchRealmConfig. A
+          // malformed realm.json at this point surfaces a 500 with the
+          // "Unable to parse existing realm config card" message.
           let response = await request
             .patch('/_config')
             .set('Accept', SupportedMimeType.JSON)
@@ -806,21 +807,21 @@ module(basename(__filename), function () {
             .send({
               data: {
                 type: 'realm-config',
-                attributes: { interactHome: 'card://realm/home' },
+                attributes: { name: 'Patched Name' },
               },
             });
 
           assert.strictEqual(response.status, 500, 'HTTP 500 status');
           assert.ok(
             response.body.errors?.[0]?.message?.startsWith(
-              'Unable to parse existing realm config:',
+              'Unable to parse existing realm config card:',
             ),
             'error message indicates parsing failure',
           );
           assert.strictEqual(
             readFileSync(realmConfigPath, 'utf8'),
             invalidContent,
-            '.realm.json remains unchanged when existing file is invalid',
+            'realm.json card remains unchanged when existing file is invalid',
           );
         } finally {
           if (initialConfig) {
@@ -2009,7 +2010,6 @@ module(basename(__filename), function () {
     let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
-      '.realm.json': readJSONSync(join(fixtureDir('realistic'), '.realm.json')),
       'realm.json': readJSONSync(join(fixtureDir('realistic'), 'realm.json')),
       'person.gts': readFileSync(
         join(fixtureDir('realistic'), 'person.gts'),
@@ -2020,12 +2020,49 @@ module(basename(__filename), function () {
       ),
     };
 
+    let dbAdapter: PgAdapter;
+    let baseRealmTemplateDatabase: string | undefined;
+    let savedTestTimeout: number | null | undefined;
+
+    // Build a base-realm-indexed template database once, up front, and clone
+    // it per test (see `templateDatabase` below). Cold-indexing the whole base
+    // realm through the single-tab in-process prerenderer takes tens of
+    // seconds; doing it inline in each test's `beforeEach` rode the per-phase
+    // `QUnit.config.testTimeout` and timed out under CI load — and the killed
+    // `beforeEach` left `request` undefined, surfacing as a downstream
+    // TypeError in the test body. With base pre-indexed, `base.start()` is a
+    // no-op (`isNewIndex()` is false), so the cold index leaves the per-test
+    // path entirely.
+    //
+    // The test body still fully re-indexes the realms several times, which is
+    // the behavior under test; a from-scratch index clears the realm's
+    // definition cache on completion, so each `reindex()` legitimately
+    // re-renders base. That work, plus the one-time build, needs more than the
+    // default per-phase timeout, so raise it for this module and restore it
+    // afterwards. The `withIndexProgressHeartbeat` wrappers keep a stalled or
+    // unexpectedly slow index diagnosable instead of an opaque phase timeout.
+    hooks.before(function () {
+      savedTestTimeout = QUnit.config.testTimeout;
+      QUnit.config.testTimeout = 240_000;
+    });
+    hooks.before(async function () {
+      baseRealmTemplateDatabase = await acquireBaseRealmTemplate(
+        basePath,
+        await getTestPrerenderer(),
+      );
+    });
+    hooks.after(function () {
+      QUnit.config.testTimeout = savedTestTimeout;
+    });
+
     hooks.beforeEach(async function () {
       dir = dirSync();
     });
 
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
+      templateDatabase: () => baseRealmTemplateDatabase,
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
         let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
         let prerenderer = await getTestPrerenderer();
         let definitionLookup = new CachingDefinitionLookup(
@@ -2088,8 +2125,18 @@ module(basename(__filename), function () {
           definitionLookup,
           prerenderer,
         }).listen(parseInt(localBaseRealmURL.port));
-        await base.start();
-        await testRealm.start();
+        // base.start() is a no-op now that the cloned template already holds
+        // base's index; demo is the only realm cold-indexed here. The
+        // heartbeat keeps a future regression (base no longer skipping, an
+        // index wedging) diagnosable instead of an opaque phase timeout.
+        await withIndexProgressHeartbeat(
+          'multiple realms beforeEach (base + demo start)',
+          dbAdapter,
+          async () => {
+            await base.start();
+            await testRealm.start();
+          },
+        );
 
         request = supertest(testRealmServer);
       },
@@ -2106,8 +2153,14 @@ module(basename(__filename), function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       }
 
-      await base.reindex();
-      await testRealm.reindex();
+      await withIndexProgressHeartbeat(
+        'multiple realms reindex (base + demo)',
+        dbAdapter,
+        async () => {
+          await base.reindex();
+          await testRealm.reindex();
+        },
+      );
 
       {
         let response = await request
@@ -2116,8 +2169,14 @@ module(basename(__filename), function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       }
 
-      await base.reindex();
-      await testRealm.reindex();
+      await withIndexProgressHeartbeat(
+        'multiple realms reindex (base + demo)',
+        dbAdapter,
+        async () => {
+          await base.reindex();
+          await testRealm.reindex();
+        },
+      );
 
       {
         let response = await request

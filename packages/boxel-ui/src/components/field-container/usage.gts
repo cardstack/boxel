@@ -26,22 +26,31 @@ export default class FieldUsage extends Component {
   @tracked icon = Profile;
   @tracked tag?: keyof HTMLElementTagNameMap;
 
-  @tracked vertical2 = false;
-  @tracked horizontalLabelSize2 = 'default';
-  @tracked icon2: Icon | undefined;
+  @tracked inline = false;
+
+  @tracked inline2 = false;
+
+  @tracked inline3 = false;
+  @tracked vertical3 = false;
+  @tracked horizontalLabelSize3 = 'default';
+  @tracked icon3: Icon | undefined;
   @cssVariable({ cssClassName: 'boxel-field' })
   declare boxelFieldLabelAlign: CSSVariableInfo;
   @cssVariable({ cssClassName: 'boxel-field' })
   declare boxelFieldLabelJustifyContent: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name="Field">
+    <FreestyleUsage
+      @name="Field"
+      @description="Form-field wrapper that pairs a label with its input control, plus helper text and validation messages — the standard layout primitive for form rows."
+    >
       <:example>
         <BoxelFieldContainer
           @tag={{this.tag}}
           @label={{this.label}}
           @fieldId={{this.id}}
           @vertical={{this.vertical}}
+          @inline={{this.inline}}
           @horizontalLabelSize={{this.horizontalLabelSize}}
           @labelFontSize={{this.labelFontSize}}
           @centeredDisplay={{this.centeredDisplay}}
@@ -89,6 +98,13 @@ export default class FieldUsage extends Component {
           @onInput={{fn (mut this.vertical)}}
           @value={{this.vertical}}
         />
+        <Args.Bool
+          @name="inline"
+          @description="Compact horizontal layout: label column shrinks to content width, min-height removed. Use when embedding the field inside a flex row alongside other controls."
+          @defaultValue="false"
+          @onInput={{fn (mut this.inline)}}
+          @value={{this.inline}}
+        />
         <Args.String
           @name="horizontalLabelSize"
           @description="Width of the label column (only applies to horizontal layout)"
@@ -135,20 +151,63 @@ export default class FieldUsage extends Component {
 
     <FreestyleUsage @name="Usage with Boxel::Input">
       <:example>
-        <BoxelFieldContainer @tag="label" @label="Name">
+        <BoxelFieldContainer
+          @tag="label"
+          @label="Name"
+          @inline={{this.inline2}}
+        >
           <BoxelInput @id="usage-boxel-input" @value="" />
         </BoxelFieldContainer>
       </:example>
+      <:api as |Args|>
+        <Args.Bool
+          @name="inline"
+          @description="Compact horizontal layout: label column shrinks to content width, min-height removed."
+          @defaultValue="false"
+          @onInput={{fn (mut this.inline2)}}
+          @value={{this.inline2}}
+        />
+      </:api>
     </FreestyleUsage>
+
+    <FreestyleUsage @name="Inline (compact horizontal)">
+      <:description>
+        Use
+        <code>@inline</code>
+        when placing a labeled control inside a flex row alongside other
+        elements. The label column shrinks to fit its text and
+        <code>min-height</code>
+        is removed so the field doesn't impose extra height on the row.
+      </:description>
+      <:example>
+        <div class="inline-example-row">
+          <BoxelFieldContainer @tag="label" @label="Max" @inline={{true}}>
+            <BoxelInput @type="number" @value={{0}} @min={{0}} />
+          </BoxelFieldContainer>
+          <BoxelFieldContainer @tag="label" @label="Min" @inline={{true}}>
+            <BoxelInput @type="number" @value={{0}} @min={{0}} />
+          </BoxelFieldContainer>
+        </div>
+      </:example>
+    </FreestyleUsage>
+
+    <style scoped>
+      .inline-example-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+    </style>
 
     <FreestyleUsage @name="Usage with Boxel::Input (invalid state)">
       <:example>
         <BoxelFieldContainer
           @tag="label"
           @label="Name"
-          @vertical={{this.vertical2}}
-          @horizontalLabelSize={{this.horizontalLabelSize2}}
-          @icon={{this.icon2}}
+          @inline={{this.inline3}}
+          @vertical={{this.vertical3}}
+          @horizontalLabelSize={{this.horizontalLabelSize3}}
+          @icon={{this.icon3}}
         >
           <BoxelInput
             @id=""
@@ -163,24 +222,31 @@ export default class FieldUsage extends Component {
         <Args.Component
           @name="icon"
           @description="icon component reference"
-          @value={{this.icon2}}
+          @value={{this.icon3}}
           @options={{ALL_ICON_COMPONENTS}}
-          @onChange={{fn (mut this.icon2)}}
+          @onChange={{fn (mut this.icon3)}}
+        />
+        <Args.Bool
+          @name="inline"
+          @description="Compact horizontal layout: label column shrinks to content width, min-height removed."
+          @defaultValue="false"
+          @onInput={{fn (mut this.inline3)}}
+          @value={{this.inline3}}
         />
         <Args.Bool
           @name="vertical"
           @description="Whether the field should be displayed vertically"
           @defaultValue="false"
-          @onInput={{fn (mut this.vertical2)}}
-          @value={{this.vertical2}}
+          @onInput={{fn (mut this.vertical3)}}
+          @value={{this.vertical3}}
         />
         <Args.String
           @name="horizontalLabelSize"
           @description="Width of the label column (only applies to horizontal layout)"
           @options={{array "small" "default"}}
           @defaultValue="minmax(4rem, 25%)"
-          @onInput={{fn (mut this.horizontalLabelSize2)}}
-          @value={{this.horizontalLabelSize2}}
+          @onInput={{fn (mut this.horizontalLabelSize3)}}
+          @value={{this.horizontalLabelSize3}}
         />
       </:api>
     </FreestyleUsage>

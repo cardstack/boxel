@@ -11,7 +11,10 @@ export default class AccordionUsage extends Component {
   @tracked displayContainer?: boolean;
 
   <template>
-    <FreestyleUsage @name="Accordion">
+    <FreestyleUsage
+      @name="Accordion"
+      @description="Collapsible disclosure panels with a clickable header and animated expand/collapse — group several to build FAQ entries, settings groups, or any progressive-disclosure UI."
+    >
       <:example>
         <Accordion @displayContainer={{this.displayContainer}} as |A|>
           <A.Item

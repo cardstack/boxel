@@ -41,7 +41,10 @@ export default class MenuUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="Menu">
+    <FreestyleUsage
+      @name="Menu"
+      @description="Vertical list of clickable menu items for dropdowns and context menus. Each item supports icons, separators, and disabled states."
+    >
       <:example>
         <BoxelMenu
           @closeMenu={{this.closeMenu}}

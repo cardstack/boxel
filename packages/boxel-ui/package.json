@@ -35,6 +35,7 @@
     "lint:types": "ember-tsc --noEmit",
     "rebuild:icons": "node bin/rebuild-icons.mjs",
     "rebuild:usage": "node bin/rebuild-usage.mjs",
+    "generate:component-specs": "node bin/generate-component-specs.mjs",
     "start": "vite dev",
     "test": "vite build --mode=development --out-dir dist-tests && testem --file testem.cjs ci --port 0"
   },

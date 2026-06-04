@@ -28,6 +28,7 @@ import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
+import { JobScopedSearchCache } from './job-scoped-search-cache';
 import { createSendEvent } from './handlers/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm';
 import { createServeIndex } from './handlers/serve-index';
@@ -37,6 +38,14 @@ import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
+
+// Opt-in HTTP/2 stall diagnostics (see installHttp2Diagnostics). Off by
+// default; set in the host-test CI job so an intermittent "request accepted
+// but never answered" h2 stall dumps its full session/stream state instead of
+// surfacing only as an opaque 60s host-test timeout. The h2 path is never
+// reached in production (BOXEL_ENVIRONMENT short-circuits to plain HTTP above),
+// so this only ever runs in local dev / CI.
+const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
 
 export type RealmHttpServer =
   | http.Server
@@ -141,6 +150,9 @@ export function createListener(
     );
     return { server: http.createServer(app.callback()), proto: 'http' };
   }
+  if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
+    installHttp2Diagnostics(tlsServer, log);
+  }
   let redirectServer = http.createServer(redirectToHttps);
   // Track every accepted socket so shutdown can force-close them. Without
   // this, `dispatcher.close()` waits for active HTTP/2 sessions and
@@ -211,6 +223,303 @@ export function createListener(
     activeSockets.clear();
   };
   return { server: dispatcher, proto: 'https/h2' };
+}
+
+// Instrument the HTTP/2 secure server so an intermittent stall — a stream that
+// is accepted but whose response never reaches the browser — is observable
+// instead of surfacing only as a downstream 60s host-test timeout. The flake
+// has been isolated to "something in the Chrome ↔ Node http2 path" (the h1
+// toggle made it vanish and the byte-peek dispatcher was exonerated), but the
+// mechanism is still unknown. This narrows it down by answering, for any
+// long-open stream:
+//   - did the app ever produce a response? (sawRequest / res.writableEnded /
+//     headersSent) — distinguishes an app-side hang from an h2 transport stall
+//   - is the stream flow-control-blocked? (stream localWindowSize, session
+//     effectiveLocalWindowSize / remoteWindowSize / outboundQueueSize)
+//   - is the connection over its stream budget? (local/remote
+//     maxConcurrentStreams vs. live open-stream count)
+//   - how did it finally end? (rstCode / aborted on close)
+// Read-only: it attaches observer listeners and reads getters, never consuming
+// the stream body or writing a response, so it cannot perturb the path it
+// watches. Periodic so a single stuck stream is dumped repeatedly and its
+// window/queue evolution is visible.
+//
+// The per-stream sweep above only fires once a server-side stream has been
+// open >8s. A captured hang showed it completely clean, which is itself the
+// clue: the wedge is somewhere that never becomes a long-open server stream.
+// So each sweep ALSO emits a session-level snapshot to cover what the
+// per-stream view is blind to:
+//   - did the server receive the hung request at all? (the roll-up's
+//     `openStreams` count + the per-session `inFlight=[…]` path list — a client
+//     hang with `openStreams=0` means it never arrived)
+//   - is the session at its concurrent-stream ceiling, so the browser is
+//     queueing requests it never sends? (live/peak vs maxConcurrentStreams)
+//   - is the connection flow-control-deadlocked? (session windows + outbound
+//     queue, sampled continuously rather than only per stalled stream)
+//   - is the transport even alive during the hang? (a passive PING round-trip
+//     per session — observe only, never tear anything down)
+function installHttp2Diagnostics(
+  tlsServer: http2.Http2SecureServer,
+  log: ReturnType<typeof logger>,
+) {
+  const STALL_THRESHOLD_MS = 8000;
+  const SWEEP_INTERVAL_MS = 5000;
+
+  interface TrackedStream {
+    id: number;
+    method: string;
+    path: string;
+    startedAt: number;
+    sawRequest: boolean;
+    res?: http2.Http2ServerResponse;
+    everStalled: boolean;
+  }
+
+  interface SessionRec {
+    id: number;
+    peakStreams: number;
+    lastPingAt?: number;
+    lastPongAt?: number;
+    lastRttMs?: number;
+    pingInFlight: boolean;
+  }
+
+  let nextId = 0;
+  let nextSessionId = 0;
+  let sessions = new Map<http2.ServerHttp2Session, SessionRec>();
+  let open = new Map<http2.ServerHttp2Stream, TrackedStream>();
+
+  tlsServer.on('session', (session) => {
+    let srec: SessionRec = {
+      id: nextSessionId++,
+      peakStreams: 0,
+      pingInFlight: false,
+    };
+    sessions.set(session, srec);
+    log.info(
+      `[h2-diag] session #${srec.id} opened (live sessions=${sessions.size})`,
+    );
+    probeSession(session, srec);
+    session.on('close', () => {
+      sessions.delete(session);
+      log.info(
+        `[h2-diag] session #${srec.id} closed (live sessions=${sessions.size})`,
+      );
+    });
+    session.on('error', (e) =>
+      log.warn(`[h2-diag] session #${srec.id} error: ${e.message}`),
+    );
+    session.on('frameError', (type, code, id) =>
+      log.warn(
+        `[h2-diag] session #${srec.id} frameError type=${type} code=${code} streamId=${id}`,
+      ),
+    );
+    session.on('goaway', (code, lastStreamID) =>
+      log.warn(
+        `[h2-diag] session #${srec.id} goaway errorCode=${code} lastStreamID=${lastStreamID}`,
+      ),
+    );
+    session.on('timeout', () =>
+      log.warn(`[h2-diag] session #${srec.id} timeout`),
+    );
+  });
+
+  // Get-or-create the per-stream record. Both the `stream` and `request`
+  // events populate it, and either may fire first: the compat `request`
+  // listener that `createSecureServer(..., app.callback())` registers runs
+  // before this function's `stream` listener and emits `request`
+  // synchronously, so for a normal request the record is created from the
+  // `request` side; a stream that stalls before the app ever dispatches is
+  // created from the `stream` side with `sawRequest` left false. (Creating it
+  // only from `stream` would always report `sawRequest=false`, defeating the
+  // app-hang-vs-transport-stall distinction.)
+  function trackStream(
+    stream: http2.ServerHttp2Stream,
+    method: string,
+    path: string,
+  ): TrackedStream {
+    let rec = open.get(stream);
+    if (!rec) {
+      rec = {
+        id: nextId++,
+        method,
+        path,
+        startedAt: Date.now(),
+        sawRequest: false,
+        everStalled: false,
+      };
+      open.set(stream, rec);
+    }
+    return rec;
+  }
+
+  tlsServer.on('stream', (stream, headers) => {
+    trackStream(
+      stream,
+      String(headers[':method'] ?? '?'),
+      String(headers[':path'] ?? '?'),
+    );
+    // The `stream` event always fires for an h2 stream, so attach the close
+    // cleanup here exactly once regardless of which event created the record.
+    stream.once('close', () => {
+      let rec = open.get(stream);
+      open.delete(stream);
+      if (rec && rec.everStalled) {
+        log.warn(
+          `[h2-diag] stream #${rec.id} ${rec.method} ${rec.path} CLOSED after ` +
+            `${Date.now() - rec.startedAt}ms rstCode=${stream.rstCode} ` +
+            `aborted=${stream.aborted} sawRequest=${rec.sawRequest} ` +
+            `resWritableEnded=${rec.res?.writableEnded ?? 'n/a'}`,
+        );
+      }
+    });
+  });
+
+  tlsServer.on('request', (req, res) => {
+    // h1 requests (allowHTTP1) have no backing h2 stream; only h2 is in scope.
+    let stream = req.stream as http2.ServerHttp2Stream | undefined;
+    if (stream == null) {
+      return;
+    }
+    let rec = trackStream(stream, req.method ?? '?', req.url ?? '?');
+    rec.sawRequest = true;
+    rec.res = res;
+  });
+
+  // Passive liveness probe — send one PING and record its round-trip. Observe
+  // only; never tears the session down (that distinguishes this from a
+  // keepalive). Run once on session open so the first sweep already has a
+  // reading, then again each sweep.
+  function probeSession(
+    session: http2.ServerHttp2Session,
+    srec: SessionRec,
+  ): void {
+    if (srec.pingInFlight || session.destroyed || session.closed) {
+      return;
+    }
+    srec.pingInFlight = true;
+    srec.lastPingAt = Date.now();
+    let sent = false;
+    try {
+      sent =
+        session.ping((err: Error | null, duration: number) => {
+          srec.pingInFlight = false;
+          if (!err) {
+            srec.lastPongAt = Date.now();
+            srec.lastRttMs = Math.round(duration);
+          }
+        }) !== false;
+    } catch {
+      srec.pingInFlight = false;
+    }
+    if (!sent) {
+      srec.pingInFlight = false;
+    }
+  }
+
+  let timer = setInterval(() => {
+    let now = Date.now();
+    for (let [stream, rec] of open) {
+      let age = now - rec.startedAt;
+      if (age < STALL_THRESHOLD_MS) {
+        continue;
+      }
+      rec.everStalled = true;
+      // `stream.session` can be undefined once a stalled stream's session has
+      // gone away — keep the optional chaining rather than assuming it's live.
+      let session = stream.session;
+      let ss = session?.state;
+      let st = stream.state;
+      // maxConcurrentStreams is negotiated per-session, so the budget signal
+      // must compare against this session's own live stream count, not the
+      // process-wide total (which spans every browser session).
+      let liveThisSession = 0;
+      if (session) {
+        for (let other of open.keys()) {
+          if (other.session === session) {
+            liveThisSession++;
+          }
+        }
+      }
+      log.warn(
+        `[h2-diag] STALLED stream #${rec.id} ${rec.method} ${rec.path} age=${age}ms ` +
+          `sawRequest=${rec.sawRequest} ` +
+          `res(headersSent=${rec.res?.headersSent ?? 'n/a'} ` +
+          `writableEnded=${rec.res?.writableEnded ?? 'n/a'}) ` +
+          `stream(closed=${stream.closed} destroyed=${stream.destroyed} ` +
+          `aborted=${stream.aborted} ` +
+          `localClose=${st?.localClose} remoteClose=${st?.remoteClose} ` +
+          `localWindow=${st?.localWindowSize}) ` +
+          `session(closed=${session?.closed} destroyed=${session?.destroyed} ` +
+          `outboundQueueSize=${ss?.outboundQueueSize} ` +
+          `effectiveLocalWindow=${ss?.effectiveLocalWindowSize} ` +
+          `effectiveRecvData=${ss?.effectiveRecvDataLength} ` +
+          `remoteWindow=${ss?.remoteWindowSize} ` +
+          `liveStreamsThisSession=${liveThisSession} liveStreamsTotal=${open.size}) ` +
+          `maxConcurrentStreams(local=${session?.localSettings?.maxConcurrentStreams} ` +
+          `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
+      );
+    }
+
+    // Session-level snapshot — see the function comment. Covers the wedges the
+    // per-stream sweep above is structurally blind to (request queued before a
+    // server stream exists, connection-level flow-control stall, dead transport).
+    let healthyPongs = 0;
+    for (let [session, srec] of sessions) {
+      let inFlight: { rec: TrackedStream; age: number }[] = [];
+      for (let [stream, rec] of open) {
+        if (stream.session === session) {
+          inFlight.push({ rec, age: now - rec.startedAt });
+        }
+      }
+      if (inFlight.length > srec.peakStreams) {
+        srec.peakStreams = inFlight.length;
+      }
+      let pongAge = srec.lastPongAt != null ? now - srec.lastPongAt : undefined;
+      let pongHealthy = pongAge != null && pongAge < SWEEP_INTERVAL_MS * 2;
+      if (pongHealthy) {
+        healthyPongs++;
+      }
+      // Log a per-session line only when it's doing work or its last ping went
+      // unanswered; idle, healthy sessions are covered by the roll-up below.
+      let pongOverdue = srec.lastPingAt != null && !pongHealthy;
+      if (inFlight.length > 0 || pongOverdue) {
+        let ss = session.state;
+        let shown = inFlight.slice(0, 12);
+        let list = shown
+          .map((e) => `${e.rec.method} ${e.rec.path} ${e.age}ms`)
+          .join(', ');
+        let more =
+          inFlight.length > shown.length
+            ? ` +${inFlight.length - shown.length} more`
+            : '';
+        log.warn(
+          `[h2-diag] session #${srec.id} ` +
+            `streams=${inFlight.length}/peak=${srec.peakStreams}/` +
+            `max(local=${session.localSettings?.maxConcurrentStreams} ` +
+            `remote=${session.remoteSettings?.maxConcurrentStreams}) ` +
+            `win(localEff=${ss?.effectiveLocalWindowSize} ` +
+            `remote=${ss?.remoteWindowSize} ` +
+            `recvData=${ss?.effectiveRecvDataLength} ` +
+            `outQ=${ss?.outboundQueueSize}) ` +
+            `ping(rtt=${srec.lastRttMs ?? 'n/a'}ms ` +
+            `pongAge=${pongAge != null ? `${pongAge}ms` : 'never'}) ` +
+            `inFlight=[${list}${more}]`,
+        );
+      }
+      probeSession(session, srec);
+    }
+    // Greppable roll-up: a client hang showing `openStreams=0 pingHealthy=N/N`
+    // means the request never reached the server (it's wedged client-side or in
+    // transit); `openStreams>0` with the hung path in a session's inFlight list
+    // means the server received it and the response is what's stuck.
+    log.info(
+      `[h2-diag] sweep liveSessions=${sessions.size} ` +
+        `openStreams=${open.size} pingHealthy=${healthyPongs}/${sessions.size}`,
+    );
+  }, SWEEP_INTERVAL_MS);
+  // Don't let the sweep timer hold the process open during shutdown.
+  timer.unref?.();
 }
 
 // Same-port 308 redirect for plain-text HTTP requests that land on the
@@ -292,6 +601,7 @@ export class RealmServer {
     | undefined;
   private prerenderer: Prerenderer | undefined;
   private reconciler: RealmRegistryReconciler;
+  private searchCache: JobScopedSearchCache;
 
   constructor({
     serverURL,
@@ -314,6 +624,7 @@ export class RealmServer {
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
+    searchCache,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -339,6 +650,10 @@ export class RealmServer {
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
+    // Optional so test harnesses that construct a RealmServer directly get a
+    // private cache for free. main.ts passes a shared instance so the
+    // JobsFinishedListener can evict the same cache the handlers populate.
+    searchCache?: JobScopedSearchCache;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -379,6 +694,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
+    this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
   @Memoize()
@@ -478,6 +794,7 @@ export class RealmServer {
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reconciler: this.reconciler,
+          searchCache: this.searchCache,
         }),
       )
       .use(

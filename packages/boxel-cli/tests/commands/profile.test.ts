@@ -218,7 +218,7 @@ describe('ProfileManager', () => {
     );
     const profile = manager.getProfile('@dev:localhost')!;
     expect(profile.matrixUrl).toBe('http://localhost:8008');
-    expect(profile.realmServerUrl).toBe('http://localhost:4201/');
+    expect(profile.realmServerUrl).toBe('https://localhost:4201/');
   });
 
   it('adds a production profile with correct defaults', async () => {

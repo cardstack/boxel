@@ -22,6 +22,7 @@ import {
   type SerializeOpts,
 } from './card-serialization';
 import { initSharedState } from './shared-state';
+import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
@@ -78,7 +79,7 @@ const fieldOverrides = initSharedState(
 // off-pass case in the host-UI hot loop.
 let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 // Counters snapshotted by the render/meta route to populate
-// `boxel_index.timing_diagnostics`. They are unconditional integer
+// `boxel_index.diagnostics`. They are unconditional integer
 // increments inside `getter` — cheap enough to keep on in production, but
 // only meaningful between `beginComputePass`/`endComputePass`.
 let computedCallCount = 0;
@@ -613,7 +614,12 @@ export function getRelationship<T extends CardDef = CardDef>(
         `expected ${fieldName} to be an array but was ${typeof related}`,
       );
     }
-    return related.map((entry) => relationshipStateForEntry<T>(entry));
+    // Read the raw backing array: per-slot index access hides the broken-link
+    // sentinels (surfacing them as `undefined`), but `getRelationship` is the
+    // typed surface whose whole job is to report each slot's true state.
+    return rawArrayValues(related).map((entry) =>
+      relationshipStateForEntry<T>(entry),
+    );
   }
 
   return relationshipStateForEntry<T>(related);
@@ -632,14 +638,12 @@ export interface BrokenLinkFinding {
 
 // Walk the rendered instance graph and collect every `linksTo` / `linksToMany`
 // relationship currently in an `'error'` or `'not-found'` state. This is the
-// intended read surface for the indexer's broken-link error capture: a caller
-// scans the instance after the store has settled and builds a structured
-// failure payload from the findings. (Wiring it into the prerender / render
-// route is tracked separately; nothing in production calls this yet.)
+// read surface for the indexer's broken-link error capture: the prerender and
+// render route scan the instance after the store has settled and build a
+// structured failure payload from the findings.
 //
-// The walk recurses to match the coverage the legacy `boxel-render-error`
-// dispatch had — that event fired for any failed lazy load anywhere in the
-// rendered graph, not just the root card:
+// The walk recurses so a broken link anywhere in the rendered graph is
+// captured, not just one held directly by the root card:
 //   - present `linksTo` / `linksToMany` values are recursed into, since a
 //     loaded linked card can itself hold a link that was dereferenced (and
 //     failed) during this render;
@@ -679,6 +683,18 @@ export function getBrokenLinks(
     if (!field || field.computeVia) {
       continue;
     }
+    // Query-backed `linksTo` / `linksToMany` fields (the `{ query }` form
+    // resolved through `_federated-search`) sit outside the
+    // broken-link / declared-`linksTo` scan: their failure surface is
+    // `getRelationship`, not the indexer-side cascade. A search resource
+    // can fail for "soft" reasons that should not classify the consuming
+    // card as instance-error (cross-realm assertions, transient federated
+    // failures), and the field getter already routes them through a
+    // structured state machine. Skip them here so a planted resource-level
+    // sentinel does not flow into a render error.
+    if (field.queryDefinition) {
+      continue;
+    }
     // Only inspect fields already in the data bucket — reading an absent field
     // through the getter would initialize it (see above).
     if (!bucket.has(fieldName)) {
@@ -688,6 +704,19 @@ export function getBrokenLinks(
       let state = getRelationship(instance as CardDef, fieldName);
       for (let entry of Array.isArray(state) ? state : [state]) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
+          // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Read
+          // only fields that won't initialize bucket entries via the
+          // field getter (constructor name + the entry's own reference);
+          // reading `instance.id` here would write the `id` field's
+          // emptyValue into the bucket and violate the pure-read contract
+          // the surrounding `getBrokenLinks` upholds.
+          console.error('[CS-11221 DIAG] getBrokenLinks finding', {
+            ownerType: instance?.constructor?.name,
+            fieldName,
+            fieldType: field.fieldType,
+            kind: entry.kind,
+            reference: entry.reference,
+          });
           findings.push({
             fieldName,
             kind: entry.kind,
@@ -711,70 +740,6 @@ export function getBrokenLinks(
     }
   }
   return findings;
-}
-
-type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
-interface NotLoadedRelationship {
-  type: 'not-loaded';
-  reference: string;
-  // TODO add a loader (which may turn this into a class)
-  // load(): Promise<CardInstanceType<CardT>>;
-}
-interface LoadedRelationship {
-  type: 'loaded';
-  card: CardDef | null;
-}
-
-/**
- * @deprecated Use {@link getRelationship} instead. `relationshipMeta` is a
- * back-compat wrapper that collapses the five-kind `RelationshipState` union
- * into the legacy `{ type: 'loaded' | 'not-loaded' }` envelope and will be
- * removed once all callers have migrated.
- */
-export function relationshipMeta(
-  instance: CardDef,
-  fieldName: string,
-): RelationshipMeta | RelationshipMeta[] | undefined {
-  let field = getField(instance, fieldName);
-  if (!field) {
-    throw new Error(
-      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
-    );
-  }
-  if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
-    return undefined;
-  }
-  // Legacy linksToMany scalar shape: a computed `linksToMany` whose upstream
-  // link hasn't resolved surfaces as a single sentinel rather than an array.
-  // Before `getRelationship`, this returned a scalar meta (not a one-element
-  // array). `getRelationship`'s typed contract wraps it as `[state]`, so the
-  // wrapper unwraps that case here to keep `relationshipMeta` callers stable.
-  if (field.fieldType === 'linksToMany') {
-    let peeked = peekAtField(instance, fieldName);
-    if (isNonPresentLink(peeked)) {
-      return toLegacyRelationshipMeta(relationshipStateForEntry(peeked));
-    }
-  }
-  let state = getRelationship(instance, fieldName);
-  if (Array.isArray(state)) {
-    return state.map(toLegacyRelationshipMeta);
-  }
-  return toLegacyRelationshipMeta(state);
-}
-
-function toLegacyRelationshipMeta(
-  state: RelationshipState,
-): RelationshipMeta {
-  // Legacy callers only branched on 'loaded' vs 'not-loaded'; the new error /
-  // not-found kinds did not exist when the contract was written. Map them to
-  // 'not-loaded' so existing consumers see a stable shape until migration.
-  if (state.isLoaded) {
-    return { type: 'loaded', card: state.value };
-  }
-  if (state.kind === 'not-set') {
-    return { type: 'loaded', card: null };
-  }
-  return { type: 'not-loaded', reference: state.reference };
 }
 
 export function serializedGet<CardT extends BaseDefConstructor>(

@@ -46,7 +46,10 @@ export default class IconButtonUsage extends Component {
 
   <template>
     <div class={{cn dark-background=(eq this.variant "secondary-dark")}}>
-      <FreestyleUsage @name="IconButton">
+      <FreestyleUsage
+        @name="IconButton"
+        @description="Button rendered as a single icon with no text — used in toolbars, table-row actions, and tight UI spots where a labelled button would not fit."
+      >
         <:example>
           <BoxelIconButton
             @icon={{this.icon}}

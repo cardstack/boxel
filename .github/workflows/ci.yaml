@@ -9,6 +9,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   checks: write
   contents: read
@@ -820,6 +824,7 @@ jobs:
       actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      pr-number: ${{ github.event.pull_request.number }}
       slots: realm-tests
     secrets: inherit
 

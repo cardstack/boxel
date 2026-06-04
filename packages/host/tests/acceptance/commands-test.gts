@@ -61,6 +61,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   waitForNewRoomSkillsLoaded,
+  realmConfigCardJSON,
 } from '../helpers';
 
 import {
@@ -471,12 +472,12 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
         'index.json': new CardsGrid(),
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
         'hi.txt': 'hi',
       },
     });

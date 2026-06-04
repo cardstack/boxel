@@ -26,7 +26,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -411,7 +411,7 @@ export class RoomResource extends Resource<Args> {
     return (
       systemCard?.defaultModelConfiguration?.id ??
       systemCard?.modelConfigurations?.[0]?.id ??
-      DEFAULT_LLM
+      DEFAULT_FALLBACK_MODEL_ID
     );
   }
 
@@ -499,29 +499,35 @@ export class RoomResource extends Resource<Args> {
   }
 
   /**
-   * Get the active LLM mode at a specific timestamp by looking at the most recent
-   * LLM mode event that occurred before or at the given timestamp.
+   * Get the LLM mode that was active when a given message was created.
+   *
+   * Matrix `origin_server_ts` has millisecond resolution, so a message and a
+   * mode transition can share a timestamp; a bare timestamp comparison cannot
+   * tell whether such a transition happened just before or just after the
+   * message. `sortedEvents` is a stable sort on `origin_server_ts`, so for
+   * equal timestamps it preserves room (insertion) order. Walking it up to the
+   * message and tracking the last mode transition seen yields the mode in
+   * effect when the message arrived, regardless of same-millisecond ties.
    */
-  getActiveLLMModeAtTimestamp(timestamp: number): LLMMode {
-    let latestLLMModeEvent: DiscreteMatrixEvent | undefined;
-
-    for (let event of this.llmModeEvents) {
-      if (event.origin_server_ts <= timestamp) {
-        if (
-          !latestLLMModeEvent ||
-          event.origin_server_ts > latestLLMModeEvent.origin_server_ts
-        ) {
-          latestLLMModeEvent = event;
-        }
+  getActiveLLMModeForMessage(messageEventId: string): LLMMode {
+    let activeMode: LLMMode = 'ask';
+    let foundMessage = false;
+    for (let event of this.sortedEvents) {
+      if (event.event_id === messageEventId) {
+        foundMessage = true;
+        break;
+      }
+      if (event.type === APP_BOXEL_LLM_MODE) {
+        activeMode = (event as any).content?.mode ?? 'ask';
       }
     }
-
-    // If no LLM mode event found before the timestamp, default to 'ask'
-    if (!latestLLMModeEvent) {
+    // If the message isn't in the timeline yet, don't infer 'act' from later
+    // transitions — fall back to 'ask' so a patch is never auto-applied on
+    // incomplete data.
+    if (!foundMessage) {
       return 'ask';
     }
-
-    return (latestLLMModeEvent as any).content?.mode ?? 'ask';
+    return activeMode;
   }
 
   get isActivatingLLMMode() {

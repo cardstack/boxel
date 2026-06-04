@@ -221,7 +221,10 @@ export default class BoxelMultiSelectUsage extends Component {
         boxel-multi-select-pill-color=this.boxelMultiSelectPillColor.value
       }}
     >
-      <FreestyleUsage @name="Multi Select">
+      <FreestyleUsage
+        @name="Multi Select"
+        @description="Dropdown control that lets the user pick multiple values from a list — shows the selected items as inline chips and emits a change event with the full selection."
+      >
         <:description>
           <p>
             Boxel Multi Select is a component that enables the selection of

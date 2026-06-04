@@ -39,7 +39,10 @@ export default class DateRangePickerUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="Date Range Picker">
+    <FreestyleUsage
+      @name="Date Range Picker"
+      @description="Calendar control for selecting a start and end date as a contiguous range — used for filters, reports, booking flows, and any time-window input."
+    >
       <:example>
         {{this.range1String}}
         <DateRangePicker

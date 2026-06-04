@@ -3,16 +3,13 @@ import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
 import { executableExtensions, logger } from './index';
 
-import { CardError } from './error';
+import { CardError, iconNotFoundMessage } from './error';
 import flatMap from 'lodash/flatMap';
 import {
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker';
-import {
-  unresolveCardReference,
-  resolveCardReference,
-} from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 
 type FetchingModule = {
   state: 'fetching';
@@ -207,6 +204,7 @@ export class Loader {
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
+  private virtualNetwork: VirtualNetwork | undefined;
   // When the host runs inside a prerender, `setTimeout` is suppressed by
   // the render-timer-stub so the default sleep used by
   // `fetchWithTransientRetry` would never resolve and a transient 5xx on
@@ -218,17 +216,26 @@ export class Loader {
   constructor(
     fetch: Fetch,
     resolveImport?: (moduleIdentifier: string) => string,
-    options?: { retrySleep?: (ms: number) => Promise<void> },
+    options?: {
+      retrySleep?: (ms: number) => Promise<void>;
+      virtualNetwork?: VirtualNetwork;
+    },
   ) {
     this.fetchImplementation = fetch;
     this.resolveImport =
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
+    this.virtualNetwork = options?.virtualNetwork;
+  }
+
+  getVirtualNetwork(): VirtualNetwork | undefined {
+    return this.virtualNetwork;
   }
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
+      virtualNetwork: loader.virtualNetwork,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -310,12 +317,12 @@ export class Loader {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
     // are treated as the same module for cycle detection and self-exclusion.
-    let resolvedHref = new URL(
-      resolveCardReference(moduleIdentifier, undefined),
-    ).href;
-    let resolvedInitial = new URL(
-      resolveCardReference(initialIdentifier, undefined),
-    ).href;
+    let resolvedHref = this.virtualNetwork
+      ? this.virtualNetwork.toURL(moduleIdentifier).href
+      : new URL(moduleIdentifier).href;
+    let resolvedInitial = this.virtualNetwork
+      ? this.virtualNetwork.toURL(initialIdentifier).href
+      : new URL(initialIdentifier).href;
 
     if (consumed.includes(resolvedHref)) {
       return [];
@@ -722,12 +729,29 @@ export class Loader {
         urlOrRequest instanceof Request
           ? urlOrRequest.url
           : String(urlOrRequest);
-      this.log.error(`fetch failed for ${url}`, err);
+      // `err.code` is present in Node (undici surfaces ECONNREFUSED /
+      // ENOTFOUND / etc.) but absent in browsers — Chromium logs the
+      // underlying `net::ERR_*` through its own network-layer channel
+      // rather than the JS Error. Include whatever's available so the
+      // synthetic Response carries the most specific detail we can get
+      // wherever the loader runs.
+      let detail = err?.code
+        ? `${err.message} (${err.code})`
+        : (err?.message ?? String(err));
+      this.log.error(`fetch failed for ${url}: ${detail}`, err);
 
-      return new Response(`fetch failed for ${url}`, {
+      let synthetic = new Response(`fetch failed for ${url}: ${detail}`, {
         status: 500,
-        statusText: err.message,
+        statusText: detail.slice(0, 200) || 'fetch failed',
       });
+      // Mark this Response as a transport-level (server-unreachable) failure.
+      // The thrown CardError above this gets flagged downstream so callers
+      // know not to poison the module cache with this exception — a
+      // "Failed to fetch" means the server wasn't there, not that the
+      // module is broken.
+      (synthetic as any)[Symbol.for('boxel-loader-transient-fetch-failure')] =
+        true;
+      return synthetic;
     }
   };
 
@@ -757,9 +781,10 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    let moduleId = unresolveCardReference(
-      trimModuleIdentifier(moduleIdentifier),
-    );
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    let moduleId = this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(trimmed)
+      : trimmed;
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
@@ -811,11 +836,23 @@ export class Loader {
     try {
       loaded = await this.load(moduleURL);
     } catch (exception) {
-      this.setModule(moduleIdentifier, {
-        state: 'broken',
-        exception,
-        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-      });
+      if (
+        (exception as { isTransientFetchFailure?: boolean })
+          ?.isTransientFetchFailure
+      ) {
+        // Inability to talk to the server isn't a deterministic property
+        // of the module — caching this as `broken` would poison the
+        // module entry for the lifetime of this loader (every future
+        // `import` would rethrow without retrying). Drop the entry so
+        // the next `import` re-enters `fetchModule` and refetches.
+        this.modules.delete(trimModuleIdentifier(moduleIdentifier));
+      } else {
+        this.setModule(moduleIdentifier, {
+          state: 'broken',
+          exception,
+          consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+        });
+      }
       module.deferred.fulfill();
       throw exception;
     }
@@ -1045,6 +1082,32 @@ export class Loader {
     }
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
+      // Replace the raw S3 AccessDenied XML for a missing boxel icon with a
+      // user-actionable message, while preserving everything else the base
+      // error carries (status, deps, responseText). The host's browser loader
+      // rewrites these failures to a fallback icon module, but the indexing
+      // worker's loader has no such middleware, so without this the XML lands
+      // in error_doc.message.
+      let iconMessage = iconNotFoundMessage(moduleURL.href, response.status);
+      if (iconMessage) {
+        error.message = iconMessage;
+        if (!error.deps?.length) {
+          error.deps = [response.url || moduleURL.href];
+        }
+      }
+      // Surfaced from `_fetch`'s catch: the request never reached the
+      // server. Tag the error so `fetchModule` skips caching it as a
+      // broken module — transport-level failures are non-deterministic
+      // and the next import should retry rather than replay this error.
+      if (
+        (response as unknown as Record<symbol, unknown>)[
+          Symbol.for('boxel-loader-transient-fetch-failure')
+        ]
+      ) {
+        (
+          error as CardError & { isTransientFetchFailure?: boolean }
+        ).isTransientFetchFailure = true;
+      }
       throw error;
     }
 

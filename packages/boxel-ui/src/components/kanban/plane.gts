@@ -1,4 +1,5 @@
 // KanbanPlane — Public wrapper that owns the default drag manager.
+import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -18,14 +19,14 @@ export class KanbanPlane extends Component<{
     onChange?: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
-    onShowEmptyColumns?: () => void;
-    onToggleCollapsed?: (columnKey: string | null, collapsed: boolean) => void;
+    onToggleCollapsed?: (column: KanbanColumnConfig | null) => void;
     placements: KanbanPlacement[];
   };
   Blocks: {
     card: [KanbanPlacement];
     ghost: [number];
   };
+  Element: HTMLElement;
 }> {
   private ownedManager: KanbanDragManager;
 
@@ -34,6 +35,9 @@ export class KanbanPlane extends Component<{
 
     let self = this;
     let managerArgs = {
+      get columns() {
+        return self.args.columns;
+      },
       get columnCount() {
         return self.args.columns.length;
       },
@@ -70,39 +74,44 @@ export class KanbanPlane extends Component<{
     this.args.onSelect?.(index);
   };
 
-  isColumnVisible = (colIndex: number): boolean => {
-    let column = this.args.columns[colIndex];
-    if (!column || column.collapsed) {
-      return false;
-    }
-    if (!this.args.hideEmpty) {
-      return true;
-    }
-    return this.args.placements.some(
-      (placement) => placement.column === colIndex,
-    );
+  isColumnVisible = (colId: string): boolean => {
+    let column = this.args.columns.find((c) => c.key === colId);
+    return !column?.collapsed;
   };
 
   <template>
-    <KanbanPlaneInner
-      class="kanban-plane"
-      @boardLabel={{@boardLabel}}
-      @cardSize={{@cardSize}}
-      @columns={{@columns}}
-      @hideEmpty={{@hideEmpty}}
-      @manager={{this.ownedManager}}
-      @onAddCard={{@onAddCard}}
-      @onToggleCollapsed={{@onToggleCollapsed}}
-      @onShowEmptyColumns={{@onShowEmptyColumns}}
-      @placements={{@placements}}
-    >
-      <:card as |placement|>
-        {{yield placement to="card"}}
-      </:card>
-      <:ghost as |dragIndex|>
-        {{yield dragIndex to="ghost"}}
-      </:ghost>
-    </KanbanPlaneInner>
+    {{#if @columns.length}}
+      <KanbanPlaneInner
+        class="kanban-plane"
+        @boardLabel={{@boardLabel}}
+        @cardSize={{@cardSize}}
+        @columns={{@columns}}
+        @hideEmpty={{@hideEmpty}}
+        @manager={{this.ownedManager}}
+        @onAddCard={{@onAddCard}}
+        @onToggleCollapsed={{@onToggleCollapsed}}
+        @placements={{@placements}}
+        data-test-kanban-board
+        ...attributes
+      >
+        <:card as |placement|>
+          {{yield placement to="card"}}
+        </:card>
+        <:ghost as |dragIndex|>
+          {{yield dragIndex to="ghost"}}
+        </:ghost>
+      </KanbanPlaneInner>
+    {{else}}
+      <div class="kanban-empty-state">
+        <SquareKanban />
+        <div class="kanban-empty-copy">
+          <h2>No content yet</h2>
+          <p>
+            Add columns and cards to this board to start organizing work.
+          </p>
+        </div>
+      </div>
+    {{/if}}
 
     <style scoped>
       .kanban-plane {
@@ -151,12 +160,57 @@ export class KanbanPlane extends Component<{
           var(--primary-foreground, var(--boxel-dark))
         );
         --_kanban-muted-opacity: var(--boxel-kanban-muted-opacity, 0.7);
-        --_kanban-muted-fg: var(--muted-foreground, var(--boxel-450));
+        --_kanban-muted-fg: var(
+          --boxel-kanban-muted-fg,
+          var(--muted-foreground, var(--boxel-450))
+        );
         --_kanban-radius: var(
           --boxel-kanban-radius,
           var(--radius, var(--boxel-border-radius-sm))
         );
         --_kanban-col-gap: 0.5rem; /* KANBAN_INSERTION_GAP_PX (8px) in JS calculations */
+        --_kanban-border: var(
+          --boxel-kanban-border,
+          var(--border, var(--boxel-border-color))
+        );
+      }
+
+      .kanban-empty-state {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 2rem;
+      }
+      .kanban-empty-copy {
+        max-width: 24rem;
+        text-align: center;
+        display: grid;
+        gap: 0.5rem;
+        padding: 1.5rem;
+        border: 1px solid var(--_kanban-border);
+        border-radius: 0.75rem;
+        background: var(--_kanban-card-bg);
+        color: var(--_kanban-card-fg);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+      }
+      .kanban-empty-copy h2,
+      .kanban-empty-copy p {
+        margin: 0;
+      }
+      .kanban-empty-copy h2 {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      .kanban-empty-copy p {
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--_kanban-muted-fg);
+      }
+      .kanban-empty-state :deep(svg) {
+        width: 1.5rem;
+        height: 1.5rem;
+        margin: 0 auto 0.25rem;
+        color: var(--_kanban-border);
       }
     </style>
   </template>

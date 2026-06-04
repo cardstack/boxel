@@ -8,14 +8,14 @@ allowed-tools: Read, Grep, Glob, Bash
 
 The prerender pool's tab capacity is governed by a small set of SSM-driven knobs:
 
-| Env var | What it controls |
-|---|---|
-| `PRERENDER_PAGE_POOL_MIN` | Idle floor — pool never contracts below this. |
-| `PRERENDER_PAGE_POOL_MAX` | Burst ceiling reachable by any priority. |
-| `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX` | Extra ceiling, reachable only when caller `priority >= HIGH_PRIORITY_THRESHOLD`. |
-| `PRERENDER_HIGH_PRIORITY_THRESHOLD` | Priority bar that unlocks the upper tier. |
-| `PRERENDER_PAGE_POOL_IDLE_CONTRACTION_MS` | Hysteresis window before each contraction tick. |
-| `PRERENDER_SHARED_CONTEXT_CAP` | Absolute LRU cap for cached BrowserContexts. |
+| Env var                                   | What it controls                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| `PRERENDER_PAGE_POOL_MIN`                 | Idle floor — pool never contracts below this.                                    |
+| `PRERENDER_PAGE_POOL_MAX`                 | Burst ceiling reachable by any priority.                                         |
+| `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX`   | Extra ceiling, reachable only when caller `priority >= HIGH_PRIORITY_THRESHOLD`. |
+| `PRERENDER_HIGH_PRIORITY_THRESHOLD`       | Priority bar that unlocks the upper tier.                                        |
+| `PRERENDER_PAGE_POOL_IDLE_CONTRACTION_MS` | Hysteresis window before each contraction tick.                                  |
+| `PRERENDER_SHARED_CONTEXT_CAP`            | Absolute LRU cap for cached BrowserContexts.                                     |
 
 Plus the ECS task definition's `cpu` and `memory`. All these together form the **memory envelope** that bounds how many warmed BrowserContexts the system can hold and how much burst headroom it has.
 
@@ -31,7 +31,7 @@ Trigger on any of:
 - "Why does the dashboard show prerender memory peak at X%?"
 - "Should I bump `PRERENDER_PAGE_POOL_MAX` from N to M?"
 
-If the user is asking "why did this single render time out", that's the `indexing-diagnostics` skill, not this one. This skill is for *capacity planning*.
+If the user is asking "why did this single render time out", that's the `indexing-diagnostics` skill, not this one. This skill is for _capacity planning_.
 
 ## The sizing model
 
@@ -47,7 +47,7 @@ where:
 - `N`: number of warmed pool entries (active tabs + standby contexts the LRU is holding).
 - `marginal_per_tab`: cost of one additional warmed BrowserContext + its cached fetches + tab queue state. Empirically derived per environment.
 
-**CPU follows a different shape.** Each *actively rendering* tab consumes approximately one busy CPU core (Chromium docs / observed). But tabs alternate between rendering, host-side waits (fetches, store loads), and idle. So:
+**CPU follows a different shape.** Each _actively rendering_ tab consumes approximately one busy CPU core (Chromium docs / observed). But tabs alternate between rendering, host-side waits (fetches, store loads), and idle. So:
 
 ```
 cpu_peak ≈ (# tabs rendering simultaneously) × 1 vCPU
@@ -138,36 +138,36 @@ The output is a histogram: how many snapshots saw each `(totalTabs, totalPending
 
 #### DB — render-timing distribution
 
-Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.timing_diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
+Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
 
 ```sql
 -- 7-day render-timing histogram. The `::int` casts assume the
 -- diagnostic shape Prerenderer emits today; if a row is missing
 -- a key (older diagnostic shape, partial write, manual edit) the
 -- whole query errors. If that happens, narrow the WHERE clause to
--- skip the malformed rows: e.g. `AND timing_diagnostics->'waits' ?
+-- skip the malformed rows: e.g. `AND diagnostics->'waits' ?
 -- 'tabQueueMs'` (the JSONB `?` operator tests for a key) keeps
 -- only rows with that key present.
-SELECT 
+SELECT
   count(*) AS rows_with_diag,
-  count(*) FILTER (WHERE (timing_diagnostics->>'totalElapsedMs')::int >= 145000) AS at_or_over_timeout,
-  percentile_cont(0.95) WITHIN GROUP (ORDER BY (timing_diagnostics->>'totalElapsedMs')::int) AS p95_total_ms,
-  percentile_cont(0.99) WITHIN GROUP (ORDER BY (timing_diagnostics->>'totalElapsedMs')::int) AS p99_total_ms,
-  max((timing_diagnostics->>'totalElapsedMs')::int) AS max_total_ms,
-  percentile_cont(0.95) WITHIN GROUP (ORDER BY (timing_diagnostics->'waits'->>'tabQueueMs')::int) AS p95_tabq_ms,
-  max((timing_diagnostics->'waits'->>'tabQueueMs')::int) AS max_tabq_ms,
-  percentile_cont(0.95) WITHIN GROUP (ORDER BY (timing_diagnostics->'waits'->>'semaphoreMs')::int) AS p95_sem_ms,
-  max((timing_diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms
+  count(*) FILTER (WHERE (diagnostics->>'totalElapsedMs')::int >= 145000) AS at_or_over_timeout,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->>'totalElapsedMs')::int) AS p95_total_ms,
+  percentile_cont(0.99) WITHIN GROUP (ORDER BY (diagnostics->>'totalElapsedMs')::int) AS p99_total_ms,
+  max((diagnostics->>'totalElapsedMs')::int) AS max_total_ms,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->'waits'->>'tabQueueMs')::int) AS p95_tabq_ms,
+  max((diagnostics->'waits'->>'tabQueueMs')::int) AS max_tabq_ms,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->'waits'->>'semaphoreMs')::int) AS p95_sem_ms,
+  max((diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms
 FROM boxel_index
-WHERE timing_diagnostics IS NOT NULL
-  AND timing_diagnostics ? 'totalElapsedMs'
-  AND (timing_diagnostics->>'indexedAt') ~ '^[0-9]+$'
-  AND (timing_diagnostics->>'indexedAt')::bigint > extract(epoch from now() - interval '7 days')*1000;
+WHERE diagnostics IS NOT NULL
+  AND diagnostics ? 'totalElapsedMs'
+  AND (diagnostics->>'indexedAt') ~ '^[0-9]+$'
+  AND (diagnostics->>'indexedAt')::bigint > extract(epoch from now() - interval '7 days')*1000;
 ```
 
 Key signals to look for:
 
-- `at_or_over_timeout > 0`: the system is *already* dropping renders. Sizing change is needed urgently.
+- `at_or_over_timeout > 0`: the system is _already_ dropping renders. Sizing change is needed urgently.
 - `max_tabq_ms` of seconds-to-tens-of-seconds: the user was waiting for a tab. This is the UX-visible pressure that priority routing + dynamic expansion exists to mitigate.
 - `max_sem_ms` of seconds-to-tens-of-seconds: global render-semaphore saturation. Indicates pool is too small or fleet is too small.
 - `p99_total_ms` near `145000` (the timeout budget): system was at the edge. Even if no timeouts fired, you're one bad burst from a 504.
@@ -230,13 +230,13 @@ If the resize affects task size, do a Fargate pricing comparison. us-east-1 on-d
 
 So:
 
-| Task size | $/hr | /month per task |
-|---|---:|---:|
-| 1 vCPU / 4 GB  | $0.058 | $42 |
-| 2 vCPU / 8 GB  | $0.117 | $85 |
-| 2 vCPU / 16 GB | $0.152 | $111 |
-| 4 vCPU / 8 GB  | $0.197 | $144 |
-| 4 vCPU / 16 GB | $0.233 | $170 |
+| Task size      |   $/hr | /month per task |
+| -------------- | -----: | --------------: |
+| 1 vCPU / 4 GB  | $0.058 |             $42 |
+| 2 vCPU / 8 GB  | $0.117 |             $85 |
+| 2 vCPU / 16 GB | $0.152 |            $111 |
+| 4 vCPU / 8 GB  | $0.197 |            $144 |
+| 4 vCPU / 16 GB | $0.233 |            $170 |
 
 If the resize is "swap memory for CPU" (the typical case for prerender — memory-bound, CPU over-provisioned), the cost may actually drop. **Always show the pricing delta in the PR description.** It's a meaningful data point for the resize decision.
 
@@ -246,14 +246,14 @@ Captured on 2026-04-30 ~20:00 UTC for the CS-10976 PR 12 staging activation.
 
 ### Telemetry
 
-| Metric | 24 h | 7 d |
-|---|---:|---:|
-| CPU avg of 5-min Avg | 1.1 % | 1.5 % |
-| CPU 5-min peak | 67.5 % | 97.5 % |
-| Memory avg of 5-min Avg | 35 % | 39 % |
-| Memory 5-min peak | 64 % | 98.3 % |
+| Metric                  |   24 h |    7 d |
+| ----------------------- | -----: | -----: |
+| CPU avg of 5-min Avg    |  1.1 % |  1.5 % |
+| CPU 5-min peak          | 67.5 % | 97.5 % |
+| Memory avg of 5-min Avg |   35 % |   39 % |
+| Memory 5-min peak       |   64 % | 98.3 % |
 
-7-d render-timing histogram from `boxel_index.timing_diagnostics`:
+7-d render-timing histogram from `boxel_index.diagnostics`:
 
 - 58,549 rows with diagnostics
 - 0 timeouts (`totalElapsedMs ≥ 145 000`)
@@ -285,12 +285,12 @@ Queue-snapshot at the memory peak:
 
 ### Memory projection
 
-| N tabs | Memory used | 8 GB (today) | 16 GB (resized) |
-|---:|---:|:---:|:---:|
-| 2 (MIN) | 3.7 GB | 46 % ✓ | 23 % ✓ |
-| 4 | 5.4 GB | 67 % ✓ | 34 % ✓ |
-| **6 (MAX)** | **7.1 GB** | **89 % ✗** | **44 % ✓** |
-| **8 (HP_MAX)** | **8.7 GB** | **109 % ✗ OOM** | **55 % ✓** |
+|         N tabs | Memory used |  8 GB (today)   | 16 GB (resized) |
+| -------------: | ----------: | :-------------: | :-------------: |
+|        2 (MIN) |      3.7 GB |     46 % ✓      |     23 % ✓      |
+|              4 |      5.4 GB |     67 % ✓      |     34 % ✓      |
+|    **6 (MAX)** |  **7.1 GB** |   **89 % ✗**    |   **44 % ✓**    |
+| **8 (HP_MAX)** |  **8.7 GB** | **109 % ✗ OOM** |   **55 % ✓**    |
 
 The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 is already tight; HP_MAX=8 would OOM.
 

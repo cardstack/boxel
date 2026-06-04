@@ -69,6 +69,8 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import consumeContext from '../../helpers/consume-context';
 
+import { removeFileExtension } from '../../utils/card-search/types';
+
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import NeighborStackTriggerButton, {
@@ -97,7 +99,11 @@ const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
 
-const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
+// Selections are tracked by card id rather than by loaded instance. Materializing
+// a CardDef for every selected card is expensive (a fetch + deserialize per card
+// that isn't already resident), which made "Select All" over a large grid freeze
+// the UI for seconds. Instances are now loaded lazily, only when a copy is invoked.
+const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<string>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
 
 const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
@@ -430,10 +436,7 @@ export default class InteractSubmode extends Component {
         if (!selections) {
           continue;
         }
-        let removedCard = [...selections].find((c: CardDef) => c.id === cardId);
-        if (removedCard) {
-          selections.delete(removedCard);
-        }
+        selections.delete(cardId);
       }
     }
     await this.withTestWaiters(async () => {
@@ -462,7 +465,7 @@ export default class InteractSubmode extends Component {
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
-      sources: CardDef[],
+      sourceIds: string[],
       sourceItem: StackItem,
       destinationItem: StackItem,
     ) => {
@@ -484,6 +487,11 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
+        // Materialize the selected cards now (lazily, only for a copy) rather
+        // than when they were selected.
+        let sources = (
+          await Promise.all(sourceIds.map((id) => this.store.get(id)))
+        ).filter(isCardInstance) as CardDef[];
         sources.sort((a, b) => a.cardTitle.localeCompare(b.cardTitle));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
@@ -563,15 +571,17 @@ export default class InteractSubmode extends Component {
     async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
       let waiterToken = waiter.beginAsync();
       try {
-        let loadedCards = await Promise.all(
-          selectedCards.map((cardDefOrId: CardDefOrId) => {
-            if (typeof cardDefOrId === 'string') {
-              // WARNING This card is not part of the identity map!
-              return this.store.get(cardDefOrId);
-            }
-            return cardDefOrId;
-          }),
-        );
+        // Prerendered-card IDs arrive with the `.json` file extension on
+        // them, but the canonical card id (and `cardToDelete.id` in the
+        // delete handler) is the extensionless URL. Strip the extension
+        // here so prune-on-delete and copy lookups match.
+        let ids = selectedCards
+          .map((cardDefOrId) => {
+            let raw =
+              typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+            return raw ? removeFileExtension(raw) : undefined;
+          })
+          .filter(Boolean) as string[];
 
         let selected = cardSelections.get(stackItem);
         if (!selected) {
@@ -579,10 +589,8 @@ export default class InteractSubmode extends Component {
           cardSelections.set(stackItem, selected);
         }
         selected.clear();
-        for (let card of loadedCards) {
-          if (isCardInstance(card)) {
-            selected.add(card);
-          }
+        for (let id of ids) {
+          selected.add(id);
         }
       } finally {
         waiter.endAsync(waiterToken);
@@ -590,7 +598,7 @@ export default class InteractSubmode extends Component {
     },
   );
 
-  private get selectedCards() {
+  private get selectedCardIds() {
     return this.operatorModeStateService
       .topMostStackItems()
       .map((i) => [...(cardSelections.get(i) ?? [])]);
@@ -910,7 +918,7 @@ export default class InteractSubmode extends Component {
           {{/each}}
 
           <CopyButton
-            @selectedCards={{this.selectedCards}}
+            @selectedCardIds={{this.selectedCardIds}}
             @copy={{fn (perform this.copy)}}
             @isCopying={{this.copy.isRunning}}
           />

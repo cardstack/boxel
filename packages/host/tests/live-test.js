@@ -28,7 +28,6 @@ async function discoverTestModules(realmURL) {
     .map((url) => url.slice(0, -'.gts'.length));
 }
 
-// eslint-disable-next-line ember/no-test-import-export
 export async function loadRealmTests(application) {
   const urlParams = new URLSearchParams(window.location.search);
   const qunitAny = /** @type {any} */ (QUnit);
@@ -44,7 +43,7 @@ export async function loadRealmTests(application) {
   }
 
   const realmURL =
-    urlParams.get('realmURL') ?? 'http://localhost:4201/software-factory/';
+    urlParams.get('realmURL') ?? 'https://localhost:4201/skills/';
 
   const [
     helpers,

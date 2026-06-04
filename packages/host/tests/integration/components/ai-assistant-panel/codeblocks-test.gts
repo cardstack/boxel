@@ -30,6 +30,7 @@ import {
   setupOnSave,
   getMonacoContent,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -89,6 +90,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
       if (url.toString() === 'https://example.com/component.gts') {
         return {
           status: 200,
+          contentType: 'application/vnd.card+source',
           content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -106,6 +108,7 @@ export default class MyComponent extends Component {
       }
       return {
         status: 404,
+        contentType: null,
         content: '',
       };
     };
@@ -167,7 +170,7 @@ export default class MyComponent extends Component {
             country: 'Indonesia',
           }),
         }),
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
 

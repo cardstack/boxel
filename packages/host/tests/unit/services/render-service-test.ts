@@ -2,8 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   Deferred,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
+  VirtualNetwork,
   type RealmResourceIdentifier,
   type SingleCardDocument,
   type SingleFileMetaDocument,
@@ -27,17 +26,25 @@ function fetchInputURL(input: string | URL | Request): string {
   return input.href;
 }
 
-module('Unit | Service | render-service', function (hooks) {
-  hooks.beforeEach(function () {
-    registerCardReferencePrefix(prefix, targetRealm);
-  });
+function makeVN(): VirtualNetwork {
+  let vn = new VirtualNetwork(globalThis.fetch);
+  vn.addRealmMapping(prefix, targetRealm);
+  return vn;
+}
 
+module('Unit | Service | render-service', function (hooks) {
+  // `makeVN()` calls `addRealmMapping`, which registers `@test-prefix/`
+  // in the module-level card-reference prefix registry (a global the
+  // VirtualNetwork bridges to). Without cleanup that mapping leaks into
+  // sibling test modules — e.g. realm indexing, whose server-side
+  // indexing would then unresolve indexed card URLs back to the
+  // `@test-prefix/` form and break its deepEqual assertions.
   hooks.afterEach(function () {
-    unregisterCardReferencePrefix(prefix);
+    new VirtualNetwork(globalThis.fetch).removeRealmMapping(prefix);
   });
 
   test('CardStoreWithErrors resolves registered prefix ids for card and file lookups', function (assert) {
-    let store = new CardStoreWithErrors(globalThis.fetch);
+    let store = new CardStoreWithErrors(globalThis.fetch, makeVN());
     let card = {} as CardDef;
     let file = {} as FileDef;
 
@@ -63,7 +70,7 @@ module('Unit | Service | render-service', function (hooks) {
       fetchCalls.push(fetchInputURL(input));
       return fetchDeferred.promise;
     }) as typeof globalThis.fetch;
-    let store = new CardStoreWithErrors(fetch);
+    let store = new CardStoreWithErrors(fetch, makeVN());
 
     let firstLoad = store.loadCardDocument(`${prefix}Person/hassan`);
     let secondLoad = store.loadCardDocument(`${targetRealm}Person/hassan`);
@@ -120,7 +127,7 @@ module('Unit | Service | render-service', function (hooks) {
       fetchCalls.push(fetchInputURL(input));
       return fetchDeferred.promise;
     }) as typeof globalThis.fetch;
-    let store = new CardStoreWithErrors(fetch);
+    let store = new CardStoreWithErrors(fetch, makeVN());
 
     let firstLoad = store.loadFileMetaDocument(`${prefix}hero.png`);
     let secondLoad = store.loadFileMetaDocument(`${targetRealm}hero.png`);

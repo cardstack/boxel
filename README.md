@@ -670,6 +670,8 @@ If the isolated realm server fails to get stopped you may see an error about por
 
 All environment configuration is centralized in `mise-tasks/lib/env-vars.sh`, which is automatically sourced by every mise task. The slug computation used for hostnames and database names lives in `scripts/env-slug.sh`.
 
+Run one environment per Git worktree. The host package's embroider cache (`packages/host/node_modules/.embroider/content-for.json`) is rewritten at vite startup with that env's URLs; two vites launched from the same worktree would fight over it and silently serve each other's URLs even though Traefik routes correctly. The vite launcher refuses to start a second env-mode vite when it detects one already running in this worktree.
+
 Here’s an example using Git worktrees and a `parallel` environment name:
 
 ```bash

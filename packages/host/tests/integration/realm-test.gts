@@ -28,6 +28,7 @@ import {
   testModuleRealm,
   cardInfo,
   getFileCreatedAt,
+  realmConfigCardJSON,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -3427,15 +3428,15 @@ posts/ignore-me.gts
     }
   });
 
-  test('realm can serve info requests by reading .realm.json', async function (assert) {
+  test('realm can serve info requests by reading the RealmConfig card', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        '.realm.json': `{
-          "name": "Example Workspace",
-          "backgroundURL": "https://example-background-url.com",
-          "iconURL": "https://example-icon-url.com"
-        }`,
+        'realm.json': realmConfigCardJSON({
+          name: 'Example Workspace',
+          backgroundURL: 'https://example-background-url.com',
+          iconURL: 'https://example-icon-url.com',
+        }),
       },
     });
     let response = await handle(
@@ -3448,30 +3449,37 @@ posts/ignore-me.gts
       }),
     );
     let json = await response.json();
-    assert.deepEqual(
-      json,
-      {
-        data: {
-          id: testRealmURL,
-          type: 'realm-info',
-          attributes: {
-            name: 'Example Workspace',
-            backgroundURL: 'https://example-background-url.com',
-            iconURL: 'https://example-icon-url.com',
-            realmUserId: '@realm_server:localhost',
-            showAsCatalog: null,
-            visibility: 'public',
-            publishable: null,
-            lastPublishedAt: null,
-            includePrerenderedDefaultRealmIndex: null,
-          },
-        },
-      },
-      '/_info response is correct',
+    assert.strictEqual(json.data.id, testRealmURL, 'id is correct');
+    assert.strictEqual(json.data.type, 'realm-info', 'type is correct');
+    let attributes = json.data.attributes;
+    assert.strictEqual(attributes.name, 'Example Workspace', 'name');
+    assert.strictEqual(
+      attributes.backgroundURL,
+      'https://example-background-url.com',
+      'backgroundURL',
+    );
+    assert.strictEqual(
+      attributes.iconURL,
+      'https://example-icon-url.com',
+      'iconURL',
+    );
+    assert.strictEqual(
+      attributes.realmUserId,
+      '@realm_server:localhost',
+      'realmUserId',
+    );
+    assert.strictEqual(attributes.showAsCatalog, null, 'showAsCatalog');
+    assert.strictEqual(attributes.visibility, 'public', 'visibility');
+    assert.strictEqual(attributes.publishable, null, 'publishable');
+    assert.strictEqual(attributes.lastPublishedAt, null, 'lastPublishedAt');
+    assert.strictEqual(
+      attributes.includePrerenderedDefaultRealmIndex,
+      null,
+      'includePrerenderedDefaultRealmIndex',
     );
   });
 
-  test('realm can serve info requests if .realm.json is missing', async function (assert) {
+  test('realm can serve info requests if the RealmConfig card is missing', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {},
@@ -3499,11 +3507,11 @@ posts/ignore-me.gts
     );
   });
 
-  test('realm can serve info requests if .realm.json is malformed', async function (assert) {
+  test('realm can serve info requests if the RealmConfig card is malformed', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        '.realm.json': `Some example content that is not valid json`,
+        'realm.json': `Some example content that is not valid json`,
       },
     });
     let response = await handle(

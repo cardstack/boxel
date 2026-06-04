@@ -17,6 +17,7 @@ import {
   setupOnSave,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -100,7 +101,10 @@ module('Integration | commands | search', function (hooks) {
             lastName: 'Jackson',
             bio: 'Novelist specializing in xylophone-themed mystery fiction.',
           }),
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+          'realm.json': realmConfigCardJSON({
+            name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+          }),
         },
       });
     });

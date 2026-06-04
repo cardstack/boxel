@@ -21,6 +21,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -112,7 +113,10 @@ module('Integration | card-catalog', function (hooks) {
         'pet.gts': { Pet },
         'tree.gts': { Tree },
         'publishing-packet.gts': { PublishingPacket },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+        'realm.json': realmConfigCardJSON({
+          name: realmName,
+          iconURL: 'https://example-icon.test',
+        }),
         'index.json': new CardsGrid(),
         'Spec/publishing-packet.json': new Spec({
           cardTitle: 'Publishing Packet',
@@ -295,6 +299,24 @@ module('Integration | card-catalog', function (hooks) {
         'http://test-realm/test/Spec/publishing-packet',
         'http://test-realm/test/Spec/tree',
       ]);
+    });
+
+    test('catalog items render with the Adorn visual treatment', async function (assert) {
+      await waitFor(
+        `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
+      );
+
+      // The card chooser opts in to the Adorn treatment (teal hover tab +
+      // chip + outline), so every catalog item button carries the `adorn`
+      // class — matching the operator-mode cards-grid look.
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .exists({ count: 5 }, 'catalog items are rendered');
+      assert
+        .dom(
+          `[data-test-realm="${realmName}"] [data-test-card-catalog-item]:not(.adorn)`,
+        )
+        .doesNotExist('every catalog item renders with the adorn class');
     });
   });
 

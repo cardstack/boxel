@@ -18,6 +18,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -451,6 +452,14 @@ export function setupOperatorModeTests(
       name: 'Stable Example',
       status: 'ok',
     });
+    // Companion fixture used by the operator-mode error-UI tests: an
+    // ExplodingCard whose `status: 'boom'` makes the `cardTitle` compute
+    // throw, so the card lands as instance-error on index from the start
+    // (no last-known-good HTML available).
+    let preExplodedCard = new ExplodingCard({
+      name: 'Pre-Exploded Example',
+      status: 'boom',
+    });
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -661,12 +670,16 @@ export function setupOperatorModeTests(
           'BlogPost/1.json': blogPost,
           'BlogPost/2.json': new BlogPost({ cardTitle: 'Beginnings' }),
           'ExplodingCard/1.json': explodingCard,
+          'ExplodingCard/exploded.json': preExplodedCard,
           'CardDef/1.json': new CardDef({ cardTitle: 'CardDef instance' }),
           'PublishingPacket/story.json': new PublishingPacket({
             cardTitle: 'Space Story',
             blogPost,
           }),
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+          'realm.json': realmConfigCardJSON({
+            name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+          }),
           ...Object.fromEntries(personCards),
         },
       }));

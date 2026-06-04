@@ -36,46 +36,87 @@ export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
 export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
-export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-5-nano';
 export const DEFAULT_IMAGE_GENERATION_LLM = 'google/gemini-2.5-flash-image';
 
-export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
-  'anthropic/claude-3.5-sonnet': 'Anthropic: Claude 3.5 Sonnet',
-  'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
-  'anthropic/claude-3.7-sonnet:thinking':
-    'Anthropic: Claude 3.7 Sonnet (thinking)',
-  'anthropic/claude-haiku-4.5': 'Anthropic: Claude Haiku 4.5',
-  'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
-  'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
-  'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
-  'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
-  'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
-  'google/gemini-2.5-pro': 'Google: Gemini 2.5 Pro',
-  'google/gemini-2.5-flash-lite': 'Google: Gemini 2.5 Flash Lite',
-  'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
-  'meta-llama/llama-3.2-3b-instruct': 'Meta: Llama 3.2 3B Instruct',
-  'openai/gpt-4.1-nano': 'OpenAI: GPT-4.1 Nano',
-  'openai/gpt-4.1-mini': 'OpenAI: GPT-4.1 Mini',
-  'openai/gpt-4.1': 'OpenAI: GPT-4.1',
-  'openai/gpt-4o': 'OpenAI: GPT-4o',
-  'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
-  'openai/gpt-5-nano': 'OpenAI: GPT-5 Nano',
-  'openai/gpt-5-mini': 'OpenAI: GPT-5 Mini',
-  'openai/gpt-5': 'OpenAI: GPT-5',
-  'openai/gpt-oss-20b': 'OpenAI: GPT OSS 20B',
-};
+// Realm-independent fallback model surface. Used when SystemCard /
+// SystemCard.modelConfigurations is unavailable so we never ship undefined
+// capability fields on the wire (silent-tools-off bug — see CS-11249).
+//
+// Refresh: re-derive from `https://openrouter.ai/api/v1/models` when the
+// curated set changes. Derivation rules mirror the computed fields on the
+// `OpenRouterModel` card (`packages/openrouter-realm/openrouter-model.gts`):
+//   toolsSupported  = supportedParameters.includes('tools')
+//   inputModalities = architecture.inputModalities (verbatim)
+// `reasoningEffort` is intentionally not modeled here — it's a user choice,
+// not a model capability. Callers / SystemCard supply it; the fallback never
+// auto-fills it.
+export interface FallbackModelConfig {
+  modelId: string;
+  displayName: string;
+  toolsSupported: boolean;
+  inputModalities: string[];
+}
 
-// Note - we are moving towards using the system card for defining these for users
-// See:
-// - packages/catalog-realm/ModelConfiguration for a list of models for all users
-// - packages/catalog-realm/SystemCard/default.json for the default system card for users
-// - packages/host/README.md for how to add new models
-export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
+export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
+  {
+    modelId: 'anthropic/claude-sonnet-4.6',
+    displayName: 'Anthropic: Claude Sonnet 4.6',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'anthropic/claude-opus-4.7',
+    displayName: 'Anthropic: Claude Opus 4.7',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'google/gemini-3-flash-preview',
+    displayName: 'Google: Gemini 3 Flash Preview',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file', 'audio', 'video'],
+  },
+  {
+    modelId: 'google/gemini-3.1-pro-preview',
+    displayName: 'Google: Gemini 3.1 Pro Preview',
+    toolsSupported: true,
+    inputModalities: ['audio', 'file', 'image', 'text', 'video'],
+  },
+  {
+    modelId: 'openai/gpt-5.4',
+    displayName: 'OpenAI: GPT-5.4',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'openai/gpt-5.5',
+    displayName: 'OpenAI: GPT-5.5',
+    toolsSupported: true,
+    inputModalities: ['file', 'image', 'text'],
+  },
+] as const;
+
+export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
 export const SLIDING_SYNC_LIST_RANGE_END = 9;
+// AI rooms (ai-room list) emit one event per message and rely on the host's
+// loadAllTimelineEvents scrollback (which calls /messages with an m.replace
+// filter) to backfill older history on demand, so a per-room timeline_limit
+// of 1 is sufficient.
+//
+// Realm session rooms (auth-room list) instead receive a burst of multiple
+// events per write or delete — incremental-index-initiation → update →
+// incremental, plus an extra initiation per file in multi-file batches. The
+// `update` event sits in the middle of that burst and is what DirectoryResource
+// subscribes to for live file-tree refresh; with timeline_limit=1, sliding
+// sync only delivers the latest event of any burst that arrives in the same
+// poll window, so the `update` event gets silently dropped (it remains in the
+// room but never reaches the live Room.timeline listener). The higher limit
+// on the auth-room list keeps the full burst in each /sync response.
 export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_TIMEOUT = 30000;

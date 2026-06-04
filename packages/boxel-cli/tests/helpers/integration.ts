@@ -159,6 +159,16 @@ export async function startTestRealmServer(
   };
 }
 
+/**
+ * Returns the PgAdapter created by `startTestRealmServer`, or undefined if
+ * the server hasn't been started yet. Intended for tests that need to seed
+ * or read realm-server tables directly (e.g. injecting a `has_error` row
+ * into `boxel_index` to exercise endpoints that surface index errors).
+ */
+export function getTestDbAdapter(): PgAdapter | undefined {
+  return dbAdapter;
+}
+
 export async function stopTestRealmServer(): Promise<void> {
   for (let realm of activeRealms) {
     realm.unsubscribe();

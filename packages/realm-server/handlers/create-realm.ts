@@ -150,14 +150,12 @@ export async function createRealm(
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    // CS-10053: publishable lives in realm_metadata now, not the
-    // sidecar. The legacy .realm.json is no longer written here, and
-    // a fresh realm has no hostRoutingRules / hostHome to seed (host
-    // mode picks them up from the realm.json card once an operator
-    // sets one via /_config). Reset all mutable metadata columns on
-    // conflict so a stale row (e.g. left over from a previous realm
-    // at the same URL whose delete didn't clean up) doesn't bleed
-    // into the new realm.
+    // publishable lives in realm_metadata. A fresh realm has no
+    // hostRoutingRules to seed (host mode picks them up from the
+    // realm.json card once an operator sets one via /_config). Reset
+    // all mutable metadata columns on conflict so a stale row (e.g.
+    // left over from a previous realm at the same URL whose delete
+    // didn't clean up) doesn't bleed into the new realm.
     await query(dbAdapter, [
       `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
       param(url),

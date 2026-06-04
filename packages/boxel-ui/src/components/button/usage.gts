@@ -42,7 +42,11 @@ export default class ButtonUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name="Button" class="boxel-button-usage">
+    <FreestyleUsage
+      @name="Button"
+      @description="Interactive button for actions, links, and form submission. Renders as a button, anchor, or LinkTo depending on the @as argument, with primary, secondary, and danger color variants."
+      class="boxel-button-usage"
+    >
       <:example>
         <div
           class={{cn

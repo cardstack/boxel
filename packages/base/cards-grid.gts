@@ -44,6 +44,7 @@ import {
   CardDef,
   realmInfo,
   realmURL,
+  virtualNetworkFor,
   type BaseDef,
   type BoxComponent,
 } from './card-api';
@@ -307,9 +308,13 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      await this.args.createCard?.(spec.ref, cardIdToURL(spec.id!), {
-        realmURL: this.args.model[realmURL],
-      });
+      await this.args.createCard?.(
+        spec.ref,
+        virtualNetworkFor(spec)?.toURL(spec.id!) ?? cardIdToURL(spec.id!),
+        {
+          realmURL: this.args.model[realmURL],
+        },
+      );
     } else if (activeFilterRef) {
       // No spec exists for the active type filter — create an instance of
       // the type directly. `activeFilterRef` is an absolute CodeRef sourced

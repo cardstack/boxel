@@ -649,7 +649,7 @@ module('Unit | index-writer', function (hooks) {
         icon_html: '<svg>test icon</svg>',
         markdown: null,
         is_deleted: null,
-        timing_diagnostics: null,
+        diagnostics: null,
       },
       'the copied instance is correct',
     );
@@ -745,16 +745,12 @@ module('Unit | index-writer', function (hooks) {
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     // Strip non-deterministic write-time stamps from both the row and
-    // the error_doc (the indexer mirrors timing_diagnostics onto
+    // the error_doc (the indexer mirrors diagnostics onto
     // error_doc.diagnostics for UI compat); they're verified
     // separately below.
-    let {
-      indexed_at: _remove,
-      timing_diagnostics,
-      ...errorEntry
-    } = rawErrorEntry;
+    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
-    // The indexer mirrors `timing_diagnostics` onto `error_doc.diagnostics`
+    // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
     // mirror relationship separately below). `diagnostics` is a declared
     // optional field on `SerializedError`, so this is a plain destructure
@@ -806,16 +802,77 @@ module('Unit | index-writer', function (hooks) {
       },
       'the error entry includes last known good state of instance',
     );
-    assert.ok(timing_diagnostics, 'timing_diagnostics populated on error row');
+    assert.ok(diagnostics, 'diagnostics populated on error row');
     assert.strictEqual(
-      typeof timing_diagnostics,
+      typeof diagnostics,
       'object',
-      'timing_diagnostics is an object',
+      'diagnostics is an object',
     );
     assert.deepEqual(
       errorDocDiagnostics,
-      timing_diagnostics,
-      'error_doc.diagnostics mirrors timing_diagnostics',
+      diagnostics,
+      'error_doc.diagnostics mirrors diagnostics',
+    );
+  });
+
+  test('strips jsonb-illegal code points from error_doc and diagnostics on write', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    // A NUL and an unpaired surrogate in the error message + diagnostics:
+    // Postgres rejects both in jsonb, so without sanitization this write
+    // aborts the whole batch.
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance-error',
+      error: {
+        message: 'Unexpected token \u0000\uD800 JFIF is not valid JSON',
+        status: 500,
+        additionalErrors: [
+          {
+            message: 'nested \u0000 binary',
+            status: 500,
+            additionalErrors: [],
+          } as any,
+        ],
+      },
+      diagnostics: { renderStage: 'load\u0000links' },
+    });
+    // Must not throw — the un-sanitized write rejected the upsert.
+    await batch.done();
+
+    let [row] = (await adapter.execute(
+      'SELECT * FROM boxel_index WHERE has_error = TRUE AND realm_version = 2',
+      { coerceTypes },
+    )) as unknown as BoxelIndexTable[];
+    assert.ok(row?.error_doc, 'error row persisted despite binary in message');
+
+    let nul = String.fromCharCode(0);
+    let hasIllegalCodePoint = (s: string) =>
+      s.includes(nul) ||
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(
+        s,
+      );
+    assert.notOk(
+      hasIllegalCodePoint(row.error_doc!.message),
+      'illegal code points stripped from the error message',
+    );
+    assert.true(
+      row.error_doc!.message.includes('JFIF'),
+      'the readable remainder of the message is preserved',
+    );
+    assert.notOk(
+      hasIllegalCodePoint(
+        (row.error_doc!.additionalErrors as any[])[0].message,
+      ),
+      'illegal code points stripped from nested additionalErrors too',
+    );
+    assert.strictEqual(
+      (row.diagnostics as any).renderStage,
+      'load\uFFFDlinks',
+      'illegal code points stripped from diagnostics strings too',
     );
   });
 
@@ -840,13 +897,9 @@ module('Unit | index-writer', function (hooks) {
       'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
-    let {
-      indexed_at: _remove,
-      timing_diagnostics,
-      ...errorEntry
-    } = rawErrorEntry;
+    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
-    // The indexer mirrors `timing_diagnostics` onto `error_doc.diagnostics`
+    // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
     // mirror relationship separately below). `diagnostics` is a declared
     // optional field on `SerializedError`, so this is a plain destructure
@@ -888,16 +941,16 @@ module('Unit | index-writer', function (hooks) {
       },
       'the error entry does not include last known good state of instance',
     );
-    assert.ok(timing_diagnostics, 'timing_diagnostics populated on error row');
+    assert.ok(diagnostics, 'diagnostics populated on error row');
     assert.strictEqual(
-      typeof timing_diagnostics,
+      typeof diagnostics,
       'object',
-      'timing_diagnostics is an object',
+      'diagnostics is an object',
     );
     assert.deepEqual(
       errorDocDiagnostics,
-      timing_diagnostics,
-      'error_doc.diagnostics mirrors timing_diagnostics',
+      diagnostics,
+      'error_doc.diagnostics mirrors diagnostics',
     );
   });
 

@@ -32,4 +32,19 @@ function sanitizeSlug(raw) {
     .replace(/^-|-$/g, '');
 }
 
-module.exports = { sanitizeSlug };
+/**
+ * Convert a sanitized slug into a Postgres-safe database-name suffix.
+ *
+ * Postgres allows hyphens in identifiers only when quoted; unquoted
+ * references (CREATE DATABASE foo-bar, psql -d foo-bar, libpq's
+ * URI parser) treat them as operators or delimiters. Swap hyphens for
+ * underscores so the slug is usable unquoted.
+ *
+ * @param {string | null | undefined} slug
+ * @returns {string}
+ */
+function pgDbSlug(slug) {
+  return (slug || '').replace(/-/g, '_');
+}
+
+module.exports = { sanitizeSlug, pgDbSlug };

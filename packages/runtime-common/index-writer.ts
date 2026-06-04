@@ -12,13 +12,18 @@ import {
   logger,
 } from './index';
 import {
-  isRegisteredPrefix,
+  isRegisteredPrefix as globalIsRegisteredPrefix,
   rri,
-  unresolveCardReference,
+  unresolveCardReference as globalUnresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
-import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
+import type { VirtualNetwork } from './virtual-network';
+import {
+  getCreatedTime,
+  ensureFileCreatedAt,
+  getContentMeta,
+} from './file-meta';
 import {
   type Expression,
   param,
@@ -32,11 +37,15 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import { clampSerializedError, type SerializedError } from './error';
+import {
+  clampSerializedError,
+  sanitizeForJsonb,
+  type SerializedError,
+} from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
-import type { TimingDiagnostics } from './index';
+import type { Diagnostics } from './index';
 import {
   coerceTypes,
   type BoxelIndexTable,
@@ -51,8 +60,12 @@ export class IndexWriter {
     this.#dbAdapter = dbAdapter;
   }
 
-  async createBatch(realmURL: URL, jobInfo?: JobInfo) {
-    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo);
+  async createBatch(
+    realmURL: URL,
+    jobInfo?: JobInfo,
+    virtualNetwork?: VirtualNetwork,
+  ) {
+    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo, virtualNetwork);
     await batch.ready;
     return batch;
   }
@@ -94,11 +107,11 @@ export interface InstanceEntry {
   deps: Set<string>;
   // Per-row render timing diagnostics (launch/waits/render timings
   // plus host-side breadcrumbs). Populated from the Prerenderer's
-  // `response.meta` and persisted onto `boxel_index.timing_diagnostics`.
+  // `response.meta` and persisted onto `boxel_index.diagnostics`.
   // Not tied to `has_error` — we persist this for successful rows too
   // so operators can retrospectively answer "why did this instance
   // take N seconds on the last reindex?".
-  timingDiagnostics?: TimingDiagnostics;
+  diagnostics?: Diagnostics;
 }
 
 export interface IndexErrorEntry {
@@ -107,10 +120,10 @@ export interface IndexErrorEntry {
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
-  // See InstanceEntry.timingDiagnostics. On the error path, the
+  // See InstanceEntry.diagnostics. On the error path, the
   // same payload is also copied into `error_doc.diagnostics` at
   // write time so the UI read path keeps working unchanged.
-  timingDiagnostics?: TimingDiagnostics;
+  diagnostics?: Diagnostics;
 }
 
 export type InstanceErrorIndexEntry = IndexErrorEntry & {
@@ -154,8 +167,8 @@ export interface FileEntry {
   atomHtml?: string;
   iconHTML?: string;
   markdown?: string;
-  // See InstanceEntry.timingDiagnostics.
-  timingDiagnostics?: TimingDiagnostics;
+  // See InstanceEntry.diagnostics.
+  diagnostics?: Diagnostics;
 }
 
 export class Batch {
@@ -171,8 +184,8 @@ export class Batch {
   // with stale content.
   #resumedRows = new Map<string, number | null>();
   // Correlation ID minted once per Batch and stamped into every row's
-  // `timing_diagnostics` via `updateEntry`, so operators can
-  // `SELECT ... WHERE timing_diagnostics->>'invalidationId' = '...'`
+  // `diagnostics` via `updateEntry`, so operators can
+  // `SELECT ... WHERE diagnostics->>'invalidationId' = '...'`
   // and see every row that was part of the same indexing fan-out in
   // one query. Minted in the constructor (not `invalidate()`) so
   // fromScratch — which doesn't call `invalidate()` — still gets a
@@ -188,10 +201,26 @@ export class Batch {
     dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
     private jobInfo?: JobInfo,
+    private virtualNetwork?: VirtualNetwork,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
+  }
+
+  // Prefix checks and unresolution prefer the threaded VirtualNetwork, and
+  // fall back to the deprecated module-level resolver when a Batch is
+  // constructed without one (e.g. the worker-manager and copy-task paths).
+  private isRegisteredPrefix(reference: string): boolean {
+    return this.virtualNetwork
+      ? this.virtualNetwork.isRegisteredPrefix(reference)
+      : globalIsRegisteredPrefix(reference);
+  }
+
+  private unresolveURL(url: string): string {
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(url)
+      : globalUnresolveCardReference(url);
   }
 
   private async setupBatch(): Promise<void> {
@@ -282,6 +311,17 @@ export class Batch {
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
+  // Look up the content hash and size persisted at write time for a given file
+  // path, in a single row lookup. Either value is undefined when the realm has
+  // no recorded value (e.g. files written before file-meta hashing existed, or
+  // a no-op rewrite that left the columns untouched).
+  async getContentMeta(localPath: string): Promise<{
+    contentHash: string | undefined;
+    contentSize: number | undefined;
+  }> {
+    return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
   @Memoize()
   private get nodeResolvedInvalidations() {
     return [...this.invalidations].map((href) =>
@@ -324,7 +364,7 @@ export class Batch {
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
     let copyURL = (value: string) =>
-      isRegisteredPrefix(value)
+      this.isRegisteredPrefix(value)
         ? value
         : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
     let values = sources.map((entry) => {
@@ -389,7 +429,7 @@ export class Batch {
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
-    if (!new RealmPaths(this.realmURL).inRealm(url)) {
+    if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
       return;
@@ -418,7 +458,7 @@ export class Batch {
     }
     let href = url.href;
     this.#invalidations.add(url.href);
-    // Build the per-row timing_diagnostics blob. Render-side fields
+    // Build the per-row diagnostics blob. Render-side fields
     // come from the Prerenderer's `response.meta` (already flattened
     // in `visit-file.ts`); write-side stamps are added here:
     //
@@ -428,17 +468,18 @@ export class Batch {
     //     correlation key.
     //   - `indexedAt` — wall-clock the write happened.
     //
-    // The canonical storage is the `timing_diagnostics` column. For
+    // The canonical storage is the `diagnostics` column. For
     // error rows we ALSO mirror the blob onto `error_doc.diagnostics`
     // so the UI read path (error doc → CardErrorJSONAPI.meta.
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    let timingDiagnostics: TimingDiagnostics = {
-      ...(entry.timingDiagnostics ?? {}),
+    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
+    let diagnostics: Diagnostics = sanitizeForJsonb({
+      ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    };
+    });
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -448,9 +489,9 @@ export class Batch {
               // The SerializedError shape's `diagnostics` is
               // `Record<string, unknown>` by design (it tolerates
               // extra fields for derived / legacy payloads);
-              // `TimingDiagnostics` is structurally-compatible
+              // `Diagnostics` is structurally-compatible
               // but needs an explicit cast across the boundary.
-              diagnostics: timingDiagnostics as Record<string, unknown>,
+              diagnostics: diagnostics as Record<string, unknown>,
             },
             url,
           ),
@@ -480,7 +521,7 @@ export class Batch {
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
           has_error: false,
-          timing_diagnostics: timingDiagnostics,
+          diagnostics: diagnostics,
         };
         break;
       case 'file':
@@ -503,7 +544,7 @@ export class Batch {
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
           has_error: false,
-          timing_diagnostics: timingDiagnostics,
+          diagnostics: diagnostics,
         };
         break;
       case 'instance-error':
@@ -523,9 +564,9 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
+          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
           has_error: true,
-          timing_diagnostics: timingDiagnostics,
+          diagnostics: diagnostics,
         };
         break;
       default:
@@ -823,7 +864,7 @@ export class Batch {
   private async tombstoneEntries(invalidations: string[]) {
     // insert tombstone into next version of the realm index. Stamp
     // the current `invalidationId` + `indexedAt` on every tombstone
-    // so fan-out queries (`WHERE timing_diagnostics->>'invalidationId'
+    // so fan-out queries (`WHERE diagnostics->>'invalidationId'
     // = <id>`) also surface the delete rows for this pass — otherwise
     // tombstones would inherit a stale ID from a prior write or stay
     // NULL entirely, misattributing deletes in the grouping view.
@@ -857,14 +898,14 @@ export class Batch {
       'is_deleted',
       'has_error',
       'error_doc',
-      'timing_diagnostics',
+      'diagnostics',
       'job_id',
     ].map((c) => [c]);
-    let tombstoneDiagnostics: TimingDiagnostics = {
+    let tombstoneDiagnostics: Diagnostics = {
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
     };
-    // `timing_diagnostics` is a jsonb column. This helper uses
+    // `diagnostics` is a jsonb column. This helper uses
     // `upsertMultipleRows` which passes each value through `param()`
     // as a raw `PgPrimitive`, so we pre-serialize the JSON here (the
     // regular `updateEntry` path reaches jsonb via `asExpressions`
@@ -992,7 +1033,7 @@ export class Batch {
     await this.ready;
     // Mint a fresh correlation ID for this invalidation fan-out; every
     // subsequent `updateEntry` on this batch stamps it into the row's
-    // `timing_diagnostics` so operators can group the rows touched by
+    // `diagnostics` so operators can group the rows touched by
     // the same triggering change.
     this.#currentInvalidationId = uuidv4();
     let start = Date.now();
@@ -1242,9 +1283,10 @@ export class Batch {
     let pageNumber = 0;
     // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
     // since deps may be stored in prefix form for portability
-    let unresolvedPath = unresolveCardReference(resolvedPath);
+    let unresolvedPath = this.unresolveURL(resolvedPath);
     let searchBothForms =
-      unresolvedPath !== resolvedPath && isRegisteredPrefix(unresolvedPath);
+      unresolvedPath !== resolvedPath &&
+      this.isRegisteredPrefix(unresolvedPath);
     do {
       // SQLite does not support cursors when used in the worker thread since
       // the API for using cursors cannot be serialized over the postMessage
@@ -1363,8 +1405,8 @@ export class Batch {
   }
 
   private copiedRealmURL(fromRealm: URL, file: URL): URL {
-    let source = new RealmPaths(fromRealm);
-    let dest = new RealmPaths(this.realmURL);
+    let source = new RealmPaths(fromRealm, this.virtualNetwork);
+    let dest = new RealmPaths(this.realmURL, this.virtualNetwork);
     if (!source.inRealm(file)) {
       return file;
     }
@@ -1434,7 +1476,7 @@ export class Batch {
           obj.id &&
           typeof obj.id === 'string'
         ) {
-          obj.id = isRegisteredPrefix(obj.id)
+          obj.id = this.isRegisteredPrefix(obj.id)
             ? obj.id
             : this.copiedRealmURL(fromRealm, new URL(obj.id));
         } else {

@@ -13,7 +13,11 @@ import {
   setupTestProfile,
   uniqueRealmName,
 } from '../helpers/integration';
-import { TINY_PNG_BYTES, TINY_PDF_BYTES } from '../helpers/binary-fixtures';
+import {
+  TINY_PNG_BYTES,
+  TINY_PDF_BYTES,
+  TINY_MP3_BYTES,
+} from '../helpers/binary-fixtures';
 import type { ProfileManager } from '../../src/lib/profile-manager';
 
 let profileManager: ProfileManager;
@@ -437,26 +441,23 @@ describe('realm push (integration)', () => {
     ]);
   });
 
-  it('does not upload .realm.json (protected file) even if present locally', async () => {
+  it('does not upload dotfiles even if present locally', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
-    writeLocalFile(localDir, '.realm.json', '{"name":"locally-edited-marker"}');
+    // .gitkeep stands in for any local dotfile a workspace might carry;
+    // sync ignores anything starting with `.` (see shouldIgnoreFile in
+    // realm-sync-base).
+    writeLocalFile(localDir, '.gitkeep', 'locally-edited-marker');
 
     await pushCommand(localDir, realmUrl, { profileManager });
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
-    // The remote .realm.json may not exist at all on a freshly-created
-    // realm (CS-10053 stopped seeding one). Either way, the local file
-    // must not have been pushed.
-    if (await remoteFileExists(realmUrl, '.realm.json')) {
-      let remoteRealmJson = await fetchRemoteFile(realmUrl, '.realm.json');
-      expect(remoteRealmJson).not.toContain('locally-edited-marker');
-    }
+    expect(await remoteFileExists(realmUrl, '.gitkeep')).toBe(false);
 
     let manifest = readManifest(localDir);
-    expect(manifest.files['.realm.json']).toBeUndefined();
+    expect(manifest.files['.gitkeep']).toBeUndefined();
   });
 
   // --- Flag-combination scenarios ---
@@ -752,6 +753,20 @@ describe('realm push (integration)', () => {
 
     let remote = await fetchRemoteBytes(realmUrl, 'doc.pdf');
     expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
+  });
+
+  it('pushes an MP3 file byte-identically', async () => {
+    // Audio files are binary; if `isBinaryFilename` missed `audio/*`,
+    // the bytes would be UTF-8 round-tripped and corrupted on the wire.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalBytes(localDir, 'sample.mp3', TINY_MP3_BYTES);
+
+    await pushCommand(localDir, realmUrl, { profileManager });
+
+    let remote = await fetchRemoteBytes(realmUrl, 'sample.mp3');
+    expect(remote.equals(Buffer.from(TINY_MP3_BYTES))).toBe(true);
   });
 
   it('mixed batch carves binary out of /_atomic but lands every file', async () => {

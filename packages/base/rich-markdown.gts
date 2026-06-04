@@ -19,6 +19,7 @@ import {
   containsMany,
   field,
   linksToMany,
+  virtualNetworkFor,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
@@ -57,10 +58,14 @@ export class RichMarkdownField extends FieldDef {
       let rel = this[relativeTo];
       let baseUrl = rel
         ? typeof rel === 'string'
-          ? cardIdToURL(rel).href
+          ? (virtualNetworkFor(this)?.toURL(rel).href ?? cardIdToURL(rel).href)
           : rel.href
         : '';
-      return extractCardReferenceUrls(this.content, baseUrl);
+      return extractCardReferenceUrls(
+        this.content,
+        baseUrl,
+        virtualNetworkFor(this),
+      );
     },
   });
 
@@ -78,18 +83,25 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
-      let rel = this.args.model?.[relativeTo];
-      if (!rel) {
+      let model = this.args.model;
+      let rel = model?.[relativeTo];
+      if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
+      return typeof rel === 'string'
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        : rel.href;
     }
     <template>
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -98,18 +110,25 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
-      let rel = this.args.model?.[relativeTo];
-      if (!rel) {
+      let model = this.args.model;
+      let rel = model?.[relativeTo];
+      if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
+      return typeof rel === 'string'
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        : rel.href;
     }
     <template>
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -125,7 +144,9 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    _modeState = new TrackedObject({ value: 'compose' as 'compose' | 'source' | 'preview' });
+    _modeState = new TrackedObject({
+      value: 'compose' as 'compose' | 'source' | 'preview',
+    });
 
     get _mode(): 'compose' | 'source' | 'preview' {
       return this._modeState.value;
@@ -134,12 +155,18 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
-      let rel = this.args.model?.[relativeTo];
-      if (!rel) {
+      let model = this.args.model;
+      let rel = model?.[relativeTo];
+      if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
+      return typeof rel === 'string'
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        : rel.href;
     }
     get linkedCards(): CardDef[] | null {
       try {
@@ -181,6 +208,7 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
           </div>
         {{else}}
@@ -190,6 +218,7 @@ export class RichMarkdownField extends FieldDef {
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             />
@@ -221,7 +250,9 @@ export class RichMarkdownField extends FieldDef {
           font-size: 0.8rem;
           cursor: pointer;
           color: var(--boxel-400, #666);
-          transition: background-color 0.15s, color 0.15s;
+          transition:
+            background-color 0.15s,
+            color 0.15s;
         }
 
         .mode-btn:last-child {

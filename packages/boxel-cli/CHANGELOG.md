@@ -6,24 +6,48 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-05-28 — npm v0.3.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.3.0
+
+## @cardstack/boxel-cli v0.3.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.3.0
+
+## Changes
+
+- chore: remove `.realm.json` by @backspace in https://github.com/cardstack/boxel/pull/4971
+- test(boxel-cli): poll remote read in first-sync prefer-local conflict test by @habdelra in https://github.com/cardstack/boxel/pull/5003
+- feat(skills): include all skills from boxel-skills (CS-11195) by @FadhlanR in https://github.com/cardstack/boxel/pull/4912
+- feat: add self contained test-running ability to boxel-cli by @jurgenwerk in https://github.com/cardstack/boxel/pull/4914
+- test(boxel-cli): stabilize delete-vs-change sync test against post-DELETE visibility race by @habdelra in https://github.com/cardstack/boxel/pull/4937
+- fix(boxel-cli): preserve atomic-upload error detail + retry SF seed sync by @habdelra in https://github.com/cardstack/boxel/pull/4933
+- test: diagnose flaky boxel-cli prefer-local conflict-resolution test by @habdelra in https://github.com/cardstack/boxel/pull/4929
+- fix(boxel-cli): Extract fetch error.cause on publish/unpublish failures by @backspace in https://github.com/cardstack/boxel/pull/4925
+- feat(boxel-cli): bundle parsing (type checking) into boxel-cli; drop the requirement for running it in monorepo by @jurgenwerk in https://github.com/cardstack/boxel/pull/4901
+- chore(boxel-cli): sunset workspace-sync-cli — CS-11047 + CS-11162 by @FadhlanR in https://github.com/cardstack/boxel/pull/4853
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.2.0...boxel-cli-v0.3.0
+
 ## 2026-05-21 — npm v0.2.0
+
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.2.0
 
 ## @cardstack/boxel-cli v0.2.0 (npm `latest`)
+
 https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.2.0
 
 ## Changes
 
-* fix: Send binary files via application/octet-stream in boxel-cli sync (CS-11075) by @FadhlanR in https://github.com/cardstack/boxel/pull/4852
-* fix: Swap stored password for Matrix access token (CS-10725) by @FadhlanR in https://github.com/cardstack/boxel/pull/4779
-* feat(boxel-cli): Add publish/unpublish by @backspace in https://github.com/cardstack/boxel/pull/4851
-* feat(boxel-cli): add lint, parse, test validator commands by @jurgenwerk in https://github.com/cardstack/boxel/pull/4881
-* fix(boxel-cli): narrow release notes; restrict CHANGELOG to stable cuts by @FadhlanR in https://github.com/cardstack/boxel/pull/4880
-* fix(boxel-cli): CS-11062 protect local edits in `boxel realm watch start` by @FadhlanR in https://github.com/cardstack/boxel/pull/4844
-* fix(boxel-cli): consolidate publish workflows, push annotated tags by @FadhlanR in https://github.com/cardstack/boxel/pull/4879
-* feat(boxel-cli): auto-publish unstable per merge, repurpose manual workflow as stable promoter by @FadhlanR in https://github.com/cardstack/boxel/pull/4804
-* Add boxel consolidate-workspaces command (CS-10632) by @FadhlanR in https://github.com/cardstack/boxel/pull/4780
-* Add boxel realm sync status command (CS-10621) by @FadhlanR in https://github.com/cardstack/boxel/pull/4781
+- fix: Send binary files via application/octet-stream in boxel-cli sync (CS-11075) by @FadhlanR in https://github.com/cardstack/boxel/pull/4852
+- fix: Swap stored password for Matrix access token (CS-10725) by @FadhlanR in https://github.com/cardstack/boxel/pull/4779
+- feat(boxel-cli): Add publish/unpublish by @backspace in https://github.com/cardstack/boxel/pull/4851
+- feat(boxel-cli): add lint, parse, test validator commands by @jurgenwerk in https://github.com/cardstack/boxel/pull/4881
+- fix(boxel-cli): narrow release notes; restrict CHANGELOG to stable cuts by @FadhlanR in https://github.com/cardstack/boxel/pull/4880
+- fix(boxel-cli): CS-11062 protect local edits in `boxel realm watch start` by @FadhlanR in https://github.com/cardstack/boxel/pull/4844
+- fix(boxel-cli): consolidate publish workflows, push annotated tags by @FadhlanR in https://github.com/cardstack/boxel/pull/4879
+- feat(boxel-cli): auto-publish unstable per merge, repurpose manual workflow as stable promoter by @FadhlanR in https://github.com/cardstack/boxel/pull/4804
+- Add boxel consolidate-workspaces command (CS-10632) by @FadhlanR in https://github.com/cardstack/boxel/pull/4780
+- Add boxel realm sync status command (CS-10621) by @FadhlanR in https://github.com/cardstack/boxel/pull/4781
 
 **Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.1.4...boxel-cli-v0.2.0
-
