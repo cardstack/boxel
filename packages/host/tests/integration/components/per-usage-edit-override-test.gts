@@ -22,6 +22,7 @@ import {
   contains,
   containsMany,
   field,
+  FieldDef,
   linksTo,
   linksToMany,
   setupBaseRealm,
@@ -75,6 +76,37 @@ module('Integration | per-usage edit override', function (hooks) {
     assert
       .dom('[data-test-field="nickname"] input')
       .doesNotExist('the default string editor is suppressed');
+  });
+
+  test('the override wins even when the FieldDef aliases its embedded and edit slots', async function (assert) {
+    const SharedView: TemplateOnlyComponent<{ Args: { model: unknown } }> =
+      <template>
+        <div data-test-shared-view>shared</div>
+      </template>;
+
+    class SharedField extends FieldDef {
+      static embedded = SharedView;
+      static edit = SharedView;
+    }
+
+    const CustomEditor: TemplateOnlyComponent<{
+      Args: { model: unknown };
+    }> = <template>
+      <div data-test-shared-field-custom-editor>custom</div>
+    </template>;
+
+    class Card extends CardDef {
+      @field thing = contains(SharedField, { edit: CustomEditor });
+    }
+
+    await renderCard(loader, new Card(), 'edit');
+
+    assert
+      .dom('[data-test-shared-field-custom-editor]')
+      .exists('the per-usage override wins over the shared view slot');
+    assert
+      .dom('[data-test-shared-view]')
+      .doesNotExist('the shared view slot is not used in edit format');
   });
 
   test('a linksTo field can override its edit component per usage', async function (assert) {
