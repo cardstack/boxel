@@ -43,6 +43,7 @@ import {
   rri,
   logger,
   formattedError,
+  isJsonContentType,
   SupportedMimeType,
   RealmPaths,
   type Store as StoreInterface,
@@ -1880,7 +1881,27 @@ export default class StoreService extends Service implements StoreInterface {
             vn.toURL(`${url}.json`),
           );
           if (result.status === 200) {
-            json = JSON.parse(result.content);
+            // A relationship link can point at a non-card URL (e.g. an
+            // image); gate on Content-Type so the binary body never
+            // reaches JSON.parse.
+            if (!isJsonContentType(result.contentType)) {
+              throw new Error(
+                `Could not load ${url} as a card: the response (content type ${
+                  result.contentType ?? 'unknown'
+                }) is not a card document. If this is a relationship link, it likely points at a non-card URL (e.g. an image) rather than a card.`,
+              );
+            }
+            try {
+              json = JSON.parse(result.content);
+            } catch {
+              // Content-Type claimed JSON but the body didn't parse
+              // (e.g. truncated source) — still surface a clean error.
+              throw new Error(
+                `Could not load ${url} as a card: its source (content type ${
+                  result.contentType ?? 'unknown'
+                }) is not valid JSON.`,
+              );
+            }
           } else {
             throw new Error(
               `Received non-200 status fetching instance source ${url}.json: ${result.content}`,

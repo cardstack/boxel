@@ -8,13 +8,13 @@ Wraps `boxel profile`, which manages credentials for different users and environ
 
 ## When the user asks to...
 
-| Ask | Run |
-|---|---|
-| "what profiles do I have?" / "who am I logged in as?" | `boxel profile list` |
-| "log in" / "add a new account" | `boxel profile add` (interactive — preferred) |
-| "switch to my staging account" | `boxel profile switch <username-or-fragment>` |
-| "remove that old profile" | `boxel profile remove <profile-id>` |
-| "import from my old .env" | `boxel profile migrate` |
+| Ask                                                   | Run                                           |
+| ----------------------------------------------------- | --------------------------------------------- |
+| "what profiles do I have?" / "who am I logged in as?" | `boxel profile list`                          |
+| "log in" / "add a new account"                        | `boxel profile add` (interactive — preferred) |
+| "switch to my staging account"                        | `boxel profile switch <username-or-fragment>` |
+| "remove that old profile"                             | `boxel profile remove <profile-id>`           |
+| "import from my old .env"                             | `boxel profile migrate`                       |
 
 ## Profile IDs
 
@@ -42,8 +42,8 @@ For ephemeral environments (PR previews, branch deploys), `BOXEL_ENVIRONMENT` de
 
 ```bash
 BOXEL_ENVIRONMENT=my-branch boxel profile add -u @sarah:my-branch.localhost
-# → matrix at http://matrix.my-branch.localhost
-# → realm-server at http://realm-server.my-branch.localhost/
+# → matrix at https://matrix.my-branch.localhost
+# → realm-server at https://realm-server.my-branch.localhost/
 ```
 
 Override individually with `--matrix-url` / `--realm-server-url` if needed.

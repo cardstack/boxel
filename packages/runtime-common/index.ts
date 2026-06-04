@@ -600,6 +600,7 @@ export {
   isCardErrorJSONAPI,
   clampSerializedError,
   coerceErrorMessage,
+  sanitizeForJsonb,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';
@@ -748,7 +749,7 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType } from './supported-mime-type';
+export { SupportedMimeType, isJsonContentType } from './supported-mime-type';
 export {
   isUrlLike,
   VirtualNetwork,

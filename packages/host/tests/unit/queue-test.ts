@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-// eslint-disable-next-line ember/no-test-import-export
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 
 import { BrowserQueue } from '@cardstack/host/lib/browser-queue';

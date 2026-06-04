@@ -35,7 +35,11 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import { clampSerializedError, type SerializedError } from './error';
+import {
+  clampSerializedError,
+  sanitizeForJsonb,
+  type SerializedError,
+} from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
@@ -461,11 +465,12 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    let diagnostics: Diagnostics = {
+    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
+    let diagnostics: Diagnostics = sanitizeForJsonb({
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    };
+    });
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -550,7 +555,7 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
+          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
           has_error: true,
           diagnostics: diagnostics,
         };

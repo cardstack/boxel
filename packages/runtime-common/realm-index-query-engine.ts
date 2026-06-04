@@ -3,6 +3,7 @@ import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  isJsonContentType,
   baseRealm,
   inferContentType,
   unixTime,
@@ -52,6 +53,7 @@ import {
 } from './code-ref';
 import {
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -1171,7 +1173,8 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
-  ): Promise<Map<string, CardResource<Saved>>> {
+    linkContext?: Map<string, { fieldName: string }>,
+  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
@@ -1193,21 +1196,40 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
+        // `links.self` should resolve to a card or file document, but a
+        // mistake (human or AI-generated) can leave a non-card URL here.
+        // Gate on Content-Type so a binary body never reaches JSON.parse.
+        let contentType = response.headers.get('content-type');
+        if (!isJsonContentType(contentType)) {
+          let fieldName = linkContext?.get(url)?.fieldName;
+          let fieldLabel = fieldName
+            ? `Relationship \`${fieldName}\``
+            : 'A relationship';
           throw new Error(
-            `instance ${url} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
+            `${fieldLabel} links to a non-card URL (${
+              contentType ?? 'unknown content type'
+            }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
           );
         }
-        let linkResource: CardResource<Saved> = {
-          ...json.data,
-          ...{ links: { self: json.data.id } },
-        };
-        return [url, linkResource] as const;
+        let json = await response.json();
+        // Cross-realm links can target either a card or a file (e.g. a card
+        // instantiated from a catalog still links to the catalog's image
+        // file). Both kinds are valid linked resources; only an unrecognized
+        // payload is an error.
+        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+          let linkResource: CardResource<Saved> | FileMetaResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
+          return [url, linkResource] as const;
+        }
+        throw new Error(
+          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
+            json,
+            null,
+            2,
+          )}`,
+        );
       }),
     );
     return new Map(entries);
@@ -1492,6 +1514,9 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
+      // Maps each cross-realm URL to the field that produced it, so a
+      // non-card link can name the offending field in its error.
+      let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1601,6 +1626,9 @@ export class RealmIndexQueryEngine {
             }
           } else {
             crossRealmURLs.add(linkURL.href);
+            if (!crossRealmFieldNames.has(linkURL.href)) {
+              crossRealmFieldNames.set(linkURL.href, { fieldName });
+            }
           }
 
           entries.push({
@@ -1628,7 +1656,7 @@ export class RealmIndexQueryEngine {
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved>>;
+      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
@@ -1648,8 +1676,11 @@ export class RealmIndexQueryEngine {
                 [...crossRealmURLs],
                 invocationId,
                 currentLayerIndex,
+                crossRealmFieldNames,
               )
-            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+            : Promise.resolve(
+                new Map<string, CardResource<Saved> | FileMetaResource>(),
+              ),
         ]);
       } catch (err: unknown) {
         let message =
