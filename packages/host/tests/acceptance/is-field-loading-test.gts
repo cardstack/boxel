@@ -218,7 +218,10 @@ module('Acceptance | isFieldLoading', function (hooks) {
     });
     let cardSelector = `[data-test-stack-card="${LINKSTO_URL}"]`;
     try {
-      visitOperatorMode({
+      // Capture but don't await yet: the gate holds the load/search in flight,
+      // so the app won't settle (and this promise won't resolve) until we
+      // release below. Awaiting it before then would deadlock the test.
+      let navigation = visitOperatorMode({
         stacks: [[{ id: LINKSTO_URL, format: 'isolated' }]],
       });
 
@@ -228,6 +231,7 @@ module('Acceptance | isFieldLoading', function (hooks) {
         .exists('shows the loading state while the link is in flight');
 
       gate.release();
+      await navigation;
       await settled();
 
       assert
@@ -252,7 +256,10 @@ module('Acceptance | isFieldLoading', function (hooks) {
     });
     let cardSelector = `[data-test-stack-card="${LINKSTOMANY_URL}"]`;
     try {
-      visitOperatorMode({
+      // Capture but don't await yet: the gate holds the load/search in flight,
+      // so the app won't settle (and this promise won't resolve) until we
+      // release below. Awaiting it before then would deadlock the test.
+      let navigation = visitOperatorMode({
         stacks: [[{ id: LINKSTOMANY_URL, format: 'isolated' }]],
       });
 
@@ -286,6 +293,7 @@ module('Acceptance | isFieldLoading', function (hooks) {
         );
 
       gate.release();
+      await navigation;
       await settled();
 
       assert
@@ -331,7 +339,10 @@ module('Acceptance | isFieldLoading', function (hooks) {
     });
     let cardSelector = `[data-test-stack-card="${QUERY_URL}"]`;
     try {
-      visitOperatorMode({
+      // Capture but don't await yet: the gate holds the load/search in flight,
+      // so the app won't settle (and this promise won't resolve) until we
+      // release below. Awaiting it before then would deadlock the test.
+      let navigation = visitOperatorMode({
         stacks: [[{ id: QUERY_URL, format: 'isolated' }]],
       });
 
@@ -341,6 +352,7 @@ module('Acceptance | isFieldLoading', function (hooks) {
         .exists('shows the loading state while the search is in flight');
 
       gate.release();
+      await navigation;
       await settled();
 
       assert
