@@ -104,11 +104,17 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
         align-items: center;
         gap: var(--boxel-sp-sm);
       }
-      .path-cell {
-        /* Tighten the gap between the leading "/" accessory and the
-           editable text; the BoxelInputGroup defaults to --boxel-sp-sm
-           around both the accessory and the input. */
-        --boxel-input-group-padding-x: var(--boxel-sp-xxs);
+      /* Tighten the gap between the leading "/" accessory and the
+         editable text. BoxelInputGroup's accessory + input each carry
+         --boxel-input-group-padding-x on the inner-facing side, but
+         overriding the var on an ancestor is shadowed by the group's
+         own scoped CSS — so the actual consumer classes are
+         pierced directly. */
+      .path-cell :deep(.text-accessory) {
+        padding-right: 0;
+      }
+      .path-cell :deep(.form-control) {
+        padding-left: var(--boxel-sp-xxs);
       }
       .path-cell :deep(input) {
         font-family: var(--boxel-font-family-mono, monospace);
