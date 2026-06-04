@@ -1428,7 +1428,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveRef(store, reference, relativeTo);
+    let href = resolveRef(store.virtualNetwork, reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1997,7 +1997,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveRef(store, reference, relativeTo);
+        let normalizedReference = resolveRef(
+          store.virtualNetwork,
+          reference,
+          relativeTo,
+        );
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2443,7 +2447,7 @@ export class BaseDef {
           return maybeRelativeReference;
         }
         return resolveRef(
-          getStore(value),
+          getStore(value).virtualNetwork,
           maybeRelativeReference,
           value[relativeTo],
         );
@@ -2470,7 +2474,7 @@ export class BaseDef {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
               normalizedId = resolveRef(
-                getStore(value),
+                getStore(value).virtualNetwork,
                 normalizedId,
                 value[relativeTo],
               );
@@ -3443,7 +3447,11 @@ function lazilyLoadLink(
     inflightLinkLoads.set(instance, inflightLoads);
   }
   let store = getStore(instance);
-  let reference = resolveRef(store, link, instance.id ?? instance[relativeTo]);
+  let reference = resolveRef(
+    store.virtualNetwork,
+    link,
+    instance.id ?? instance[relativeTo],
+  );
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   if (promise) {
@@ -3515,7 +3523,7 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store,
+            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3603,7 +3611,7 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store,
+            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -4654,21 +4662,20 @@ export function virtualNetworkFor(
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the store's VirtualNetwork. When the store doesn't carry
-// a VN (test stubs, detached instances), fall back to plain URL math: it
+// string through the supplied VirtualNetwork. When the caller can't supply
+// one (test stubs, detached instances), fall back to plain URL math: it
 // covers URL-form refs and relative refs against URL-form bases. Prefix-form
 // refs and refs against prefix-form bases can't be resolved without a VN —
 // `new URL()` throws on those, so we return the raw reference unchanged
 // instead of bubbling the error to callers (e.g. relationship deserialize
 // uses the returned string as a "did this resolve?" signal).
 function resolveRef(
-  store: CardStore | undefined,
+  virtualNetwork: VirtualNetwork | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
-  let vn = store?.virtualNetwork;
-  if (vn) {
-    return vn.resolveURL(reference, relativeTo).href;
+  if (virtualNetwork) {
+    return virtualNetwork.resolveURL(reference, relativeTo).href;
   }
   let base: URL | string | undefined;
   if (relativeTo instanceof URL) {
