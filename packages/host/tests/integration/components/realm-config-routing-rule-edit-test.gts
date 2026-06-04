@@ -35,7 +35,9 @@ module(
       autostart: true,
     });
 
-    hooks.beforeEach(async function () {
+    async function renderRealmConfigEdit(
+      hostRoutingRules: Array<Record<string, unknown>>,
+    ) {
       let loader = getService('loader-service').loader;
       let cardApi: typeof import('https://cardstack.com/base/card-api') =
         await loader.import(`${baseRealm.url}card-api`);
@@ -63,15 +65,10 @@ module(
           '.realm.json': `{ "name": "${realmName}" }`,
           'Pet/mango.json': new Pet({ name: 'Mango' }),
           'index.json': new CardsGrid(),
-          // RealmConfig card with one routing rule whose `instance`
-          // (a linksTo) is unset, so the instance editor shows its
-          // "Link" button and we can open the chooser from it.
           'realm.json': {
             data: {
               type: 'card',
-              attributes: {
-                hostRoutingRules: [{ path: '/docs' }],
-              },
+              attributes: { hostRoutingRules },
               meta: {
                 adoptsFrom: {
                   module: 'https://cardstack.com/base/realm-config',
@@ -83,9 +80,7 @@ module(
         },
       });
 
-      let operatorModeStateService = getService(
-        'operator-mode-state-service',
-      );
+      let operatorModeStateService = getService('operator-mode-state-service');
       operatorModeStateService.restore({
         stacks: [[{ id: `${testRealmURL}realm`, format: 'edit' }]],
       });
@@ -96,9 +91,11 @@ module(
         },
       );
       await waitFor(`[data-test-stack-card="${testRealmURL}realm"]`);
-    });
+    }
 
     test('the card chooser is locked to the consuming realm', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
       await click('[data-test-add-new="instance"]');
       await waitFor('[data-test-card-catalog-modal]');
       await waitFor(`[data-test-realm="${realmName}"]`);
@@ -112,6 +109,48 @@ module(
       assert
         .dom('[data-test-realm="Base Workspace"]')
         .doesNotExist('cross-realm candidates are excluded by the lock');
+    });
+
+    test('renders a per-rule warning when a path is malformed', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: 'docs' }, // missing leading slash
+        { path: '/foo bar' }, // disallowed character
+      ]);
+
+      let warningTexts = [
+        ...document.querySelectorAll('[data-test-path-warning]'),
+      ].map((el) => el.textContent?.trim() ?? '');
+
+      assert.strictEqual(
+        warningTexts.length,
+        2,
+        'one warning per malformed rule',
+      );
+      assert.ok(
+        warningTexts.some((t) => t.includes('Path must start with /')),
+        'missing-slash warning is rendered',
+      );
+      assert.ok(
+        warningTexts.some((t) =>
+          t.includes('Path may only contain letters, numbers'),
+        ),
+        'invalid-characters warning is rendered',
+      );
+    });
+
+    test('renders the aggregate duplicate-path warning when paths repeat', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/docs' },
+        { path: '/docs' },
+        { path: '/pricing' },
+      ]);
+
+      assert
+        .dom('[data-test-duplicate-path-warning]')
+        .exists('the duplicate banner is shown');
+      assert
+        .dom('[data-test-duplicate-path-warning]')
+        .containsText('/docs', 'the duplicate banner names the repeated path');
     });
   },
 );
