@@ -11,6 +11,24 @@
 // for backwards-compatibility with existing imports.
 export const X_BOXEL_JOB_ID_HEADER = 'x-boxel-job-id';
 
+// Sanitize the inbound job-id header. Format is `<digits>.<digits>`
+// (job.id + reservation.id, both bigint-shaped); accept up to 32 digits
+// per side (so up to 65 chars total including the separator) to be
+// defensive without admitting newlines or other log-injection. Lives
+// here alongside the header so both the realm-server search handlers and
+// the Realm class (card-GET assembly) normalize the identity the same way
+// before using it as a job-scoped cache key. realm-server's
+// `prerender-constants.ts` re-exports this as `sanitizePrerenderJobId`.
+const JOB_ID_PATTERN = /^[0-9]{1,32}\.[0-9]{1,32}$/;
+export function sanitizePrerenderJobId(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  return JOB_ID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 // HTTP header sent by the host's `_federated-search` fetch wrapper while
 // rendering inside a prerender tab. Carries the URL of the realm whose
 // card is currently being rendered (the "consuming" realm). The realm-
@@ -74,4 +92,29 @@ export function sanitizeJobPriorityHeader(
   let n = Number(trimmed);
   if (!Number.isSafeInteger(n) || n < 0 || n > JOB_PRIORITY_MAX) return null;
   return n;
+}
+
+// Per-search correlation id minted by the host SPA on each
+// `_federated-search` fetch it issues while rendering inside a prerender
+// tab. The realm-server's search path reads it back out and emits a
+// `realm:search-timing` line keyed by it, so a client-observed slow
+// search (visible in the prerender's `queryLoadsInFlight` diagnostics)
+// can be joined to where the realm-server actually spent the time. Lives
+// here so the host SPA can import the header name without depending on
+// the realm-server package.
+export const X_BOXEL_LOGGING_CORRELATION_ID_HEADER =
+  'x-boxel-logging-correlation-id';
+
+// Sanitize the inbound request-id header. It's echoed into log lines, so
+// admit only a bounded run of URL-safe id characters (covers a UUID and
+// then some) and reject anything with whitespace or control characters
+// that could forge a log line.
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+export function sanitizeLoggingCorrelationId(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  return REQUEST_ID_PATTERN.test(trimmed) ? trimmed : null;
 }

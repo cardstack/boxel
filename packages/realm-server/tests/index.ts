@@ -200,6 +200,8 @@ const ALL_TEST_FILES: string[] = [
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
+  './sanitize-for-jsonb-test',
+  './is-json-content-type-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
   './queue-test',
@@ -291,6 +293,8 @@ const ALL_TEST_FILES: string[] = [
   './session-room-queries-test',
   './indexing-event-sink-test',
   './skip-query-backed-expansion-test',
+  './job-scoped-instance-cache-test',
+  './per-instance-cache-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

@@ -49,7 +49,7 @@ const MENU_ENVIRONMENTS: Record<
   local: {
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
-    realmServerUrl: 'http://localhost:4201/',
+    realmServerUrl: 'https://localhost:4201/',
   },
 };
 
@@ -103,8 +103,8 @@ export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
   }
   return {
     domain: `${slug}.localhost`,
-    matrixUrl: `http://matrix.${slug}.localhost`,
-    realmServerUrl: `http://realm-server.${slug}.localhost/`,
+    matrixUrl: `https://matrix.${slug}.localhost`,
+    realmServerUrl: `https://realm-server.${slug}.localhost/`,
   };
 }
 

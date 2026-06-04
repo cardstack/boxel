@@ -42,6 +42,8 @@ import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { JobsFinishedListener } from './lib/jobs-finished-listener';
 import { JobScopedSearchCache } from './job-scoped-search-cache';
+import { JobScopedInstanceCache } from './job-scoped-instance-cache';
+import { startHealthSampler } from './health-sampler';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
@@ -383,6 +385,18 @@ const smokeTestHostApp = async () => {
   // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
+  // Per-instance wire-format cache (job_scoped_instance_cache). Reads/writes
+  // happen in runtime-common's loadLinks for requests carrying a job identity
+  // (the `x-boxel-job-id` header) — which in normal operation only indexer-
+  // driven prerender stamps; this process owns its eviction (via the
+  // JobsFinishedListener below) and the age-based janitor backstop.
+  let instanceCache = new JobScopedInstanceCache(dbAdapter);
+  instanceCache.startJanitor();
+  // Periodic event-loop-lag + in-flight-search sampler. Emits a
+  // `realm:health` line only during saturation windows, so a stalled
+  // `_search` can be checked against whether the process's event loop was
+  // starved at the time.
+  let stopHealthSampler = startHealthSampler();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -633,6 +647,8 @@ const smokeTestHostApp = async () => {
       (httpServer as any).closeAllConnections();
     }
     searchCache.stopJanitor();
+    instanceCache.stopJanitor();
+    stopHealthSampler();
     httpServer.close(() => {
       (async () => {
         await Promise.all([
@@ -758,6 +774,7 @@ const smokeTestHostApp = async () => {
   jobsFinishedListener = new JobsFinishedListener({
     dbAdapter,
     searchCache,
+    instanceCache,
   });
   await jobsFinishedListener.start();
 

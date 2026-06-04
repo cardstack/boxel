@@ -1,5 +1,27 @@
 'use strict';
 
+// See the root `.eslintrc.js` — these selectors guard against TypeScript
+// syntax that requires compilation (so it would not work under Node's
+// native `--experimental-strip-types`). This package has `root: true`,
+// so the root config does not apply here.
+const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
+  {
+    selector: 'TSEnumDeclaration',
+    message:
+      'TypeScript `enum` is not erasable and requires compilation. Use a `const` object with `as const` (or a union of string literals) instead.',
+  },
+  {
+    selector: 'TSImportEqualsDeclaration',
+    message:
+      '`import =` syntax requires TypeScript compilation. Use standard ES module `import` instead.',
+  },
+  {
+    selector: 'TSExportAssignment',
+    message:
+      '`export =` syntax requires TypeScript compilation. Use a standard ES module `export default` (or named exports) instead.',
+  },
+];
+
 module.exports = {
   root: true,
   env: {
@@ -39,5 +61,25 @@ module.exports = {
       'error',
       { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
     ],
+    '@typescript-eslint/parameter-properties': [
+      'error',
+      { prefer: 'class-property' },
+    ],
+    'no-restricted-syntax': ['error', ...NO_COMPILATION_REQUIRED_TS_SELECTORS],
   },
+  overrides: [
+    {
+      // Files exempted from the erasable-TypeScript rules because they use
+      // TypeScript constructor parameter properties, which are not erasable.
+      // Do not add new files here; refactor a file to declare its fields
+      // explicitly to remove its entry.
+      files: [
+        'lib/matrix/response-event-data.ts',
+        'lib/matrix/response-publisher.ts',
+      ],
+      rules: {
+        '@typescript-eslint/parameter-properties': 'off',
+      },
+    },
+  ],
 };
