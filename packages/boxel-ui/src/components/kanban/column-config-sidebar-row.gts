@@ -24,7 +24,7 @@ interface Signature {
     onReorder?: (direction: 'up' | 'down') => void;
     onToggleCollapsed?: () => void;
     onWipLimitChange?: (val: string) => void;
-    rowId: string;
+    rowId: string | number;
   };
   Element: HTMLElement;
 }

@@ -187,6 +187,12 @@ export class KanbanPlaneInner extends Component<{
       });
   }
 
+  onToggleCollapsed = (column: KanbanColumnConfig) => {
+    if (this.args.onToggleCollapsed) {
+      this.args.onToggleCollapsed(column);
+    }
+  };
+
   <template>
     <div
       class={{cn 'board' is-dragging=this.isDragging}}
@@ -295,7 +301,7 @@ export class KanbanPlaneInner extends Component<{
                   (concat 'Show ' hc.config.label)
                   'Show column'
                 }}
-                {{on 'click' (fn @onToggleCollapsed hc.config)}}
+                {{on 'click' (fn this.onToggleCollapsed hc.config)}}
                 data-test-hidden-column-row={{i}}
                 data-test-show-hidden-column={{hc.config.key}}
               >

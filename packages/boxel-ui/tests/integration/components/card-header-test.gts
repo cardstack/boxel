@@ -2,7 +2,8 @@ import { CardHeader } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { find, render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 function centerX(selector: string): number {
   let el = find(selector);
