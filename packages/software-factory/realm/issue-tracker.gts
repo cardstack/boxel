@@ -319,7 +319,6 @@ class IssueIsolated extends Component<typeof Issue> {
         gap: var(--boxel-sp-xl);
         align-content: start;
         overflow-y: auto;
-        overflow-x: hidden;
       }
       .content-section {
         display: grid;
@@ -1564,12 +1563,11 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         --boxel-kanban-border: var(--board-border);
 
         height: 100%;
-        overflow-y: auto;
-        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         background-color: var(--board-bg);
         color: var(--board-fg);
+        overflow: hidden;
       }
       .kanban-toolbar {
         display: flex;
@@ -1675,10 +1673,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         border-radius: inherit;
       }
       .kanban-config-sidebar-wrap {
-        position: absolute;
-        right: 0;
-        top: 0;
-        bottom: 0;
+        flex-shrink: 0;
         width: 0;
         overflow: hidden;
         transition: width var(--boxel-transition);
@@ -1686,6 +1681,9 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       }
       .kanban-config-sidebar-wrap.is-open {
         width: 19rem;
+      }
+      .kanban-config-sidebar-wrap > :deep(aside) {
+        border-top: none;
       }
     </style>
   </template>
