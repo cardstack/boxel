@@ -9,13 +9,20 @@ import {
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
+import CardInfoTemplates from './default-templates/card-info';
 import {
+  cardDefComputedFields,
   findDuplicateRoutingPaths,
+  getField,
+  getFieldIcon,
   validateRoutingPath,
 } from '@cardstack/runtime-common';
+import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import { startCase } from 'lodash';
+import type { FieldsTypeFor } from './card-api';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -157,89 +164,125 @@ export class RealmConfigEdit extends Component<typeof RealmConfig> {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
+  // CardInfoTemplates.edit is typed for CardDef; Glint sees args.model as
+  // PartialFields<RealmConfig>, which doesn't satisfy that strictly. Same
+  // value, narrower compile-time view.
+  private get baseModel(): CardDef {
+    return this.args.model as unknown as CardDef;
+  }
+
+  // Mirror the default card-edit template so iconURL, backgroundURL, and
+  // includePrerenderedDefaultRealmIndex render with the same FieldContainer
+  // chrome they would without a custom static edit. Only hostRoutingRules
+  // gets the custom UI (duplicate-path advisory).
+  private get cardInfoFieldDisplayNames(): string[] | undefined {
+    let fieldNames = cardDefComputedFields.filter((fieldName) => {
+      let f = getField(this.args.model.constructor, fieldName);
+      return f?.computeVia == undefined;
+    });
+    return fieldNames.length ? fieldNames : undefined;
+  }
+
+  private get otherDisplayFields(): FieldsTypeFor<RealmConfig> | undefined {
+    let excluded = [
+      'id',
+      'cardInfo',
+      'hostRoutingRules',
+      ...cardDefComputedFields,
+      'theme',
+    ].filter((name) => !this.cardInfoFieldDisplayNames?.includes(name));
+    let entries = Object.entries(this.args.fields).filter(
+      ([key]) => !excluded.includes(key),
+    );
+    return entries.length
+      ? (Object.fromEntries(entries) as FieldsTypeFor<RealmConfig>)
+      : undefined;
+  }
+
   <template>
-    <article class='realm-config-edit' data-test-realm-config-edit>
-      <section class='section'>
-        <h2 class='section-title'>Appearance</h2>
-        <label class='field'>
-          <span class='field-label'>Icon URL</span>
-          <@fields.iconURL />
-        </label>
-        <label class='field'>
-          <span class='field-label'>Background URL</span>
-          <@fields.backgroundURL />
-        </label>
-      </section>
+    <div
+      class='default-card-template edit'
+      data-test-base-template='edit'
+      data-test-realm-config-edit
+    >
+      <Header @hasBottomBorder={{true}} class='card-info-header'>
+        <CardInfoTemplates.edit
+          @fields={{@fields}}
+          @model={{this.baseModel}}
+        />
+      </Header>
 
-      <section class='section'>
-        <h2 class='section-title'>Host Routing Rules</h2>
-        <p class='help'>
-          Map static paths within this realm to a card to render in host mode.
-        </p>
-        {{#if this.duplicatePaths.length}}
-          <div
-            class='warning'
-            role='status'
-            data-test-duplicate-path-warning
+      <section class='own-display-fields'>
+        {{#each-in this.otherDisplayFields as |key Field|}}
+          <FieldContainer
+            @label={{startCase key}}
+            @icon={{getFieldIcon @model key}}
+            data-test-field={{key}}
           >
-            Duplicate paths:
-            {{#each this.duplicatePaths as |p i|}}
-              {{#if i}}, {{/if}}<code>{{p}}</code>
-            {{/each}}
-          </div>
-        {{/if}}
-        <div class='rules' data-test-host-routing-rules-edit>
+            <Field />
+          </FieldContainer>
+        {{/each-in}}
+
+        <FieldContainer
+          @label='Host Routing Rules'
+          @icon={{getFieldIcon @model 'hostRoutingRules'}}
+          data-test-field='hostRoutingRules'
+        >
+          {{#if this.duplicatePaths.length}}
+            <div
+              class='warning'
+              role='status'
+              data-test-duplicate-path-warning
+            >
+              Duplicate paths:
+              {{#each this.duplicatePaths as |p i|}}
+                {{#if i}}, {{/if}}<code>{{p}}</code>
+              {{/each}}
+            </div>
+          {{/if}}
           <@fields.hostRoutingRules />
-        </div>
+        </FieldContainer>
       </section>
 
-      <section class='section'>
-        <h2 class='section-title'>Advanced</h2>
-        <label class='field checkbox-field'>
-          <@fields.includePrerenderedDefaultRealmIndex />
-          <span class='field-label'>
-            Keep the full prerendered isolated HTML for the realm's default
-            CardsGrid index card.
-          </span>
-        </label>
-      </section>
-    </article>
+      <footer class='notes-footer'>
+        <FieldContainer
+          @label='Notes'
+          @icon={{getFieldIcon @model.cardInfo 'notes'}}
+          data-test-field='cardInfo-notes'
+        >
+          <@fields.cardInfo.notes />
+        </FieldContainer>
+      </footer>
+    </div>
     <style scoped>
-      .realm-config-edit {
-        padding: var(--boxel-sp-lg);
+      .default-card-template {
+        --hr-color: rgba(0 0 0 / 10%);
+        display: grid;
+      }
+      .card-info-header {
+        --boxel-header-min-height: 9.375rem;
+        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
+        --boxel-header-gap: var(--boxel-sp-lg);
+        --boxel-header-border-color: var(--hr-color);
+        align-items: flex-start;
+        background-color: var(--muted, var(--boxel-100));
+      }
+      .card-info-header :deep(.info) {
+        align-self: center;
+      }
+      .own-display-fields {
         display: grid;
         gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+        background-color: var(--background, var(--boxel-light));
       }
-      .section {
-        display: grid;
-        gap: var(--boxel-sp-sm);
+      .own-display-fields + .notes-footer {
+        border-top: 1px solid var(--hr-color);
       }
-      .section-title {
-        margin: 0;
-        font: 600 var(--boxel-font);
-        color: var(--boxel-dark, #000);
-      }
-      .field {
-        display: grid;
-        gap: var(--boxel-sp-xxs);
-      }
-      .field-label {
-        font: 500 var(--boxel-font-sm);
-        color: var(--boxel-450);
-      }
-      .checkbox-field {
-        grid-template-columns: auto 1fr;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .checkbox-field .field-label {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-dark, #000);
-      }
-      .help {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-450);
+      .notes-footer {
+        padding: var(--boxel-sp-xl);
+        background-color: var(--muted, var(--boxel-100));
       }
       .warning {
         background: #fef3c7;
@@ -248,6 +291,7 @@ export class RealmConfigEdit extends Component<typeof RealmConfig> {
         border-radius: var(--boxel-border-radius-sm, 6px);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-size: var(--boxel-font-size-sm);
+        margin-bottom: var(--boxel-sp-xs);
       }
       .warning code {
         font-family: var(--boxel-font-family-mono, monospace);
