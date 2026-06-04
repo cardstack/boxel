@@ -443,6 +443,21 @@ export default class ItemButton extends Component<Signature> {
       .catalog-item.adorn.selected {
         border-color: transparent;
       }
+      /* Selection ring for adorn catalog items. Defined here on the item
+         itself (rather than relying on AdornContext's :deep stroke rule,
+         which the portaled catalog item didn't reliably inherit — leaving
+         only the thin 1px button border) so the ring stays a full-weight
+         4px whether or not the item is hovered, darkening on hover to match
+         the rest of the Adorn treatment. `transition: none` makes the ring
+         appear in lockstep with the selection tag/chip (which render
+         instantly) instead of fading in ~0.2s later. */
+      .catalog-item.adorn.selected {
+        box-shadow: 0 0 0 0.25rem var(--boxel-highlight);
+        transition: none;
+      }
+      .catalog-item.adorn.selected:hover {
+        box-shadow: 0 0 0 0.25rem var(--boxel-highlight-hover);
+      }
       /* The type-label tab is placed by the shared positionAdornLabel
          modifier (inline position/top/left), so this class only carries
          the consumer's concerns: keep it out of pointer events and fade
