@@ -173,6 +173,16 @@ export class Prerenderer {
     this.#pagePool.__test_seedRevokedException(pageId, entry, exceptionId);
   }
 
+  // Test-only seam — see PagePool.__test_poisonPage.
+  __test_poisonPage(pageId: string, moduleURL: string): void {
+    this.#pagePool.__test_poisonPage(pageId, moduleURL);
+  }
+
+  // Test-only seam — see PagePool.__test_clearPoisonedPages.
+  __test_clearPoisonedPages(): void {
+    this.#pagePool.__test_clearPoisonedPages();
+  }
+
   async stop(): Promise<void> {
     if (this.#cleanupInterval) {
       clearInterval(this.#cleanupInterval);

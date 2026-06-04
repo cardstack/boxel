@@ -187,6 +187,7 @@ const ALL_TEST_FILES: string[] = [
   './module-syntax-test',
   './permissions/permission-checker-test',
   './prerendering-test',
+  './prerender-stale-page-affinity-test',
   './prerender-server-test',
   './prerender-manager-test',
   './prerender-affinity-activity-test',

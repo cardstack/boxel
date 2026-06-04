@@ -358,6 +358,12 @@ export class PagePool {
   // throughout this file so a single source of truth flows into
   // both PagePool's own logs and the capture module's logs.
   #affinityKeyByPageId = new Map<string, string>();
+  // Test-only: per-pageId set of module URLs that should fail to render
+  // on that page, modeling a pool page whose loaded host bundle is stale
+  // (predates an export the module imports). Populated only via
+  // `__test_poisonPage`; the module render path consults it through
+  // `__test_isPagePoisonedForModule`. Production never writes to it.
+  #poisonedModulesByPageId = new Map<string, Set<string>>();
   // Fired from `disposeAffinity` after an affinity's tabs are torn down.
   // Consumed by the Prerenderer to clear `clearCache` batch ownership
   // for the affinity (CS-10758 step 3) — stale ownership across a page
@@ -2790,6 +2796,47 @@ export class PagePool {
     };
     this.#recordThrownException(pageId, exceptionId, seededEntry);
     this.#recordRevokedException(pageId, exceptionId);
+  }
+
+  // Test-only seam: mark a specific pool page as unable to render a
+  // module, modeling a page running a stale host bundle. A real stale
+  // page differs from its peers only by the bytes already loaded into
+  // its browser context — something a test can't reproduce without
+  // shipping two host builds — so the differentiation is injected here
+  // by pageId. The module render path checks this via
+  // `__test_isPagePoisonedForModule` and synthesizes the same
+  // module-error a genuine in-page failure would. Production never
+  // calls this; the registry is otherwise always empty.
+  __test_poisonPage(pageId: string, moduleURL: string): void {
+    let bucket = this.#poisonedModulesByPageId.get(pageId);
+    if (!bucket) {
+      bucket = new Set();
+      this.#poisonedModulesByPageId.set(pageId, bucket);
+    }
+    bucket.add(this.#normalizePoisonKey(moduleURL));
+  }
+
+  // Test-only seam: clear all injected page poison. Lets a test flip a
+  // page back to "healthy" to exercise the recovery path.
+  __test_clearPoisonedPages(): void {
+    this.#poisonedModulesByPageId.clear();
+  }
+
+  // Consulted by the module render path. Returns true when a prior
+  // `__test_poisonPage` marked this page+module as stale. Always false
+  // in production (the registry is never populated).
+  __test_isPagePoisonedForModule(pageId: string, moduleURL: string): boolean {
+    let bucket = this.#poisonedModulesByPageId.get(pageId);
+    if (!bucket) {
+      return false;
+    }
+    return bucket.has(this.#normalizePoisonKey(moduleURL));
+  }
+
+  // Drop any executable extension so the poison key matches whether the
+  // caller passes `…/person.gts` or the extensionless module URL.
+  #normalizePoisonKey(moduleURL: string): string {
+    return moduleURL.replace(/\.(gts|gjs|ts|js)$/, '');
   }
 
   #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {

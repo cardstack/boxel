@@ -586,6 +586,39 @@ export class RenderRunner {
       // inside the try so `finally { release() }` frees the tab slot
       // if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
+
+      // Test-only: a page marked stale by `__test_poisonPage` renders
+      // the module exactly as a page on an outdated host bundle would —
+      // the import of an export the bundle predates throws, surfacing as
+      // a module-error. Synthesize that here so the affinity-routing
+      // behavior around a stale page can be exercised without shipping a
+      // second host build. The registry is always empty in production.
+      if (this.#pagePool.__test_isPagePoisonedForModule(pageId, url)) {
+        let renderError = buildInvalidModuleResponseError(
+          page,
+          `Module '@cardstack/runtime-common' has no exported member 'buildWaiter'.`,
+          { title: 'Module Error', evict: false },
+        );
+        renderError.type = 'module-error';
+        let response: ModuleRenderResponse = {
+          id: url,
+          status: 'error',
+          nonce: String(this.#nonce),
+          isShimmed: false,
+          lastModified: 0,
+          createdAt: 0,
+          deps: renderError.error.deps ?? [],
+          definitions: {},
+          error: renderError,
+        };
+        response.error = this.#mergeConsoleErrors(pageId, response.error);
+        return {
+          response,
+          timings: { launchMs, renderMs: 0, waits },
+          pool: poolInfo,
+        };
+      }
+
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
