@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 
 import { buildInstanceOperation } from '@cardstack/host/commands/listing-install';
@@ -11,7 +12,7 @@ function copyMeta(lid: string): CopyInstanceMeta {
     sourceCard: { id: `https://localhost:4201/catalog/${lid}` } as any,
     lid,
     targetCodeRef: {
-      module: 'https://localhost:4201/experiments/example',
+      module: rri('https://localhost:4201/experiments/example'),
       name: 'Example',
     },
   };
