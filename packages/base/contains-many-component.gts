@@ -364,14 +364,14 @@ export function getContainsManyComponent({
             <field.edit
               @model={{model.value}}
               @values={{arrayField.value}}
-              @defaultEditor={{(component
+              @defaultEditor={{component
                 ContainsManyEditor
                 model=model
                 arrayField=arrayField
                 field=field
                 cardTypeFor=cardTypeFor
                 typeConstraint=@typeConstraint
-              )}}
+              }}
             />
           {{else}}
             <ContainsManyEditor

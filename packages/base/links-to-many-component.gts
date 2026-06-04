@@ -669,7 +669,7 @@ export function getLinksToManyComponent({
             <field.edit
               @model={{model.value}}
               @values={{arrayField.value}}
-              @defaultEditor={{(component
+              @defaultEditor={{component
                 LinksToManyEditor
                 model=model
                 arrayField=arrayField
@@ -681,7 +681,7 @@ export function getLinksToManyComponent({
                   model
                 )
                 typeConstraint=@typeConstraint
-              )}}
+              }}
             />
           {{else}}
             <LinksToManyEditor
