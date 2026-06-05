@@ -276,6 +276,7 @@ const ALL_TEST_FILES: string[] = [
   './command-parsing-utils-test',
   './query-matches-filter-test',
   './matches-filter-integration-test',
+  './eq-containment-integration-test',
   './search-in-flight-key-test',
   './coerce-error-message-test',
   './fallback-models-test',
