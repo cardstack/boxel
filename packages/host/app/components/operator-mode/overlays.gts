@@ -95,6 +95,13 @@ export default class Overlays extends Component<OverlaySignature> {
     {{/each}}
     <style scoped>
       .base-overlay {
+        /* Establish `position: absolute` from CSS, before velcro's first
+           computePosition runs. floating-ui requires the floating element to
+           already be absolutely positioned when it first measures; the offset
+           middleware also sets this, but that runs *after* the initial
+           measurement, so without it here the overlay lands ~1 frame off and
+           visibly jumps into place on first appearance. */
+        position: absolute;
         width: 100%;
         height: 100%;
         pointer-events: none;

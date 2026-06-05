@@ -218,6 +218,14 @@ export default class OperatorModeOverlays extends Overlays {
     </AdornContext>
     <style scoped>
       .actions-overlay {
+        /* Establish `position: absolute` from CSS, before velcro's first
+           computePosition runs. floating-ui requires the floating element to
+           already be absolutely positioned when it first measures; the offset
+           middleware also sets this, but that runs *after* the initial
+           measurement, so without it here the overlay (and everything riding
+           it — the type-label tab, the select chip, the menu) lands ~1 frame
+           off and visibly jumps into place on first hover. */
+        position: absolute;
         pointer-events: none;
         /* Allow the type-label tab and selection chip to extend outside the
            overlay's bounding box without being clipped. */
