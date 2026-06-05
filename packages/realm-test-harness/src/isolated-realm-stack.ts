@@ -623,9 +623,10 @@ export async function startIsolatedRealmStack({
    *  upstream by `resolveFactoryRealmServerURL` and threaded down through
    *  the template build. We adopt it (so the sibling worker-manager /
    *  realm-server allocations below can't steal the number) and release it
-   *  immediately before the compat proxy binds. When omitted, the public
-   *  port came from a reused context, so we hold the specific number
-   *  ourselves. */
+   *  immediately before the compat proxy binds. Omitted whenever the public
+   *  port wasn't freshly allocated with a holder — a reused context, a
+   *  caller-supplied `realmServerURL`, or an explicit `compatRealmServerPort`
+   *  — in which case we hold the specific number ourselves. */
   publicPortReservation?: PortReservation;
 }): Promise<RunningFactoryStack> {
   if (realms.length === 0) {

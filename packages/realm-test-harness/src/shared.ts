@@ -499,7 +499,14 @@ export async function holdSpecificPort(port: number): Promise<PortReservation> {
   return await new Promise<PortReservation>((resolveOuter, rejectOuter) => {
     let server = createNetServer((socket) => socket.destroy());
     let onError = (error: NodeJS.ErrnoException) => {
-      server.close();
+      // The bind failed, so the server never listened — close() hits the
+      // not-running case. Guard it so a synchronous throw here can't strand
+      // the outer promise without settling it.
+      try {
+        server.close();
+      } catch {
+        // never listened — nothing to close
+      }
       if (error.code === 'EADDRINUSE') {
         diagnosePortConflict(port)
           .catch(() => '')
@@ -519,9 +526,16 @@ export async function holdSpecificPort(port: number): Promise<PortReservation> {
       // Swallow late errors after a successful bind so they don't surface
       // as unhandled 'error' events.
       server.on('error', () => {});
+      // Report the actually-bound port. For a concrete non-zero port that's
+      // the requested number; if a caller ever passes 0, listen() picks an
+      // ephemeral port and this reports the real one instead of a misleading
+      // 0.
+      let address = server.address();
+      let boundPort =
+        address && typeof address !== 'string' ? address.port : port;
       let released = false;
       resolveOuter({
-        port,
+        port: boundPort,
         release: () =>
           new Promise<void>((resolveClose, rejectClose) => {
             if (released) {
