@@ -32,9 +32,15 @@ export function serialize(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
-    virtualNetwork: VirtualNetwork;
+    virtualNetwork?: VirtualNetwork;
   },
 ): ResolvedCodeRef | {} {
+  // The recursive serialize path through a non-primitive `Contains` field
+  // intentionally isolates the inner card's serialization from the outer
+  // card's opts (see `Contains.serialize` in card-api.gts), so opts can
+  // arrive here as `undefined` or as a synthesized `{ overrides }` object
+  // with no `virtualNetwork`. URL-form refs can still be resolved with
+  // plain URL math; prefix-form refs need a VN and are left alone.
   if (!opts) {
     return { ...codeRef };
   }
@@ -43,9 +49,23 @@ export function serialize(
   if (opts.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
   } else if (typeof opts.relativeTo === 'string') {
-    baseURL = vn.toURL(opts.relativeTo);
+    if (vn) {
+      baseURL = vn.toURL(opts.relativeTo);
+    } else if (
+      opts.relativeTo.startsWith('http://') ||
+      opts.relativeTo.startsWith('https://')
+    ) {
+      baseURL = new URL(opts.relativeTo);
+    }
   } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = vn.toURL(doc.data.id);
+    if (vn) {
+      baseURL = vn.toURL(doc.data.id);
+    } else if (
+      doc.data.id.startsWith('http://') ||
+      doc.data.id.startsWith('https://')
+    ) {
+      baseURL = new URL(doc.data.id);
+    }
   }
   return {
     ...codeRef,
@@ -91,11 +111,11 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 function codeRefAdjustments(
   codeRef: any,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  opts: Omit<SerializeOpts, 'virtualNetwork'> & {
+  opts?: Omit<SerializeOpts, 'virtualNetwork'> & {
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
-    virtualNetwork: VirtualNetwork;
+    virtualNetwork?: VirtualNetwork;
   },
 ) {
   if (!codeRef) {
@@ -104,18 +124,33 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
-  let vn = opts.virtualNetwork;
-  let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
+  // opts may arrive without a VN — the recursive non-primitive-Contains
+  // serialize path isolates inner cards from the outer card's opts, and
+  // `deserializeAbsolute` may also be called without a store. URL-like
+  // refs still resolve through plain URL math; bare specifiers fall
+  // through to the loader's importMap shim via the surrounding try/catch.
+  let vn = opts?.virtualNetwork;
+  let resolve = (ref: string) => {
+    if (vn) {
+      return resolveModuleHref(ref, relativeTo, vn);
+    }
+    if (!isUrlLike(ref)) {
+      throw new Error(
+        `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
+      );
+    }
+    return new URL(ref, relativeTo).href;
+  };
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
       let resolved = resolve(codeRef.module);
       if (resolved !== codeRef.module) {
         let module: string = resolved;
-        if (opts.trimExecutableExtension) {
+        if (opts?.trimExecutableExtension) {
           module = trimExecutableExtension(rri(module));
         }
-        if (opts.allowRelative && opts.maybeRelativeReference) {
+        if (opts?.allowRelative && opts?.maybeRelativeReference) {
           module = opts.maybeRelativeReference(module);
         }
         return { module };
@@ -127,10 +162,10 @@ function codeRefAdjustments(
   }
   if (relativeTo) {
     let module: string = resolve(codeRef.module);
-    if (opts.trimExecutableExtension) {
+    if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
-    if (opts.allowRelative && opts.maybeRelativeReference) {
+    if (opts?.allowRelative && opts?.maybeRelativeReference) {
       module = opts.maybeRelativeReference(module);
     }
     return { module };
