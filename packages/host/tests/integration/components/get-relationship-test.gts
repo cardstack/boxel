@@ -66,12 +66,16 @@ function singleMember(
   assert: Assert,
   rel: RelationshipStatusType,
 ): RelationshipState {
+  let membership = rel.membership;
   assert.strictEqual(
-    rel.membership?.length,
+    membership?.length,
     1,
     'singular linksTo returns a one-element membership',
   );
-  return (rel.membership ?? [])[0];
+  if (!membership || membership.length !== 1) {
+    throw new Error('expected a one-element membership');
+  }
+  return membership[0];
 }
 
 // The per-element membership of a `linksToMany` (an array; `undefined` only
