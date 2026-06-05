@@ -22,6 +22,7 @@ export {
   buildServerToken,
   diagnosePortConflict,
   findAndHoldAvailablePort,
+  holdSpecificPort,
   isFactorySupportContext,
   type PortReservation,
 } from './shared';

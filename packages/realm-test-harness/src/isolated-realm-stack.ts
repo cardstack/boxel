@@ -29,6 +29,7 @@ import {
   DEFAULT_REALM_LOG_LEVELS,
   diagnosePortConflict,
   findAndHoldAvailablePort,
+  holdSpecificPort,
   FIXTURE_REALM_SERVER_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
   INCLUDE_SKILLS,
@@ -430,7 +431,25 @@ export async function startCompatRealmProxy({
     },
   );
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      // The public port is supposed to be held from the moment it was
+      // allocated until just before this bind. If it still collides, probe
+      // the contested port so the failed-job log names which interface/pid
+      // holds it instead of failing with an opaque EADDRINUSE.
+      if (error.code === 'EADDRINUSE') {
+        diagnosePortConflict(listenPort)
+          .catch(() => '')
+          .then((diagnostic) => {
+            realmLog.warn(
+              `startCompatRealmProxy: EADDRINUSE binding 127.0.0.1:${listenPort}` +
+                (diagnostic ? `\n${diagnostic}` : ''),
+            );
+            reject(error);
+          });
+        return;
+      }
+      reject(error);
+    });
     server.listen(listenPort, '127.0.0.1', () => resolve());
   });
   let address = server.address();
@@ -571,6 +590,7 @@ export async function startIsolatedRealmStack({
   realmServerPort: explicitRealmServerPort,
   prerenderURL: explicitPrerenderURL,
   noCompatProxy,
+  publicPortReservation: explicitPublicPortReservation,
 }: {
   realms: RealmConfig[];
   realmServerURL: URL;
@@ -599,6 +619,15 @@ export async function startIsolatedRealmStack({
    *  calls `setTargetPort` on it itself once the realm-server binds).
    *  The returned stack's `compatProxy` is `undefined` in that case. */
   noCompatProxy?: boolean;
+  /** Holder for the public (compat-proxy) port, freshly allocated and held
+   *  upstream by `resolveFactoryRealmServerURL` and threaded down through
+   *  the template build. We adopt it (so the sibling worker-manager /
+   *  realm-server allocations below can't steal the number) and release it
+   *  immediately before the compat proxy binds. Omitted whenever the public
+   *  port wasn't freshly allocated with a holder — a reused context, a
+   *  caller-supplied `realmServerURL`, or an explicit `compatRealmServerPort`
+   *  — in which case we hold the specific number ourselves. */
+  publicPortReservation?: PortReservation;
 }): Promise<RunningFactoryStack> {
   if (realms.length === 0) {
     throw new Error('startIsolatedRealmStack requires at least one realm');
@@ -607,28 +636,59 @@ export async function startIsolatedRealmStack({
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
 
+  // Hold the public (compat-proxy) port BEFORE allocating the
+  // worker-manager / realm-server child ports below. Those allocations ask
+  // the OS for an ephemeral port-0, and the public port — chosen earlier in
+  // resolveFactoryRealmServerURL — is fair game for the allocator unless
+  // something keeps it bound. Without this hold a sibling allocation can be
+  // handed the public port number and bind it first, so the compat-proxy
+  // bind further down dies with EADDRINUSE. Adopt the caller's reservation
+  // when they freshly allocated and held it upstream; otherwise the port
+  // came from a reused context, so hold the specific number ourselves.
+  // Released right before the compat proxy binds it (mirrors the
+  // worker-manager release-before-spawn handoff). Skipped entirely under
+  // noCompatProxy, where the caller owns the proxy out-of-band.
+  let compatPortHold: PortReservation | undefined;
+  if (noCompatProxy) {
+    // We won't bind the public port here; release any caller-held holder so
+    // it doesn't leak until process exit.
+    await explicitPublicPortReservation?.release().catch(() => {});
+  } else if (explicitPublicPortReservation) {
+    compatPortHold = explicitPublicPortReservation;
+  } else {
+    compatPortHold = await holdSpecificPort(Number(realmServerURL.port));
+  }
+
   // Hold the worker-manager and realm-server ports across the (multi-second)
   // gap between allocation and actual child bind. Without the hold, sibling
   // findAvailablePort() calls inside this same process — for the prerender
   // server, host serve, etc — can be handed back the same port number by
   // the OS port-0 allocator, and the child process eventually races us and
   // dies with EADDRINUSE.
-  let workerManagerPortInfo = await resolvePortReservation(
-    explicitWorkerManagerPort,
-  );
+  let workerManagerPortInfo: ResolvedPortReservation;
+  try {
+    workerManagerPortInfo = await resolvePortReservation(
+      explicitWorkerManagerPort,
+    );
+  } catch (error) {
+    await compatPortHold?.release().catch(() => {});
+    throw error;
+  }
   let realmServerPortInfo: ResolvedPortReservation;
   try {
     realmServerPortInfo = await resolvePortReservation(explicitRealmServerPort);
   } catch (error) {
     await workerManagerPortInfo.releaseHolder();
+    await compatPortHold?.release().catch(() => {});
     throw error;
   }
   let actualWorkerManagerPort = workerManagerPortInfo.port;
   let actualRealmServerPort = realmServerPortInfo.port;
-  // From this point on, any thrown error must release both port holders so
+  // From this point on, any thrown error must release all port holders so
   // they don't leak until process exit. The releases are idempotent: the
-  // happy path releases each holder just before its respective child is
-  // spawned, and the cleanup below is a no-op for already-released holders.
+  // happy path releases each holder just before its respective child binds
+  // (or, for the public port, just before the compat proxy listens), and
+  // the cleanup below is a no-op for already-released holders.
   let releaseHoldersOnFailure = async () => {
     try {
       await workerManagerPortInfo.releaseHolder();
@@ -637,6 +697,11 @@ export async function startIsolatedRealmStack({
     }
     try {
       await realmServerPortInfo.releaseHolder();
+    } catch {
+      // best effort
+    }
+    try {
+      await compatPortHold?.release();
     } catch {
       // best effort
     }
@@ -692,11 +757,18 @@ export async function startIsolatedRealmStack({
         username,
       });
     }
-    let compatProxy = noCompatProxy
-      ? undefined
-      : await startCompatRealmProxy({
-          listenPort: Number(realmServerURL.port),
-        });
+    let compatProxy: StartedCompatRealmProxy | undefined;
+    if (noCompatProxy) {
+      compatProxy = undefined;
+    } else {
+      // Release the holder the instant before the proxy binds the same
+      // port. Nothing else allocates a port between here and the bind, so
+      // the OS can't re-hand the number in this window.
+      await compatPortHold?.release();
+      compatProxy = await startCompatRealmProxy({
+        listenPort: Number(realmServerURL.port),
+      });
+    }
     // The software-factory Playwright harness can keep prerender alive for the
     // lifetime of a Playwright testWorker even though the realm stack itself is
     // recreated per test. When provided, reuse that long-lived prerender URL so
