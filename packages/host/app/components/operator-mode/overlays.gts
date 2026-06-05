@@ -9,7 +9,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
-import { modifier } from 'ember-modifier';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
 
@@ -79,7 +78,6 @@ export default class Overlays extends Component<OverlaySignature> {
           <div
             class={{this.overlayClassName}}
             {{velcro renderedCard.element middleware=(array this.offset)}}
-            {{this.revealWhenPositioned}}
             style={{renderedCard.overlayZIndexStyle}}
             data-test-card-overlay
             ...attributes
@@ -128,12 +126,12 @@ export default class Overlays extends Component<OverlaySignature> {
   protected offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
-      let { elements, rects } = state;
+      let { elements } = state;
       let { floating, reference } = elements;
-      let { width, height } = reference.getBoundingClientRect();
+      let refRect = reference.getBoundingClientRect();
 
-      floating.style.width = width + 'px';
-      floating.style.height = height + 'px';
+      floating.style.width = refRect.width + 'px';
+      floating.style.height = refRect.height + 'px';
       floating.style.position = 'absolute';
       // Mirror the underlying card's corner radius so any decorative
       // outline / box-shadow on the overlay follows the same curve.
@@ -141,69 +139,43 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
+
+      // Position the overlay from the live reference rect relative to the
+      // floating element's own offset parent, rather than floating-ui's
+      // `rects.reference`. floating-ui's first one-or-two computePosition calls
+      // omit the offset parent's offset (they return the reference in viewport
+      // coordinates and only subtract the offset parent a frame later), so
+      // trusting `rects.reference` makes the overlay — and everything riding it
+      // (the type-label tab, the select chip, the menu, the outline) — paint
+      // one frame off and visibly jump into place on first appearance.
+      // Computing it ourselves from the current rects is correct on the very
+      // first frame. We recover the offset parent's scale the same way the
+      // Adorn label positioner does (the test runner scales `#ember-testing`),
+      // and convert the viewport anchor into the offset parent's local space.
+      let offsetParent = floating.offsetParent as HTMLElement | null;
+      let parentRect = offsetParent
+        ? offsetParent.getBoundingClientRect()
+        : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+      let scaleX =
+        offsetParent && offsetParent.offsetWidth > 0
+          ? parentRect.width / offsetParent.offsetWidth
+          : 1;
+      let scaleY =
+        offsetParent && offsetParent.offsetHeight > 0
+          ? parentRect.height / offsetParent.offsetHeight
+          : 1;
+      if (!Number.isFinite(scaleX) || scaleX === 0) {
+        scaleX = 1;
+      }
+      if (!Number.isFinite(scaleY) || scaleY === 0) {
+        scaleY = 1;
+      }
       return {
-        x: rects.reference.x,
-        y: rects.reference.y,
+        x: (refRect.left - parentRect.left) / scaleX,
+        y: (refRect.top - parentRect.top) / scaleY,
       };
     },
   };
-
-  // Whether to keep the overlay hidden (opacity 0) until its velcro position
-  // has settled, to avoid the first-frame jump. Off by default (consumers
-  // without visible chrome — spec-preview, playground — don't need it);
-  // OperatorModeOverlays overrides it.
-  protected get hideUntilPositioned(): boolean {
-    return false;
-  }
-
-  // floating-ui's first one-or-two computePosition calls return the reference
-  // in viewport coordinates rather than offset-parent-relative ones (it omits
-  // the offset parent's offset for ~1 frame, then corrects), so the overlay —
-  // and everything riding it (the type-label tab, the select chip, the menu,
-  // the outline) — paints one frame off and visibly jumps into place. Hold the
-  // overlay at opacity 0 until its measured rect has been unchanged for two
-  // consecutive frames, then reveal. We watch the actual geometry rather than
-  // count frames or compare middleware outputs, because the wrong position can
-  // repeat across calls and the correction lands a frame after the first paint;
-  // only the rect going stable is a reliable "done moving" signal. Opacity (not
-  // visibility) keeps the overlay's action buttons hit-testable throughout.
-  protected revealWhenPositioned = modifier((element: HTMLElement) => {
-    if (!this.hideUntilPositioned) {
-      return undefined;
-    }
-    element.style.opacity = '0';
-    let lastTop: number | undefined;
-    let lastLeft: number | undefined;
-    let stableFrames = 0;
-    let elapsedFrames = 0;
-    let raf = 0;
-    let tick = () => {
-      let { top, left } = element.getBoundingClientRect();
-      if (top === lastTop && left === lastLeft) {
-        stableFrames += 1;
-      } else {
-        stableFrames = 0;
-        lastTop = top;
-        lastLeft = left;
-      }
-      elapsedFrames += 1;
-      // Reveal once the rect has settled, with a safety cap so a perpetually
-      // animating reference can't keep the overlay hidden forever.
-      if (stableFrames >= 2 || elapsedFrames > 30) {
-        element.style.opacity = '';
-        return;
-      }
-      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
-      raf = requestAnimationFrame(tick);
-    };
-    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
-    raf = requestAnimationFrame(tick);
-    return () => {
-      if (raf) {
-        cancelAnimationFrame(raf);
-      }
-    };
-  });
 
   // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
   // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.

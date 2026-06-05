@@ -280,13 +280,6 @@ export default class OperatorModeOverlays extends Overlays {
     return 100;
   }
 
-  // This overlay carries visible chrome (the teal type-label tab, the select
-  // chip, the menu, the outline), so hide it until velcro's position settles
-  // to avoid the first-frame jump those would otherwise show.
-  protected override get hideUntilPositioned(): boolean {
-    return true;
-  }
-
   // Tracks which rendered cards are currently small enough to warrant
   // the Adorn compact treatment (narrow atom-format cards). The set
   // is updated by `trackCompact` as cards resize; `isCompact` reads
