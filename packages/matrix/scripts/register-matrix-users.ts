@@ -1,11 +1,11 @@
 import * as childProcess from 'child_process';
 
-import { createRegistrationToken, loginUser } from '../docker/synapse';
+import { createRegistrationToken, loginUser } from '../support/synapse';
 import { ensureUserRecord } from '../helpers/ensure-user-record';
 import {
   getSynapseContainerName,
   getSynapseURL,
-} from '../helpers/environment-config';
+} from '../support/environment-config';
 import { realmPassword } from '../helpers/realm-credentials';
 
 type Mode = 'all' | 'realms-only';
@@ -149,7 +149,8 @@ async function main() {
     process.exit(-1);
   }
 
-  const realmSecretSeed = process.env.REALM_SECRET_SEED || "shhh! it's a secret";
+  const realmSecretSeed =
+    process.env.REALM_SECRET_SEED || "shhh! it's a secret";
 
   // In 'all' mode we'll INSERT into the users table for bot/writer accounts,
   // so ensure Postgres is reachable too. 'realms-only' mode never touches

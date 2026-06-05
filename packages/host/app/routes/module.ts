@@ -325,6 +325,7 @@ export async function buildModuleModel(
           let codeRef = internalKeyFor(
             { module: id as RealmResourceIdentifier, name },
             undefined,
+            context.network.virtualNetwork,
           );
           definitions[codeRef] = definition;
         }
@@ -480,7 +481,11 @@ async function getTypes(
       }
 
       types.push({
-        refURL: internalKeyFor(loadedCardRef, undefined),
+        refURL: internalKeyFor(
+          loadedCardRef,
+          undefined,
+          context.network.virtualNetwork,
+        ),
         codeRef: loadedCardRef,
         displayName: getDisplayName(loadedCard),
       });

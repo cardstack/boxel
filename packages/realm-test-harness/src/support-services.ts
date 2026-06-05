@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-import puppeteer from 'puppeteer';
+import puppeteer, { type Browser } from 'puppeteer';
 
 import { logger } from './logger';
 
@@ -181,7 +181,7 @@ function assertUsableHostDist(hostPackageDir: string): void {
 }
 
 async function loadSynapseModule() {
-  let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
+  let moduleSpecifier = '../../matrix/support/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     registerUser: (
       synapse: SynapseInstance,
@@ -202,7 +202,7 @@ async function loadSynapseModule() {
 }
 
 async function loadMatrixEnvironmentConfigModule() {
-  let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
+  let moduleSpecifier = '../../matrix/support/environment-config.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     getSynapseURL: (synapse?: { baseUrl?: string; port?: number }) => string;
   };
@@ -221,6 +221,81 @@ const STANDBY_DOM_RENDER_TIMEOUT_MS =
 // optimize in one go.
 const STANDBY_DOM_ATTEMPT_TIMEOUT_MS = 60_000;
 
+// Chrome cold-start on a loaded CI runner can take longer than Puppeteer's
+// default 30s launch timeout to print its DevTools WS endpoint, so a single
+// slow start fails the whole support bring-up before the post-launch
+// render-retry loop below ever runs. Retry the launch on a fresh Chrome
+// process with a longer per-attempt budget, bounded by the standby gate's
+// overall deadline. From the first retry onward, pipe Chrome's own
+// stdout/stderr through node (dumpio) so a persistent failure records *why* it
+// could not start — sandbox denial, missing shared library, GPU init crash —
+// instead of only the bare "waiting for the WS endpoint URL" timeout.
+const STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS = 45_000;
+const STANDBY_LAUNCH_MAX_ATTEMPTS = 3;
+const STANDBY_LAUNCH_RETRY_BACKOFF_MS = 2_000;
+
+async function launchStandbyBrowser(deadline: number): Promise<Browser> {
+  let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  let verbose = process.env.TEST_HARNESS_STANDBY_VERBOSE === '1';
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= STANDBY_LAUNCH_MAX_ATTEMPTS; attempt++) {
+    let remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      break;
+    }
+    let timeout = Math.min(STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS, remaining);
+    // Attempt 1 stays quiet on the healthy path; any retry already means
+    // something is wrong, so capture Chrome's own output for the next failure.
+    let dumpio = verbose || attempt > 1;
+    supportLog.info(
+      `standby DOM gate: puppeteer.launch attempt ${attempt}/${STANDBY_LAUNCH_MAX_ATTEMPTS} ` +
+        `(timeout=${timeout}ms, executable=${
+          executablePath ?? 'puppeteer-bundled'
+        }, dumpio=${dumpio})`,
+    );
+    let startedAt = Date.now();
+    try {
+      let browser = await puppeteer.launch({
+        headless: true,
+        timeout,
+        dumpio,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+        ...(executablePath ? { executablePath } : {}),
+      });
+      supportLog.info(
+        `standby DOM gate: puppeteer.launch attempt ${attempt} succeeded after ${
+          Date.now() - startedAt
+        }ms`,
+      );
+      return browser;
+    } catch (error) {
+      lastError = error;
+      supportLog.warn(
+        `standby DOM gate: puppeteer.launch attempt ${attempt} failed after ${
+          Date.now() - startedAt
+        }ms: ${
+          error instanceof Error ? error.message.split('\n')[0] : String(error)
+        }`,
+      );
+      if (
+        attempt === STANDBY_LAUNCH_MAX_ATTEMPTS ||
+        deadline - Date.now() <= STANDBY_LAUNCH_RETRY_BACKOFF_MS
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, STANDBY_LAUNCH_RETRY_BACKOFF_MS));
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`puppeteer.launch failed: ${String(lastError)}`);
+}
+
 // Drive `<hostURL>/_standby` in a real (headless) browser and wait for the
 // `#standby-ready` marker the host app renders once its bundles have loaded
 // and the app shell has booted — the same signal the prerender's PagePool
@@ -233,16 +308,8 @@ async function assertStandbyRendersDom(
   getFatalExitCode: () => number | null,
 ): Promise<void> {
   let standbyURL = `${hostURL.replace(/\/$/, '')}/_standby`;
-  let browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-  });
   let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
+  let browser = await launchStandbyBrowser(deadline);
   let lastError: Error | undefined;
   let startedAt = Date.now();
   let attempt = 0;

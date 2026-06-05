@@ -4,7 +4,7 @@ import { RealmPaths } from './paths';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 export function maybeURL(

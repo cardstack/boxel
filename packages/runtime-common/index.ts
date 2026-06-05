@@ -11,13 +11,7 @@ import type { VirtualNetwork } from './virtual-network';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
-import {
-  resolveCardReference,
-  unresolveCardReference,
-  isRegisteredPrefix,
-  rri,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -45,10 +39,29 @@ export type PatchData = {
   };
 };
 
+// A broken `linksTo` / `linksToMany` target found on the rendered
+// instance, recorded as searchable metadata on the (successful) index
+// entry. The card itself indexes as `type='instance'` — the broken slot
+// renders a placeholder and the reference is preserved on the wire — so
+// this is the only direct, indexed signal that lets a consumer (AI
+// tooling, realm-health reports) enumerate cards-with-broken-links
+// without parsing the rendered HTML or re-running `getBrokenLinks` at
+// read time. `errorDoc` is intentionally omitted: it's large, and the
+// error detail is still available at runtime via
+// `getRelationship(card, fieldName)` and inline in the rendered placeholder.
+export interface BrokenLinkSummary {
+  // The declared `linksTo` / `linksToMany` field holding the broken reference.
+  fieldName: string;
+  // The broken target reference, preserved from the relationship state.
+  reference: string;
+  // `'error'` for a generic upstream failure, `'not-found'` for an HTTP 404.
+  kind: 'error' | 'not-found';
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
-// `boxel_index.timing_diagnostics`. All fields optional — older host
+// `boxel_index.diagnostics`. All fields optional — older host
 // builds that predate the counters omit the block entirely.
 export interface PrerenderMetaDiagnostics {
   // Number of `computeVia` invocations that ran during the
@@ -65,6 +78,12 @@ export interface PrerenderMetaDiagnostics {
   serializeMs?: number;
   // Wall-clock of the host-side searchDoc call.
   searchDocMs?: number;
+  // Broken `linksTo` / `linksToMany` targets found on the rendered
+  // instance after the store settled. Captured by the render.meta scan
+  // and persisted to `boxel_index.diagnostics.brokenLinks` so
+  // cards-with-broken-links are cheaply enumerable. Omitted entirely
+  // when the card has no broken links.
+  brokenLinks?: BrokenLinkSummary[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -77,7 +96,7 @@ export interface PrerenderMeta {
   types: string[] | null;
   // Optional host-side timing block. The Prerenderer lifts this onto
   // `response.meta.diagnostics` so it persists to
-  // `boxel_index.timing_diagnostics` for SQL-side perf triage.
+  // `boxel_index.diagnostics` for SQL-side perf triage.
   diagnostics?: PrerenderMetaDiagnostics;
 }
 
@@ -239,7 +258,7 @@ export interface RenderTimeoutDiagnostics {
       // — e.g. a priority-10 file render stuck behind a priority-0
       // module call sticks out cleanly. Optional in the schema even
       // though fresh producers always emit a value: the same shape is
-      // deserialized from `boxel_index.timing_diagnostics`, where rows
+      // deserialized from `boxel_index.diagnostics`, where rows
       // persisted before priority threading landed will lack the
       // field. Consumers should treat absent as `0`.
       priority?: number;
@@ -247,7 +266,7 @@ export interface RenderTimeoutDiagnostics {
   };
   // Host-emitted computed-field counters lifted out of
   // PrerenderMeta.diagnostics so they ride alongside the existing
-  // server-observed timings in `boxel_index.timing_diagnostics`.
+  // server-observed timings in `boxel_index.diagnostics`.
   computedCalls?: number;
   computedCacheHits?: number;
   serializeMs?: number;
@@ -260,7 +279,7 @@ export interface RenderError extends ErrorEntry {
   // in-flight loads, blocked-timer summary, etc.) produced by
   // `withTimeout`. The Prerenderer lifts these onto
   // `response.meta.diagnostics` before returning, where the indexer
-  // picks them up and persists them into `timing_diagnostics`. The
+  // picks them up and persists them into `diagnostics`. The
   // field is dropped from the final response — callers should read
   // `response.meta.diagnostics` instead.
   diagnostics?: RenderTimeoutDiagnostics;
@@ -322,7 +341,7 @@ export interface ModulePrerenderModel {
 
 export interface ModuleRenderResponse extends ModulePrerenderModel {
   // Server-observed timing breakdown, carried in the response body
-  // so the indexer can persist it onto `boxel_index.timing_diagnostics`
+  // so the indexer can persist it onto `boxel_index.diagnostics`
   // for both in-process and remote prerender paths without needing a
   // separate side channel.
   meta?: PrerenderResponseMeta;
@@ -331,27 +350,34 @@ export interface ModuleRenderResponse extends ModulePrerenderModel {
 export interface PrerenderResponseMeta {
   // Aggregated diagnostic payload — server-observed timings
   // (launchMs, waits, renderElapsedMs, totalElapsedMs from
-  // `RenderTimeoutDiagnostics`) plus host-side breadcrumbs
-  // (renderStage, in-flight loads, recent module evaluations,
-  // blocked-timer summary, etc.). Populated by the Prerenderer from
-  // both its own timing measurements and any `RenderError.diagnostics`
-  // lifted out of embedded errors. The indexer picks this up, merges
-  // in the HTTP `requestId`, and persists into `timing_diagnostics`.
-  diagnostics?: RenderTimeoutDiagnostics;
+  // `RenderTimeoutDiagnostics`) plus the host-side `render.meta` block
+  // (`PrerenderMetaDiagnostics`: computed-field counters and the
+  // `brokenLinks` findings) lifted off the card sub-response. Typed as
+  // the full persisted `Diagnostics` shape so consumers of the response
+  // contract can read every lifted field — notably `brokenLinks` —
+  // without casts; the write-side stamps it adds (`invalidationId`,
+  // `indexedAt`) are simply absent at this stage. Populated by the
+  // Prerenderer from its own timing measurements and any lifted
+  // `RenderError.diagnostics`; the indexer merges in the HTTP `requestId`
+  // and persists the result into the `diagnostics` column.
+  diagnostics?: Diagnostics;
   // HTTP correlation ID stamped by the prerender server's Koa layer.
   // Lets operators join client → manager → prerender-server logs for
   // a single request. Absent for in-process (non-HTTP) callers.
   requestId?: string;
 }
 
-// The shape persisted to `boxel_index.timing_diagnostics`. Extends
-// `RenderTimeoutDiagnostics` (which already carries `requestId`) with
-// two write-side stamps applied at `IndexWriter.updateEntry` time:
+// The shape persisted to `boxel_index.diagnostics`. Named `Diagnostics`
+// (not `TimingDiagnostics`) because the block is no longer purely about
+// timing: it also carries `brokenLinks`, the broken-link findings the
+// render surfaced. Extends `RenderTimeoutDiagnostics` (which already
+// carries `requestId`) with two write-side stamps applied at
+// `IndexWriter.updateEntry` time:
 //
 //   - `invalidationId` — one UUID per `Batch`; every row touched by
 //     the same indexing pass (incremental fan-out or fromScratch)
 //     shares it, so operators can `SELECT ... WHERE
-//     timing_diagnostics->>'invalidationId' = '<id>'` and see the
+//     diagnostics->>'invalidationId' = '<id>'` and see the
 //     whole batch.
 //   - `indexedAt` — wall-clock the write happened.
 //
@@ -360,20 +386,26 @@ export interface PrerenderResponseMeta {
 // write-side stamps come from the IndexWriter. Any stage may skip
 // pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
-export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
+// Extends both render-side diagnostic shapes so the persisted blob types
+// every field that actually lands in it: server-observed timings from
+// `RenderTimeoutDiagnostics` and the host-side `render.meta` block from
+// `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
+// The two write-side stamps below are added at `IndexWriter.updateEntry`.
+export interface Diagnostics
+  extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to
-// `*.timing_diagnostics` columns. Keeps the rich host-side payload (from
+// `*.diagnostics` columns. Keeps the rich host-side payload (from
 // `meta.diagnostics`) at the top level and promotes the HTTP `requestId`
 // alongside it for jsonb-path querying. Returns `undefined` when there's
 // nothing to persist. Used by both the indexer (boxel_index rows) and the
 // definition-lookup module-cache writer (modules rows).
 export function flattenPrerenderMeta(
   meta: PrerenderResponseMeta | undefined,
-): TimingDiagnostics | undefined {
+): Diagnostics | undefined {
   if (!meta) return undefined;
   let diagnostics = meta.diagnostics ?? {};
   let hasRequestId = meta.requestId != null;
@@ -485,7 +517,7 @@ export interface RenderVisitResponse {
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
-  // `boxel_index.timing_diagnostics`.
+  // `boxel_index.diagnostics`.
   meta?: PrerenderResponseMeta;
 }
 
@@ -568,18 +600,11 @@ export {
   isCardErrorJSONAPI,
   clampSerializedError,
   coerceErrorMessage,
+  sanitizeForJsonb,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';
 export { validateWriteSize } from './write-size-validation';
-export {
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-  resolveCardReference,
-  unresolveCardReference,
-  isRegisteredPrefix,
-  cardIdToURL,
-} from './card-reference-resolver';
 
 export interface ResourceObject {
   type: string;
@@ -633,7 +658,7 @@ export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
-export * from './card-reference-resolver';
+export * from './realm-identifiers';
 export * from './bfm-card-references';
 export * from './bfm-math-render';
 export * from './bfm-mermaid-render';
@@ -657,6 +682,7 @@ export * from './stream';
 export * from './realm';
 export * from './realm-index-updater';
 export * from './fetcher';
+export * from './test-waiters';
 export * from './scoped-css';
 export * from './html-utils';
 export * from './utils';
@@ -665,6 +691,7 @@ export * from './resource-types';
 export * from './prerender-headers';
 export * from './query';
 export * from './search-utils';
+export * from './request-timings';
 export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
@@ -723,7 +750,7 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType } from './supported-mime-type';
+export { SupportedMimeType, isJsonContentType } from './supported-mime-type';
 export {
   isUrlLike,
   VirtualNetwork,
@@ -1099,18 +1126,14 @@ export function trimExecutableExtension(
 export function internalKeyFor(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string {
   if (!('type' in ref)) {
-    let resolved = virtualNetwork
-      ? virtualNetwork.resolveURL(ref.module, relativeTo).href
-      : resolveCardReference(ref.module, relativeTo);
+    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
     let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
-    module = virtualNetwork
-      ? virtualNetwork.unresolveURL(module)
-      : unresolveCardReference(module);
+    module = virtualNetwork.unresolveURL(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
@@ -1212,13 +1235,8 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork?: VirtualNetwork) {
-  return (
-    !id.startsWith('http') &&
-    !(virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(id)
-      : isRegisteredPrefix(id))
-  );
+export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
+  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {
@@ -1233,4 +1251,3 @@ export {
   type BotCommandFilter,
   type BotCommandMatrixFilter,
 } from './bot-command';
-export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

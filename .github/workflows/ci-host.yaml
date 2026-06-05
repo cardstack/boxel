@@ -23,6 +23,10 @@ on:
       - "packages/observability/scripts/**"
   workflow_dispatch:
 
+concurrency:
+  group: ci-host-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   id-token: write
@@ -149,7 +153,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        shardIndex:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+          ]
         shardTotal: [20]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
@@ -260,7 +286,14 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: host-test-report-${{ matrix.shardIndex }}
+          # Scope the artifact name to the run attempt. Artifacts are retained
+          # per attempt under one run_id, and download-artifact (in the merge
+          # job) has no attempt filter — so a plain `host-test-report-N` name
+          # lets a re-run's merge pull this attempt's report alongside the
+          # failed prior attempt's, re-injecting stale failures into the
+          # published "Host Test Results" check. The attempt prefix keeps the
+          # merge scoped to the current attempt.
+          name: host-test-report-${{ github.run_attempt }}-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Extract memory report
@@ -563,7 +596,11 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: all-host-reports
-          pattern: host-test-report-*
+          # Only the current attempt's shard reports. A bare `host-test-report-*`
+          # also matched the `host-test-report-merged` output below and every
+          # prior attempt's shard reports, so re-running a flaky shard re-merged
+          # the failed attempt's results and the check could never go green.
+          pattern: host-test-report-${{ github.run_attempt }}-*
           merge-multiple: true
 
       - run: ls
@@ -633,6 +670,7 @@ jobs:
       actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      pr-number: ${{ github.event.pull_request.number }}
       slots: host-tests
     secrets: inherit
 

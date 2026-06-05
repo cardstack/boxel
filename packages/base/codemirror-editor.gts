@@ -8,9 +8,9 @@ import { scheduleOnce } from '@ember/runloop';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
-  resolveCardReference,
   trimJsonExtension,
   maybeRelativeReference,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from './card-api';
 import { CardContextConsumer } from './field-component';
@@ -86,9 +86,24 @@ function isInline(kind: string): boolean {
   return kind === 'inline';
 }
 
-function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+function resolveUrl(
+  raw: string,
+  baseUrl: string | null | undefined,
+  virtualNetwork: VirtualNetwork | undefined,
+): string {
+  // With a VN, resolve through it so prefix-form bases and registered
+  // prefix-form refs round-trip correctly. Without a VN, plain
+  // `new URL(raw, baseUrl)` still handles the common case — URL-form
+  // refs (with or without a base) and relative refs against a URL-form
+  // base. Prefix-form bases need a VN; `new URL()` throws on those and
+  // we fall back to the raw ref.
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+    if (virtualNetwork) {
+      return trimJsonExtension(
+        virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
+      );
+    }
+    return trimJsonExtension(new URL(raw, baseUrl || undefined).href);
   } catch {
     return trimJsonExtension(raw);
   }
@@ -100,7 +115,11 @@ function makeCardRef(
 ): string {
   if (!baseUrl) return cardUrl;
   try {
-    return maybeRelativeReference(new URL(cardUrl), new URL(baseUrl), undefined);
+    return maybeRelativeReference(
+      new URL(cardUrl),
+      new URL(baseUrl),
+      undefined,
+    );
   } catch {
     return cardUrl;
   }
@@ -118,6 +137,7 @@ interface CodeMirrorEditorSignature {
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    cardReferenceVirtualNetwork?: VirtualNetwork;
     /** When false, all syntax markers are visible (source mode). Default true. */
     livePreview?: boolean;
     getCards?: (
@@ -616,9 +636,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   get _resolvedCardUrls(): string[] {
     let baseUrl = this.args.cardReferenceBaseUrl;
+    let vn = this.args.cardReferenceVirtualNetwork;
     let urls = new Set<string>();
     for (let target of this._widgetTargets) {
-      urls.add(resolveUrl(target.cardId, baseUrl));
+      urls.add(resolveUrl(target.cardId, baseUrl, vn));
     }
     return [...urls];
   }
@@ -670,8 +691,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       }
     }
 
+    let vn = this.args.cardReferenceVirtualNetwork;
     return targets.map((target) => {
-      let resolvedUrl = resolveUrl(target.cardId, baseUrl);
+      let resolvedUrl = resolveUrl(target.cardId, baseUrl, vn);
       return {
         ...target,
         card: cardsByUrl.get(resolvedUrl) ?? null,

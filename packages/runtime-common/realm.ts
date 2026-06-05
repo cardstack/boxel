@@ -1,9 +1,10 @@
 import { Deferred } from './deferred';
+import type { SearchOpts } from './search-utils';
 import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
@@ -30,8 +31,7 @@ import {
   persistFileMeta,
   removeFileMeta,
   getCreatedTime,
-  getContentHash,
-  getContentSize,
+  getContentMeta,
 } from './file-meta';
 import {
   systemError,
@@ -43,6 +43,7 @@ import {
   responseWithError,
   formattedError,
   unsupportedMediaType,
+  type SerializedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -669,6 +670,15 @@ interface Options {
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
   fromScratchIndexPriority?: number;
+  // When set, the realm mounts and serves source but does not run a
+  // from-scratch index on startup, even when its index is empty (new). Card
+  // definitions are still resolved lazily on demand via the prerenderer, so
+  // source serving and definition lookup keep working. Used by the
+  // realm-server test stack, whose suite runs its own in-process realms and
+  // only needs the boot realms to serve source — skipping their boot index
+  // removes both the startup wait and the prerender-pool contention it would
+  // otherwise create with the tests.
+  skipBootIndex?: true;
 }
 
 interface UpdateItem {
@@ -700,10 +710,25 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
+  #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
+  // Per-path generation counters for #sourceCache — the source-read analogue
+  // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
+  // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
+  // and only then calls #sourceCache.set. An invalidateCache(path) that fires
+  // inside that window — e.g. a concurrent DELETE removing the file while a
+  // worker's indexing fetch of the same source is still in flight — clears the
+  // slot synchronously, but the in-flight read's set would otherwise re-fill it
+  // with the now-deleted bytes, leaving a GET serving a file that is gone from
+  // disk. The reader snapshots the generation before its first await and drops
+  // its set when the generation moved. #sourceCacheGlobalGeneration covers the
+  // bulk clears (__testOnlyClearCaches / clearLocalSourceCaches), which reset
+  // the per-path map alongside any in-flight snapshot's `path` component.
+  #sourceCacheGenerations: Map<LocalPath, number> = new Map();
+  #sourceCacheGlobalGeneration = 0;
   #transpiledModuleCache = new AliasCache<TranspiledModuleEntry>();
   // CS-11028: per-path generation counters for #transpiledModuleCache. Bumped
   // synchronously by invalidateCache(path) before any await. fallbackHandle
@@ -835,13 +860,14 @@ export class Realm {
     },
     opts?: Options,
   ) {
-    this.paths = new RealmPaths(new URL(url));
+    this.paths = new RealmPaths(new URL(url), virtualNetwork);
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
     this.#queue = queue;
     this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#matrixClient = matrixClient;
@@ -953,6 +979,11 @@ export class Realm {
         '/_publishability',
         SupportedMimeType.JSONAPI,
         this.publishability.bind(this),
+      )
+      .get(
+        '/_indexing-errors',
+        SupportedMimeType.JSONAPI,
+        this.indexingErrors.bind(this),
       )
       .get(
         '/_card-dependencies',
@@ -1460,7 +1491,7 @@ export class Realm {
   }
 
   __testOnlyClearCaches() {
-    this.#sourceCache.clear();
+    this.#dropAllSourceCacheEntries();
     this.#dropAllTranspiledModuleCacheEntries();
     // Reset the transpile counter so each test reasons about its own
     // delta. Production never reads this counter — only the CS-11029
@@ -1487,7 +1518,7 @@ export class Realm {
   // `clearLocalSourceCachesAndBroadcast` (local clear + peer broadcast);
   // the listener invokes it directly (no broadcast — would NOTIFY-loop).
   clearLocalSourceCaches(): void {
-    this.#sourceCache.clear();
+    this.#dropAllSourceCacheEntries();
     this.#dropAllTranspiledModuleCacheEntries();
   }
 
@@ -1521,6 +1552,17 @@ export class Realm {
     this.#testOnlyTranspileDelay = fn;
   }
   #testOnlyTranspileDelay?: () => Promise<void>;
+
+  // Test-only gate for the source-cache set-after-invalidate race: when set,
+  // getSourceOrRedirect awaits the returned promise AFTER it has read the file
+  // bytes from disk but BEFORE it writes #sourceCache. Lets the race test park
+  // a source read mid-flight, fire invalidateCache concurrently, then release
+  // — deterministically reproducing the window the generation guard closes,
+  // without depending on real worker/indexer timing.
+  __testOnlyDelaySourceCacheSet(fn: (() => Promise<void>) | undefined): void {
+    this.#testOnlySourceCacheDelay = fn;
+  }
+  #testOnlySourceCacheDelay?: () => Promise<void>;
 
   // CS-11119: Drop every read-side cache whose content derives from
   // server-side state — currently `#inFlightSearch` (the searchCards
@@ -1560,7 +1602,7 @@ export class Realm {
   // extensions. Public so the realm-server process can wire a NOTIFY listener
   // without reaching into private state.
   invalidateCache(path: LocalPath): void {
-    this.#sourceCache.invalidate(path);
+    this.#dropSourceCacheEntry(path);
     if (hasExecutableExtension(path)) {
       this.#dropTranspiledModuleEntry(path);
     }
@@ -1663,6 +1705,68 @@ export class Realm {
     }
     let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
     let curGen = this.#transpiledModuleCacheGenerations.get(canonicalPath) ?? 0;
+    return curGen !== snapGen;
+  }
+
+  // Source-cache analogue of #dropTranspiledModuleEntry: bump the path's
+  // generation BEFORE clearing the slot so a concurrent in-flight source read
+  // — already past its generation snapshot in getSourceOrRedirect — observes
+  // the new value at persist time and drops its #sourceCache.set instead of
+  // re-filling the slot we're about to empty.
+  #dropSourceCacheEntry(canonicalPath: LocalPath): void {
+    this.#sourceCacheGenerations.set(
+      canonicalPath,
+      (this.#sourceCacheGenerations.get(canonicalPath) ?? 0) + 1,
+    );
+    this.#sourceCache.invalidate(canonicalPath);
+  }
+
+  // Source-cache analogue of #dropAllTranspiledModuleCacheEntries: wipe every
+  // entry and bump the global generation so an in-flight read whose snapshot
+  // predates the wipe discards its post-read set rather than re-populating the
+  // just-cleared map. The per-path map is cleared because the generations it
+  // held are no longer reachable — the global counter is what catches
+  // in-flight snapshots after a wipe.
+  #dropAllSourceCacheEntries(): void {
+    this.#sourceCache.clear();
+    this.#sourceCacheGenerations.clear();
+    this.#sourceCacheGlobalGeneration += 1;
+  }
+
+  // Snapshot generations for every path getSourceOrRedirect's
+  // getFileWithFallbacks could resolve to: the request's localPath plus each
+  // executable extension and ".json" when the request is extensionless (the
+  // exact fallback set getSourceOrRedirect passes). The post-read check keys
+  // on the resolved canonicalPath, so snapshotting all candidates catches the
+  // race whether the request was extensionless or carried its extension —
+  // same reasoning as #snapshotModuleCacheGeneration.
+  #snapshotSourceCacheGeneration(localPath: LocalPath): {
+    pathGens: Map<LocalPath, number>;
+    global: number;
+  } {
+    let pathGens = new Map<LocalPath, number>();
+    pathGens.set(localPath, this.#sourceCacheGenerations.get(localPath) ?? 0);
+    if (!hasExecutableExtension(localPath)) {
+      for (let ext of [...executableExtensions, '.json']) {
+        let candidate = localPath + ext;
+        pathGens.set(
+          candidate,
+          this.#sourceCacheGenerations.get(candidate) ?? 0,
+        );
+      }
+    }
+    return { pathGens, global: this.#sourceCacheGlobalGeneration };
+  }
+
+  #sourceCacheGenerationChanged(
+    canonicalPath: LocalPath,
+    snapshot: { pathGens: Map<LocalPath, number>; global: number },
+  ): boolean {
+    if (this.#sourceCacheGlobalGeneration !== snapshot.global) {
+      return true;
+    }
+    let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
+    let curGen = this.#sourceCacheGenerations.get(canonicalPath) ?? 0;
     return curGen !== snapGen;
   }
 
@@ -2475,7 +2579,10 @@ export class Realm {
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      if (isNewIndex || this.#fullIndexOnStartup) {
+      if (this.#skipBootIndex) {
+        // Mount-and-serve only: no from-scratch index, even on a new index.
+        // Definitions resolve lazily via the prerenderer on first lookup.
+      } else if (isNewIndex || this.#fullIndexOnStartup) {
         if (this.#fullIndexOnStartup) {
           // CS-11245: bootstrap realms (kind='bootstrap': base,
           // catalog, skills, …) full-index on every realm-server
@@ -3708,7 +3815,7 @@ export class Realm {
     if (bypassCache) {
       let cachedEntry = this.#sourceCache.get(localName);
       if (cachedEntry) {
-        this.#sourceCache.invalidate(cachedEntry.canonicalPath);
+        this.#dropSourceCacheEntry(cachedEntry.canonicalPath);
       }
     } else {
       let cached = this.#sourceCache.get(localName);
@@ -3756,6 +3863,19 @@ export class Realm {
       let fallbackExtensions = alreadyHasExecutableExt
         ? []
         : [...executableExtensions, '.json'];
+      // Snapshot the source-cache generation BEFORE the first await for every
+      // candidate getFileWithFallbacks could resolve to. invalidateCache(path)
+      // bumps the counter synchronously, so if it fires while we're reading
+      // bytes from disk (getFileWithFallbacks + materializeFileRef + the
+      // getCreatedTime query below) the post-read comparison against
+      // handle.path's snapshotted gen catches the race and we skip the cache
+      // write — otherwise the pre-invalidation bytes we just read would
+      // re-fill the slot invalidate just cleared, serving a file that is
+      // already gone from disk. bypassCache requests never set the cache, so
+      // they need no snapshot.
+      let sourceCacheGenSnapshot = bypassCache
+        ? undefined
+        : this.#snapshotSourceCacheGeneration(localName);
       let handle = await this.getFileWithFallbacks(
         localName,
         fallbackExtensions,
@@ -3780,13 +3900,24 @@ export class Realm {
           },
           requestContext,
         });
-        if (!bypassCache) {
-          this.#sourceCache.set(localName, {
-            type: 'redirect',
-            status: 302,
-            headers,
-            canonicalPath: handle.path,
-          });
+        if (sourceCacheGenSnapshot) {
+          if (
+            !this.#sourceCacheGenerationChanged(
+              handle.path,
+              sourceCacheGenSnapshot,
+            )
+          ) {
+            this.#sourceCache.set(localName, {
+              type: 'redirect',
+              status: 302,
+              headers,
+              canonicalPath: handle.path,
+            });
+          } else {
+            this.#log.info(
+              `Dropped stale #sourceCache redirect set for ${handle.path} (requested ${localName}) — invalidated during in-flight source read`,
+            );
+          }
         }
         return response;
       }
@@ -3806,17 +3937,34 @@ export class Realm {
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
+        // Test-only gate: park here (bytes read, cache not yet written) so the
+        // source-cache race test can fire invalidateCache before the set.
+        if (this.#testOnlySourceCacheDelay) {
+          await this.#testOnlySourceCacheDelay();
+        }
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
         // post-materialization, so this is a single md5 with no extra I/O.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
-        this.#sourceCache.set(localName, {
-          type: 'file',
-          ref: cachedRef,
-          defaultHeaders,
-          canonicalPath: handle.path,
-          contentHash,
-        });
+        if (
+          sourceCacheGenSnapshot &&
+          !this.#sourceCacheGenerationChanged(
+            handle.path,
+            sourceCacheGenSnapshot,
+          )
+        ) {
+          this.#sourceCache.set(localName, {
+            type: 'file',
+            ref: cachedRef,
+            defaultHeaders,
+            canonicalPath: handle.path,
+            contentHash,
+          });
+        } else if (sourceCacheGenSnapshot) {
+          this.#log.info(
+            `Dropped stale #sourceCache set for ${handle.path} — invalidated during in-flight source read`,
+          );
+        }
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
@@ -3994,14 +4142,13 @@ export class Realm {
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
     let realmInfo = await this.parseRealmInfo();
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
     let contentHash =
-      (this.#dbAdapter
-        ? await getContentHash(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentHashFromRef(fileRef));
+      persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef));
     let contentSize =
-      (this.#dbAdapter
-        ? await getContentSize(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentSizeFromRef(fileRef));
+      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -4046,18 +4193,21 @@ export class Realm {
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
     let realmInfo = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
-    let contentHash =
+    let searchHash =
       typeof searchDoc.contentHash === 'string'
         ? searchDoc.contentHash
-        : this.#dbAdapter
-          ? await getContentHash(this.#dbAdapter, this.url, localPath)
-          : undefined;
-    let contentSize =
+        : undefined;
+    let searchSize =
       typeof searchDoc.contentSize === 'number'
         ? searchDoc.contentSize
-        : this.#dbAdapter
-          ? await getContentSize(this.#dbAdapter, this.url, localPath)
-          : undefined;
+        : undefined;
+    // Only hit the DB when the indexed searchDoc is missing a value.
+    let persistedMeta =
+      (searchHash === undefined || searchSize === undefined) && this.#dbAdapter
+        ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+        : { contentHash: undefined, contentSize: undefined };
+    let contentHash = searchHash ?? persistedMeta.contentHash;
+    let contentSize = searchSize ?? persistedMeta.contentSize;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
@@ -4811,8 +4961,26 @@ export class Realm {
         }
       }
       if (maybeError.type === 'error') {
+        // The index has a row for this card, it just can't be served
+        // cleanly — so mirror the underlying error's HTTP status when it
+        // is a real HTTP error status (auth 401/403, validation 422,
+        // upstream 5xx, …) instead of flattening everything to 500.
+        //
+        // 404 is the one status we never mirror: an existing-but-errored
+        // card is not "not found". 404 is reserved for a missing index
+        // row (see `notFound` above) so that a 404 on a card GET is an
+        // unambiguous "this card no longer exists" signal. A recorded
+        // 404 (e.g. an error whose underlying cause was a missing linked
+        // instance) therefore falls back to 500, as do non-HTTP failures
+        // (fetch failures recorded as status 0) and any out-of-range
+        // value.
+        let errorStatus = maybeError.error.errorDetail.status;
         return systemError({
           requestContext,
+          status:
+            errorStatus >= 400 && errorStatus <= 599 && errorStatus !== 404
+              ? errorStatus
+              : 500,
           message: `cannot return card, ${request.url}, from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.message}`,
           id: request.url,
           additionalError: CardError.fromSerializableError(maybeError.error),
@@ -5103,18 +5271,16 @@ export class Realm {
 
   public async search(
     query: Query,
-    opts?: {
-      cacheOnlyDefinitions?: boolean;
-      skipQueryBackedExpansion?: boolean;
-    },
+    opts?: SearchOpts,
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
-      ...(opts?.skipQueryBackedExpansion
-        ? { skipQueryBackedExpansion: true }
-        : {}),
+      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.timings ? { timings: opts.timings } : {}),
     });
   }
 
@@ -5168,14 +5334,12 @@ export class Realm {
       let duringPrerender = isDuringPrerenderRequest(request);
       let doc = await this.search(cardsQuery, {
         cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender, leave `relationships.{field}.data`
-        // populated for query-backed `linksTo` / `linksToMany` but
-        // skip transitive expansion into `included[]`. The host
-        // resolves the listed IDs via per-URL fetches against the
-        // store (which has the same prerender skip applied on
-        // instance-GET); the eager closure is a wasted round-trip in
-        // the prerender path.
-        skipQueryBackedExpansion: duringPrerender,
+        // Inside a prerender the search skips the `loadLinks`
+        // relationship-assembly pass entirely: the host re-resolves
+        // every result card from its raw card+source file and consumes
+        // only `data[].id`, so the query-field umbrellas and the
+        // transitive `included[]` are throwaway work in this path.
+        omitIncluded: duringPrerender,
       });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -5921,6 +6085,87 @@ export class Realm {
     });
   }
 
+  private async indexingErrors(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // With CS-11003's deferred indexing on +source POSTs, a caller that
+    // pushes a fix and immediately polls this endpoint could otherwise
+    // see a stale snapshot — either still reporting an error the just-
+    // pushed fix cleared, or missing a fresh failure from the same write.
+    // Same hazard publishability() guards against (see realm.ts:5629).
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
+    let sourceRealmURL = ensureTrailingSlash(this.url);
+
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT url, type, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      `AND (`,
+      `  has_error = TRUE`,
+      `  OR (`,
+      `    jsonb_typeof(diagnostics->'brokenLinks') = 'array'`,
+      `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
+      `  )`,
+      `)`,
+      `ORDER BY type, url`,
+    ])) as {
+      url: string;
+      type: string;
+      error_doc: SerializedError | null;
+      diagnostics: Record<string, unknown> | null;
+    }[];
+
+    let doc = {
+      data: rows.map((row) => {
+        let brokenLinks =
+          row.diagnostics && Array.isArray(row.diagnostics.brokenLinks)
+            ? (row.diagnostics.brokenLinks as unknown[])
+            : null;
+        let hasError = row.error_doc != null;
+        // 'indexing-error' = row.has_error = TRUE (rendered/indexed badly).
+        // 'broken-link' = the index row is healthy but the rendered card has
+        // dead linksTo/linksToMany targets surfaced by render.meta. Both
+        // classes share the (entryType, url) key; the discriminator lets
+        // consumers branch on which attributes to read.
+        let resourceType: 'indexing-error' | 'broken-link' = hasError
+          ? 'indexing-error'
+          : 'broken-link';
+        let attributes: Record<string, unknown> = {
+          url: row.url,
+          entryType: row.type,
+          diagnostics: row.diagnostics,
+        };
+        if (hasError) {
+          attributes.errorDoc = row.error_doc;
+        }
+        if (brokenLinks && brokenLinks.length > 0) {
+          attributes.brokenLinks = brokenLinks;
+        }
+        return {
+          type: resourceType,
+          // `(type, url)` is the boxel_index PK partition; encoding both
+          // keeps the JSON:API resource id unique when the same URL fails
+          // as both 'instance' and 'file'.
+          id: `${row.type}::${row.url}`,
+          attributes,
+        };
+      }),
+    };
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
   private async realmMtimes(
     _request: Request,
     requestContext: RequestContext,
@@ -6648,6 +6893,8 @@ export class Realm {
     let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#virtualNetwork,
     ) as ResolvedCodeRef;
     let definition =
       await this.#definitionLookup.lookupDefinition(absoluteCodeRef);

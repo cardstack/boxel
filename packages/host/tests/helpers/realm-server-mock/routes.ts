@@ -7,9 +7,11 @@ import {
   parseSearchQueryFromPayload,
   parseSearchRequestPayload,
   SearchRequestError,
+  sanitizeLoggingCorrelationId,
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
   type Query,
 } from '@cardstack/runtime-common';
@@ -118,9 +120,17 @@ function registerSearchRoutes() {
         throw e;
       }
 
+      // Mirror the realm-server's `handle-search`: read the client's
+      // correlation id off the request and thread it into searchRealms, so
+      // the real `realm:search-timing` line is emitted (and observable by
+      // host integration tests) keyed by the id the client minted.
+      let loggingCorrelationId = sanitizeLoggingCorrelationId(
+        req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+      );
       let combined = await searchRealms(
         realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
         cardsQuery,
+        loggingCorrelationId ? { loggingCorrelationId } : undefined,
       );
 
       return new Response(JSON.stringify(combined), {
@@ -471,6 +481,11 @@ function getSearchableRealmForURL(
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm not in the registry: there is no real server to search,
+    // so treat it as unavailable. searchRealms() drops undefined entries.
+    return undefined;
+  }
   let remoteRealm: SearchableRealm = {
     url: resolvedRealmURL,
     // pass thru for live realms on localhost:4201 (base, skills, catalog)
@@ -542,6 +557,13 @@ async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm that isn't (yet) in the registry — e.g. its setup
+    // hasn't run, or a prior test's destroyed-owner entry was just evicted.
+    // There is no real server to fall back to, so report it as unavailable
+    // rather than fetching a non-existent host.
+    return null;
+  }
   try {
     let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
       method: 'QUERY',
@@ -623,4 +645,21 @@ function resolveRemoteRealmURL(realmURL: string): string {
     return ensureTrailingSlash(ENV.resolvedBaseRealmURL);
   }
   return normalizedRealmURL;
+}
+
+// The realm server is mocked at ENV.realmServerURL (http://test-realm); realms
+// under that origin are served in-process via the test-realm registry and have
+// no listener on the real network. Only realms that resolve to a genuinely
+// served origin — the base and skills realms on localhost:4201 — can be reached
+// with a real fetch. A `globalThis.fetch` against an in-process realm always
+// rejects with `TypeError: Failed to fetch`; besides the noise, that rejection
+// can escape as an uncaught error and red an unrelated sibling test.
+function isInProcessRealmURL(resolvedRealmURL: string): boolean {
+  try {
+    return (
+      new URL(resolvedRealmURL).origin === new URL(ENV.realmServerURL).origin
+    );
+  } catch {
+    return false;
+  }
 }

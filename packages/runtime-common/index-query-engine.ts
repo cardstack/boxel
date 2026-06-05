@@ -2,7 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
 import type { ResolvedCodeRef } from './index';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import {
   type CardResource,
   type CodeRef,
@@ -72,6 +72,8 @@ import {
 } from './definition-lookup';
 import { isScopedCSSRequest } from './scoped-css';
 import type { FileMetaResource } from './resource-types';
+import type { VirtualNetwork } from './virtual-network';
+import type { RequestTimings } from './request-timings';
 
 export interface IndexedFile {
   type: 'file';
@@ -138,7 +140,8 @@ interface InstanceError extends Partial<
 export type InstanceOrError = IndexedInstance | InstanceError;
 
 type GetEntryOptions = WIPOptions;
-export type QueryOptions = WIPOptions & PrerenderedCardOptions;
+export type QueryOptions = WIPOptions &
+  PrerenderedCardOptions & { timings?: RequestTimings };
 
 interface PrerenderedCardOptions {
   htmlFormat?: PrerenderedHtmlFormat;
@@ -180,18 +183,36 @@ export { isValidPrerenderedHtmlFormat };
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
+  #virtualNetwork: VirtualNetwork;
 
-  constructor(dbAdapter: DBAdapter, definitionLookup: DefinitionLookup) {
+  constructor(
+    dbAdapter: DBAdapter,
+    definitionLookup: DefinitionLookup,
+    virtualNetwork: VirtualNetwork,
+  ) {
     this.#dbAdapter = dbAdapter;
     this.#definitionLookup = definitionLookup;
+    this.#virtualNetwork = virtualNetwork;
   }
 
   async #query(expression: Expression) {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  async #queryCards(query: CardExpression) {
-    return this.#query(await this.makeExpression(query));
+  // Split the two phases so the search-timing line can attribute the SQL
+  // stage. `makeExpression` resolves the filter tree to SQL — that resolution
+  // runs a `getDefinition` card-definition lookup per type/field (a cache
+  // read, or a module prerender on a miss), so it can dominate a search whose
+  // actual row fetch is tiny. `#query` is the DB round-trip itself. The data
+  // and count queries run concurrently, so these accumulate into the
+  // parallel-sum `busy` bucket rather than the wall-clock stages.
+  async #queryCards(query: CardExpression, timings?: RequestTimings) {
+    let expression = timings
+      ? await timings.busyTime('compile', () => this.makeExpression(query))
+      : await this.makeExpression(query);
+    return timings
+      ? await timings.busyTime('sqlExec', () => this.#query(expression))
+      : this.#query(expression);
   }
 
   async getInstance(
@@ -486,7 +507,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined);
+    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -509,7 +530,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined);
+    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -601,8 +622,8 @@ export class IndexQueryEngine {
       ];
 
       let [results, totalResults] = await Promise.all([
-        this.#queryCards(query),
-        this.#queryCards(queryCount),
+        this.#queryCards(query, opts.timings),
+        this.#queryCards(queryCount, opts.timings),
       ]);
 
       return {
@@ -848,7 +869,9 @@ export class IndexQueryEngine {
     htmlColumnExpression.push('COALESCE(');
     if (renderType) {
       htmlColumnExpression.push(`ANY_VALUE(${fieldName}) ->> `);
-      htmlColumnExpression.push(param(internalKeyFor(renderType, undefined)));
+      htmlColumnExpression.push(
+        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
+      );
       htmlColumnExpression.push(',');
     }
 
@@ -896,10 +919,10 @@ export class IndexQueryEngine {
         `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
       );
       usedRenderTypeColumnExpression.push(
-        param(internalKeyFor(renderType, undefined)),
+        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
       );
       usedRenderTypeColumnExpression.push(
-        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`,
+        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined, this.#virtualNetwork)}'`,
       );
       usedRenderTypeColumnExpression.push(
         ...[
@@ -998,7 +1021,7 @@ export class IndexQueryEngine {
     return [
       tableValuedEach('types'),
       '=',
-      param(internalKeyFor(ref, undefined)),
+      param(internalKeyFor(ref, undefined, this.#virtualNetwork)),
     ];
   }
 

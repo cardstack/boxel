@@ -243,6 +243,21 @@ export function createListener(
 // the stream body or writing a response, so it cannot perturb the path it
 // watches. Periodic so a single stuck stream is dumped repeatedly and its
 // window/queue evolution is visible.
+//
+// The per-stream sweep above only fires once a server-side stream has been
+// open >8s. A captured hang showed it completely clean, which is itself the
+// clue: the wedge is somewhere that never becomes a long-open server stream.
+// So each sweep ALSO emits a session-level snapshot to cover what the
+// per-stream view is blind to:
+//   - did the server receive the hung request at all? (the roll-up's
+//     `openStreams` count + the per-session `inFlight=[…]` path list — a client
+//     hang with `openStreams=0` means it never arrived)
+//   - is the session at its concurrent-stream ceiling, so the browser is
+//     queueing requests it never sends? (live/peak vs maxConcurrentStreams)
+//   - is the connection flow-control-deadlocked? (session windows + outbound
+//     queue, sampled continuously rather than only per stalled stream)
+//   - is the transport even alive during the hang? (a passive PING round-trip
+//     per session — observe only, never tear anything down)
 function installHttp2Diagnostics(
   tlsServer: http2.Http2SecureServer,
   log: ReturnType<typeof logger>,
@@ -260,31 +275,53 @@ function installHttp2Diagnostics(
     everStalled: boolean;
   }
 
+  interface SessionRec {
+    id: number;
+    peakStreams: number;
+    lastPingAt?: number;
+    lastPongAt?: number;
+    lastRttMs?: number;
+    pingInFlight: boolean;
+  }
+
   let nextId = 0;
-  let sessions = new Set<http2.ServerHttp2Session>();
+  let nextSessionId = 0;
+  let sessions = new Map<http2.ServerHttp2Session, SessionRec>();
   let open = new Map<http2.ServerHttp2Stream, TrackedStream>();
 
   tlsServer.on('session', (session) => {
-    sessions.add(session);
-    log.info(`[h2-diag] session opened (live sessions=${sessions.size})`);
+    let srec: SessionRec = {
+      id: nextSessionId++,
+      peakStreams: 0,
+      pingInFlight: false,
+    };
+    sessions.set(session, srec);
+    log.info(
+      `[h2-diag] session #${srec.id} opened (live sessions=${sessions.size})`,
+    );
+    probeSession(session, srec);
     session.on('close', () => {
       sessions.delete(session);
-      log.info(`[h2-diag] session closed (live sessions=${sessions.size})`);
+      log.info(
+        `[h2-diag] session #${srec.id} closed (live sessions=${sessions.size})`,
+      );
     });
     session.on('error', (e) =>
-      log.warn(`[h2-diag] session error: ${e.message}`),
+      log.warn(`[h2-diag] session #${srec.id} error: ${e.message}`),
     );
     session.on('frameError', (type, code, id) =>
       log.warn(
-        `[h2-diag] session frameError type=${type} code=${code} streamId=${id}`,
+        `[h2-diag] session #${srec.id} frameError type=${type} code=${code} streamId=${id}`,
       ),
     );
     session.on('goaway', (code, lastStreamID) =>
       log.warn(
-        `[h2-diag] session goaway errorCode=${code} lastStreamID=${lastStreamID}`,
+        `[h2-diag] session #${srec.id} goaway errorCode=${code} lastStreamID=${lastStreamID}`,
       ),
     );
-    session.on('timeout', () => log.warn(`[h2-diag] session timeout`));
+    session.on('timeout', () =>
+      log.warn(`[h2-diag] session #${srec.id} timeout`),
+    );
   });
 
   // Get-or-create the per-stream record. Both the `stream` and `request`
@@ -349,6 +386,37 @@ function installHttp2Diagnostics(
     rec.res = res;
   });
 
+  // Passive liveness probe — send one PING and record its round-trip. Observe
+  // only; never tears the session down (that distinguishes this from a
+  // keepalive). Run once on session open so the first sweep already has a
+  // reading, then again each sweep.
+  function probeSession(
+    session: http2.ServerHttp2Session,
+    srec: SessionRec,
+  ): void {
+    if (srec.pingInFlight || session.destroyed || session.closed) {
+      return;
+    }
+    srec.pingInFlight = true;
+    srec.lastPingAt = Date.now();
+    let sent = false;
+    try {
+      sent =
+        session.ping((err: Error | null, duration: number) => {
+          srec.pingInFlight = false;
+          if (!err) {
+            srec.lastPongAt = Date.now();
+            srec.lastRttMs = Math.round(duration);
+          }
+        }) !== false;
+    } catch {
+      srec.pingInFlight = false;
+    }
+    if (!sent) {
+      srec.pingInFlight = false;
+    }
+  }
+
   let timer = setInterval(() => {
     let now = Date.now();
     for (let [stream, rec] of open) {
@@ -392,6 +460,63 @@ function installHttp2Diagnostics(
           `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
       );
     }
+
+    // Session-level snapshot — see the function comment. Covers the wedges the
+    // per-stream sweep above is structurally blind to (request queued before a
+    // server stream exists, connection-level flow-control stall, dead transport).
+    let healthyPongs = 0;
+    for (let [session, srec] of sessions) {
+      let inFlight: { rec: TrackedStream; age: number }[] = [];
+      for (let [stream, rec] of open) {
+        if (stream.session === session) {
+          inFlight.push({ rec, age: now - rec.startedAt });
+        }
+      }
+      if (inFlight.length > srec.peakStreams) {
+        srec.peakStreams = inFlight.length;
+      }
+      let pongAge = srec.lastPongAt != null ? now - srec.lastPongAt : undefined;
+      let pongHealthy = pongAge != null && pongAge < SWEEP_INTERVAL_MS * 2;
+      if (pongHealthy) {
+        healthyPongs++;
+      }
+      // Log a per-session line only when it's doing work or its last ping went
+      // unanswered; idle, healthy sessions are covered by the roll-up below.
+      let pongOverdue = srec.lastPingAt != null && !pongHealthy;
+      if (inFlight.length > 0 || pongOverdue) {
+        let ss = session.state;
+        let shown = inFlight.slice(0, 12);
+        let list = shown
+          .map((e) => `${e.rec.method} ${e.rec.path} ${e.age}ms`)
+          .join(', ');
+        let more =
+          inFlight.length > shown.length
+            ? ` +${inFlight.length - shown.length} more`
+            : '';
+        log.warn(
+          `[h2-diag] session #${srec.id} ` +
+            `streams=${inFlight.length}/peak=${srec.peakStreams}/` +
+            `max(local=${session.localSettings?.maxConcurrentStreams} ` +
+            `remote=${session.remoteSettings?.maxConcurrentStreams}) ` +
+            `win(localEff=${ss?.effectiveLocalWindowSize} ` +
+            `remote=${ss?.remoteWindowSize} ` +
+            `recvData=${ss?.effectiveRecvDataLength} ` +
+            `outQ=${ss?.outboundQueueSize}) ` +
+            `ping(rtt=${srec.lastRttMs ?? 'n/a'}ms ` +
+            `pongAge=${pongAge != null ? `${pongAge}ms` : 'never'}) ` +
+            `inFlight=[${list}${more}]`,
+        );
+      }
+      probeSession(session, srec);
+    }
+    // Greppable roll-up: a client hang showing `openStreams=0 pingHealthy=N/N`
+    // means the request never reached the server (it's wedged client-side or in
+    // transit); `openStreams>0` with the hung path in a session's inFlight list
+    // means the server received it and the response is what's stuck.
+    log.info(
+      `[h2-diag] sweep liveSessions=${sessions.size} ` +
+        `openStreams=${open.size} pingHealthy=${healthyPongs}/${sessions.size}`,
+    );
   }, SWEEP_INTERVAL_MS);
   // Don't let the sweep timer hold the process open during shutdown.
   timer.unref?.();
@@ -603,7 +728,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Grafana-Device-Id, X-Grafana-Action',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,

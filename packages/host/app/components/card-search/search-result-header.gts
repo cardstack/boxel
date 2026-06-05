@@ -4,14 +4,12 @@ import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 
 import {
-  BoxelDropdown,
-  Button,
-  Menu,
+  SelectionCheckmark,
+  SelectionMenu,
   SortDropdown,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
@@ -42,41 +40,58 @@ export default class SearchResultHeader extends Component<Signature> {
     return this.args.selectedCards?.length ?? 0;
   }
 
+  // The selection menu only makes sense once something is selected — its
+  // trigger shows the count and its items act on the current selection.
+  get showSelectionMenu(): boolean {
+    return Boolean(this.args.multiSelect) && this.selectedCount > 0;
+  }
+
+  // The trigger's visible text is just the count, so spell the control out
+  // for assistive tech. "cards" is an app concern, so it's supplied here
+  // rather than baked into the generic SelectionMenu.
+  get selectionMenuLabel(): string {
+    let count = this.selectedCount;
+    return `Selection menu, ${count} card${count === 1 ? '' : 's'} selected`;
+  }
+
+  // Select All / Deselect All are app actions, so the items (including the
+  // inert count header) are built here and handed to the generic
+  // SelectionMenu via @items.
+  private get selectionMenuItems() {
+    return [
+      new MenuItem({
+        label: `${this.selectedCount} Selected`,
+        action: () => {},
+        icon: SelectionCheckmark,
+        header: true,
+      }),
+      new MenuItem({
+        label: 'Select All',
+        action: () => {
+          if (this.args.allCards && this.args.onSelectAll) {
+            this.args.onSelectAll(this.args.allCards);
+          }
+        },
+        icon: SelectAllIcon,
+      }),
+      new MenuItem({
+        label: 'Deselect All',
+        action: () => this.args.onDeselectAll?.(),
+        icon: DeselectIcon,
+      }),
+    ];
+  }
+
   <template>
     <header class='search-result-header' data-test-search-result-header>
       <div class='summary' data-test-search-label>{{@summaryText}}</div>
       <div class='controls'>
-        {{#if @multiSelect}}
-          <div class='selection-menu'>
-            <BoxelDropdown
-              @contentClass='selection-dropdown-content'
-              @matchTriggerWidth={{false}}
-            >
-              <:trigger as |bindings|>
-                <Button
-                  class='selection-dropdown-trigger'
-                  @kind='secondary-light'
-                  {{bindings}}
-                  data-test-selection-dropdown-trigger
-                >
-                  {{this.selectedCount}}
-                  Selected
-                  <DropdownArrowDown
-                    class='dropdown-arrow'
-                    width='12'
-                    height='12'
-                  />
-                </Button>
-              </:trigger>
-              <:content as |dd|>
-                <Menu
-                  class='selection-menu'
-                  @items={{this.selectionMenuItems}}
-                  @closeMenu={{dd.close}}
-                />
-              </:content>
-            </BoxelDropdown>
-          </div>
+        {{#if this.showSelectionMenu}}
+          <SelectionMenu
+            @selectedCount={{this.selectedCount}}
+            @items={{this.selectionMenuItems}}
+            @label={{this.selectionMenuLabel}}
+          />
         {{/if}}
         <ViewSelector
           @items={{@viewOptions}}
@@ -124,42 +139,6 @@ export default class SearchResultHeader extends Component<Signature> {
         min-width: 140px;
         gap: var(--boxel-sp-xs);
       }
-
-      .selection-dropdown-trigger {
-        border-radius: var(--boxel-border-radius);
-        min-width: 140px;
-        justify-content: flex-start;
-        padding-left: var(--boxel-sp-sm);
-        padding-right: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-xs);
-        font-weight: 600;
-      }
-      .dropdown-arrow {
-        margin-left: auto;
-        flex-shrink: 0;
-      }
-      .selection-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      }
     </style>
   </template>
-
-  private get selectionMenuItems() {
-    return [
-      new MenuItem({
-        label: 'Deselect All',
-        action: () => this.args.onDeselectAll?.(),
-        icon: DeselectIcon,
-      }),
-      new MenuItem({
-        label: 'Select All',
-        action: () => {
-          if (this.args.allCards && this.args.onSelectAll) {
-            this.args.onSelectAll(this.args.allCards);
-          }
-        },
-        icon: SelectAllIcon,
-      }),
-    ];
-  }
 }

@@ -8,7 +8,7 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common/card-reference-resolver';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 
 import { fetchCardTypeSchema } from './darkfactory-schemas';
 import {

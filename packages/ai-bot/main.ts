@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 import {
   logger,
   aiBotUsername,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -25,7 +25,7 @@ import {
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
-  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -164,7 +164,7 @@ class Assistant {
   }
 
   getModel(prompt: PromptParts) {
-    return prompt.model ?? DEFAULT_LLM;
+    return prompt.model ?? DEFAULT_FALLBACK_MODEL_ID;
   }
 
   async handleDebugCommands(
@@ -693,13 +693,13 @@ Common issues are:
     filters: {
       is_dm: false,
     },
-    timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+    timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
     required_state: [['*', '*']],
   });
   let slidingSync = new SlidingSync(
     client.baseUrl,
     lists,
-    { timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT },
+    { timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT },
     client,
     SLIDING_SYNC_TIMEOUT,
   );

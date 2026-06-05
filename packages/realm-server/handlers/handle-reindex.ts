@@ -34,30 +34,36 @@ export default function handleReindex({
       return;
     }
     let serverURLObj = new URL(serverURL);
-    let realmURLObj = new RealmPaths(serverURLObj).directoryURL(realmPath);
-    let realmURL = realmURLObj.href;
-    // Reject `realm=` values that resolve to a URL outside this server's
-    // URL space. `directoryURL` uses `new URL(local, base)`, which lets
-    // an absolute `local` ("http://evil/", "//foo/", etc.) override the
-    // base — the pre-CS-11271 `realms.find()` check accidentally
-    // enforced "must be hosted here" because the in-memory list only
-    // contained local mounts, but the reconciler probe against the
-    // cluster-wide `realm_registry` doesn't. Defence-in-depth on top
-    // of `grafanaAuthorization`.
-    if (
-      realmURLObj.origin !== serverURLObj.origin ||
-      !realmURLObj.pathname.startsWith(serverURLObj.pathname)
-    ) {
+    // `realm=` may be a path relative to this server (a source realm) or
+    // an absolute URL (a published realm, which lives on a different
+    // domain — e.g. https://ctse.staging.boxel.dev/foo/ served by a
+    // server whose own URL is https://realms-staging.stack.cards/).
+    // `directoryURL` uses `new URL(local, base)`, so an absolute `local`
+    // keeps its own origin and a relative one resolves under the server.
+    // The resolved URL is not constrained to this server's origin: any
+    // realm the server hosts — including published realms on their own
+    // domains — must be reindexable. The authoritative gate is
+    // `reconciler.lookupOrMount` below, which only resolves URLs present
+    // as `realm_registry` rows (a parameterized `WHERE url = $1` lookup
+    // that never fetches the input URL), so an off-registry `realm=`
+    // value falls through to the "does not exist" 400. With that lookup
+    // plus `grafanaAuthorization` gating the endpoint, accepting
+    // cross-origin `realm=` values opens no SSRF surface.
+    let realmURLObj: URL;
+    try {
+      realmURLObj = new RealmPaths(serverURLObj).directoryURL(realmPath);
+    } catch (e: any) {
       await sendResponseForBadRequest(
         ctxt,
-        `"realm" must be a path under this server (${serverURLObj.href})`,
+        `invalid "realm" value: ${e.message}`,
       );
       return;
     }
-    // CS-11271: route through the reconciler so a non-pinned realm that
-    // hasn't been touched on this process since the last restart still
-    // mounts on demand, instead of failing with a confusing
-    // "does not exist on this server" 400.
+    let realmURL = realmURLObj.href;
+    // Route through the reconciler so a non-pinned realm that hasn't been
+    // touched on this process since the last restart still mounts on
+    // demand, instead of failing with a confusing "does not exist on this
+    // server" 400.
     let realm: Realm | undefined;
     try {
       realm = await reconciler.lookupOrMount(realmURL);

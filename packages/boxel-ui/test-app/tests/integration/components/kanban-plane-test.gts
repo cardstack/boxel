@@ -14,7 +14,6 @@ module('Integration | Component | kanban-plane', function (hooks) {
 
   test('it can hide a column from the header and restore it from the hidden tray', async function (assert) {
     class State {
-      @tracked hideEmpty = false;
       @tracked columns: KanbanColumnConfig[] = [
         {
           key: 'todo',
@@ -22,7 +21,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
           color: null,
           wipLimit: null,
           collapsed: null,
-          sortOrder: 0,
+          sortOrder: 1,
         },
         {
           key: 'doing',
@@ -30,23 +29,19 @@ module('Integration | Component | kanban-plane', function (hooks) {
           color: null,
           wipLimit: 1,
           collapsed: null,
-          sortOrder: 1,
+          sortOrder: 2,
         },
       ];
       @tracked placements: KanbanPlacement[] = [
-        { index: 0, column: 0, sortOrder: 1 },
-        { index: 1, column: 1, sortOrder: 1 },
-        { index: 2, column: 1, sortOrder: 2 },
+        { index: 0, columnId: 'todo', sortOrder: 1 },
+        { index: 1, columnId: 'doing', sortOrder: 1 },
+        { index: 2, columnId: 'doing', sortOrder: 2 },
       ];
 
-      restoreColumn = (columnKey: string | null, collapsed: boolean): void => {
-        this.columns = this.columns.map((column) =>
-          column.key === columnKey ? { ...column, collapsed } : column,
+      onToggleCollapsed = (column: KanbanColumnConfig): void => {
+        this.columns = this.columns.map((c) =>
+          c.key === column.key ? { ...c, collapsed: !c.collapsed } : c,
         );
-      };
-
-      showEmptyColumns = (): void => {
-        this.hideEmpty = false;
       };
     }
 
@@ -57,9 +52,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
         <KanbanPlane
           @columns={{state.columns}}
           @placements={{state.placements}}
-          @hideEmpty={{state.hideEmpty}}
-          @onToggleCollapsed={{state.restoreColumn}}
-          @onShowEmptyColumns={{state.showEmptyColumns}}
+          @onToggleCollapsed={{state.onToggleCollapsed}}
         >
           <:card as |placement|>
             <div data-test-card-content>Card {{placement.index}}</div>
@@ -75,28 +68,28 @@ module('Integration | Component | kanban-plane', function (hooks) {
     assert.dom('[data-test-column-is-over-wip]').exists();
     assert.dom('[data-test-kanban-col-wip]').hasText('Max 1');
     assert.dom('[data-card-index]').exists({ count: 3 });
-    assert.dom('[data-kanban-column="0"]').exists();
-    assert.dom('[data-kanban-column="1"]').exists();
+    assert.dom('[data-kanban-column="todo"]').exists();
+    assert.dom('[data-kanban-column="doing"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
 
-    await click('[data-kanban-column="0"] [data-test-column-collapse-button]');
+    await click('[data-test-column-collapse-button="todo"]');
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('[data-kanban-column="0"]').doesNotExist();
+    assert.dom('[data-kanban-column="todo"]').doesNotExist();
     assert.dom('[data-test-hidden-columns]').containsText('Hidden');
     assert.dom('[data-test-hidden-column-count]').hasText('1');
-    assert.dom('[aria-label="Show Todo"]').exists();
+    assert.dom('[data-test-show-hidden-column="todo"]').exists();
     assert.dom('[data-test-hidden-column-row="0"]').includesText('Todo');
     assert.dom('[data-test-hidden-column-row="0"]').includesText('1');
 
-    await click('[aria-label="Show Todo"]');
+    await click('[data-test-show-hidden-column="todo"]');
 
     assert.dom('[data-kanban-column]').exists({ count: 2 });
-    assert.dom('[data-kanban-column="0"]').exists();
+    assert.dom('[data-kanban-column="todo"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
   });
 
-  test('it can hide empty columns and restore them from the hidden tray', async function (assert) {
+  test('when hideEmpty is on, empty column rows in the hidden tray are disabled and not restorable by click', async function (assert) {
     class State {
       @tracked hideEmpty = false;
       @tracked columns: KanbanColumnConfig[] = [
@@ -105,28 +98,34 @@ module('Integration | Component | kanban-plane', function (hooks) {
           label: 'Todo',
           color: null,
           wipLimit: null,
-          collapsed: null,
-          sortOrder: 0,
+          collapsed: false,
+          sortOrder: 1,
         },
         {
           key: 'doing',
           label: 'Doing',
           color: null,
           wipLimit: null,
-          collapsed: null,
-          sortOrder: 1,
+          collapsed: false,
+          sortOrder: 2,
         },
       ];
       @tracked placements: KanbanPlacement[] = [
-        { index: 0, column: 1, sortOrder: 1 },
+        { index: 0, columnId: 'doing', sortOrder: 1 },
       ];
 
-      showEmptyColumns = (): void => {
-        this.hideEmpty = false;
+      onToggleCollapsed = (column: KanbanColumnConfig): void => {
+        this.columns = this.columns.map((c) =>
+          c.key === column.key ? { ...c, collapsed: !c.collapsed } : c,
+        );
       };
 
       toggleHideEmpty = (): void => {
         this.hideEmpty = !this.hideEmpty;
+        this.columns = this.columns.map((c) => {
+          let isEmpty = !this.placements.some((p) => p.columnId === c.key);
+          return isEmpty ? { ...c, collapsed: this.hideEmpty } : c;
+        });
       };
     }
 
@@ -135,13 +134,13 @@ module('Integration | Component | kanban-plane', function (hooks) {
     await render(
       <template>
         <button type='button' {{on 'click' state.toggleHideEmpty}}>
-          Hide empty columns
+          Toggle hide empty
         </button>
         <KanbanPlane
           @columns={{state.columns}}
           @placements={{state.placements}}
           @hideEmpty={{state.hideEmpty}}
-          @onShowEmptyColumns={{state.showEmptyColumns}}
+          @onToggleCollapsed={{state.onToggleCollapsed}}
         >
           <:card as |placement|>
             <div data-test-card-content>Card {{placement.index}}</div>
@@ -154,99 +153,83 @@ module('Integration | Component | kanban-plane', function (hooks) {
     );
 
     assert.dom('[data-kanban-column]').exists({ count: 2 });
-    assert.dom('[data-kanban-column="0"]').exists();
-    assert.dom('[data-test-empty-column="0"]').hasText('No cards');
+    assert.dom('[data-test-empty-column="todo"]').hasText('No cards');
     assert.dom('[data-test-hidden-columns]').doesNotExist();
 
     await click('button');
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('[data-kanban-column="0"]').doesNotExist();
+    assert.dom('[data-kanban-column="todo"]').doesNotExist();
     assert.dom('[data-test-hidden-column-count]').hasText('1');
-    assert.dom('[aria-label="Show Todo"]').exists();
     assert.dom('[data-test-hidden-column-row="0"]').includesText('Todo');
     assert.dom('[data-test-hidden-columns]').includesText('0');
+    assert
+      .dom('[data-test-show-hidden-column="todo"]')
+      .isDisabled('empty column row is disabled when hideEmpty is on');
+    assert
+      .dom('[data-kanban-column="todo"]')
+      .doesNotExist('column stays hidden');
 
-    await click('[aria-label="Show Todo"]');
+    await click('button');
 
-    assert.dom('[data-kanban-column="0"]').exists();
-    assert.dom('[data-test-empty-column="0"]').hasText('No cards');
     assert.dom('[data-kanban-column]').exists({ count: 2 });
+    assert.dom('[data-kanban-column="todo"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
   });
 
-  test('restoring a collapsed empty column also clears the hideEmpty filter', async function (assert) {
-    class State {
-      @tracked hideEmpty = true;
-      @tracked columns: KanbanColumnConfig[] = [
-        {
-          key: 'todo',
-          label: 'Todo',
-          color: null,
-          wipLimit: null,
-          collapsed: true,
-          sortOrder: 0,
-        },
-        {
-          key: 'doing',
-          label: 'Doing',
-          color: null,
-          wipLimit: null,
-          collapsed: null,
-          sortOrder: 1,
-        },
-      ];
-      @tracked placements: KanbanPlacement[] = [
-        { index: 0, column: 1, sortOrder: 1 },
-      ];
-
-      toggleCollapsed = (
-        columnKey: string | null,
-        collapsed: boolean,
-      ): void => {
-        this.columns = this.columns.map((col) =>
-          col.key === columnKey ? { ...col, collapsed } : col,
-        );
-      };
-
-      showEmptyColumns = (): void => {
-        this.hideEmpty = false;
-      };
-    }
-
-    let state = new State();
+  test('columns are rendered in sortOrder order regardless of array order', async function (assert) {
+    let columns: KanbanColumnConfig[] = [
+      {
+        key: 'c',
+        label: 'C',
+        color: null,
+        wipLimit: null,
+        collapsed: false,
+        sortOrder: 3,
+      },
+      {
+        key: 'a',
+        label: 'A',
+        color: null,
+        wipLimit: null,
+        collapsed: false,
+        sortOrder: 1,
+      },
+      {
+        key: 'b',
+        label: 'B',
+        color: null,
+        wipLimit: null,
+        collapsed: false,
+        sortOrder: 2,
+      },
+    ];
+    let placements: KanbanPlacement[] = [];
 
     await render(
       <template>
-        <KanbanPlane
-          @columns={{state.columns}}
-          @placements={{state.placements}}
-          @hideEmpty={{state.hideEmpty}}
-          @onToggleCollapsed={{state.toggleCollapsed}}
-          @onShowEmptyColumns={{state.showEmptyColumns}}
-        >
-          <:card as |placement|>
-            <div data-test-card-content>Card {{placement.index}}</div>
-          </:card>
-          <:ghost as |index|>
-            <div data-test-ghost-content>Ghost {{index}}</div>
-          </:ghost>
+        <KanbanPlane @columns={{columns}} @placements={{placements}}>
+          <:card as |placement|><div>Card {{placement.index}}</div></:card>
+          <:ghost as |index|><div>Ghost {{index}}</div></:ghost>
         </KanbanPlane>
       </template>,
     );
 
-    // Todo is collapsed and has no cards — hidden by both collapsed and hideEmpty
-    assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('[data-test-hidden-column-count]').hasText('1');
-    assert.dom('[aria-label="Show Todo"]').exists();
-
-    await click('[aria-label="Show Todo"]');
-
-    // Both collapsed=false and hideEmpty=false must have been applied —
-    // the Todo column should now be visible despite having no cards
-    assert.dom('[data-kanban-column]').exists({ count: 2 });
-    assert.dom('[data-kanban-column="0"]').exists();
-    assert.dom('[data-test-empty-column="0"]').hasText('No cards');
-    assert.dom('[data-test-hidden-columns]').doesNotExist();
+    let rendered = document.querySelectorAll('[data-kanban-column]');
+    assert.strictEqual(
+      rendered[0]?.getAttribute('data-kanban-column'),
+      'a',
+      'first column is a (sortOrder 1)',
+    );
+    assert.strictEqual(
+      rendered[1]?.getAttribute('data-kanban-column'),
+      'b',
+      'second column is b (sortOrder 2)',
+    );
+    assert.strictEqual(
+      rendered[2]?.getAttribute('data-kanban-column'),
+      'c',
+      'third column is c (sortOrder 3)',
+    );
   });
 });

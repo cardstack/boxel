@@ -5,7 +5,7 @@
  * / `document-types.ts` / `code-ref.ts`) so that callers which only need
  * to know whether a payload *looks* like a card document can import them
  * without pulling the transitive runtime chain rooted at
- * `resource-types.ts` → `card-reference-resolver.ts` → `loader.ts` →
+ * `resource-types.ts` → `realm-identifiers.ts` → `loader.ts` →
  * `realm.ts` → `realm-index-query-engine.ts`. The latter uses
  * `@Memoize()` decorators that some downstream TS loaders (notably
  * Playwright's) can't compile.

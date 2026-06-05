@@ -1,4 +1,4 @@
-import type { RealmResourceIdentifier } from '../card-reference-resolver';
+import type { RealmResourceIdentifier } from '../realm-identifiers';
 import type { SharedTests } from '../helpers';
 import type { Filter } from '../query';
 import {

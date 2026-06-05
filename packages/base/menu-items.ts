@@ -1,4 +1,5 @@
 import type { BaseDef, CardCrudFunctions, CardDef } from './card-api';
+import { virtualNetworkFor } from './card-api';
 import {
   copyCardURLToClipboard,
   type MenuItemOptions,
@@ -76,6 +77,7 @@ export function getDefaultCardMenuItems(
 ): MenuItemOptions[] {
   let cardId = card.id as unknown as string;
   let menuItems: MenuItemOptions[] = [];
+  let vnForCard = virtualNetworkFor(card);
   if (
     ['interact', 'code-mode-preview', 'code-mode-playground'].includes(
       params.menuContext,
@@ -130,7 +132,8 @@ export function getDefaultCardMenuItems(
       );
     }
     if (
-      !isRealmIndexCard(card) && // workspace index card cannot be deleted
+      vnForCard &&
+      !isRealmIndexCard(card, vnForCard) && // workspace index card cannot be deleted
       cardId &&
       params.canEdit
     ) {
@@ -212,11 +215,15 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (!isRealmIndexCard(card)) {
+    if (vnForCard && !isRealmIndexCard(card, vnForCard)) {
       menuItems.push({
         label: `Create Listing`,
         action: async () => {
-          const codeRef = resolveAdoptsFrom(card);
+          let vn = vnForCard;
+          if (!vn) {
+            throw new Error('No VirtualNetwork available to resolve codeRef');
+          }
+          const codeRef = resolveAdoptsFrom(card, vn);
           if (!codeRef) {
             throw new Error('Unable to resolve codeRef from card');
           }

@@ -3,14 +3,12 @@ import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  isJsonContentType,
   baseRealm,
   inferContentType,
   unixTime,
   maxLinkDepth,
   maybeURL,
-  resolveCardReference,
-  isRegisteredPrefix,
-  cardIdToURL,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -32,11 +30,12 @@ import type { Realm } from './realm';
 import type { VirtualNetwork } from './virtual-network';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
+import type { RequestTimings } from './request-timings';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './card-reference-resolver';
-import { rri } from './card-reference-resolver';
+} from './realm-identifiers';
+import { rri } from './realm-identifiers';
 import {
   normalizeQueryForSignature,
   sortKeysDeep,
@@ -52,6 +51,7 @@ import {
 } from './code-ref';
 import {
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -94,14 +94,35 @@ type Options = {
   // When true, `loadLinks` populates `relationships.{field}.data` for
   // query-backed `linksTo` / `linksToMany` fields but does NOT push
   // the linked resources into `included[]`. Static linksTo / linksToMany
-  // still expand transitively. Set by the realm-server handlers when
-  // the request originates inside a prerender — the caller can resolve
-  // the listed IDs via per-URL fetches, and the eager closure is a
-  // wasted round-trip in that context. The umbrella relationship
-  // carries `links.search` only when written by `applyQueryResults`,
-  // so that key is the per-field "is this query-backed?" signal at
-  // follow time.
+  // still expand transitively. Set by the realm-server card-document
+  // handlers (GET / POST / PATCH) when the request originates inside a
+  // prerender — the caller can resolve the listed IDs via per-URL fetches,
+  // and the eager closure is a wasted round-trip in that context. The
+  // umbrella relationship carries `links.search` only when written by
+  // `applyQueryResults`, so that key is the per-field "is this
+  // query-backed?" signal at follow time. (The search path does not use
+  // this flag — see `omitIncluded`.)
   skipQueryBackedExpansion?: boolean;
+  // When true, `searchCardsUncoalesced` skips the `loadLinks` /
+  // `populateQueryFields` pass entirely. Each result still carries its
+  // pristine index row (id + attributes + any static-link relationships)
+  // plus page meta, but the pass that would add query-field
+  // `relationships.{field}.data` umbrellas and expand linked resources into
+  // `included[]` does not run — so neither is present. Set by the
+  // realm-server search handlers when the request originates inside a
+  // prerender: the host re-resolves every result card from its raw
+  // card+source file and reads only `data[].id`, so that assembly is
+  // throwaway work in that context. Strictly prerender-scoped — live /
+  // external `_federated-search` callers still receive fully-assembled
+  // compound documents.
+  omitIncluded?: boolean;
+  // Per-request wall-clock collector, threaded from `searchRealms` when a
+  // request carries a correlation id. The post-SQL stages here — the SQL
+  // query and the `loadLinks` relationship assembly — stamp their elapsed
+  // time on it so the handler can attribute the request's server-side time
+  // across stages. Absent (and so a no-op) for everything except
+  // instrumented `_federated-search` calls.
+  timings?: RequestTimings;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -153,10 +174,19 @@ export function searchInFlightKey(
   // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
   // collide with the delimiter and cause unrelated searches to coalesce.
   try {
+    // `timings` is a per-request diagnostic collector, not part of the
+    // result-shaping opts. Exclude it from the key so it can't perturb the
+    // in-flight coalescing — two otherwise-identical searches must still
+    // dedupe even though each carries its own collector.
+    let keyOpts = opts;
+    if (opts && 'timings' in opts) {
+      let { timings: _omitTimings, ...rest } = opts;
+      keyOpts = rest;
+    }
     return JSON.stringify([
       realmURL,
       normalizeQueryForSignature(query),
-      opts ? sortKeysDeep(opts) : null,
+      keyOpts ? sortKeysDeep(keyOpts) : null,
     ]);
   } catch {
     return undefined;
@@ -167,26 +197,18 @@ function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   // Registered prefix references (e.g. @cardstack/catalog/foo) are already
   // in their canonical portable form — don't resolve them.
-  if (
-    virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(url)
-      : isRegisteredPrefix(url)
-  ) {
+  if (virtualNetwork.isRegisteredPrefix(url)) {
     return;
   }
   if (!resourceId) {
     setURL(url);
     return;
   }
-  setURL(
-    virtualNetwork
-      ? virtualNetwork.resolveURL(url, resourceId).href
-      : resolveCardReference(url, resourceId),
-  );
+  setURL(virtualNetwork.resolveURL(url, resourceId).href);
 }
 
 export class RealmIndexQueryEngine {
@@ -246,7 +268,11 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
+    this.#indexQueryEngine = new IndexQueryEngine(
+      dbAdapter,
+      definitionLookup,
+      realm.virtualNetwork,
+    );
     this.#definitionLookup = definitionLookup;
     this.#realm = realm;
     this.#fetch = fetch;
@@ -265,7 +291,15 @@ export class RealmIndexQueryEngine {
     if (key !== undefined) {
       let existing = this.#inFlightSearch.get(key);
       if (existing) {
-        return await existing;
+        // A concurrent identical search is already running; this follower
+        // awaits its result instead of re-running the work. Record that wait
+        // as `coalescedWait` on the follower's own collector so its
+        // `realm:search-timing` line reflects the time spent — otherwise the
+        // follower would show no `sql`/`loadLinks` and look misleadingly
+        // instant exactly under the concurrent search load we're diagnosing.
+        return opts?.timings
+          ? await opts.timings.time('coalescedWait', () => existing)
+          : await existing;
       }
       let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
         // Identity-check before deletion: a concurrent invalidation path
@@ -308,11 +342,15 @@ export class RealmIndexQueryEngine {
         meta,
       };
     } else {
-      let { cards, meta } = await this.#indexQueryEngine.searchCards(
-        new URL(this.#realm.url),
-        query,
-        opts,
-      );
+      let runCardSql = () =>
+        this.#indexQueryEngine.searchCards(
+          new URL(this.#realm.url),
+          query,
+          opts,
+        );
+      let { cards, meta } = opts?.timings
+        ? await opts.timings.time('sql', runCardSql)
+        : await runCardSql();
       let cardResources = cards.map((resource) => ({
         ...resource,
         ...{ links: { self: resource.id } },
@@ -331,7 +369,16 @@ export class RealmIndexQueryEngine {
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
-    if (opts?.loadLinks) {
+    //
+    // Prerender searches (`omitIncluded`) skip the relationship-assembly pass
+    // entirely: the host re-resolves every result card from its raw
+    // card+source file and consumes only `data[].id`, so `loadLinks` /
+    // `populateQueryFields` — the query-field umbrellas and the transitive
+    // `included[]` expansion — is provably throwaway work here. The response
+    // carries the pristine result rows (ids + attributes + static-link
+    // relationships) and page meta only. Live / external callers still run
+    // the full pass below.
+    if (opts?.loadLinks && !opts?.omitIncluded) {
       let linkFields = isFileMetaQuery
         ? query.fields?.['file-meta']
         : query.fields?.['card'];
@@ -340,14 +387,18 @@ export class RealmIndexQueryEngine {
       // Process all root resources together so a single batched DB query
       // resolves their first-level links (1+1 instead of N+M sequential
       // round-trips). See CS-11038.
-      let included = await this.loadLinks(
-        {
-          realmURL: this.realmURL,
-          rootResources: doc.data,
-          omit,
-        },
-        linkOpts,
-      );
+      let runLoadLinks = () =>
+        this.loadLinks(
+          {
+            realmURL: this.realmURL,
+            rootResources: doc.data,
+            omit,
+          },
+          linkOpts,
+        );
+      let included = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
       if (included.length > 0) {
         doc.included = included;
       }
@@ -398,6 +449,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return false;
@@ -618,20 +671,6 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getFile(url, opts);
   }
 
-  async loadLinksForResource(
-    resource: LooseCardResource | FileMetaResource,
-    opts?: Options,
-  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
-    return await this.loadLinks(
-      {
-        realmURL: this.realmURL,
-        rootResources: [resource],
-        omit: [...(resource.id ? [resource.id] : [])],
-      },
-      opts,
-    );
-  }
-
   private async populateQueryFields(
     resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
@@ -647,6 +686,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return;
@@ -1106,7 +1147,8 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
-  ): Promise<Map<string, CardResource<Saved>>> {
+    linkContext?: Map<string, { fieldName: string }>,
+  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
@@ -1128,21 +1170,40 @@ export class RealmIndexQueryEngine {
           );
           throw await CardError.fromFetchResponse(url, response);
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
+        // `links.self` should resolve to a card or file document, but a
+        // mistake (human or AI-generated) can leave a non-card URL here.
+        // Gate on Content-Type so a binary body never reaches JSON.parse.
+        let contentType = response.headers.get('content-type');
+        if (!isJsonContentType(contentType)) {
+          let fieldName = linkContext?.get(url)?.fieldName;
+          let fieldLabel = fieldName
+            ? `Relationship \`${fieldName}\``
+            : 'A relationship';
           throw new Error(
-            `instance ${url} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
+            `${fieldLabel} links to a non-card URL (${
+              contentType ?? 'unknown content type'
+            }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
           );
         }
-        let linkResource: CardResource<Saved> = {
-          ...json.data,
-          ...{ links: { self: json.data.id } },
-        };
-        return [url, linkResource] as const;
+        let json = await response.json();
+        // Cross-realm links can target either a card or a file (e.g. a card
+        // instantiated from a catalog still links to the catalog's image
+        // file). Both kinds are valid linked resources; only an unrecognized
+        // payload is an error.
+        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+          let linkResource: CardResource<Saved> | FileMetaResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
+          return [url, linkResource] as const;
+        }
+        throw new Error(
+          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
+            json,
+            null,
+            2,
+          )}`,
+        );
       }),
     );
     return new Map(entries);
@@ -1175,7 +1236,7 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    let realmPath = new RealmPaths(realmURL);
+    let realmPath = new RealmPaths(realmURL, this.#realm.virtualNetwork);
     let omitSet = new Set(omit);
     let visited = new Set<string>();
 
@@ -1216,7 +1277,7 @@ export class RealmIndexQueryEngine {
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its
       // computed query-fields; collapsing those across the layer is a
-      // separate optimization (out of scope for CS-11038).
+      // separate optimization.
       try {
         await Promise.all(
           layer.map(async ({ resource, applyLinkFields }) => {
@@ -1225,20 +1286,30 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
+            let timings = popOpts?.timings;
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
               }
             )?.queryFieldDefs;
-            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
-              await this.populateQueryFieldsFromMeta(
-                resource,
-                realmURL,
-                storedDefs,
-                popOpts,
-              );
+            // The relationship/query-field assembly — the definition lookup +
+            // field-tree walk — is the post-SQL "wire-format prep" the timeline
+            // attributes under `populate`. Recorded as busy-time (this runs
+            // concurrently across the layer); the wall-clock of the whole pass
+            // is the outer `loadLinks` stage.
+            let runPopulate = () =>
+              popOpts?.cacheOnlyDefinitions && storedDefs
+                ? this.populateQueryFieldsFromMeta(
+                    resource,
+                    realmURL,
+                    storedDefs,
+                    popOpts,
+                  )
+                : this.populateQueryFields(resource, realmURL, popOpts);
+            if (timings) {
+              await timings.busyTime('populate', runPopulate);
             } else {
-              await this.populateQueryFields(resource, realmURL, popOpts);
+              await runPopulate();
             }
           }),
         );
@@ -1252,6 +1323,38 @@ export class RealmIndexQueryEngine {
           `[loadLinks ${invocationId}] layer=${currentLayerIndex} populateQueryFields rejected for layer of ${layer.length} resource(s): ${message}`,
         );
         throw err;
+      }
+
+      // Step 1b: strip `fieldName.N` sub-entries from query-backed fields.
+      // The host deserializer treats every per-item entry as a
+      // follow-able relationship and expects its target in `included[]`,
+      // so leaving them on the wire alongside a query-backed field whose
+      // targets are not expanded into `included[]` produces orphan-link
+      // errors. The umbrella entry (`fieldName`) stays — it carries
+      // `links.search` and `data: [array of IDs]` for the host's per-URL
+      // hydration path. Set by the card-document prerender path
+      // (`skipQueryBackedExpansion`).
+      if (opts?.skipQueryBackedExpansion) {
+        for (let { resource } of layer) {
+          if (!resource.relationships) {
+            continue;
+          }
+          for (let fieldName of Object.keys(resource.relationships)) {
+            let umbrella = resource.relationships[fieldName];
+            if (
+              !umbrella ||
+              Array.isArray(umbrella) ||
+              !umbrella.links?.search
+            ) {
+              continue;
+            }
+            for (let key of Object.keys(resource.relationships)) {
+              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
+                delete resource.relationships[key];
+              }
+            }
+          }
+        }
       }
 
       // Step 2: walk every resource's relationships, classify each link,
@@ -1274,6 +1377,9 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
+      // Maps each cross-realm URL to the field that produced it, so a
+      // non-card link can name the offending field in its error.
+      let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1282,31 +1388,6 @@ export class RealmIndexQueryEngine {
           : opts?.linkFields
             ? { ...opts, linkFields: undefined }
             : opts;
-        if (activeOpts?.skipQueryBackedExpansion && resource.relationships) {
-          // Strip `fieldName.N` sub-entries from query-backed fields
-          // before traversal: the host deserializer treats every
-          // per-item entry as a follow-able relationship and expects
-          // its target in `included[]`, so leaving them on the wire
-          // alongside an empty `included[]` produces orphan-link
-          // errors. The umbrella entry (`fieldName`) stays — it
-          // carries `links.search` and `data: [array of IDs]` for the
-          // host's per-URL hydration path.
-          for (let fieldName of Object.keys(resource.relationships)) {
-            let umbrella = resource.relationships[fieldName];
-            if (
-              !umbrella ||
-              Array.isArray(umbrella) ||
-              !umbrella.links?.search
-            ) {
-              continue;
-            }
-            for (let key of Object.keys(resource.relationships)) {
-              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
-                delete resource.relationships[key];
-              }
-            }
-          }
-        }
         let processed = new Set<string>();
 
         for (let entry of relationshipEntries(resource.relationships)) {
@@ -1408,6 +1489,9 @@ export class RealmIndexQueryEngine {
             }
           } else {
             crossRealmURLs.add(linkURL.href);
+            if (!crossRealmFieldNames.has(linkURL.href)) {
+              crossRealmFieldNames.set(linkURL.href, { fieldName });
+            }
           }
 
           entries.push({
@@ -1435,7 +1519,7 @@ export class RealmIndexQueryEngine {
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved>>;
+      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
@@ -1455,8 +1539,11 @@ export class RealmIndexQueryEngine {
                 [...crossRealmURLs],
                 invocationId,
                 currentLayerIndex,
+                crossRealmFieldNames,
               )
-            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+            : Promise.resolve(
+                new Map<string, CardResource<Saved> | FileMetaResource>(),
+              ),
         ]);
       } catch (err: unknown) {
         let message =
@@ -1653,7 +1740,7 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
 export function relativizeDocument(
   doc: SingleCardDocument,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
@@ -1682,43 +1769,29 @@ function relativizeResource(
   resource: LooseCardResource,
   primaryURL: URL,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
   // which is not a valid URL base. Resolve it to a URL for relative resolution.
   let resourceURL = resource.id
-    ? virtualNetwork
-      ? virtualNetwork.toURL(resource.id)
-      : cardIdToURL(resource.id)
+    ? virtualNetwork.toURL(resource.id)
     : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (
-      virtualNetwork
-        ? virtualNetwork.isRegisteredPrefix(url)
-        : isRegisteredPrefix(url)
-    ) {
+    if (virtualNetwork.isRegisteredPrefix(url)) {
       return;
     }
-    let urlObj = virtualNetwork
-      ? virtualNetwork.resolveURL(url, resourceURL)
-      : new URL(resolveCardReference(url, resourceURL));
+    let urlObj = virtualNetwork.resolveURL(url, resourceURL);
     setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (
-      virtualNetwork
-        ? virtualNetwork.isRegisteredPrefix(moduleURL)
-        : isRegisteredPrefix(moduleURL)
-    ) {
+    if (virtualNetwork.isRegisteredPrefix(moduleURL)) {
       return;
     }
-    let absoluteModuleURL = virtualNetwork
-      ? virtualNetwork.resolveURL(moduleURL, resourceURL)
-      : new URL(resolveCardReference(moduleURL, resourceURL));
+    let absoluteModuleURL = virtualNetwork.resolveURL(moduleURL, resourceURL);
     setModuleURL(
       maybeRelativeReference(
         absoluteModuleURL,

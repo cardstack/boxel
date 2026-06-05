@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  CardCrudFunctionsContextName,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
@@ -190,6 +191,95 @@ module(
       }
     });
 
+    test('the reveal overlay is non-linking and offers copy + "Open anyway"', async function (assert) {
+      await setupRealm();
+
+      // viewCard is normally provided by the host per-submode; a stub records
+      // where "Open anyway" tries to navigate.
+      let opened: string[] = [];
+      provideConsumeContext(CardCrudFunctionsContextName, {
+        createCard: () => {},
+        saveCard: () => {},
+        editCard: () => {},
+        deleteCard: async () => {},
+        viewCard: (cardOrURL: URL | { id: string } | string) => {
+          opened.push(
+            cardOrURL instanceof URL ? cardOrURL.href : String(cardOrURL),
+          );
+        },
+      });
+
+      let person = await createPerson({
+        pet: { links: { self: GHOST_URL } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      // The broken reference is informational only — never a clickable anchor.
+      assert
+        .dom('a[data-test-broken-link-url]')
+        .doesNotExist('the broken URL is rendered as text, not a link');
+
+      let embedded = `[data-test-slot='embedded']`;
+      await click(`${embedded} [data-test-broken-link-reveal]`);
+      assert
+        .dom(`${embedded} [data-test-broken-link-copy]`)
+        .exists(
+          'the overlay offers a copy-to-clipboard affordance for the URL',
+        );
+      assert
+        .dom(`${embedded} [data-test-broken-link-open-anyway]`)
+        .exists('the overlay offers an "Open anyway" affordance');
+
+      await click(`${embedded} [data-test-broken-link-open-anyway]`);
+      assert.deepEqual(
+        opened,
+        [GHOST_URL],
+        '"Open anyway" navigates to the broken reference via viewCard',
+      );
+    });
+
+    test('"Open anyway" is withheld for a non-http(s) reference', async function (assert) {
+      await setupRealm();
+      provideConsumeContext(CardCrudFunctionsContextName, {
+        createCard: () => {},
+        saveCard: () => {},
+        editCard: () => {},
+        deleteCard: async () => {},
+        viewCard: () => {},
+      });
+
+      // A corrupted realm could ship a non-http reference; the placeholder still
+      // renders it as text, but the navigate affordance must never forward a
+      // javascript:/data: URL into viewCard.
+      let person = await createPerson({});
+      getDataBucket(person).set('pet', {
+        type: 'link-error',
+        reference: 'javascript:alert(1)',
+        errorDoc: {
+          status: 500,
+          title: 'Internal Server Error',
+          message: 'boom',
+          additionalErrors: null,
+        } satisfies SerializedError,
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let embedded = `[data-test-slot='embedded']`;
+      await click(`${embedded} [data-test-broken-link-reveal]`);
+      assert
+        .dom(`${embedded} [data-test-broken-link-url]`)
+        .hasText('javascript:alert(1)', 'the reference is still shown as text');
+      assert
+        .dom(`${embedded} [data-test-broken-link-open-anyway]`)
+        .doesNotExist(
+          'no "Open anyway" affordance for a non-navigable reference',
+        );
+    });
+
     test('a link-error sentinel renders the error placeholder with its message', async function (assert) {
       await setupRealm();
       let person = await createPerson({});
@@ -286,7 +376,7 @@ module(
       );
     });
 
-    test('in edit format a broken link shows the placeholder plus remove and replace affordances', async function (assert) {
+    test('in edit format a broken link shows the placeholder plus a remove-only affordance', async function (assert) {
       await setupRealm();
       let person = await createPerson({
         pet: { links: { self: GHOST_URL } },
@@ -297,8 +387,8 @@ module(
 
       // The broken state is distinguished from the empty state by the
       // placeholder: a never-set link shows only the bare "Link" button, while a
-      // broken link surfaces the URL alongside remove (clear) and replace (swap)
-      // controls.
+      // broken link surfaces the URL alongside a remove control. There is no
+      // inline replace affordance — relinking routes through the not-set state.
       assert
         .dom('[data-test-broken-link-template]')
         .exists('editor shows the broken-link placeholder');
@@ -310,10 +400,19 @@ module(
         .exists('editor offers a remove affordance for the broken reference');
       assert
         .dom('[data-test-add-new="pet"]')
-        .exists('editor offers a "Link" affordance to replace the broken link')
+        .doesNotExist(
+          'the broken state offers no inline "Link" replace button',
+        );
+
+      // Removing the broken reference reverts to the not-set state, whose "Link"
+      // button is the single entry point for adding a working replacement.
+      await click('[data-test-remove-card]');
+      assert
+        .dom('[data-test-add-new="pet"]')
+        .exists('the not-set state offers the "Link" affordance to relink')
         .hasText(
           'Link Pet',
-          'the replace control is labelled for the field type',
+          'the relink control is labelled for the field type',
         );
     });
 

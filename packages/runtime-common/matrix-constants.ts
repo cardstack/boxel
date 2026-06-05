@@ -36,43 +36,9 @@ export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
 export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
-export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-5-nano';
 export const DEFAULT_IMAGE_GENERATION_LLM = 'google/gemini-2.5-flash-image';
-
-export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
-  'anthropic/claude-3.5-sonnet': 'Anthropic: Claude 3.5 Sonnet',
-  'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
-  'anthropic/claude-3.7-sonnet:thinking':
-    'Anthropic: Claude 3.7 Sonnet (thinking)',
-  'anthropic/claude-haiku-4.5': 'Anthropic: Claude Haiku 4.5',
-  'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
-  'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
-  'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
-  'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
-  'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
-  'google/gemini-2.5-pro': 'Google: Gemini 2.5 Pro',
-  'google/gemini-2.5-flash-lite': 'Google: Gemini 2.5 Flash Lite',
-  'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
-  'meta-llama/llama-3.2-3b-instruct': 'Meta: Llama 3.2 3B Instruct',
-  'openai/gpt-4.1-nano': 'OpenAI: GPT-4.1 Nano',
-  'openai/gpt-4.1-mini': 'OpenAI: GPT-4.1 Mini',
-  'openai/gpt-4.1': 'OpenAI: GPT-4.1',
-  'openai/gpt-4o': 'OpenAI: GPT-4o',
-  'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
-  'openai/gpt-5-nano': 'OpenAI: GPT-5 Nano',
-  'openai/gpt-5-mini': 'OpenAI: GPT-5 Mini',
-  'openai/gpt-5': 'OpenAI: GPT-5',
-  'openai/gpt-oss-20b': 'OpenAI: GPT OSS 20B',
-};
-
-// Note - we are moving towards using the system card for defining these for users
-// See:
-// - packages/catalog-realm/ModelConfiguration for a list of models for all users
-// - packages/catalog-realm/SystemCard/default.json for the default system card for users
-// - packages/host/README.md for how to add new models
-export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 
 // Realm-independent fallback model surface. Used when SystemCard /
 // SystemCard.modelConfigurations is unavailable so we never ship undefined
@@ -137,5 +103,37 @@ export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
 export const SLIDING_SYNC_LIST_RANGE_END = 9;
-export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+// Sliding-sync per-room timeline_limit is sized differently per list, and the
+// AI-room list also uses a two-stage value: small during the very first sync
+// (cold-start latency), then bumped after the initial sync completes so live
+// streaming bursts can't be dropped.
+//
+// INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT — the conservative value used for
+// the AI-room list on the first /sync request and as the SlidingSync
+// constructor's default for any list/subscription we haven't otherwise
+// overridden. Keeping it at 1 keeps the initial sync fast when many AI rooms
+// exist.
+//
+// SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT — the steady-state value applied to the
+// AI-room list via setList() immediately after the first SlidingSyncState.Complete
+// event. AI streaming responses are not one-event-per-message: the bot emits an
+// initial m.room.message with isStreamingFinished:false, then many m.replace
+// events (~250 ms throttle), then a final m.replace with isStreamingFinished:true.
+// If more than one replace lands in the same sliding-sync poll window,
+// timeline_limit=1 only delivers the latest; any event landing after the
+// finalization replace in that same window displaces it, the host's tracked
+// Message stays at isStreamingFinished:false, and the assistant panel hangs
+// in "generating results" until a manual page reload. The higher steady-state
+// value keeps the full streaming burst (and any trailing room churn) in each
+// /sync response.
+//
+// SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT — realm session rooms (auth-room list)
+// receive a burst of multiple events per write or delete (incremental-index-
+// initiation → update → incremental, plus an extra initiation per file in
+// multi-file batches). The `update` event sits in the middle of that burst and
+// is what DirectoryResource subscribes to for live file-tree refresh; without
+// the higher limit it gets silently dropped from the live Room.timeline.
+export const INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT = 20;
+export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_TIMEOUT = 30000;

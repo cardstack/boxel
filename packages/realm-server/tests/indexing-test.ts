@@ -5,6 +5,7 @@ import {
   SupportedMimeType,
   Deferred,
   IndexWriter,
+  VirtualNetwork,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
@@ -692,31 +693,60 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
+    test('a card whose linksTo target fails to load indexes successfully with the broken target captured in deps', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}bad-link`),
       );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed',
-        );
-        let actualDeps = (entry.error.errorDetail.deps ?? []).map((d) =>
-          d.endsWith('.json') ? d.slice(0, -5) : d,
-        );
-        assert.ok(
-          actualDeps.includes(`${testRealm}post`),
-          'deps include post module',
-        );
-        assert.ok(
-          actualDeps.includes(
-            `http://localhost:9000/this-is-a-link-to-nowhere`,
-          ),
-          'deps include missing link target',
-        );
-      } else {
-        assert.ok(false, 'expected search entry to be an error document');
-      }
+      assert.strictEqual(
+        entry?.type,
+        'instance',
+        'card with an unreachable linksTo target indexes as a clean instance — the broken slot renders the placeholder, the entry itself is not in error',
+      );
+      let deps = (entry?.deps ?? []).map((d) =>
+        d.endsWith('.json') ? d.slice(0, -5) : d,
+      );
+      assert.ok(deps.includes(`${testRealm}post`), 'deps include post module');
+      assert.ok(
+        deps.includes(`http://localhost:9000/this-is-a-link-to-nowhere`),
+        'deps include the unreachable link target so invalidation can reach this card if it becomes reachable',
+      );
+
+      // The broken slot is also recorded as searchable metadata on the
+      // (successful) index row: the render.meta scan runs getBrokenLinks
+      // after the store settles and the finding rides the diagnostics
+      // channel into `boxel_index.diagnostics.brokenLinks`. This is
+      // the direct, indexed signal that lets a consumer enumerate
+      // cards-with-broken-links without parsing HTML or re-running the scan.
+      let [diagRow] = (await testDbAdapter.execute(
+        `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+        { bind: [realm.url, `${testRealm}bad-link.json`] },
+      )) as { diagnostics: { brokenLinks?: unknown } | null }[];
+      let brokenLinks = diagRow?.diagnostics?.brokenLinks as
+        | { fieldName: string; reference: string; kind: string }[]
+        | undefined;
+      assert.strictEqual(
+        brokenLinks?.length,
+        1,
+        `diagnostics.brokenLinks records the single broken slot, got: ${JSON.stringify(
+          brokenLinks,
+        )}`,
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.fieldName,
+        'author',
+        'broken-link finding names the linksTo field',
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.reference,
+        'http://localhost:9000/this-is-a-link-to-nowhere',
+        'broken-link finding carries the unreachable reference',
+      );
+      // An unreachable external host fails as a generic fetch error rather
+      // than a 404; either is a valid terminal broken-link kind.
+      assert.ok(
+        ['error', 'not-found'].includes(brokenLinks?.[0]?.kind ?? ''),
+        `broken-link finding carries a terminal kind, got: ${brokenLinks?.[0]?.kind}`,
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
@@ -1151,6 +1181,7 @@ module(basename(__filename), function () {
       let fileDefKey = internalKeyFor(
         { module: rri(fileDefModule), name: 'FileDef' },
         undefined,
+        realm.virtualNetwork,
       );
       await testDbAdapter.execute(
         `UPDATE boxel_index SET types = '${JSON.stringify([
@@ -1334,6 +1365,11 @@ module(basename(__filename), function () {
       let queuePublisher: QueuePublisher;
       let queueRunner: QueueRunner;
       let testRealmServer: TestRealmServerResult | undefined;
+      let virtualNetwork: VirtualNetwork;
+
+      hooks.beforeEach(function () {
+        virtualNetwork = new VirtualNetwork();
+      });
 
       setupPermissionedRealmCached(hooks, {
         mode: 'beforeEach',
@@ -1378,6 +1414,7 @@ module(basename(__filename), function () {
       test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1389,6 +1426,7 @@ module(basename(__filename), function () {
 
         let jsonSeedBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await jsonSeedBatch.invalidate([new URL(`${testRealm}mango.json`)]);
         assert.ok(
@@ -1403,6 +1441,7 @@ module(basename(__filename), function () {
 
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await stagingBatch.updateEntry(stagedOnlyURL, {
           type: 'file',
@@ -1413,7 +1452,7 @@ module(basename(__filename), function () {
 
         let invalidationBatch = await new IndexWriter(
           testDbAdapter,
-        ).createBatch(new URL(realm.url));
+        ).createBatch(new URL(realm.url), virtualNetwork);
         await invalidationBatch.invalidate([stagedAliasURL]);
 
         assert.ok(
@@ -1425,6 +1464,7 @@ module(basename(__filename), function () {
       test('batch invalidation tombstones all rows that share a matching file_alias', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1468,6 +1508,7 @@ module(basename(__filename), function () {
         //    instance-error entry and committing the batch.
         let errorBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await errorBatch.updateEntry(mangoURL, {
           type: 'instance-error',
@@ -1497,6 +1538,7 @@ module(basename(__filename), function () {
         // 2. Tombstone the URL.
         let tombstoneBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await tombstoneBatch.invalidate([mangoURL]);
         await tombstoneBatch.done();
@@ -1535,6 +1577,7 @@ module(basename(__filename), function () {
         // instead of silently writing the unusable row.
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         for (let badError of [
@@ -2166,6 +2209,55 @@ module(basename(__filename), function () {
         assert.ok(
           deps.includes(`${testRealm}filedef-helper`),
           `deps include helper module (deps: ${JSON.stringify(deps)})`,
+        );
+      });
+
+      test('the full-realm module pre-warm sweep runs on from-scratch indexing but not on incrementals', async function (assert) {
+        // `fancy-person.gts` is an orphan card module: it defines a CardDef
+        // (FancyPerson) but no instance adopts it and no other module
+        // imports it. Because nothing ever invalidates it, the only code
+        // path that can land it in the module cache is the realm-wide
+        // pre-warm sweep — which runs on from-scratch indexing and is
+        // skipped on incrementals. Its presence in the `modules` table is
+        // therefore a deterministic signal of whether the sweep ran.
+        let orphanAlias = `${testRealm}fancy-person`;
+
+        async function isCached(moduleAlias: string): Promise<boolean> {
+          let rows = (await testDbAdapter.execute(
+            `SELECT url FROM modules WHERE url = $1 OR file_alias = $1`,
+            { bind: [moduleAlias] },
+          )) as { url: string }[];
+          return rows.length > 0;
+        }
+
+        // The realm was from-scratch indexed during setup; the realm-wide
+        // sweep warmed every card module, including the orphan that no
+        // instance references.
+        assert.true(
+          await isCached(orphanAlias),
+          'from-scratch pre-warm caches the orphan module via the full-realm sweep',
+        );
+
+        // Clear the cache, then run an incremental on an unrelated instance.
+        // The incremental has no realm-wide sweep, and the orphan is neither
+        // visited nor a dependency of the change, so it does not come back —
+        // only the realm-wide sweep (from-scratch) would re-cache a module
+        // that no instance consumes.
+        await testDbAdapter.execute('DELETE FROM modules');
+        await realm.write(
+          'vangogh.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Van Gogh', hourlyRate: 51 },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+        );
+        assert.false(
+          await isCached(orphanAlias),
+          'incremental skips the full-realm sweep, leaving the orphan module uncached',
         );
       });
 
@@ -3756,30 +3848,36 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        // child-error is the only entry in indexing-error state — its
+        // adoptsFrom module is missing, so module → instance propagation
+        // demotes it. parent-rel and grandparent-rel each linksTo a
+        // downstream card; instance → instance propagation terminates at
+        // the first hop, so the consumers stay indexable. The broken slot
+        // renders the placeholder inline.
+        let childError = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childError?.type,
+          'instance-error',
+          'child-error inherits its missing adoptsFrom module via module → instance propagation',
+        );
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'parent is in error while relationship target is broken',
+          'instance',
+          'parent stays indexable while its linksTo target is broken — broken slot renders the placeholder',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'grandparent is in error while downstream relationship target is broken',
+          'instance',
+          'grandparent stays indexable while its downstream linksTo chain reaches a broken card',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          assert.ok(
-            hasErrorDetail(grandParentBefore.error, 'missing-child'),
-            'two-hop relationship error details include missing child module context',
-          );
-        } else {
-          assert.ok(false, 'expected grandparent to be an instance error');
-        }
 
         await realm.write(
           'missing-child.gts',
@@ -3793,13 +3891,21 @@ module(basename(__filename), function () {
         `,
         );
 
+        let childErrorAfter = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childErrorAfter?.type,
+          'instance',
+          'child-error recovers once the missing adoptsFrom module is created',
+        );
         let parentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentAfter?.type,
           'instance',
-          'parent repairs after relationship target is fixed',
+          'parent stays a clean instance after the relationship target recovers',
         );
         let grandParentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
@@ -3807,7 +3913,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           grandParentAfter?.type,
           'instance',
-          'grandparent repairs after downstream relationship target is fixed',
+          'grandparent stays a clean instance after the downstream target recovers',
         );
 
         let parentDeps = await depsFor(`${testRealm}parent-rel.json`);
@@ -4557,6 +4663,124 @@ module(basename(__filename), function () {
             },
           });
           assert.strictEqual(result.length, 1, 'found the post instance');
+        }
+      });
+
+      test('terminates instance→instance error doc propagation at the first linksTo hop', async function (assert) {
+        // Baseline: hassan (PetPerson, linksTo Pet, links to ringo) indexes
+        // cleanly against the as-built fixture. Used as the post-recovery
+        // reference state below.
+        let hassanBaseline = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanBaseline?.type,
+          'instance',
+          'hassan is a clean instance before any breakage',
+        );
+
+        // Put ringo into instance-error state by pointing its `adoptsFrom` at
+        // a module that does not exist. Pet.gts itself stays clean, so the
+        // only error in play is at the instance level.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./missing-pet-target'),
+                  name: 'MissingPet',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let ringoErrored = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
+        );
+        assert.strictEqual(
+          ringoErrored?.type,
+          'instance-error',
+          'ringo is in error state once its adoptsFrom module is missing',
+        );
+        if (ringoErrored?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoErrored.error, 'missing-pet-target'),
+            'ringo error doc names the missing module — used below as the inheritance probe',
+          );
+        }
+
+        // hassan (linksTo ringo) must NOT inherit ringo's error doc — and
+        // critically, must NOT itself be in error. The broken slot renders
+        // the placeholder inline; hassan stays a fully indexable instance.
+        let hassanWithBrokenLink = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanWithBrokenLink?.type,
+          'instance',
+          'hassan with a broken linksTo target is a clean instance, not instance-error — broken slot renders the placeholder inline',
+        );
+        let hassanDeps = hassanWithBrokenLink?.deps ?? [];
+        assert.ok(
+          hassanDeps.some(
+            (dep) =>
+              dep === `${testRealm}ringo.json` || dep === `${testRealm}ringo`,
+          ),
+          'hassan deps still include ringo so invalidation fan-out continues to reach hassan when ringo changes',
+        );
+
+        // Recovery: restoring ringo re-indexes hassan via the
+        // `itemsThatReference` fan-out, and hassan returns to a clean
+        // instance entry.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let hassanRecovered = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanRecovered?.type,
+          'instance',
+          'hassan recovers to a clean instance once ringo is restored',
+        );
+      });
+
+      test('preserves module→instance error propagation alongside the instance→instance terminator', async function (assert) {
+        // Companion to the instance→instance terminator above: when a module
+        // breaks, instances backed by that module must still inherit the
+        // module error in `additionalErrors`. Only the instance→instance hop
+        // terminates.
+        await realm.write(
+          'pet.gts',
+          `import { OnlyExistsInDreams } from "./does-not-exist";
+           export class Pet extends OnlyExistsInDreams {}`,
+        );
+
+        let ringoAfterModuleBreak = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
+        );
+        assert.strictEqual(
+          ringoAfterModuleBreak?.type,
+          'instance-error',
+          'ringo cascades to instance-error via module→instance propagation',
+        );
+        if (ringoAfterModuleBreak?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoAfterModuleBreak.error, 'does-not-exist'),
+            'module→instance: ringo inherits Pet module error in additionalErrors',
+          );
         }
       });
 

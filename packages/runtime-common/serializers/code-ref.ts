@@ -8,12 +8,9 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
-import {
-  resolveCardReference,
-  cardIdToURL,
-  rri,
-  type RealmResourceIdentifier,
-} from '../card-reference-resolver';
+import { resolveModuleHref } from '../code-ref';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers';
+import type { VirtualNetwork } from '../virtual-network';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -34,15 +31,17 @@ export function serialize(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
+    virtualNetwork?: VirtualNetwork;
   },
 ): ResolvedCodeRef | {} {
+  let vn = opts?.virtualNetwork;
   let baseURL: URL | undefined;
   if (opts?.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
   } else if (typeof opts?.relativeTo === 'string') {
-    baseURL = cardIdToURL(opts.relativeTo);
+    baseURL = vn ? vn.toURL(opts.relativeTo) : undefined;
   } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = cardIdToURL(doc.data.id);
+    baseURL = vn ? vn.toURL(doc.data.id) : undefined;
   }
   return {
     ...codeRef,
@@ -80,6 +79,7 @@ function codeRefAdjustments(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
+    virtualNetwork?: VirtualNetwork;
   },
 ) {
   if (!codeRef) {
@@ -88,10 +88,29 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
+  // The `deserializeAbsolute` field-deserialize path reaches this without
+  // opts (no VN, no `allowRelative`, no `maybeRelativeReference`). For
+  // URL-like refs we can still do a plain URL-join against `relativeTo`
+  // and apply `trimExecutableExtension`. Bare specifiers (e.g.
+  // `@cardstack/boxel-host/…`) throw — `resolve` is wrapped in try/catch
+  // below, so the original ref stays intact for the loader's importMap
+  // shim.
+  let vn = opts?.virtualNetwork;
+  let resolve = (ref: string) => {
+    if (vn) {
+      return resolveModuleHref(ref, relativeTo, vn);
+    }
+    if (!isUrlLike(ref)) {
+      throw new Error(
+        `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
+      );
+    }
+    return new URL(ref, relativeTo).href;
+  };
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
-      let resolved = resolveCardReference(codeRef.module, relativeTo);
+      let resolved = resolve(codeRef.module);
       if (resolved !== codeRef.module) {
         let module: string = resolved;
         if (opts?.trimExecutableExtension) {
@@ -108,7 +127,7 @@ function codeRefAdjustments(
     return {};
   }
   if (relativeTo) {
-    let module: string = resolveCardReference(codeRef.module, relativeTo);
+    let module: string = resolve(codeRef.module);
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
@@ -127,15 +146,17 @@ function maybeSerializeCodeRef(
   if (codeRef && isResolvedCodeRef(codeRef)) {
     let base =
       stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
-    try {
-      let moduleHref = resolveCardReference(
-        codeRef.module,
-        base && typeof base === 'string' ? base : undefined,
-      );
-      return `${moduleHref}/${codeRef.name}`;
-    } catch {
-      return `${codeRef.module}/${codeRef.name}`;
+    // `queryableValue` / `formatQuery` don't receive a VirtualNetwork, so
+    // we can't resolve registered prefixes here. URL-like refs join
+    // against the base; bare specifiers and absolute URLs pass through.
+    if (isUrlLike(codeRef.module) && typeof base === 'string') {
+      try {
+        return `${new URL(codeRef.module, base).href}/${codeRef.name}`;
+      } catch {
+        // fall through to the as-is shape below
+      }
     }
+    return `${codeRef.module}/${codeRef.name}`;
   }
   return undefined;
 }

@@ -89,6 +89,7 @@ import type { StackItemComponentAPI } from './stack-item';
 import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
+import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
@@ -149,6 +150,7 @@ export default class InteractSubmode extends Component {
   @service declare private realmServer: RealmServer;
   @service declare private recentCardsService: RecentCardsService;
   @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
@@ -245,7 +247,12 @@ export default class InteractSubmode extends Component {
       });
     } else {
       let CardKlass = await loadCardDef(
-        codeRefWithAbsoluteIdentifier(ref, relativeTo),
+        codeRefWithAbsoluteIdentifier(
+          ref,
+          relativeTo,
+          undefined,
+          this.network.virtualNetwork,
+        ),
         {
           loader: this.loaderService.loader,
         },

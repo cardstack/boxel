@@ -26,7 +26,6 @@ import {
   setupMatrixRoom,
   closeServer,
   testRealmInfo,
-  cleanWhiteSpace,
   createJWT,
   testRealmServerMatrixUserId,
   cardInfo,
@@ -211,13 +210,16 @@ module(basename(__filename), function () {
           });
         });
 
-        test('serves a card error request without last known good state', async function (assert) {
+        test('serves a card with a broken linksTo target as a normal instance — the broken slot is surfaced via the relationship reference, not as a server error', async function (assert) {
           let response = await request
             .get('/missing-link')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          let json = response.body;
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -228,49 +230,17 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-
-          let errorBody = json.errors[0];
-          assert.ok(
-            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
-            'stack trace is correct',
-          );
-          delete errorBody.meta.stack;
-          assert.strictEqual(errorBody.id, `${testRealmHref}missing-link`);
-          assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Link Not Found');
+          let json = response.body;
           assert.strictEqual(
-            errorBody.message,
-            `missing file ${testRealmHref}does-not-exist.json`,
-          );
-          assert.strictEqual(errorBody.realm, testRealmHref);
-          assert.strictEqual(
-            errorBody.meta.lastKnownGoodHtml,
-            null,
-            'no last known good html is present',
+            json.data.id,
+            `${testRealmHref}missing-link`,
+            'response carries the requested card id',
           );
           assert.strictEqual(
-            errorBody.meta.cardTitle,
-            null,
-            'no card title is present',
+            json.data.relationships?.friend?.links?.self,
+            './does-not-exist',
+            'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
-          assert.ok(
-            Array.isArray(errorBody.meta.scopedCssUrls),
-            'scoped css urls are present',
-          );
-          if (errorBody.meta.scopedCssUrls.length > 0) {
-            assert.ok(
-              errorBody.meta.scopedCssUrls.every((scopedCssUrl: string) =>
-                scopedCssUrl.endsWith('.glimmer-scoped.css'),
-              ),
-              'scoped css urls have the expected suffix',
-            );
-          } else {
-            assert.deepEqual(
-              errorBody.meta.scopedCssUrls,
-              [],
-              'scoped css urls can be empty when no styles are collected',
-            );
-          }
         });
 
         test('includes FileDef resources for file links in included payload', async function (assert) {
@@ -1048,7 +1018,7 @@ module(basename(__filename), function () {
           onRealmSetup,
         });
 
-        test('serves a card error request with last known good state', async function (assert) {
+        test('patching a card to point at a missing linksTo target keeps the card itself indexable — GET returns the card as a normal instance with the broken reference preserved on the wire', async function (assert) {
           await request
             .patch('/hassan')
             .send({
@@ -1075,8 +1045,11 @@ module(basename(__filename), function () {
             .get('/hassan')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          let json = response.body;
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -1087,30 +1060,83 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-
-          let errorBody = json.errors[0];
-          let lastKnownGoodHtml = cleanWhiteSpace(
-            errorBody.meta.lastKnownGoodHtml,
-          );
-
-          assert.ok(
-            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
-            'stack trace is correct',
-          );
-          assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Link Not Found');
+          let json = response.body;
           assert.strictEqual(
-            errorBody.message,
-            `missing file ${testRealmHref}does-not-exist.json`,
+            json.data.id,
+            `${testRealmHref}hassan`,
+            'response carries the requested card id',
           );
-          assert.ok(lastKnownGoodHtml.includes('Hassan has a friend'));
-          assert.ok(lastKnownGoodHtml.includes('Jade'));
-          let scopedCssUrls = errorBody.meta.scopedCssUrls;
-          assertScopedCssUrlsContain(
-            assert,
-            scopedCssUrls,
-            cardDefModuleDependencies,
+          assert.strictEqual(
+            json.data.relationships?.friend?.links?.self,
+            './does-not-exist',
+            'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
+        });
+
+        test('GET on an existing-but-errored index entry mirrors the underlying error status onto the HTTP response, but never 404 (reserved for a missing row) and never a non-HTTP status', async function (assert) {
+          let cardURL = `${testRealmHref}person-1`;
+          let cases: { errorStatus: number; expectedHttp: number }[] = [
+            // Real, card-level HTTP error statuses flow through unchanged.
+            { errorStatus: 401, expectedHttp: 401 },
+            { errorStatus: 403, expectedHttp: 403 },
+            { errorStatus: 422, expectedHttp: 422 },
+            { errorStatus: 500, expectedHttp: 500 },
+            // An unregistered-but-in-range upstream status (e.g. a proxied
+            // 520) is still mirrored and must not throw while building the
+            // error response.
+            { errorStatus: 520, expectedHttp: 520 },
+            // An existing-but-errored card is never "not found": a
+            // recorded 404 (e.g. the error's underlying cause was a
+            // missing linked instance) falls back to 500 so that a 404
+            // on a card GET stays an unambiguous "card no longer exists"
+            // signal.
+            { errorStatus: 404, expectedHttp: 500 },
+            // Non-HTTP / out-of-range statuses also fall back to 500: a
+            // fetch failure recorded as 0, and a non-error status that
+            // should never reach the error-row branch.
+            { errorStatus: 0, expectedHttp: 500 },
+            { errorStatus: 200, expectedHttp: 500 },
+          ];
+
+          for (let { errorStatus, expectedHttp } of cases) {
+            let errorDoc = {
+              message: 'boom',
+              status: errorStatus,
+              title: 'Some Error',
+              additionalErrors: null,
+            };
+            // The instance row is keyed by `url` with the `.json` suffix;
+            // the bare card URL is the `file_alias`. Match either so the
+            // error flag lands on the row the GET read resolves.
+            for (let table of ['boxel_index', 'boxel_index_working']) {
+              await dbAdapter.execute(
+                `UPDATE ${table}
+                 SET has_error = TRUE, error_doc = $1::jsonb
+                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+                {
+                  bind: [JSON.stringify(errorDoc), cardURL],
+                },
+              );
+            }
+
+            let response = await request
+              .get('/person-1')
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(
+              response.status,
+              expectedHttp,
+              `errorDoc.status ${errorStatus} → HTTP ${expectedHttp}`,
+            );
+            // The JSON:API body always carries the real underlying
+            // status regardless of the HTTP status chosen, so consumers
+            // can still see the precise cause.
+            assert.strictEqual(
+              response.body.errors?.[0]?.status,
+              errorStatus,
+              `JSON:API body preserves the underlying status (${errorStatus})`,
+            );
+          }
         });
       });
 
@@ -4337,6 +4363,120 @@ module(basename(__filename), function () {
     });
   });
 
+  module('cross-realm file links', function (hooks) {
+    // A card instantiated from the catalog (e.g. a blackjack game) keeps a
+    // linksTo(FileDef) reference to an image file that lives in the catalog
+    // realm. When the card is served from a different realm, loadLinks resolves
+    // that reference via the cross-realm fetch path. Regression for CS-11344:
+    // that path used to assume every cross-realm link target was a card and
+    // threw "instance ... is not a card document" on a file-meta target,
+    // surfacing as an HTTP 500.
+    const providerRealmURL = 'http://127.0.0.1:5531/test/';
+    const consumerRealmURL = 'http://127.0.0.1:5532/test/';
+    let consumerRequest: RealmRequest;
+
+    setupPermissionedRealmsCached(hooks, {
+      realms: [
+        {
+          realmURL: providerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSystem: {
+            'instructions.md': '# Cross-realm instructions',
+          },
+        },
+        {
+          realmURL: consumerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSystem: {
+            'skill-card.gts': `
+              import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+
+              export class SkillCard extends CardDef {
+                @field cardTitle = contains(StringField);
+                @field instructionsSource = linksTo(MarkdownDef);
+              }
+            `,
+            'skill.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Cross-realm skill',
+                },
+                relationships: {
+                  instructionsSource: {
+                    links: {
+                      self: `${providerRealmURL}instructions.md`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skill-card'),
+                    name: 'SkillCard',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms }) {
+        let latestRealms = realms.slice(-2);
+        consumerRequest = withRealmPath(
+          supertest(latestRealms[1].realmHttpServer),
+          new URL(consumerRealmURL),
+        );
+      },
+    });
+
+    hooks.afterEach(() => {
+      resetCatalogRealms();
+    });
+
+    test('serves a card linking to a file in another realm', async function (assert) {
+      let response = await consumerRequest
+        .get('/skill')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let doc = response.body as LooseSingleCardDocument;
+      let relationship = doc.data.relationships
+        ?.instructionsSource as Relationship;
+      assert.deepEqual(
+        relationship?.data,
+        {
+          type: 'file-meta',
+          id: `${providerRealmURL}instructions.md`,
+        },
+        'cross-realm file relationship references the file-meta target',
+      );
+
+      let included = doc.included ?? [];
+      let linkedFile = included.find(
+        (resource) => resource.id === `${providerRealmURL}instructions.md`,
+      );
+      assert.ok(linkedFile, 'includes the cross-realm file-meta resource');
+      assert.strictEqual(
+        linkedFile?.type,
+        'file-meta',
+        'cross-realm linked resource is a file-meta resource',
+      );
+      assert.strictEqual(linkedFile?.attributes?.name, 'instructions.md');
+    });
+  });
+
   module('Query-backed relationships runtime resolver', function (hooks) {
     const providerRealmURL = 'http://127.0.0.1:5521/test/';
     const consumerRealmURL = 'http://127.0.0.1:5522/test/';
@@ -4647,29 +4787,3 @@ module(basename(__filename), function () {
     });
   });
 });
-
-function assertScopedCssUrlsContain(
-  assert: Assert,
-  scopedCssUrls: string[],
-  moduleUrls: string[],
-) {
-  moduleUrls.forEach((url) => {
-    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
-
-    assert.true(
-      scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
-      `css url for ${url} is in the deps`,
-    );
-  });
-}
-
-// These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
-let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/embedded.gts',
-  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-  'https://cardstack.com/base/default-templates/field-edit.gts',
-  'https://cardstack.com/base/field-component.gts',
-  'https://cardstack.com/base/contains-many-component.gts',
-  'https://cardstack.com/base/links-to-editor.gts',
-  'https://cardstack.com/base/links-to-many-component.gts',
-];

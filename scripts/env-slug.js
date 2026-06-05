@@ -3,7 +3,7 @@
  * Mirror of scripts/env-slug.sh's `compute_env_slug` — keep the two in
  * sync. Required by:
  *   packages/host/scripts/traefik-helpers.js
- *   packages/matrix/helpers/environment-config.ts
+ *   packages/matrix/support/environment-config.ts
  *   packages/realm-server/lib/dev-service-registry.ts
  */
 

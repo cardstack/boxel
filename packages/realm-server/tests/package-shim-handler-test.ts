@@ -38,6 +38,18 @@ module(basename(__filename), function () {
     test('PackageShimHandler error message names the full requested URL — useful for cards that import from a typo URL', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
+    test('PackageShimHandler error message names the correct subpath when the symbol is exported from another shim', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('PackageShimHandler error message lists every shim that owns the symbol when more than one matches', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('PackageShimHandler error message falls back to the verbatim message for a typo no shim owns', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('PackageShimHandler suggests an async-shimmed module once it has been served', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
   });
 
   module('shimAsyncModule retry (CS-10860 follow-up)', function () {

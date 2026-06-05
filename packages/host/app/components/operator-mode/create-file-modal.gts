@@ -840,6 +840,8 @@ export default class CreateFileModal extends Component<Signature> {
           name: exportName,
         },
         new URL(this.selectedRealmURL),
+        undefined,
+        this.network.virtualNetwork,
       ) as ResolvedCodeRef
     ).module;
     const absoluteModule = new URL(absoluteModuleHref);
@@ -949,7 +951,12 @@ export class ${className} extends ${exportName} {
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from. The server will make relative URL if appropriate after creation
-    let maybeRef = codeRefWithAbsoluteIdentifier(ref, relativeTo);
+    let maybeRef = codeRefWithAbsoluteIdentifier(
+      ref,
+      relativeTo,
+      undefined,
+      this.network.virtualNetwork,
+    );
     if ('name' in maybeRef && 'module' in maybeRef) {
       ref = maybeRef;
     }

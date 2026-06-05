@@ -42,6 +42,7 @@ import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { JobsFinishedListener } from './lib/jobs-finished-listener';
 import { JobScopedSearchCache } from './job-scoped-search-cache';
+import { startHealthSampler } from './health-sampler';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
@@ -153,6 +154,14 @@ const FULL_INDEX_ON_STARTUP_OVERRIDE =
 // test's first lookupDefinition.
 const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
   process.env.REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP === 'true';
+// When set to 'true', every realm in this process mounts and serves source
+// without running a from-scratch index on startup (even on a new/empty index).
+// Definitions resolve lazily via the prerenderer on first lookup. Used by the
+// realm-server test stack's boot realm server: the suite runs its own
+// in-process realms and only needs the boot realms to serve source, so
+// skipping their boot index removes both the ~minutes-long startup wait and
+// the prerender-pool contention that index would create with the tests.
+const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -375,6 +384,11 @@ const smokeTestHostApp = async () => {
   // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
+  // Periodic event-loop-lag + in-flight-search sampler. Emits a
+  // `realm:health` line only during saturation windows, so a stalled
+  // `_search` can be checked against whether the process's event loop was
+  // starved at the time.
+  let stopHealthSampler = startHealthSampler();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -526,6 +540,7 @@ const smokeTestHostApp = async () => {
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+          ...(SKIP_BOOT_INDEX ? { skipBootIndex: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
@@ -624,6 +639,7 @@ const smokeTestHostApp = async () => {
       (httpServer as any).closeAllConnections();
     }
     searchCache.stopJanitor();
+    stopHealthSampler();
     httpServer.close(() => {
       (async () => {
         await Promise.all([

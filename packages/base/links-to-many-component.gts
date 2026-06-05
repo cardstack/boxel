@@ -18,8 +18,10 @@ import {
 } from './card-api';
 import BrokenLinkTemplate from './default-templates/broken-link-template';
 import { getRelationship, type RelationshipState } from './field-support';
+import { rawArrayValues } from './watched-array';
 import {
   BoxComponentSignature,
+  CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
   getBoxComponent,
@@ -120,10 +122,16 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         fileType ? { fileType, fileTypeName } : undefined,
       );
       if (file) {
-        let selectedCards =
-          (this.args.model.value as any)[this.args.field.name] ?? [];
-        selectedCards = [...selectedCards, file];
-        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+        // Rebuild from the raw backing array so any broken sibling slot keeps
+        // its sentinel instead of collapsing to `undefined` (per-slot reads are
+        // masked). The new file is appended after the existing entries.
+        let existing = rawArrayValues(
+          (this.args.model.value as any)[this.args.field.name] ?? [],
+        );
+        (this.args.model.value as any)[this.args.field.name] = [
+          ...existing,
+          file,
+        ];
       }
       return;
     }
@@ -162,16 +170,31 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         isCardInstance(card),
       ) as CardDef[];
       if (newCards.length > 0) {
-        selectedCards = [...selectedCards, ...newCards];
-        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+        // `selectedCards` above is the masked read used only to build the
+        // already-selected query filter. Rebuild the field from the raw backing
+        // array so broken sibling slots keep their sentinels rather than
+        // collapsing to `undefined` on append.
+        let existing = rawArrayValues(
+          (this.args.model.value as any)[this.args.field.name] ?? [],
+        );
+        (this.args.model.value as any)[this.args.field.name] = [
+          ...existing,
+          ...newCards,
+        ];
       }
     }
   });
 
   remove = (index: number) => {
-    let cards = (this.args.model.value as any)[this.args.field.name];
-    cards = cards.filter((_c: CardDef, i: number) => i !== index);
-    (this.args.model.value as any)[this.args.field.name] = cards;
+    // Drop the slot by position on the raw backing array so the other slots —
+    // including any broken sentinels — are preserved verbatim. Filtering the
+    // masked field value would turn every other broken slot into `undefined`.
+    let raw = rawArrayValues<CardDef>(
+      (this.args.model.value as any)[this.args.field.name] ?? [],
+    );
+    (this.args.model.value as any)[this.args.field.name] = raw.filter(
+      (_c, i) => i !== index,
+    );
   };
 }
 
@@ -211,11 +234,18 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     // still keys on the stable index `key`, so adding this never changes block
     // identity and an input elsewhere in the edit form keeps focus.
     let broken = brokenSlotsFor(this.args.model, this.args.field.name);
+    // `raw` is the per-slot backing value handed to ember-sortable as its item
+    // model. A broken slot's masked value is `undefined` (non-unique and lossy
+    // across a reorder), so we pass the raw entry — the card for a present slot,
+    // the sentinel object for a broken one — as an opaque, stable token. This is
+    // never inspected here; it only keeps reorder from dropping broken slots.
+    let raw = rawArrayValues(this.args.arrayField.value ?? []);
     return this.args.arrayField.children.map((child, index) => ({
       box: child,
       index,
       key: index,
       broken: broken[index],
+      raw: raw[index],
     }));
   }
 
@@ -239,10 +269,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
             <li
               class='editor {{if permissions.canWrite "can-write" "read-only"}}'
               data-test-item={{entry.index}}
-              {{sortableItem
-                groupName=this.sortableGroupId
-                model=entry.box.value
-              }}
+              {{sortableItem groupName=this.sortableGroupId model=entry.raw}}
             >
               {{#if permissions.canWrite}}
                 <IconButton
@@ -267,13 +294,16 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 />
               {{/if}}
               {{#if entry.broken}}
-                <BrokenLinkTemplate
-                  @brokenUrl={{entry.broken.reference}}
-                  @errorDoc={{entry.broken.errorDoc}}
-                  @state={{entry.broken.kind}}
-                  @format='fitted'
-                  data-test-plural-view-item={{entry.index}}
-                />
+                <CardCrudFunctionsConsumer as |crud|>
+                  <BrokenLinkTemplate
+                    @brokenUrl={{entry.broken.reference}}
+                    @errorDoc={{entry.broken.errorDoc}}
+                    @state={{entry.broken.kind}}
+                    @format='fitted'
+                    @viewCard={{crud.viewCard}}
+                    data-test-plural-view-item={{entry.index}}
+                  />
+                </CardCrudFunctionsConsumer>
               {{else}}
                 {{#let
                   (getBoxComponent
@@ -420,13 +450,16 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           {{#let (get brokenSlots i) as |broken|}}
             {{#if broken}}
               <Pill class='item-pill' data-test-pill-item={{i}}>
-                <BrokenLinkTemplate
-                  @brokenUrl={{broken.reference}}
-                  @errorDoc={{broken.errorDoc}}
-                  @state={{broken.kind}}
-                  @format='atom'
-                  data-test-plural-view-item={{i}}
-                />
+                <CardCrudFunctionsConsumer as |crud|>
+                  <BrokenLinkTemplate
+                    @brokenUrl={{broken.reference}}
+                    @errorDoc={{broken.errorDoc}}
+                    @state={{broken.kind}}
+                    @format='atom'
+                    @viewCard={{crud.viewCard}}
+                    data-test-plural-view-item={{i}}
+                  />
+                </CardCrudFunctionsConsumer>
                 <IconButton
                   @icon={{IconX}}
                   @width='10px'
@@ -626,19 +659,46 @@ export function getLinksToManyComponent({
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
         {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
-          <LinksToManyEditor
-            @model={{model}}
-            @arrayField={{arrayField}}
-            @field={{field}}
-            @cardTypeFor={{cardTypeFor}}
-            @childFormat={{getEditorChildFormat
-              @format
-              defaultFormats.cardDef
-              model
-            }}
-            @typeConstraint={{@typeConstraint}}
-            ...attributes
-          />
+          {{#if field.edit}}
+            {{!-- Per-usage edit override on a linksToMany. Contract
+                  mirrors containsMany: the override receives the
+                  containing card as @model, the current values array
+                  as @values, and a pre-bound default LinksToManyEditor
+                  as @defaultEditor so it can wrap the standard iteration
+                  / add / remove UI without reimplementing it. --}}
+            <field.edit
+              @model={{model.value}}
+              @values={{arrayField.value}}
+              @defaultEditor={{component
+                LinksToManyEditor
+                model=model
+                arrayField=arrayField
+                field=field
+                cardTypeFor=cardTypeFor
+                childFormat=(getEditorChildFormat
+                  @format
+                  defaultFormats.cardDef
+                  model
+                )
+                typeConstraint=@typeConstraint
+              }}
+              ...attributes
+            />
+          {{else}}
+            <LinksToManyEditor
+              @model={{model}}
+              @arrayField={{arrayField}}
+              @field={{field}}
+              @cardTypeFor={{cardTypeFor}}
+              @childFormat={{getEditorChildFormat
+                @format
+                defaultFormats.cardDef
+                model
+              }}
+              @typeConstraint={{@typeConstraint}}
+              ...attributes
+            />
+          {{/if}}
         {{else}}
           {{#let
             (coalesce @format defaultFormats.cardDef)
@@ -660,16 +720,19 @@ export function getLinksToManyComponent({
                   <div class='linksToMany-itemContainer'>
                     {{#let (get brokenSlots i) as |broken|}}
                       {{#if broken}}
-                        <BrokenLinkTemplate
-                          @brokenUrl={{broken.reference}}
-                          @errorDoc={{broken.errorDoc}}
-                          @state={{broken.kind}}
-                          @format={{brokenLinkFormat
-                            effectiveFormat
-                            effectiveFormat
-                          }}
-                          data-test-plural-view-item={{i}}
-                        />
+                        <CardCrudFunctionsConsumer as |crud|>
+                          <BrokenLinkTemplate
+                            @brokenUrl={{broken.reference}}
+                            @errorDoc={{broken.errorDoc}}
+                            @state={{broken.kind}}
+                            @format={{brokenLinkFormat
+                              effectiveFormat
+                              effectiveFormat
+                            }}
+                            @viewCard={{crud.viewCard}}
+                            data-test-plural-view-item={{i}}
+                          />
+                        </CardCrudFunctionsConsumer>
                       {{else}}
                         <Item
                           @format={{getPluralChildFormat

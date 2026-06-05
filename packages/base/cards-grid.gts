@@ -16,7 +16,6 @@ import AllFilesIcon from '@cardstack/boxel-icons/files';
 import FileIcon from '@cardstack/boxel-icons/file';
 
 import {
-  cardIdToURL,
   chooseCard,
   specRef,
   baseRealm,
@@ -308,13 +307,15 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      await this.args.createCard?.(
-        spec.ref,
-        virtualNetworkFor(spec)?.toURL(spec.id!) ?? cardIdToURL(spec.id!),
-        {
-          realmURL: this.args.model[realmURL],
-        },
-      );
+      let vn = virtualNetworkFor(spec);
+      if (!vn) {
+        throw new Error(
+          `cards-grid createCard requires a VirtualNetwork on the spec's store`,
+        );
+      }
+      await this.args.createCard?.(spec.ref, vn.toURL(spec.id!), {
+        realmURL: this.args.model[realmURL],
+      });
     } else if (activeFilterRef) {
       // No spec exists for the active type filter — create an instance of
       // the type directly. `activeFilterRef` is an absolute CodeRef sourced

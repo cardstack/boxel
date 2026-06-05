@@ -1,23 +1,39 @@
-import { cardIdToURL } from './card-reference-resolver';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 
 interface LocalOptions {
   preserveQuerystring?: boolean;
 }
+
+// Structural subset of VirtualNetwork that RealmPaths needs. Declared
+// locally so paths.ts doesn't take a direct import edge on virtual-network
+// (which would transitively pull base-realm URL imports into consumers
+// that only need URL-handling, like @cardstack/boxel-cli).
+interface RealmPathsVirtualNetwork {
+  toURL(rri: string): URL;
+}
+
 export class RealmPaths {
   readonly url: string;
+  private virtualNetwork: RealmPathsVirtualNetwork | undefined;
 
-  constructor(realmURL: URL);
-  constructor(realmId: RealmIdentifier);
-  constructor(realmURLOrId: URL | RealmIdentifier) {
+  constructor(realmURL: URL, virtualNetwork?: RealmPathsVirtualNetwork);
+  constructor(
+    realmId: RealmIdentifier,
+    virtualNetwork?: RealmPathsVirtualNetwork,
+  );
+  constructor(
+    realmURLOrId: URL | RealmIdentifier,
+    virtualNetwork?: RealmPathsVirtualNetwork,
+  ) {
     if (realmURLOrId instanceof URL) {
       this.url = ensureTrailingSlash(decodeURI(realmURLOrId.href));
     } else {
       this.url = ensureTrailingSlash(realmURLOrId);
     }
+    this.virtualNetwork = virtualNetwork;
   }
 
   get realmId(): RealmIdentifier {
@@ -104,12 +120,16 @@ export class RealmPaths {
     ) {
       return true;
     }
-    // Cross-form: normalize both sides to URL form and re-check.
+    // Cross-form: needs a VirtualNetwork to normalize prefix-form ↔ URL-form.
+    // Without one, this RealmPaths only resolves same-form membership.
+    if (!this.virtualNetwork) {
+      return false;
+    }
     let realmURL: string;
     let inputURL: string;
     try {
-      realmURL = cardIdToURL(this.url).href;
-      inputURL = cardIdToURL(inputStr).href;
+      realmURL = this.virtualNetwork.toURL(this.url).href;
+      inputURL = this.virtualNetwork.toURL(inputStr).href;
     } catch {
       return false;
     }

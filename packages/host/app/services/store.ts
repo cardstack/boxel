@@ -43,6 +43,7 @@ import {
   rri,
   logger,
   formattedError,
+  isJsonContentType,
   SupportedMimeType,
   RealmPaths,
   type Store as StoreInterface,
@@ -89,6 +90,7 @@ import {
   consumingRealmHeader,
   duringPrerenderHeaders,
   jobIdHeader,
+  loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
@@ -775,7 +777,9 @@ export default class StoreService extends Service implements StoreInterface {
     fileDef: FileDef,
   ): Promise<SingleFileMetaDocument> {
     let api = await this.cardService.getAPI();
-    return api.serializeFileDef(fileDef) as SingleFileMetaDocument;
+    return api.serializeFileDef(fileDef, {
+      virtualNetwork: this.network.virtualNetwork,
+    }) as SingleFileMetaDocument;
   }
 
   async delete(id: string): Promise<void> {
@@ -784,8 +788,26 @@ export default class StoreService extends Service implements StoreInterface {
       // the card isn't actually saved yet, so do nothing
       return;
     }
+    // Snapshot the consumers BEFORE removing the deleted instance from the
+    // store, then rewrite each consumer's slot to a link-not-found sentinel so
+    // the placeholder render takes over without a navigation. This is the same
+    // rewrite the realm-invalidation path performs when a delete originates
+    // elsewhere — but that path keys off the deleted id still being loaded when
+    // its invalidation event arrives, and the eager eviction below removes it
+    // first. So for a delete initiated in this session the invalidation handler
+    // has nothing to reload, and without this the consumer's render stays stale
+    // on the now-orphaned card object until a reload.
+    let instance = this.store.getCard(id);
+    let api = instance ? await this.cardService.getAPI() : undefined;
+    let consumers =
+      api && instance ? this.store.consumersOf(api, instance) : [];
     this.unsubscribeFromInstance(id);
     this.store.delete(id);
+    if (api) {
+      for (let consumer of consumers) {
+        api.notifyLinksToTargetDeleted(consumer, id);
+      }
+    }
     await this.cardService.fetchJSON(id, { method: 'DELETE' });
   }
 
@@ -1133,6 +1155,7 @@ export default class StoreService extends Service implements StoreInterface {
           ...consumingRealmHeader(),
           ...jobIdHeader(),
           ...jobPriorityHeader(),
+          ...loggingCorrelationIdHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
@@ -1477,6 +1500,24 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
         if (isCardInstance(instance)) {
+          // The invalidation id is the canonical remote id for this card. When
+          // the server has just assigned a remote id to a locally-created
+          // instance, this event is the first the store hears of it: the
+          // instance is still keyed by its local id with an unset/local `id`.
+          // Reconcile the identity now — this event is precisely when we learn a
+          // remote id exists for the local id. We only learn the identity here,
+          // not the new content: the instance keeps its original local content
+          // until `reloadInstance` (below) fetches the server state, but its
+          // `id` must be the remote id first so that fetch targets the right
+          // URL. Doing it here, in the event handler, keeps `store.peek` a pure
+          // read — reconciling during a render-time peek would mutate the
+          // tracked `id` mid-render and trip a backtracking re-render assertion.
+          if (
+            invalidation.split('/').pop() === instance[localIdSymbol] &&
+            instance.id !== rri(invalidation)
+          ) {
+            instance.id = rri(invalidation);
+          }
           // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
           // overwriting the inputs with past values. This can happen if the user makes edits in the time between
           // the auto save request and the arrival realm event.
@@ -1605,7 +1646,20 @@ export default class StoreService extends Service implements StoreInterface {
       }
       if (isDelete) {
         await this.stopAutoSaving(instance);
+        // Snapshot the consumers BEFORE removing the deleted instance from
+        // the store. `consumersOf` walks the loaded cards and reads their
+        // linksTo refs — every consumer that has the now-deleted card in
+        // its bucket needs its slot rewritten to a link-not-found sentinel
+        // so the placeholder render takes over the slot without a
+        // navigation. Without this, the consumer's render stays stale on
+        // the now-orphaned card object until something else forces a
+        // re-render.
+        let api = await this.cardService.getAPI();
+        let consumers = this.store.consumersOf(api, instance);
         this.store.delete(instance.id);
+        for (let consumer of consumers) {
+          api.notifyLinksToTargetDeleted(consumer, instance.id);
+        }
       }
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);
@@ -1829,7 +1883,27 @@ export default class StoreService extends Service implements StoreInterface {
             vn.toURL(`${url}.json`),
           );
           if (result.status === 200) {
-            json = JSON.parse(result.content);
+            // A relationship link can point at a non-card URL (e.g. an
+            // image); gate on Content-Type so the binary body never
+            // reaches JSON.parse.
+            if (!isJsonContentType(result.contentType)) {
+              throw new Error(
+                `Could not load ${url} as a card: the response (content type ${
+                  result.contentType ?? 'unknown'
+                }) is not a card document. If this is a relationship link, it likely points at a non-card URL (e.g. an image) rather than a card.`,
+              );
+            }
+            try {
+              json = JSON.parse(result.content);
+            } catch {
+              // Content-Type claimed JSON but the body didn't parse
+              // (e.g. truncated source) — still surface a clean error.
+              throw new Error(
+                `Could not load ${url} as a card: its source (content type ${
+                  result.contentType ?? 'unknown'
+                }) is not valid JSON.`,
+              );
+            }
           } else {
             throw new Error(
               `Received non-200 status fetching instance source ${url}.json: ${result.content}`,
@@ -2530,10 +2604,7 @@ export function asURL(
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN. `isLocalId` and
-  // `vn.toURL` both consult the VN's mappings and fall back to the
-  // deprecated module-level registry, so prefixes registered either way
-  // produce the same canonical URL.
+  // Locals stay as-is; remotes resolve through the VN.
   return isLocalId(id, vn) ? id : vn.toURL(id).href;
 }
 

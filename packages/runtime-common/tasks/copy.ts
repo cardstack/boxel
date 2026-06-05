@@ -66,14 +66,22 @@ registerQueueJobDefinition({
   coalesce: chooseCopyCoalesceDecision,
 });
 
-const copy: Task<CopyArgs, CopyResult> = ({ reportStatus, log, indexWriter }) =>
+const copy: Task<CopyArgs, CopyResult> = ({
+  reportStatus,
+  log,
+  indexWriter,
+  virtualNetwork,
+}) =>
   async function (args) {
     let { jobInfo, realmURL, sourceRealmURL } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
-    let batch = await indexWriter.createBatch(new URL(realmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(realmURL),
+      virtualNetwork,
+    );
     await batch.copyFrom(new URL(sourceRealmURL));
     let result = await batch.done();
     let invalidations = batch.invalidations;

@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { putEvent } from '../docker/synapse';
+import { putEvent } from '../support/synapse';
 import {
   getRoomId,
   sendMessage,
@@ -17,8 +17,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-} from '../helpers/matrix-constants';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/matrix-constants';
+import { appURL } from '../support/isolated-realm-server';
 
 const serverIndexUrl = new URL(appURL).origin;
 

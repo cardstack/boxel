@@ -11,7 +11,6 @@ import {
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
-  rri,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   logger,
@@ -73,10 +72,6 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
-
-function isCardOrFileInstance(item: unknown): item is StoredInstance {
-  return isCardInstance(item) || isFileDefInstance(item);
-}
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -486,8 +481,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   delete(id: string): void {
     id = id.replace(/\.json$/, '');
-    let localId = isLocalId(id) ? id : undefined;
-    let remoteId = !isLocalId(id) ? id : undefined;
+    let localId = isLocalId(id, this.#virtualNetwork) ? id : undefined;
+    let remoteId = !isLocalId(id, this.#virtualNetwork) ? id : undefined;
 
     if (localId) {
       let remoteIds = this.#idResolver.getRemoteIds(localId);
@@ -737,7 +732,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id = id.replace(/\.json$/, '');
     let { item, localId } = this.tryFindingCardItem(type, id);
 
-    if (!item && isLocalId(id)) {
+    if (!item && isLocalId(id, this.#virtualNetwork)) {
       let maybeRemoteId = this.#idResolver.findRemoteId(id);
       if (maybeRemoteId) {
         ({ item, localId } = this.tryFindingCardItem(type, maybeRemoteId));
@@ -788,8 +783,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       type === 'instance'
         ? this.#nonTrackedCardInstances
         : this.#nonTrackedCardInstanceErrors;
-    let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
-    let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
+    let localId = isLocalId(localOrRemoteId, this.#virtualNetwork)
+      ? localOrRemoteId
+      : undefined;
+    let remoteId = !isLocalId(localOrRemoteId, this.#virtualNetwork)
+      ? localOrRemoteId
+      : undefined;
     let item: CardDef | CardErrorJSONAPI | undefined;
     if (remoteId) {
       if (localId) {
@@ -797,14 +796,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
 
       localId = this.#idResolver.getLocalId(remoteId);
-      // try correlating the last part of the URL with a local ID to handle
-      // the scenario where the instance has a newly assigned remote id
+      // Correlate the last segment of the remote URL with a local ID to find an
+      // instance that was created locally and has since been given a remote id
+      // the resolver doesn't know about yet. This is a pure lookup: it does NOT
+      // reconcile the instance's `id` to the remote id, because it runs inside
+      // render-time reads (`store.peek`) and writing the tracked `id` mid-render
+      // trips Glimmer's backtracking re-render assertion. Identity reconciliation
+      // happens when the store learns the remote id out of band — at the realm
+      // invalidation event (StoreService.handleInvalidations) and the
+      // save/deserialize flow (api.setId / updateFromSerialized).
       if (!localId) {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
-        if (item && type === 'instance' && isCardOrFileInstance(item)) {
-          item.id = rri(remoteId);
-        }
       }
     }
 
@@ -831,7 +834,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let errorBucket = notTracked
       ? this.#nonTrackedCardInstanceErrors
       : this.#cardInstanceErrors;
-    let isRemoteId = !isLocalId(id);
+    let isRemoteId = !isLocalId(id, this.#virtualNetwork);
     if (isRemoteId) {
       if (isCardInstance(item)) {
         this.#idResolver.addIdPair(item[localIdSymbol], id);
@@ -847,10 +850,15 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
-    if (error && isRemoteId && error.id && isLocalId(error.id)) {
+    if (
+      error &&
+      isRemoteId &&
+      error.id &&
+      isLocalId(error.id, this.#virtualNetwork)
+    ) {
       this.#idResolver.addIdPair(error.id, id);
     }
-    let localId = isLocalId(id) ? id : undefined;
+    let localId = isLocalId(id, this.#virtualNetwork) ? id : undefined;
     let remoteIds = isRemoteId ? [id] : [];
     if (localId) {
       remoteIds = this.#idResolver.getRemoteIds(localId);
@@ -924,7 +932,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private hasReferences(id: string): boolean {
     let idsToCheck = new Set<string>([id]);
-    let localId = isLocalId(id) ? id : this.#idResolver.getLocalId(id);
+    let localId = isLocalId(id, this.#virtualNetwork)
+      ? id
+      : this.#idResolver.getLocalId(id);
     if (localId) {
       idsToCheck.add(localId);
       for (let remoteId of this.#idResolver.getRemoteIds(localId)) {
@@ -1040,10 +1050,10 @@ function findInstances(
   if (isFileDefInstance(obj)) {
     return [obj];
   }
-  if (
-    (obj as { type?: unknown; reference?: unknown }).type === 'not-loaded' &&
-    typeof (obj as { reference?: unknown }).reference === 'string'
-  ) {
+  // A sentinel in the bucket (not-loaded / link-error / link-not-found) is
+  // never an instance and never owns instance references — skip the recursion
+  // so its `errorDoc` and `reference` fields are not walked as a generic object.
+  if (api.isNonPresentLink(obj)) {
     return [];
   }
   if (isBaseDefInstance(obj)) {

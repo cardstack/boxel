@@ -3,7 +3,8 @@ import {
   isCardDef,
   codeRefWithAbsoluteIdentifier,
 } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
+import type { VirtualNetwork } from './virtual-network';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai';
@@ -117,7 +118,8 @@ function friendlyModuleName(fullModuleUrl: string) {
 
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
-  relativeTo?: RealmResourceIdentifier | URL,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
@@ -125,6 +127,8 @@ export function buildCommandFunctionName(
   let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
     commandCodeRef,
     relativeTo,
+    undefined,
+    virtualNetwork,
   ) as ResolvedCodeRef;
 
   const hashed = simpleHash(

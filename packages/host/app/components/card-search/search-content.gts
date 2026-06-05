@@ -10,7 +10,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
@@ -23,10 +23,12 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
+import AdornContext from '@cardstack/host/components/adorn/adorn-context';
 import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
@@ -138,6 +140,9 @@ interface Signature {
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
     initialFocusedSection?: string | null;
+    // When true, search-result cards render the Adorn visual treatment
+    // (teal hover type-label tab + teal selection chip).
+    adorn?: boolean;
   };
   Blocks: {};
 }
@@ -145,6 +150,7 @@ interface Signature {
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
 export default class SearchContent extends Component<Signature> {
+  @service declare network: NetworkService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service('recent-cards-service')
@@ -207,7 +213,7 @@ export default class SearchContent extends Component<Signature> {
     // Consume selectedTypeIds outside the ternary so the tracking
     // dependency is always established, even when the query is skipped.
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-      internalKeyFor(ref, undefined),
+      internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );
     return {
       query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
@@ -279,7 +285,7 @@ export default class SearchContent extends Component<Signature> {
         };
       }
       const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-        internalKeyFor(ref, undefined),
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
       );
       return {
         query: buildRecentsQuery(
@@ -503,76 +509,91 @@ export default class SearchContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
-      class='search-sheet-content {{if @isCompact "compact"}}'
+      class={{cn 'search-sheet-content' compact=@isCompact}}
       ...attributes
     >
-      {{#if this.showHeader}}
-        {{#unless @isCompact}}
-          <SearchResultHeader
-            @summaryText={{this.summaryText}}
-            @viewOptions={{VIEW_OPTIONS}}
-            @activeViewId={{this.activeViewId}}
-            @activeSort={{@activeSort}}
-            @sortOptions={{SORT_OPTIONS}}
-            @onChangeView={{this.onChangeView}}
-            @onChangeSort={{this.onChangeSort}}
-            @multiSelect={{@multiSelect}}
-            @selectedCards={{@selectedCards}}
-            @allCards={{this.allCards}}
-            @onSelectAll={{@onSelectAll}}
-            @onDeselectAll={{@onDeselectAll}}
-          />
-        {{/unless}}
-      {{/if}}
-
-      {{! Handle empty URL search state — only after loading completes }}
-      {{#if this.searchKeyIsURL}}
-        {{#if this.isCardResourceLoaded}}
-          {{#unless this.resolvedCard}}
-            <div class='empty-state' data-test-search-sheet-empty>
-              No card found at
-              {{@searchKey}}
-            </div>
+      {{! AdornContext aligns with this search-sheet-content div as
+          the visual region for adorn-decorated items. The Adorn
+          tokens + outline rules anchor here, so child ItemButtons
+          don't need to re-establish them per item. We thread the
+          yielded `strokeClass` down to each ItemButton rather than
+          letting them hard-code it. Harmless when @adorn is false (no
+          adorn-decorated descendants for the rules to match). }}
+      <AdornContext as |adorn|>
+        {{#if this.showHeader}}
+          {{#unless @isCompact}}
+            <SearchResultHeader
+              @summaryText={{this.summaryText}}
+              @viewOptions={{VIEW_OPTIONS}}
+              @activeViewId={{this.activeViewId}}
+              @activeSort={{@activeSort}}
+              @sortOptions={{SORT_OPTIONS}}
+              @onChangeView={{this.onChangeView}}
+              @onChangeSort={{this.onChangeSort}}
+              @multiSelect={{@multiSelect}}
+              @selectedCards={{@selectedCards}}
+              @allCards={{this.allCards}}
+              @onSelectAll={{@onSelectAll}}
+              @onDeselectAll={{@onDeselectAll}}
+            />
           {{/unless}}
         {{/if}}
-      {{/if}}
 
-      {{#if @isCompact}}
-        {{#if this.recentCardsSection}}
-          <SearchResultSection
-            @section={{this.recentCardsSection}}
-            @isCompact={{true}}
-            @handleSelect={{@handleSelect}}
-            data-test-search-result-section='recent-cards'
-          />
+        {{! Handle empty URL search state — only after loading completes }}
+        {{#if this.searchKeyIsURL}}
+          {{#if this.isCardResourceLoaded}}
+            {{#unless this.resolvedCard}}
+              <div class='empty-state' data-test-search-sheet-empty>
+                No card found at
+                {{@searchKey}}
+              </div>
+            {{/unless}}
+          {{/if}}
         {{/if}}
-      {{else}}
-        {{! Render all sections }}
-        {{#each this.sections key='sid' as |section i|}}
-          <SearchResultSection
-            @section={{section}}
-            @viewOption={{this.activeViewId}}
-            @handleSelect={{@handleSelect}}
-            @isFocused={{eq this.pagination.focusedSection section.sid}}
-            @isCollapsed={{this.isSectionCollapsed section.sid}}
-            @onFocusSection={{this.onFocusSection}}
-            @getDisplayedCount={{this.getDisplayedCount}}
-            @onShowMore={{this.onShowMore}}
-            @selectedCards={{@selectedCards}}
-            @multiSelect={{@multiSelect}}
-            @offerToCreate={{@offerToCreate}}
-            @onSubmit={{@onSubmit}}
-            data-section-sid={{section.sid}}
-            data-test-search-result-section={{i}}
-          />
-        {{/each}}
-      {{/if}}
 
-      {{#if this.hasNoResults}}
-        <div class='empty-state' data-test-search-content-empty>
-          No cards available
-        </div>
-      {{/if}}
+        {{#if @isCompact}}
+          {{#if this.recentCardsSection}}
+            <SearchResultSection
+              @section={{this.recentCardsSection}}
+              @isCompact={{true}}
+              @handleSelect={{@handleSelect}}
+              @adorn={{@adorn}}
+              @adornStrokeClass={{adorn.strokeClass}}
+              @adornPositionLabel={{adorn.positionLabel}}
+              data-test-search-result-section='recent-cards'
+            />
+          {{/if}}
+        {{else}}
+          {{! Render all sections }}
+          {{#each this.sections key='sid' as |section i|}}
+            <SearchResultSection
+              @section={{section}}
+              @viewOption={{this.activeViewId}}
+              @handleSelect={{@handleSelect}}
+              @isFocused={{eq this.pagination.focusedSection section.sid}}
+              @isCollapsed={{this.isSectionCollapsed section.sid}}
+              @onFocusSection={{this.onFocusSection}}
+              @getDisplayedCount={{this.getDisplayedCount}}
+              @onShowMore={{this.onShowMore}}
+              @selectedCards={{@selectedCards}}
+              @multiSelect={{@multiSelect}}
+              @offerToCreate={{@offerToCreate}}
+              @onSubmit={{@onSubmit}}
+              @adorn={{@adorn}}
+              @adornStrokeClass={{adorn.strokeClass}}
+              @adornPositionLabel={{adorn.positionLabel}}
+              data-section-sid={{section.sid}}
+              data-test-search-result-section={{i}}
+            />
+          {{/each}}
+        {{/if}}
+
+        {{#if this.hasNoResults}}
+          <div class='empty-state' data-test-search-content-empty>
+            No cards available
+          </div>
+        {{/if}}
+      </AdornContext>
     </div>
     <style scoped>
       .search-sheet-content {
@@ -583,13 +604,27 @@ export default class SearchContent extends Component<Signature> {
         overscroll-behavior: none;
         height: 100%;
         background-color: var(--boxel-light);
-        padding-right: var(--boxel-sp);
+        /* `overflow-y: auto` also clips horizontal overflow, so the
+           Adorn outline stroke and type-label tab (which extend a few
+           px outside each card) get cut off on the top/left edges
+           without room. Block + inline-start padding keeps them inside
+           the clip region; the larger inline-end padding is the
+           existing scrollbar gutter. */
+        padding-block: var(--boxel-sp-xs);
+        padding-inline: var(--boxel-sp-xs) var(--boxel-sp);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .search-sheet-content.compact {
         flex-direction: row;
         flex-wrap: nowrap;
         padding-inline: var(--boxel-sp-xs);
+        /* `overflow-y: hidden` (needed so only the row scrolls
+           horizontally) would clip the Adorn outline stroke and the
+           hover type-label tab, which flips below the card. Bias the
+           block padding toward the block-end so the tab has room below
+           (the block-start only needs to clear the outline stroke),
+           working with the taller prompt sheet (--search-sheet-prompt-height). */
+        padding-block: var(--boxel-sp-2xs) var(--boxel-sp);
         overflow-y: hidden;
         overflow-x: auto;
       }

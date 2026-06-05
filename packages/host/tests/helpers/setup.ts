@@ -1,7 +1,7 @@
 /* eslint-disable @cardstack/host/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
-import { getSettledState, settled } from '@ember/test-helpers';
+import { getContext, getSettledState, settled } from '@ember/test-helpers';
 
 import { getPendingWaiterState } from '@ember/test-waiters';
 import type { TestWaiterDebugInfo } from '@ember/test-waiters';
@@ -28,7 +28,7 @@ import { cleanupMonacoEditorModels } from './index';
 // than reassigning, otherwise late-resolving fetches would mutate the next
 // test's tracking container. Snapshotted by the unhandled-rejection
 // diagnostics helper to surface what was outstanding when a rejection fired.
-const inFlightFetches = new Map<number, string>();
+const inFlightFetches = new Map<number, { desc: string; startedAt: number }>();
 let nextFetchId = 0;
 
 // Track the most recent failed fetches per test so a "Promise rejected during X"
@@ -44,6 +44,65 @@ const recentFailedFetches: string[] = [];
 const RECENT_FAILED_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
 
+// Module/name of the test currently running, captured from QUnit.testStart so a
+// global error can be attributed to the test that produced it. Resets on page
+// reload (i.e. per shard), which is exactly the lifetime over which the
+// renderer-corruption tracking below is meaningful.
+let currentTestLabel = '<unknown test>';
+
+// An error thrown synchronously during render (e.g. a backtracking re-render
+// assertion: "attempted to update X, but it had already been used previously in
+// the same computation") leaves Ember's renderer in an unrecoverable state for
+// the rest of the page load. Every later test that tries to render or fetch
+// then fails too — typically as an opaque `settled()` timeout or `Failed to
+// fetch` — with nothing tying it back to the test that actually broke the app.
+// Remember the first such error so a later cascade victim's diagnostic can name
+// the originating test instead of looking like an independent failure. Gated to
+// the render-corruption signatures so a benign earlier rejection is never
+// blamed for an unrelated downstream failure.
+interface CapturedRenderError {
+  epoch: number;
+  label: string;
+  message: string;
+}
+let firstRenderCorruptingError: CapturedRenderError | undefined;
+
+function isRenderCorruptingError(message: string): boolean {
+  return (
+    message.includes(
+      'had already been used previously in the same computation',
+    ) ||
+    message.includes('unrecoverable error occur during render') ||
+    message.includes('Attempted to rerender')
+  );
+}
+
+function rememberRenderCorruptingError(message: string) {
+  if (firstRenderCorruptingError || !isRenderCorruptingError(message)) {
+    return;
+  }
+  firstRenderCorruptingError = {
+    epoch: currentTestEpoch,
+    label: currentTestLabel,
+    message,
+  };
+}
+
+// Only surfaced for a test that ran AFTER the corrupting one — the originating
+// test's own diagnostic already prints the error directly, so flagging it there
+// as a "cascade" would be misleading.
+function summarizePriorRenderCorruption(): string | undefined {
+  let prior = firstRenderCorruptingError;
+  if (!prior || prior.epoch >= currentTestEpoch) {
+    return undefined;
+  }
+  return (
+    `prior render-corrupting error (in "${prior.label}") left Ember's renderer ` +
+    `unrecoverable for the rest of this page load — this failure is likely a ` +
+    `cascade of it, not an independent failure:\n  ${prior.message}`
+  );
+}
+
 // Lazily install a single global QUnit.testDone callback that fires the
 // existing diagnostic dump when a failed test ran longer than 60s. Silent
 // QUnit timeouts (e.g. a waitFor that never resolves) don't surface through
@@ -56,8 +115,16 @@ let currentTestEpoch = 0;
 let timeoutDiagnosticsInstalled = false;
 function installTimeoutDiagnosticsOnce() {
   if (timeoutDiagnosticsInstalled) return;
+  startEventLoopLagSampler();
   let qunitGlobal = getQUnitWithCallbacks();
   if (!qunitGlobal || typeof qunitGlobal.testDone !== 'function') return;
+  if (typeof qunitGlobal.testStart === 'function') {
+    qunitGlobal.testStart((details: QUnitTestStartDetails) => {
+      currentTestLabel = `${details?.module ?? '<unknown module>'} > ${
+        details?.name ?? '<unknown test>'
+      }`;
+    });
+  }
   qunitGlobal.testDone((details: QUnitTestDoneDetails) => {
     if (
       details &&
@@ -86,13 +153,22 @@ interface QUnitTestDoneDetails {
   runtime?: number;
 }
 
+interface QUnitTestStartDetails {
+  name?: string;
+  module?: string;
+}
+
 function getQUnitWithCallbacks():
-  | { testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void }
+  | {
+      testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
+      testStart?: (cb: (details: QUnitTestStartDetails) => void) => void;
+    }
   | undefined {
   let q = (globalThis as { QUnit?: unknown }).QUnit;
   return q && typeof q === 'object'
     ? (q as {
         testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
+        testStart?: (cb: (details: QUnitTestStartDetails) => void) => void;
       })
     : undefined;
 }
@@ -115,7 +191,10 @@ function setupFetchDebugging(hooks: NestedHooks) {
       let { method, url } = describeFetchRequest(input, init);
       let id = nextFetchId++;
       let epoch = currentTestEpoch;
-      inFlightFetches.set(id, `${method} ${url}`);
+      inFlightFetches.set(id, {
+        desc: `${method} ${url}`,
+        startedAt: Date.now(),
+      });
       try {
         return await boundFetch(input, init);
       } catch (error) {
@@ -201,10 +280,9 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
       handler = (event: PromiseRejectionEvent) => {
         // Observation only — do NOT call event.preventDefault(). QUnit's own
         // unhandled-rejection handling must still run and fail the test.
-        logRejectionDiagnostics(
-          '[test-unhandled-rejection]',
-          formatRejectionReason(event.reason),
-        );
+        let reason = formatRejectionReason(event.reason);
+        rememberRenderCorruptingError(reason);
+        logRejectionDiagnostics('[test-unhandled-rejection]', reason);
       };
       target.addEventListener('unhandledrejection', handler);
     }
@@ -221,10 +299,9 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
       originalOnUncaughtException = qunitGlobal.onUncaughtException;
       wrappedOnUncaughtException = (error: unknown) => {
         try {
-          logRejectionDiagnostics(
-            '[test-qunit-uncaught]',
-            formatRejectionReason(error),
-          );
+          let reason = formatRejectionReason(error);
+          rememberRenderCorruptingError(reason);
+          logRejectionDiagnostics('[test-qunit-uncaught]', reason);
         } catch (_e) {
           // never let diagnostic logging swallow the original failure
         }
@@ -262,12 +339,21 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
 }
 
 function logRejectionDiagnostics(prefix: string, formattedReason: string) {
-  let inFlightSnapshot = Array.from(inFlightFetches.values());
+  // Include how long each fetch has been outstanding — a request hung for most
+  // of the test's lifetime (vs one just dispatched) is the wedge signature, and
+  // pairing the age with the `recent failed fetches` list below shows whether
+  // earlier retry attempts of the same URL rejected before this one stuck.
+  let now = Date.now();
+  let inFlightSnapshot = Array.from(inFlightFetches.values()).map(
+    (f) => `${f.desc} (outstanding ${now - f.startedAt}ms)`,
+  );
   let recent = recentFailedFetches.slice();
+  let priorCorruption = summarizePriorRenderCorruption();
   console.error(
     [
       prefix,
       formattedReason,
+      priorCorruption,
       inFlightSnapshot.length
         ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
         : 'in-flight fetches at rejection time: <none>',
@@ -275,8 +361,93 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
       summarizeSettledState(),
-    ].join('\n'),
+      summarizeRealmAuth(),
+      summarizeEventLoopLag(),
+      summarizeDomSnapshot(),
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n'),
   );
+}
+
+// Sample event-loop lag across the whole suite so a silent timeout can be
+// attributed. Flat lag while a single await never resolves points at a real
+// code/render hang; lag spiking to seconds points at runner CPU/GC contention
+// — the suite was simply too slow to beat the 60s budget, not stuck. Uses a
+// raw setInterval, which is invisible to Ember's `settled()`, so it never
+// perturbs the state it measures.
+const EVENT_LOOP_LAG_SAMPLES_MS: number[] = [];
+const EVENT_LOOP_LAG_SAMPLE_LIMIT = 12;
+const EVENT_LOOP_LAG_INTERVAL_MS = 500;
+let eventLoopLagLastTick = 0;
+let eventLoopLagSamplerStarted = false;
+// Last substantial #ember-testing HTML captured while a test was still
+// mounted. On a silent timeout the dump runs at QUnit.testDone — after the app
+// is torn down and the live container is empty — so this preserves what the
+// hung test was actually rendering ~during the stall.
+let lastMountedDomSnapshot = '';
+function startEventLoopLagSampler() {
+  if (eventLoopLagSamplerStarted) return;
+  eventLoopLagSamplerStarted = true;
+  eventLoopLagLastTick = performance.now();
+  setInterval(() => {
+    let now = performance.now();
+    let lag = Math.max(
+      0,
+      now - eventLoopLagLastTick - EVENT_LOOP_LAG_INTERVAL_MS,
+    );
+    eventLoopLagLastTick = now;
+    EVENT_LOOP_LAG_SAMPLES_MS.push(Math.round(lag));
+    if (EVENT_LOOP_LAG_SAMPLES_MS.length > EVENT_LOOP_LAG_SAMPLE_LIMIT) {
+      EVENT_LOOP_LAG_SAMPLES_MS.shift();
+    }
+    try {
+      let root = document.querySelector('#ember-testing');
+      let html = root ? root.innerHTML.replace(/\s+/g, ' ').trim() : '';
+      // Only keep substantial renders so a between-tests empty container
+      // doesn't clobber the last real one.
+      if (html.length > 60) {
+        lastMountedDomSnapshot = html;
+      }
+    } catch {
+      // never let diagnostics sampling throw
+    }
+  }, EVENT_LOOP_LAG_INTERVAL_MS);
+}
+
+function summarizeEventLoopLag(): string {
+  if (!EVENT_LOOP_LAG_SAMPLES_MS.length) {
+    return 'event-loop lag: <no samples>';
+  }
+  let samples = EVENT_LOOP_LAG_SAMPLES_MS.slice();
+  let max = Math.max(...samples);
+  return `event-loop lag (last ${samples.length} @ ${EVENT_LOOP_LAG_INTERVAL_MS}ms, max=${max}ms): ${samples.join(',')}ms`;
+}
+
+// On a silent timeout the client is usually fully settled, so the real failure
+// is "the awaited DOM never appeared" rather than a hung promise. Capturing the
+// rendered test container shows what DID render (an error card, an empty stack,
+// a spinner) in place of the element the test was waiting for.
+function summarizeDomSnapshot(): string {
+  try {
+    let root = document.querySelector('#ember-testing') ?? document.body;
+    let live = root ? root.innerHTML.replace(/\s+/g, ' ').trim() : '';
+    // At QUnit.testDone the app is already torn down, so the live container is
+    // empty; fall back to the last substantial DOM the sampler captured while
+    // the test was still mounted (i.e. ~during the hang).
+    let useSampled =
+      live.length <= 60 && lastMountedDomSnapshot.length > live.length;
+    let html = useSampled ? lastMountedDomSnapshot : live;
+    let source = useSampled ? 'last sampled while mounted' : 'live';
+    const LIMIT = 4000;
+    let body =
+      html.length > LIMIT
+        ? `${html.slice(0, LIMIT)}… (+${html.length - LIMIT} more chars)`
+        : html;
+    return `dom snapshot (#ember-testing, ${source}, ${html.length} chars):\n  ${body}`;
+  } catch (error) {
+    return `dom snapshot: <unavailable: ${formatErrorForLog(error)}>`;
+  }
 }
 
 // A silent QUnit timeout (e.g. a `waitFor`/`settled` that never resolves)
@@ -284,6 +455,55 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
 // something other than the network. Snapshot Ember's settledness metrics and,
 // when a test waiter is the culprit, name it (with any captured begin-async
 // origin) so the next timeout points at the stuck gate instead of being opaque.
+// `realm.canWrite(url)` drives whether the card editor renders its fields
+// editable; it reads the realm session JWT claims, which populate
+// asynchronously once the realm token is minted. A silent timeout — or a
+// `fillIn`-on-disabled failure with everything settled — is consistent with
+// the editor having rendered before the session resolved, so report each realm
+// resource's auth/permission state at failure time. Read-only, and only looked
+// up on failure, so it never instantiates the service for tests that don't use
+// it. Note: on QUnit's post-teardown timeout path the owner is already gone,
+// so this reports `<no active test owner>` there; the during-test uncaught /
+// unhandled-rejection paths still capture it.
+function summarizeRealmAuth(): string {
+  try {
+    let owner = (
+      getContext() as { owner?: { lookup(name: string): unknown } } | undefined
+    )?.owner;
+    if (!owner) {
+      return 'realm auth: <no active test owner>';
+    }
+    let realmService = owner.lookup('service:realm') as
+      | {
+          realms?: ReadonlyMap<
+            string,
+            {
+              url: string;
+              isLoggedIn: boolean;
+              canRead: boolean;
+              canWrite: boolean;
+            }
+          >;
+        }
+      | undefined;
+    let realms = realmService?.realms;
+    if (!realms) {
+      return 'realm auth: <no realm service>';
+    }
+    let lines: string[] = [];
+    for (let resource of realms.values()) {
+      lines.push(
+        `${resource.url} loggedIn=${resource.isLoggedIn} canRead=${resource.canRead} canWrite=${resource.canWrite}`,
+      );
+    }
+    return lines.length
+      ? `realm auth:\n  ${lines.join('\n  ')}`
+      : 'realm auth: <no realm resources>';
+  } catch (error) {
+    return `realm auth: <unavailable: ${formatErrorForLog(error)}>`;
+  }
+}
+
 function summarizeSettledState(): string {
   try {
     let state = getSettledState();

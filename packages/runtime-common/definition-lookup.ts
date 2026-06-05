@@ -11,6 +11,22 @@ import {
   type Querier,
 } from './expression';
 import { clampSerializedError, type SerializedError } from './error';
+import { logger } from './log';
+
+// Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
+// mismatches: every cache read logs its exact key + HIT/MISS, every write
+// logs its key, and each definition load is tagged pre-warm vs on-demand.
+// Off unless `LOG_LEVELS` enables it, e.g. `*=info,definition-cache-key=debug`.
+const log = logger('definition-lookup');
+const keyLog = logger('definition-cache-key');
+function fmtKey(
+  moduleUrl: string,
+  cacheScope: string,
+  authUserId: string,
+  resolvedRealmURL: string,
+): string {
+  return `module=${moduleUrl} scope=${cacheScope} user=${authUserId || '(empty)'} realm=${resolvedRealmURL}`;
+}
 import {
   fetchUserPermissions,
   flattenPrerenderMeta,
@@ -23,18 +39,12 @@ import {
   type Realm,
   type RealmPermissions,
   type ResolvedCodeRef,
-  type TimingDiagnostics,
+  type Diagnostics,
   executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
-import {
-  isRegisteredPrefix,
-  cardIdToURL,
-  resolveCardReference,
-  rri,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
@@ -89,20 +99,14 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
 
 function canonicalURL(
   url: string,
-  relativeTo?: string,
-  virtualNetwork?: VirtualNetwork,
+  relativeTo: string | undefined,
+  virtualNetwork: VirtualNetwork,
 ): string {
   // Resolve registered prefix identifiers (e.g. @cardstack/catalog/foo)
   // to real URLs so that realm-membership checks and DB lookups work.
-  if (
-    virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(url)
-      : isRegisteredPrefix(url)
-  ) {
+  if (virtualNetwork.isRegisteredPrefix(url)) {
     try {
-      return virtualNetwork
-        ? virtualNetwork.toURL(url).href
-        : resolveCardReference(url, undefined);
+      return virtualNetwork.toURL(url).href;
     } catch (_e) {
       // fall through to normal URL handling
     }
@@ -197,9 +201,9 @@ interface WriteToDatabaseCacheParams {
   authUserId: string;
   // Server-observed render timings + host-side breadcrumbs flattened from
   // the prerender response's `meta` block (same shape as
-  // `boxel_index.timing_diagnostics`). Lets operators query slow / hung
+  // `boxel_index.diagnostics`). Lets operators query slow / hung
   // module renders the same way they query slow / hung card renders.
-  timingDiagnostics?: TimingDiagnostics;
+  diagnostics?: Diagnostics;
 }
 
 export class FilterRefersToNonexistentTypeError extends Error {
@@ -285,6 +289,21 @@ export interface DefinitionLookupOptions {
   priority?: number;
 }
 
+// Explicit cache context for a read-through populate. Callers that
+// already know the realm context (the IndexRunner pre-warm, which runs
+// in the worker against a bare lookup that has no registered realm and
+// thus cannot self-resolve a context) supply it directly instead of
+// relying on `buildLookupContext`'s `#realms` / remote-probe resolution.
+export interface PopulateDefinitionCacheEntryArgs {
+  moduleURL: string;
+  realmURL: string;
+  resolvedRealmURL: string;
+  cacheScope: CacheScope;
+  cacheUserId: string;
+  prerenderUserId: string;
+  priority?: number;
+}
+
 export interface DefinitionLookup {
   lookupDefinition(
     codeRef: ResolvedCodeRef,
@@ -305,6 +324,14 @@ export interface DefinitionLookup {
   getCachedDefinitions(
     moduleUrl: string,
     opts?: DefinitionLookupOptions,
+  ): Promise<DefinitionCacheEntry | undefined>;
+  // Like getCachedDefinitions, but the caller supplies the cache context
+  // explicitly rather than letting `buildLookupContext` self-resolve it.
+  // Required by callers running against a lookup with no registered realm
+  // (the worker's IndexRunner pre-warm), where self-resolution returns
+  // null and the populate silently no-ops.
+  populateDefinitionCacheEntry(
+    args: PopulateDefinitionCacheEntryArgs,
   ): Promise<DefinitionCacheEntry | undefined>;
   getCachedDefinitionsBatch(
     query: DefinitionCacheEntryQuery,
@@ -467,6 +494,24 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
+  async populateDefinitionCacheEntry(
+    args: PopulateDefinitionCacheEntryArgs,
+  ): Promise<DefinitionCacheEntry | undefined> {
+    return await this.loadDefinitionCacheEntry({
+      ...args,
+      moduleURL: canonicalURL(args.moduleURL, undefined, this.#virtualNetwork),
+      // Pre-warm is speculative and best-effort: the IndexRunner sweeps
+      // every realm `.gts`/`.gjs` to prime sibling card modules, so it
+      // also touches modules that aren't cards and fail to prerender
+      // (e.g. a non-card `realm.gts`). Persisting those errors would
+      // pollute the modules cache with rows no reader asked for. Skip
+      // error persistence here; if a module is genuinely needed and
+      // genuinely errors, the on-demand lookup during the visit phase
+      // re-derives and caches the error.
+      skipErrorPersist: true,
+    });
+  }
+
   private async query(expression: Expression, coerceTypes?: TypeCoercion) {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
@@ -479,6 +524,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
     priority?: number;
+    skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
     let key = inFlightKey(args);
     let existing = this.#inFlight.get(key);
@@ -553,6 +599,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId: string;
       prerenderUserId: string;
       priority?: number;
+      skipErrorPersist?: boolean;
     },
     coordinator: PopulateCoordinator,
   ): Promise<DefinitionCacheEntry | undefined> {
@@ -602,6 +649,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId,
     prerenderUserId,
     priority,
+    skipErrorPersist,
   }: {
     moduleURL: string;
     realmURL: string;
@@ -610,7 +658,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
     priority?: number;
+    skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
+    // Real cache-effectiveness signal: a MISS is logged exactly once below,
+    // only when the lookup exhausts the cache (primary + every alias/extension
+    // candidate) and commits to a prerender. Per-probe DB reads are NOT logged
+    // as misses — those alias probes inflate the count with non-real misses.
+    // HITs are logged at the DB read itself (the choke point for all callers).
+    let prerenderMissLogged = false;
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmDefinitions (and any future synchronous bump) runs entirely before
     // its first await, so a snapshot taken after an await above would already
@@ -643,6 +698,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           return candidateCached;
         }
       }
+      if (!prerenderMissLogged) {
+        keyLog.debug(
+          `MISS source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL)}`,
+        );
+        prerenderMissLogged = true;
+      }
       let response = await this.getModuleDefinitionsViaPrerenderer(
         candidateURL,
         realmURL,
@@ -654,6 +715,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         this.isMissingModuleError(response, candidateURL)
       ) {
         continue;
+      }
+      if (skipErrorPersist && response.status === 'error') {
+        // Speculative pre-warm: don't leave error state behind for a
+        // module that failed to prerender. Returning here without
+        // persisting reverts to the same outcome as a pre-warm miss —
+        // the visit phase re-derives and caches the error if the module
+        // is genuinely needed.
+        return undefined;
       }
       if (this.generationChanged(resolvedRealmURL, moduleURL, startSnapshot)) {
         // Invalidate (or a wider cache wipe) ran while we were prerendering.
@@ -1010,7 +1079,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     } catch (err: unknown) {
       // Local state is already consistent; cross-instance staleness is
       // bounded and self-healing. Don't fail the invalidation.
-      console.warn(
+      log.warn(
         `pg_notify ${MODULE_CACHE_INVALIDATED_CHANNEL} failed for "${payload}": ${String(err)}`,
       );
     }
@@ -1155,10 +1224,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       };
     } catch (err) {
-      console.warn(
-        `Failed to probe remote realm visibility for ${moduleURL}`,
-        err,
-      );
+      log.warn(`Failed to probe remote realm visibility for ${moduleURL}`, err);
       return null;
     }
   }
@@ -1215,9 +1281,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       created_at: string | null;
     }[];
 
+    // Only HITs are logged here — a HIT (row found) is unambiguous. A "no
+    // rows" result is just one probe (primary URL or an alias/extension
+    // candidate) and is NOT a real miss on its own; the real miss is logged
+    // once at the prerender-commit point in loadDefinitionCacheEntryUncached.
     if (!rows.length) {
       return undefined;
     }
+
+    keyLog.debug(
+      `HIT ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL)} alias=${moduleAlias}`,
+    );
 
     let row = rows[0];
     let definitions =
@@ -1330,7 +1404,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL,
     cacheScope,
     authUserId,
-    timingDiagnostics,
+    diagnostics,
   }: WriteToDatabaseCacheParams): Promise<void> {
     await this.query([
       'INSERT INTO',
@@ -1346,7 +1420,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ['resolved_realm_url'],
           ['cache_scope'],
           ['auth_user_id'],
-          ['timing_diagnostics'],
+          ['diagnostics'],
         ]),
       ) as Expression),
       'VALUES',
@@ -1370,7 +1444,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(resolvedRealmURL)],
           [param(cacheScope)],
           [param(authUserId)],
-          [param(timingDiagnostics ? JSON.stringify(timingDiagnostics) : null)],
+          [param(diagnostics ? JSON.stringify(diagnostics) : null)],
         ]),
       ) as Expression),
       'ON CONFLICT ON CONSTRAINT modules_pkey DO UPDATE SET',
@@ -1381,7 +1455,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['error_doc = excluded.error_doc'],
         ['created_at = excluded.created_at'],
         ['resolved_realm_url = excluded.resolved_realm_url'],
-        ['timing_diagnostics = excluded.timing_diagnostics'],
+        ['diagnostics = excluded.diagnostics'],
       ]) as Expression),
     ]);
   }
@@ -1393,6 +1467,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope,
     userId: string,
   ): Promise<DefinitionCacheEntry> {
+    keyLog.debug(
+      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, cacheScope === 'public' ? '' : userId, resolvedRealmURL)}`,
+    );
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
       response.deps ?? [],
@@ -1437,7 +1514,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       cacheScope,
       authUserId: cacheScope === 'public' ? '' : userId,
-      timingDiagnostics: flattenPrerenderMeta(response.meta),
+      diagnostics: flattenPrerenderMeta(response.meta),
     });
     return cacheEntry;
   }
@@ -1572,9 +1649,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = this.#virtualNetwork
-              ? this.#virtualNetwork.toURL(error.id)
-              : cardIdToURL(error.id);
+            base = this.#virtualNetwork.toURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }
@@ -1838,6 +1913,12 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined> {
     return await this.#inner.getCachedDefinitions(moduleUrl, opts);
+  }
+
+  async populateDefinitionCacheEntry(
+    args: PopulateDefinitionCacheEntryArgs,
+  ): Promise<DefinitionCacheEntry | undefined> {
+    return await this.#inner.populateDefinitionCacheEntry(args);
   }
 
   async getCachedDefinitionsBatch(

@@ -196,9 +196,12 @@ const ALL_TEST_FILES: string[] = [
   './page-pool-priority-test',
   './page-pool-eviction-recovery-test',
   './page-pool-standby-refill-test',
+  './page-pool-cert-verifier-retry-test',
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
+  './sanitize-for-jsonb-test',
+  './is-json-content-type-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
   './queue-test',
@@ -222,6 +225,7 @@ const ALL_TEST_FILES: string[] = [
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
   './realm-endpoints/directory-test',
+  './realm-endpoints/indexing-errors-test',
   './realm-endpoints/info-test',
   './realm-endpoints/invalidate-urls-test',
   './realm-endpoints/lint-test',
@@ -266,7 +270,7 @@ const ALL_TEST_FILES: string[] = [
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',
   './claim-boxel-domain-test',
-  './card-reference-resolver-test',
+  './realm-identifiers-test',
   './bfm-card-references-test',
   './package-shim-handler-test',
   './command-parsing-utils-test',
@@ -288,6 +292,7 @@ const ALL_TEST_FILES: string[] = [
   './node-realm-test',
   './session-room-queries-test',
   './indexing-event-sink-test',
+  './skip-query-backed-expansion-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

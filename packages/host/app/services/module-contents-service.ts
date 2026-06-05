@@ -111,7 +111,11 @@ export default class ModuleContentsService extends Service {
       throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
     }
     let source = r.content;
-    let moduleSyntax = new ModuleSyntax(source, moduleId);
+    let moduleSyntax = new ModuleSyntax(
+      source,
+      moduleId,
+      this.network.virtualNetwork,
+    );
     if ('error' in result) {
       throw new Error(
         `Error loading module at ${url}: ${result.error.message}`,

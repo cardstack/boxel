@@ -5,6 +5,7 @@ import {
   waitFor,
   click,
   typeIn,
+  settled,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -337,6 +338,96 @@ module('Integration | Store', function (hooks) {
 
     let file = await testRealmAdapter.openFile(`Person/boris.json`);
     assert.strictEqual(file, undefined, 'delete() removes the remote card');
+  });
+
+  test('deleting a linked target rewrites a loaded consumer linksTo slot to a broken-link sentinel', async function (assert) {
+    // Load the consumer and the target, then link them so the consumer holds
+    // the target as a resolved (present) link — the state a user is looking at
+    // when they delete the linked card. The delete must flip that slot to a
+    // broken-link sentinel in place, so the placeholder render takes over
+    // without a reload. (delete() evicts the target from the store before its
+    // own invalidation event arrives, so the realm-event reload path never
+    // sees it; the rewrite has to happen here.)
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+    let hassan = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDefType;
+    (hassan as any).bestFriend = boris;
+    await settled();
+
+    assert.strictEqual(
+      (api.getRelationship(hassan, 'bestFriend') as CardAPI.RelationshipState)
+        .kind,
+      'present',
+      'the consumer link resolves to the target before the delete',
+    );
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    let after = api.getRelationship(
+      hassan,
+      'bestFriend',
+    ) as CardAPI.RelationshipState;
+    assert.strictEqual(
+      after.kind,
+      'not-found',
+      'deleting the target rewrites the consumer slot to a broken-link sentinel without a reload',
+    );
+    assert.strictEqual(
+      after.reference,
+      `${testRealmURL}Person/boris`,
+      'the sentinel preserves the deleted target reference for the placeholder',
+    );
+  });
+
+  test('deleting a linked target rewrites only the matching element of a loaded consumer linksToMany slot', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    storeService.addReference(`${testRealmURL}Person/jade`);
+    await storeService.flush();
+    let hassan = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDefType;
+    let jade = storeService.peek(`${testRealmURL}Person/jade`) as CardDefType;
+    (hassan as any).friends = [jade, boris];
+    await settled();
+
+    let before = api.getRelationship(
+      hassan,
+      'friends',
+    ) as CardAPI.RelationshipState[];
+    assert.deepEqual(
+      before.map((s) => s.kind),
+      ['present', 'present'],
+      'both linksToMany elements resolve before the delete',
+    );
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    let after = api.getRelationship(
+      hassan,
+      'friends',
+    ) as CardAPI.RelationshipState[];
+    let borisEntry = after.find(
+      (s) => s.reference === `${testRealmURL}Person/boris`,
+    );
+    let jadeEntry = after.find(
+      (s) => s.reference === `${testRealmURL}Person/jade`,
+    );
+    assert.strictEqual(
+      borisEntry?.kind,
+      'not-found',
+      'the deleted element becomes a broken-link sentinel',
+    );
+    assert.strictEqual(
+      jadeEntry?.kind,
+      'present',
+      'the surviving element is left untouched',
+    );
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {

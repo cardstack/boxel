@@ -59,7 +59,9 @@ export async function getTypes(instance: CardDef): Promise<string[]> {
     if (!loadedCardRef) {
       throw new Error(`could not identify card ${loadedCard.name}`);
     }
-    types.push(internalKeyFor(loadedCardRef, undefined));
+    types.push(
+      internalKeyFor(loadedCardRef, undefined, loader.getVirtualNetwork()!),
+    );
     if (!isEqual(loadedCardRef, baseCardRef)) {
       fullRef = {
         type: 'ancestorOf',

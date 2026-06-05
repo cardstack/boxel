@@ -362,15 +362,15 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
 
     // Both slots load concurrently; wait until neither is still in-flight so
     // the good slot has resolved to a card and the broken one to a sentinel.
+    // Per-slot index access is masked to `Card | undefined`, so settle on the
+    // typed `getRelationship` surface rather than probing the array for shapes.
     await waitUntil(() => {
-      let arr = getDataBucket(person).get('pets');
-      if (!Array.isArray(arr)) {
+      let states = getRelationship(person, 'pets');
+      if (!Array.isArray(states)) {
         return false;
       }
-      let stillLoading = arr.some(
-        (e: any) => e?.type === 'not-loaded' || e?.loading,
-      );
-      return !stillLoading && arr.some((e: any) => isLinkNotFound(e));
+      let kinds = states.map((s) => s.kind);
+      return !kinds.includes('not-loaded') && kinds.includes('not-found');
     });
 
     let arrayAfter = getDataBucket(person).get('pets');

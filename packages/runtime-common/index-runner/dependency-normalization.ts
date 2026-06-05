@@ -1,9 +1,5 @@
-import { rri } from '../card-reference-resolver';
+import { rri } from '../realm-identifiers';
 import { trimExecutableExtension } from '../index';
-import {
-  isRegisteredPrefix,
-  resolveCardReference,
-} from '../card-reference-resolver';
 import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';
 
@@ -15,7 +11,7 @@ export function isExtensionlessPath(url: URL): boolean {
 export function normalizeStoredDependency(
   dep: string,
   relativeTo: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string {
   return canonicalURL(dep, relativeTo.href, virtualNetwork);
 }
@@ -24,19 +20,13 @@ export function normalizeRelationshipDependency(
   dep: string,
   relativeTo: URL,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string {
   let canonical = canonicalURL(dep, relativeTo.href, virtualNetwork);
   // Prefix-form deps (e.g. @cardstack/catalog/foo) are already canonical.
   // Resolve to check realm membership and add .json if needed.
-  if (
-    virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(canonical)
-      : isRegisteredPrefix(canonical)
-  ) {
-    let resolved = virtualNetwork
-      ? virtualNetwork.toURL(canonical).href
-      : resolveCardReference(canonical, undefined);
+  if (virtualNetwork.isRegisteredPrefix(canonical)) {
+    let resolved = virtualNetwork.toURL(canonical).href;
     try {
       let parsed = new URL(resolved);
       if (
@@ -67,16 +57,11 @@ export function normalizeRelationshipDependency(
 export function canTraverseRelationshipDependency(
   dep: string,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): boolean {
   try {
-    let isPrefix = virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(dep)
-      : isRegisteredPrefix(dep);
-    let resolved = isPrefix
-      ? virtualNetwork
-        ? virtualNetwork.toURL(dep).href
-        : resolveCardReference(dep, undefined)
+    let resolved = virtualNetwork.isRegisteredPrefix(dep)
+      ? virtualNetwork.toURL(dep).href
       : dep;
     let parsed = new URL(resolved);
     if (!parsed.href.startsWith(realmURL.href)) {
@@ -91,7 +76,7 @@ export function canTraverseRelationshipDependency(
 export function normalizeDependencyForLookup(
   dep: string,
   relativeTo: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string {
   let canonical = canonicalURL(dep, relativeTo.href, virtualNetwork);
   return trimExecutableExtension(rri(canonical));

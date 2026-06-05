@@ -14,6 +14,10 @@ on:
     paths-ignore:
       - "packages/observability/**"
 
+concurrency:
+  group: ci-lint-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   checks: write
   contents: read

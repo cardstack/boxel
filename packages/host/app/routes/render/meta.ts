@@ -95,6 +95,7 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
             vn.toURL(reference),
@@ -138,6 +139,27 @@ export default class RenderMetaRoute extends Route<Model> {
       serializeMs: Math.round(serializeMs * 100) / 100,
       searchDocMs: Math.round(searchDocMs * 100) / 100,
     };
+
+    // Record broken `linksTo` / `linksToMany` targets as searchable
+    // metadata on the success entry. We awaited `readyPromise` above, so
+    // the store has settled: every lazy link the render pulled on has
+    // resolved and any failure has planted its sentinel. `getBrokenLinks`
+    // reads that terminal state through `getRelationship` without
+    // retriggering a load. The card still indexes as `type='instance'`
+    // (the broken slot renders a placeholder); this block is the only
+    // direct, indexed signal of which slots are broken, persisted to
+    // `boxel_index.diagnostics.brokenLinks`. Guarded like the
+    // compute-pass hooks above: a stale base/card-api build loaded during
+    // a cold boot may predate the export, in which case we omit the
+    // findings and the render still produces a correct meta doc.
+    if (typeof api.getBrokenLinks === 'function') {
+      let brokenLinks = api.getBrokenLinks(instance);
+      if (brokenLinks.length > 0) {
+        diagnostics.brokenLinks = brokenLinks.map(
+          ({ fieldName, reference, kind }) => ({ fieldName, reference, kind }),
+        );
+      }
+    }
     computePerfLog.debug(
       `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls ?? 'n/a'} cacheHits=${diagnostics.computedCacheHits ?? 'n/a'} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs}`,
     );
@@ -145,7 +167,9 @@ export default class RenderMetaRoute extends Route<Model> {
     return {
       serialized,
       displayNames,
-      types: types.map((t) => internalKeyFor(t, undefined)),
+      types: types.map((t) =>
+        internalKeyFor(t, undefined, this.network.virtualNetwork),
+      ),
       searchDoc,
       deps,
       diagnostics,

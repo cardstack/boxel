@@ -13,10 +13,7 @@ import {
   serializableError,
 } from '@cardstack/runtime-common/error';
 
-import type {
-  CardDef,
-  BrokenLinkFinding,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 export interface RenderErrorContext {
   cardId?: string;
@@ -67,38 +64,6 @@ export function coerceRenderError(reason: unknown): RenderError | undefined {
     }
   }
   return undefined;
-}
-
-// Build a render error from a settled instance's broken-link scan
-// (`getBrokenLinks`). The first finding becomes the primary error; the `deps`
-// of every finding are unioned so downstream invalidation can reach each
-// broken target — including extra deps carried on non-primary findings. The
-// deps come from each finding's `errorDoc.deps`, which already carries the
-// broken instance target in the canonical `.json` form the deps column uses
-// for instances (the bare reference is deliberately not added). Returns
-// `undefined` when the scan found nothing, so callers branch on a clean
-// render. Run the result through `normalizeRenderError` to apply card-id /
-// missing-link overrides.
-export function brokenLinkRenderError(
-  findings: BrokenLinkFinding[],
-): RenderError | undefined {
-  if (findings.length === 0) {
-    return undefined;
-  }
-  let primary = findings[0];
-  let deps = new Set<string>();
-  for (let finding of findings) {
-    for (let dep of finding.errorDoc.deps ?? []) {
-      deps.add(dep);
-    }
-  }
-  return {
-    type: 'instance-error',
-    error: {
-      ...primary.errorDoc,
-      deps: [...deps],
-    },
-  };
 }
 
 export function normalizeRenderError(

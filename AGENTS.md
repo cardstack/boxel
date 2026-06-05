@@ -163,6 +163,17 @@
 
 - Always run `pnpm lint` in modified packages before committing
 
+### Pre-commit autofix hook
+
+A husky `pre-commit` hook runs `lint-staged`, which auto-fixes staged files
+(`eslint --fix` for `.js/.ts/.gjs/.gts`, `ember-template-lint --fix` for
+`.hbs`, `prettier --write` for other formats) and re-stages them. It does
+**not** block the commit: issues that can't be auto-fixed (type errors, unused
+vars, the `data-test-*` ban, etc.) are printed as a warning so you get early
+notice, but the commit still proceeds. CI lint remains the real gate, so still
+fix what the warning reports. Do **not** pass `git commit --no-verify` — that
+skips the autofix and is what lets trivial lint errors waste a CI run.
+
 ### boxel-cli commit prefixes
 
 PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.
@@ -185,7 +196,7 @@ Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected
 
 ## `.gts` file gotcha: regex literals can break content-tag
 
-The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
+The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Three known triggers:
 
 **1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
 
@@ -208,6 +219,18 @@ lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
 const HEADING_RE = /^\s*#{1,6}\s+/;
 lines.some((line) => !HEADING_RE.test(line));
 ```
+
+**3. Backtick-wrapped bracket token inside the `<template>` body** — a comment _inside_ the template (e.g. a `<style scoped>` CSS comment) that contains a backtick-wrapped selector like `` `[data-foo]` `` drops the template. The same text in a `//` comment _outside_ `<template>…</template>` is harmless; content-tag only runs its template-mode lexer between the tags.
+
+```hbs
+<template>
+  <style scoped>
+    {{! BROKEN: backtick-wrapped `[data-foo]` in a template-region comment }}{{! FIX: drop the backticks or the brackets, or move the note to a JS comment above the component }}
+  </style>
+</template>
+```
+
+Symptom differs from triggers 1–2: the template body is silently dropped, so type-check can still pass while ESLint reports phantom `no-unused-vars` on imports/consts the template references (e.g. `hash`, yielded consts). ESLint is the canary.
 
 ## Base realm imports
 

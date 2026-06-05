@@ -29,7 +29,7 @@ export interface SerializedError {
   stack?: string;
   // Structured render-timeout diagnostics (e.g. launchMs, waits,
   // renderStage, queryLoadsInFlight). The source of truth is the
-  // `boxel_index.timing_diagnostics` column; the IndexWriter copies
+  // `boxel_index.diagnostics` column; the IndexWriter copies
   // the payload onto this field when persisting an error row so the
   // existing UI read path (formattedError → CardErrorJSONAPI.meta.
   // diagnostics) continues to work unchanged.
@@ -62,6 +62,32 @@ export interface SerializedError {
 // The budget is set to 8 MiB: 32× under the jsonb limit, plenty of
 // debug headroom for healthy errors, and small enough to leave room
 // for the rest of the row (`pristine_doc` / `search_doc` etc.).
+// Postgres rejects the NUL character (`22P05`) and unpaired UTF-16
+// surrogate halves inside a `jsonb` value's text. A single such code
+// point — e.g. raw binary folded into an error message — aborts the
+// whole upsert batch, so `sanitizeForJsonb` replaces them before write.
+/* eslint-disable no-control-regex -- matching the NUL control character is the whole point */
+const JSONB_ILLEGAL_CODE_POINTS =
+  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/* eslint-enable no-control-regex */
+
+export function sanitizeForJsonb<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(JSONB_ILLEGAL_CODE_POINTS, '\uFFFD') as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForJsonb(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    let result: Record<string, unknown> = {};
+    for (let [key, val] of Object.entries(value)) {
+      result[sanitizeForJsonb(key)] = sanitizeForJsonb(val);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 export const ERROR_DOC_MAX_BYTES = 8 * 1024 * 1024;
 export const ERROR_DOC_MAX_ADDITIONAL_ERRORS = 200;
 const ENTRY_STACK_BUDGET = 64 * 1024;
@@ -464,6 +490,48 @@ export class CardError extends Error implements SerializedError {
   }
 }
 
+// The import map (host network.ts) resolves every `@cardstack/boxel-icons/<name>`
+// import to `<iconsURL>/@cardstack/boxel-icons/v1/icons/<name>.js`. This path
+// segment is the same in every environment (local http-server, per-slug
+// Traefik host, and the production CDN), so a path match is a reliable,
+// config-free way to recognize an icon module from inside runtime-common.
+const BOXEL_ICONS_MODULE_PATH = '/@cardstack/boxel-icons/v1/icons/';
+
+// A missing icon key returns 403 from the production S3-backed CDN (the bucket
+// withholds `s3:ListBucket` from the public principal, so absent keys 403
+// instead of 404) and 404 from the local http-server. Either way it means the
+// named icon does not exist. Translate that into a message that points the user
+// at the real fix — correcting the import — instead of surfacing the raw S3
+// AccessDenied XML. Returns undefined when `moduleHref`/`status` are not a
+// missing-icon fetch, so callers fall back to their normal error handling.
+export function iconNotFoundMessage(
+  moduleHref: string,
+  status: number,
+): string | undefined {
+  if (status !== 403 && status !== 404) {
+    return undefined;
+  }
+  let pathname: string;
+  try {
+    pathname = new URL(moduleHref).pathname;
+  } catch {
+    return undefined;
+  }
+  let index = pathname.indexOf(BOXEL_ICONS_MODULE_PATH);
+  if (index === -1) {
+    return undefined;
+  }
+  let rest = pathname.slice(index + BOXEL_ICONS_MODULE_PATH.length);
+  if (!rest.endsWith('.js')) {
+    return undefined;
+  }
+  let iconName = rest.slice(0, -'.js'.length);
+  if (!iconName) {
+    return undefined;
+  }
+  return `Icon "${iconName}" was not found in @cardstack/boxel-icons. Check the import path against the available icons.`;
+}
+
 export function isCardErrorJSONAPI(err: any): err is CardErrorJSONAPI {
   return (
     err != null &&
@@ -700,6 +768,7 @@ export function systemError({
   body,
   id,
   lid,
+  status: httpStatus = 500,
 }: {
   requestContext: RequestContext;
   message: string;
@@ -707,9 +776,21 @@ export function systemError({
   body?: Record<string, any>;
   id?: string;
   lid?: string;
+  // HTTP status for the response. Defaults to 500; callers serving an
+  // index error row pass the underlying error's status so a card whose
+  // recorded failure is, say, an auth or validation error returns that
+  // status rather than masquerading as a realm outage.
+  status?: number;
 }): Response {
   let err = new CardError(message, {
-    status: 500,
+    status: httpStatus,
+    // Supply a title explicitly so the CardError constructor never falls
+    // back to `getReasonPhrase`, which throws for unregistered codes — a
+    // mirrored upstream status (e.g. a proxied 520/499) would otherwise
+    // turn the error response itself into an unhandled failure. The
+    // `statuses` lookup returns undefined for unknown codes rather than
+    // throwing, and we backstop that with a generic phrase.
+    title: status.message[httpStatus] || `HTTP ${httpStatus}`,
     ...(id ? { id } : {}),
     ...(lid ? { lid } : {}),
   });

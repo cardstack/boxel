@@ -1,7 +1,7 @@
 import * as childProcess from 'child_process';
 
-import { loginUser } from '../docker/synapse';
-import { getSynapseContainerName } from '../helpers/environment-config';
+import { loginUser } from '../support/synapse';
+import { getSynapseContainerName } from '../support/environment-config';
 
 import { realmPassword } from '../helpers/realm-credentials';
 

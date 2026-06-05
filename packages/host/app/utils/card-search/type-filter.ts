@@ -1,4 +1,9 @@
-import type { CodeRef, Filter, TypeRefResult } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  Filter,
+  TypeRefResult,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import {
   baseCardRef,
   baseFieldRef,
@@ -15,13 +20,17 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 /**
  * Internal key strings for root types (CardDef, FieldDef, BaseDef).
  * These represent the base of the type hierarchy and are excluded
- * from type picker options and type-constraint checks.
+ * from type picker options and type-constraint checks. Pass the
+ * caller's VirtualNetwork so the keys produced here match those
+ * generated elsewhere in the same realm-mapping context.
  */
-export const ROOT_TYPE_KEYS = new Set([
-  internalKeyFor(baseCardRef, undefined),
-  internalKeyFor(baseFieldRef, undefined),
-  internalKeyFor(baseRef, undefined),
-]);
+export function getRootTypeKeys(virtualNetwork: VirtualNetwork): Set<string> {
+  return new Set([
+    internalKeyFor(baseCardRef, undefined, virtualNetwork),
+    internalKeyFor(baseFieldRef, undefined, virtualNetwork),
+    internalKeyFor(baseRef, undefined, virtualNetwork),
+  ]);
+}
 
 /**
  * Extracts type references from a Filter (thin wrapper around runtime-common).
@@ -44,6 +53,7 @@ export function getFilterTypeRefs(
  */
 export function getBaseFilterTypeKeys(
   baseFilter: Filter | undefined,
+  virtualNetwork: VirtualNetwork,
 ): Set<string> | undefined {
   const typeRefs = getFilterTypeRefs(baseFilter);
   if (!typeRefs || typeRefs.length === 0) {
@@ -52,14 +62,15 @@ export function getBaseFilterTypeKeys(
   const refs = new Set<string>();
   for (const { ref, negated } of typeRefs) {
     if (!negated && isResolvedCodeRef(ref)) {
-      refs.add(internalKeyFor(ref, undefined));
+      refs.add(internalKeyFor(ref, undefined, virtualNetwork));
     }
   }
   if (refs.size === 0) return undefined;
 
   // CardDef/FieldDef are root types — all card types inherit from them,
   // so filtering by them would incorrectly show zero results. Skip.
-  if ([...refs].every((r) => ROOT_TYPE_KEYS.has(r))) {
+  const rootKeys = getRootTypeKeys(virtualNetwork);
+  if ([...refs].every((r) => rootKeys.has(r))) {
     return undefined;
   }
 
@@ -69,8 +80,11 @@ export function getBaseFilterTypeKeys(
 /**
  * Whether a base filter constrains to non-root types.
  */
-export function hasNonRootBaseFilter(baseFilter: Filter | undefined): boolean {
-  return getBaseFilterTypeKeys(baseFilter) !== undefined;
+export function hasNonRootBaseFilter(
+  baseFilter: Filter | undefined,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  return getBaseFilterTypeKeys(baseFilter, virtualNetwork) !== undefined;
 }
 
 /**

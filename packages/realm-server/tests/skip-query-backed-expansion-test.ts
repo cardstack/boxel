@@ -15,6 +15,9 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
 
     export class Target extends CardDef {
       @field name = contains(StringField);
+      // cardTitle is the field the query-backed linksToMany below filters
+      // on; it must be a real field on the target for the query to match.
+      @field cardTitle = contains(StringField);
     }
   `;
 
@@ -143,7 +146,7 @@ module(basename(__filename), function () {
       let doc = await realm.realmIndexQueryEngine.searchCards(
         {
           filter: {
-            type: { module: rri('./consumer'), name: 'Consumer' },
+            type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
           },
         },
         { loadLinks: true, skipQueryBackedExpansion: true },
@@ -159,6 +162,94 @@ module(basename(__filename), function () {
         includedIds.filter((id) => id?.includes('/query-target-')).length,
         0,
         'no query-backed linksToMany matches in included',
+      );
+    });
+  });
+
+  module('omitIncluded', function (hooks) {
+    let realm: Realm;
+
+    setupPermissionedRealmCached(hooks, {
+      mode: 'before',
+      realmURL: testRealm,
+      permissions: { '*': ['read'] },
+      fileSystem: buildFileSystem(),
+      onRealmSetup({ testRealm: r }) {
+        realm = r;
+      },
+    });
+
+    test('searchCards with omitIncluded skips loadLinks: pristine rows, no query-field umbrella, no included[]', async function (assert) {
+      let doc = await realm.realmIndexQueryEngine.searchCards(
+        {
+          filter: {
+            type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
+          },
+        },
+        { loadLinks: true, omitIncluded: true },
+      );
+
+      assert.strictEqual(doc.data.length, 1, 'one consumer matched');
+      assert.ok(
+        doc.data[0].id?.endsWith('/consumer-1'),
+        'the matching result identifier is returned',
+      );
+      assert.strictEqual(
+        (doc.included ?? []).length,
+        0,
+        'included[] is omitted entirely',
+      );
+
+      let relationships = doc.data[0].relationships as
+        | Record<
+            string,
+            {
+              links?: { self?: string | null; search?: string | null };
+              data?: { id: string } | Array<{ id: string }> | null;
+            }
+          >
+        | undefined;
+
+      // loadLinks / populateQueryFields never ran, so the query-backed field
+      // carries no assembled umbrella: no `links.search`, and it does not name
+      // any matched targets. The host re-resolves the field from card+source.
+      let queryLinks = relationships?.queryLinks;
+      assert.notOk(
+        queryLinks?.links?.search,
+        'query-backed field has no links.search (umbrella never assembled)',
+      );
+      assert.strictEqual(
+        Array.isArray(queryLinks?.data) ? queryLinks!.data.length : 0,
+        0,
+        'query-backed field does not name any matched targets',
+      );
+
+      // No per-item `queryLinks.N` sub-entries leaked onto the wire.
+      let perItemKeys = Object.keys(relationships ?? {}).filter((k) =>
+        /^queryLinks\.\d+$/.test(k),
+      );
+      assert.deepEqual(perItemKeys, [], 'no query-backed per-item sub-entries');
+    });
+
+    test('omitIncluded is prerender-scoped: default search still ships a compound included[]', async function (assert) {
+      let doc = await realm.realmIndexQueryEngine.searchCards(
+        {
+          filter: {
+            type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
+          },
+        },
+        { loadLinks: true },
+      );
+
+      let includedIds = (doc.included ?? []).map((r) => r.id);
+      assert.ok(
+        includedIds.some((id) => id?.endsWith('/direct-target')),
+        'static linksTo target is in included for non-prerender callers',
+      );
+      assert.strictEqual(
+        includedIds.filter((id) => id?.includes('/query-target-')).length,
+        3,
+        'query-backed matches are in included for non-prerender callers',
       );
     });
   });

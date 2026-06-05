@@ -1,8 +1,8 @@
 import {
-  cardIdToURL,
   extractCardReferenceUrls,
   fieldSerializer,
   relativeTo,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -58,13 +58,13 @@ export class RichMarkdownField extends FieldDef {
       let rel = this[relativeTo];
       let baseUrl = rel
         ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? cardIdToURL(rel).href)
+          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
           : rel.href
         : '';
       return extractCardReferenceUrls(
         this.content,
         baseUrl,
-        virtualNetworkFor(this),
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },
   });
@@ -83,6 +83,9 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
@@ -90,7 +93,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     <template>
@@ -98,6 +101,7 @@ export class RichMarkdownField extends FieldDef {
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -106,6 +110,9 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
@@ -113,7 +120,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     <template>
@@ -121,6 +128,7 @@ export class RichMarkdownField extends FieldDef {
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -147,6 +155,9 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
+    get virtualNetwork() {
+      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
+    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
@@ -154,7 +165,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     get linkedCards(): CardDef[] | null {
@@ -197,6 +208,7 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
           </div>
         {{else}}
@@ -206,6 +218,7 @@ export class RichMarkdownField extends FieldDef {
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             />
