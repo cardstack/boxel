@@ -17,7 +17,10 @@ import {
   brokenLinkFormat,
 } from './card-api';
 import BrokenLinkTemplate from './default-templates/broken-link-template';
-import { getRelationshipMembershipState, type RelationshipState } from './field-support';
+import {
+  getRelationshipMembershipState,
+  type RelationshipState,
+} from './field-support';
 import { rawArrayValues } from './watched-array';
 import {
   BoxComponentSignature,
@@ -50,7 +53,7 @@ import {
   FourLines,
   IconPlus,
 } from '@cardstack/boxel-ui/icons';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce, eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
 import {
   SortableGroupModifier as sortableGroup,
@@ -578,10 +581,6 @@ function getPluralChildFormat(
     return 'fitted';
   }
   return effectiveFormat;
-}
-
-function coalesce<T>(arg1: T | undefined, arg2: T): T {
-  return arg1 ?? arg2;
 }
 
 function shouldRenderEditor(
