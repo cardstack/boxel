@@ -4,7 +4,7 @@ import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
@@ -6893,6 +6893,8 @@ export class Realm {
     let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#virtualNetwork,
     ) as ResolvedCodeRef;
     let definition =
       await this.#definitionLookup.lookupDefinition(absoluteCodeRef);

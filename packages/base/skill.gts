@@ -6,6 +6,7 @@ import {
   contains,
   containsMany,
   relativeTo,
+  virtualNetworkFor,
   type BaseDefComponent,
 } from './card-api';
 import BooleanField from './boolean';
@@ -49,9 +50,16 @@ export class CommandField extends FieldDef {
   @field functionName = contains(StringField, {
     description: 'The name of the function to be executed',
     computeVia: function (this: CommandField) {
+      let vn = virtualNetworkFor(this);
+      if (!vn) {
+        throw new Error(
+          `CommandField.functionName requires a VirtualNetwork (no store attached to ${this.constructor.name})`,
+        );
+      }
       return buildCommandFunctionName(
         this.codeRef,
         this[Symbol.for('cardstack-relative-to') as typeof relativeTo],
+        vn,
       );
     },
   });

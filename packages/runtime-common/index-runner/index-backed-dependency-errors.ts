@@ -1,7 +1,6 @@
 import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index';
 import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
-import { cardIdToURL } from '../card-reference-resolver';
 import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';
 import {
@@ -12,7 +11,7 @@ import {
 
 interface IndexBackedDependencyErrorOptions {
   realmURL: URL;
-  virtualNetwork?: VirtualNetwork;
+  virtualNetwork: VirtualNetwork;
   readDefinitionCacheEntries(
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
@@ -22,7 +21,7 @@ interface IndexBackedDependencyErrorOptions {
 
 export class IndexBackedDependencyErrors {
   #realmURL: URL;
-  #virtualNetwork: VirtualNetwork | undefined;
+  #virtualNetwork: VirtualNetwork;
   #readDefinitionCacheEntries: (
     moduleIds: string[],
   ) => Promise<DefinitionCacheEntries>;
@@ -264,9 +263,7 @@ export class IndexBackedDependencyErrors {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = this.#virtualNetwork
-              ? this.#virtualNetwork.toURL(error.id)
-              : cardIdToURL(error.id);
+            base = this.#virtualNetwork.toURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }

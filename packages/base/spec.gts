@@ -28,7 +28,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   getMenuItems,
-  cardIdToURL,
   codeRefWithAbsoluteIdentifier,
   ensureExtension,
   isPrimitive,
@@ -37,7 +36,6 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  resolveCardReference,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -84,9 +82,12 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
       return [];
     }
     let vn = virtualNetworkFor(card);
+    if (!vn) {
+      return [];
+    }
     codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      vn ? vn.toURL(card.id!) : cardIdToURL(card.id!),
+      vn.toURL(card.id!),
       undefined,
       vn,
     )! as ResolvedCodeRef;
@@ -659,12 +660,12 @@ class Isolated extends Component<typeof Spec> {
       return undefined;
     }
     let vn = virtualNetworkFor(this.args.model);
-    let url = vn
-      ? vn.toURL(this.args.model.id)
-      : cardIdToURL(this.args.model.id);
+    if (!vn) {
+      return undefined;
+    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      url,
+      vn.toURL(this.args.model.id),
       undefined,
       vn,
     );
@@ -783,12 +784,12 @@ class Edit extends Component<typeof Spec> {
       return undefined;
     }
     let vn = virtualNetworkFor(this.args.model);
-    let url = vn
-      ? vn.toURL(this.args.model.id)
-      : cardIdToURL(this.args.model.id);
+    if (!vn) {
+      return undefined;
+    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      url,
+      vn.toURL(this.args.model.id),
       undefined,
       vn,
     );
@@ -946,9 +947,10 @@ export class Spec extends CardDef {
         return undefined;
       }
       let vn = virtualNetworkFor(this);
-      return vn
-        ? vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href
-        : resolveCardReference(this.ref.module, this.id ?? this[relativeTo]);
+      if (!vn) {
+        return undefined;
+      }
+      return vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
@@ -990,12 +992,18 @@ export class Spec extends CardDef {
               params.commandContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
-              codeRef: codeRefWithAbsoluteIdentifier(
-                this.ref,
-                virtualNetworkFor(this)?.toURL(this.id) ?? cardIdToURL(this.id),
-                undefined,
-                virtualNetworkFor(this),
-              ) as ResolvedCodeRef,
+              codeRef: (() => {
+                let vn = virtualNetworkFor(this);
+                if (!vn) {
+                  throw new Error('No VirtualNetwork available');
+                }
+                return codeRefWithAbsoluteIdentifier(
+                  this.ref,
+                  vn.toURL(this.id),
+                  undefined,
+                  vn,
+                ) as ResolvedCodeRef;
+              })(),
               realm: this[realmURL]?.href,
               exampleCard: this,
             });

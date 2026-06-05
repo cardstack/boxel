@@ -9,12 +9,7 @@ import {
   executableExtensions,
 } from '../index';
 import { resolveModuleHref } from '../code-ref';
-import {
-  resolveCardReference,
-  cardIdToURL,
-  rri,
-  type RealmResourceIdentifier,
-} from '../card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers';
 import type { VirtualNetwork } from '../virtual-network';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
@@ -44,9 +39,9 @@ export function serialize(
   if (opts?.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
   } else if (typeof opts?.relativeTo === 'string') {
-    baseURL = vn ? vn.toURL(opts.relativeTo) : cardIdToURL(opts.relativeTo);
+    baseURL = vn ? vn.toURL(opts.relativeTo) : undefined;
   } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = vn ? vn.toURL(doc.data.id) : cardIdToURL(doc.data.id);
+    baseURL = vn ? vn.toURL(doc.data.id) : undefined;
   }
   return {
     ...codeRef,
@@ -93,8 +88,25 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
+  // The `deserializeAbsolute` field-deserialize path reaches this without
+  // opts (no VN, no `allowRelative`, no `maybeRelativeReference`). For
+  // URL-like refs we can still do a plain URL-join against `relativeTo`
+  // and apply `trimExecutableExtension`. Bare specifiers (e.g.
+  // `@cardstack/boxel-host/…`) throw — `resolve` is wrapped in try/catch
+  // below, so the original ref stays intact for the loader's importMap
+  // shim.
   let vn = opts?.virtualNetwork;
-  let resolve = (ref: string) => resolveModuleHref(ref, relativeTo, vn);
+  let resolve = (ref: string) => {
+    if (vn) {
+      return resolveModuleHref(ref, relativeTo, vn);
+    }
+    if (!isUrlLike(ref)) {
+      throw new Error(
+        `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
+      );
+    }
+    return new URL(ref, relativeTo).href;
+  };
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
@@ -134,15 +146,17 @@ function maybeSerializeCodeRef(
   if (codeRef && isResolvedCodeRef(codeRef)) {
     let base =
       stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
-    try {
-      let moduleHref = resolveCardReference(
-        codeRef.module,
-        base && typeof base === 'string' ? base : undefined,
-      );
-      return `${moduleHref}/${codeRef.name}`;
-    } catch {
-      return `${codeRef.module}/${codeRef.name}`;
+    // `queryableValue` / `formatQuery` don't receive a VirtualNetwork, so
+    // we can't resolve registered prefixes here. URL-like refs join
+    // against the base; bare specifiers and absolute URLs pass through.
+    if (isUrlLike(codeRef.module) && typeof base === 'string') {
+      try {
+        return `${new URL(codeRef.module, base).href}/${codeRef.name}`;
+      } catch {
+        // fall through to the as-is shape below
+      }
     }
+    return `${codeRef.module}/${codeRef.name}`;
   }
   return undefined;
 }

@@ -2,7 +2,7 @@ import {
   rri,
   type RealmIdentifier,
   type RealmResourceIdentifier,
-} from '../card-reference-resolver';
+} from '../realm-identifiers';
 import type { RealmInfo } from '../index';
 export const testRealmURL = 'http://test-realm/test/' as RealmIdentifier;
 export const testHostModeRealmURL =

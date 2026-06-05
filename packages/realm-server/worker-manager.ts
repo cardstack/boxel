@@ -48,6 +48,7 @@ import {
   separatedByCommas,
   IndexWriter,
   isUrlLike,
+  VirtualNetwork,
   type Expression,
   type StatusArgs,
   type IndexingProgressEvent,
@@ -726,7 +727,15 @@ async function markFailedIndexEntry({
 }) {
   log.info(`marking index entry ${url} with an error doc`);
   let indexWriter = new IndexWriter(adapter);
-  let batch = await indexWriter.createBatch(new URL(realm));
+  // The worker-manager doesn't run inside any particular realm context, so
+  // it can't see the per-realm prefix mappings. An empty VirtualNetwork is
+  // sufficient here because `invalidate` consumes already-URL-form inputs
+  // and unresolveURL falls through to the original URL when no realm
+  // mapping matches.
+  let batch = await indexWriter.createBatch(
+    new URL(realm),
+    new VirtualNetwork(),
+  );
   await batch.invalidate([new URL(url)]);
   let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {

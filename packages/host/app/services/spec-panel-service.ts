@@ -15,6 +15,7 @@ import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type CardService from './card-service';
+import type NetworkService from './network';
 import type ResetService from './reset';
 import type StoreService from './store';
 
@@ -23,6 +24,7 @@ export default class SpecPanelService extends Service {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
   @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
   private cachedAPI?: typeof CardAPI;
   private pendingCardIdSubscriptions = new Map<string, CardDef>();
 
@@ -42,7 +44,7 @@ export default class SpecPanelService extends Service {
 
   setSelection = (id: string | null) => {
     this.specSelection = id;
-    if (id && isLocalId(id)) {
+    if (id && isLocalId(id, this.network.virtualNetwork)) {
       this.storeWhenIdAssignedTask.perform(id);
     } else {
       this.clearPendingCardIdSubscriptions();

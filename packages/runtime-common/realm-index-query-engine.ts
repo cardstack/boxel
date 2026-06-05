@@ -9,9 +9,6 @@ import {
   unixTime,
   maxLinkDepth,
   maybeURL,
-  resolveCardReference,
-  isRegisteredPrefix,
-  cardIdToURL,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -37,8 +34,8 @@ import type { RequestTimings } from './request-timings';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './card-reference-resolver';
-import { rri } from './card-reference-resolver';
+} from './realm-identifiers';
+import { rri } from './realm-identifiers';
 import {
   normalizeQueryForSignature,
   sortKeysDeep,
@@ -200,26 +197,18 @@ function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   // Registered prefix references (e.g. @cardstack/catalog/foo) are already
   // in their canonical portable form — don't resolve them.
-  if (
-    virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(url)
-      : isRegisteredPrefix(url)
-  ) {
+  if (virtualNetwork.isRegisteredPrefix(url)) {
     return;
   }
   if (!resourceId) {
     setURL(url);
     return;
   }
-  setURL(
-    virtualNetwork
-      ? virtualNetwork.resolveURL(url, resourceId).href
-      : resolveCardReference(url, resourceId),
-  );
+  setURL(virtualNetwork.resolveURL(url, resourceId).href);
 }
 
 export class RealmIndexQueryEngine {
@@ -279,7 +268,11 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
+    this.#indexQueryEngine = new IndexQueryEngine(
+      dbAdapter,
+      definitionLookup,
+      realm.virtualNetwork,
+    );
     this.#definitionLookup = definitionLookup;
     this.#realm = realm;
     this.#fetch = fetch;
@@ -1747,7 +1740,7 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
 export function relativizeDocument(
   doc: SingleCardDocument,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
@@ -1776,43 +1769,29 @@ function relativizeResource(
   resource: LooseCardResource,
   primaryURL: URL,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
   // which is not a valid URL base. Resolve it to a URL for relative resolution.
   let resourceURL = resource.id
-    ? virtualNetwork
-      ? virtualNetwork.toURL(resource.id)
-      : cardIdToURL(resource.id)
+    ? virtualNetwork.toURL(resource.id)
     : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (
-      virtualNetwork
-        ? virtualNetwork.isRegisteredPrefix(url)
-        : isRegisteredPrefix(url)
-    ) {
+    if (virtualNetwork.isRegisteredPrefix(url)) {
       return;
     }
-    let urlObj = virtualNetwork
-      ? virtualNetwork.resolveURL(url, resourceURL)
-      : new URL(resolveCardReference(url, resourceURL));
+    let urlObj = virtualNetwork.resolveURL(url, resourceURL);
     setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (
-      virtualNetwork
-        ? virtualNetwork.isRegisteredPrefix(moduleURL)
-        : isRegisteredPrefix(moduleURL)
-    ) {
+    if (virtualNetwork.isRegisteredPrefix(moduleURL)) {
       return;
     }
-    let absoluteModuleURL = virtualNetwork
-      ? virtualNetwork.resolveURL(moduleURL, resourceURL)
-      : new URL(resolveCardReference(moduleURL, resourceURL));
+    let absoluteModuleURL = virtualNetwork.resolveURL(moduleURL, resourceURL);
     setModuleURL(
       maybeRelativeReference(
         absoluteModuleURL,

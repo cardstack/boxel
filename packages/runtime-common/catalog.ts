@@ -8,8 +8,8 @@ import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
-import { cardIdToURL, rri } from './card-reference-resolver';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import { rri } from './realm-identifiers';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 // Local mirror of the boxel-catalog Listing shape — that repo isn't cloned in boxel CI. (CS-11166)
@@ -94,13 +94,13 @@ export class ListingPathResolver {
   private sourceRealmPath: RealmPaths;
   private targetDirectoryPath: RealmPaths;
   private foreignRealmPaths: RealmPaths[] = [];
-  private virtualNetwork: VirtualNetwork | undefined;
+  private virtualNetwork: VirtualNetwork;
 
   constructor(
     targetRealm: string,
     listing: Listing,
-    installDirId?: string,
-    virtualNetwork?: VirtualNetwork,
+    installDirId: string | undefined,
+    virtualNetwork: VirtualNetwork,
   ) {
     this.virtualNetwork = virtualNetwork;
     this.targetRealmPath = new RealmPaths(new URL(targetRealm), virtualNetwork);
@@ -178,7 +178,7 @@ export class PlanBuilder {
   constructor(
     realmUrl: string,
     listing: Listing,
-    virtualNetwork?: VirtualNetwork,
+    virtualNetwork: VirtualNetwork,
   ) {
     this.resolver = new ListingPathResolver(
       realmUrl,
@@ -218,14 +218,12 @@ export class PlanBuilder {
 function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
   if (baseRealmPath.inRealm(codeRef.module)) {
     return codeRef;
   } else {
-    let moduleURL = virtualNetwork
-      ? virtualNetwork.toURL(codeRef.module)
-      : cardIdToURL(codeRef.module);
+    let moduleURL = virtualNetwork.toURL(codeRef.module);
     let targetModule = resolver.target(moduleURL.href);
     return {
       name: codeRef.name,
@@ -237,7 +235,7 @@ function resolveTargetCodeRef(
 export function planModuleInstall(
   specs: Spec[],
   resolver: ListingPathResolver,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): InstallPlan {
   if (specs.length == 0) {
     return new InstallPlan([], []);
@@ -269,17 +267,13 @@ export function planModuleInstall(
 export function planInstanceInstall(
   instances: CardDef[],
   resolver: ListingPathResolver,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): InstallPlan {
   let instancesCopy: CopyInstanceMeta[] = [];
   let modulesCopy: CopyMeta[] = [];
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance, virtualNetwork);
-    let lid = resolver.local(
-      virtualNetwork
-        ? virtualNetwork.toURL(instance.id).href
-        : cardIdToURL(instance.id).href,
-    );
+    let lid = resolver.local(virtualNetwork.toURL(instance.id).href);
     if (baseRealmPath.inRealm(rri(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }

@@ -1,16 +1,9 @@
 import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  rri,
-  baseRRI,
-  Deferred,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-} from '@cardstack/runtime-common';
+import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
@@ -292,6 +285,22 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
+    // The `prefix-form ref` nested module needs `@test-realm/test2/` to
+    // resolve to testRealmURL2 before the realm setup below indexes
+    // `spec/animal.json` (whose `adoptsFrom` is `@test-realm/test2/animal`).
+    // QUnit fires the outer `beforeEach` before any nested `beforeEach`,
+    // so the inner module can't add this mapping in time. Register it
+    // only when the active module is that nested one — other sibling
+    // modules generate IDs whose canonical form depends on which mappings
+    // are present in the VN, so unconditional registration would shift
+    // them into prefix form and trip downstream realm-lookup paths.
+    let activeModuleName = QUnit.config.current?.module?.name ?? '';
+    if (activeModuleName.includes('uses a prefix-form ref')) {
+      getService('network').virtualNetwork.addRealmMapping(
+        testPrefixRealmURL2,
+        testRealmURL2,
+      );
+    }
     ({ adapter } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
@@ -1346,25 +1355,10 @@ export class TestCard extends CardDef {
     });
   });
 
-  module('when a selected spec uses a prefix-form ref', function (hooks) {
-    // hooks.before (once-per-module) is intentional — the prefix needs
-    // to be registered before `setupAcceptanceTestRealm` indexes
-    // `spec/animal.json`, whose `adoptsFrom` ref is `@test-realm/test2/
-    // animal`. `hooks.beforeEach` runs *after* setupApplicationTest's
-    // own beforeEach (which is where the indexer fires), so registration
-    // would be too late. Uses the deprecated global registry directly
-    // because no VN is in scope at module-setup time (getService isn't
-    // usable in hooks.before). The VN.addRealmMapping bridge mirrors
-    // registrations into both stores, so the global form is observable
-    // on migrated paths too.
-    hooks.before(function () {
-      registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
-    });
-
-    hooks.after(function () {
-      unregisterCardReferencePrefix(testPrefixRealmURL2);
-    });
-
+  module('when a selected spec uses a prefix-form ref', function () {
+    // The `@test-realm/test2/` → testRealmURL2 mapping this module relies
+    // on is registered up in the outer `beforeEach` so it lands before
+    // `setupAcceptanceTestRealm` indexes `spec/animal.json`.
     test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {
       assert.expect(2);
       await visitOperatorMode(`${baseRealm.url}card-api.gts`);

@@ -32,7 +32,7 @@ import {
   type Diagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import type { VirtualNetwork } from './virtual-network';
 import { isCardError } from './error';
@@ -214,8 +214,8 @@ export class IndexRunner {
     );
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
-      current.#jobInfo,
       current.#virtualNetwork,
+      current.#jobInfo,
     );
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts
@@ -397,8 +397,8 @@ export class IndexRunner {
 
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
-      current.#jobInfo,
       current.#virtualNetwork,
+      current.#jobInfo,
     );
     // Announce the job at kickoff — before invalidation — so the
     // dashboard shows it immediately. The total starts at 0 and the

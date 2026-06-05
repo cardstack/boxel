@@ -2,7 +2,7 @@ import deburr from 'lodash/deburr';
 
 import {
   realmURL,
-  RealmPaths,
+  ensureTrailingSlash,
   devSkillLocalPath,
   envSkillLocalPath,
 } from '@cardstack/runtime-common';
@@ -61,11 +61,15 @@ export function urlForRealmLookup(card: CardDef) {
   return urlForRealmLookup;
 }
 
-// usage example for realm url: `catalogRealm.url`, `skillsRealm.url`
-export const catalogRealm = ENV.resolvedCatalogRealmURL
-  ? new RealmPaths(new URL(ENV.resolvedCatalogRealmURL))
+// Catalog and Skills realm URLs as plain strings (always trailing-slashed).
+// Use `.url`-style URL operations directly; for realm-membership checks
+// against either of these, construct a `RealmPaths` with a VN at the call site.
+export const catalogRealmURL: string | null = ENV.resolvedCatalogRealmURL
+  ? ensureTrailingSlash(decodeURI(new URL(ENV.resolvedCatalogRealmURL).href))
   : null;
-export const skillsRealm = new RealmPaths(new URL(ENV.resolvedSkillsRealmURL));
+export const skillsRealmURL: string = ensureTrailingSlash(
+  decodeURI(new URL(ENV.resolvedSkillsRealmURL).href),
+);
 
 /**
  * Constructs a universal @cardstack/skills/ reference to a skill card.

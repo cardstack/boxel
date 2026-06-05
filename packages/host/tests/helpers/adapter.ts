@@ -265,7 +265,9 @@ export class TestRealmAdapter implements RealmAdapter {
         `${baseRealm.url}card-api`,
       );
       if (cardApi.isCard(value)) {
-        let doc = cardApi.serializeCard(value);
+        let doc = cardApi.serializeCard(value, {
+          virtualNetwork: this.#loader.getVirtualNetwork(),
+        });
         fileRefContent = JSON.stringify(doc);
       } else {
         fileRefContent =

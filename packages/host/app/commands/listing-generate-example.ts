@@ -1,3 +1,5 @@
+import { service } from '@ember/service';
+
 import { resolveAdoptsFrom } from '@cardstack/runtime-common/code-ref';
 import { realmURL } from '@cardstack/runtime-common/constants';
 
@@ -9,10 +11,14 @@ import HostBaseCommand from '../lib/host-base-command';
 import { GenerateExampleCardsOneShotCommand } from './generate-example-cards';
 import GetDefaultWritableRealmCommand from './get-default-writable-realm';
 
+import type NetworkService from '../services/network';
+
 export default class ListingGenerateExampleCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateListingExampleInput,
   typeof BaseCommandModule.CreateInstanceResult
 > {
+  @service declare private network: NetworkService;
+
   static actionVerb = 'Generate Example';
   description = 'Generate a new example card for the listing and link it.';
 
@@ -37,7 +43,10 @@ export default class ListingGenerateExampleCommand extends HostBaseCommand<
       throw new Error('Listing must include a reference example');
     }
 
-    const codeRef = resolveAdoptsFrom(referenceExample);
+    const codeRef = resolveAdoptsFrom(
+      referenceExample,
+      this.network.virtualNetwork,
+    );
     if (!codeRef) {
       throw new Error(
         'Unable to resolve card definition from reference example',
