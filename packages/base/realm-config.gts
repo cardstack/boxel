@@ -56,8 +56,19 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     // unset paths have no runtime meaning anyway, and this lets the
     // duplicate-path warning treat two visually-equal rules as the
     // conflict they really are.
+    //
+    // The write is deferred past the current render: assigning
+    // synchronously would mutate inside the same tracked computation
+    // that's already read autoSaveState.isSaving via the saving
+    // indicator in the CardHeader, and Glimmer rejects read-then-write
+    // on a tracked cell within one computation.
     if (this.args.model.path == null) {
-      this.args.model.path = '/';
+      queueMicrotask(() => {
+        if (this.isDestroying || this.isDestroyed) return;
+        if (this.args.model.path == null) {
+          this.args.model.path = '/';
+        }
+      });
     }
   }
 
