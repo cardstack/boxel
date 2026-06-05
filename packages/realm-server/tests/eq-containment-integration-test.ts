@@ -11,9 +11,16 @@ import {
   type CodeRef,
   type Definition,
   type DefinitionLookup,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { setupDB } from './helpers';
+
+// Build a resolved code ref; the cast brands the module URL as the
+// RealmResourceIdentifier the CodeRef types expect.
+function ref(module: string, name: string): ResolvedCodeRef {
+  return { module: module as ResolvedCodeRef['module'], name };
+}
 
 // Exercises the singular-path scalar `eq` -> `search_doc @>` containment
 // rewrite against real Postgres. The engine emits a `@>` predicate (GIN
@@ -25,31 +32,13 @@ import { setupDB } from './helpers';
 
 const testRealmURL = 'http://eq-containment-test/';
 
-const stringRef: CodeRef = {
-  module: 'https://cardstack.com/base/string',
-  name: 'default',
-};
-const numberRef: CodeRef = {
-  module: 'https://cardstack.com/base/number',
-  name: 'default',
-};
-const booleanRef: CodeRef = {
-  module: 'https://cardstack.com/base/boolean',
-  name: 'default',
-};
-const policyRef: CodeRef = { module: `${testRealmURL}policy`, name: 'Policy' };
-const customerRef: CodeRef = {
-  module: `${testRealmURL}customer`,
-  name: 'Customer',
-};
-const metadataRef: CodeRef = {
-  module: `${testRealmURL}policy`,
-  name: 'Metadata',
-};
-const contactRef: CodeRef = {
-  module: `${testRealmURL}policy`,
-  name: 'Contact',
-};
+const stringRef = ref('https://cardstack.com/base/string', 'default');
+const numberRef = ref('https://cardstack.com/base/number', 'default');
+const booleanRef = ref('https://cardstack.com/base/boolean', 'default');
+const policyRef = ref(`${testRealmURL}policy`, 'Policy');
+const customerRef = ref(`${testRealmURL}customer`, 'Customer');
+const metadataRef = ref(`${testRealmURL}policy`, 'Metadata');
+const contactRef = ref(`${testRealmURL}policy`, 'Contact');
 
 // Customer (linked card): a string `id` leaf + a string `name`.
 const customerDef: Definition = {
@@ -176,13 +165,15 @@ function refsEqual(a: CodeRef, b: CodeRef): boolean {
 
 function makeDefinitionLookup(): DefinitionLookup {
   const lookup: DefinitionLookup = {
-    async lookupDefinition(codeRef: CodeRef) {
+    async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
       for (let def of [policyDef, customerDef, metadataDef, contactDef]) {
         if (refsEqual(codeRef, def.codeRef)) {
           return def;
         }
       }
-      return undefined;
+      throw new Error(
+        `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
+      );
     },
     async lookupCachedDefinition() {
       return undefined;
@@ -333,8 +324,10 @@ module(basename(__filename), function () {
       return cards.map((c) => c.id!).sort();
     }
 
+    // Only the search queries matter for asserting the predicate form; the
+    // per-test seeding INSERTs are captured too, so exclude them.
     function lastFilterSql(): string {
-      return executedSql.join('\n');
+      return executedSql.filter((sql) => !/^\s*INSERT\b/i.test(sql)).join('\n');
     }
 
     test('singular string eq is served by `@>` containment', async function (assert) {
