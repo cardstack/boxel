@@ -51,11 +51,17 @@ export function buildInstanceOperation(
   copyInstanceMeta: CopyInstanceMeta,
   realmIdentifier: string,
 ): InstanceOperation | undefined {
-  if (!doc || typeof doc !== 'object' || !('data' in doc)) {
+  if (
+    !doc ||
+    typeof doc !== 'object' ||
+    !('data' in doc) ||
+    !(doc as { data: unknown }).data ||
+    typeof (doc as { data: unknown }).data !== 'object'
+  ) {
     throw new Error('We are only expecting single documents returned');
   }
   let data = (doc as { data: { type?: string } }).data;
-  if (data?.type === 'file-meta') {
+  if (data.type === 'file-meta') {
     return undefined;
   }
   delete (doc as any).data.id;

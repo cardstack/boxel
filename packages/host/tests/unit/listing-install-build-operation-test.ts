@@ -116,4 +116,28 @@ module('Unit | Catalog | listing-install buildInstanceOperation', function () {
       /We are only expecting single documents returned/,
     );
   });
+
+  test('throws when data is null', function (assert) {
+    assert.throws(
+      () =>
+        buildInstanceOperation(
+          { data: null } as unknown,
+          copyMeta('listing-xyz/something'),
+          realmIdentifier,
+        ),
+      /We are only expecting single documents returned/,
+    );
+  });
+
+  test('throws when data is undefined', function (assert) {
+    assert.throws(
+      () =>
+        buildInstanceOperation(
+          { data: undefined } as unknown,
+          copyMeta('listing-xyz/something'),
+          realmIdentifier,
+        ),
+      /We are only expecting single documents returned/,
+    );
+  });
 });
