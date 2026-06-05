@@ -1342,7 +1342,23 @@ export default class MatrixService extends Service {
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
     let matrixRoom = this.client.getRoom(roomId);
     let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
-    return lastMatrixEvent ?? defaultTimestamp;
+    // Renaming a session counts as activity and moves it to the top of the
+    // past-sessions list. A rename is recorded as an `m.room.name` state event,
+    // but `getLastActiveTimestamp()` only inspects the live timeline. After a
+    // reload the fresh sync can surface that rename as current room state rather
+    // than a timeline event, so the room's last-active time would otherwise
+    // regress to its last message and the rename's ordering would be lost. Fold
+    // the rename's timestamp in so a renamed session keeps its place.
+    let nameEventTimestamp = matrixRoom?.currentState
+      ?.getStateEvents('m.room.name', '')
+      ?.getTs();
+    let candidates = [lastMatrixEvent, nameEventTimestamp].filter(
+      (timestamp): timestamp is number => typeof timestamp === 'number',
+    );
+    if (candidates.length === 0) {
+      return defaultTimestamp;
+    }
+    return Math.max(...candidates);
   }
 
   async requestRegisterEmailToken(
