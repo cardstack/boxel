@@ -402,7 +402,7 @@ export class IndexBackedDependencyErrors {
       // Instance→instance error doc propagation terminates here. The consumer
       // stays indexable through the broken-link placeholder render; the
       // referenced instance's error_doc reaches AI / humans via the
-      // placeholder's own `getRelationship(...).reference / .errorDoc` read.
+      // placeholder's own `getRelationshipMembershipState(...).reference / .errorDoc` read.
       if (selected.type === 'instance') {
         continue;
       }

@@ -98,6 +98,7 @@ import {
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
+  peekQueryFieldSearchResource,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -165,8 +166,12 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
-  getRelationship,
+  getRelationshipMembershipState,
   getter,
+  registerRelationshipProbe,
+  relationshipStateForEntry,
+  readFieldLoadingSignal,
+  bumpFieldLoadingSignal,
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
@@ -185,6 +190,7 @@ import {
   type LinkErrorValue,
   type LinkNotFoundValue,
   type NotLoadedValue,
+  type RelationshipStatus,
   type RelationshipState,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
@@ -213,7 +219,7 @@ export {
   getDataBucket,
   getFieldDescription,
   getFields,
-  getRelationship,
+  getRelationshipMembershipState,
   isNonPresentLink,
   peekAtField,
   isCard,
@@ -235,6 +241,7 @@ export {
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type RelationshipStatus,
   type RelationshipState,
   type ResourceID,
   type SerializeOpts,
@@ -1228,7 +1235,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // `ensureQueryFieldSearchResource` mirrors the resource's error state
       // into the bucket. The recognition pattern mirrors the declared
       // `linksTo` path above — a terminal `link-error` / `link-not-found`
-      // sentinel surfaces as `undefined`, and `getRelationship` is the
+      // sentinel surfaces as `undefined`, and `getRelationshipMembershipState` is the
       // structured read.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
@@ -1261,7 +1268,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     // link-error / link-not-found are terminal failure states planted by
     // lazilyLoadLink. They surface to userland as `undefined` (the same shape a
     // not-loaded link produces) and are NOT retried — re-reading must not kick
-    // off another fetch. `getRelationship` is the only way to observe the
+    // off another fetch. `getRelationshipMembershipState` is the only way to observe the
     // structured failure from outside this module.
     if (isLinkError(maybeNotLoaded) || isLinkNotFound(maybeNotLoaded)) {
       return undefined;
@@ -1680,7 +1687,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // Resource-level failure: `ensureQueryFieldSearchResource` plants a
       // single whole-field sentinel in the bucket (the search fails as a
       // unit, not per element). The empty array hands callers a usable
-      // shape; the structured failure surfaces through `getRelationship`.
+      // shape; the structured failure surfaces through `getRelationshipMembershipState`.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
@@ -1752,7 +1759,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // for the resolved card (success) or a terminal error/not-found sentinel
       // (failure). The array identity never changes, so Glimmer re-renders on
       // the in-place swap. A failed slot becomes terminal and surfaces as
-      // `undefined` per-slot — `getRelationship` is the only way to read its
+      // `undefined` per-slot — `getRelationshipMembershipState` is the only way to read its
       // structured failure state.
       for (let entry of rawEntries) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
@@ -1777,7 +1784,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // Treat a non-present whole-field sentinel as an empty plural for index
     // purposes; the broken reference is preserved on the wire via the
     // serializer (`relationships.{field}` carries the sentinel's `reference`),
-    // and `getRelationship` is the structured read surface for the failure
+    // and `getRelationshipMembershipState` is the structured read surface for the failure
     // state outside the index.
     if (isNonPresentLink(instances)) {
       return null;
@@ -2168,7 +2175,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
 // is a terminal failure (`error` / `not-found`). Every other kind — including
 // `not-loaded` and `not-set`, which the field getter also surfaces as
 // `undefined` — yields `undefined` here so the caller falls through to the
-// normal render path. `getRelationship` is a pure read (it never retriggers
+// normal render path. `getRelationshipMembershipState` is a pure read (it never retriggers
 // `lazilyLoadLink`), so this is the single call per render that distinguishes a
 // broken link from an absent one.
 function brokenSingularLink(
@@ -2179,12 +2186,9 @@ function brokenSingularLink(
   if (owner == null) {
     return undefined;
   }
-  let state = getRelationship(owner, fieldName);
-  if (Array.isArray(state)) {
-    return undefined;
-  }
-  if (state.kind === 'error' || state.kind === 'not-found') {
-    return state;
+  let slot = getRelationshipMembershipState(owner, fieldName).membership?.[0];
+  if (slot && (slot.kind === 'error' || slot.kind === 'not-found')) {
+    return slot;
   }
   return undefined;
 }
@@ -3453,6 +3457,8 @@ function lazilyLoadLink(
   }
   let deferred = new Deferred<void>();
   inflightLoads.set(key, deferred.promise);
+  // Surface the in-flight state to `getRelationshipMembershipState(...).isLoading` observers.
+  bumpFieldLoadingSignal(instance, field.name);
   store.trackLoad(
     // we wrap the promise with a catch that will prevent the rejections from bubbling up but
     // not interfere with the original deferred. this prevents QUnit from being really noisy
@@ -3582,7 +3588,7 @@ function lazilyLoadLink(
       // array slot(s) (plural), replacing the legacy `field = null` write. The
       // field getter surfaces these as `undefined` to userland — the same
       // surface a not-loaded link produces — and never retriggers the loader
-      // for them; `getRelationship` is the only way to read the structured
+      // for them; `getRelationshipMembershipState` is the only way to read the structured
       // failure from outside this module. HTTP 404 → `link-not-found`, every
       // other failure → `link-error`.
       let errorDoc: SerializedError = {
@@ -3627,84 +3633,64 @@ function lazilyLoadLink(
       if (inflightLoads.size === 0) {
         inflightLinkLoads.delete(instance);
       }
+      // The load settled — re-evaluate `getRelationshipMembershipState(...).isLoading`.
+      bumpFieldLoadingSignal(instance, field.name);
     }
   })();
 }
 
-// The live loading state of a `linksTo` / `linksToMany` relationship.
-// `isLoading` is a getter, not a snapshot: each read re-evaluates against
-// the tracked source — card tracking for declared links, the search
-// resource's running state for query-backed fields — so a template bound to
-// `result.isLoading` updates as the load resolves, whether the caller reads
-// it inline or holds the object across renders.
-export interface FieldLoadingState {
-  readonly isLoading: boolean;
-}
-
-// Report whether a `linksTo` / `linksToMany` relationship's data is in
-// flight, collapsed to a single boolean for a template to drive a spinner.
-// Sits alongside `getRelationship`, with the same `(instance, fieldName)`
-// input, and is valid for the same field types — including query-backed
-// ones.
-//
-// Reading the result warms the field: it kicks the lazy load for a declared
-// link, or ensures the search resource for a query-backed field, so asking
-// "is this loading?" starts the work a template is about to wait on.
-//
-// "loading" means in flight specifically. `present`, `not-set`, and the
-// terminal `error` / `not-found` states all read as `false`, and a
-// terminally-failed link is never retried — a relationship being unresolved
-// does not by itself mean a fetch is running. For `linksToMany` the slots
-// collapse to one value: `isLoading` is true while ANY element is in flight.
-export function isFieldLoading(
+// Whether a declared `linksTo` / `linksToMany` field has a lazy load in flight
+// right now. Pure read of the in-flight load registry — the observe-only signal
+// behind `getRelationshipMembershipState(...).isLoading` for declared links. A `not-loaded`
+// slot that nothing is fetching is NOT loading.
+function hasInflightLoadForField(
   instance: CardDef,
   fieldName: string,
-): FieldLoadingState {
-  let field = getField(instance, fieldName);
-  if (!field) {
-    throw new Error(
-      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
-    );
+): boolean {
+  let loads = inflightLinkLoads.get(instance);
+  if (!loads) {
+    return false;
   }
-  if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
-    throw new Error(
-      `isFieldLoading requires a 'linksTo' or 'linksToMany' field; '${fieldName}' on ${instance.constructor.name} is '${field.fieldType}'`,
-    );
+  let prefix = `${fieldName}/`;
+  for (let key of loads.keys()) {
+    if (key.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Supply `getRelationshipMembershipState` with the loading status and query-field membership
+// that live above field-support: in-flight link loads (here) and per-field
+// search resources (in query-field-support). Observe-only — this never starts a
+// load or a search; the template's field getter does that.
+registerRelationshipProbe((instance, field) => {
+  // Entangle the reading render with the field's loading signal so a deferred
+  // bump (load start / settle, or query resource creation) re-evaluates this.
+  readFieldLoadingSignal(instance, field.name);
+  if (field.queryDefinition) {
+    let resource = peekQueryFieldSearchResource(instance, field.name);
+    let isLoading = resource?.isLoading ?? false;
+    let bucketEntry = getDataBucket(instance).get(field.name);
+    let queryMembership: RelationshipState[] | undefined;
+    if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+      // A search that failed as a unit surfaces one whole-field sentinel —
+      // independent of whether a live resource exists (it may have been planted
+      // directly), so this takes precedence.
+      queryMembership = [relationshipStateForEntry(bucketEntry)];
+    } else if (!isLoading && resource) {
+      queryMembership = (resource.instances ?? []).map((card) =>
+        relationshipStateForEntry(card),
+      );
+    }
+    // Otherwise membership stays undefined: in flight, or never queried.
+    return { isLoading, isQueryField: true, queryMembership };
   }
   return {
-    get isLoading() {
-      return computeFieldLoading(instance, field);
-    },
+    isLoading: hasInflightLoadForField(instance, field.name),
+    isQueryField: false,
   };
-}
-
-function computeFieldLoading(instance: CardDef, field: Field): boolean {
-  // Warm the field through its own getter — the same path a render takes. For
-  // a declared link this kicks `lazilyLoadLink` for any not-loaded slot; for a
-  // query-backed field it reads `searchResource.instances`, which is the
-  // consumption that schedules the search (the resource performs after the
-  // getter returns — merely creating it never runs the query). Both also
-  // entangle card tracking, so this read re-fires when the load settles.
-  field.getter(instance);
-
-  if (field.queryDefinition) {
-    // A query-backed field is driven by one search resource standing in for
-    // the whole field — there are no per-element states to inspect. Reading
-    // `isLoading` entangles with the resource's tracked running state.
-    let resource = ensureQueryFieldSearchResource(
-      getStore(instance),
-      instance,
-      field,
-    );
-    return resource?.isLoading ?? false;
-  }
-
-  let relationship = getRelationship(instance, field.name);
-  if (Array.isArray(relationship)) {
-    return relationship.some((slot) => slot.kind === 'not-loaded');
-  }
-  return relationship.kind === 'not-loaded';
-}
+});
 
 // Replace any linksTo / linksToMany bucket entry on `consumer` that points
 // to `deletedRef` with a `link-not-found` sentinel, and notify subscribers

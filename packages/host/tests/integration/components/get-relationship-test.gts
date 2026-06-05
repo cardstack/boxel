@@ -12,7 +12,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { RelationshipState as RelationshipStateType } from 'https://cardstack.com/base/card-api';
+import type {
+  RelationshipState as RelationshipStateType,
+  RelationshipStatus as RelationshipStatusType,
+} from 'https://cardstack.com/base/card-api';
 
 import {
   provideConsumeContext,
@@ -28,7 +31,7 @@ import {
   field,
   getBrokenLinks,
   getDataBucket,
-  getRelationship,
+  getRelationshipMembershipState,
   linksTo,
   linksToMany,
   setupBaseRealm,
@@ -58,17 +61,23 @@ function errorDoc(message: string, status = 500): SerializedError {
   };
 }
 
-function assertSingular(
+// A singular `linksTo` resolves to a one-element membership; return that member.
+function singleMember(
   assert: Assert,
-  state: RelationshipState | RelationshipState[],
-): asserts state is RelationshipState {
-  assert.notOk(
-    Array.isArray(state),
-    'singular linksTo returns one state, not an array',
+  rel: RelationshipStatusType,
+): RelationshipState {
+  assert.strictEqual(
+    rel.membership?.length,
+    1,
+    'singular linksTo returns a one-element membership',
   );
-  if (Array.isArray(state)) {
-    throw new Error('expected singular state');
-  }
+  return (rel.membership ?? [])[0];
+}
+
+// The per-element membership of a `linksToMany` (an array; `undefined` only
+// while a query-backed search is in flight).
+function members(rel: RelationshipStatusType): RelationshipState[] {
+  return rel.membership ?? [];
 }
 
 function assertKind<K extends RelationshipState['kind']>(
@@ -82,17 +91,7 @@ function assertKind<K extends RelationshipState['kind']>(
   }
 }
 
-function assertPlural(
-  assert: Assert,
-  state: RelationshipState | RelationshipState[],
-): asserts state is RelationshipState[] {
-  assert.ok(Array.isArray(state), 'plural linksToMany returns an array');
-  if (!Array.isArray(state)) {
-    throw new Error('expected plural state');
-  }
-}
-
-module('Integration | getRelationship', function (hooks) {
+module('Integration | getRelationshipMembershipState', function (hooks) {
   let loader: Loader;
 
   setupRenderingTest(hooks);
@@ -131,18 +130,18 @@ module('Integration | getRelationship', function (hooks) {
       await saveCard(pet, `${testRealmURL}Pet/mango`, loader);
       let person = new Person({ firstName: 'Hassan', pet });
 
-      let state = getRelationship(person, 'pet');
-      assertSingular(assert, state);
+      let state = singleMember(
+        assert,
+        getRelationshipMembershipState(person, 'pet'),
+      );
       assertKind(assert, state, 'present');
-      assert.true(state.isLoaded);
-      assert.false(state.isError);
       assert.strictEqual(state.value, pet);
       assert.strictEqual(state.reference, `${testRealmURL}Pet/mango`);
     });
 
     test("returns kind 'present' with the local id as reference when the linked card is unsaved", async function (assert) {
       // Unsaved CardDef instances have a localId but no URL `id` until saveCard
-      // runs. getRelationship reports them as 'present' with the local id as
+      // runs. getRelationshipMembershipState reports them as 'present' with the local id as
       // the reference — the store's identity map correlates that local id to
       // the remote URL once the server assigns one, so it stays resolvable.
       class Pet extends CardDef {
@@ -157,8 +156,10 @@ module('Integration | getRelationship', function (hooks) {
       let unsavedPet = new Pet({ firstName: 'Mango' });
       let person = new Person({ firstName: 'Hassan', pet: unsavedPet });
 
-      let state = getRelationship(person, 'pet');
-      assertSingular(assert, state);
+      let state = singleMember(
+        assert,
+        getRelationshipMembershipState(person, 'pet'),
+      );
       assertKind(assert, state, 'present');
       assert.strictEqual(state.value, unsavedPet);
       assert.strictEqual(
@@ -184,11 +185,11 @@ module('Integration | getRelationship', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
-      let state = getRelationship(person, 'pet');
-      assertSingular(assert, state);
+      let state = singleMember(
+        assert,
+        getRelationshipMembershipState(person, 'pet'),
+      );
       assertKind(assert, state, 'not-set');
-      assert.false(state.isLoaded);
-      assert.false(state.isError);
       assert.strictEqual(state.value, undefined);
       assert.strictEqual(state.reference, undefined);
     });
@@ -210,11 +211,11 @@ module('Integration | getRelationship', function (hooks) {
       };
       getDataBucket(person).set('pet', sentinel);
 
-      let state = getRelationship(person, 'pet');
-      assertSingular(assert, state);
+      let state = singleMember(
+        assert,
+        getRelationshipMembershipState(person, 'pet'),
+      );
       assertKind(assert, state, 'not-loaded');
-      assert.false(state.isLoaded);
-      assert.false(state.isError);
       assert.strictEqual(state.value, undefined);
       assert.strictEqual(state.reference, `${testRealmURL}Pet/mango`);
     });
@@ -238,11 +239,11 @@ module('Integration | getRelationship', function (hooks) {
       };
       getDataBucket(person).set('pet', sentinel);
 
-      let state = getRelationship(person, 'pet');
-      assertSingular(assert, state);
+      let state = singleMember(
+        assert,
+        getRelationshipMembershipState(person, 'pet'),
+      );
       assertKind(assert, state, 'error');
-      assert.false(state.isLoaded);
-      assert.true(state.isError);
       assert.strictEqual(state.value, undefined);
       assert.strictEqual(state.reference, `${testRealmURL}Pet/exploded`);
       assert.strictEqual(state.errorDoc, doc);
@@ -267,11 +268,11 @@ module('Integration | getRelationship', function (hooks) {
       };
       getDataBucket(person).set('pet', sentinel);
 
-      let state = getRelationship(person, 'pet');
-      assertSingular(assert, state);
+      let state = singleMember(
+        assert,
+        getRelationshipMembershipState(person, 'pet'),
+      );
       assertKind(assert, state, 'not-found');
-      assert.false(state.isLoaded);
-      assert.true(state.isError);
       assert.strictEqual(state.value, undefined);
       assert.strictEqual(state.reference, `${testRealmURL}Pet/missing`);
       assert.strictEqual(state.errorDoc, doc);
@@ -312,8 +313,7 @@ module('Integration | getRelationship', function (hooks) {
         errorDoc: notFoundDoc,
       } satisfies LinkNotFoundSentinel);
 
-      let states = getRelationship(person, 'pets');
-      assertPlural(assert, states);
+      let states = members(getRelationshipMembershipState(person, 'pets'));
       assert.strictEqual(states.length, 4);
 
       let [s0, s1, s2, s3] = states;
@@ -344,8 +344,7 @@ module('Integration | getRelationship', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
 
       let person = new Person({ firstName: 'Hassan' });
-      let states = getRelationship(person, 'pets');
-      assertPlural(assert, states);
+      let states = members(getRelationshipMembershipState(person, 'pets'));
       assert.strictEqual(states.length, 0);
     });
 
@@ -366,8 +365,7 @@ module('Integration | getRelationship', function (hooks) {
       };
       getDataBucket(person).set('pets', sentinel);
 
-      let states = getRelationship(person, 'pets');
-      assertPlural(assert, states);
+      let states = members(getRelationshipMembershipState(person, 'pets'));
       assert.strictEqual(states.length, 1);
       assertKind(assert, states[0], 'not-loaded');
       assert.strictEqual(
@@ -778,9 +776,9 @@ module('Integration | getRelationship', function (hooks) {
       // Repeated reads should not mutate the bucket entry — lazilyLoadLink
       // would replace it (or, for linksToMany, set a `.loading` flag on the
       // sentinel). Sentinel identity preserved == no fetch was kicked off.
-      getRelationship(person, 'pet');
-      getRelationship(person, 'pet');
-      getRelationship(person, 'pet');
+      getRelationshipMembershipState(person, 'pet');
+      getRelationshipMembershipState(person, 'pet');
+      getRelationshipMembershipState(person, 'pet');
 
       assert.strictEqual(
         getDataBucket(person).get('pet'),
@@ -805,9 +803,9 @@ module('Integration | getRelationship', function (hooks) {
 
       let person = new Person({ firstName: 'Hassan' });
       // Seed the WatchedArray that linksToMany.emptyValue() returns by reading
-      // once through getRelationship (which uses peekAtField), then push
+      // once through getRelationshipMembershipState (which uses peekAtField), then push
       // sentinels directly so the test stays hermetic.
-      getRelationship(person, 'pets');
+      getRelationshipMembershipState(person, 'pets');
       let pets = getDataBucket(person).get('pets');
       let sentinelA: NotLoadedSentinel = {
         type: 'not-loaded',
@@ -819,8 +817,8 @@ module('Integration | getRelationship', function (hooks) {
       };
       pets.push(sentinelA, sentinelB);
 
-      getRelationship(person, 'pets');
-      getRelationship(person, 'pets');
+      getRelationshipMembershipState(person, 'pets');
+      getRelationshipMembershipState(person, 'pets');
 
       assert.notOk(
         (sentinelA as { loading?: boolean }).loading,
@@ -847,8 +845,8 @@ module('Integration | getRelationship', function (hooks) {
         renderCount++;
         return '';
       };
-      let stateKind = (s: ReturnType<typeof getRelationship>) =>
-        Array.isArray(s) ? s.map((x) => x.kind).join(',') : s.kind;
+      let stateKind = (s: ReturnType<typeof getRelationshipMembershipState>) =>
+        (s.membership ?? []).map((x) => x.kind).join(',');
 
       // 'not-set' is enough for the render-count contract — any kind exercises
       // the same template-side read path, and not-set needs no realm setup.
@@ -857,9 +855,15 @@ module('Integration | getRelationship', function (hooks) {
       await render(
         <template>
           <span>{{bump}}</span>
-          <span data-test-a>{{stateKind (getRelationship person 'pet')}}</span>
-          <span data-test-b>{{stateKind (getRelationship person 'pet')}}</span>
-          <span data-test-c>{{stateKind (getRelationship person 'pet')}}</span>
+          <span data-test-a>{{stateKind
+              (getRelationshipMembershipState person 'pet')
+            }}</span>
+          <span data-test-b>{{stateKind
+              (getRelationshipMembershipState person 'pet')
+            }}</span>
+          <span data-test-c>{{stateKind
+              (getRelationshipMembershipState person 'pet')
+            }}</span>
         </template>,
       );
 
@@ -875,7 +879,7 @@ module('Integration | getRelationship', function (hooks) {
       assert.strictEqual(
         renderCount,
         1,
-        'three getRelationship reads in one render frame did not schedule re-renders',
+        'three getRelationshipMembershipState reads in one render frame did not schedule re-renders',
       );
     });
 
@@ -902,10 +906,8 @@ module('Integration | getRelationship', function (hooks) {
         pets: [mango, vangogh],
       });
 
-      let first = getRelationship(person, 'pets');
-      let second = getRelationship(person, 'pets');
-      assertPlural(assert, first);
-      assertPlural(assert, second);
+      let first = members(getRelationshipMembershipState(person, 'pets'));
+      let second = members(getRelationshipMembershipState(person, 'pets'));
 
       assert.notStrictEqual(
         first,
@@ -946,7 +948,7 @@ module('Integration | getRelationship', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person });
       let person = new Person({ firstName: 'Hassan' });
       assert.throws(
-        () => getRelationship(person, 'pet'),
+        () => getRelationshipMembershipState(person, 'pet'),
         /does not have a field 'pet'/,
       );
     });
@@ -958,7 +960,7 @@ module('Integration | getRelationship', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person });
       let person = new Person({ firstName: 'Hassan' });
       assert.throws(
-        () => getRelationship(person, 'firstName'),
+        () => getRelationshipMembershipState(person, 'firstName'),
         /requires a 'linksTo' or 'linksToMany' field/,
       );
     });

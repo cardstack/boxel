@@ -24,7 +24,7 @@ import {
 import { initSharedState } from './shared-state';
 import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash';
-import { TrackedWeakMap } from 'tracked-built-ins';
+import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
 
 export interface NotLoadedValue {
@@ -70,6 +70,45 @@ const fieldOverrides = initSharedState(
   'fieldOverrides',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
+
+// A tracked, observe-only invalidation signal per (instance, field). It carries
+// no truth of its own — `getRelationshipMembershipState(...).isLoading` reads it only to
+// entangle, and consults the real in-flight state (in-flight link loads / the
+// search resource's running flag) separately. `lazilyLoadLink` and the query
+// search lifecycle bump it when a load starts / settles, so a bound spinner
+// re-renders; because only `getRelationshipMembershipState` consumers read it, the bump
+// re-renders just those spinners, not every holder of the field.
+const fieldLoadingSignal = initSharedState(
+  'fieldLoadingSignal',
+  () => new TrackedWeakMap<BaseDef, TrackedMap<string, number>>(),
+);
+
+// Entangle the caller's render with a field's loading signal (read-only).
+export function readFieldLoadingSignal(
+  instance: BaseDef,
+  fieldName: string,
+): void {
+  fieldLoadingSignal.get(instance)?.get(fieldName);
+}
+
+// Invalidate a field's loading signal so `getRelationshipMembershipState` re-evaluates. The
+// write is deferred a microtask: the load that triggers it starts inside the
+// field getter mid-render, and a synchronous tracked write would backtrack a
+// `getRelationshipMembershipState` read from the same render. A monotonic version counter (not
+// a refcount) keeps it a pure invalidation trigger.
+export function bumpFieldLoadingSignal(
+  instance: BaseDef,
+  fieldName: string,
+): void {
+  Promise.resolve().then(() => {
+    let counts = fieldLoadingSignal.get(instance);
+    if (!counts) {
+      counts = new TrackedMap<string, number>();
+      fieldLoadingSignal.set(instance, counts);
+    }
+    counts.set(fieldName, (counts.get(fieldName) ?? 0) + 1);
+  });
+}
 
 // Pass-scoped computed-field memo. When non-null, `getter` consults a
 // per-instance Map before invoking `computeVia` and stores the result for
@@ -475,11 +514,12 @@ export function peekAtField(instance: BaseDef, fieldName: string): any {
 // rather than reading the data bucket directly. The five discriminators cover
 // every state a linked field can be in; callers branch on `kind` and read the
 // fields the union narrows to.
+// `kind` is the single discriminator — `isLoaded` / `isError` are derivable
+// from it (`present` is loaded; `error` / `not-found` are errors), so they are
+// not carried as redundant fields.
 export type RelationshipState<T extends CardDef = CardDef> =
   | {
       kind: 'present';
-      isLoaded: true;
-      isError: false;
       value: T;
       // Fully-qualified URL once the linked card is saved; the card's local id
       // before then. Both resolve through the store's identity map, which
@@ -488,43 +528,33 @@ export type RelationshipState<T extends CardDef = CardDef> =
     }
   | {
       kind: 'not-loaded';
-      isLoaded: false;
-      isError: false;
       value: undefined;
       reference: string;
     }
   | {
       kind: 'error';
-      isLoaded: false;
-      isError: true;
       value: undefined;
       reference: string;
       errorDoc: SerializedError;
     }
   | {
       kind: 'not-found';
-      isLoaded: false;
-      isError: true;
       value: undefined;
       reference: string;
       errorDoc: SerializedError;
     }
   | {
       kind: 'not-set';
-      isLoaded: false;
-      isError: false;
       value: undefined;
       reference: undefined;
     };
 
-function relationshipStateForEntry<T extends CardDef>(
+export function relationshipStateForEntry<T extends CardDef>(
   entry: unknown,
 ): RelationshipState<T> {
   if (isNotLoadedValue(entry)) {
     return {
       kind: 'not-loaded',
-      isLoaded: false,
-      isError: false,
       value: undefined,
       reference: entry.reference,
     };
@@ -532,8 +562,6 @@ function relationshipStateForEntry<T extends CardDef>(
   if (isLinkError(entry)) {
     return {
       kind: 'error',
-      isLoaded: false,
-      isError: true,
       value: undefined,
       reference: entry.reference,
       errorDoc: entry.errorDoc,
@@ -542,8 +570,6 @@ function relationshipStateForEntry<T extends CardDef>(
   if (isLinkNotFound(entry)) {
     return {
       kind: 'not-found',
-      isLoaded: false,
-      isError: true,
       value: undefined,
       reference: entry.reference,
       errorDoc: entry.errorDoc,
@@ -552,16 +578,12 @@ function relationshipStateForEntry<T extends CardDef>(
   if (entry == null) {
     return {
       kind: 'not-set',
-      isLoaded: false,
-      isError: false,
       value: undefined,
       reference: undefined,
     };
   }
   return {
     kind: 'present',
-    isLoaded: true,
-    isError: false,
     value: entry as T,
     // Saved cards carry a URL `id`; unsaved cards carry only a local id. Both
     // are resolvable references through the store's identity map.
@@ -569,25 +591,63 @@ function relationshipStateForEntry<T extends CardDef>(
   };
 }
 
-// Read the relationship state for a `linksTo` or `linksToMany` field. Returns a
-// single `RelationshipState` for singular `linksTo`, or an array (one entry per
-// element) for `linksToMany`. Pure read — entangles with card tracking via the
-// shared field getter so templates re-render when sentinels change, but never
-// triggers `lazilyLoadLink` and never mutates the data bucket.
+// The relationship status of a `linksTo` / `linksToMany` field — one consistent
+// object shape for every arity, query-backed or not.
 //
-// Render stability: this returns a fresh envelope object (and a fresh array for
-// the plural case) on every call, so the envelope's own identity is NOT stable
-// across renders. The stable anchors are `reference` (a string) and `value`
-// (the underlying card instance, itself stable across renders). Templates that
-// render editable inputs per element MUST key `{{#each}}` on `reference` and
-// bind inputs to `value` — never to envelope identity — or the each-blocks tear
-// down on every re-render and input fields lose cursor focus in edit format.
-// `getRelationship` itself schedules no re-renders (see the render-count test),
-// so it cannot destabilize a component on its own.
-export function getRelationship<T extends CardDef = CardDef>(
+// `isLoading` is a whole-field, observe-only flag: true while the field's data
+// is actually being fetched. Reading it never starts the fetch — the template's
+// field getter does that. If nothing accesses the field, `isLoading` stays
+// `false`.
+//
+// `membership` is the per-element resolution(s), in document order:
+//   - declared `linksTo`: a one-element array;
+//   - declared `linksToMany`: one entry per element;
+//   - query-backed (either arity): `undefined` while the search is in flight
+//     (membership not yet known), then an array once results arrive — the same
+//     shape as a non-query `linksToMany`. A re-triggered live query returns it
+//     to `undefined` while running, then back to an array.
+export interface RelationshipStatus<T extends CardDef = CardDef> {
+  isLoading: boolean;
+  membership: RelationshipState<T>[] | undefined;
+}
+
+// `getRelationshipMembershipState` reports `isLoading` and query-field membership, both of
+// which derive from state that lives above this module (in-flight link loads
+// and per-field search resources). Card-api registers a probe that supplies
+// them, keeping `getRelationshipMembershipState` here (where its declared-link consumers live)
+// without a circular import.
+export interface RelationshipProbeResult<T extends CardDef = CardDef> {
+  isLoading: boolean;
+  isQueryField: boolean;
+  // Resolved membership for a query-backed field (`undefined` while in flight).
+  // Ignored for declared fields, whose membership comes from the data bucket.
+  queryMembership?: RelationshipState<T>[] | undefined;
+}
+type RelationshipProbe = (
+  instance: CardDef,
+  field: Field,
+) => RelationshipProbeResult;
+let relationshipProbe: RelationshipProbe | undefined;
+export function registerRelationshipProbe(probe: RelationshipProbe): void {
+  relationshipProbe = probe;
+}
+
+// Read the relationship status for a `linksTo` or `linksToMany` field. Always
+// returns a `Relationship` object (never a bare array): `isLoading` plus
+// `membership` (per the type above). Pure read — entangles with card tracking
+// via the shared field getter so templates re-render when sentinels change, but
+// never triggers `lazilyLoadLink` / the search and never mutates the data
+// bucket.
+//
+// Render stability: this returns a fresh envelope on every call, so the
+// envelope's identity is NOT stable across renders. The stable anchors are each
+// member's `reference` (a string) and `value` (the underlying card instance).
+// Templates that render editable inputs per element MUST key `{{#each}}` on
+// `reference` and bind inputs to `value` — never to envelope identity.
+export function getRelationshipMembershipState<T extends CardDef = CardDef>(
   instance: CardDef,
   fieldName: string,
-): RelationshipState<T> | RelationshipState<T>[] {
+): RelationshipStatus<T> {
   let field = getField(instance, fieldName);
   if (!field) {
     throw new Error(
@@ -596,33 +656,49 @@ export function getRelationship<T extends CardDef = CardDef>(
   }
   if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
     throw new Error(
-      `getRelationship requires a 'linksTo' or 'linksToMany' field; '${fieldName}' on ${instance.constructor.name} is '${field.fieldType}'`,
+      `getRelationshipMembershipState requires a 'linksTo' or 'linksToMany' field; '${fieldName}' on ${instance.constructor.name} is '${field.fieldType}'`,
     );
   }
 
-  let related = peekAtField(instance, field.name);
+  let probe = relationshipProbe?.(instance, field);
+  let isLoading = probe?.isLoading ?? false;
 
+  if (field.queryDefinition) {
+    // Query-backed: membership and loading both come from the field's search
+    // resource (supplied by the probe), not the data bucket. `membership` is
+    // `undefined` while the search is in flight.
+    return {
+      isLoading,
+      membership: probe?.queryMembership as RelationshipState<T>[] | undefined,
+    };
+  }
+
+  // Declared link: membership comes from the data bucket (pure read).
+  let related = peekAtField(instance, field.name);
+  let membership: RelationshipState<T>[];
   if (field.fieldType === 'linksToMany') {
     // A computed `linksToMany` can surface as a single sentinel when it
     // consumes an unresolved upstream link. Wrap it as a one-element array so
-    // callers can branch uniformly on the plural shape.
+    // callers branch uniformly on the plural shape.
     if (isNonPresentLink(related)) {
-      return [relationshipStateForEntry<T>(related)];
-    }
-    if (!Array.isArray(related)) {
+      membership = [relationshipStateForEntry<T>(related)];
+    } else if (!Array.isArray(related)) {
       throw new Error(
         `expected ${fieldName} to be an array but was ${typeof related}`,
       );
+    } else {
+      // Read the raw backing array: per-slot index access hides the broken-link
+      // sentinels (surfacing them as `undefined`), but `membership` is the typed
+      // surface whose whole job is to report each slot's true state.
+      membership = rawArrayValues(related).map((entry) =>
+        relationshipStateForEntry<T>(entry),
+      );
     }
-    // Read the raw backing array: per-slot index access hides the broken-link
-    // sentinels (surfacing them as `undefined`), but `getRelationship` is the
-    // typed surface whose whole job is to report each slot's true state.
-    return rawArrayValues(related).map((entry) =>
-      relationshipStateForEntry<T>(entry),
-    );
+  } else {
+    // Singular `linksTo` — a one-element membership keeps the shape consistent.
+    membership = [relationshipStateForEntry<T>(related)];
   }
-
-  return relationshipStateForEntry<T>(related);
+  return { isLoading, membership };
 }
 
 export interface BrokenLinkFinding {
@@ -658,7 +734,7 @@ export interface BrokenLinkFinding {
 // link nor a nested card — so skipping absent fields loses nothing and avoids
 // the getter's side effect of initializing them with `emptyValue` (which would
 // pollute `getUsedFields` / serialization). Relationship state is then read
-// through `getRelationship`, which never triggers `lazilyLoadLink`, so a
+// through `getRelationshipMembershipState`, which never triggers `lazilyLoadLink`, so a
 // recursed value surfaces only states that genuinely failed during this render.
 // `'present'`, `'not-loaded'`, and `'not-set'` are not terminal failures; a
 // `'not-loaded'` slot is an in-flight fetch, so callers must scan only after
@@ -686,7 +762,7 @@ export function getBrokenLinks(
     // Query-backed `linksTo` / `linksToMany` fields (the `{ query }` form
     // resolved through `_federated-search`) sit outside the
     // broken-link / declared-`linksTo` scan: their failure surface is
-    // `getRelationship`, not the indexer-side cascade. A search resource
+    // `getRelationshipMembershipState`, not the indexer-side cascade. A search resource
     // can fail for "soft" reasons that should not classify the consuming
     // card as instance-error (cross-realm assertions, transient federated
     // failures), and the field getter already routes them through a
@@ -701,8 +777,13 @@ export function getBrokenLinks(
       continue;
     }
     if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
-      let state = getRelationship(instance as CardDef, fieldName);
-      for (let entry of Array.isArray(state) ? state : [state]) {
+      // Declared fields (query-backed are skipped above) always have an array
+      // membership built from the data bucket.
+      let { membership } = getRelationshipMembershipState(
+        instance as CardDef,
+        fieldName,
+      );
+      for (let entry of membership ?? []) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
           // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Read
           // only fields that won't initialize bucket entries via the

@@ -54,7 +54,7 @@ export type PatchData = {
 // without parsing the rendered HTML or re-running `getBrokenLinks` at
 // read time. `errorDoc` is intentionally omitted: it's large, and the
 // error detail is still available at runtime via
-// `getRelationship(card, fieldName)` and inline in the rendered placeholder.
+// `getRelationshipMembershipState(card, fieldName)` and inline in the rendered placeholder.
 export interface BrokenLinkSummary {
   // The declared `linksTo` / `linksToMany` field holding the broken reference.
   fieldName: string;
