@@ -483,23 +483,99 @@ export async function findAndHoldAvailablePort(): Promise<PortReservation> {
   });
 }
 
+/**
+ * Hold a *specific* port (rather than an OS-chosen one) with a holder
+ * socket, so a known port the harness is about to bind can't be handed to a
+ * sibling `findAndHoldAvailablePort()` in the gap before the real bind.
+ * Mirrors `findAndHoldAvailablePort` but for a port the caller already
+ * committed to (e.g. the public realm-server port baked into a reused
+ * FactoryTestContext). Binds the dual-stack wildcard for the same reason
+ * `findAndHoldAvailablePort` does — so the hold covers every interface the
+ * eventual bind might use. Rejects when the port is already taken, with a
+ * port-conflict probe appended to the error so the collision surfaces
+ * immediately and names its holder rather than failing opaquely later.
+ */
+export async function holdSpecificPort(port: number): Promise<PortReservation> {
+  return await new Promise<PortReservation>((resolveOuter, rejectOuter) => {
+    let server = createNetServer((socket) => socket.destroy());
+    let onError = (error: NodeJS.ErrnoException) => {
+      server.close();
+      if (error.code === 'EADDRINUSE') {
+        diagnosePortConflict(port)
+          .catch(() => '')
+          .then((diagnostic) => {
+            if (diagnostic) {
+              error.message = `${error.message}\n${diagnostic}`;
+            }
+            rejectOuter(error);
+          });
+        return;
+      }
+      rejectOuter(error);
+    };
+    server.once('error', onError);
+    server.listen(port, () => {
+      server.off('error', onError);
+      // Swallow late errors after a successful bind so they don't surface
+      // as unhandled 'error' events.
+      server.on('error', () => {});
+      let released = false;
+      resolveOuter({
+        port,
+        release: () =>
+          new Promise<void>((resolveClose, rejectClose) => {
+            if (released) {
+              resolveClose();
+              return;
+            }
+            released = true;
+            server.close((closeError) => {
+              if (closeError) {
+                rejectClose(closeError);
+              } else {
+                resolveClose();
+              }
+            });
+          }),
+      });
+    });
+  });
+}
+
+/**
+ * Resolve the public-facing realm-server URL the harness exposes — the port
+ * the in-stack compat proxy binds. When the port is freshly allocated here,
+ * the returned `portReservation` keeps a holder socket bound to it. Hold it
+ * across the gap between this allocation and the compat-proxy bind deep
+ * inside `startIsolatedRealmStack`, then release it right before the proxy
+ * listens. Without the hold, the sibling `findAndHoldAvailablePort()`
+ * allocations made in between (support services, worker-manager,
+ * realm-server child, prerender) can be handed this same port number by the
+ * OS port-0 allocator and bind it first, so the compat-proxy bind dies with
+ * EADDRINUSE. `portReservation` is `undefined` for a caller-supplied or
+ * pre-configured URL/port — the caller owns those.
+ */
 export async function resolveFactoryRealmServerURL(
   realmServerURL?: URL,
   compatRealmServerPort?: number,
-): Promise<URL> {
+): Promise<{ url: URL; portReservation?: PortReservation }> {
   if (realmServerURL) {
-    return new URL(realmServerURL.href);
+    return { url: new URL(realmServerURL.href) };
   }
 
   if (CONFIGURED_REALM_SERVER_URL) {
-    return new URL(CONFIGURED_REALM_SERVER_URL.href);
+    return { url: new URL(CONFIGURED_REALM_SERVER_URL.href) };
   }
 
-  let port =
-    compatRealmServerPort && compatRealmServerPort !== 0
-      ? compatRealmServerPort
-      : await findAvailablePort();
-  return new URL(`http://localhost:${port}/`);
+  if (compatRealmServerPort && compatRealmServerPort !== 0) {
+    return { url: new URL(`http://localhost:${compatRealmServerPort}/`) };
+  }
+
+  let portReservation = await findAndHoldAvailablePort();
+  return {
+    url: new URL(`http://localhost:${portReservation.port}/`),
+    portReservation,
+  };
 }
 
 export function baseRealmURLFor(realmServerURL: URL): URL {
