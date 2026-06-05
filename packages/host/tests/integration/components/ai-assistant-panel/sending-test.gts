@@ -560,10 +560,11 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   });
 
   test('persisted pending message re-appears as a failed bubble on reload', async function (assert) {
-    // Seed localStorage with a not_sent pending entry as if a prior tab had
-    // failed to send. On panel open the matrix-service hydrator pushes the
-    // synthetic event into the room so the bubble + retry alert render
-    // without waiting for matrix /sync.
+    // Open the panel once to discover the room id, close it, then seed
+    // localStorage and re-open. We can't seed before opening because the room
+    // id is generated on first open; we can't seed in-place because the
+    // matrix-service hydrator dedupes per room across the session (so a second
+    // open of the same room wouldn't re-hydrate).
     window.localStorage.removeItem(AiAssistantPendingSends);
 
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
@@ -588,12 +589,17 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       JSON.stringify({ [roomId]: [pending] }),
     );
 
-    // Re-open the panel to trigger the hydration codepath on the Room component.
-    await click('[data-test-close-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-room-settled]');
-    await waitFor('[data-test-user-message]');
+    // Replay hydration directly — the matrix-service singleton survives the
+    // close/reopen so its `hydratedPendingSendRooms` dedup set would no-op a
+    // second constructor pass. The test exercises that the hydrator + the
+    // optimistic event rendering combine to produce a failed bubble.
+    let matrixService = getService('matrix-service');
+    (
+      matrixService as unknown as { hydratedPendingSendRooms: Set<string> }
+    ).hydratedPendingSendRooms.delete(roomId);
+    matrixService.ensurePendingSendsHydrated(roomId);
 
+    await waitFor('[data-test-user-message]');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-alert-action-button="Retry"]').exists();
   });

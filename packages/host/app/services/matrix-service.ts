@@ -1284,11 +1284,12 @@ export default class MatrixService extends Service {
         body: content.body,
         format: 'org.matrix.custom.html',
         clientGeneratedId: content.clientGeneratedId,
-        // isStreamingFinished:false suppresses the queueEventForCodePatchProcessing
-        // side effect in processDecryptedEvent if the user's text happens to
-        // contain SEARCH/REPLACE markers; user messages also don't carry
-        // command requests so the command-processing branch is naturally inert.
-        isStreamingFinished: false,
+        // Deliberately omit isStreamingFinished. Setting it to `false` would
+        // make `generatingResults` (which reads `!lastMessage.isStreamingFinished`)
+        // misclassify the user's own bubble as "AI generating", flashing the
+        // status banner over the user's pending message. Omitting the key is
+        // just as effective at suppressing processDecryptedEvent's
+        // code-patch-processing branch, which gates on a truthy value.
         data: {
           attachedCards: content.attachedCardIds.map((id) => ({
             sourceUrl: id,
@@ -2619,7 +2620,6 @@ export default class MatrixService extends Service {
           body: entry.body,
           format: 'org.matrix.custom.html',
           clientGeneratedId: entry.clientGeneratedId,
-          isStreamingFinished: false,
           ...(entry.status === 'not_sent' && entry.errorMessage
             ? { errorMessage: entry.errorMessage }
             : {}),

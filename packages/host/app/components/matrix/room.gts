@@ -1795,17 +1795,13 @@ export default class Room extends Component<Signature> {
   );
 
   private get isSending() {
-    if (this.doSendMessage.isRunning) {
-      return true;
-    }
-    // A user message in 'sending' or 'queued' is still in matrix's outbound
-    // pipeline; gate Send + attachment actions until it reconciles. 'not_sent'
-    // is deliberately excluded — a failed bubble shouldn't lock the UI forever.
-    return this.messages.some(
-      (m) =>
-        m.author.userId === this.matrixService.userId &&
-        this.isPendingMessage(m),
-    );
+    // Only mirror the in-flight `doSendMessage` task here. `isSending` drives
+    // the chat-input's `disabled` and the send button's `@loading` spinner; we
+    // want both to release as soon as the task completes, not wait for the
+    // ~100ms matrix-js-sdk reconciliation debounce after sendEvent returns.
+    // The Send button stays disabled past that window via `canSend`'s
+    // user-pending check, which doesn't disable the input or show a spinner.
+    return this.doSendMessage.isRunning;
   }
 
   private get canSend() {
@@ -1912,10 +1908,20 @@ export default class Room extends Component<Signature> {
   }
 
   private get generatingResults() {
-    return (
-      this.messages[this.messages.length - 1] &&
-      !this.messages[this.messages.length - 1].isStreamingFinished
-    );
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage) {
+      return false;
+    }
+    // The banner means "the AI is generating a reply". Only consider the bot's
+    // streaming state — user messages don't carry `isStreamingFinished` on the
+    // wire, so they read as not-streamed-yet even after they've landed. With
+    // the optimistic bubble appearing at click-time, the user's message is the
+    // last message for a longer window than before; without this author gate
+    // the banner shows on the user's own pending bubble.
+    if (lastMessage.author.userId !== this.matrixService.aiBotUserId) {
+      return false;
+    }
+    return !lastMessage.isStreamingFinished;
   }
 
   @cached
