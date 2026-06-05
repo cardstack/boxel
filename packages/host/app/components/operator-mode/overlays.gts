@@ -28,6 +28,22 @@ import type { CardDefOrId } from './stack-item';
 import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { MiddlewareState } from '@floating-ui/dom';
 
+// --- TEMP INSTRUMENTATION (overlay first-frame jump) — remove before merge ---
+// Enable with localStorage.setItem('adorn-pos-debug','1') (reload) or
+// ?adornPosDebug=1. Logs, per velcro computePosition, the quantities that
+// determine where the overlay lands, so we can see which one is ~60px off on
+// the first call.
+function overlayDebugOn(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (window.localStorage?.getItem('adorn-pos-debug') === '1') return true;
+  } catch {
+    /* localStorage may be unavailable */
+  }
+  return /[?&]adornPosDebug=1\b/.test(window.location?.search ?? '');
+}
+// --- end TEMP ---
+
 interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
@@ -146,6 +162,27 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
+      // --- TEMP INSTRUMENTATION (build marker v-mw1) — remove before merge ---
+      if (overlayDebugOn()) {
+        let op = floating.offsetParent as HTMLElement | null;
+        let opRect = op ? op.getBoundingClientRect() : null;
+        let refRect =
+          reference instanceof Element
+            ? reference.getBoundingClientRect()
+            : null;
+        let scroller = floating.closest(
+          '[data-test-cards-grid-cards], .boxel-cards-grid, [data-scroller], .ember-application',
+        ) as HTMLElement | null;
+        console.log(
+          `[overlay-mw v-mw1] x=${rects.reference.x.toFixed(1)} y=${rects.reference.y.toFixed(1)}` +
+            ` | refRect top=${refRect ? refRect.top.toFixed(1) : '?'} left=${refRect ? refRect.left.toFixed(1) : '?'}` +
+            ` | floatPos=${window.getComputedStyle(floating).position}` +
+            ` | offsetParent=${op ? op.tagName + '.' + String(op.className).replace(/\s+/g, '.').slice(0, 30) : 'null'}` +
+            ` opTop=${opRect ? opRect.top.toFixed(1) : '?'} opLeft=${opRect ? opRect.left.toFixed(1) : '?'}` +
+            ` | scrollY=${window.scrollY} scrollerTop=${scroller ? scroller.scrollTop : '?'}`,
+        );
+      }
+      // --- end TEMP ---
       return {
         x: rects.reference.x,
         y: rects.reference.y,
