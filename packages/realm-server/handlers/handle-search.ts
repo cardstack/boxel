@@ -79,19 +79,14 @@ export default function handleSearch(opts: {
     }
 
     let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
-    // Inside a prerender, leave `relationships.{field}.data` populated
-    // for query-backed `linksTo` / `linksToMany` but skip transitive
-    // expansion into `included[]`. The host's prerender-mode getter
-    // resolves the listed IDs from its seed and skips the live
-    // re-query, so the eager closure is a wasted round-trip in this
-    // path. Same gating as `cacheOnlyDefinitions`.
-    let skipQueryBackedExpansion = cacheOnlyDefinitions;
-    // Inside a prerender the host never reads the response's
-    // `included[]` — it resolves every linked card by URL via
-    // card+source (query fields from the seed umbrella, static links via
-    // a lazy-loading `not-loaded` sentinel). Omit `included[]` entirely:
-    // seed the root result cards and skip the static-link BFS that builds
-    // it. Same gating as `cacheOnlyDefinitions`.
+    // Inside a prerender the search skips the `loadLinks`
+    // relationship-assembly pass entirely: the host re-resolves every
+    // result card from its raw card+source file and consumes only
+    // `data[].id`, so the query-field `relationships.{field}.data`
+    // umbrellas and the transitive `included[]` are all throwaway work
+    // here. The response carries the matching result identifiers (+
+    // pristine attributes / static-link relationships) and page meta
+    // only. Same gating as `cacheOnlyDefinitions`.
     let omitIncluded = cacheOnlyDefinitions;
     // The host's `_federated-search` fetch wrapper stamps
     // `x-boxel-job-priority` while rendering inside a prerender tab.
@@ -105,25 +100,20 @@ export default function handleSearch(opts: {
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
     );
     // `<jobId>.<reservationId>` identity stamped by indexer-driven prerender
-    // requests. Threaded into searchOpts so the per-instance wire-format cache
-    // (`job_scoped_instance_cache`, consulted inside `loadLinks`) scopes its
-    // entries to one indexing job; also reused below as the query-level
-    // cache's job key. Absent for live / external callers.
+    // requests; used below as the job-scoped search cache's job key (the
+    // whole-doc `_federated-search` response cache). Absent for live /
+    // external callers, which therefore bypass the cache.
     let prerenderJobId = sanitizePrerenderJobId(
       ctxt.get(PRERENDER_JOB_ID_HEADER),
     );
     let searchOpts: {
       cacheOnlyDefinitions?: true;
-      skipQueryBackedExpansion?: true;
       omitIncluded?: true;
       priority?: number;
-      jobIdentity?: string;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
-    if (skipQueryBackedExpansion) searchOpts.skipQueryBackedExpansion = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
-    if (prerenderJobId) searchOpts.jobIdentity = prerenderJobId;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
     // `loggingCorrelationId` / `timings` are deliberately kept OUT of `searchOpts`:

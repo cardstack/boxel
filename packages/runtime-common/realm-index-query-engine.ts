@@ -28,9 +28,6 @@ import {
   visitInstanceURLs,
   maybeRelativeReference,
   codeRefFromInternalKey,
-  query,
-  param,
-  type Expression,
 } from '.';
 import type { Realm } from './realm';
 import type { VirtualNetwork } from './virtual-network';
@@ -82,43 +79,6 @@ import {
 // uses the same depth for repeated card types).
 const RECURSING_DEPTH = 3;
 
-const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
-
-// Hit/miss observability for the per-instance cache. Counters are kept per job
-// identity and a running summary is emitted as cache traffic accumulates — a
-// low-volume aggregate (not one line per event) so an indexing run reports its
-// cache hit rate in the ordinary logs. The map is diagnostics-only and bounded.
-// Lazily created (not at module load): a top-level `logger()` call here races
-// the circular import that populates it, whereas first use happens well after.
-let instanceCacheLog: ReturnType<typeof logger> | undefined;
-const instanceCacheStats = new Map<string, { hits: number; misses: number }>();
-const INSTANCE_CACHE_LOG_EVERY = 200;
-
-function recordInstanceCacheEvent(jobId: string, hit: boolean): void {
-  let stat = instanceCacheStats.get(jobId);
-  if (!stat) {
-    // Bound memory without tracking job lifecycle here: drop the whole map if
-    // it grows past a sane number of concurrent jobs.
-    if (instanceCacheStats.size > 256) {
-      instanceCacheStats.clear();
-    }
-    stat = { hits: 0, misses: 0 };
-    instanceCacheStats.set(jobId, stat);
-  }
-  if (hit) {
-    stat.hits++;
-  } else {
-    stat.misses++;
-  }
-  let total = stat.hits + stat.misses;
-  if (total === 1 || total % INSTANCE_CACHE_LOG_EVERY === 0) {
-    (instanceCacheLog ??= logger('instance-cache')).info(
-      `job=${jobId} hits=${stat.hits} misses=${stat.misses} ` +
-        `hitRate=${Math.round((100 * stat.hits) / total)}%`,
-    );
-  }
-}
-
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
@@ -137,46 +97,33 @@ type Options = {
   // When true, `loadLinks` populates `relationships.{field}.data` for
   // query-backed `linksTo` / `linksToMany` fields but does NOT push
   // the linked resources into `included[]`. Static linksTo / linksToMany
-  // still expand transitively. Set by the realm-server handlers when
-  // the request originates inside a prerender — the caller can resolve
-  // the listed IDs via per-URL fetches, and the eager closure is a
-  // wasted round-trip in that context. The umbrella relationship
-  // carries `links.search` only when written by `applyQueryResults`,
-  // so that key is the per-field "is this query-backed?" signal at
-  // follow time.
+  // still expand transitively. Set by the realm-server card-document
+  // handlers (GET / POST / PATCH) when the request originates inside a
+  // prerender — the caller can resolve the listed IDs via per-URL fetches,
+  // and the eager closure is a wasted round-trip in that context. The
+  // umbrella relationship carries `links.search` only when written by
+  // `applyQueryResults`, so that key is the per-field "is this
+  // query-backed?" signal at follow time. (The search path does not use
+  // this flag — see `omitIncluded`.)
   skipQueryBackedExpansion?: boolean;
-  // When true, `loadLinks` seeds the top-level result cards
-  // (`populateQueryFields` on the roots) and then returns an empty array —
-  // the transitive static-link BFS, the deeper-layer
-  // `populateQueryFields`, and the clone-into-`included` step are all
-  // skipped. (The search assembler only sets `doc.included` when the array
-  // is non-empty, so the response document omits the `included` member
-  // entirely.) Set by the realm-server search handlers when the request
-  // originates inside a prerender: the host resolves every linked card
-  // by URL via card+source (query fields from the seed umbrella, static
-  // links via a `not-loaded` sentinel that lazy-loads), so the response's
-  // `included[]` is dead weight. Strictly prerender-scoped — live /
-  // external `_federated-search` callers still receive compound documents.
-  // Implies the query-backed `${field}.N` sub-entry stripping
-  // (see `skipQueryBackedExpansion`) so the seeded roots stay orphan-free.
+  // When true, `searchCardsUncoalesced` skips the `loadLinks` /
+  // `populateQueryFields` pass entirely: the response carries only the
+  // matching result identifiers + page meta — the pristine attributes and
+  // static-link relationships from each index row, but no query-field
+  // `relationships.{field}.data` umbrellas and no `included[]`. Set by the
+  // realm-server search handlers when the request originates inside a
+  // prerender: the host re-resolves every result card from its raw
+  // card+source file and consumes only `data[].id`, so the entire
+  // relationship-assembly pass is throwaway work in that context. Strictly
+  // prerender-scoped — live / external `_federated-search` callers still
+  // receive fully-assembled compound documents.
   omitIncluded?: boolean;
-  // The `<jobId>.<reservationId>` job identity (from the `x-boxel-job-id`
-  // header), threaded by the realm-server search / card-GET handlers when a
-  // request originates inside an indexing prerender. Enables the per-instance
-  // wire-format cache (`job_scoped_instance_cache`): within one job
-  // `boxel_index` is frozen, so an instance's assembled query-field
-  // relationships are stable and can be reused across every search / GET that
-  // touches it. The reservation is part of the key because a job can re-run
-  // under a new reservation, between which committed state may move. Absent
-  // for live / external callers, which therefore never read or write the
-  // cache.
-  jobIdentity?: string;
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
-  // query, the `loadLinks` relationship assembly, and the per-instance
-  // cache reads/writes — stamp their elapsed time on it so the handler can
-  // attribute the request's server-side time across stages. Absent (and so
-  // a no-op) for everything except instrumented `_federated-search` calls.
+  // query and the `loadLinks` relationship assembly — stamp their elapsed
+  // time on it so the handler can attribute the request's server-side time
+  // across stages. Absent (and so a no-op) for everything except
+  // instrumented `_federated-search` calls.
   timings?: RequestTimings;
 } & QueryOptions;
 
@@ -279,7 +226,6 @@ export class RealmIndexQueryEngine {
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
-  #dbAdapter: DBAdapter;
   #log = logger('realm:index-query-engine');
   // In-flight dedup for searchCards: concurrent callers asking for the same
   // (realm, query, opts) share one in-flight promise instead of each running
@@ -334,7 +280,6 @@ export class RealmIndexQueryEngine {
     }
     this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
     this.#definitionLookup = definitionLookup;
-    this.#dbAdapter = dbAdapter;
     this.#realm = realm;
     this.#fetch = fetch;
   }
@@ -430,7 +375,16 @@ export class RealmIndexQueryEngine {
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
-    if (opts?.loadLinks) {
+    //
+    // Prerender searches (`omitIncluded`) skip the relationship-assembly pass
+    // entirely: the host re-resolves every result card from its raw
+    // card+source file and consumes only `data[].id`, so `loadLinks` /
+    // `populateQueryFields` — the query-field umbrellas and the transitive
+    // `included[]` expansion — is provably throwaway work here. The response
+    // carries the pristine result rows (ids + attributes + static-link
+    // relationships) and page meta only. Live / external callers still run
+    // the full pass below.
+    if (opts?.loadLinks && !opts?.omitIncluded) {
       let linkFields = isFileMetaQuery
         ? query.fields?.['file-meta']
         : query.fields?.['card'];
@@ -721,20 +675,6 @@ export class RealmIndexQueryEngine {
 
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
     return await this.#indexQueryEngine.getFile(url, opts);
-  }
-
-  async loadLinksForResource(
-    resource: LooseCardResource | FileMetaResource,
-    opts?: Options,
-  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
-    return await this.loadLinks(
-      {
-        realmURL: this.realmURL,
-        rootResources: [resource],
-        omit: [...(resource.id ? [resource.id] : [])],
-      },
-      opts,
-    );
   }
 
   private async populateQueryFields(
@@ -1283,82 +1223,6 @@ export class RealmIndexQueryEngine {
   // in-realm cards and one for in-realm file-meta resources, alongside
   // Promise.all-fanout cross-realm fetches, all running concurrently
   // regardless of how many siblings reference links at that depth.
-  // ── Job-scoped per-instance wire-format cache (job_scoped_instance_cache) ──
-  // Within one indexing job `boxel_index` is frozen, so an instance's assembled
-  // query-field relationships are stable. Caching them per (jobIdentity, url)
-  // lets every later occurrence of the instance in the job — another search
-  // result, a per-URL card GET, a linked target — skip the definition lookup +
-  // field-tree walk that `populateQueryFields` would otherwise repeat.
-
-  // Cache coordinates for a resource, or undefined when caching doesn't apply:
-  // no job identity, no id, or a sparse-fieldset (partial) population that
-  // mustn't masquerade as a full assembly. `jobIdentity` is derived from the
-  // sanitized `x-boxel-job-id` header, which by design only indexer-driven
-  // prerender requests carry — so in normal operation this scopes the cache to
-  // indexing and live / external traffic skips it (it is an expectation about
-  // callers, not a property this layer enforces).
-  #instanceCacheKey(
-    resource: LooseCardResource | FileMetaResource,
-    opts: Options | undefined,
-  ): { jobId: string; url: string } | undefined {
-    if (!opts?.jobIdentity || !resource.id || opts.linkFields) {
-      return undefined;
-    }
-    return { jobId: opts.jobIdentity, url: resource.id };
-  }
-
-  // `undefined` = cache miss (no row); `null` = cached "no relationships";
-  // object = cached relationships map. Best-effort: a read failure degrades to
-  // a recompute, never an error.
-  async #readCachedRelationships(
-    jobId: string,
-    url: string,
-  ): Promise<Record<string, unknown> | null | undefined> {
-    try {
-      let rows = (await query(this.#dbAdapter, [
-        `SELECT result FROM ${INSTANCE_CACHE_TABLE} WHERE job_id =`,
-        param(jobId),
-        ` AND url =`,
-        param(url),
-      ] as Expression)) as { result: string }[];
-      if (!rows.length) {
-        return undefined;
-      }
-      return JSON.parse(rows[0].result) as Record<string, unknown> | null;
-    } catch (err: unknown) {
-      this.#log.warn(
-        `per-instance cache read failed for ${url} (job ${jobId}): ${String(err)}`,
-      );
-      return undefined;
-    }
-  }
-
-  // First write wins (ON CONFLICT DO NOTHING) — concurrent populates of the
-  // same instance in one job produce equivalent results against the frozen
-  // index, so either is valid. Best-effort: a write failure is logged, never
-  // thrown.
-  async #writeCachedRelationships(
-    jobId: string,
-    url: string,
-    relationships: unknown,
-  ): Promise<void> {
-    try {
-      await query(this.#dbAdapter, [
-        `INSERT INTO ${INSTANCE_CACHE_TABLE} (job_id, url, result) VALUES (`,
-        param(jobId),
-        `,`,
-        param(url),
-        `,`,
-        param(JSON.stringify(relationships ?? null)),
-        `) ON CONFLICT (job_id, url) DO NOTHING`,
-      ] as Expression);
-    } catch (err: unknown) {
-      this.#log.warn(
-        `per-instance cache write failed for ${url} (job ${jobId}): ${String(err)}`,
-      );
-    }
-  }
-
   private async loadLinks(
     {
       realmURL,
@@ -1419,7 +1283,7 @@ export class RealmIndexQueryEngine {
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its
       // computed query-fields; collapsing those across the layer is a
-      // separate optimization (out of scope for CS-11038).
+      // separate optimization.
       try {
         await Promise.all(
           layer.map(async ({ resource, applyLinkFields }) => {
@@ -1429,38 +1293,6 @@ export class RealmIndexQueryEngine {
                 ? { ...opts, linkFields: undefined }
                 : opts;
             let timings = popOpts?.timings;
-            let cacheKey = this.#instanceCacheKey(resource, popOpts);
-            if (cacheKey) {
-              let ck = cacheKey;
-              // `busyTime`, not `time`: this callback is one of N running
-              // concurrently in the layer's `Promise.all`, so summing each
-              // op's elapsed would overcount wall-clock. Recorded as
-              // aggregate busy-time instead (see RequestTimings).
-              let cached = timings
-                ? await timings.busyTime('cacheRead', () =>
-                    this.#readCachedRelationships(ck.jobId, ck.url),
-                  )
-                : await this.#readCachedRelationships(ck.jobId, ck.url);
-              if (cached !== undefined) {
-                recordInstanceCacheEvent(cacheKey.jobId, true);
-                timings?.incr('cacheHit');
-                // Hit: reuse this instance's assembled query-field
-                // relationships from an earlier occurrence in the same job,
-                // skipping the definition lookup + field-tree walk. The
-                // cached value is pre-strip; the `${field}.N` /
-                // included-omission steps below run uniformly on hit and miss.
-                if (cached === null) {
-                  delete (resource as { relationships?: unknown })
-                    .relationships;
-                } else {
-                  (resource as { relationships?: unknown }).relationships =
-                    cached;
-                }
-                return;
-              }
-              recordInstanceCacheEvent(cacheKey.jobId, false);
-              timings?.incr('cacheMiss');
-            }
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
@@ -1485,20 +1317,6 @@ export class RealmIndexQueryEngine {
             } else {
               await runPopulate();
             }
-            if (cacheKey) {
-              let ck = cacheKey;
-              let writeCache = () =>
-                this.#writeCachedRelationships(
-                  ck.jobId,
-                  ck.url,
-                  (resource as { relationships?: unknown }).relationships,
-                );
-              if (timings) {
-                await timings.busyTime('cacheWrite', writeCache);
-              } else {
-                await writeCache();
-              }
-            }
           }),
         );
       } catch (err: unknown) {
@@ -1516,13 +1334,13 @@ export class RealmIndexQueryEngine {
       // Step 1b: strip `fieldName.N` sub-entries from query-backed fields.
       // The host deserializer treats every per-item entry as a
       // follow-able relationship and expects its target in `included[]`,
-      // so leaving them on the wire alongside an omitted / query-backed
-      // `included[]` produces orphan-link errors. The umbrella entry
-      // (`fieldName`) stays — it carries `links.search` and
-      // `data: [array of IDs]` for the host's per-URL hydration path.
-      // Runs for both the query-backed-only prerender skip and the
-      // broader `omitIncluded` short-circuit below.
-      if (opts?.skipQueryBackedExpansion || opts?.omitIncluded) {
+      // so leaving them on the wire alongside a query-backed field whose
+      // targets are not expanded into `included[]` produces orphan-link
+      // errors. The umbrella entry (`fieldName`) stays — it carries
+      // `links.search` and `data: [array of IDs]` for the host's per-URL
+      // hydration path. Set by the card-document prerender path
+      // (`skipQueryBackedExpansion`).
+      if (opts?.skipQueryBackedExpansion) {
         for (let { resource } of layer) {
           if (!resource.relationships) {
             continue;
@@ -1543,20 +1361,6 @@ export class RealmIndexQueryEngine {
             }
           }
         }
-      }
-
-      // Prerender included-omission: the host never reads the search
-      // response's `included[]` — it resolves every linked card by URL
-      // via card+source (query fields from the seed umbrella written by
-      // `populateQueryFields` above; static links via a `not-loaded`
-      // sentinel that lazy-loads). Once the root result cards are seeded,
-      // the transitive static-link BFS (Steps 2-5) and the deeper-layer
-      // `populateQueryFields` are pure waste, so stop after the root
-      // layer and return an empty array (the caller then omits the
-      // `included` member from the response document). Strictly
-      // prerender-scoped.
-      if (opts?.omitIncluded) {
-        break;
       }
 
       // Step 2: walk every resource's relationships, classify each link,
