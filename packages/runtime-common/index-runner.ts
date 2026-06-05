@@ -434,13 +434,16 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
-    // Incremental indexing does no module pre-warming. The module cache
-    // is already warm from the prior from-scratch, and any module a
-    // render needs that isn't cached resolves through the on-demand
-    // `lookupDefinition` read-through during the visit (PagePool-safe: the
-    // sub-prerender materializes its own tab). Leaning on the read-through
-    // keeps this path's cost bounded by the cards it actually visits
-    // instead of fanning out a separate module-warming pass.
+    // Incremental indexing does no module pre-warming. Query-backed field
+    // expansion during a prerender `_search` reads the `queryFieldDefs`
+    // pre-extracted onto each result instance's stored meta
+    // (`populateQueryFieldsFromMeta`), so it needs no `modules`-table row
+    // for the queried type. The prerender-search definition path is
+    // cache-only by design — a read-through there would re-enter the same
+    // affinity tab mid-render and deadlock the pool — while definition
+    // needs outside it resolve through the on-demand `lookupDefinition`
+    // read-through. There is nothing left for a pre-warm pass to
+    // front-load here.
     let filesCompleted = 0;
     let totalFiles = invalidations.length;
 
@@ -686,10 +689,9 @@ export class IndexRunner {
     // mid-card-render at lookup time, which is the wait-shape the
     // PagePool's tab-materialization for module/command callers is
     // meant to relieve. This realm-wide sweep runs only on from-scratch
-    // indexing, where the module cache is cold; incremental indexing does
-    // no pre-warming and relies on the cache the last from-scratch left
-    // warm (the cost of this sweep is O(realm module count), not O(files
-    // changed)).
+    // indexing, where the module cache is cold by definition; incremental
+    // indexing does no pre-warming (the cost of this sweep is O(realm
+    // module count), not O(files changed)).
     //
     // `.gts` / `.gjs` only is an optimization, not a correctness gate:
     // `.ts` / `.js` files CAN host `CardDef` (e.g. command-input
