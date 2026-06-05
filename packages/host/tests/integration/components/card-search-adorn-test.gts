@@ -54,8 +54,8 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
       </template>,
     );
     assert
-      .dom('.catalog-item.adorn')
-      .exists('the catalog-item button carries the adorn class');
+      .dom('.item-button.adorn')
+      .exists('the item-button carries the adorn class');
   });
 
   test('does not add the adorn class when @adorn is omitted', async function (assert) {
@@ -68,9 +68,9 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
         />
       </template>,
     );
-    assert.dom('.catalog-item').exists();
+    assert.dom('.item-button').exists();
     assert
-      .dom('.catalog-item.adorn')
+      .dom('.item-button.adorn')
       .doesNotExist('the legacy treatment is unchanged without @adorn');
   });
 
@@ -90,7 +90,7 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
       </template>,
     );
     assert
-      .dom('.catalog-item.adorn-stroke')
+      .dom('.item-button.adorn-stroke')
       .doesNotExist(
         'a non-adorn item does not receive the Adorn outline class',
       );
