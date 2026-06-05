@@ -9,6 +9,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
 
@@ -78,6 +79,7 @@ export default class Overlays extends Component<OverlaySignature> {
           <div
             class={{this.overlayClassName}}
             {{velcro renderedCard.element middleware=(array this.offset)}}
+            {{this.revealWhenPositioned}}
             style={{renderedCard.overlayZIndexStyle}}
             data-test-card-overlay
             ...attributes
@@ -139,35 +141,6 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
-      // floating-ui's first one-or-two computePosition calls return the
-      // reference in viewport coordinates rather than offset-parent-relative
-      // ones (it omits the offset parent's offset for ~1 frame, then corrects),
-      // so the overlay paints one frame off and visibly jumps into place — and
-      // everything riding it (the type-label tab, the select chip, the menu,
-      // the outline) jumps with it. Subclasses with visible chrome opt into
-      // hiding the overlay until its position has settled (see
-      // `hideUntilPositioned`). We use opacity rather than visibility so the
-      // overlay's action buttons stay hit-testable the whole time. The reveal
-      // is rescheduled on every position write and fires one frame after the
-      // last, so it lands only once the position has stopped moving (the wrong
-      // value can repeat across calls, so converging on equality isn't enough).
-      if (
-        this.hideUntilPositioned &&
-        floating.dataset.overlayPositioned !== 'true'
-      ) {
-        floating.style.opacity = '0';
-        let pending = this.overlayRevealHandles.get(floating);
-        if (pending !== undefined) {
-          cancelAnimationFrame(pending);
-        }
-        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
-        let handle = requestAnimationFrame(() => {
-          this.overlayRevealHandles.delete(floating);
-          floating.dataset.overlayPositioned = 'true';
-          floating.style.opacity = '';
-        });
-        this.overlayRevealHandles.set(floating, handle);
-      }
       return {
         x: rects.reference.x,
         y: rects.reference.y,
@@ -175,17 +148,62 @@ export default class Overlays extends Component<OverlaySignature> {
     },
   };
 
-  // Tracks the pending reveal rAF per overlay element so it can be rescheduled
-  // (and so the latest write wins) while the position is still settling.
-  private overlayRevealHandles = new WeakMap<HTMLElement, number>();
-
-  // Whether to keep the overlay hidden (opacity 0) until floating-ui's position
+  // Whether to keep the overlay hidden (opacity 0) until its velcro position
   // has settled, to avoid the first-frame jump. Off by default (consumers
   // without visible chrome — spec-preview, playground — don't need it);
   // OperatorModeOverlays overrides it.
   protected get hideUntilPositioned(): boolean {
     return false;
   }
+
+  // floating-ui's first one-or-two computePosition calls return the reference
+  // in viewport coordinates rather than offset-parent-relative ones (it omits
+  // the offset parent's offset for ~1 frame, then corrects), so the overlay —
+  // and everything riding it (the type-label tab, the select chip, the menu,
+  // the outline) — paints one frame off and visibly jumps into place. Hold the
+  // overlay at opacity 0 until its measured rect has been unchanged for two
+  // consecutive frames, then reveal. We watch the actual geometry rather than
+  // count frames or compare middleware outputs, because the wrong position can
+  // repeat across calls and the correction lands a frame after the first paint;
+  // only the rect going stable is a reliable "done moving" signal. Opacity (not
+  // visibility) keeps the overlay's action buttons hit-testable throughout.
+  protected revealWhenPositioned = modifier((element: HTMLElement) => {
+    if (!this.hideUntilPositioned) {
+      return undefined;
+    }
+    element.style.opacity = '0';
+    let lastTop: number | undefined;
+    let lastLeft: number | undefined;
+    let stableFrames = 0;
+    let elapsedFrames = 0;
+    let raf = 0;
+    let tick = () => {
+      let { top, left } = element.getBoundingClientRect();
+      if (top === lastTop && left === lastLeft) {
+        stableFrames += 1;
+      } else {
+        stableFrames = 0;
+        lastTop = top;
+        lastLeft = left;
+      }
+      elapsedFrames += 1;
+      // Reveal once the rect has settled, with a safety cap so a perpetually
+      // animating reference can't keep the overlay hidden forever.
+      if (stableFrames >= 2 || elapsedFrames > 30) {
+        element.style.opacity = '';
+        return;
+      }
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
+      raf = requestAnimationFrame(tick);
+    };
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
+    raf = requestAnimationFrame(tick);
+    return () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+      }
+    };
+  });
 
   // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
   // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
