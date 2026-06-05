@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // Drop the job-scoped per-instance wire-format cache. Prerender `_federated-
