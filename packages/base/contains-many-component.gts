@@ -361,23 +361,40 @@ export function getContainsManyComponent({
             (coalesce @format defaultFormats.fieldDef)
             as |effectiveFormat|
           }}
-            <div
-              class='plural-field containsMany-field
-                {{effectiveFormat}}-format
-                {{unless arrayField.children.length "empty"}}'
-              data-test-plural-view={{field.fieldType}}
-              data-test-plural-view-field={{field.name}}
-              data-test-plural-view-format={{effectiveFormat}}
-              ...attributes
-            >
+            {{#if (coalesce @displayContainer true)}}
+              <div
+                class='plural-field containsMany-field
+                  {{effectiveFormat}}-format
+                  {{unless arrayField.children.length "empty"}}'
+                data-test-plural-view={{field.fieldType}}
+                data-test-plural-view-field={{field.name}}
+                data-test-plural-view-format={{effectiveFormat}}
+                ...attributes
+              >
+                {{#each (getComponents) as |Item i|}}
+                  <div
+                    class='containsMany-item'
+                    data-test-plural-view-item={{i}}
+                  >
+                    <Item
+                      @format={{getPluralChildFormat effectiveFormat model}}
+                    />
+                  </div>
+
+                {{/each}}
+              </div>
+            {{else}}
               {{#each (getComponents) as |Item i|}}
-                <div class='containsMany-item' data-test-plural-view-item={{i}}>
-                  <Item
-                    @format={{getPluralChildFormat effectiveFormat model}}
-                  />
-                </div>
+                <Item
+                  @format={{getPluralChildFormat effectiveFormat model}}
+                  @displayContainer={{false}}
+                  data-test-plural-view={{field.fieldType}}
+                  data-test-plural-view-field={{field.name}}
+                  data-test-plural-view-format={{effectiveFormat}}
+                  data-test-plural-view-item={{i}}
+                />
               {{/each}}
-            </div>
+            {{/if}}
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>

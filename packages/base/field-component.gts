@@ -29,6 +29,7 @@ import {
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import {
+  coalesce,
   extractCssVariables,
   sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
@@ -371,7 +372,12 @@ export function getBoxComponent(
                         </CardContainer>
                       </DefaultFormatsProvider>
                     {{/let}}
-                  {{else if (isCompoundField model.value)}}
+                  {{else if
+                    (and
+                      (isCompoundField model.value)
+                      (coalesce @displayContainer true)
+                    )
+                  }}
                     <DefaultFormatsProvider
                       @value={{defaultFieldFormats effectiveFormats.fieldDef}}
                     >
