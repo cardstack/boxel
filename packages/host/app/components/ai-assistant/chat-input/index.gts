@@ -24,7 +24,7 @@ interface Signature {
     isSending?: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
-      'chooseCard' | 'chooseFile' | 'chooseLocalFile'
+      'chooseCard' | 'chooseFile' | 'chooseLocalFile' | 'disabled'
     >;
   };
 }

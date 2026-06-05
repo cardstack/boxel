@@ -208,6 +208,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   private restoredDraftRooms = new Set<string>();
+  private onLocalEchoHandlers = new Map<string, () => void>();
   @tracked private _isLoadingMoreAIRooms = false;
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
@@ -1251,6 +1252,20 @@ export default class MatrixService extends Service {
     return response;
   }
 
+  // Register a one-shot handler to fire when the local-echo for `clientGeneratedId`
+  // is processed (i.e. when the pending bubble is added to the rendered messages list
+  // inside `processDecryptedEvent`). Use this for "do X when matrix-js-sdk has
+  // accepted the event," e.g. clearing the chat-input draft so the clear and the
+  // pending bubble appear in the same render. The handler is removed before being
+  // invoked, so it only ever runs once per registration.
+  registerOnLocalEcho(clientGeneratedId: string, handler: () => void) {
+    this.onLocalEchoHandlers.set(clientGeneratedId, handler);
+  }
+
+  unregisterOnLocalEcho(clientGeneratedId: string) {
+    this.onLocalEchoHandlers.delete(clientGeneratedId);
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -1258,7 +1273,6 @@ export default class MatrixService extends Service {
     attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
     context?: BoxelContext,
-    onBeforeSend?: () => void,
   ): Promise<void> {
     let tools: Tool[] = [];
     // Open cards are attached automatically
@@ -1283,12 +1297,6 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
-
-    // Pre-send work (uploads, serialization) is finished. Hand control back to
-    // the caller for any "we're about to ship this" UI flips — e.g. clearing
-    // the chat-input textarea — so that flip happens at the same moment
-    // matrix-js-sdk emits LocalEchoUpdated and the pending bubble appears.
-    onBeforeSend?.();
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2206,6 +2214,19 @@ export default class MatrixService extends Service {
       return;
     }
     await this.addRoomEvent(event, oldEventId);
+
+    // The pending bubble is now in the rendered messages list. If a caller
+    // registered a one-shot handler for this event's clientGeneratedId (typically
+    // the room component, to clear the chat-input draft), fire it now so the
+    // clear lands in the same render frame as the bubble.
+    let cgi = event.content?.clientGeneratedId as string | undefined;
+    if (cgi) {
+      let handler = this.onLocalEchoHandlers.get(cgi);
+      if (handler) {
+        this.onLocalEchoHandlers.delete(cgi);
+        handler();
+      }
+    }
 
     if (
       event.type === 'm.room.message' &&

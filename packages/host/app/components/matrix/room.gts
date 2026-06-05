@@ -231,6 +231,7 @@ export default class Room extends Component<Signature> {
             @fileUploadStates={{this.fileUploadStates}}
             @retryFileUpload={{this.retryFileUpload}}
             @inputModalities={{@roomResource.activeInputModalities}}
+            @isDisabled={{this.isSending}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
               'Current card is shared automatically'
@@ -276,7 +277,7 @@ export default class Room extends Component<Signature> {
                 @onSend={{this.sendMessage}}
                 @onPaste={{this.handleChatInputPaste}}
                 @canSend={{this.canSend}}
-                @isSending={{this.doSendMessage.isRunning}}
+                @isSending={{this.isSending}}
                 data-test-message-field={{@roomId}}
               />
               {{#if this.aiAssistantPanelService.isFocusPillVisible}}
@@ -1262,6 +1263,9 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseCard(cardId: string) {
+    if (this.isSending) {
+      return;
+    }
     // handle the case where auto-attached card pill is clicked
     if (this.autoAttachedCardIds.has(cardId)) {
       this.removedAttachedCardIds.add(cardId);
@@ -1275,6 +1279,9 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(id: string) {
+    if (this.isSending) {
+      return;
+    }
     if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
       return;
@@ -1302,6 +1309,9 @@ export default class Room extends Component<Signature> {
   }
 
   private chooseFileTask = enqueueTask(async (file: FileDef) => {
+    if (this.isSending) {
+      return;
+    }
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
@@ -1316,6 +1326,9 @@ export default class Room extends Component<Signature> {
   });
 
   private chooseLocalFileTask = task(async () => {
+    if (this.isSending) {
+      return;
+    }
     let localFile = await this.fileUpload.pickLocalFile();
     if (!localFile) {
       return;
@@ -1326,7 +1339,7 @@ export default class Room extends Component<Signature> {
   @action
   private handleChatInputDragOver(event: Event) {
     let dragEvent = event as DragEvent;
-    if (!this.isFileDrag(dragEvent.dataTransfer)) {
+    if (this.isSending || !this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
     dragEvent.preventDefault();
@@ -1340,7 +1353,7 @@ export default class Room extends Component<Signature> {
   @action
   private handleChatInputDragEnter(event: Event) {
     let dragEvent = event as DragEvent;
-    if (!this.isFileDrag(dragEvent.dataTransfer)) {
+    if (this.isSending || !this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
     dragEvent.preventDefault();
@@ -1366,6 +1379,13 @@ export default class Room extends Component<Signature> {
   @action
   private handleChatInputDrop(event: Event) {
     let dragEvent = event as DragEvent;
+    if (this.isSending) {
+      dragEvent.preventDefault();
+      dragEvent.stopPropagation();
+      this.dropZoneDragDepth = 0;
+      this.isDropZoneActive = false;
+      return;
+    }
     let files = Array.from(dragEvent.dataTransfer?.files ?? []);
     if (!files.length) {
       return;
@@ -1379,6 +1399,9 @@ export default class Room extends Component<Signature> {
 
   @action
   private handleChatInputPaste(event: ClipboardEvent) {
+    if (this.isSending) {
+      return;
+    }
     let files = this.getClipboardFiles(event.clipboardData);
     if (!files.length) {
       return;
@@ -1445,6 +1468,9 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeFile(file: FileDef) {
+    if (this.isSending) {
+      return;
+    }
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
       return;
@@ -1600,33 +1626,38 @@ export default class Room extends Component<Signature> {
       keepInputAndAttachments = false,
     ) => {
       this.unknownMessageSendError = undefined;
-      let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
-      let cardsToSend =
-        this.matrixService.getCardsToSend(this.args.roomId) ?? undefined;
-      let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
-      let filesToSend =
-        this.matrixService.getFilesToSend(this.args.roomId) ?? undefined;
-      let filesToSendCopy = filesToSend ? [...filesToSend] : undefined;
       const shouldClearDraft = !keepInputAndAttachments;
-      let draftWasCleared = false;
 
-      // The draft stays visible (textarea disabled, send button in loading state)
-      // until matrix-service is about to hand the event off to client.sendEvent.
-      // At that point the onBeforeSend callback below clears it — and
-      // matrix-js-sdk emits LocalEchoUpdated in the same tick, so the pending
-      // bubble appears in the conversation as the textarea empties.
-      // If the send fails after the clear, the catch block restores from the
-      // local copies captured above.
-      let clearDraft = () => {
-        if (!shouldClearDraft || draftWasCleared) {
-          return;
-        }
-        this.matrixService.setMessageToSend(this.args.roomId, undefined);
-        this.matrixService.setCardsToSend(this.args.roomId, undefined);
-        this.matrixService.setFilesToSend(this.args.roomId, undefined);
-        this._fileUploadStates.clear();
-        draftWasCleared = true;
-      };
+      // Why register a one-shot local-echo handler instead of clearing the draft
+      // here (or via a callback into matrixService.sendMessage)?
+      //
+      // The pre-send pipeline (skill/command upload, attached card + file upload,
+      // serialization) can take several seconds. Clearing the draft up-front leaves
+      // the user staring at an empty input until matrix-js-sdk emits its local echo
+      // and the pending bubble renders — the gap CS-11367 reported.
+      //
+      // The chat-input draft state (messageToSend, cardsToSend, filesToSend) lives
+      // in matrix-service. The matrix-js-sdk LocalEchoUpdated event also routes
+      // through matrix-service, debounced and decrypted into processDecryptedEvent
+      // where the event is added to the rendered messages list. By piggy-backing on
+      // that same processing step, the clear and the pending bubble land in the
+      // same render frame — no flicker, no "input cleared, no bubble yet" gap.
+      //
+      // We register here (room.gts) because _fileUploadStates is per-component
+      // state that matrix-service shouldn't own; bundling the service-state clear
+      // with the component-state clear keeps cleanup in one place.
+      //
+      // Retry / resend (keepInputAndAttachments=true) just skips registration.
+      // If anything throws before sendEvent fires, the catch block unregisters so
+      // we don't leak a stale closure that would clear the draft on a later echo.
+      if (shouldClearDraft) {
+        this.matrixService.registerOnLocalEcho(clientGeneratedId, () => {
+          this.matrixService.setMessageToSend(this.args.roomId, undefined);
+          this.matrixService.setCardsToSend(this.args.roomId, undefined);
+          this.matrixService.setFilesToSend(this.args.roomId, undefined);
+          this._fileUploadStates.clear();
+        });
+      }
 
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
@@ -1672,27 +1703,17 @@ export default class Room extends Component<Signature> {
           files,
           clientGeneratedId,
           context,
-          clearDraft,
         );
       } catch (e) {
         console.error(e);
         this.unknownMessageSendError =
           'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
-        if (shouldClearDraft && draftWasCleared) {
-          this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
-          this.matrixService.setCardsToSend(
-            this.args.roomId,
-            cardsToSendCopy && cardsToSendCopy.length > 0
-              ? cardsToSendCopy
-              : undefined,
-          );
-          this.matrixService.setFilesToSend(
-            this.args.roomId,
-            filesToSendCopy && filesToSendCopy.length > 0
-              ? filesToSendCopy
-              : undefined,
-          );
+        // Pre-send work threw before sendEvent could fire, so the local-echo
+        // handler we registered will never run. Drop it so a later, unrelated
+        // echo with this clientGeneratedId can't clear the still-populated draft.
+        if (shouldClearDraft) {
+          this.matrixService.unregisterOnLocalEcho(clientGeneratedId);
         }
       }
     },
@@ -1726,6 +1747,10 @@ export default class Room extends Component<Signature> {
       });
     },
   );
+
+  private get isSending() {
+    return this.doSendMessage.isRunning;
+  }
 
   private get canSend() {
     return (

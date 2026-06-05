@@ -246,14 +246,9 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     let uploadGate = new Promise<void>((resolve) => {
       releaseUpload = resolve;
     });
-    let interceptorReached!: () => void;
-    let uploadStarted = new Promise<void>((resolve) => {
-      interceptorReached = resolve;
-    });
     mockMatrixUtils.setUploadContentInterceptor(async () => {
       // Only the first upload should block; subsequent uploads run normally.
       mockMatrixUtils.setUploadContentInterceptor(undefined);
-      interceptorReached();
       await uploadGate;
     });
 
@@ -261,7 +256,11 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     await fillIn('[data-test-message-field]', prompt);
     click('[data-test-send-message-btn]');
 
-    await uploadStarted;
+    // Wait for the in-flight render to land — `doSendMessage.isRunning` flipping
+    // to true propagates via `@isSending`, which the chat-input mirrors onto
+    // `data-test-chat-input-sending`. Anchoring on the rendered attribute (rather
+    // than a race against the upload's microtask) keeps this deterministic in CI.
+    await waitFor('[data-test-chat-input-sending="true"]');
     assert
       .dom('[data-test-message-field]')
       .hasValue(
@@ -269,14 +268,22 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
         'textarea keeps the typed text while pre-send uploads are running',
       );
     assert.dom('[data-test-message-field]').isDisabled();
-    assert.dom('[data-test-chat-input-sending="true"]').exists();
     assert.dom('[data-test-send-message-btn]').hasClass('loading');
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
 
     releaseUpload();
 
+    // The clear-draft handler runs inside `processDecryptedEvent` right after
+    // the pending bubble is added to the rendered messages list, so the
+    // textarea should already be empty in the same render where the bubble
+    // first appears — no flicker, no "input cleared, no bubble yet" window.
     await waitFor('[data-test-ai-assistant-message-pending]');
-    assert.dom('[data-test-message-field]').hasValue('');
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue(
+        '',
+        'textarea clears in the same render the pending bubble appears',
+      );
     assert.dom('[data-test-user-message]').hasClass('is-pending');
 
     await waitFor('[data-test-user-message]:not(.is-pending)');
@@ -292,7 +299,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert.dom('[data-test-message-field]').isNotDisabled();
   });
 
-  test('restores draft + attachments when pre-send work fails before the matrix send', async function (assert) {
+  test('preserves draft + attachments when pre-send work fails before the matrix send', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {

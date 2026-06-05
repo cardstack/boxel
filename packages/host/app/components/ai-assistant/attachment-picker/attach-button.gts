@@ -35,6 +35,7 @@ interface Signature {
     chooseCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void | Promise<void>;
     chooseLocalFile: () => void | Promise<void>;
+    disabled?: boolean;
   };
 }
 
@@ -51,6 +52,7 @@ export default class AttachButton extends Component<Signature> {
       @matchTriggerWidth={{false}}
       @dropdownClass='attach-button__dropdown'
       @triggerComponent={{component AttachButtonTrigger}}
+      @disabled={{@disabled}}
       class='attach-button'
       as |option|
     >
