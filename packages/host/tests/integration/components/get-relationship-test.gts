@@ -379,6 +379,100 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
     });
   });
 
+  // A computed `linksTo` / `linksToMany` derives from already-materialized
+  // declared fields, so it never lazily loads: `isLoading` is always false and
+  // there is no `not-loaded` state — only `present` (running instances) or
+  // `not-set` (the compute resolved to nothing). Otherwise it behaves exactly
+  // like the non-computed forms.
+  module('computed relationships', function () {
+    test('computed linksTo: present member, never loading', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field petAlias = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.pet;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let pet = new Pet({ firstName: 'Mango' });
+      await saveCard(pet, `${testRealmURL}Pet/mango`, loader);
+      let person = new Person({ firstName: 'Hassan', pet });
+
+      let rel = getRelationshipMembershipState(person, 'petAlias');
+      assert.false(rel.isLoading, 'a computed linksTo never reports loading');
+      let state = singleMember(assert, rel);
+      assertKind(assert, state, 'present');
+      assert.strictEqual(state.value, pet);
+      assert.strictEqual(state.reference, `${testRealmURL}Pet/mango`);
+    });
+
+    test('computed linksToMany: every member present, never loading', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+        @field petsAlias = linksToMany(Pet, {
+          computeVia: function (this: Person) {
+            return this.pets;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({ firstName: 'Mango' });
+      let vangogh = new Pet({ firstName: 'Van Gogh' });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      await saveCard(vangogh, `${testRealmURL}Pet/vangogh`, loader);
+      let person = new Person({ firstName: 'Hassan', pets: [mango, vangogh] });
+
+      let rel = getRelationshipMembershipState(person, 'petsAlias');
+      assert.false(
+        rel.isLoading,
+        'a computed linksToMany never reports loading',
+      );
+      let states = members(rel);
+      assert.deepEqual(
+        states.map((s) => s.kind),
+        ['present', 'present'],
+        'every computed element is present',
+      );
+      assert.deepEqual(
+        states.map((s) => s.value),
+        [mango, vangogh],
+        'computed elements carry the running instances',
+      );
+    });
+
+    test('computed linksTo resolving to nothing is not-set, still not loading', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field maybePet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return undefined;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      let rel = getRelationshipMembershipState(person, 'maybePet');
+      assert.false(rel.isLoading);
+      let state = singleMember(assert, rel);
+      assertKind(assert, state, 'not-set');
+    });
+  });
+
   module('getBrokenLinks', function () {
     test('returns no findings when every declared link is present or unset', async function (assert) {
       class Pet extends CardDef {
