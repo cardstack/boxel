@@ -47,6 +47,20 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 }
 
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    // The path input renders an empty input alongside a fixed `/`
+    // accessory, so a rule with `path == null` is visually
+    // indistinguishable from one with `path === '/'`. Normalize unset
+    // paths to `/` on mount so the data matches what the user sees —
+    // unset paths have no runtime meaning anyway, and this lets the
+    // duplicate-path warning treat two visually-equal rules as the
+    // conflict they really are.
+    if (this.args.model.path == null) {
+      this.args.model.path = '/';
+    }
+  }
+
   get pathWarning(): string | undefined {
     return validateRoutingPath(this.args.model.path);
   }

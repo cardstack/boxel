@@ -153,6 +153,22 @@ module(
         .containsText('/docs', 'the duplicate banner names the repeated path');
     });
 
+    test('rules with unset paths warn as duplicates of explicit "/" rules', async function (assert) {
+      // A rule with no path stored is rendered exactly like one with
+      // path "/" (the slash accessory is always present and the input
+      // is empty for both), so the duplicate-path warning should treat
+      // them as the conflict the user sees. The edit component is
+      // expected to normalize unset paths to "/" on mount.
+      await renderRealmConfigEdit([{ path: '/' }, {}]);
+
+      assert
+        .dom('[data-test-duplicate-path-warning]')
+        .exists('the duplicate banner is shown for visually-equal "/" rules');
+      assert
+        .dom('[data-test-duplicate-path-warning]')
+        .containsText('/', 'the duplicate banner names the conflicting path');
+    });
+
     test('the containsMany override wraps the default editor via @defaultEditor', async function (assert) {
       await renderRealmConfigEdit([{ path: '/docs' }, { path: '/about' }]);
 
