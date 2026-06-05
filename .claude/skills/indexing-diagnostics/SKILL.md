@@ -832,7 +832,7 @@ Wall-clock timeline stages:
 
 **Reading it — the decision tree.**
 
-1. **`sql=` is the bulk of `handler`** → a genuinely slow query. Confirm with `pg_stat_activity` / `EXPLAIN`. Fast SQL but large `sql=` means lock / connection-pool wait inside the query call. (This is now the common case, since the post-SQL assembly is gone for prerender searches.)
+1. **`sql=` is the bulk of `handler`** → a genuinely slow query. Confirm with `pg_stat_activity` / `EXPLAIN`. Fast SQL but large `sql=` means lock / connection-pool wait inside the query call. (For a prerender search this is the typical shape — the post-SQL assembly doesn't run on that path, so `sql` carries most of the handler.)
 2. **`stringify` dominates** → serializing a large federated response. Look at `results=` for a fat result set.
 3. **`dur` (realm:requests) ≫ `handler` (realm:search-timing)** → the time is NOT inside the handler. It was spent **queued before the handler ran** (or sending). This is the saturation fingerprint: cross-reference `realm:health` near the same timestamp — if `eventLoopLagMs` spiked into the hundreds/thousands with `inFlightSearch` high, the single-threaded realm-server's event loop was starved, so the request sat unserviced even though, once it ran, the handler was fast. That is the CS-10820 saturation class seen from the server side.
 4. **`coalescedWait` dominates** → this follower waited on another in-flight identical search. Find the leader (same job + query, overlapping time); its line carries the real breakdown.
