@@ -1258,6 +1258,7 @@ export default class MatrixService extends Service {
     attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
     context?: BoxelContext,
+    onBeforeSend?: () => void,
   ): Promise<void> {
     let tools: Tool[] = [];
     // Open cards are attached automatically
@@ -1282,6 +1283,12 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
+
+    // Pre-send work (uploads, serialization) is finished. Hand control back to
+    // the caller for any "we're about to ship this" UI flips — e.g. clearing
+    // the chat-input textarea — so that flip happens at the same moment
+    // matrix-js-sdk emits LocalEchoUpdated and the pending bubble appears.
+    onBeforeSend?.();
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

@@ -21,6 +21,7 @@ interface Signature {
     onSend: () => void;
     onPaste?: (event: ClipboardEvent) => void | Promise<void>;
     canSend: boolean;
+    isSending?: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
       'chooseCard' | 'chooseFile' | 'chooseLocalFile'
@@ -30,7 +31,10 @@ interface Signature {
 
 export default class AiAssistantChatInput extends Component<Signature> {
   <template>
-    <div class='chat-input-container'>
+    <div
+      class='chat-input-container'
+      data-test-chat-input-sending={{@isSending}}
+    >
       <label for='ai-chat-input' class='boxel-sr-only'>
         Enter text to chat with AI Assistant
       </label>
@@ -44,6 +48,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
           value={{@value}}
           placeholder='Enter a prompt'
           rows='1'
+          disabled={{@isSending}}
+          aria-busy={{if @isSending 'true' 'false'}}
           {{on 'input' (pick 'target.value' @onInput)}}
           {{on 'paste' this.onPaste}}
           {{onKeyMod 'Shift+Enter' this.insertNewLine}}
@@ -55,8 +61,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
       </div>
       <IconButton
         {{on 'click' this.onSend}}
-        {{! TODO we should visually surface this loading state }}
         disabled={{not @canSend}}
+        @loading={{@isSending}}
         data-test-can-send-msg={{@canSend}}
         class='send-button'
         @variant='primary'

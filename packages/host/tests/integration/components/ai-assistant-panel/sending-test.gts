@@ -233,6 +233,95 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       .hasValue(failingMessage, 'prompt is not lost after retry');
   });
 
+  test('keeps the input populated, disabled, and the send button in a loading state while uploads are in flight', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    let releaseUpload!: () => void;
+    let uploadGate = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    let interceptorReached!: () => void;
+    let uploadStarted = new Promise<void>((resolve) => {
+      interceptorReached = resolve;
+    });
+    mockMatrixUtils.setUploadContentInterceptor(async () => {
+      // Only the first upload should block; subsequent uploads run normally.
+      mockMatrixUtils.setUploadContentInterceptor(undefined);
+      interceptorReached();
+      await uploadGate;
+    });
+
+    let prompt = 'Slow-upload test message';
+    await fillIn('[data-test-message-field]', prompt);
+    click('[data-test-send-message-btn]');
+
+    await uploadStarted;
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue(
+        prompt,
+        'textarea keeps the typed text while pre-send uploads are running',
+      );
+    assert.dom('[data-test-message-field]').isDisabled();
+    assert.dom('[data-test-chat-input-sending="true"]').exists();
+    assert.dom('[data-test-send-message-btn]').hasClass('loading');
+    assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+
+    releaseUpload();
+
+    await waitFor('[data-test-ai-assistant-message-pending]');
+    assert.dom('[data-test-message-field]').hasValue('');
+    assert.dom('[data-test-user-message]').hasClass('is-pending');
+
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+    await waitUntil(
+      () =>
+        !(
+          document.querySelector(
+            '[data-test-send-message-btn]',
+          ) as HTMLButtonElement
+        ).disabled,
+    );
+    assert.dom('[data-test-chat-input-sending="false"]').exists();
+    assert.dom('[data-test-message-field]').isNotDisabled();
+  });
+
+  test('restores draft + attachments when pre-send work fails before the matrix send', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    mockMatrixUtils.setUploadContentInterceptor(async () => {
+      mockMatrixUtils.setUploadContentInterceptor(undefined);
+      throw new Error('Simulated pre-send upload failure');
+    });
+
+    let prompt = 'Pre-send failure test message';
+    await fillIn('[data-test-message-field]', prompt);
+    await click('[data-test-send-message-btn]');
+
+    await waitFor('[data-test-boxel-alert="error"]');
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue(
+        prompt,
+        'textarea retains the typed text when pre-send fails before sendEvent',
+      );
+    assert.dom('[data-test-ai-assistant-message]').doesNotExist();
+    assert.dom('[data-test-user-message]').doesNotExist();
+    assert.dom('[data-test-message-field]').isNotDisabled();
+  });
+
   test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
     setCardInOperatorModeState();
     await renderComponent(

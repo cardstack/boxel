@@ -276,6 +276,7 @@ export default class Room extends Component<Signature> {
                 @onSend={{this.sendMessage}}
                 @onPaste={{this.handleChatInputPaste}}
                 @canSend={{this.canSend}}
+                @isSending={{this.doSendMessage.isRunning}}
                 data-test-message-field={{@roomId}}
               />
               {{#if this.aiAssistantPanelService.isFocusPillVisible}}
@@ -1607,17 +1608,25 @@ export default class Room extends Component<Signature> {
         this.matrixService.getFilesToSend(this.args.roomId) ?? undefined;
       let filesToSendCopy = filesToSend ? [...filesToSend] : undefined;
       const shouldClearDraft = !keepInputAndAttachments;
+      let draftWasCleared = false;
 
-      // We copy the draft and attachments into local variables before clearing them
-      // (unless we're intentionally preserving the user's current draft for a retry).
-      // Clearing immediately empties the input so the user sees that their message is “in flight”.
-      // If the send fails, we restore those saved values in the catch block so nothing is lost.
-      if (shouldClearDraft) {
+      // The draft stays visible (textarea disabled, send button in loading state)
+      // until matrix-service is about to hand the event off to client.sendEvent.
+      // At that point the onBeforeSend callback below clears it — and
+      // matrix-js-sdk emits LocalEchoUpdated in the same tick, so the pending
+      // bubble appears in the conversation as the textarea empties.
+      // If the send fails after the clear, the catch block restores from the
+      // local copies captured above.
+      let clearDraft = () => {
+        if (!shouldClearDraft || draftWasCleared) {
+          return;
+        }
         this.matrixService.setMessageToSend(this.args.roomId, undefined);
         this.matrixService.setCardsToSend(this.args.roomId, undefined);
         this.matrixService.setFilesToSend(this.args.roomId, undefined);
         this._fileUploadStates.clear();
-      }
+        draftWasCleared = true;
+      };
 
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
@@ -1663,13 +1672,14 @@ export default class Room extends Component<Signature> {
           files,
           clientGeneratedId,
           context,
+          clearDraft,
         );
       } catch (e) {
         console.error(e);
         this.unknownMessageSendError =
           'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
-        if (shouldClearDraft) {
+        if (shouldClearDraft && draftWasCleared) {
           this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
           this.matrixService.setCardsToSend(
             this.args.roomId,
