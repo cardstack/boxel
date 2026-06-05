@@ -1,8 +1,8 @@
 import * as childProcess from 'child_process';
 
-import { loginUser } from '../docker/synapse';
+import { loginUser } from '../support/synapse';
 import { ensureUserRecord } from '../helpers/ensure-user-record';
-import { getSynapseContainerName } from '../helpers/environment-config';
+import { getSynapseContainerName } from '../support/environment-config';
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
 

@@ -3,8 +3,8 @@ import {
   getJoinedRooms,
   getAccountData,
   type Credentials,
-} from '../docker/synapse';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/synapse';
+import { appURL } from '../support/isolated-realm-server';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -23,9 +23,9 @@ test.describe('Login', () => {
   let username: string;
   let password: string;
 
-test.beforeEach(async () => {
-  ({ username, password, credentials } =
-    await createSubscribedUser('login-tests'));
+  test.beforeEach(async () => {
+    ({ username, password, credentials } =
+      await createSubscribedUser('login-tests'));
     await setupPermissions(credentials.userId, `${appURL}/`);
   });
 

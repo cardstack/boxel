@@ -3,9 +3,9 @@ import {
   getJoinedRooms,
   getRoomMembers,
   getRoomRetentionPolicy,
-} from '../docker/synapse';
+} from '../support/synapse';
 import { createSubscribedUser } from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server';
 
 test.describe('Auth rooms', () => {
   // CS-8988 - was flaky before, making it a toPass to attempt to stabilize

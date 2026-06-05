@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server';
 import {
   createRealm,
   showAllCards,

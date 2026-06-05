@@ -1,4 +1,4 @@
-import { loginUser } from '../docker/synapse';
+import { loginUser } from '../support/synapse';
 
 const matrixURL = process.env.MATRIX_URL || 'http://localhost:8008';
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';

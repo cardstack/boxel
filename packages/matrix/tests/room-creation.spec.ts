@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server';
 import {
   login,
   logout,
@@ -379,7 +379,12 @@ test.describe('Room creation', () => {
         let roomEl = page.locator('[data-test-room]');
         if ((await roomEl.count()) === 0) return false;
         let roomId = await roomEl.getAttribute('data-test-room');
-        if (roomId && roomId !== room1 && roomId !== room2 && roomId !== room3) {
+        if (
+          roomId &&
+          roomId !== room1 &&
+          roomId !== room2 &&
+          roomId !== room3
+        ) {
           newRoom = roomId;
           return true;
         }

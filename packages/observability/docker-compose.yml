@@ -146,7 +146,7 @@ services:
   # Local Prometheus — scrapes the dev Synapse container's `/metrics`
   # endpoint so the vendored Synapse dashboard works without an AMP
   # workspace. Joined to the `boxel` Docker network (created by
-  # `mise run start-synapse` / packages/matrix/docker/synapse/index.ts)
+  # `mise run start-synapse` / packages/matrix/support/synapse/index.ts)
   # so it can resolve `boxel-synapse:9001` directly. Staging and
   # production scrape via AMP and ignore this service entirely.
   prometheus:
@@ -166,7 +166,7 @@ services:
 networks:
   default:
   # The synapse dev container runs on the `boxel` Docker network (created
-  # by packages/matrix/docker/synapse/index.ts). Marked external so this
+  # by packages/matrix/support/synapse/index.ts). Marked external so this
   # compose project doesn't try to manage its lifecycle. If you bring up
   # the observability stack BEFORE starting synapse, run
   # `docker network create boxel` first — or just `mise run start-synapse`,

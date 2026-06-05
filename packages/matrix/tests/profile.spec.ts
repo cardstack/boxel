@@ -9,7 +9,7 @@ import {
   createUser,
   updateSynapseUser,
 } from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server';
 
 test.describe('Profile', () => {
   let user: {
