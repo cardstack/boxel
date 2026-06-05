@@ -165,6 +165,28 @@ module('Integration | per-usage edit override', function (hooks) {
       .exists({ count: 2 }, 'all values flow through the default iteration');
   });
 
+  test('a containsMany override receives splattributes from the caller', async function (assert) {
+    const WrapEditor: TemplateOnlyComponent<{
+      Args: { model: unknown; values: unknown; defaultEditor: unknown };
+      Element: HTMLDivElement;
+    }> = <template>
+      <div data-test-contains-attr-wrap ...attributes>wrap</div>
+    </template>;
+
+    class Tagged extends CardDef {
+      @field tags = containsMany(StringField, { edit: WrapEditor });
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.tags data-test-from-caller='yes' /></template>
+      };
+    }
+
+    await renderCard(loader, new Tagged({ tags: ['a'] }), 'edit');
+
+    assert
+      .dom('[data-test-contains-attr-wrap][data-test-from-caller="yes"]')
+      .exists('attributes from the field site reach the override');
+  });
+
   test('a linksToMany override receives @defaultEditor for the wrap contract', async function (assert) {
     class Pet extends CardDef {
       @field name = contains(StringField);

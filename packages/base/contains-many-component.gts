@@ -372,6 +372,7 @@ export function getContainsManyComponent({
                 cardTypeFor=cardTypeFor
                 typeConstraint=@typeConstraint
               }}
+              ...attributes
             />
           {{else}}
             <ContainsManyEditor
