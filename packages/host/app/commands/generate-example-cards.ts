@@ -29,6 +29,7 @@ import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -96,6 +97,7 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
 > {
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
+  @service declare private network: NetworkService;
   @service declare private cardService: CardService;
 
   static actionVerb = 'Generate Example (One-shot)';
@@ -181,6 +183,7 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
       examplePayload,
       realm,
       store: this.store,
+      network: this.network,
       defaultRealm: this.realm.defaultWritableRealm?.path,
       localDir: undefined,
     }).catch((error) => {
@@ -206,13 +209,18 @@ export async function createExampleInstanceFromPayload(opts: {
   examplePayload: Record<string, unknown>;
   realm: string | undefined;
   store: StoreService;
+  network: NetworkService;
   defaultRealm?: string;
   localDir?: string | null;
 }): Promise<CardDef | undefined> {
   if (!opts.codeRef?.module || !opts.codeRef?.name) {
     return undefined;
   }
-  const resolvedRef = resolveExampleCodeRef(opts.codeRef, opts.realm);
+  const resolvedRef = resolveExampleCodeRef(
+    opts.codeRef,
+    opts.realm,
+    opts.network,
+  );
   if (!resolvedRef) {
     return undefined;
   }
@@ -281,6 +289,7 @@ function normalizeExampleAttributes(
 function resolveExampleCodeRef(
   codeRef: BaseCommandModule.CreateInstancesInput['codeRef'],
   realm: string | undefined,
+  network: NetworkService,
 ): ResolvedCodeRef | undefined {
   if (isResolvedCodeRef(codeRef)) {
     return codeRef;
@@ -290,6 +299,8 @@ function resolveExampleCodeRef(
     const resolved = codeRefWithAbsoluteIdentifier(
       codeRef,
       relativeTo,
+      undefined,
+      network.virtualNetwork,
     ) as ResolvedCodeRef;
     return resolved;
   } catch {

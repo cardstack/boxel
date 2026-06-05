@@ -39,6 +39,7 @@ export default async function serialize({
   const codeRefOpts = {
     relativeTo,
     trimExecutableExtension: true as true,
+    virtualNetwork,
   };
   const metaCodeRefOpts = {
     ...codeRefOpts,
@@ -86,6 +87,7 @@ export default async function serialize({
       relativeTo,
       codeRefOpts: metaCodeRefOpts,
       definitionLookup,
+      virtualNetwork,
     });
   }
 
@@ -148,6 +150,7 @@ async function processAttributes({
   relativeTo,
   codeRefOpts,
   definitionLookup,
+  virtualNetwork,
 }: {
   attributes: Record<string, any>;
   definition: Definition;
@@ -157,10 +160,12 @@ async function processAttributes({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
 }): Promise<Record<string, any>> {
   const result: Record<string, any> = {};
 
@@ -212,6 +217,7 @@ async function processAttributes({
               itemAdoptsFrom,
               relativeTo,
               definitionLookup,
+              virtualNetwork,
             );
             if (!childDef) {
               return {};
@@ -224,6 +230,7 @@ async function processAttributes({
               relativeTo,
               codeRefOpts,
               definitionLookup,
+              virtualNetwork,
             });
           }),
         );
@@ -242,6 +249,7 @@ async function processAttributes({
         polymorphicAdoptsFrom,
         relativeTo,
         definitionLookup,
+        virtualNetwork,
       );
       if (!childDef) {
         continue;
@@ -254,6 +262,7 @@ async function processAttributes({
         relativeTo,
         codeRefOpts,
         definitionLookup,
+        virtualNetwork,
       });
     }
   }
@@ -271,9 +280,15 @@ async function resolveChildDef(
   polymorphicAdoptsFrom: CodeRef | undefined,
   relativeTo: URL,
   definitionLookup: DefinitionLookup,
+  virtualNetwork: VirtualNetwork,
 ): Promise<Definition | undefined> {
   let codeRef = polymorphicAdoptsFrom
-    ? codeRefWithAbsoluteIdentifier(polymorphicAdoptsFrom, relativeTo)
+    ? codeRefWithAbsoluteIdentifier(
+        polymorphicAdoptsFrom,
+        relativeTo,
+        undefined,
+        virtualNetwork,
+      )
     : fieldDefinition.fieldOrCard;
   if (!isResolvedCodeRef(codeRef)) {
     return undefined;
@@ -364,6 +379,7 @@ async function processRelationships({
       metaFields,
       relativeTo,
       definitionLookup,
+      virtualNetwork,
     );
 
     if (!fieldDefinition || fieldDefinition.isComputed) {
@@ -410,6 +426,7 @@ async function resolveDottedFieldDef(
   metaFields: CardFields | undefined,
   relativeTo: URL,
   definitionLookup: DefinitionLookup,
+  virtualNetwork: VirtualNetwork,
 ): Promise<FieldDefinition | undefined> {
   let segments = dottedPath.split('.');
   let current: Pick<Definition, 'fields' | 'fieldDefs'> = rootDefinition;
@@ -434,6 +451,7 @@ async function resolveDottedFieldDef(
       polymorphicAdoptsFrom,
       relativeTo,
       definitionLookup,
+      virtualNetwork,
     );
     if (!next) {
       return undefined;
@@ -463,6 +481,7 @@ function processMetaFields({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };
@@ -503,6 +522,7 @@ function processMetaField({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };

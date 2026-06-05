@@ -12,12 +12,10 @@ import {
   logger,
 } from './index';
 import {
-  isRegisteredPrefix as globalIsRegisteredPrefix,
   rri,
-  unresolveCardReference as globalUnresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 import {
   getCreatedTime,
@@ -37,7 +35,11 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import { clampSerializedError, type SerializedError } from './error';
+import {
+  clampSerializedError,
+  sanitizeForJsonb,
+  type SerializedError,
+} from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
 import type { FileMetaResource } from './resource-types';
@@ -58,10 +60,10 @@ export class IndexWriter {
 
   async createBatch(
     realmURL: URL,
+    virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
-    virtualNetwork?: VirtualNetwork,
   ) {
-    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo, virtualNetwork);
+    let batch = new Batch(this.#dbAdapter, realmURL, virtualNetwork, jobInfo);
     await batch.ready;
     return batch;
   }
@@ -196,27 +198,20 @@ export class Batch {
   constructor(
     dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
+    private virtualNetwork: VirtualNetwork,
     private jobInfo?: JobInfo,
-    private virtualNetwork?: VirtualNetwork,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
   }
 
-  // Prefix checks and unresolution prefer the threaded VirtualNetwork, and
-  // fall back to the deprecated module-level resolver when a Batch is
-  // constructed without one (e.g. the worker-manager and copy-task paths).
   private isRegisteredPrefix(reference: string): boolean {
-    return this.virtualNetwork
-      ? this.virtualNetwork.isRegisteredPrefix(reference)
-      : globalIsRegisteredPrefix(reference);
+    return this.virtualNetwork.isRegisteredPrefix(reference);
   }
 
   private unresolveURL(url: string): string {
-    return this.virtualNetwork
-      ? this.virtualNetwork.unresolveURL(url)
-      : globalUnresolveCardReference(url);
+    return this.virtualNetwork.unresolveURL(url);
   }
 
   private async setupBatch(): Promise<void> {
@@ -470,11 +465,12 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    let diagnostics: Diagnostics = {
+    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
+    let diagnostics: Diagnostics = sanitizeForJsonb({
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    };
+    });
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -559,7 +555,7 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
+          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
           has_error: true,
           diagnostics: diagnostics,
         };

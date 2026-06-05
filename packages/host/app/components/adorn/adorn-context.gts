@@ -57,10 +57,10 @@ import type { ModifierLike } from '@glint/template';
 // wrapper. AdornContext renders as `display: contents`, so its own
 // rect is empty — its parent is the element the consumer mounted it
 // inside, which is the region we want. Wired into the yielded
-// `positionLabel` modifier so the `.adorn-context` marker stays an
-// implementation detail of this component.
+// `positionLabel` modifier so the `[data-adorn-context]` marker stays
+// an implementation detail of this component.
 function getBoundaryElement(el: HTMLElement): HTMLElement | null {
-  let marker = el.closest<HTMLElement>('.adorn-context');
+  let marker = el.closest<HTMLElement>('[data-adorn-context]');
   return marker?.parentElement ?? null;
 }
 
@@ -85,7 +85,7 @@ interface AdornContextSignature {
 }
 
 const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
-  <div class='adorn-context' ...attributes>
+  <div class='adorn-context' data-adorn-context ...attributes>
     {{yield (hash strokeClass='adorn-stroke' positionLabel=positionLabel)}}
   </div>
   <style scoped>
@@ -99,11 +99,11 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
       display: contents;
 
       /* Token definitions live with the context, not in the global
-         stylesheet. --boxel-teal is the light accent shipped by
-         boxel-ui; the darker accent is exclusive to the Adorn
-         treatment and used when a selected card is hovered. */
-      --adorn-accent-light: var(--boxel-teal);
-      --adorn-accent: #00da9f;
+         stylesheet. --boxel-highlight is the app-wide highlight accent
+         shipped by boxel-ui; --boxel-highlight-hover is its darker
+         companion, used here when a selected card is hovered. */
+      --adorn-accent-light: var(--boxel-highlight);
+      --adorn-accent: var(--boxel-highlight-hover);
     }
     /* Stroke utility. The consumer applies `.adorn-stroke` to
        whichever descendant should carry the outline (typically the
@@ -115,14 +115,14 @@ const AdornContext: TemplateOnlyComponent<AdornContextSignature> = <template>
        element it's rendered inside. */
     .adorn-context :deep(.adorn-stroke:hover:not(.selected)),
     .adorn-context :deep(.adorn-stroke.hovered:not(.selected)) {
-      box-shadow: 0 0 0 2px var(--adorn-accent-light);
+      box-shadow: 0 0 0 0.125rem var(--adorn-accent-light);
     }
     .adorn-context :deep(.adorn-stroke.selected) {
-      box-shadow: 0 0 0 4px var(--adorn-accent-light);
+      box-shadow: 0 0 0 0.25rem var(--adorn-accent-light);
     }
     .adorn-context :deep(.adorn-stroke.selected:hover),
     .adorn-context :deep(.adorn-stroke.selected.hovered) {
-      box-shadow: 0 0 0 4px var(--adorn-accent);
+      box-shadow: 0 0 0 0.25rem var(--adorn-accent);
       --adorn-label-bg: var(--adorn-accent);
     }
   </style>

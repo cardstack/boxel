@@ -103,20 +103,37 @@ export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
 export const SLIDING_SYNC_LIST_RANGE_END = 9;
-// AI rooms (ai-room list) emit one event per message and rely on the host's
-// loadAllTimelineEvents scrollback (which calls /messages with an m.replace
-// filter) to backfill older history on demand, so a per-room timeline_limit
-// of 1 is sufficient.
+// Sliding-sync per-room timeline_limit is sized differently per list, and the
+// AI-room list also uses a two-stage value: small during the very first sync
+// (cold-start latency), then bumped after the initial sync completes so live
+// streaming bursts can't be dropped.
 //
-// Realm session rooms (auth-room list) instead receive a burst of multiple
-// events per write or delete — incremental-index-initiation → update →
-// incremental, plus an extra initiation per file in multi-file batches. The
-// `update` event sits in the middle of that burst and is what DirectoryResource
-// subscribes to for live file-tree refresh; with timeline_limit=1, sliding
-// sync only delivers the latest event of any burst that arrives in the same
-// poll window, so the `update` event gets silently dropped (it remains in the
-// room but never reaches the live Room.timeline listener). The higher limit
-// on the auth-room list keeps the full burst in each /sync response.
-export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+// INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT — the conservative value used for
+// the AI-room list on the first /sync request and as the SlidingSync
+// constructor's default for any list/subscription we haven't otherwise
+// overridden. Keeping it at 1 keeps the initial sync fast when many AI rooms
+// exist.
+//
+// SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT — the steady-state value applied to the
+// AI-room list via setList() immediately after the first SlidingSyncState.Complete
+// event. AI streaming responses are not one-event-per-message: the bot emits an
+// initial m.room.message with isStreamingFinished:false, then many m.replace
+// events (~250 ms throttle), then a final m.replace with isStreamingFinished:true.
+// If more than one replace lands in the same sliding-sync poll window,
+// timeline_limit=1 only delivers the latest; any event landing after the
+// finalization replace in that same window displaces it, the host's tracked
+// Message stays at isStreamingFinished:false, and the assistant panel hangs
+// in "generating results" until a manual page reload. The higher steady-state
+// value keeps the full streaming burst (and any trailing room churn) in each
+// /sync response.
+//
+// SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT — realm session rooms (auth-room list)
+// receive a burst of multiple events per write or delete (incremental-index-
+// initiation → update → incremental, plus an extra initiation per file in
+// multi-file batches). The `update` event sits in the middle of that burst and
+// is what DirectoryResource subscribes to for live file-tree refresh; without
+// the higher limit it gets silently dropped from the live Room.timeline.
+export const INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_TIMEOUT = 30000;

@@ -1,6 +1,8 @@
 import { module, test } from 'qunit';
 
-import { isRealmIndexCardId } from '@cardstack/runtime-common';
+import { VirtualNetwork, isRealmIndexCardId } from '@cardstack/runtime-common';
+
+const virtualNetwork = new VirtualNetwork();
 
 module('Unit | isRealmIndexCardId', function () {
   test('it recognizes the realm root index card when realm is missing trailing slash', function (assert) {
@@ -8,6 +10,7 @@ module('Unit | isRealmIndexCardId', function () {
       isRealmIndexCardId(
         'https://cardstack.com/test-realm/index',
         'https://cardstack.com/test-realm',
+        virtualNetwork,
       ),
     );
   });
@@ -17,6 +20,7 @@ module('Unit | isRealmIndexCardId', function () {
       isRealmIndexCardId(
         'https://cardstack.com/test-realm/person',
         'https://cardstack.com/test-realm',
+        virtualNetwork,
       ),
     );
   });
@@ -26,6 +30,7 @@ module('Unit | isRealmIndexCardId', function () {
       isRealmIndexCardId(
         'https://cardstack.com/test-realm/dir/index',
         'https://cardstack.com/test-realm',
+        virtualNetwork,
       ),
     );
   });

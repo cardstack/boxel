@@ -90,7 +90,6 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
-  resolveCardReference,
   rri,
   type RealmResourceIdentifier,
   type VirtualNetwork,
@@ -481,8 +480,8 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 export interface CardStore {
   // The VirtualNetwork that owns this store's realm mappings, used for
   // prefix/RRI resolution during (de)serialization. Optional so test doubles
-  // don't need to implement it; resolution sites fall back to the deprecated
-  // module-level resolver when it's absent.
+  // don't need to implement it; resolution sites degrade — URL-form refs
+  // still URL-join, prefix-form refs pass through unchanged.
   virtualNetwork?: VirtualNetwork;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
@@ -1595,9 +1594,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                 (shouldRenderEditor @format defaultFormats.cardDef isComputed)
               }}
                 {{#if linksToField.edit}}
-                  {{!-- Per-usage `edit:` override on a linksTo field
-                        replaces the default LinksToEditor for this
-                        specific usage. --}}
                   <linksToField.edit
                     @model={{(getInnerModel)}}
                     @field={{linksToField}}
@@ -1624,6 +1620,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
               {{else}}
@@ -4689,7 +4686,7 @@ function getStore(instance: BaseDef): CardStore {
 
 // The VirtualNetwork associated with an instance's store, for prefix/RRI
 // resolution outside this module. Returns undefined when the store can't
-// supply one, so callers fall back to the deprecated module-level resolver.
+// supply one — callers handle that by degrading to URL math or throwing.
 export function virtualNetworkFor(
   instance: BaseDef,
 ): VirtualNetwork | undefined {
@@ -4697,17 +4694,38 @@ export function virtualNetworkFor(
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the store's VirtualNetwork when available, falling back to
-// the deprecated module-level resolver when it's absent.
+// string through the store's VirtualNetwork. When the store doesn't carry
+// a VN (test stubs, detached instances), fall back to plain URL math: it
+// covers URL-form refs and relative refs against URL-form bases. Prefix-form
+// refs and refs against prefix-form bases can't be resolved without a VN —
+// `new URL()` throws on those, so we return the raw reference unchanged
+// instead of bubbling the error to callers (e.g. relationship deserialize
+// uses the returned string as a "did this resolve?" signal).
 function resolveRef(
   store: CardStore | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   let vn = store?.virtualNetwork;
-  return vn
-    ? vn.resolveURL(reference, relativeTo).href
-    : resolveCardReference(reference, relativeTo);
+  if (vn) {
+    return vn.resolveURL(reference, relativeTo).href;
+  }
+  let base: URL | string | undefined;
+  if (relativeTo instanceof URL) {
+    base = relativeTo;
+  } else if (typeof relativeTo === 'string') {
+    if (
+      relativeTo.startsWith('http://') ||
+      relativeTo.startsWith('https://')
+    ) {
+      base = relativeTo;
+    }
+  }
+  try {
+    return new URL(reference, base).href;
+  } catch {
+    return reference;
+  }
 }
 
 function myLoader(): Loader {
@@ -4789,7 +4807,13 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
+    let vn = this.virtualNetwork;
+    if (!vn) {
+      throw new Error(
+        `CardStore.loadCardDocument requires a Loader with a VirtualNetwork`,
+      );
+    }
+    let promise = loadCardDocument(fetch, url, vn);
     this.trackLoad(promise);
     return await promise;
   }
@@ -4799,7 +4823,13 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
+    let vn = this.virtualNetwork;
+    if (!vn) {
+      throw new Error(
+        `CardStore.loadFileMetaDocument requires a Loader with a VirtualNetwork`,
+      );
+    }
+    let promise = loadFileMetaDocument(fetch, url, vn);
     this.trackLoad(promise);
     return await promise;
   }

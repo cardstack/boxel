@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { Credentials } from '../docker/synapse';
+import type { Credentials } from '../support/synapse';
 import {
   loginUser,
   getAllRoomEvents,
@@ -9,11 +9,11 @@ import {
   sync,
   updateUser,
   type UpdateUserOptions,
-} from '../docker/synapse';
+} from '../support/synapse';
 import { realmPassword } from './realm-credentials';
-import type { SQLExecutor } from './isolated-realm-server';
-import { appURL, BasicSQLExecutor } from './isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+import type { SQLExecutor } from '../support/isolated-realm-server';
+import { appURL, BasicSQLExecutor } from '../support/isolated-realm-server';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants';
 import { randomUUID } from 'crypto';
 
 export const testHost = 'https://localhost:4205/test';
@@ -165,13 +165,49 @@ export async function createRealm(
   endpoint: string,
   name = endpoint,
 ) {
-  await page.locator('[data-test-add-workspace]').click();
-  await page.locator('[data-test-display-name-field]').fill(name);
-  await page.locator('[data-test-endpoint-field]').fill(endpoint);
-  await page.locator('[data-test-create-workspace-submit]').click();
-  await expect(page.locator(`[data-test-workspace="${name}"]`)).toHaveCount(1, {
-    timeout: 30_000,
-  });
+  // Creating a workspace provisions a matrix room + personal realm. Under
+  // load that can transiently fail: the modal surfaces an error
+  // (`data-test-error-message`) and stays open instead of closing and
+  // rendering the workspace tile. Submitting and waiting only for the tile
+  // then burns the full timeout on a modal that will never resolve. Instead
+  // wait for whichever outcome happens first and, on a surfaced error, retry
+  // the whole form from a clean modal (cancel re-opens with error cleared).
+  let workspaceTile = page.locator(`[data-test-workspace="${name}"]`);
+  let errorMessage = page.locator('[data-test-error-message]');
+  let maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // A previous attempt's provisioning may have landed late — if the tile is
+    // already present, don't try to create a duplicate endpoint.
+    if ((await workspaceTile.count()) > 0) {
+      return;
+    }
+
+    await page.locator('[data-test-add-workspace]').click();
+    await page.locator('[data-test-display-name-field]').fill(name);
+    await page.locator('[data-test-endpoint-field]').fill(endpoint);
+    await page.locator('[data-test-create-workspace-submit]').click();
+
+    await expect(workspaceTile.or(errorMessage).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    if ((await workspaceTile.count()) > 0) {
+      return;
+    }
+
+    let message = (await errorMessage.textContent())?.trim() ?? '(no message)';
+    if (attempt === maxAttempts) {
+      throw new Error(
+        `createRealm("${endpoint}") failed after ${maxAttempts} attempts: ${message}`,
+      );
+    }
+    console.log(
+      `[createRealm] "${endpoint}" attempt ${attempt}/${maxAttempts} errored, retrying: ${message}`,
+    );
+    // Dismiss the errored modal so the retry opens a fresh one (which clears
+    // the error and resets the fields).
+    await page.locator('[data-test-cancel-create-workspace]').click();
+    await expect(errorMessage).toBeHidden();
+  }
 }
 
 export async function openRoot(page: Page, url = testHost) {

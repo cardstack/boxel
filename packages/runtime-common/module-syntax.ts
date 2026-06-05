@@ -31,11 +31,7 @@ import {
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index';
-import {
-  cardIdToURL,
-  resolveCardReference,
-  rri,
-} from './card-reference-resolver';
+import { rri } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
@@ -65,20 +61,15 @@ export class ModuleSyntax {
   declare declarations: Declaration[];
   declare private ast: t.File;
   private url: URL;
-  private virtualNetwork: VirtualNetwork | undefined;
+  private virtualNetwork: VirtualNetwork;
 
   constructor(
     src: string,
     url: RealmResourceIdentifier | URL,
-    virtualNetwork?: VirtualNetwork,
+    virtualNetwork: VirtualNetwork,
   ) {
     this.virtualNetwork = virtualNetwork;
-    let normalized =
-      url instanceof URL
-        ? url
-        : virtualNetwork
-          ? virtualNetwork.toURL(url)
-          : cardIdToURL(url);
+    let normalized = url instanceof URL ? url : virtualNetwork.toURL(url);
     this.url = new URL(trimExecutableExtension(rri(normalized.href)));
     this.analyze(src);
   }
@@ -334,9 +325,10 @@ export class ModuleSyntax {
     classRef: ClassReference,
   ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
-      let resolvedModule = this.virtualNetwork
-        ? this.virtualNetwork.resolveURL(classRef.module, this.url).href
-        : resolveCardReference(classRef.module, this.url);
+      let resolvedModule = this.virtualNetwork.resolveURL(
+        classRef.module,
+        this.url,
+      ).href;
       if (trimExecutableExtension(rri(resolvedModule)) === this.url.href) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
@@ -417,7 +409,7 @@ function makeNewField({
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
   computedFieldFunctionSourceCode?: string;
-  virtualNetwork?: VirtualNetwork;
+  virtualNetwork: VirtualNetwork;
 }): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -461,9 +453,7 @@ function makeNewField({
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
     relativeFieldModuleRef = maybeRelativeReference(
-      virtualNetwork
-        ? virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo)
-        : new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
+      virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo),
       outgoingRelativeTo,
       outgoingRealmURL,
     );

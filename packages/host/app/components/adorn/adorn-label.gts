@@ -1,5 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { cn } from '@cardstack/boxel-ui/helpers';
+
 // AdornLabel: the teal flag-tab type label. Renders an outer div
 // shaped like a flag (sloped right edge, rounded left corners), with
 // named-block slots for an optional icon, the required type-name
@@ -36,9 +38,11 @@ export interface AdornLabelSignature {
 
 const AdornLabel: TemplateOnlyComponent<AdornLabelSignature> = <template>
   <div
-    class='adorn-label
-      {{if @compact "compact"}}
-      {{unless (has-block "dropdown") "no-menu"}}'
+    class={{cn
+      'adorn-label'
+      compact=@compact
+      no-menu=(unless (has-block 'dropdown') true)
+    }}
     ...attributes
   >
     {{#if (has-block 'icon')}}
@@ -53,38 +57,37 @@ const AdornLabel: TemplateOnlyComponent<AdornLabelSignature> = <template>
     .adorn-label {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 3px 12px 3px 7px;
+      gap: 0.3125rem;
+      padding: 0.1875rem 0.75rem 0.1875rem 0.4375rem;
       background: var(--adorn-label-bg, var(--adorn-accent-light));
-      color: #0a2e1c;
-      font: 700 10px/1 var(--boxel-font-family, inherit);
+      color: var(--boxel-highlight-foreground);
+      font: 700 0.625rem/1 var(--boxel-font-family, inherit);
       letter-spacing: 0.5px;
       text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
-      border-radius: 5px 0 0 5px;
-      clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 100%, 0 100%);
+      border-radius: 0.3125rem 0 0 0.3125rem;
+      clip-path: polygon(0 0, calc(100% - 0.8125rem) 0, 100% 100%, 0 100%);
       z-index: 1;
-      filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.2));
     }
     /* Mirrored polygon when the label flips below the card so the
        slope still points toward the card edge. */
     .adorn-label[data-side='bottom'] {
-      clip-path: polygon(0 100%, calc(100% - 13px) 100%, 100% 0, 0 0);
+      clip-path: polygon(0 100%, calc(100% - 0.8125rem) 100%, 100% 0, 0 0);
     }
     .adorn-label.compact {
-      padding: 2px 10px 2px 5px;
-      font-size: 9px;
-      gap: 4px;
+      padding: 0.125rem 0.625rem 0.125rem 0.3125rem;
+      font-size: 0.5625rem;
+      gap: 0.25rem;
     }
     /* Without an in-tab menu filling the right side, the text would
        crowd the flag's sloped right edge — add clearance so it clears
        the slope. */
     .adorn-label.no-menu {
-      padding-right: 18px;
+      padding-right: 1.125rem;
     }
     .adorn-label.no-menu.compact {
-      padding-right: 15px;
+      padding-right: 0.9375rem;
     }
 
     .adorn-label-icon-slot {
@@ -92,13 +95,13 @@ const AdornLabel: TemplateOnlyComponent<AdornLabelSignature> = <template>
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      width: 14px;
-      height: 14px;
-      color: #0a2e1c;
+      width: 0.875rem;
+      height: 0.875rem;
+      color: var(--boxel-highlight-foreground);
     }
     .adorn-label.compact .adorn-label-icon-slot {
-      width: 11px;
-      height: 11px;
+      width: 0.6875rem;
+      height: 0.6875rem;
     }
     /* Cascade the slot's size to whatever the consumer puts inside
        (typically an SVG icon), so they don't have to size it

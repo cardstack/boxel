@@ -108,7 +108,7 @@ module.exports = {
         'packages/boxel-cli/src/commands/realm/status.ts',
         'packages/boxel-cli/src/commands/realm/sync.ts',
         'packages/boxel-cli/src/lib/realm-sync-base.ts',
-        'packages/matrix/helpers/isolated-realm-server.ts',
+        'packages/matrix/support/isolated-realm-server.ts',
         'packages/postgres/pg-queue.ts',
         'packages/postgres/pg-transaction-manager.ts',
         'packages/realm-server/node-realm.ts',

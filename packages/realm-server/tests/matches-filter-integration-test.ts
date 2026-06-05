@@ -6,6 +6,7 @@ import {
   IndexQueryEngine,
   param,
   query,
+  VirtualNetwork,
   type DefinitionLookup,
 } from '@cardstack/runtime-common';
 
@@ -93,7 +94,11 @@ module(basename(__filename), function () {
     setupDB(hooks, {
       beforeEach: async (_dbAdapter) => {
         dbAdapter = _dbAdapter;
-        engine = new IndexQueryEngine(dbAdapter, stubDefinitionLookup);
+        engine = new IndexQueryEngine(
+          dbAdapter,
+          stubDefinitionLookup,
+          new VirtualNetwork(),
+        );
 
         await seedRow(dbAdapter, {
           url: `${testRealmURL}mango.json`,

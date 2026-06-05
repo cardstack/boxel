@@ -638,7 +638,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   setHostModePrimaryCard(cardId?: string) {
-    if (cardId && !isLocalId(cardId)) {
+    if (cardId && !isLocalId(cardId, this.network.virtualNetwork)) {
       this._state.hostModePrimaryCard = cardId.replace(/\.json$/, '');
     } else if (!cardId) {
       this._state.hostModePrimaryCard = null;
@@ -1049,7 +1049,10 @@ export default class OperatorModeStateService extends Service {
           let instance =
             this.store.peek(item.id) ??
             this.store.peek(item.id, { type: 'file-meta' });
-          if (!isLocalId(item.id) || instance?.id) {
+          if (
+            !isLocalId(item.id, this.network.virtualNetwork) ||
+            instance?.id
+          ) {
             serializedStack.push({
               id: instance?.id ?? item.id,
               format: item.format,
@@ -1352,7 +1355,7 @@ export default class OperatorModeStateService extends Service {
     this.clearStacks();
     // Determine realm URL. If id is a localId, look up the instance in the store to read its realm.
     let realmHref: string | undefined;
-    if (isLocalId(id)) {
+    if (isLocalId(id, this.network.virtualNetwork)) {
       let instance = this.store.peek(id);
       if (instance && isCardInstance(instance)) {
         realmHref = (instance as any)[realmURLSymbol]?.href;
@@ -1577,7 +1580,7 @@ export default class OperatorModeStateService extends Service {
         if (!id) {
           return undefined;
         }
-        if (isLocalId(id)) {
+        if (isLocalId(id, this.network.virtualNetwork)) {
           let maybeInstance = this.store.peek(id);
           if (
             maybeInstance &&

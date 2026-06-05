@@ -5,7 +5,7 @@ import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
-import type { SynapseInstance } from '../docker/synapse';
+import type { SynapseInstance } from './synapse';
 
 setGracefulCleanup();
 
@@ -277,6 +277,16 @@ export async function startPrerenderServer(
     BOXEL_HOST_URL: 'https://localhost:4200',
     LOG_LEVELS:
       process.env.TEST_HARNESS_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
+    // One prerender server is shared by both Playwright workers
+    // (fullyParallel) for the whole shard. With the pool size unset it
+    // collapses to a fixed 4 tabs, which the shard's concurrent publish +
+    // index work can exhaust — the pool thrashes (`standby refill failed
+    // to produce a fresh tab`, cross-affinity steals) and realm-server
+    // requests stall, surfacing as 60s page.goto / _publish-realm
+    // timeouts. Enable the dynamic envelope: keep a 4-tab idle floor (no
+    // extra baseline memory) but let it burst to 8 under load.
+    PRERENDER_PAGE_POOL_MIN: process.env.PRERENDER_PAGE_POOL_MIN ?? '4',
+    PRERENDER_PAGE_POOL_MAX: process.env.PRERENDER_PAGE_POOL_MAX ?? '8',
   };
   let prerenderArgs = [
     '--transpileOnly',

@@ -5,6 +5,7 @@ import {
   SupportedMimeType,
   Deferred,
   IndexWriter,
+  VirtualNetwork,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
@@ -1180,6 +1181,7 @@ module(basename(__filename), function () {
       let fileDefKey = internalKeyFor(
         { module: rri(fileDefModule), name: 'FileDef' },
         undefined,
+        realm.virtualNetwork,
       );
       await testDbAdapter.execute(
         `UPDATE boxel_index SET types = '${JSON.stringify([
@@ -1363,6 +1365,11 @@ module(basename(__filename), function () {
       let queuePublisher: QueuePublisher;
       let queueRunner: QueueRunner;
       let testRealmServer: TestRealmServerResult | undefined;
+      let virtualNetwork: VirtualNetwork;
+
+      hooks.beforeEach(function () {
+        virtualNetwork = new VirtualNetwork();
+      });
 
       setupPermissionedRealmCached(hooks, {
         mode: 'beforeEach',
@@ -1407,6 +1414,7 @@ module(basename(__filename), function () {
       test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1418,6 +1426,7 @@ module(basename(__filename), function () {
 
         let jsonSeedBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await jsonSeedBatch.invalidate([new URL(`${testRealm}mango.json`)]);
         assert.ok(
@@ -1432,6 +1441,7 @@ module(basename(__filename), function () {
 
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await stagingBatch.updateEntry(stagedOnlyURL, {
           type: 'file',
@@ -1442,7 +1452,7 @@ module(basename(__filename), function () {
 
         let invalidationBatch = await new IndexWriter(
           testDbAdapter,
-        ).createBatch(new URL(realm.url));
+        ).createBatch(new URL(realm.url), virtualNetwork);
         await invalidationBatch.invalidate([stagedAliasURL]);
 
         assert.ok(
@@ -1454,6 +1464,7 @@ module(basename(__filename), function () {
       test('batch invalidation tombstones all rows that share a matching file_alias', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1497,6 +1508,7 @@ module(basename(__filename), function () {
         //    instance-error entry and committing the batch.
         let errorBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await errorBatch.updateEntry(mangoURL, {
           type: 'instance-error',
@@ -1526,6 +1538,7 @@ module(basename(__filename), function () {
         // 2. Tombstone the URL.
         let tombstoneBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await tombstoneBatch.invalidate([mangoURL]);
         await tombstoneBatch.done();
@@ -1564,6 +1577,7 @@ module(basename(__filename), function () {
         // instead of silently writing the unusable row.
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         for (let badError of [
@@ -2195,6 +2209,55 @@ module(basename(__filename), function () {
         assert.ok(
           deps.includes(`${testRealm}filedef-helper`),
           `deps include helper module (deps: ${JSON.stringify(deps)})`,
+        );
+      });
+
+      test('the full-realm module pre-warm sweep runs on from-scratch indexing but not on incrementals', async function (assert) {
+        // `fancy-person.gts` is an orphan card module: it defines a CardDef
+        // (FancyPerson) but no instance adopts it and no other module
+        // imports it. Because nothing ever invalidates it, the only code
+        // path that can land it in the module cache is the realm-wide
+        // pre-warm sweep — which runs on from-scratch indexing and is
+        // skipped on incrementals. Its presence in the `modules` table is
+        // therefore a deterministic signal of whether the sweep ran.
+        let orphanAlias = `${testRealm}fancy-person`;
+
+        async function isCached(moduleAlias: string): Promise<boolean> {
+          let rows = (await testDbAdapter.execute(
+            `SELECT url FROM modules WHERE url = $1 OR file_alias = $1`,
+            { bind: [moduleAlias] },
+          )) as { url: string }[];
+          return rows.length > 0;
+        }
+
+        // The realm was from-scratch indexed during setup; the realm-wide
+        // sweep warmed every card module, including the orphan that no
+        // instance references.
+        assert.true(
+          await isCached(orphanAlias),
+          'from-scratch pre-warm caches the orphan module via the full-realm sweep',
+        );
+
+        // Clear the cache, then run an incremental on an unrelated instance.
+        // The incremental has no realm-wide sweep, and the orphan is neither
+        // visited nor a dependency of the change, so it does not come back —
+        // only the realm-wide sweep (from-scratch) would re-cache a module
+        // that no instance consumes.
+        await testDbAdapter.execute('DELETE FROM modules');
+        await realm.write(
+          'vangogh.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Van Gogh', hourlyRate: 51 },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+        );
+        assert.false(
+          await isCached(orphanAlias),
+          'incremental skips the full-realm sweep, leaving the orphan module uncached',
         );
       });
 

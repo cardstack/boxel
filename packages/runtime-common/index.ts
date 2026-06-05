@@ -11,13 +11,7 @@ import type { VirtualNetwork } from './virtual-network';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
-import {
-  resolveCardReference,
-  unresolveCardReference,
-  isRegisteredPrefix,
-  rri,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -606,19 +600,11 @@ export {
   isCardErrorJSONAPI,
   clampSerializedError,
   coerceErrorMessage,
+  sanitizeForJsonb,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';
 export { validateWriteSize } from './write-size-validation';
-export {
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-  resolveCardReference,
-  unresolveCardReference,
-  isRegisteredPrefix,
-  registeredCardReferencePrefixes,
-  cardIdToURL,
-} from './card-reference-resolver';
 
 export interface ResourceObject {
   type: string;
@@ -672,7 +658,7 @@ export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
-export * from './card-reference-resolver';
+export * from './realm-identifiers';
 export * from './bfm-card-references';
 export * from './bfm-math-render';
 export * from './bfm-mermaid-render';
@@ -705,6 +691,7 @@ export * from './resource-types';
 export * from './prerender-headers';
 export * from './query';
 export * from './search-utils';
+export * from './request-timings';
 export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
@@ -763,7 +750,7 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType } from './supported-mime-type';
+export { SupportedMimeType, isJsonContentType } from './supported-mime-type';
 export {
   isUrlLike,
   VirtualNetwork,
@@ -1146,18 +1133,14 @@ export function trimExecutableExtension(
 export function internalKeyFor(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string {
   if (!('type' in ref)) {
-    let resolved = virtualNetwork
-      ? virtualNetwork.resolveURL(ref.module, relativeTo).href
-      : resolveCardReference(ref.module, relativeTo);
+    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
     let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
-    module = virtualNetwork
-      ? virtualNetwork.unresolveURL(module)
-      : unresolveCardReference(module);
+    module = virtualNetwork.unresolveURL(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
@@ -1259,13 +1242,8 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork?: VirtualNetwork) {
-  return (
-    !id.startsWith('http') &&
-    !(virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(id)
-      : isRegisteredPrefix(id))
-  );
+export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
+  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {

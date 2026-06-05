@@ -24,7 +24,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
  * caller's VirtualNetwork so the keys produced here match those
  * generated elsewhere in the same realm-mapping context.
  */
-export function getRootTypeKeys(virtualNetwork?: VirtualNetwork): Set<string> {
+export function getRootTypeKeys(virtualNetwork: VirtualNetwork): Set<string> {
   return new Set([
     internalKeyFor(baseCardRef, undefined, virtualNetwork),
     internalKeyFor(baseFieldRef, undefined, virtualNetwork),
@@ -53,7 +53,7 @@ export function getFilterTypeRefs(
  */
 export function getBaseFilterTypeKeys(
   baseFilter: Filter | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): Set<string> | undefined {
   const typeRefs = getFilterTypeRefs(baseFilter);
   if (!typeRefs || typeRefs.length === 0) {
@@ -82,7 +82,7 @@ export function getBaseFilterTypeKeys(
  */
 export function hasNonRootBaseFilter(
   baseFilter: Filter | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): boolean {
   return getBaseFilterTypeKeys(baseFilter, virtualNetwork) !== undefined;
 }

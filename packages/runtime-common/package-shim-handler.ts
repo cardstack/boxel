@@ -1,4 +1,4 @@
-import { rri } from './card-reference-resolver';
+import { rri } from './realm-identifiers';
 import { logger, trimExecutableExtension } from './index';
 
 export type ModuleLike = Record<string, any>;

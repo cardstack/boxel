@@ -1,5 +1,5 @@
 import type { ResolvedCodeRef } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import { ensureTrailingSlash } from './paths';
 
 export function parseBoxelHostCommandSpecifier(

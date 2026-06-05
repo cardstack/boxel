@@ -28,7 +28,6 @@ async function discoverTestModules(realmURL) {
     .map((url) => url.slice(0, -'.gts'.length));
 }
 
-// eslint-disable-next-line ember/no-test-import-export
 export async function loadRealmTests(application) {
   const urlParams = new URLSearchParams(window.location.search);
   const qunitAny = /** @type {any} */ (QUnit);

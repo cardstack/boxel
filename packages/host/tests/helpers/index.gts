@@ -113,8 +113,8 @@ export function testModuleRRI(path: string): RealmResourceIdentifier {
 }
 
 export {
-  catalogRealm,
-  skillsRealm,
+  catalogRealmURL,
+  skillsRealmURL,
   skillCardURL,
   devSkillId,
   envSkillId,
@@ -1354,7 +1354,9 @@ async function setupTestRealm({
 
   // we use this to run cards that were added to the test filesystem
   adapter.setLoader(
-    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport, {
+      virtualNetwork,
+    }),
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?

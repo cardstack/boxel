@@ -3,12 +3,12 @@ import {
   synapseStop,
   registerUser,
   createRegistrationToken,
-} from '../docker/synapse';
+} from '../support/synapse';
 import {
   startServer as startRealmServer,
   startPrerenderServer,
-} from '../helpers/isolated-realm-server';
-import type { IsolatedRealmServer } from '../helpers/isolated-realm-server';
+} from '../support/isolated-realm-server';
+import type { IsolatedRealmServer } from '../support/isolated-realm-server';
 import { registerRealmUsers, REGISTRATION_TOKEN } from '../helpers';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 

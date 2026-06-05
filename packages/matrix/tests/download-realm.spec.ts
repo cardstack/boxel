@@ -1,11 +1,7 @@
 import { test, expect } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
-import {
-  createSubscribedUser,
-  login,
-  setupPermissions,
-} from '../helpers';
-import type { Credentials } from '../docker/synapse';
+import { appURL } from '../support/isolated-realm-server';
+import { createSubscribedUser, login, setupPermissions } from '../helpers';
+import type { Credentials } from '../support/synapse';
 
 test.describe('Download Realm', () => {
   let credentials: Credentials;

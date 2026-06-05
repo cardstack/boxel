@@ -3,6 +3,7 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
+  CardCrudFunctionsConsumer,
   DefaultFormatsProvider,
   PermissionsConsumer,
   getBoxComponent,
@@ -92,12 +93,15 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               fixed-dimension card slot, so the placeholder renders `embedded`
               (flow-sized) rather than `fitted` (which clamps to a badge
               footprint and would clip the URL here). }}
-          <BrokenLinkTemplate
-            @brokenUrl={{@brokenLink.reference}}
-            @errorDoc={{@brokenLink.errorDoc}}
-            @state={{@brokenLink.kind}}
-            @format='embedded'
-          />
+          <CardCrudFunctionsConsumer as |crud|>
+            <BrokenLinkTemplate
+              @brokenUrl={{@brokenLink.reference}}
+              @errorDoc={{@brokenLink.errorDoc}}
+              @state={{@brokenLink.kind}}
+              @format='embedded'
+              @viewCard={{crud.viewCard}}
+            />
+          </CardCrudFunctionsConsumer>
         {{else if this.isEmpty}}
           {{#if permissions.canWrite}}
             <Button

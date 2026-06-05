@@ -40,6 +40,7 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -118,6 +119,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
+  @service declare private network: NetworkService;
 
   private cardTracker = new ElementTracker();
 
@@ -169,7 +171,10 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   @action private async viewSpecInstance() {
-    if (!this.selectedId || isLocalId(this.selectedId)) {
+    if (
+      !this.selectedId ||
+      isLocalId(this.selectedId, this.network.virtualNetwork)
+    ) {
       return;
     }
 

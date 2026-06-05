@@ -61,8 +61,8 @@ Environment variables (for 'add'):
   BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
   BOXEL_ENVIRONMENT    An env-mode slug (e.g. a branch name), interpreted
                        like scripts/env-slug.sh: URLs are derived as
-                       http://matrix.<slug>.localhost and
-                       http://realm-server.<slug>.localhost/. Overridden
+                       https://matrix.<slug>.localhost and
+                       https://realm-server.<slug>.localhost/. Overridden
                        by --matrix-url / --realm-server-url if provided.`,
     )
     .action(

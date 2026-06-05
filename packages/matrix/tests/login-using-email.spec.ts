@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server';
 import {
   openRoot,
   assertLoggedIn,
