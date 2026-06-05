@@ -179,7 +179,7 @@ module(basename(__filename), function () {
       },
     });
 
-    test('searchCards with omitIncluded skips loadLinks: ids only, no query-field umbrella, no included[]', async function (assert) {
+    test('searchCards with omitIncluded skips loadLinks: pristine rows, no query-field umbrella, no included[]', async function (assert) {
       let doc = await realm.realmIndexQueryEngine.searchCards(
         {
           filter: {

@@ -107,16 +107,17 @@ type Options = {
   // this flag — see `omitIncluded`.)
   skipQueryBackedExpansion?: boolean;
   // When true, `searchCardsUncoalesced` skips the `loadLinks` /
-  // `populateQueryFields` pass entirely: the response carries only the
-  // matching result identifiers + page meta — the pristine attributes and
-  // static-link relationships from each index row, but no query-field
-  // `relationships.{field}.data` umbrellas and no `included[]`. Set by the
+  // `populateQueryFields` pass entirely. Each result still carries its
+  // pristine index row (id + attributes + any static-link relationships)
+  // plus page meta, but the pass that would add query-field
+  // `relationships.{field}.data` umbrellas and expand linked resources into
+  // `included[]` does not run — so neither is present. Set by the
   // realm-server search handlers when the request originates inside a
   // prerender: the host re-resolves every result card from its raw
-  // card+source file and consumes only `data[].id`, so the entire
-  // relationship-assembly pass is throwaway work in that context. Strictly
-  // prerender-scoped — live / external `_federated-search` callers still
-  // receive fully-assembled compound documents.
+  // card+source file and reads only `data[].id`, so that assembly is
+  // throwaway work in that context. Strictly prerender-scoped — live /
+  // external `_federated-search` callers still receive fully-assembled
+  // compound documents.
   omitIncluded?: boolean;
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL

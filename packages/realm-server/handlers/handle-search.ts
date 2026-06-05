@@ -81,12 +81,12 @@ export default function handleSearch(opts: {
     let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
     // Inside a prerender the search skips the `loadLinks`
     // relationship-assembly pass entirely: the host re-resolves every
-    // result card from its raw card+source file and consumes only
+    // result card from its raw card+source file and reads only
     // `data[].id`, so the query-field `relationships.{field}.data`
-    // umbrellas and the transitive `included[]` are all throwaway work
-    // here. The response carries the matching result identifiers (+
-    // pristine attributes / static-link relationships) and page meta
-    // only. Same gating as `cacheOnlyDefinitions`.
+    // umbrellas and the transitive `included[]` are throwaway work
+    // here. The response still carries each result's pristine row (id +
+    // attributes + static-link relationships) and page meta — just no
+    // umbrellas and no `included[]`. Same gating as `cacheOnlyDefinitions`.
     let omitIncluded = cacheOnlyDefinitions;
     // The host's `_federated-search` fetch wrapper stamps
     // `x-boxel-job-priority` while rendering inside a prerender tab.

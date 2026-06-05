@@ -819,14 +819,14 @@ eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… heapMB=…          
 
 The `|`-section is the **sequential wall-clock timeline** (these sum to ≈ `handler`).
 
-**Note — prerender searches no longer run `loadLinks`.** These lines emit only for prerender `_federated-search` (the correlation id is prerender-gated), and a prerender search skips the relationship-assembly pass entirely: the host re-resolves every result from card+source and consumes only `data[].id`, so the realm-server returns the matching ids + page meta and never runs `populateQueryFields`. The line therefore carries **no `loadLinks` stage and no `busyMs(parallel-sum)` section** (no `populate` / `cacheRead` / `cacheWrite` / `cacheHit` / `cacheMiss`) — those were the per-result umbrella assembly + per-instance wire-format cache, both removed. The dominant cost on a prerender search is now `sql` (or `stringify` for a fat result set, or queue-wait — see branch 4).
+**Note — a prerender search skips `loadLinks`.** These lines emit only for prerender `_federated-search` (the correlation id is prerender-gated), and a prerender search skips the relationship-assembly pass: the host re-resolves every result from card+source and reads only `data[].id`, so the realm-server returns each result's pristine row (id + attributes + any static-link relationships) + page meta and does not run `populateQueryFields`. The line therefore carries **no `loadLinks` stage and no `busyMs(parallel-sum)` section** (no `populate` / `cacheRead` / `cacheWrite` / `cacheHit` / `cacheMiss`) — those are the per-result umbrella assembly + per-instance wire-format cache, which do not run on this path. The dominant cost on a prerender search is `sql` (or `stringify` for a fat result set, or queue-wait — see branch 4).
 
 Wall-clock timeline stages:
 
 - `parse` — request body → Query parse.
 - `resolveRealms` — federated realm resolution / lazy-mount.
 - `sql` — the `IndexQueryEngine.searchCards` query (the actual SQL). For a prerender search this is essentially the whole `handler`.
-- `stringify` — `JSON.stringify` of the response wire-format (ids + page meta only for a prerender search).
+- `stringify` — `JSON.stringify` of the response wire-format (for a prerender search, the pristine result rows + page meta, with no query-field umbrellas or `included[]`).
 - `coalescedWait` — this request coalesced onto an already-in-flight identical search (in-flight dedup) and waited for it; the real sql work is on the **leader's** line, not this one.
 - `handler=` — handler entry → response assembled (≈ the sum of the wall-clock stages).
 
