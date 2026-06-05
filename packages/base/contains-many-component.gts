@@ -384,14 +384,10 @@ export function getContainsManyComponent({
                 {{/each}}
               </div>
             {{else}}
-              {{#each (getComponents) as |Item i|}}
+              {{#each (getComponents) as |Item|}}
                 <Item
                   @format={{getPluralChildFormat effectiveFormat model}}
                   @displayContainer={{false}}
-                  data-test-plural-view={{field.fieldType}}
-                  data-test-plural-view-field={{field.name}}
-                  data-test-plural-view-format={{effectiveFormat}}
-                  data-test-plural-view-item={{i}}
                 />
               {{/each}}
             {{/if}}
