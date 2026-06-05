@@ -218,14 +218,6 @@ export default class OperatorModeOverlays extends Overlays {
     </AdornContext>
     <style scoped>
       .actions-overlay {
-        /* Establish `position: absolute` from CSS, before velcro's first
-           computePosition runs. floating-ui requires the floating element to
-           already be absolutely positioned when it first measures; the offset
-           middleware also sets this, but that runs *after* the initial
-           measurement, so without it here the overlay (and everything riding
-           it — the type-label tab, the select chip, the menu) lands ~1 frame
-           off and visibly jumps into place on first hover. */
-        position: absolute;
         pointer-events: none;
         /* Allow the type-label tab and selection chip to extend outside the
            overlay's bounding box without being clipped. */
@@ -286,6 +278,13 @@ export default class OperatorModeOverlays extends Overlays {
     // The type-label tab floats a few pixels above the card; the cursor
     // needs to bridge that gap without the chrome dismissing itself.
     return 100;
+  }
+
+  // This overlay carries visible chrome (the teal type-label tab, the select
+  // chip, the menu, the outline), so hide it until velcro's position settles
+  // to avoid the first-frame jump those would otherwise show.
+  protected override get hideUntilPositioned(): boolean {
+    return true;
   }
 
   // Tracks which rendered cards are currently small enough to warrant

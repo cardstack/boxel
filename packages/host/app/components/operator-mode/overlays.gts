@@ -28,22 +28,6 @@ import type { CardDefOrId } from './stack-item';
 import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { MiddlewareState } from '@floating-ui/dom';
 
-// --- TEMP INSTRUMENTATION (overlay first-frame jump) — remove before merge ---
-// Enable with localStorage.setItem('adorn-pos-debug','1') (reload) or
-// ?adornPosDebug=1. Logs, per velcro computePosition, the quantities that
-// determine where the overlay lands, so we can see which one is ~60px off on
-// the first call.
-function overlayDebugOn(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    if (window.localStorage?.getItem('adorn-pos-debug') === '1') return true;
-  } catch {
-    /* localStorage may be unavailable */
-  }
-  return /[?&]adornPosDebug=1\b/.test(window.location?.search ?? '');
-}
-// --- end TEMP ---
-
 interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
@@ -111,13 +95,6 @@ export default class Overlays extends Component<OverlaySignature> {
     {{/each}}
     <style scoped>
       .base-overlay {
-        /* Establish `position: absolute` from CSS, before velcro's first
-           computePosition runs. floating-ui requires the floating element to
-           already be absolutely positioned when it first measures; the offset
-           middleware also sets this, but that runs *after* the initial
-           measurement, so without it here the overlay lands ~1 frame off and
-           visibly jumps into place on first appearance. */
-        position: absolute;
         width: 100%;
         height: 100%;
         pointer-events: none;
@@ -162,33 +139,53 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
-      // --- TEMP INSTRUMENTATION (build marker v-mw1) — remove before merge ---
-      if (overlayDebugOn()) {
-        let op = floating.offsetParent as HTMLElement | null;
-        let opRect = op ? op.getBoundingClientRect() : null;
-        let refRect =
-          reference instanceof Element
-            ? reference.getBoundingClientRect()
-            : null;
-        let scroller = floating.closest(
-          '[data-test-cards-grid-cards], .boxel-cards-grid, [data-scroller], .ember-application',
-        ) as HTMLElement | null;
-        console.log(
-          `[overlay-mw v-mw1] x=${rects.reference.x.toFixed(1)} y=${rects.reference.y.toFixed(1)}` +
-            ` | refRect top=${refRect ? refRect.top.toFixed(1) : '?'} left=${refRect ? refRect.left.toFixed(1) : '?'}` +
-            ` | floatPos=${window.getComputedStyle(floating).position}` +
-            ` | offsetParent=${op ? op.tagName + '.' + String(op.className).replace(/\s+/g, '.').slice(0, 30) : 'null'}` +
-            ` opTop=${opRect ? opRect.top.toFixed(1) : '?'} opLeft=${opRect ? opRect.left.toFixed(1) : '?'}` +
-            ` | scrollY=${window.scrollY} scrollerTop=${scroller ? scroller.scrollTop : '?'}`,
-        );
+      // floating-ui's first one-or-two computePosition calls return the
+      // reference in viewport coordinates rather than offset-parent-relative
+      // ones (it omits the offset parent's offset for ~1 frame, then corrects),
+      // so the overlay paints one frame off and visibly jumps into place — and
+      // everything riding it (the type-label tab, the select chip, the menu,
+      // the outline) jumps with it. Subclasses with visible chrome opt into
+      // hiding the overlay until its position has settled (see
+      // `hideUntilPositioned`). We use opacity rather than visibility so the
+      // overlay's action buttons stay hit-testable the whole time. The reveal
+      // is rescheduled on every position write and fires one frame after the
+      // last, so it lands only once the position has stopped moving (the wrong
+      // value can repeat across calls, so converging on equality isn't enough).
+      if (
+        this.hideUntilPositioned &&
+        floating.dataset.overlayPositioned !== 'true'
+      ) {
+        floating.style.opacity = '0';
+        let pending = this.overlayRevealHandles.get(floating);
+        if (pending !== undefined) {
+          cancelAnimationFrame(pending);
+        }
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
+        let handle = requestAnimationFrame(() => {
+          this.overlayRevealHandles.delete(floating);
+          floating.dataset.overlayPositioned = 'true';
+          floating.style.opacity = '';
+        });
+        this.overlayRevealHandles.set(floating, handle);
       }
-      // --- end TEMP ---
       return {
         x: rects.reference.x,
         y: rects.reference.y,
       };
     },
   };
+
+  // Tracks the pending reveal rAF per overlay element so it can be rescheduled
+  // (and so the latest write wins) while the position is still settling.
+  private overlayRevealHandles = new WeakMap<HTMLElement, number>();
+
+  // Whether to keep the overlay hidden (opacity 0) until floating-ui's position
+  // has settled, to avoid the first-frame jump. Off by default (consumers
+  // without visible chrome — spec-preview, playground — don't need it);
+  // OperatorModeOverlays overrides it.
+  protected get hideUntilPositioned(): boolean {
+    return false;
+  }
 
   // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
   // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
