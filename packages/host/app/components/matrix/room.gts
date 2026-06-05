@@ -614,6 +614,10 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    // Replay any persisted optimistic sends from a prior tab/session before
+    // matrix-js-sdk's /sync delivers real echoes — entries left in 'not_sent'
+    // surface the retry alert; matched real echoes reconcile via the cgi bridge.
+    this.matrixService.ensurePendingSendsHydrated(this.args.roomId);
     registerDestructor(this, () => {
       this.cleanupScrollState();
       this.getConversationScrollability = undefined;
@@ -1626,37 +1630,57 @@ export default class Room extends Component<Signature> {
       keepInputAndAttachments = false,
     ) => {
       this.unknownMessageSendError = undefined;
-      const shouldClearDraft = !keepInputAndAttachments;
+      const isRetry = keepInputAndAttachments;
+      const roomId = this.args.roomId;
 
-      // Why register a one-shot local-echo handler instead of clearing the draft
-      // here (or via a callback into matrixService.sendMessage)?
-      //
-      // The pre-send pipeline (skill/command upload, attached card + file upload,
-      // serialization) can take several seconds. Clearing the draft up-front leaves
-      // the user staring at an empty input until matrix-js-sdk emits its local echo
-      // and the pending bubble renders — the gap CS-11367 reported.
-      //
-      // The chat-input draft state (messageToSend, cardsToSend, filesToSend) lives
-      // in matrix-service. The matrix-js-sdk LocalEchoUpdated event also routes
-      // through matrix-service, debounced and decrypted into processDecryptedEvent
-      // where the event is added to the rendered messages list. By piggy-backing on
-      // that same processing step, the clear and the pending bubble land in the
-      // same render frame — no flicker, no "input cleared, no bubble yet" gap.
-      //
-      // We register here (room.gts) because _fileUploadStates is per-component
-      // state that matrix-service shouldn't own; bundling the service-state clear
-      // with the component-state clear keeps cleanup in one place.
-      //
-      // Retry / resend (keepInputAndAttachments=true) just skips registration.
-      // If anything throws before sendEvent fires, the catch block unregisters so
-      // we don't leak a stale closure that would clear the draft on a later echo.
-      if (shouldClearDraft) {
-        this.matrixService.registerOnLocalEcho(clientGeneratedId, () => {
-          this.matrixService.setMessageToSend(this.args.roomId, undefined);
-          this.matrixService.setCardsToSend(this.args.roomId, undefined);
-          this.matrixService.setFilesToSend(this.args.roomId, undefined);
-          this._fileUploadStates.clear();
+      // Snapshot the click-time inputs and render an optimistic bubble before
+      // any awaited work. The pre-send pipeline (skill / command / card / file
+      // serialization + upload) can take seconds; without this snapshot the
+      // user sees an empty transcript while the pipeline runs.
+      let snapshotBody = message ?? '';
+      let snapshotCardIds: string[] = [];
+      if (cardsOrIds) {
+        if (typeof cardsOrIds[0] === 'string') {
+          snapshotCardIds = (cardsOrIds as string[]).slice();
+        } else {
+          snapshotCardIds = (cardsOrIds as CardDef[])
+            .map((c) => c.id as unknown as string)
+            .filter((id) => Boolean(id));
+        }
+      }
+      let snapshotFiles = files ?? [];
+
+      if (!isRetry) {
+        await this.matrixService.addOptimisticEvent(roomId, {
+          body: snapshotBody,
+          clientGeneratedId,
+          attachedCardIds: snapshotCardIds,
+          attachedFiles: snapshotFiles.map((f) => f.serialize()),
         });
+        // Persist before clearing the draft so a tab close mid-pipeline still
+        // restores the bubble on reload.
+        this.matrixService.persistOptimisticSend(roomId, {
+          clientGeneratedId,
+          body: snapshotBody,
+          attachedCardIds: snapshotCardIds,
+          attachedFiles: snapshotFiles.map((f) => f.serialize()),
+        });
+
+        this.matrixService.setMessageToSend(roomId, undefined);
+        this.matrixService.setCardsToSend(roomId, undefined);
+        this.matrixService.setFilesToSend(roomId, undefined);
+        this._fileUploadStates.clear();
+      } else {
+        // Retry — flip the existing bubble back to 'sending' and clear any
+        // prior error so the alert / Retry button hides while the pipeline runs.
+        this.matrixService.updateOptimisticEvent(roomId, clientGeneratedId, {
+          status: 'sending',
+        });
+        this.matrixService.updatePersistedPendingSendStatus(
+          roomId,
+          clientGeneratedId,
+          { status: 'sending' },
+        );
       }
 
       let openCardIds = new Set([
@@ -1697,7 +1721,7 @@ export default class Room extends Component<Signature> {
         }
 
         await this.matrixService.sendMessage(
-          this.args.roomId,
+          roomId,
           message,
           cards,
           files,
@@ -1706,15 +1730,37 @@ export default class Room extends Component<Signature> {
         );
       } catch (e) {
         console.error(e);
+
+        // Inverse delivery race: client.sendEvent may have already handed the
+        // event to matrix (status === 'sent') before a downstream throw escaped
+        // into this catch. Flipping the bubble to 'not_sent' in that case
+        // would briefly contradict the server's view. Consult the SDK's own
+        // EventStatus first; only stamp 'not_sent' when matrix agrees the send
+        // didn't land.
+        let matrixStatus = this.matrixService.findPendingMatrixEventStatus(
+          roomId,
+          clientGeneratedId,
+        );
+        if (matrixStatus === 'sent') {
+          console.warn(
+            `sendMessage threw after matrix accepted clientGeneratedId=${clientGeneratedId}; ` +
+              'leaving bubble in sending state for reconciliation.',
+          );
+          return;
+        }
+
         this.unknownMessageSendError =
           'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
-        // Pre-send work threw before sendEvent could fire, so the local-echo
-        // handler we registered will never run. Drop it so a later, unrelated
-        // echo with this clientGeneratedId can't clear the still-populated draft.
-        if (shouldClearDraft) {
-          this.matrixService.unregisterOnLocalEcho(clientGeneratedId);
-        }
+        this.matrixService.updateOptimisticEvent(roomId, clientGeneratedId, {
+          status: 'not_sent',
+          errorMessage: 'Failed to send',
+        });
+        this.matrixService.updatePersistedPendingSendStatus(
+          roomId,
+          clientGeneratedId,
+          { status: 'not_sent', errorMessage: 'Failed to send' },
+        );
       }
     },
   );
@@ -1749,7 +1795,17 @@ export default class Room extends Component<Signature> {
   );
 
   private get isSending() {
-    return this.doSendMessage.isRunning;
+    if (this.doSendMessage.isRunning) {
+      return true;
+    }
+    // A user message in 'sending' or 'queued' is still in matrix's outbound
+    // pipeline; gate Send + attachment actions until it reconciles. 'not_sent'
+    // is deliberately excluded — a failed bubble shouldn't lock the UI forever.
+    return this.messages.some(
+      (m) =>
+        m.author.userId === this.matrixService.userId &&
+        this.isPendingMessage(m),
+    );
   }
 
   private get canSend() {
@@ -1764,7 +1820,11 @@ export default class Room extends Component<Signature> {
       ) &&
       !this.hasFileUploadIssues &&
       !!this.room &&
-      !this.messages.some((m) => this.isPendingMessage(m)) &&
+      !this.messages.some(
+        (m) =>
+          m.author.userId === this.matrixService.userId &&
+          this.isPendingMessage(m),
+      ) &&
       !this.matrixService.isLoadingTimeline &&
       !this.aiAssistantPanelService.isPreparingSession
     );
