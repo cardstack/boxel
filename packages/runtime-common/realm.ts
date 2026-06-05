@@ -1,8 +1,4 @@
 import { Deferred } from './deferred';
-import {
-  X_BOXEL_JOB_ID_HEADER,
-  sanitizePrerenderJobId,
-} from './prerender-headers';
 import type { SearchOpts } from './search-utils';
 import {
   rri,
@@ -235,17 +231,6 @@ const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
-}
-
-// The `<jobId>.<reservationId>` job identity carried on inbound prerender
-// requests (`x-boxel-job-id`), normalized. Threaded into card-document opts so
-// the per-instance wire-format cache scopes its entries to one indexing job.
-// Undefined for live / external traffic, which never carries the header.
-function prerenderJobIdentity(request: Request): string | undefined {
-  return (
-    sanitizePrerenderJobId(request.headers.get(X_BOXEL_JOB_ID_HEADER)) ??
-    undefined
-  );
 }
 
 // Fields owned by the RealmConfig card instance at /realm.json. A PATCH
@@ -4432,7 +4417,6 @@ export class Realm {
       {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-        jobIdentity: prerenderJobIdentity(request),
       },
     );
     if (!entry || entry?.type === 'error') {
@@ -4599,7 +4583,6 @@ export class Realm {
           {
             loadLinks: true,
             skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-            jobIdentity: prerenderJobIdentity(request),
           },
         );
         if (entry && entry.type !== 'error') {
@@ -4710,7 +4693,6 @@ export class Realm {
         {
           loadLinks: true,
           skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-          jobIdentity: prerenderJobIdentity(request),
         },
       );
       let doc: SingleCardDocument;
@@ -4965,7 +4947,6 @@ export class Realm {
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-        jobIdentity: prerenderJobIdentity(request),
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
@@ -5296,13 +5277,9 @@ export class Realm {
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
-      ...(opts?.skipQueryBackedExpansion
-        ? { skipQueryBackedExpansion: true }
-        : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-      ...(opts?.jobIdentity ? { jobIdentity: opts.jobIdentity } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
     });
   }
@@ -5357,18 +5334,11 @@ export class Realm {
       let duringPrerender = isDuringPrerenderRequest(request);
       let doc = await this.search(cardsQuery, {
         cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender, leave `relationships.{field}.data`
-        // populated for query-backed `linksTo` / `linksToMany` but
-        // skip transitive expansion into `included[]`. The host
-        // resolves the listed IDs via per-URL fetches against the
-        // store (which has the same prerender skip applied on
-        // instance-GET); the eager closure is a wasted round-trip in
-        // the prerender path.
-        skipQueryBackedExpansion: duringPrerender,
-        // Inside a prerender the host discards the response's
-        // `included[]` entirely (it resolves every linked card by URL
-        // via card+source), so omit it: seed the root result cards and
-        // skip the static-link BFS that would otherwise build it.
+        // Inside a prerender the search skips the `loadLinks`
+        // relationship-assembly pass entirely: the host re-resolves
+        // every result card from its raw card+source file and consumes
+        // only `data[].id`, so the query-field umbrellas and the
+        // transitive `included[]` are throwaway work in this path.
         omitIncluded: duringPrerender,
       });
       return createResponse({
