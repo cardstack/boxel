@@ -138,7 +138,7 @@ For **CloudFront** specifically, the role grants read across the relevant surfac
 Two operational notes when fanning these out:
 
 - CloudFront throttles aggressively — firing ~60 calls at once gets `Throttling: Rate exceeded` on some. Cap concurrency or fall back to sequential with a small `sleep`.
-- AWS CLI v2 prints **nothing** (empty output, exit 0) when a list result is genuinely empty — e.g. `list-invalidations` for a distribution that has never been invalidated. Empty output is "zero items," not an error.
+- AWS CLI v2 auto-pagination quirk: for _paginated_ list operations (e.g. `list-invalidations`, `list-distributions`), the CLI prints **nothing** (empty stdout, exit 0) when there are zero items — including under the default/JSON output. This is the pagination layer, not the output format: `--no-paginate` returns the normal `{"InvalidationList": { … "Quantity": 0 }}` payload, and non-paginated calls like `list-tags-for-resource` print `{"Items": []}` for an empty result. So empty stdout _from a paginated list_ means "zero items," not an error — but don't generalize that to other commands, which return a normal JSON payload for empty results.
 
 ## Connecting to the boxel RDS database
 
