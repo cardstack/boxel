@@ -83,20 +83,18 @@ export default class NetworkService extends Service {
         config.resolvedOpenRouterRealmURL,
       );
     }
-    // DIAGNOSTIC (CS-11275 follow-up): temporarily disable the test-realm
-    // URL mapping to determine whether it is the source of a shard-9
-    // operator-mode|links regression (24 tests) that appeared on the same
-    // run that closed ~66 unrelated env-mode failures. With the mapping
-    // disabled the original ~80 failures concentrated in shards 4/10/11/12
-    // are expected to return; if shard 9 also returns to 0 failures, the
-    // mapping was the culprit. Re-enable (or replace with a narrower
-    // rewrite) once the regression's mechanism is understood.
+    // Test fixtures and helpers hardcode the standard-mode live test realm
+    // URL (https://localhost:4202/test/), but in environment mode the live
+    // test realm is served at a per-environment Traefik hostname. Rewrite
+    // the hardcoded URL to whatever the running test realm-server is
+    // actually serving so the same test bundle works in both modes. No-op
+    // when the URLs already match (standard mode, production).
     let hardcodedTestRealmURL = new URL('https://localhost:4202/test/');
     let resolvedTestRealmURL = new URL(
       withTrailingSlash(config.resolvedTestRealmURL),
     );
     if (resolvedTestRealmURL.href !== hardcodedTestRealmURL.href) {
-      // virtualNetwork.addURLMapping(hardcodedTestRealmURL, resolvedTestRealmURL);
+      virtualNetwork.addURLMapping(hardcodedTestRealmURL, resolvedTestRealmURL);
     }
     return virtualNetwork;
   }
