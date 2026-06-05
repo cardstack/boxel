@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 
 import { MenuDivider } from '../../helpers/menu-divider.ts';
 import { MenuItem } from '../../helpers/menu-item.ts';
-import DropdownIcon from '../../icons/dropdown-arrow-down.gts';
+import CaretDown from '../../icons/caret-down.gts';
 import BoxelButton from '../button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import BoxelMenu from '../menu/index.gts';
@@ -34,7 +34,7 @@ export default class SortDropdown extends Component<Signature> {
               {{bindings}}
             >
               {{if @selectedOption @selectedOption.displayName 'Please Select'}}
-              <DropdownIcon width='12px' height='12px' />
+              <CaretDown class='sort-button-caret' width='12px' height='12px' />
             </BoxelButton>
           </:trigger>
           <:content as |dd|>
@@ -65,8 +65,15 @@ export default class SortDropdown extends Component<Signature> {
           padding-left: var(--boxel-sp-sm);
           padding-right: var(--boxel-sp-sm);
         }
-        .sort-button > svg {
+        .sort-button-caret {
           margin-left: auto;
+          transition: transform var(--boxel-transition);
+        }
+        /* Flip the caret while the menu is open, matching boxel-ui's
+           select/dropdown triggers. BoxelDropdown sets aria-expanded on the
+           trigger button via the yielded bindings. */
+        .sort-button[aria-expanded='true'] .sort-button-caret {
+          transform: rotate(180deg);
         }
       }
     </style>

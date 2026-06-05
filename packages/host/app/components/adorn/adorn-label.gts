@@ -69,7 +69,6 @@ const AdornLabel: TemplateOnlyComponent<AdornLabelSignature> = <template>
       border-radius: 0.3125rem 0 0 0.3125rem;
       clip-path: polygon(0 0, calc(100% - 0.8125rem) 0, 100% 100%, 0 100%);
       z-index: 1;
-      filter: drop-shadow(0 0.3125rem 0.5rem rgba(0, 0, 0, 0.2));
     }
     /* Mirrored polygon when the label flips below the card so the
        slope still points toward the card edge. */

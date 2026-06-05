@@ -19,6 +19,59 @@ import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
+// The host rewrites every bare `@cardstack/boxel-icons/<name>` import to
+// a module fetch against `iconsURL`, which the bundled host config points
+// at the monorepo's boxel-icons dev server (localhost:4206) — not running
+// in a self-contained `boxel test`. We intercept those fetches in the
+// browser (see `page.route` in `runQunitInBrowser`) and answer every one
+// with this single stub: every real icon module is structurally the same,
+// a template-only component rendering an SVG as its default export.
+//
+// This is a deliberate tradeoff, not a shortcut to revisit later. The real
+// icons dist is ~6,300 modules; we intentionally do not ship it purely so
+// headless tests can run. The cost is that `boxel test` can't see real
+// glyphs — every icon renders as this one placeholder, so a test can't
+// meaningfully assert on a specific icon, and a card with a wrong or
+// missing icon still passes locally. That's acceptable here: the suite
+// exercises card logic and templates, not glyphs, and base modules only
+// need the icon import to *resolve* so they load (card-api's field icons,
+// the card-info `NameIcon`, the `link-off` a `linksTo` field pulls in).
+// Same "stub, don't bundle" tack `scripts/build-types.ts` takes for the
+// `parse` side's `@cardstack/boxel-icons/*` ambient `any` shim. The SVG
+// mirrors boxel-icons' `error-404` glyph.
+const ICON_STUB_GTS = `const IconComponent = <template>
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    width='24'
+    height='24'
+    fill='none'
+    stroke='currentColor'
+    stroke-linecap='round'
+    stroke-linejoin='round'
+    stroke-width='2'
+    viewBox='0 0 24 24'
+    ...attributes
+  ><path stroke='none' d='M0 0h24v24H0z' /><path
+      d='M3 8v3a1 1 0 0 0 1 1h3M7 8v8M17 8v3a1 1 0 0 0 1 1h3M21 8v8M10 10v4a2 2 0 1 0 4 0v-4a2 2 0 1 0-4 0'
+    /></svg>
+</template>;
+export default IconComponent;
+`;
+
+let iconStubModule: Promise<string> | undefined;
+
+// Compiled once and reused for every icon request; the output is
+// identical regardless of which icon name was requested.
+export function getIconStubModule(): Promise<string> {
+  if (!iconStubModule) {
+    iconStubModule = transpileJS(
+      ICON_STUB_GTS,
+      '/@cardstack/boxel-icons/v1/icons/icon-stub.gts',
+    );
+  }
+  return iconStubModule;
+}
+
 // `@playwright/test` ships as a runtime dependency (it has to, since
 // `boxel test` drives chromium) but it's marked external in our
 // esbuild config — it bundles native binaries that esbuild can't
@@ -439,6 +492,25 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
         process.stderr.write(`[browser pageerror] ${err.message}\n`);
       });
     }
+
+    // Fulfill every boxel-icons module fetch with the stub, regardless of
+    // where the baked `iconsURL` points (it's the never-running monorepo
+    // dev server). Intercepting here covers both local and `--realm` mode
+    // without touching the host config or the asset server.
+    //
+    // `iconsURL` is a different origin from the QUnit page (localhost:4206
+    // vs the 127.0.0.1 asset server), so the loader's cross-origin module
+    // fetch needs CORS — match the asset server's own responses, which all
+    // send `Access-Control-Allow-Origin: *`.
+    let iconStub = await getIconStubModule();
+    await page.route('**/@cardstack/boxel-icons/v1/icons/*.js', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: iconStub,
+      }),
+    );
 
     // Realm-server auth only applies in remote mode — the local module
     // mounts on this same server don't gate on tokens.
