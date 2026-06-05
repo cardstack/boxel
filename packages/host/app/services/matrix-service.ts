@@ -61,11 +61,12 @@ import {
   DEFAULT_FALLBACK_MODELS,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
   SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_LIST_RANGE_END,
-  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -871,16 +872,23 @@ export default class MatrixService extends Service {
     }
   }
 
-  private async initSlidingSync(accountData?: { realms: string[] } | null) {
-    let lists: Map<string, MSC3575List> = new Map();
-    lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
+  private aiRoomListConfig(timelineLimit: number): MSC3575List {
+    return {
       ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: false,
       },
-      timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+      timeline_limit: timelineLimit,
       required_state: [['*', '*']],
-    });
+    };
+  }
+
+  private async initSlidingSync(accountData?: { realms: string[] } | null) {
+    let lists: Map<string, MSC3575List> = new Map();
+    lists.set(
+      SLIDING_SYNC_AI_ROOM_LIST_NAME,
+      this.aiRoomListConfig(INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT),
+    );
     lists.set(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, {
       ranges: [[0, accountData?.realms.length ?? SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
@@ -893,7 +901,7 @@ export default class MatrixService extends Service {
       this.client.baseUrl,
       lists,
       {
-        timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+        timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
       SLIDING_SYNC_TIMEOUT,
@@ -925,6 +933,10 @@ export default class MatrixService extends Service {
           ]).then(() => {
             this.initialSyncCompleted = true;
             this.initialSyncCompletedDeferred.fulfill();
+            this.slidingSync?.setList(
+              SLIDING_SYNC_AI_ROOM_LIST_NAME,
+              this.aiRoomListConfig(SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT),
+            );
           });
         }
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
