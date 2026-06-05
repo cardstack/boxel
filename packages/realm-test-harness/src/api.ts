@@ -163,13 +163,14 @@ export async function ensureFactoryRealmTemplate(
         options.realmServerURL ?? contextRealmServerURL,
         options.compatRealmServerPort,
       );
-    // `portReservation` is the holder for a port we freshly allocated here
-    // (only when no caller supplied a URL — e.g. the cache:prepare path).
-    // The caller's `internal.publicPortReservation`, when present, is the
-    // one that's actually held; we own only our own. Either way the build
-    // path's startIsolatedRealmStack releases the effective holder right
-    // before the compat proxy binds; we release our own at the early
-    // (cache-hit) and finally exits as an idempotent backstop.
+    // The effective public-port holder: the caller's delegated reservation
+    // when present, otherwise the one we freshly allocated above (e.g. the
+    // cache:prepare path). On the build path startIsolatedRealmStack
+    // releases it right before the compat proxy binds; we release it again
+    // at the early (cache-hit) and finally exits as an idempotent backstop.
+    // Releasing the *effective* holder (not just our own) matters when a
+    // caller delegates it but the build throws before startIsolatedRealmStack
+    // takes ownership — otherwise the delegated holder socket leaks.
     let publicPortReservation =
       internal.publicPortReservation ?? portReservation;
     let primaryRealmURL = realmURLWithinServer(realmServerURL, realms[0].path);
@@ -192,9 +193,9 @@ export async function ensureFactoryRealmTemplate(
       hasTemplateDatabase &&
       cachedTemplateMetadata
     ) {
-      // No build, so nothing will consume the holder we allocated above —
-      // release it (a no-op when the caller owns it and we hold nothing).
-      await portReservation?.release().catch(() => undefined);
+      // No build, so nothing downstream will consume the holder — release
+      // the effective one (our own or a caller's delegated reservation).
+      await publicPortReservation?.release().catch(() => undefined);
       return {
         cacheKey,
         templateDatabaseName,
@@ -264,10 +265,11 @@ export async function ensureFactoryRealmTemplate(
     } finally {
       configureLogger(originalLogLevels);
       await withSilentConsole(async () => ownedSupport?.stop());
-      // Backstop for the holder we own: a no-op once startIsolatedRealmStack
-      // has released it before the compat-proxy bind, but covers a throw
-      // before the build reached that point.
-      await portReservation?.release().catch(() => undefined);
+      // Backstop for the effective holder (our own or a caller's delegated
+      // reservation): a no-op once startIsolatedRealmStack has released it
+      // before the compat-proxy bind, but covers a throw before the build
+      // reached that point (e.g. a Postgres drop/clone failure).
+      await publicPortReservation?.release().catch(() => undefined);
     }
   });
 }
