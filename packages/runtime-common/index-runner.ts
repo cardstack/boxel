@@ -32,7 +32,7 @@ import {
   type Diagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import type { VirtualNetwork } from './virtual-network';
 import { isCardError } from './error';
@@ -214,8 +214,8 @@ export class IndexRunner {
     );
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
-      current.#jobInfo,
       current.#virtualNetwork,
+      current.#jobInfo,
     );
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts
@@ -397,11 +397,11 @@ export class IndexRunner {
 
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
-      current.#jobInfo,
       current.#virtualNetwork,
+      current.#jobInfo,
     );
-    // Announce the job at kickoff — before invalidation and pre-warm — so
-    // the dashboard shows it immediately. The total starts at 0 and the
+    // Announce the job at kickoff — before invalidation — so the
+    // dashboard shows it immediately. The total starts at 0 and the
     // first `file-visited` fills it in once the counts are known.
     current.#onProgress?.({
       type: 'indexing-started',
@@ -434,46 +434,18 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
-    // Still pre-warm, but only the modules this batch will actually
-    // render. For each invalidation `preWarmModulesTable` primes the
-    // definition cache for the invalidated module file itself (when
-    // executable) plus the per-row `boxel_index` deps of the invalidated
-    // cards (and the `adoptsFrom` module of a novel `.json`). Front-
-    // loading those before the visit phase lets a dependent card's render
-    // hit the cache instead of firing a same-affinity sub-`prerenderModule`
-    // mid-render — the per-invalidation warming, bounded by invalidation
-    // size rather than realm size.
-    //
-    // The empty base set drops only the realm-wide `.gts`/`.gjs` sweep.
-    // That sweep exists to prime sibling modules a card references by
-    // string (which never appear in any instance's runtime deps) and is
-    // worth its O(realm) cost only on from-scratch, where the cache is
-    // cold by definition. On an incremental the cache is already warm from
-    // the prior from-scratch, and any miss resolves through the on-demand
-    // `lookupDefinition` read-through during the visit (PagePool-safe: the
-    // sub-prerender materializes its own tab). Skipping it also avoids the
-    // filesystem-mtimes walk this path would otherwise run only to build
-    // the sweep.
-    // Pre-warm reports each warmed module as a `file-visited`; modules and
-    // the files visited below share one `totalFiles` so the dashboard bar
-    // spans both phases.
+    // Incremental indexing does no module pre-warming. Query-backed field
+    // expansion during a prerender `_search` reads the `queryFieldDefs`
+    // pre-extracted onto each result instance's stored meta
+    // (`populateQueryFieldsFromMeta`), so it needs no `modules`-table row
+    // for the queried type. The prerender-search definition path is
+    // cache-only by design — a read-through there would re-enter the same
+    // affinity tab mid-render and deadlock the pool — while definition
+    // needs outside it resolve through the on-demand `lookupDefinition`
+    // read-through. There is nothing left for a pre-warm pass to
+    // front-load here.
     let filesCompleted = 0;
-    let preWarmedCount = await current.preWarmModulesTable(
-      invalidations,
-      [],
-      ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
-        filesCompleted = completed;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: moduleUrl,
-          filesCompleted,
-          totalFiles,
-        });
-      },
-    );
-    let totalFiles = preWarmedCount + invalidations.length;
+    let totalFiles = invalidations.length;
 
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
@@ -716,10 +688,10 @@ export class IndexRunner {
     // this layer the search fires a same-affinity `prerenderModule`
     // mid-card-render at lookup time, which is the wait-shape the
     // PagePool's tab-materialization for module/command callers is
-    // meant to relieve. Populated only on from-scratch indexing, where
-    // the module cache is cold; incrementals pass an empty base set and
-    // rely on the cache the last from-scratch left warm (the cost of
-    // this sweep is O(realm module count), not O(files changed)).
+    // meant to relieve. This realm-wide sweep runs only on from-scratch
+    // indexing, where the module cache is cold by definition; incremental
+    // indexing does no pre-warming (the cost of this sweep is O(realm
+    // module count), not O(files changed)).
     //
     // `.gts` / `.gjs` only is an optimization, not a correctness gate:
     // `.ts` / `.js` files CAN host `CardDef` (e.g. command-input

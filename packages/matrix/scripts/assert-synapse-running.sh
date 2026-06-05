@@ -25,7 +25,7 @@ if [ "$RUNNING" = "$CONTAINER_NAME" ]; then
   if [ -n "$BOXEL_ENVIRONMENT" ]; then
     HOST_PORT=$(docker port "$CONTAINER_NAME" 8008/tcp 2>/dev/null | head -1 | awk -F: '{print $NF}')
     if [ -n "$HOST_PORT" ]; then
-      pnpm exec ts-node --transpileOnly -e "import { registerSynapseWithTraefik } from './helpers/environment-config'; registerSynapseWithTraefik($HOST_PORT);"
+      pnpm exec ts-node --transpileOnly -e "import { registerSynapseWithTraefik } from './support/environment-config'; registerSynapseWithTraefik($HOST_PORT);"
     fi
   fi
 else

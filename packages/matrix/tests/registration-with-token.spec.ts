@@ -4,8 +4,8 @@ import {
   registerUser,
   getAccountData,
   type SynapseInstance,
-} from '../docker/synapse';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/synapse';
+import { appURL } from '../support/isolated-realm-server';
 import {
   validateEmail,
   gotoRegistration,
@@ -21,7 +21,7 @@ import {
   REGISTRATION_TOKEN,
   getMatrixTestContext,
 } from '../helpers';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../support/matrix-constants';
 
 const serverIndexUrl = new URL(appURL).origin;
 
@@ -45,8 +45,7 @@ function makeRegistrationUser(
 }
 
 test.describe('User Registration w/ Token', () => {
-  test.beforeEach(async () => {
-  });
+  test.beforeEach(async () => {});
 
   test('it can register a user with a registration token', async ({ page }) => {
     let secondUser = await createSubscribedUser('token-registration-2');

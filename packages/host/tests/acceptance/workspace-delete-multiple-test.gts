@@ -140,17 +140,17 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection state is active
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .containsText('1', 'Selection chip shows count');
 
     // Select additional cards
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2');
+    assert.dom('[data-test-selection-dropdown-trigger]').containsText('2');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click bulk delete option
     await click('[data-test-boxel-menu-item-text="Delete 2 items"]');
@@ -180,7 +180,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection mode is cleared
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .doesNotExist('Selection summary is cleared');
   });
 
@@ -209,17 +209,17 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/3');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('3');
+    assert.dom('[data-test-selection-dropdown-trigger]').containsText('3');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click "Deselect All" option
     await click('[data-test-boxel-menu-item-text="Deselect All"]');
 
     // Verify selection is cleared
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .doesNotExist('Selection summary is cleared after deselect');
 
     // Verify overlay chrome is gone. The overlay clears on hover-out via a
@@ -254,22 +254,22 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection state is active
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .containsText('1', 'Selection chip shows count');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click "Select All" option
     await click('[data-test-boxel-menu-item-text="Select All"]');
 
     // Verify all cards are selected
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .containsText(`${totalCardCount}`, 'All cards are now selected');
 
     // Open utility menu again to verify "Select All" is no longer available
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // "Select All" should not be available when all cards are selected
     assert
@@ -318,18 +318,18 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     };
 
     try {
-      await click('.utility-menu-trigger');
+      await click('[data-test-selection-dropdown-trigger]');
       let countBeforeSelectAll = getCallCount;
       await click('[data-test-boxel-menu-item-text="Select All"]');
       await waitUntil(() =>
         document
-          .querySelector('.utility-menu-trigger')
+          .querySelector('[data-test-selection-dropdown-trigger]')
           ?.textContent?.includes(`${totalCardCount}`),
       );
       let getsDuringSelectAll = getCallCount - countBeforeSelectAll;
 
       assert
-        .dom('.utility-menu-trigger')
+        .dom('[data-test-selection-dropdown-trigger]')
         .containsText(`${totalCardCount}`, 'All cards are now selected');
       assert.strictEqual(
         getsDuringSelectAll,
@@ -366,10 +366,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2');
+    assert.dom('[data-test-selection-dropdown-trigger]').containsText('2');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click bulk delete option
     await click('[data-test-boxel-menu-item-text="Delete 2 items"]');
@@ -400,7 +400,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection is still active
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .containsText('2', 'Selection remains active after cancel');
   });
 });

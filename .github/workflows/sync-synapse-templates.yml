@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/matrix/docker/synapse/templates/**"
+      - "packages/matrix/support/synapse/templates/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -56,15 +56,15 @@ jobs:
 
       - name: Replace URL in registration success template
         run: |
-          sed -i "s/http:\/\/localhost:4200/https:\/\/${{ env.HOST_DOMAIN }}/" packages/matrix/docker/synapse/templates/registration_success.html
+          sed -i "s/http:\/\/localhost:4200/https:\/\/${{ env.HOST_DOMAIN }}/" packages/matrix/support/synapse/templates/registration_success.html
 
       - name: Replace icon URL with one from matching subdomain
         run: |
-          sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}/" packages/matrix/docker/synapse/templates/_base.html
+          sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}/" packages/matrix/support/synapse/templates/_base.html
 
       - name: S3 Sync
         run: |
-          aws s3 sync packages/matrix/docker/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
+          aws s3 sync packages/matrix/support/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
 
       - name: Restart Synapse ECS Service
         run: |

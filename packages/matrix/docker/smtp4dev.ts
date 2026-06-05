@@ -1,4 +1,9 @@
-import { dockerCreateNetwork, dockerRun, dockerStop, dockerRm } from './index';
+import {
+  dockerCreateNetwork,
+  dockerRun,
+  dockerStop,
+  dockerRm,
+} from '../support/docker';
 
 interface Options {
   mailClientPort?: number;

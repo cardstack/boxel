@@ -2023,7 +2023,11 @@ module(`Integration | realm indexing`, function (hooks) {
       'default embedded HTML is correct',
     );
 
-    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    let cardDefRefURL = internalKeyFor(
+      baseCardRef,
+      undefined,
+      getService('network').virtualNetwork,
+    );
     assert.deepEqual(
       Object.keys(embeddedHtml!),
       [
@@ -2168,7 +2172,11 @@ module(`Integration | realm indexing`, function (hooks) {
       'default fitted HTML is correct',
     );
 
-    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    let cardDefRefURL = internalKeyFor(
+      baseCardRef,
+      undefined,
+      getService('network').virtualNetwork,
+    );
     assert.deepEqual(
       Object.keys(fittedHtml!),
       [

@@ -1,8 +1,8 @@
 import {
-  cardIdToURL,
   extractCardReferenceUrls,
   fieldSerializer,
   relativeTo,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -58,13 +58,13 @@ export class RichMarkdownField extends FieldDef {
       let rel = this[relativeTo];
       let baseUrl = rel
         ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? cardIdToURL(rel).href)
+          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
           : rel.href
         : '';
       return extractCardReferenceUrls(
         this.content,
         baseUrl,
-        virtualNetworkFor(this),
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },
   });
@@ -93,7 +93,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     <template>
@@ -120,7 +120,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     <template>
@@ -165,7 +165,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
       return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
         : rel.href;
     }
     get linkedCards(): CardDef[] | null {

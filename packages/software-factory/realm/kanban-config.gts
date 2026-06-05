@@ -148,5 +148,5 @@ export const ProjectStatusField = enumField(StringField, {
 });
 
 export const GroupByField = enumField(StringField, {
-  options: defaultColumns.map(({ key, label }) => ({ key, label })),
+  options: defaultColumns.map(({ key, label }) => ({ key, label, value: key })),
 });

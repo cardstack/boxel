@@ -1842,4 +1842,245 @@ module(basename(__filename), function () {
       });
     },
   );
+
+  // Regression coverage for the persist-after-invalidate race in
+  // Realm.#sourceCache — the source-read analogue of the
+  // #transpiledModuleCache race above. getSourceOrRedirect reads bytes from
+  // disk under an await, then writes #sourceCache. If invalidateCache fires
+  // inside that window — e.g. a DELETE removing the file while a worker's
+  // indexing fetch of the same source is still in flight — the in-flight
+  // read's set would otherwise re-fill the slot invalidate just cleared,
+  // leaving a subsequent GET serving a file that is already gone from disk.
+  // The reader snapshots the source-cache generation before its first await
+  // and discards its set when the generation moved.
+  //
+  // __testOnlyDelaySourceCacheSet parks a source read at the exact post-read,
+  // pre-set point so the tests can fire invalidate / delete concurrently and
+  // assert on the next request's x-boxel-cache header (and HTTP status, for
+  // the delete case) deterministically — no reliance on real worker timing.
+  module('Realm.#sourceCache set-after-invalidate race', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealm: Realm;
+    let request: RealmRequest;
+
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+    }) {
+      testRealm = args.testRealm;
+      request = withRealmPath(args.request, realmURL);
+    }
+
+    setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
+      realmURL,
+      permissions: {
+        '*': ['read', 'write'],
+        user: ['read', 'write', 'realm-owner'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
+      },
+      onRealmSetup,
+    });
+
+    function authHeader() {
+      return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+    }
+
+    // supertest's Test is a thenable — an identity .then() forces the HTTP
+    // request to dispatch now so the caller can race other work against the
+    // in-flight read instead of waiting on an await to start it.
+    function fireSourceRequest(path: string): Promise<{ status: number }> {
+      return request
+        .get(`/${path}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader())
+        .then((r) => r as { status: number });
+    }
+
+    // Install a gate that parks the next source read AFTER it has read bytes
+    // from disk but BEFORE it writes #sourceCache. `entered` resolves once a
+    // read is actually parked, so tests never depend on a fixed timeout.
+    function parkNextSourceRead(): {
+      release: () => void;
+      entered: Promise<void>;
+    } {
+      let release: () => void = () => {};
+      let gate = new Promise<void>((r) => {
+        release = r;
+      });
+      let signalEntered: () => void = () => {};
+      let entered = new Promise<void>((r) => {
+        signalEntered = r;
+      });
+      testRealm.__testOnlyDelaySourceCacheSet(() => {
+        signalEntered();
+        return gate;
+      });
+      return { release, entered };
+    }
+
+    test('in-flight source read is dropped when invalidateCache fires concurrently', async function (assert) {
+      let modulePath = 'source-race-invalidate.gts';
+      await testRealm.write(modulePath, 'export const v = 1;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(modulePath);
+        await entered;
+
+        // Invalidate mid-read: bumps the source-cache generation and clears
+        // the slot. The parked read's post-gate set must be discarded.
+        testRealm.invalidateCache(modulePath);
+
+        // Stop parking so the assertion request below runs unblocked, then
+        // release the in-flight read.
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+
+        let response = await inflight;
+        assert.strictEqual(
+          response.status,
+          200,
+          'in-flight read still serves the bytes it read at request time',
+        );
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let nextResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        nextResponse.headers['x-boxel-cache'],
+        'miss',
+        'next source request is a cache miss — the in-flight read did not re-fill the slot invalidate cleared',
+      );
+    });
+
+    test('a source read in flight during a delete does not leave the deleted file served from cache', async function (assert) {
+      let modulePath = 'source-race-delete.gts';
+      await testRealm.write(modulePath, 'export const v = 1;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(modulePath);
+        await entered;
+
+        // Delete the file while the read is parked. _deleteUnlocked removes
+        // the file from disk AND calls invalidateCache(path) synchronously —
+        // exactly the concurrency the boxel-cli `push --delete` flake hit,
+        // where a worker's indexing fetch of the source was in flight when
+        // the DELETE landed and re-cached the just-removed bytes.
+        await testRealm.delete(modulePath, { waitForIndex: false });
+
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+        await inflight;
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let afterDelete = await request
+        .get(`/${modulePath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        afterDelete.status,
+        404,
+        'the deleted source is gone — without the generation guard the parked read would re-cache it and this would be a stale 200',
+      );
+    });
+
+    test('invalidateCache of an unrelated path does not drop the in-flight source set', async function (assert) {
+      let primaryPath = 'source-race-primary.gts';
+      let unrelatedPath = 'source-race-unrelated.gts';
+      await testRealm.write(primaryPath, 'export const v = 1;\n');
+      await testRealm.write(unrelatedPath, 'export const v = 2;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(primaryPath);
+        await entered;
+
+        // Invalidate a DIFFERENT path mid-read. primaryPath's generation is
+        // unchanged, so its set must proceed.
+        testRealm.invalidateCache(unrelatedPath);
+
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+        await inflight;
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let nextResponse = await request
+        .get(`/${primaryPath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        nextResponse.headers['x-boxel-cache'],
+        'hit',
+        'cross-path invalidate did not poison the in-flight source set — per-path scoping is correct',
+      );
+    });
+
+    test('in-flight source read is dropped when __testOnlyClearCaches fires concurrently', async function (assert) {
+      let modulePath = 'source-race-clear.gts';
+      await testRealm.write(modulePath, 'export const v = 1;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(modulePath);
+        await entered;
+
+        // Global wipe mid-read. The path-level counter is reset to 0
+        // alongside the parked read's snapshot value, so only the global
+        // generation distinguishes pre/post-wipe — that's what catches the
+        // race here. (__testOnlyClearCaches does not touch the delay hook.)
+        testRealm.__testOnlyClearCaches();
+
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+        await inflight;
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let nextResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        nextResponse.headers['x-boxel-cache'],
+        'miss',
+        'next source request is a cache miss — the global generation bump catches the race the path counter alone would miss',
+      );
+    });
+  });
 });

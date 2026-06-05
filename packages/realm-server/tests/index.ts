@@ -270,7 +270,7 @@ const ALL_TEST_FILES: string[] = [
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',
   './claim-boxel-domain-test',
-  './card-reference-resolver-test',
+  './realm-identifiers-test',
   './bfm-card-references-test',
   './package-shim-handler-test',
   './command-parsing-utils-test',
@@ -293,8 +293,6 @@ const ALL_TEST_FILES: string[] = [
   './session-room-queries-test',
   './indexing-event-sink-test',
   './skip-query-backed-expansion-test',
-  './job-scoped-instance-cache-test',
-  './per-instance-cache-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

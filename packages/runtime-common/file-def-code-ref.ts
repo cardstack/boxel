@@ -1,6 +1,6 @@
 import { baseRealm, baseFileRef } from './constants';
 import type { ResolvedCodeRef } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import type { VirtualNetwork } from './virtual-network';
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;

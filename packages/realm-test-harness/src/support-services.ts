@@ -181,7 +181,7 @@ function assertUsableHostDist(hostPackageDir: string): void {
 }
 
 async function loadSynapseModule() {
-  let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
+  let moduleSpecifier = '../../matrix/support/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     registerUser: (
       synapse: SynapseInstance,
@@ -202,7 +202,7 @@ async function loadSynapseModule() {
 }
 
 async function loadMatrixEnvironmentConfigModule() {
-  let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
+  let moduleSpecifier = '../../matrix/support/environment-config.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     getSynapseURL: (synapse?: { baseUrl?: string; port?: number }) => string;
   };

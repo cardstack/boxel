@@ -1,4 +1,4 @@
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './realm-identifiers';
 import { logger } from './log';
 import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
@@ -320,14 +320,16 @@ export function combinePrerenderedSearchResults(
 
 // Shared opts contract for the federated-search path, kept in one place so
 // SearchableRealm.search, searchRealms, and Realm.search can't drift —
-// dropping a field here (e.g. priority / jobIdentity) silently breaks the
-// threading from the realm-server handler down to searchCards.
+// dropping a field here (e.g. priority) silently breaks the threading from
+// the realm-server handler down to searchCards.
 export type SearchOpts = {
   cacheOnlyDefinitions?: boolean;
-  skipQueryBackedExpansion?: boolean;
+  // Prerender searches set this so `searchCardsUncoalesced` skips the
+  // `loadLinks` relationship-assembly pass entirely (the host re-resolves
+  // every result from card+source and reads only `data[].id`). Live /
+  // external callers leave it unset and receive fully-assembled documents.
   omitIncluded?: boolean;
   priority?: number;
-  jobIdentity?: string;
   // Correlation id minted by the client (the prerendered host stamps
   // `x-boxel-logging-correlation-id` on its `_federated-search` fetch) and read back
   // out by the request handler into opts. When present, `searchRealms`
@@ -426,7 +428,6 @@ export async function searchRealms(
   if (ownsTimings && timings) {
     emitSearchTiming(
       `corr=${opts!.loggingCorrelationId}` +
-        (opts!.jobIdentity ? ` job=${opts!.jobIdentity}` : '') +
         ` realms=${realmEntries.length}` +
         ` total=${Date.now() - startedAt}ms ` +
         timings.toLogFragment(),

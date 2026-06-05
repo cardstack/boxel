@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import type { TestResult } from '../src/factory-agent';

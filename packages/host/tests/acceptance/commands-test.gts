@@ -861,10 +861,14 @@ module('Acceptance | Commands tests', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
-          name: buildCommandFunctionName({
-            module: testRRI('search-and-open-card-command'),
-            name: 'default',
-          }),
+          name: buildCommandFunctionName(
+            {
+              module: testRRI('search-and-open-card-command'),
+              name: 'default',
+            },
+            undefined,
+            getService('network').virtualNetwork,
+          ),
           arguments: JSON.stringify({
             description: 'Finding and opening Hassan card',
             attributes: {
@@ -931,10 +935,14 @@ module('Acceptance | Commands tests', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
-          name: buildCommandFunctionName({
-            module: testRRI('search-and-open-card-command'),
-            name: 'default',
-          }),
+          name: buildCommandFunctionName(
+            {
+              module: testRRI('search-and-open-card-command'),
+              name: 'default',
+            },
+            undefined,
+            getService('network').virtualNetwork,
+          ),
           arguments: JSON.stringify({
             attributes: {
               description: 'Finding and opening Hassan card',

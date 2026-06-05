@@ -30,8 +30,6 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
-  isRegisteredPrefix,
-  cardIdToURL,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
@@ -75,8 +73,9 @@ export interface SerializeOpts {
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
   // The VirtualNetwork to consult for prefix/RRI resolution during
-  // serialization. Optional; sites fall back to the deprecated module-level
-  // resolver when absent.
+  // serialization. Optional: when absent, the `maybeRelativeReference`
+  // closures degrade — prefix-form refs pass through unchanged and only
+  // URL-form bases support URL math.
   virtualNetwork?: VirtualNetwork;
 }
 
@@ -227,23 +226,36 @@ export function serializeCard(
     ...opts,
     ...{
       maybeRelativeReference(possibleReference: string) {
+        let vn = opts?.virtualNetwork;
         // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
-        // in their canonical portable form — return as-is
-        if (
-          opts?.virtualNetwork
-            ? opts.virtualNetwork.isRegisteredPrefix(possibleReference)
-            : isRegisteredPrefix(possibleReference)
-        ) {
+        // in their canonical portable form — return as-is. Without a VN
+        // we can't know which prefixes are registered, so the most we can
+        // do for prefix-form refs is pass them through unchanged.
+        if (vn ? vn.isRegisteredPrefix(possibleReference) : false) {
           return possibleReference;
         }
-        let modelRelativeToForURL =
-          typeof modelRelativeTo === 'string'
-            ? opts?.virtualNetwork
-              ? opts.virtualNetwork.toURL(modelRelativeTo)
-              : cardIdToURL(modelRelativeTo)
-            : modelRelativeTo;
+        let modelRelativeToForURL: URL | undefined;
+        if (typeof modelRelativeTo === 'string') {
+          if (vn) {
+            modelRelativeToForURL = vn.toURL(modelRelativeTo);
+          } else if (
+            modelRelativeTo.startsWith('http://') ||
+            modelRelativeTo.startsWith('https://')
+          ) {
+            modelRelativeToForURL = new URL(modelRelativeTo);
+          }
+        } else {
+          modelRelativeToForURL = modelRelativeTo;
+        }
         let url = maybeURL(possibleReference, modelRelativeToForURL);
         if (!url) {
+          if (!vn) {
+            // Without a VN we can't resolve a prefix-form reference. Pass
+            // through unchanged so callers that don't need relativization
+            // (e.g. test adapters serializing same-realm cards by URL)
+            // don't blow up on portable refs.
+            return possibleReference;
+          }
           throw new Error(
             `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
           );
@@ -335,23 +347,33 @@ export function serializeFileDef(
       ...opts,
       ...{
         maybeRelativeReference(possibleReference: string) {
-          // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
-          // in their canonical portable form — return as-is
-          if (
-            opts?.virtualNetwork
-              ? opts.virtualNetwork.isRegisteredPrefix(possibleReference)
-              : isRegisteredPrefix(possibleReference)
-          ) {
+          let vn = opts?.virtualNetwork;
+          // Registered prefix refs (e.g. @cardstack/catalog/foo) are
+          // already in their canonical portable form — return as-is.
+          // Without a VN we can't know which prefixes are registered,
+          // so the most we can do for prefix-form refs is pass them
+          // through unchanged.
+          if (vn ? vn.isRegisteredPrefix(possibleReference) : false) {
             return possibleReference;
           }
-          let modelRelativeToForURL =
-            typeof modelRelativeTo === 'string'
-              ? opts?.virtualNetwork
-                ? opts.virtualNetwork.toURL(modelRelativeTo)
-                : cardIdToURL(modelRelativeTo)
-              : modelRelativeTo;
+          let modelRelativeToForURL: URL | undefined;
+          if (typeof modelRelativeTo === 'string') {
+            if (vn) {
+              modelRelativeToForURL = vn.toURL(modelRelativeTo);
+            } else if (
+              modelRelativeTo.startsWith('http://') ||
+              modelRelativeTo.startsWith('https://')
+            ) {
+              modelRelativeToForURL = new URL(modelRelativeTo);
+            }
+          } else {
+            modelRelativeToForURL = modelRelativeTo;
+          }
           let url = maybeURL(possibleReference, modelRelativeToForURL);
           if (!url) {
+            if (!vn) {
+              return possibleReference;
+            }
             throw new Error(
               `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
             );

@@ -368,6 +368,8 @@ export default class FileDefManagerImpl
       let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
         commandDef.codeRef,
         commandDef[relativeTo],
+        undefined,
+        this.network.virtualNetwork,
       ) as ResolvedCodeRef;
       const Command = await getClass(
         absoluteCodeRef,

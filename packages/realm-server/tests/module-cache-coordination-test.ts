@@ -36,6 +36,9 @@ const stubVirtualNetwork = {
   }) as typeof fetch,
   isRegisteredPrefix: () => false,
   toURL: (url: string) => new URL(url),
+  resolveURL: (reference: string, relativeTo: URL | string | undefined) =>
+    new URL(reference, relativeTo),
+  unresolveURL: (url: string) => url,
 } as unknown as VirtualNetwork;
 const stubCreatePrerenderAuth = (
   _userId: string,
@@ -70,6 +73,7 @@ function buildModuleResponse(
   const definitionId = internalKeyFor(
     { module: rri(moduleURL), name },
     undefined,
+    stubVirtualNetwork,
   );
   return {
     id: moduleURL,
@@ -545,6 +549,7 @@ module(basename(__filename), function () {
           const definitionId = internalKeyFor(
             { module: rri(moduleURL), name: 'Foo' },
             undefined,
+            stubVirtualNetwork,
           );
           const defA = entryA?.definitions[definitionId];
           const defB = entryB?.definitions[definitionId];

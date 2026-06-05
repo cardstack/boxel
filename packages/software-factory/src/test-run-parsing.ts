@@ -1,4 +1,4 @@
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 
 import type { TestResult } from './factory-agent';
 import type {

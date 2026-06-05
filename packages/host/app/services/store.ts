@@ -2604,10 +2604,7 @@ export function asURL(
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN. `isLocalId` and
-  // `vn.toURL` both consult the VN's mappings and fall back to the
-  // deprecated module-level registry, so prefixes registered either way
-  // produce the same canonical URL.
+  // Locals stay as-is; remotes resolve through the VN.
   return isLocalId(id, vn) ? id : vn.toURL(id).href;
 }
 

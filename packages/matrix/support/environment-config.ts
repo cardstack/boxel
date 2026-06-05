@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { writeFileSync, renameSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
@@ -139,7 +139,6 @@ export function registerSynapseWithTraefik(hostPort: number): void {
 // polling option. See dev-service-registry.ts for the full rationale.
 function kickTraefikIfNeeded(): void {
   if (process.platform !== 'darwin') return;
-  let { spawn } = require('child_process') as typeof import('child_process');
   let child = spawn('docker', ['restart', 'boxel-traefik'], {
     stdio: 'ignore',
     detached: true,

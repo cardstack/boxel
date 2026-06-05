@@ -1,3 +1,5 @@
+import { service } from '@ember/service';
+
 import {
   codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
@@ -19,9 +21,13 @@ import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
 import ValidateRealmCommand from './validate-realm';
 
+import type NetworkService from '../services/network';
+
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
 > {
+  @service declare private network: NetworkService;
+
   description = 'Catalog listing use command';
 
   async getInputType() {
@@ -54,7 +60,12 @@ export default class ListingUseCommand extends HostBaseCommand<
       if (spec.isComponent) {
         return;
       }
-      let ref = codeRefWithAbsoluteIdentifier(spec.ref, rri(spec.id));
+      let ref = codeRefWithAbsoluteIdentifier(
+        spec.ref,
+        rri(spec.id),
+        undefined,
+        this.network.virtualNetwork,
+      );
       if (!isResolvedCodeRef(ref)) {
         throw new Error('ref is not a resolved code ref');
       }
