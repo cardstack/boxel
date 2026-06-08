@@ -50,6 +50,7 @@ import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
   isCommandDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
@@ -219,6 +220,14 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
+  private get showComponentPanel() {
+    return (
+      this.isModule &&
+      this.args.selectedDeclaration &&
+      isComponentDeclaration(this.args.selectedDeclaration)
+    );
+  }
+
   private get cardType() {
     if (
       this.args.selectedDeclaration &&
@@ -241,9 +250,27 @@ export default class DetailPanel extends Component<Signature> {
   private get definitionActions() {
     if (
       this.args.selectedDeclaration &&
-      !isCardOrFieldDeclaration(this.args.selectedDeclaration)
+      !isCardOrFieldDeclaration(this.args.selectedDeclaration) &&
+      !isComponentDeclaration(this.args.selectedDeclaration)
     ) {
       return [];
+    }
+    // A component declaration isn't instantiable or inheritable like a card def,
+    // so the only definition action it supports is being published as a listing.
+    if (
+      this.args.selectedDeclaration &&
+      isComponentDeclaration(this.args.selectedDeclaration)
+    ) {
+      return this.realm.canWrite(this.args.readyFile.url) &&
+        this.args.selectedDeclaration.exportName
+        ? [
+            {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListing,
+            },
+          ]
+        : [];
     }
     return [
       // internal cards are not really meant to be addressable instances, but
@@ -448,7 +475,19 @@ export default class DetailPanel extends Component<Signature> {
       }
       await command.execute({ openCardIds, codeRef, targetRealm });
     } else {
-      const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      let codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      // A default-exported component surfaces with exportName 'default'; use the
+      // class's local name so the listing and its spec read as the component
+      // (e.g. "SubmissionTestComponent") rather than "default".
+      let decl = this.args.selectedDeclaration;
+      if (
+        decl &&
+        isComponentDeclaration(decl) &&
+        codeRef.name === 'default' &&
+        decl.localName
+      ) {
+        codeRef = { ...codeRef, name: decl.localName };
+      }
       let openCardIds: string[] = this.args.cardInstance?.id
         ? [this.args.cardInstance.id]
         : [];
@@ -763,6 +802,24 @@ export default class DetailPanel extends Component<Signature> {
           </PanelHeader>
           <ModuleDefinitionContainer
             @title='Command'
+            @fileURL={{@readyFile.url}}
+            @name={{this.selectedDeclarationName}}
+            @fileExtension={{this.fileExtension}}
+            @isActive={{true}}
+            @actions={{this.definitionActions}}
+            @infoText={{this.lastModified.value}}
+          />
+        </PanelSection>
+      {{else if this.showComponentPanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader
+            aria-label='Component Panel Header'
+            data-test-component-panel-header
+          >
+            Component
+          </PanelHeader>
+          <ModuleDefinitionContainer
+            @title='Component'
             @fileURL={{@readyFile.url}}
             @name={{this.selectedDeclarationName}}
             @fileExtension={{this.fileExtension}}

@@ -20,6 +20,7 @@ import {
   type CommandDeclaration,
   isCardOrFieldDeclaration,
   isCommandDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/services/module-contents-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -27,6 +28,7 @@ import type NetworkService from '@cardstack/host/services/network';
 export {
   isCardOrFieldDeclaration,
   isCommandDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
   type ModuleDeclaration,
   type CardOrFieldDeclaration,

@@ -1,3 +1,5 @@
+import { service } from '@ember/service';
+
 import type {
   LooseSingleCardDocument,
   ResolvedCodeRef,
@@ -23,6 +25,11 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import {
+  findDeclarationByName,
+  isComponentDeclaration,
+} from '../services/module-contents-service';
+
 import AuthedFetchCommand from './authed-fetch';
 import CreateSpecCommand from './create-specs';
 import GenerateThumbnailCommand from './generate-thumbnail';
@@ -35,7 +42,9 @@ import SearchAndChooseCommand from './search-and-choose';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
 import StoreAddCommand from './store-add';
 
-type ListingType = 'card' | 'skill' | 'theme' | 'field';
+import type ModuleContentsService from '../services/module-contents-service';
+
+type ListingType = 'card' | 'skill' | 'theme' | 'field' | 'component';
 
 const BASE_CARD_API_MODULE = 'https://cardstack.com/base/card-api';
 const BASE_SKILL_MODULE = 'https://cardstack.com/base/skill';
@@ -45,12 +54,15 @@ const listingSubClass: Record<ListingType, string> = {
   skill: 'SkillListing',
   theme: 'ThemeListing',
   field: 'FieldListing',
+  component: 'ComponentListing',
 };
 
 export default class ListingCreateCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateInput,
   typeof BaseCommandModule.ListingCreateResult
 > {
+  @service declare private moduleContentsService: ModuleContentsService;
+
   static actionVerb = 'Create';
   description = 'Create a catalog listing for an example card';
 
@@ -190,6 +202,12 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async guessListingType(
     codeRef: ResolvedCodeRef,
   ): Promise<ListingType> {
+    // A Glimmer component isn't a card/field def, so loadCardDef can't classify
+    // it — detect it from the module's declarations before falling through.
+    if (await this.isComponentExport(codeRef)) {
+      return 'component';
+    }
+
     let cardDef;
     try {
       cardDef = await loadCardDef(codeRef, {
@@ -209,6 +227,18 @@ export default class ListingCreateCommand extends HostBaseCommand<
       return 'skill';
     }
     return 'card';
+  }
+
+  private async isComponentExport(codeRef: ResolvedCodeRef): Promise<boolean> {
+    try {
+      let declarations = await this.moduleContentsService.assemble(
+        codeRef.module,
+      );
+      let declaration = findDeclarationByName(codeRef.name, declarations);
+      return declaration ? isComponentDeclaration(declaration) : false;
+    } catch {
+      return false;
+    }
   }
 
   private isAncestor(
