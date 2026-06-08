@@ -1,6 +1,5 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import { Memoize } from 'typescript-memoize';
 import http from 'http';
 import http2 from 'http2';
 import net from 'net';
@@ -602,6 +601,7 @@ export class RealmServer {
   private prerenderer: Prerenderer | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
+  private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
     serverURL,
@@ -697,8 +697,11 @@ export class RealmServer {
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
-  @Memoize()
   get app() {
+    return (this.cachedApp ??= this.buildApp());
+  }
+
+  private buildApp() {
     let { serveIndex, serveHostApp } = createServeIndex({
       serverURL: this.serverURL,
       assetsURL: this.assetsURL,

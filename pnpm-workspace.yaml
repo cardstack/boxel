@@ -240,7 +240,6 @@ catalog:
   tmp: ^0.2.1
   tracked-built-ins: ^4.0.0
   typescript: ~5.9.3
-  typescript-memoize: ^1.1.1
   undici: ^7.22.0
   uuid: ^9.0.1
   validate-peer-dependencies: ^1.1.0

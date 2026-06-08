@@ -1,4 +1,3 @@
-import { Memoize } from 'typescript-memoize';
 import { isScopedCSSRequest } from './scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
@@ -213,6 +212,7 @@ function absolutizeInstanceURL(
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
+  #realmURL: URL | undefined;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
@@ -278,9 +278,8 @@ export class RealmIndexQueryEngine {
     this.#fetch = fetch;
   }
 
-  @Memoize()
   private get realmURL() {
-    return new URL(this.#realm.url);
+    return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
   async searchCards(
