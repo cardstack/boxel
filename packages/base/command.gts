@@ -670,8 +670,9 @@ export class GetPublishedRealmsInput extends CardDef {
   @field realmURL = contains(StringField);
 }
 
-// One published destination for a source realm. lastPublishedAt is an
-// ISO-8601 timestamp string (empty when never published).
+// One published destination for a source realm. lastPublishedAt mirrors the
+// realm-server value: epoch milliseconds rendered as a string (Date.now()
+// .toString()); absent when the realm has never been published.
 export class PublishedRealmInfo extends FieldDef {
   @field publishedRealmURL = contains(StringField);
   @field lastPublishedAt = contains(StringField);

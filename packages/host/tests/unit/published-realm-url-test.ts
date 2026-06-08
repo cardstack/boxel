@@ -150,6 +150,57 @@ module('Unit | published-realm-url', function () {
         /requires a hostname/,
       );
     });
+
+    test('rejects a hostname that includes a path', function (assert) {
+      assert.throws(
+        () =>
+          resolvePublishedRealmUrl({
+            type: 'custom',
+            name: 'mysite.boxel.site/foo',
+          }),
+        /path, query, or fragment/,
+      );
+    });
+
+    test('rejects a hostname that includes credentials', function (assert) {
+      assert.throws(
+        () =>
+          resolvePublishedRealmUrl({
+            type: 'custom',
+            name: 'user:pass@mysite.boxel.site',
+          }),
+        /must not include credentials/,
+      );
+    });
+
+    test('rejects a hostname that includes a query or fragment', function (assert) {
+      assert.throws(
+        () =>
+          resolvePublishedRealmUrl({
+            type: 'custom',
+            name: 'mysite.boxel.site?a=1',
+          }),
+        /path, query, or fragment/,
+      );
+      assert.throws(
+        () =>
+          resolvePublishedRealmUrl({
+            type: 'custom',
+            name: 'mysite.boxel.site#frag',
+          }),
+        /path, query, or fragment/,
+      );
+    });
+
+    test('normalizes an accidental protocol passed in ctx', function (assert) {
+      assert.strictEqual(
+        resolvePublishedRealmUrl(
+          { type: 'custom', name: 'mysite.boxel.site' },
+          { protocol: 'https://' },
+        ),
+        'https://mysite.boxel.site/',
+      );
+    });
   });
 
   test('throws on an unknown target type', function (assert) {

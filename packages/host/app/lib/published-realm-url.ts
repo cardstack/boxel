@@ -54,27 +54,55 @@ export function deriveRealmName(realmURL: string): string {
   return lastSegment.toLowerCase();
 }
 
-// Strips a leading protocol and any trailing slash from a hostname so a caller
-// may pass either "host:port" or "https://host:port/".
-function normalizeHostname(value: string): string {
-  return value.replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '');
+// Parses a custom-domain target's name into a bare host (with port when
+// present). A custom target maps to `https://<host>/`, so anything beyond a
+// hostname — credentials, a path, a query, or a fragment — means the caller
+// passed a URL or made a mistake, and is rejected rather than silently
+// producing a non-root published-realm URL. A leading protocol is tolerated so
+// callers may pass either "host:port" or "https://host:port/".
+function parseCustomHostname(value: string): string {
+  let trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error('A custom publish target requires a hostname in `name`');
+  }
+  let withProtocol = /^[a-z]+:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withProtocol);
+  } catch {
+    throw new Error(`Invalid custom publish target hostname: "${value}"`);
+  }
+  if (url.username || url.password) {
+    throw new Error(
+      `A custom publish target hostname must not include credentials: "${value}"`,
+    );
+  }
+  if ((url.pathname && url.pathname !== '/') || url.search || url.hash) {
+    throw new Error(
+      `A custom publish target must be a bare hostname, not a URL with a path, query, or fragment: "${value}"`,
+    );
+  }
+  return url.host; // host includes the port when present
+}
+
+// Normalizes a caller-supplied protocol to a bare scheme so a value like
+// "https" or an accidental "https://" both yield "https".
+function normalizeProtocol(protocol: string): string {
+  return protocol.replace(/:\/*$/, '');
 }
 
 export function resolvePublishedRealmUrl(
   target: PublishTargetSpec,
   ctx: PublishedRealmUrlContext = {},
 ): string {
-  let protocol = ctx.protocol ?? DEFAULT_PROTOCOL;
+  let protocol = normalizeProtocol(ctx.protocol ?? DEFAULT_PROTOCOL);
 
   switch (target.type) {
     case 'custom': {
-      let hostname = normalizeHostname((target.name ?? '').trim());
-      if (!hostname) {
-        throw new Error(
-          'A custom publish target requires a hostname in `name`',
-        );
-      }
-      return `${protocol}://${hostname}/`;
+      let host = parseCustomHostname(target.name ?? '');
+      return `${protocol}://${host}/`;
     }
     case 'subdirectory': {
       let realmName = (target.name ?? '').trim();
