@@ -62,11 +62,11 @@ interface WorkflowContext {
 }
 
 class StepError extends Error {
-  constructor(
-    readonly step: FailedStep,
-    cause: unknown,
-  ) {
+  readonly step: FailedStep;
+
+  constructor(step: FailedStep, cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.step = step;
     this.name = 'StepError';
   }
 }

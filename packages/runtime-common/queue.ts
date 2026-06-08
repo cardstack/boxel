@@ -136,10 +136,12 @@ export function makeQueueWaiter<TResult>(
 }
 
 export class Job<T> {
-  constructor(
-    readonly id: number,
-    private notifier: Deferred<T>,
-  ) {}
+  readonly id: number;
+  private notifier: Deferred<T>;
+  constructor(id: number, notifier: Deferred<T>) {
+    this.id = id;
+    this.notifier = notifier;
+  }
   get done(): Promise<T> {
     return this.notifier.promise;
   }

@@ -2,8 +2,11 @@ import type { PgAdapter } from './pg-adapter';
 
 export class TransactionManager {
   private isInTransaction = false;
+  private client: PgAdapter;
 
-  constructor(private client: PgAdapter) {}
+  constructor(client: PgAdapter) {
+    this.client = client;
+  }
 
   async begin(): Promise<void> {
     if (this.isInTransaction) {

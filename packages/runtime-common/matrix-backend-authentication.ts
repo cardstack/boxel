@@ -11,10 +11,12 @@ export interface Utils {
 }
 
 export class MatrixBackendAuthentication {
-  constructor(
-    private matrixClient: MatrixClient,
-    private utils: Utils,
-  ) {}
+  private matrixClient: MatrixClient;
+  private utils: Utils;
+  constructor(matrixClient: MatrixClient, utils: Utils) {
+    this.matrixClient = matrixClient;
+    this.utils = utils;
+  }
 
   async createSession(request: Request): Promise<Response> {
     if (!(await this.matrixClient.isTokenValid())) {

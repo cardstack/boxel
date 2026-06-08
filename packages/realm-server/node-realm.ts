@@ -79,10 +79,13 @@ function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
 }
 
 export class NodeAdapter implements RealmAdapter {
-  constructor(
-    private realmDir: string,
-    private enableFileWatcher?: boolean,
-  ) {}
+  private realmDir: string;
+  private enableFileWatcher?: boolean;
+
+  constructor(realmDir: string, enableFileWatcher?: boolean) {
+    this.realmDir = realmDir;
+    this.enableFileWatcher = enableFileWatcher;
+  }
 
   get dir(): string {
     return this.realmDir;

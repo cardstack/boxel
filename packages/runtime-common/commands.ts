@@ -50,7 +50,11 @@ export abstract class Command<
   name: string = this.constructor.name;
   description = '';
 
-  constructor(protected readonly commandContext: CommandContext) {}
+  protected readonly commandContext: CommandContext;
+
+  constructor(commandContext: CommandContext) {
+    this.commandContext = commandContext;
+  }
 
   async execute(): Promise<CardInstance<CardResultType>>;
   async execute(

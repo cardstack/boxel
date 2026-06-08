@@ -31,16 +31,22 @@ export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     vscode.TreeItem | undefined | null | void
   > = this._onDidChangeTreeData.event;
 
+  private realmAuth: RealmAuth;
+  private context: vscode.ExtensionContext;
+  private localFileSystem: LocalFileSystem;
   private skillLists: SkillList[] = [];
   private dataPath: string;
   private cursorRulesPath: string;
   private enabledSkillIds: Set<string> = new Set();
 
   constructor(
-    private realmAuth: RealmAuth,
-    private context: vscode.ExtensionContext,
-    private localFileSystem: LocalFileSystem,
+    realmAuth: RealmAuth,
+    context: vscode.ExtensionContext,
+    localFileSystem: LocalFileSystem,
   ) {
+    this.realmAuth = realmAuth;
+    this.context = context;
+    this.localFileSystem = localFileSystem;
     // Use the local storage path provided by LocalFileSystem
     this.dataPath = path.join(
       this.localFileSystem.getLocalStoragePath(),
@@ -326,12 +332,15 @@ export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
 }
 
 export class Skill extends vscode.TreeItem {
-  constructor(
-    public readonly label: string,
-    public readonly instructions: string,
-    public readonly id: string,
-  ) {
+  public readonly label: string;
+  public readonly instructions: string;
+  public readonly id: string;
+
+  constructor(label: string, instructions: string, id: string) {
     super(label);
+    this.label = label;
+    this.instructions = instructions;
+    this.id = id;
     this.checkboxState = vscode.TreeItemCheckboxState.Unchecked;
   }
   getChildren(_element?: SkillList): Thenable<Skill[]> {
@@ -341,13 +350,15 @@ export class Skill extends vscode.TreeItem {
 
 export class SkillList extends vscode.TreeItem {
   skills: Skill[] = [];
+  public readonly label: string;
+  public readonly realmUrl: string;
+  public readonly readOnly: boolean;
 
-  constructor(
-    public readonly label: string,
-    public readonly realmUrl: string,
-    public readonly readOnly: boolean = false,
-  ) {
+  constructor(label: string, realmUrl: string, readOnly: boolean = false) {
     super(label);
+    this.label = label;
+    this.realmUrl = realmUrl;
+    this.readOnly = readOnly;
     this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   }
 

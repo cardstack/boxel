@@ -18,12 +18,11 @@ interface PullOptions extends SyncOptions {
 class RealmPuller extends RealmSyncBase {
   hasError = false;
   downloadedFiles: string[] = [];
+  private pullOptions: PullOptions;
 
-  constructor(
-    private pullOptions: PullOptions,
-    authenticator: RealmAuthenticator,
-  ) {
+  constructor(pullOptions: PullOptions, authenticator: RealmAuthenticator) {
     super(pullOptions, authenticator);
+    this.pullOptions = pullOptions;
   }
 
   async sync(): Promise<void> {

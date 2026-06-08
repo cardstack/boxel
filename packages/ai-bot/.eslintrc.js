@@ -80,19 +80,4 @@ module.exports = {
     ],
     'no-restricted-syntax': ['error', ...NO_COMPILATION_REQUIRED_TS_SELECTORS],
   },
-  overrides: [
-    {
-      // Files exempted from the erasable-TypeScript rules because they use
-      // TypeScript constructor parameter properties, which are not erasable.
-      // Do not add new files here; refactor a file to declare its fields
-      // explicitly to remove its entry.
-      files: [
-        'lib/matrix/response-event-data.ts',
-        'lib/matrix/response-publisher.ts',
-      ],
-      rules: {
-        '@typescript-eslint/parameter-properties': 'off',
-      },
-    },
-  ],
 };

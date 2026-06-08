@@ -89,11 +89,13 @@ export class WorkLoop {
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
   private runnerPromise: Promise<void> | undefined;
+  private label: string;
+  private pollInterval: number;
 
-  constructor(
-    private label: string,
-    private pollInterval: number,
-  ) {}
+  constructor(label: string, pollInterval: number) {
+    this.label = label;
+    this.pollInterval = pollInterval;
+  }
 
   // 1. Your fn should loop until workLoop.shuttingDown is true.
   // 2. When it has no work to do, it should await workLoop.sleep().

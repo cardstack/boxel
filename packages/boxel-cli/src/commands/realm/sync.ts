@@ -56,12 +56,11 @@ class RealmSyncer extends RealmSyncBase {
   // so callers don't have to scrape stderr to learn why the batch
   // failed.
   uploadFatalMessage?: string;
+  private syncOptions: BiSyncOptions;
 
-  constructor(
-    private syncOptions: BiSyncOptions,
-    authenticator: RealmAuthenticator,
-  ) {
+  constructor(syncOptions: BiSyncOptions, authenticator: RealmAuthenticator) {
     super(syncOptions, authenticator);
+    this.syncOptions = syncOptions;
   }
 
   private get conflictStrategy(): ConflictStrategy | null {
