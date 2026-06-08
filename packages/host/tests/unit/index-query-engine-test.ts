@@ -354,9 +354,9 @@ module('Unit | query', function (hooks) {
     );
   });
 
-  // CS-11431: the projection-parametrized `search()` underlying both
-  // `searchCards` (dataOnly) and `searchPrerendered` (render). The existing
-  // wrapper tests are the parity goldens; these cover the new shared method.
+  // The projection-parametrized `search()` underlying both `searchCards`
+  // (dataOnly) and `searchPrerendered` (render). The existing wrapper tests are
+  // the parity goldens; these cover the new shared method directly.
   test('search() projects the same row set and total across dataOnly and render', async function (assert) {
     let { mango, vangogh } = testCards;
     let personCard = await personCardType(testCards);
