@@ -115,13 +115,13 @@ module('Unit | instance-filter-matcher', function (hooks) {
     loader.shimModule(`${testRealmURL}cat`, { Cat });
     loader.shimModule(`${testRealmURL}event`, { Event });
 
-    personRef = { module: `${testRealmURL}person`, name: 'Person' };
+    personRef = { module: rri(`${testRealmURL}person`), name: 'Person' };
     fancyPersonRef = {
-      module: `${testRealmURL}fancy-person`,
+      module: rri(`${testRealmURL}fancy-person`),
       name: 'FancyPerson',
     };
-    catRef = { module: `${testRealmURL}cat`, name: 'Cat' };
-    eventRef = { module: `${testRealmURL}event`, name: 'Event' };
+    catRef = { module: rri(`${testRealmURL}cat`), name: 'Cat' };
+    eventRef = { module: rri(`${testRealmURL}event`), name: 'Event' };
 
     let ringo = new Person({
       name: 'Ringo',
