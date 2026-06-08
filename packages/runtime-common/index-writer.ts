@@ -194,13 +194,19 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   declare private realmVersion: number;
+  private realmURL: URL; // this assumes that we only index cards in our own realm...
+  private virtualNetwork: VirtualNetwork;
+  private jobInfo?: JobInfo;
 
   constructor(
     dbAdapter: DBAdapter,
-    private realmURL: URL, // this assumes that we only index cards in our own realm...
-    private virtualNetwork: VirtualNetwork,
-    private jobInfo?: JobInfo,
+    realmURL: URL,
+    virtualNetwork: VirtualNetwork,
+    jobInfo?: JobInfo,
   ) {
+    this.realmURL = realmURL;
+    this.virtualNetwork = virtualNetwork;
+    this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();

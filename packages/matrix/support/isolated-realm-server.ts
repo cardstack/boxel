@@ -708,7 +708,9 @@ export interface SQLExecutor {
 
 export class BasicSQLExecutor implements SQLExecutor {
   pool: Pool;
-  constructor(readonly db: string) {
+  readonly db: string;
+  constructor(db: string) {
+    this.db = db;
     this.pool = new Pool({
       host: 'localhost',
       port: 5435,
@@ -733,13 +735,21 @@ export class IsolatedRealmServer implements SQLExecutor {
   private workerManagerStopped: (() => void) | undefined;
   private sqlResults: ((results: string) => void) | undefined;
   private sqlError: ((error: string) => void) | undefined;
+  private realmServerProcess: ReturnType<typeof spawn>;
+  private workerManagerProcess: ReturnType<typeof spawn>;
+  readonly realmPath: string; // useful for debugging
+  readonly db: string;
 
   constructor(
-    private realmServerProcess: ReturnType<typeof spawn>,
-    private workerManagerProcess: ReturnType<typeof spawn>,
-    readonly realmPath: string, // useful for debugging
-    readonly db: string,
+    realmServerProcess: ReturnType<typeof spawn>,
+    workerManagerProcess: ReturnType<typeof spawn>,
+    realmPath: string,
+    db: string,
   ) {
+    this.realmServerProcess = realmServerProcess;
+    this.workerManagerProcess = workerManagerProcess;
+    this.realmPath = realmPath;
+    this.db = db;
     workerManagerProcess.on('message', (message) => {
       if (message === 'stopped') {
         if (!this.workerManagerStopped) {

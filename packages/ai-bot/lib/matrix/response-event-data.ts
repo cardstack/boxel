@@ -5,12 +5,14 @@ export default class ResponseEventData {
   contentEndIndex: number = 0;
   reasoningStartIndex: number = 0;
   reasoningEndIndex: number = 0;
+  readonly eventSizeMax: number;
 
   constructor(
     eventId: string | undefined,
-    readonly eventSizeMax: number,
+    eventSizeMax: number,
     contentStartIndex: number = 0,
   ) {
+    this.eventSizeMax = eventSizeMax;
     this.eventId = eventId;
     this.contentStartIndex = contentStartIndex;
   }

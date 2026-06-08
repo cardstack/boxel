@@ -4,12 +4,18 @@ import { RealmPaths, logger } from './index';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
-export enum AuthenticationErrorMessages {
-  MissingAuthHeader = 'Missing Authorization header',
-  PermissionMismatch = "User permissions in the JWT payload do not match the server's permissions", // Could happen if the user's permissions were changed during the life of the JWT
-  TokenExpired = 'Token expired',
-  TokenInvalid = 'Token invalid',
-}
+// A `const` object (rather than a TS `enum`) so the declaration is
+// erasable and runs under Node's native `--experimental-strip-types`.
+export const AuthenticationErrorMessages = {
+  MissingAuthHeader: 'Missing Authorization header',
+  // Could happen if the user's permissions were changed during the life of the JWT
+  PermissionMismatch:
+    "User permissions in the JWT payload do not match the server's permissions",
+  TokenExpired: 'Token expired',
+  TokenInvalid: 'Token invalid',
+} as const;
+export type AuthenticationErrorMessages =
+  (typeof AuthenticationErrorMessages)[keyof typeof AuthenticationErrorMessages];
 
 type Handler = (
   request: Request,

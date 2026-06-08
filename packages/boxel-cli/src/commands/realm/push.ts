@@ -32,12 +32,11 @@ const REMOTE_DELETE_EXCLUSIONS = new Set(['index.json', 'realm.json']);
 
 class RealmPusher extends RealmSyncBase {
   hasError = false;
+  private pushOptions: PushOptions;
 
-  constructor(
-    private pushOptions: PushOptions,
-    authenticator: RealmAuthenticator,
-  ) {
+  constructor(pushOptions: PushOptions, authenticator: RealmAuthenticator) {
     super(pushOptions, authenticator);
+    this.pushOptions = pushOptions;
   }
 
   async sync(): Promise<void> {

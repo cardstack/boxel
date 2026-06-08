@@ -576,11 +576,11 @@ async function stopChildProcess(
 }
 
 class PrerenderPortContentionError extends Error {
-  constructor(
-    public readonly port: number,
-    message: string,
-  ) {
+  public readonly port: number;
+
+  constructor(port: number, message: string) {
     super(message);
+    this.port = port;
     this.name = 'PrerenderPortContentionError';
   }
 }

@@ -30,11 +30,13 @@ type WalkNode = AnyNode | null | undefined;
 export class IdentifierRewriter {
   private readonly scopeChain: Scope[] = [];
   private usesImportMeta = false;
+  private readonly ms: MagicString;
+  private readonly importedAccess: ReadonlyMap<string, string>;
 
-  constructor(
-    private readonly ms: MagicString,
-    private readonly importedAccess: ReadonlyMap<string, string>,
-  ) {}
+  constructor(ms: MagicString, importedAccess: ReadonlyMap<string, string>) {
+    this.ms = ms;
+    this.importedAccess = importedAccess;
+  }
 
   // Walk the AST. Returns true iff at least one `import.meta` usage
   // was rewritten — caller uses that to decide whether to declare the

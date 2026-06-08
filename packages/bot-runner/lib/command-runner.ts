@@ -63,12 +63,16 @@ export function makeEnqueueRunCommand(
 
 export class CommandRunner {
   private enqueueRunCommand: EnqueueRunCommandFn;
+  private dbAdapter: DBAdapter;
+  private handlers: BotCommandHandler[];
 
   constructor(
-    private dbAdapter: DBAdapter,
+    dbAdapter: DBAdapter,
     queuePublisher: QueuePublisher,
-    private handlers: BotCommandHandler[] = [],
+    handlers: BotCommandHandler[] = [],
   ) {
+    this.dbAdapter = dbAdapter;
+    this.handlers = handlers;
     this.enqueueRunCommand = makeEnqueueRunCommand(queuePublisher, dbAdapter);
   }
 
