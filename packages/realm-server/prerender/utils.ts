@@ -10,7 +10,7 @@ import {
 import { prerenderRenderTimeoutMs } from './prerender-constants';
 import { getPendingNetworkRequests } from './network-inflight-tracker';
 
-import type { Page } from 'puppeteer';
+import type { CDPSession, Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
@@ -1299,15 +1299,22 @@ export async function captureScreenshot(
 // the condition where the in-page `__boxelRenderDiagnostics` hook also
 // goes dark. Never throws — resolves to a boolean.
 async function probeMainThreadResponsive(page: Page): Promise<boolean> {
-  return Promise.race([
-    page
-      .evaluate(() => true)
-      .then(() => true)
-      .catch(() => false),
-    new Promise<boolean>((r) =>
-      setTimeout(() => r(false), RESPONSIVENESS_PROBE_MS),
-    ),
-  ]);
+  // Clear the loser timer so a fast `evaluate` doesn't leave a pending
+  // timeout holding the event loop for the rest of the probe window.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      page
+        .evaluate(() => true)
+        .then(() => true)
+        .catch(() => false),
+      new Promise<boolean>((r) => {
+        timer = setTimeout(() => r(false), RESPONSIVENESS_PROBE_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Best-effort CPU / heap capture via the CDP `Performance` domain. Runs
@@ -1323,7 +1330,7 @@ async function captureCpuMetrics(page: Page): Promise<{
   taskBusyFraction?: number;
   jsHeapUsedMB?: number;
 }> {
-  let client;
+  let client: CDPSession | undefined;
   try {
     client = await page.createCDPSession();
     await client.send('Performance.enable');
@@ -1389,7 +1396,11 @@ export async function withTimeout<T>(
   // one stalled on its own.
   activeRenderCount++;
   let concurrentRenders = activeRenderCount;
-  let result;
+  let result!: T | { timeout: true };
+  // Capture the timeout timer so we can clear it once the race settles —
+  // otherwise a render that finishes fast leaves a pending timer holding
+  // the event loop for the full `timeoutMs`.
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     result = await Promise.race([
       fn().catch((err) => {
@@ -1400,15 +1411,16 @@ export async function withTimeout<T>(
         }
         throw err;
       }),
-      new Promise<{ timeout: true }>((r) =>
-        setTimeout(() => {
+      new Promise<{ timeout: true }>((r) => {
+        timeoutTimer = setTimeout(() => {
           r({ timeout: true });
-        }, timeoutMs),
-      ),
+        }, timeoutMs);
+      }),
     ]);
     concurrentRenders = activeRenderCount;
   } finally {
     activeRenderCount--;
+    clearTimeout(timeoutTimer);
   }
   if (
     result &&
