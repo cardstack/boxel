@@ -341,10 +341,16 @@ export async function parseUnifiedSearchRequestFromRequest(
 export function parseUnifiedSearchRequestFromPayload(
   payload: unknown,
 ): UnifiedSearchRequest {
-  let payloadRecord =
-    payload && typeof payload === 'object'
-      ? (payload as Record<string, any>)
-      : {};
+  // Reject a non-object body (null / string / number / boolean) rather than
+  // coercing it to `{}` and treating it as an empty broad search — matching
+  // the live parser, which passes such payloads straight to `assertQuery`.
+  if (payload == null || typeof payload !== 'object') {
+    throw new SearchRequestError(
+      'invalid-query',
+      'Invalid query: request body must be a JSON object',
+    );
+  }
+  let payloadRecord = payload as Record<string, any>;
 
   // `dataOnly: true` is the only way to get live-only results; anything else
   // (including a missing `render`) keeps the prefer-HTML default.

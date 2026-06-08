@@ -297,10 +297,20 @@ export function isRenderedHtmlResource(
   if (typeof resource.id !== 'string') {
     return false;
   }
-  if (typeof resource.attributes !== 'object' || resource.attributes == null) {
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
     return false;
   }
-  return typeof resource.attributes.html === 'string';
+  if (
+    typeof attributes.html !== 'string' ||
+    typeof attributes.cardType !== 'string'
+  ) {
+    return false;
+  }
+  // The has-many `styles` relationship is part of the type, so a sound guard
+  // must confirm it before a consumer reads the stylesheet links.
+  let styles = resource.relationships?.styles;
+  return Boolean(styles && Array.isArray(styles.data));
 }
 
 export function isCssResource(resource: any): resource is CssResource {

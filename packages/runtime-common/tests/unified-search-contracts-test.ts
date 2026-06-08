@@ -1,5 +1,5 @@
 import type { SharedTests } from '../helpers';
-import type { RealmResourceIdentifier } from '../realm-identifiers';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers';
 import type {
   CardResource,
   CssResource,
@@ -15,7 +15,7 @@ import {
 import { parseUnifiedSearchRequestFromPayload } from '../search-utils';
 
 const realmURL = 'http://localhost:4201/test/';
-const cardUrl = `${realmURL}Author/1`;
+const cardUrl = rri(`${realmURL}Author/1`);
 
 const authorRef = {
   module: `${realmURL}author` as RealmResourceIdentifier,
@@ -116,8 +116,26 @@ const tests = Object.freeze({
         type: 'rendered-html',
         id: cardUrl,
         attributes: { cardType: 'Author' },
+        relationships: { styles: { data: [] } },
       }),
       'a rendered-html resource without html is rejected',
+    );
+    assert.false(
+      isRenderedHtmlResource({
+        type: 'rendered-html',
+        id: cardUrl,
+        attributes: { html: '<div></div>' },
+        relationships: { styles: { data: [] } },
+      }),
+      'a rendered-html resource without cardType is rejected',
+    );
+    assert.false(
+      isRenderedHtmlResource({
+        type: 'rendered-html',
+        id: cardUrl,
+        attributes: { html: '<div></div>', cardType: 'Author' },
+      }),
+      'a rendered-html resource without a styles relationship is rejected',
     );
   },
 
@@ -187,6 +205,17 @@ const tests = Object.freeze({
         render: { renderType: 'bogus' },
       }),
     );
+  },
+
+  'parse: a non-object body is rejected': async (assert) => {
+    // null / string / number must not coerce to an empty broad search.
+    for (let bad of [null, 'a string', 42, true]) {
+      assert.throws(
+        () => parseUnifiedSearchRequestFromPayload(bad as unknown),
+        /must be a JSON object/,
+        `rejects ${JSON.stringify(bad)}`,
+      );
+    }
   },
 
   'parse: dataOnly true yields live-only with no render': async (assert) => {
