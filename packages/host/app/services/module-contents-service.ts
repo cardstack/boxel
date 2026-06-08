@@ -77,6 +77,23 @@ export function isReexportCardOrField(
   );
 }
 
+export function isComponentDeclaration(
+  declaration: ModuleDeclaration,
+): boolean {
+  if (
+    !('super' in declaration) ||
+    !declaration.super ||
+    declaration.super.type !== 'external'
+  ) {
+    return false;
+  }
+  let { name, module } = declaration.super;
+  return (
+    module === '@glimmer/component' ||
+    (name === 'Component' && module === 'https://cardstack.com/base/card-api')
+  );
+}
+
 function hasCardOrFieldProperties(declaration: ModuleDeclaration) {
   return (
     (declaration as CardOrField).cardType !== undefined &&
