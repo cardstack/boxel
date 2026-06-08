@@ -184,6 +184,7 @@ const ALL_TEST_FILES: string[] = [
   './listener-dispatcher-test',
   './module-cache-race-test',
   './module-syntax-test',
+  './network-inflight-tracker-test',
   './permissions/permission-checker-test',
   './prerendering-test',
   './prerender-server-test',
