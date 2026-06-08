@@ -96,7 +96,8 @@ export function makePositionAdornLabel(
         let anchorRightX = cardRect.right - (radius - 4);
         let unclampedLeft = anchorRightX - labelWidth;
         // Don't let the label spill past the card tile's own left edge —
-        // pin its left edge to the card (matching the non-overflow anchor)
+        // pin its left edge to the card's left edge plus the 4px stroke
+        // bleed (`cardRect.left - 4`, matching the non-overflow anchor)
         // and let text-overflow:ellipsis truncate the type-name so the tab
         // never exceeds the tile's footprint.
         let cardLeftLimit = cardRect.left - 4;
