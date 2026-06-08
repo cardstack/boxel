@@ -244,29 +244,32 @@ function readJsonVersion(path: string): string {
   return json.version;
 }
 
-function npmUnstableCounters(base: string): number[] {
-  // `npm view ... versions --json` yields an array, or a bare string when
-  // exactly one version is published; `[].concat` normalizes both. Empty when
-  // the package was never published (E404 → non-zero exit).
-  let raw: string;
-  try {
-    raw = execSync('npm view @cardstack/boxel-cli versions --json', {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-      .toString()
-      .trim();
-  } catch {
-    return [];
-  }
-  if (!raw) return [];
-  const versions: string[] = [].concat(JSON.parse(raw));
+// Pure: the `-unstable.<n>` counters already published for `base`. Tolerates
+// any npm output shape — non-string entries are dropped rather than throwing.
+export function unstableCounters(base: string, versions: unknown[]): number[] {
   const re = new RegExp(
     '^' + base.replace(/\./g, '\\.') + '-unstable\\.(\\d+)$',
   );
   return versions
+    .filter((v): v is string => typeof v === 'string')
     .map((v) => (v.match(re) || [])[1])
     .filter((x): x is string => x != null)
     .map(Number);
+}
+
+function fetchNpmVersions(): unknown[] {
+  // `npm view ... versions --json` yields an array, or a bare string when
+  // exactly one version is published; `[].concat` normalizes both. We
+  // deliberately don't swallow a non-zero exit (npm outage / registry error):
+  // treating it as "nothing published" would pick `-unstable.0` and re-create
+  // the version collision this whole change exists to prevent. The package
+  // already exists on npm, so the first-publish E404 case isn't reachable.
+  const raw = execSync('npm view @cardstack/boxel-cli versions --json', {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+    .toString()
+    .trim();
+  return raw ? [].concat(JSON.parse(raw)) : [];
 }
 
 function main(): void {
@@ -309,7 +312,7 @@ function main(): void {
   });
   if (result.nextNpm) {
     const base = result.nextNpm.replace(/-unstable\.\d+$/, '');
-    const counters = npmUnstableCounters(base);
+    const counters = unstableCounters(base, fetchNpmVersions());
     const n = counters.length ? Math.max(...counters) + 1 : 0;
     result.nextNpm = `${base}-unstable.${n}`;
     result.prereleaseN = n;

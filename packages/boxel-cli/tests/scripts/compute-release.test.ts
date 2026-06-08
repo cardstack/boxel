@@ -4,6 +4,7 @@ import {
   computeRelease,
   detectSurfaces,
   parseSemver,
+  unstableCounters,
   type ComputeReleaseInput,
 } from '../../scripts/compute-release';
 
@@ -146,6 +147,39 @@ describe('parseSemver', () => {
 
   it('throws on invalid input', () => {
     expect(() => parseSemver('not-a-version')).toThrow();
+  });
+});
+
+describe('unstableCounters', () => {
+  it('returns max-candidate counters for the matching base', () => {
+    const versions = [
+      '0.3.2-unstable.0',
+      '0.3.2-unstable.1',
+      '0.3.2-unstable.5',
+    ];
+    expect(unstableCounters('0.3.2', versions)).toEqual([0, 1, 5]);
+  });
+
+  it('ignores other bases (and treats a different base as non-matching)', () => {
+    const versions = [
+      '0.3.1-unstable.9',
+      '0.3.20-unstable.4', // must NOT match base 0.3.2
+      '0.4.0-unstable.3',
+      '0.3.2-unstable.2',
+    ];
+    expect(unstableCounters('0.3.2', versions)).toEqual([2]);
+  });
+
+  it('is empty when nothing matches or the list is empty', () => {
+    expect(unstableCounters('0.3.2', ['0.3.1', '0.3.2'])).toEqual([]);
+    expect(unstableCounters('0.3.2', [])).toEqual([]);
+  });
+
+  it('tolerates non-string npm output shapes without throwing', () => {
+    // `npm view ... versions --json` is normally string | string[], but guard
+    // against null / unexpected entries rather than crashing the publish run.
+    const versions = [null, 42, { v: 'x' }, '0.3.2-unstable.7'];
+    expect(unstableCounters('0.3.2', versions)).toEqual([7]);
   });
 });
 

@@ -262,9 +262,12 @@ jobs:
             const base = pkg.version.split("-unstable.")[0];
             // `npm view ... versions --json` is an array, or a bare string when
             // exactly one version is published; `[].concat` normalizes both.
+            // A non-zero exit (npm outage) is left to abort the run rather than
+            // be treated as "nothing published" — the latter would pick
+            // -unstable.0 and re-create the collision this step prevents.
             const pub = [].concat(JSON.parse(execSync("npm view @cardstack/boxel-cli versions --json")));
             const re = new RegExp("^" + base.replace(/\./g, "\\.") + "-unstable\\.(\\d+)$");
-            const ns = pub.map((v) => (v.match(re) || [])[1]).filter((x) => x != null).map(Number);
+            const ns = pub.filter((v) => typeof v === "string").map((v) => (v.match(re) || [])[1]).filter((x) => x != null).map(Number);
             pkg.version = base + "-unstable." + (ns.length ? Math.max(...ns) + 1 : 0);
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
             console.log("next unstable version → " + pkg.version);
