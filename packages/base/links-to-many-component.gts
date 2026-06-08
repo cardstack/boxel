@@ -658,46 +658,19 @@ export function getLinksToManyComponent({
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
         {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
-          {{#if field.edit}}
-            {{!-- Per-usage edit override on a linksToMany. Contract
-                  mirrors containsMany: the override receives the
-                  containing card as @model, the current values array
-                  as @values, and a pre-bound default LinksToManyEditor
-                  as @defaultEditor so it can wrap the standard iteration
-                  / add / remove UI without reimplementing it. --}}
-            <field.edit
-              @model={{model.value}}
-              @values={{arrayField.value}}
-              @defaultEditor={{component
-                LinksToManyEditor
-                model=model
-                arrayField=arrayField
-                field=field
-                cardTypeFor=cardTypeFor
-                childFormat=(getEditorChildFormat
-                  @format
-                  defaultFormats.cardDef
-                  model
-                )
-                typeConstraint=@typeConstraint
-              }}
-              ...attributes
-            />
-          {{else}}
-            <LinksToManyEditor
-              @model={{model}}
-              @arrayField={{arrayField}}
-              @field={{field}}
-              @cardTypeFor={{cardTypeFor}}
-              @childFormat={{getEditorChildFormat
-                @format
-                defaultFormats.cardDef
-                model
-              }}
-              @typeConstraint={{@typeConstraint}}
-              ...attributes
-            />
-          {{/if}}
+          <LinksToManyEditor
+            @model={{model}}
+            @arrayField={{arrayField}}
+            @field={{field}}
+            @cardTypeFor={{cardTypeFor}}
+            @childFormat={{getEditorChildFormat
+              @format
+              defaultFormats.cardDef
+              model
+            }}
+            @typeConstraint={{@typeConstraint}}
+            ...attributes
+          />
         {{else}}
           {{#let
             (coalesce @format defaultFormats.cardDef)
