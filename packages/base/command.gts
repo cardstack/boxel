@@ -614,6 +614,87 @@ export class ExecuteAtomicOperationsResult extends CardDef {
   @field results = containsMany(JsonField);
 }
 
+// A publish destination for a realm. 'type' is 'subdirectory' (a Boxel Space
+// under the user's space domain, where 'name' is the realm-name path segment)
+// or 'custom' (a claimed custom domain, where 'name' is the full hostname).
+export class PublishTarget extends FieldDef {
+  @field type = contains(StringField);
+  @field name = contains(StringField);
+}
+
+export class PublishRealmInput extends CardDef {
+  @field realmURL = contains(StringField);
+  @field targets = containsMany(PublishTarget);
+  // Whether to wait for publish (copy + reindex) to finish before resolving.
+  // Defaults to true when omitted (the command applies the default).
+  @field wait = contains(BooleanField);
+  // How long to wait when wait is true, in milliseconds; on expiry the
+  // command returns the current pending state with timedOut set.
+  @field timeoutMs = contains(NumberField);
+  // Bypass the pre-publish publishability gate (private-dependency and
+  // error-document violations). Defaults to false.
+  @field force = contains(BooleanField);
+}
+
+// Per-target outcome. 'status' is 'published' | 'pending' | 'error'.
+export class PublishTargetResult extends FieldDef {
+  @field publishedRealmURL = contains(StringField);
+  @field status = contains(StringField);
+  @field error = contains(StringField);
+}
+
+export class PublishRealmResult extends CardDef {
+  @field results = containsMany(PublishTargetResult);
+  // True if wait elapsed before every target finished (targets still pending).
+  @field timedOut = contains(BooleanField);
+}
+
+export class UnpublishRealmInput extends CardDef {
+  @field realmURL = contains(StringField);
+  // Supply either a typed target or a fully-resolved publishedRealmURL.
+  @field target = contains(PublishTarget);
+  @field publishedRealmURL = contains(StringField);
+  @field wait = contains(BooleanField);
+  @field timeoutMs = contains(NumberField);
+}
+
+// 'status' is 'unpublished' | 'pending' | 'error'.
+export class UnpublishRealmResult extends CardDef {
+  @field publishedRealmURL = contains(StringField);
+  @field status = contains(StringField);
+  @field timedOut = contains(BooleanField);
+  @field error = contains(StringField);
+}
+
+export class GetPublishedRealmsInput extends CardDef {
+  @field realmURL = contains(StringField);
+}
+
+// One published destination for a source realm. lastPublishedAt is an
+// ISO-8601 timestamp string (empty when never published).
+export class PublishedRealmInfo extends FieldDef {
+  @field publishedRealmURL = contains(StringField);
+  @field lastPublishedAt = contains(StringField);
+  @field isPublishing = contains(BooleanField);
+}
+
+export class GetPublishedRealmsResult extends CardDef {
+  @field results = containsMany(PublishedRealmInfo);
+}
+
+// 'type' is 'subdirectory' | 'custom'; 'name' matches PublishTarget.name.
+export class CheckDomainAvailabilityInput extends CardDef {
+  @field type = contains(StringField);
+  @field name = contains(StringField);
+  @field realmURL = contains(StringField);
+}
+
+export class CheckDomainAvailabilityResult extends CardDef {
+  @field available = contains(BooleanField);
+  @field publishedRealmURL = contains(StringField);
+  @field reason = contains(StringField);
+}
+
 export class StoreAddInput extends CardDef {
   @field document = contains(JsonField);
   @field realm = contains(StringField);
