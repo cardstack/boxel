@@ -279,7 +279,13 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     fieldName: string,
   ): string | undefined {
     try {
-      let serialized = this.#cardAPI?.serializeCard(card);
+      let vn = this.loaderService.loader.getVirtualNetwork();
+      if (!vn) {
+        return undefined;
+      }
+      let serialized = this.#cardAPI?.serializeCard(card, {
+        virtualNetwork: vn,
+      });
       let relationships = (serialized?.data as any)?.relationships ?? {};
       return Object.keys(relationships).find(
         (key) => key === fieldName || key.endsWith(`.${fieldName}`),

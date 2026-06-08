@@ -68,6 +68,10 @@ export class CardStoreWithErrors implements CardStore {
     this.#virtualNetwork = virtualNetwork;
   }
 
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
+  }
+
   getCard(id: string): CardDef | undefined {
     id = this.normalizeKey(id);
     return this.#cards.get(id);
