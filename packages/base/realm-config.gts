@@ -9,16 +9,25 @@ import {
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
-import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
+import CardInfoTemplates from './default-templates/card-info';
 import {
+  cardDefComputedFields,
   findDuplicateRoutingPaths,
+  getField,
+  getFieldIcon,
   validateRoutingPath,
 } from '@cardstack/runtime-common';
-import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInputGroup,
+  FieldContainer,
+  Header,
+} from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import { action } from '@ember/object';
+import { startCase } from 'lodash';
+import type { FieldsTypeFor } from './card-api';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -217,30 +226,116 @@ class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   </template>
 }
 
-// Custom CardDef edit template. Wraps the default CardDef edit so the
-// standard CardInfo header, generic field section, and notes footer all
-// render unchanged; the only addition is a cross-rule advisory banner
-// for duplicate routing paths above the form.
+// Custom CardDef edit template. Replicates the standard CardDef edit
+// scaffold (CardInfo header, displayFields iteration, notes footer)
+// so each field still renders via its own default Component — the
+// only RealmConfig-specific addition is a cross-rule advisory banner
+// for duplicate routing paths, injected directly above the
+// hostRoutingRules row so the warning sits next to the section it
+// describes. The scaffolding is kept in sync with
+// default-templates/isolated-and-edit.gts.
 class RealmConfigEdit extends Component<typeof RealmConfig> {
+  private excludedFields: string[] = [
+    'id',
+    'cardInfo',
+    ...cardDefComputedFields,
+    'theme',
+  ];
+
+  private get cardInfoFieldDisplayNames(): string[] | undefined {
+    let fieldNames = cardDefComputedFields.filter((fieldName) => {
+      const field = getField(this.args.model.constructor, fieldName);
+      return field?.computeVia == undefined;
+    });
+    return fieldNames.length ? fieldNames : undefined;
+  }
+
+  private get displayFields(): FieldsTypeFor<RealmConfig> | undefined {
+    let excludedFields = this.excludedFields.filter(
+      (name) => !this.cardInfoFieldDisplayNames?.includes(name),
+    );
+    let fields = Object.entries(this.args.fields).filter(
+      ([key]) => !excludedFields.includes(key),
+    );
+    if (!fields.length) {
+      return undefined;
+    }
+    return Object.fromEntries(fields) as FieldsTypeFor<RealmConfig>;
+  }
+
   get duplicatePaths(): string[] {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
   <template>
-    {{#if this.duplicatePaths.length}}
-      <div class='warning' role='status' data-test-duplicate-path-warning>
-        Duplicate paths:
-        {{#each this.duplicatePaths as |p i|}}
-          {{#if i}}, {{/if}}<code>{{p}}</code>
-        {{/each}}
-      </div>
-    {{/if}}
-    <DefaultCardDefTemplate
-      @model={{@model}}
-      @fields={{@fields}}
-      @format={{@format}}
-    />
+    <div class='realm-config-edit' data-test-realm-config-edit>
+      <Header @hasBottomBorder={{true}} class='card-info-header'>
+        <CardInfoTemplates.edit @fields={{@fields}} @model={{@model}} />
+      </Header>
+      {{#if this.displayFields}}
+        <section class='own-display-fields'>
+          {{#each-in this.displayFields as |key Field|}}
+            {{#if (eq key 'hostRoutingRules')}}
+              {{#if this.duplicatePaths.length}}
+                <div
+                  class='warning'
+                  role='status'
+                  data-test-duplicate-path-warning
+                >
+                  Duplicate paths:
+                  {{#each this.duplicatePaths as |p i|}}
+                    {{#if i}}, {{/if}}<code>{{p}}</code>
+                  {{/each}}
+                </div>
+              {{/if}}
+            {{/if}}
+            <FieldContainer
+              @label={{startCase key}}
+              @icon={{getFieldIcon @model key}}
+              data-test-field={{key}}
+            >
+              <Field />
+            </FieldContainer>
+          {{/each-in}}
+        </section>
+      {{/if}}
+      <footer class='notes-footer'>
+        <FieldContainer
+          @label='Notes'
+          @icon={{getFieldIcon @model.cardInfo 'notes'}}
+          data-test-field='cardInfo-notes'
+        >
+          <@fields.cardInfo.notes />
+        </FieldContainer>
+      </footer>
+    </div>
     <style scoped>
+      .realm-config-edit {
+        --hr-color: rgba(0 0 0 / 10%);
+        display: grid;
+      }
+      .card-info-header {
+        --boxel-header-min-height: 9.375rem;
+        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
+        --boxel-header-gap: var(--boxel-sp-lg);
+        --boxel-header-border-color: var(--hr-color);
+        align-items: flex-start;
+        background-color: var(--muted, var(--boxel-100));
+      }
+      .own-display-fields {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xl);
+        background-color: var(--background, var(--boxel-light));
+      }
+      .own-display-fields + .notes-footer {
+        border-top: 1px solid var(--hr-color);
+      }
+      .notes-footer {
+        padding: var(--boxel-sp-xl);
+        background-color: var(--muted, var(--boxel-100));
+      }
       .warning {
         background: #fef3c7;
         color: #78350f;
@@ -248,7 +343,6 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
         border-radius: var(--boxel-border-radius-sm, 6px);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-size: var(--boxel-font-size-sm);
-        margin: var(--boxel-sp-sm) var(--boxel-sp-xl) 0;
       }
       .warning code {
         font-family: var(--boxel-font-family-mono, monospace);
