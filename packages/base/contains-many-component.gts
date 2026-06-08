@@ -353,36 +353,13 @@ export function getContainsManyComponent({
       <DefaultFormatsConsumer as |defaultFormats|>
         {{setOverrides model.value}}
         {{#if (shouldRenderEditor @format defaultFormats.fieldDef isComputed)}}
-          {{#if field.edit}}
-            {{!-- Per-usage edit override on a containsMany.
-                  Contract: the override receives the containing card as
-                  @model, the current values array as @values, and a
-                  pre-bound default ContainsManyEditor as @defaultEditor
-                  so it can wrap (e.g. render a banner above) the standard
-                  iteration + add/remove/sortable UI without
-                  reimplementing it. --}}
-            <field.edit
-              @model={{model.value}}
-              @values={{arrayField.value}}
-              @defaultEditor={{component
-                ContainsManyEditor
-                model=model
-                arrayField=arrayField
-                field=field
-                cardTypeFor=cardTypeFor
-                typeConstraint=@typeConstraint
-              }}
-              ...attributes
-            />
-          {{else}}
-            <ContainsManyEditor
-              @model={{model}}
-              @arrayField={{arrayField}}
-              @field={{field}}
-              @cardTypeFor={{cardTypeFor}}
-              @typeConstraint={{@typeConstraint}}
-            />
-          {{/if}}
+          <ContainsManyEditor
+            @model={{model}}
+            @arrayField={{arrayField}}
+            @field={{field}}
+            @cardTypeFor={{cardTypeFor}}
+            @typeConstraint={{@typeConstraint}}
+          />
         {{else}}
           {{#let
             (coalesce @format defaultFormats.fieldDef)
