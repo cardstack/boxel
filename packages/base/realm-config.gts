@@ -26,6 +26,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { startCase } from 'lodash';
 import type { FieldsTypeFor } from './card-api';
 
@@ -55,7 +56,7 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 }
 
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     // The path input renders an empty input alongside a fixed `/`
     // accessory, so a rule with `path == null` is visually
@@ -267,10 +268,18 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
+  // CardInfoTemplates.edit insists on a strict `CardDef` for `@model`;
+  // the template arg here is `PartialFields<RealmConfig>` (every field
+  // optional, including `id`), so cast to the looser shape it actually
+  // exercises.
+  get baseModel(): CardDef {
+    return this.args.model as unknown as CardDef;
+  }
+
   <template>
     <div class='realm-config-edit' data-test-realm-config-edit>
       <Header @hasBottomBorder={{true}} class='card-info-header'>
-        <CardInfoTemplates.edit @fields={{@fields}} @model={{@model}} />
+        <CardInfoTemplates.edit @fields={{@fields}} @model={{this.baseModel}} />
       </Header>
       {{#if this.displayFields}}
         <section class='own-display-fields'>
