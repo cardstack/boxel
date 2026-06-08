@@ -239,18 +239,34 @@ function changedFilesAgainstHead1(root: string): string[] {
   return [...set];
 }
 
-function prereleaseCount(stableTag: string): number {
-  // Count commits on HEAD since the last stable tag. Each unstable publish
-  // gets a monotonically increasing N, even across reruns.
-  const out = execSync(
-    `git rev-list --count boxel-cli-v${stableTag}..HEAD`,
-  ).toString();
-  return parseInt(out.trim(), 10);
-}
-
 function readJsonVersion(path: string): string {
   const json = JSON.parse(readFileSync(path, 'utf8'));
   return json.version;
+}
+
+function npmUnstableCounters(base: string): number[] {
+  // `npm view ... versions --json` yields an array, or a bare string when
+  // exactly one version is published; `[].concat` normalizes both. Empty when
+  // the package was never published (E404 → non-zero exit).
+  let raw: string;
+  try {
+    raw = execSync('npm view @cardstack/boxel-cli versions --json', {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return [];
+  }
+  if (!raw) return [];
+  const versions: string[] = [].concat(JSON.parse(raw));
+  const re = new RegExp(
+    '^' + base.replace(/\./g, '\\.') + '-unstable\\.(\\d+)$',
+  );
+  return versions
+    .map((v) => (v.match(re) || [])[1])
+    .filter((x): x is string => x != null)
+    .map(Number);
 }
 
 function main(): void {
@@ -276,18 +292,28 @@ function main(): void {
     resolve(root, 'packages/boxel-cli/plugin/.claude-plugin/plugin.json'),
   );
   const stableBase = lastStableTag();
-  const prereleaseN = prereleaseCount(stableBase);
   const changedFiles = changedFilesAgainstHead1(root);
 
+  // Resolve the bumped base with a placeholder counter, then pick the next
+  // counter free for that base on npm. npm is the source of truth: the manual
+  // publish path publishes counters this run's git history never sees, so a
+  // git-commit count could collide with one of them.
   const result = computeRelease({
     prTitle,
     prBody,
     changedFiles,
     currentNpm,
     currentPlugin,
-    prereleaseN,
+    prereleaseN: 0,
     lastStableNpmBase: stableBase,
   });
+  if (result.nextNpm) {
+    const base = result.nextNpm.replace(/-unstable\.\d+$/, '');
+    const counters = npmUnstableCounters(base);
+    const n = counters.length ? Math.max(...counters) + 1 : 0;
+    result.nextNpm = `${base}-unstable.${n}`;
+    result.prereleaseN = n;
+  }
 
   process.stdout.write(JSON.stringify(result) + '\n');
 }
