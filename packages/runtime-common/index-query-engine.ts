@@ -150,6 +150,18 @@ interface PrerenderedCardOptions {
   cardUrls?: string[];
 }
 
+// Selects which columns the unified `search()` projects. `dataOnly` is today's
+// `searchCards` projection (live serialization only); `render` is today's
+// `searchPrerendered` projection (format-specific HTML column) plus the live
+// serialization conditionally carried for no-HTML fallback rows.
+export type SearchProjection =
+  | { kind: 'dataOnly' }
+  | {
+      kind: 'render';
+      htmlFormat: PrerenderedHtmlFormat;
+      renderType?: ResolvedCodeRef;
+    };
+
 export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
@@ -645,6 +657,73 @@ export class IndexQueryEngine {
     }
   }
 
+  // Projection-parametrized instance search. The shared query core
+  // (WHERE / GROUP BY url / ORDER / LIMIT) is built once in `_search`; this
+  // method varies only the SELECT list by projection. `searchCards` and
+  // `searchPrerendered` are thin wrappers over it. This changes no response
+  // shape or endpoint — the emission/shape work lands in CS-11433.
+  async search(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    opts: QueryOptions,
+    projection: SearchProjection,
+  ): Promise<{
+    meta: QueryResultsMeta;
+    results: (Partial<BoxelIndexTable> & {
+      html?: string | null;
+      used_render_type?: string | null;
+    })[];
+  }> {
+    let selectClauseExpression: CardExpression;
+    if (projection.kind === 'dataOnly') {
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
+      ];
+    } else {
+      let htmlColumnExpression = this.buildHtmlColumnExpression({
+        htmlFormat: projection.htmlFormat,
+        renderType: projection.renderType,
+      });
+      let usedRenderTypeColumnExpression =
+        this.buildUsedRenderTypeColumnExpression({
+          htmlFormat: projection.htmlFormat,
+          renderType: projection.renderType,
+        });
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
+        ...htmlColumnExpression,
+        ' as html,',
+        ...usedRenderTypeColumnExpression,
+        ' as used_render_type,',
+        'ANY_VALUE(deps) as deps,',
+        'ANY_VALUE(display_names) as display_names,',
+        'ANY_VALUE(icon_html) as icon_html,',
+        'ANY_VALUE(error_doc) as error_doc,',
+        // The live serialization rides along ONLY for no-HTML fallback rows
+        // (their only representation); HTML-backed rows carry no pristine_doc —
+        // they ship identity-only (CS-11433). The NULL test reuses the same
+        // html expression so it matches the emitted `html` column exactly.
+        'CASE WHEN ',
+        ...htmlColumnExpression,
+        ' IS NULL THEN ANY_VALUE(pristine_doc) END as pristine_doc',
+      ];
+    }
+
+    return (await this._search(
+      realmURL,
+      { filter, sort, page },
+      opts,
+      selectClauseExpression,
+      'instance',
+    )) as {
+      meta: QueryResultsMeta;
+      results: (Partial<BoxelIndexTable> & {
+        html?: string | null;
+        used_render_type?: string | null;
+      })[];
+    };
+  }
+
   async searchCards(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -652,14 +731,11 @@ export class IndexQueryEngine {
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
-    let { results, meta } = await this._search(
+    let { results, meta } = await this.search(
       realmURL,
       { filter, sort, page },
       opts,
-      [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
-      ],
-      'instance',
+      { kind: 'dataOnly' },
     );
 
     let cards = results
@@ -778,38 +854,16 @@ export class IndexQueryEngine {
       );
     }
 
-    let htmlColumnExpression = this.buildHtmlColumnExpression({
-      htmlFormat: opts.htmlFormat,
-      renderType: opts.renderType,
-    });
-    let usedRenderTypeColumnExpression =
-      this.buildUsedRenderTypeColumnExpression({
-        htmlFormat: opts.htmlFormat,
-        renderType: opts.renderType,
-      });
-
-    let { results, meta } = (await this._search(
+    let { results, meta } = await this.search(
       realmURL,
       { filter, sort, page },
       opts,
-      [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
-        ...htmlColumnExpression,
-        ' as html,',
-        ...usedRenderTypeColumnExpression,
-        ' as used_render_type,',
-        'ANY_VALUE(deps) as deps,',
-        'ANY_VALUE(display_names) as display_names,',
-        'ANY_VALUE(icon_html) as icon_html',
-      ],
-      'instance',
-    )) as {
-      meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & {
-        html: string | null;
-        used_render_type: string | null;
-      })[];
-    };
+      {
+        kind: 'render',
+        htmlFormat: opts.htmlFormat,
+        renderType: opts.renderType,
+      },
+    );
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
     // It would be more efficient to return scoped css urls found only in deps of the module we are filtering on (i.e. `ref`),
@@ -842,7 +896,7 @@ export class IndexQueryEngine {
       let displayNames = card.display_names as string[] | null;
       return {
         url: card.url!,
-        html: card.html,
+        html: card.html ?? null,
         cardType: displayNames?.[0] ?? undefined,
         iconHtml: (card.icon_html as string | null) ?? undefined,
         ...(usedRenderType ? { usedRenderType } : {}),
