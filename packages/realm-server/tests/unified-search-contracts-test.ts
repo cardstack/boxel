@@ -45,6 +45,18 @@ module(basename(__filename), function () {
       await runSharedTest(unifiedSearchContractsTests, assert, {});
     });
 
+    test('parse: an invalid render.format is rejected', async function (assert) {
+      await runSharedTest(unifiedSearchContractsTests, assert, {});
+    });
+
+    test('parse: a non-object render is rejected', async function (assert) {
+      await runSharedTest(unifiedSearchContractsTests, assert, {});
+    });
+
+    test('parse: render combined with dataOnly is rejected', async function (assert) {
+      await runSharedTest(unifiedSearchContractsTests, assert, {});
+    });
+
     test('parse: dataOnly true yields live-only with no render', async function (assert) {
       await runSharedTest(unifiedSearchContractsTests, assert, {});
     });

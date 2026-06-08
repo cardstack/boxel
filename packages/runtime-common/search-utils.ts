@@ -356,6 +356,16 @@ export function parseUnifiedSearchRequestFromPayload(
   // (including a missing `render`) keeps the prefer-HTML default.
   let dataOnly = payloadRecord.dataOnly === true;
 
+  // `dataOnly` (live-only) and `render` (prefer-HTML) are mutually exclusive
+  // modes — a payload carrying both is contradictory, so reject it rather than
+  // silently dropping the `render` (which would also swallow a malformed one).
+  if (dataOnly && 'render' in payloadRecord) {
+    throw new SearchRequestError(
+      'invalid-render',
+      'render must not be combined with dataOnly — they are mutually exclusive',
+    );
+  }
+
   let hasCardUrls = 'cardUrls' in payloadRecord;
   let cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
   if (hasCardUrls && !cardUrls) {

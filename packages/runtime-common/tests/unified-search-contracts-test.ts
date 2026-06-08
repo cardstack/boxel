@@ -218,6 +218,42 @@ const tests = Object.freeze({
     }
   },
 
+  'parse: an invalid render.format is rejected': async (assert) => {
+    assert.throws(
+      () =>
+        parseUnifiedSearchRequestFromPayload({
+          realms: [realmURL],
+          render: { format: 'bogus' },
+        }),
+      /render\.format/,
+    );
+  },
+
+  'parse: a non-object render is rejected': async (assert) => {
+    assert.throws(
+      () =>
+        parseUnifiedSearchRequestFromPayload({
+          realms: [realmURL],
+          render: 'oops',
+        }),
+      /render must be an object/,
+    );
+  },
+
+  'parse: render combined with dataOnly is rejected': async (assert) => {
+    // The two are mutually exclusive modes; a contradictory payload must not
+    // silently succeed (and a malformed render must not be swallowed).
+    assert.throws(
+      () =>
+        parseUnifiedSearchRequestFromPayload({
+          realms: [realmURL],
+          dataOnly: true,
+          render: { format: 'fitted' },
+        }),
+      /mutually exclusive/,
+    );
+  },
+
   'parse: dataOnly true yields live-only with no render': async (assert) => {
     let { dataOnly, render } = parseUnifiedSearchRequestFromPayload({
       realms: [realmURL],
