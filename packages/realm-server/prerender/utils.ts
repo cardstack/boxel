@@ -1420,7 +1420,44 @@ export async function withTimeout<T>(
     let [_a, _b, encodedId] = url.pathname.split('/');
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
-    // Capture diagnostics only if the page is still alive; timeouts can close the target.
+    // Render-hang discriminators, captured here only on the timeout
+    // path — the responsiveness probe and CPU sampling do real work, so
+    // they must never touch the success path. Order matters: the
+    // out-of-process / bounded signals run FIRST because they survive a
+    // wedged JS thread (the probe races a short timer; CPU capture and
+    // the network tracker read via CDP / a passive Map). The in-page
+    // `page.evaluate` diagnostics run LAST and only when the thread is
+    // responsive — on a CPU-spinning render (exactly what this is meant
+    // to diagnose) an evaluate blocks until the protocol timeout and
+    // would starve the RenderError we owe the caller.
+    let mainThreadResponsive: boolean | null = null;
+    let cpuMetrics: {
+      scriptBusyFraction?: number;
+      taskBusyFraction?: number;
+      jsHeapUsedMB?: number;
+    } = {};
+    if (!page.isClosed()) {
+      try {
+        mainThreadResponsive = await probeMainThreadResponsive(page);
+      } catch {
+        mainThreadResponsive = null;
+      }
+      cpuMetrics = await captureCpuMetrics(page);
+    }
+    // Out-of-band CDP view of fetches still outstanding — survives a
+    // wedged JS thread, so it's available even when the in-page hooks
+    // below are skipped. The longest-lived entry is what a waiting
+    // render is hung on.
+    let pendingNetworkRequests = getPendingNetworkRequests(page);
+
+    // In-page diagnostics last. Together with the signals above they
+    // tell apart a CPU-spinning render (unresponsive thread,
+    // scriptBusyFraction ≈ 1) from a render waiting on a resource
+    // (responsive thread, low script fraction → look at
+    // pendingNetworkRequests for the hung fetch). Gate on a responsive
+    // thread: a wedged one can't service `page.evaluate`, so these would
+    // block until the protocol timeout — skip them and lean on the
+    // out-of-process signals above.
     let dom: string | null = null;
     let docsInFlight: number | null = null;
     let richDiagnostics: {
@@ -1439,7 +1476,7 @@ export async function withTimeout<T>(
       recentQueryLoads?: unknown[];
     } | null = null;
     let timerSummary: string | null = null;
-    if (!page.isClosed()) {
+    if (mainThreadResponsive === true && !page.isClosed()) {
       try {
         dom = await page.evaluate(() => {
           let el = document.querySelector('[data-prerender]');
@@ -1449,9 +1486,9 @@ export async function withTimeout<T>(
           let err = document.querySelector('[data-prerender-error]');
           return err?.outerHTML ?? null;
         });
-        // CS-10872: prefer the richer per-URL diagnostic hook when the
-        // host exposes it; fall back to the count-only `__docsInFlight`
-        // so the old host build path still produces a sensible log.
+        // Prefer the richer per-URL diagnostic hook when the host
+        // exposes it; fall back to the count-only `__docsInFlight` so the
+        // old host build path still produces a sensible log.
         richDiagnostics = await page.evaluate(() => {
           try {
             let diag = (globalThis as any).__boxelRenderDiagnostics;
@@ -1492,33 +1529,6 @@ export async function withTimeout<T>(
         timerSummary = null;
       }
     }
-
-    // Render-hang discriminators. All best-effort and run only here on
-    // the timeout path — the responsiveness probe and CPU sampling do
-    // real work, so they must never touch the success path. Together
-    // they tell apart a CPU-spinning render (unresponsive thread,
-    // scriptBusyFraction ≈ 1) from a render waiting on a resource
-    // (responsive thread, low script fraction → look at
-    // pendingNetworkRequests for the hung fetch).
-    let mainThreadResponsive: boolean | null = null;
-    let cpuMetrics: {
-      scriptBusyFraction?: number;
-      taskBusyFraction?: number;
-      jsHeapUsedMB?: number;
-    } = {};
-    if (!page.isClosed()) {
-      try {
-        mainThreadResponsive = await probeMainThreadResponsive(page);
-      } catch {
-        mainThreadResponsive = null;
-      }
-      cpuMetrics = await captureCpuMetrics(page);
-    }
-    // Out-of-band CDP view of fetches still outstanding — survives a
-    // wedged JS thread, so it's available even when the in-page hooks
-    // above returned null. The longest-lived entry is what a waiting
-    // render is hung on.
-    let pendingNetworkRequests = getPendingNetworkRequests(page);
 
     let topPending = pendingNetworkRequests?.[0];
     log.warn(
