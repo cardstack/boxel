@@ -7,7 +7,6 @@
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
