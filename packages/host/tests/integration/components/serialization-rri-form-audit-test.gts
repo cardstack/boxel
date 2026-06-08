@@ -133,34 +133,32 @@ module('Integration | serialization | RRI form audit', function (hooks) {
     );
   });
 
-  test('Loader.identify shape for base-realm classes', async function (assert) {
+  test('Loader.identify returns RRI form for base-realm classes', async function (assert) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {},
     });
 
-    // The `@cardstack/base/` prefix mapping is registered against the
-    // resolved base-realm URL (`addRealmMapping` in `host/app/services/
-    // network.ts` passes `resolvedBaseRealmURL.href`). CardDef et al. are
-    // imported via the fake URL `https://cardstack.com/base/...`, so
-    // `unresolveURL` finds no target prefix that matches and returns the
-    // URL unchanged. The captured identity therefore stays in fake-URL
-    // form, not RRI form. CS-10753 needs to bridge this gap if
-    // `meta.adoptsFrom.module` should emit RRI form for base classes.
+    // Base-realm classes (CardDef, FieldDef, etc.) are imported via the
+    // virtual URL `https://cardstack.com/base/...`. `VirtualNetwork.
+    // unresolveURL` chases that through the registered virtual→real URL
+    // mapping and matches the resolved URL against the `@cardstack/base/`
+    // realm-prefix mapping, so the captured module identity comes out in
+    // RRI form.
     let cardDefRef = Loader.identify(CardDef)!;
     assert.strictEqual(cardDefRef.name, 'CardDef', 'CardDef name');
     assert.strictEqual(
       cardDefRef.module,
-      'https://cardstack.com/base/card-api',
-      'CardDef module is fake-URL form (not @cardstack/base/ RRI)',
+      '@cardstack/base/card-api',
+      'CardDef module is @cardstack/base/ RRI form',
     );
 
     let fieldDefRef = Loader.identify(FieldDef)!;
     assert.strictEqual(fieldDefRef.name, 'FieldDef', 'FieldDef name');
     assert.strictEqual(
       fieldDefRef.module,
-      'https://cardstack.com/base/card-api',
-      'FieldDef module is fake-URL form',
+      '@cardstack/base/card-api',
+      'FieldDef module is RRI form',
     );
 
     // `packages/base/string.ts` is a re-export — `export default StringField`
@@ -172,8 +170,8 @@ module('Integration | serialization | RRI form audit', function (hooks) {
     assert.strictEqual(stringFieldRef.name, 'StringField', 'StringField name');
     assert.strictEqual(
       stringFieldRef.module,
-      'https://cardstack.com/base/card-api',
-      'StringField module is fake-URL form, pointing at card-api',
+      '@cardstack/base/card-api',
+      'StringField module is RRI form, pointing at card-api',
     );
   });
 
