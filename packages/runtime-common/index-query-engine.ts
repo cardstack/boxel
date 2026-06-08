@@ -661,7 +661,8 @@ export class IndexQueryEngine {
   // (WHERE / GROUP BY url / ORDER / LIMIT) is built once in `_search`; this
   // method varies only the SELECT list by projection. `searchCards` and
   // `searchPrerendered` are thin wrappers over it. This changes no response
-  // shape or endpoint — the emission/shape work lands in CS-11433.
+  // shape or endpoint — the response-shape/emission work is a later, separate
+  // step.
   async search(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -700,9 +701,9 @@ export class IndexQueryEngine {
         'ANY_VALUE(icon_html) as icon_html,',
         'ANY_VALUE(error_doc) as error_doc,',
         // The live serialization rides along ONLY for no-HTML fallback rows
-        // (their only representation); HTML-backed rows carry no pristine_doc —
-        // they ship identity-only (CS-11433). The NULL test reuses the same
-        // html expression so it matches the emitted `html` column exactly.
+        // (their only representation); HTML-backed rows carry no pristine_doc,
+        // since they ship identity-only. The NULL test reuses the same html
+        // expression so it matches the emitted `html` column exactly.
         'CASE WHEN ',
         ...htmlColumnExpression,
         ' IS NULL THEN ANY_VALUE(pristine_doc) END as pristine_doc',
