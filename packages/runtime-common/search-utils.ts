@@ -408,6 +408,34 @@ export function parseUnifiedSearchRequestFromPayload(
   };
 }
 
+// The single render-type resolution rule (Decision #1), shared by the server
+// (selects the HTML column, echoes `meta.renderType`) and the host (drives the
+// live `CardRenderer @codeRef`) so both pick the same type. Governs only the
+// prefer-HTML path; `dataOnly` results are the actual types (nothing renders),
+// so the caller does not invoke this for them.
+//
+//   - an explicit `renderType` CodeRef  → use it
+//   - the `"native"` escape valve       → the result's own most-derived type (types[0])
+//   - omitted                           → the query's `filter.on` (the common
+//                                          ancestor searched on); when the
+//                                          query has no `filter.on`, fall back
+//                                          to the most-derived type
+export function resolveRenderType(input: {
+  renderType?: SearchRenderType;
+  filterOn?: CodeRef;
+  // The result's adoption chain, most-derived first (types[0] is the actual type).
+  types?: CodeRef[];
+}): CodeRef | undefined {
+  let { renderType, filterOn, types } = input;
+  if (renderType && renderType !== 'native') {
+    return renderType;
+  }
+  if (renderType === 'native') {
+    return types?.[0];
+  }
+  return filterOn ?? types?.[0];
+}
+
 export function combineSearchResults(
   docs: LinkableCollectionDocument[],
 ): LinkableCollectionDocument {
