@@ -355,8 +355,8 @@ module('Unit | query', function (hooks) {
   });
 
   // The projection-parametrized `search()` underlying both `searchCards`
-  // (dataOnly) and `searchPrerendered` (render). The existing wrapper tests are
-  // the parity goldens; these cover the new shared method directly.
+  // (dataOnly) and `searchPrerendered` (render). The wrapper tests are the
+  // parity goldens; these exercise the shared method directly.
   test('search() projects the same row set and total across dataOnly and render', async function (assert) {
     let { mango, vangogh } = testCards;
     let personCard = await personCardType(testCards);
@@ -453,10 +453,7 @@ module('Unit | query', function (hooks) {
 
     let vg = byUrl[`${testRealmURL}vangogh.json`];
     assert.ok(vg.html, 'the HTML-backed row has html');
-    assert.notOk(
-      vg.pristine_doc,
-      'the HTML-backed row carries NO pristine_doc (it ships identity-only)',
-    );
+    assert.notOk(vg.pristine_doc, 'the HTML-backed row omits pristine_doc');
 
     let mg = byUrl[`${testRealmURL}mango.json`];
     assert.notOk(mg.html, 'the no-HTML row has null html');

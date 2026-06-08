@@ -150,10 +150,10 @@ interface PrerenderedCardOptions {
   cardUrls?: string[];
 }
 
-// Selects which columns the unified `search()` projects. `dataOnly` is today's
-// `searchCards` projection (live serialization only); `render` is today's
-// `searchPrerendered` projection (format-specific HTML column) plus the live
-// serialization conditionally carried for no-HTML fallback rows.
+// Selects which columns the unified `search()` projects. `dataOnly` projects
+// the live serialization only (pristine_doc / error_doc); `render` projects the
+// format-specific HTML column plus the live serialization carried only on
+// no-HTML fallback rows.
 export type SearchProjection =
   | { kind: 'dataOnly' }
   | {
@@ -657,12 +657,10 @@ export class IndexQueryEngine {
     }
   }
 
-  // Projection-parametrized instance search. The shared query core
-  // (WHERE / GROUP BY url / ORDER / LIMIT) is built once in `_search`; this
-  // method varies only the SELECT list by projection. `searchCards` and
-  // `searchPrerendered` are thin wrappers over it. This changes no response
-  // shape or endpoint — the response-shape/emission work is a later, separate
-  // step.
+  // Projection-parametrized instance search. `_search` builds the shared query
+  // core (WHERE / GROUP BY url / ORDER / LIMIT); this method varies only the
+  // SELECT list by projection. `searchCards` and `searchPrerendered` are thin
+  // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -700,10 +698,10 @@ export class IndexQueryEngine {
         'ANY_VALUE(display_names) as display_names,',
         'ANY_VALUE(icon_html) as icon_html,',
         'ANY_VALUE(error_doc) as error_doc,',
-        // The live serialization rides along ONLY for no-HTML fallback rows
-        // (their only representation); HTML-backed rows carry no pristine_doc,
-        // since they ship identity-only. The NULL test reuses the same html
-        // expression so it matches the emitted `html` column exactly.
+        // pristine_doc is carried only on rows with no HTML for this format —
+        // their only representation. Rows that have HTML carry no pristine_doc.
+        // The NULL test reuses the same html expression so it matches the
+        // emitted `html` column exactly.
         'CASE WHEN ',
         ...htmlColumnExpression,
         ' IS NULL THEN ANY_VALUE(pristine_doc) END as pristine_doc',
