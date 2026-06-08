@@ -14,6 +14,7 @@ import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import { Deferred } from '@cardstack/runtime-common/deferred';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -614,15 +615,17 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     let matrixService = getService('matrix-service');
 
-    await fillIn(
-      '[data-test-message-field]',
-      'Bridge dedup test SENDING_DELAY_THEN_SUCCESS',
-    );
-    // Fire and observe the pending window before the SENDING_DELAY ends —
-    // awaiting `click` here would let the full mock sendEvent (1s sleep) run,
-    // by which time the synthetic has already reconciled to non-pending.
+    await fillIn('[data-test-message-field]', 'Bridge dedup test');
+
+    // Gate the mock sendEvent so the synthetic stays pending long enough to
+    // observe — then release and let the real echo land. `click` is not
+    // awaited because `settled()` would block on the gated send task.
+    let sendGate = new Deferred<void>();
+    mockMatrixUtils.setSendEventInterceptor(() => sendGate.promise);
     click('[data-test-send-message-btn]');
     await waitFor('[data-test-ai-assistant-message-pending]');
+    mockMatrixUtils.setSendEventInterceptor(undefined);
+    sendGate.fulfill();
 
     // After the real echo lands, only one user message event for this cgi
     // should exist in roomData.events — the bridge must have replaced the
