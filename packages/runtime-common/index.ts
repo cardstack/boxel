@@ -732,6 +732,7 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './prerender-headers';
 export * from './query';
+export * from './instance-filter-matcher';
 export * from './search-utils';
 export * from './request-timings';
 export * from './prerendered-html-format';
