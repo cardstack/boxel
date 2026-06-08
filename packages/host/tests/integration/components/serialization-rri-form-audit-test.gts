@@ -163,12 +163,17 @@ module('Integration | serialization | RRI form audit', function (hooks) {
       'FieldDef module is fake-URL form',
     );
 
+    // `packages/base/string.ts` is a re-export — `export default StringField`
+    // pointing at the class defined in card-api.gts. The Loader's identity
+    // capture sees card-api first (CardDef et al. are imported together),
+    // so StringField's recorded identity is the card-api named export,
+    // not the string-module default.
     let stringFieldRef = Loader.identify(StringField)!;
-    assert.strictEqual(stringFieldRef.name, 'default', 'StringField name');
+    assert.strictEqual(stringFieldRef.name, 'StringField', 'StringField name');
     assert.strictEqual(
       stringFieldRef.module,
-      'https://cardstack.com/base/string',
-      'StringField module is fake-URL form',
+      'https://cardstack.com/base/card-api',
+      'StringField module is fake-URL form, pointing at card-api',
     );
   });
 
