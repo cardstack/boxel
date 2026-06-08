@@ -463,6 +463,76 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test('search() render projection keeps sort order and conditional pristine_doc together', async function (assert) {
+    let { mango, vangogh, paper } = testCards;
+    let personCard = await personCardType(testCards);
+    let personKey = internalKeyFor(personCard, undefined, virtualNetwork);
+    let cardDef = 'https://cardstack.com/base/card-api/CardDef';
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}a.json`,
+        file_alias: `${testRealmURL}a`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, cardDef],
+        last_modified: '300',
+        pristine_doc: await serializeCard(mango),
+        embedded_html: { [personKey]: '<div>A</div>' }, // HTML-backed
+        search_doc: { name: 'A' },
+      },
+      {
+        url: `${testRealmURL}b.json`,
+        file_alias: `${testRealmURL}b`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, cardDef],
+        last_modified: '100',
+        pristine_doc: await serializeCard(vangogh), // no embedded_html → fallback
+        search_doc: { name: 'B' },
+      },
+      {
+        url: `${testRealmURL}c.json`,
+        file_alias: `${testRealmURL}c`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, cardDef],
+        last_modified: '200',
+        pristine_doc: await serializeCard(paper),
+        embedded_html: { [personKey]: '<div>C</div>' }, // HTML-backed
+        search_doc: { name: 'C' },
+      },
+    ]);
+
+    let { results } = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      { sort: [{ by: 'lastModified', direction: 'desc' }] },
+      { includeErrors: true },
+      { kind: 'render', htmlFormat: 'embedded' },
+    );
+
+    assert.deepEqual(
+      results.map((r) => r.url),
+      [
+        `${testRealmURL}a.json`,
+        `${testRealmURL}c.json`,
+        `${testRealmURL}b.json`,
+      ],
+      'the outer-wrapped query orders by lastModified desc',
+    );
+    let byUrl = Object.fromEntries(results.map((r) => [r.url, r]));
+    assert.notOk(
+      byUrl[`${testRealmURL}a.json`].pristine_doc,
+      'HTML-backed row omits pristine_doc even under a sort',
+    );
+    assert.ok(
+      byUrl[`${testRealmURL}b.json`].pristine_doc,
+      'no-HTML fallback row keeps pristine_doc under a sort',
+    );
+  });
+
   test('can filter by type', async function (assert) {
     let { mango, vangogh, paper } = testCards;
 

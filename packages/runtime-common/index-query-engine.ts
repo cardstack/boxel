@@ -576,6 +576,12 @@ export class IndexQueryEngine {
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' = 'instance',
+    // When set, the grouped projection is wrapped in an outer select so a
+    // conditional live `pristine_doc` can reference the computed `html` column
+    // once (see `search()`'s render branch). The inner projection must alias
+    // its raw live serialization as `pristine_doc_fallback` and its HTML as
+    // `html`.
+    conditionalLiveDoc = false,
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
@@ -615,17 +621,43 @@ export class IndexQueryEngine {
       }
 
       let everyCondition = every(conditions);
-      let query = [
-        ...selectClauseExpression,
-        `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
-        'WHERE',
-        ...everyCondition,
-        'GROUP BY url',
-        ...this.orderExpression(sort),
-        ...(page
-          ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
-          : []),
-      ];
+      let limitClause = page
+        ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
+        : [];
+      let query: CardExpression;
+      if (conditionalLiveDoc) {
+        // Outer-wrap the grouped projection so the conditional `pristine_doc`
+        // references the already-computed `html` column rather than recomputing
+        // the HTML expression. Sort keys are exposed by the inner query and the
+        // outer ORDER BY applies them (plus the `url` tiebreaker), so ordering
+        // and paging match the unwrapped path.
+        let { innerSortColumns, outerOrderBy } =
+          this.#wrappedOrderExpression(sort);
+        query = [
+          'SELECT sub.*,',
+          'CASE WHEN sub.html IS NULL THEN sub.pristine_doc_fallback END as pristine_doc',
+          'FROM (',
+          ...selectClauseExpression,
+          ...innerSortColumns,
+          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY url',
+          ') AS sub',
+          ...outerOrderBy,
+          ...limitClause,
+        ];
+      } else {
+        query = [
+          ...selectClauseExpression,
+          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY url',
+          ...this.orderExpression(sort),
+          ...limitClause,
+        ];
+      }
       let queryCount = [
         'SELECT COUNT(DISTINCT url) AS total',
         `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
@@ -698,13 +730,12 @@ export class IndexQueryEngine {
         'ANY_VALUE(display_names) as display_names,',
         'ANY_VALUE(icon_html) as icon_html,',
         'ANY_VALUE(error_doc) as error_doc,',
-        // pristine_doc is carried only on rows with no HTML for this format —
-        // their only representation. Rows that have HTML carry no pristine_doc.
-        // The NULL test reuses the same html expression so it matches the
-        // emitted `html` column exactly.
-        'CASE WHEN ',
-        ...htmlColumnExpression,
-        ' IS NULL THEN ANY_VALUE(pristine_doc) END as pristine_doc',
+        // Carry the live serialization as a raw column. `_search` wraps this
+        // projection so the final `pristine_doc` keeps it only on rows whose
+        // `html` is NULL — the HTML expression is evaluated once (as `html`)
+        // and the NULL test references that computed column rather than
+        // recomputing the COALESCE/JSONB expression.
+        'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
       ];
     }
 
@@ -714,6 +745,7 @@ export class IndexQueryEngine {
       opts,
       selectClauseExpression,
       'instance',
+      projection.kind === 'render',
     )) as {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & {
@@ -836,6 +868,42 @@ export class IndexQueryEngine {
         ['url COLLATE "POSIX"'],
       ]),
     ];
+  }
+
+  // The order expression split for the outer-wrapped projection: the inner
+  // grouped query exposes each sort value as an aliased column, and the outer
+  // query applies the ORDER BY against those aliases (plus the `url`
+  // tiebreaker). This yields the same ordering as `orderExpression` while the
+  // sort values are computed once in the inner aggregation.
+  #wrappedOrderExpression(sort: Sort | undefined): {
+    innerSortColumns: CardExpression;
+    outerOrderBy: CardExpression;
+  } {
+    if (!sort) {
+      return {
+        innerSortColumns: [],
+        outerOrderBy: ['ORDER BY url COLLATE "POSIX"'],
+      };
+    }
+    let innerSortColumns: CardExpression = [];
+    let outerKeys: CardExpression[] = [];
+    sort.forEach((s, i) => {
+      let alias = `_sort_${i}`;
+      innerSortColumns.push(
+        ', ANY_VALUE(',
+        'on' in s
+          ? fieldQuery(s.by, s.on, false, 'sort')
+          : this.generalFieldSortColumn(s.by),
+        `) AS ${alias}`,
+      );
+      outerKeys.push([alias, s.direction ?? 'asc', 'NULLS LAST']);
+    });
+    // the `url` tiebreaker matches `orderExpression` for deterministic results
+    outerKeys.push(['url COLLATE "POSIX"']);
+    return {
+      innerSortColumns,
+      outerOrderBy: ['ORDER BY', ...separatedByCommas(outerKeys)],
+    };
   }
 
   async searchPrerendered(
