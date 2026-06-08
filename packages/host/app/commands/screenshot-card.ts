@@ -73,6 +73,11 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
       );
     }
 
+    // Resolve alias-form RRI to HTTP URL — the realm server does not know
+    // the alias mapping and will fail to construct a URL from alias form.
+    let vn = this.loaderService.loader.getVirtualNetwork()!;
+    cardId = vn.toURL(cardId).href;
+
     // Target realm = the card's own realm. If the caller can't write there,
     // fail fast — no silent fallback to a different realm.
     let cardRealm = this.realm.realmOf(rri(cardId));
