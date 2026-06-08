@@ -34,7 +34,6 @@ interface Signature {
     fileUploadStates?: ReadonlyMap<string, FileUploadState>;
     retryFileUpload?: (file: FileDef) => void;
     inputModalities?: string[];
-    isDisabled?: boolean;
   };
   Blocks: {
     default: [
@@ -55,7 +54,7 @@ interface Signature {
       >,
       WithBoundArgs<
         typeof AttachButton,
-        'chooseCard' | 'chooseFile' | 'chooseLocalFile' | 'disabled'
+        'chooseCard' | 'chooseFile' | 'chooseLocalFile'
       >,
     ];
   };
@@ -84,7 +83,6 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         chooseCard=@chooseCard
         chooseFile=@chooseFile
         chooseLocalFile=@chooseLocalFile
-        disabled=@isDisabled
       )
     }}
   </template>

@@ -287,7 +287,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
           ) as HTMLButtonElement
         ).disabled,
     );
-    assert.dom('[data-test-chat-input-sending="false"]').exists();
     assert.dom('[data-test-message-field]').isNotDisabled();
   });
 
@@ -619,7 +618,10 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       '[data-test-message-field]',
       'Bridge dedup test SENDING_DELAY_THEN_SUCCESS',
     );
-    await click('[data-test-send-message-btn]');
+    // Fire and observe the pending window before the SENDING_DELAY ends —
+    // awaiting `click` here would let the full mock sendEvent (1s sleep) run,
+    // by which time the synthetic has already reconciled to non-pending.
+    click('[data-test-send-message-btn]');
     await waitFor('[data-test-ai-assistant-message-pending]');
 
     // After the real echo lands, only one user message event for this cgi

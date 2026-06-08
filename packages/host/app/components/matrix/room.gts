@@ -231,7 +231,6 @@ export default class Room extends Component<Signature> {
             @fileUploadStates={{this.fileUploadStates}}
             @retryFileUpload={{this.retryFileUpload}}
             @inputModalities={{@roomResource.activeInputModalities}}
-            @isDisabled={{this.isSending}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
               'Current card is shared automatically'
@@ -1267,9 +1266,6 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseCard(cardId: string) {
-    if (this.isSending) {
-      return;
-    }
     // handle the case where auto-attached card pill is clicked
     if (this.autoAttachedCardIds.has(cardId)) {
       this.removedAttachedCardIds.add(cardId);
@@ -1283,9 +1279,6 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(id: string) {
-    if (this.isSending) {
-      return;
-    }
     if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
       return;
@@ -1313,9 +1306,6 @@ export default class Room extends Component<Signature> {
   }
 
   private chooseFileTask = enqueueTask(async (file: FileDef) => {
-    if (this.isSending) {
-      return;
-    }
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
@@ -1330,9 +1320,6 @@ export default class Room extends Component<Signature> {
   });
 
   private chooseLocalFileTask = task(async () => {
-    if (this.isSending) {
-      return;
-    }
     let localFile = await this.fileUpload.pickLocalFile();
     if (!localFile) {
       return;
@@ -1343,7 +1330,7 @@ export default class Room extends Component<Signature> {
   @action
   private handleChatInputDragOver(event: Event) {
     let dragEvent = event as DragEvent;
-    if (this.isSending || !this.isFileDrag(dragEvent.dataTransfer)) {
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
     dragEvent.preventDefault();
@@ -1357,7 +1344,7 @@ export default class Room extends Component<Signature> {
   @action
   private handleChatInputDragEnter(event: Event) {
     let dragEvent = event as DragEvent;
-    if (this.isSending || !this.isFileDrag(dragEvent.dataTransfer)) {
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
     dragEvent.preventDefault();
@@ -1383,13 +1370,6 @@ export default class Room extends Component<Signature> {
   @action
   private handleChatInputDrop(event: Event) {
     let dragEvent = event as DragEvent;
-    if (this.isSending) {
-      dragEvent.preventDefault();
-      dragEvent.stopPropagation();
-      this.dropZoneDragDepth = 0;
-      this.isDropZoneActive = false;
-      return;
-    }
     let files = Array.from(dragEvent.dataTransfer?.files ?? []);
     if (!files.length) {
       return;
@@ -1403,9 +1383,6 @@ export default class Room extends Component<Signature> {
 
   @action
   private handleChatInputPaste(event: ClipboardEvent) {
-    if (this.isSending) {
-      return;
-    }
     let files = this.getClipboardFiles(event.clipboardData);
     if (!files.length) {
       return;
@@ -1472,9 +1449,6 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeFile(file: FileDef) {
-    if (this.isSending) {
-      return;
-    }
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
       return;
@@ -1795,12 +1769,9 @@ export default class Room extends Component<Signature> {
   );
 
   private get isSending() {
-    // Only mirror the in-flight `doSendMessage` task here. `isSending` drives
-    // the chat-input's `disabled` and the send button's `@loading` spinner; we
-    // want both to release as soon as the task completes, not wait for the
-    // ~100ms matrix-js-sdk reconciliation debounce after sendEvent returns.
-    // The Send button stays disabled past that window via `canSend`'s
-    // user-pending check, which doesn't disable the input or show a spinner.
+    // Drives the send button's `@loading` spinner. Releases as soon as the
+    // task completes; the button itself stays disabled past that point via
+    // `canSend`'s user-pending check until matrix reconciliation lands.
     return this.doSendMessage.isRunning;
   }
 

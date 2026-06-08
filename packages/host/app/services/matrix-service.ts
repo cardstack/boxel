@@ -1272,12 +1272,26 @@ export default class MatrixService extends Service {
     if (!userId) {
       throw new Error('bug: cannot add optimistic event without a userId');
     }
+    // Sort just after the tail of the existing timeline rather than using
+    // `Date.now()` directly. The matrix-js-sdk and its mocks may use a clock
+    // that's offset from the wall clock (mock-matrix's frozen-2024 clock is
+    // the common case), and `MessageBuilder.updateMessage` early-returns when
+    // the cached message's `created` is later than an incoming event — which
+    // would silently drop the status transition from 'sending' to 'sent'.
+    let existingEvents = this.getRoomData(roomId)?.events ?? [];
+    let maxTs = 0;
+    for (let e of existingEvents) {
+      let ts = (e as any).origin_server_ts;
+      if (typeof ts === 'number' && ts > maxTs) {
+        maxTs = ts;
+      }
+    }
     let event: TempEvent = {
       event_id: `local-${content.clientGeneratedId}`,
       room_id: roomId,
       sender: userId,
       type: 'm.room.message',
-      origin_server_ts: Date.now(),
+      origin_server_ts: maxTs + 1,
       status: 'sending' as MatrixSDK.EventStatus,
       content: {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

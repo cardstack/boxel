@@ -24,17 +24,14 @@ interface Signature {
     isSending?: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
-      'chooseCard' | 'chooseFile' | 'chooseLocalFile' | 'disabled'
+      'chooseCard' | 'chooseFile' | 'chooseLocalFile'
     >;
   };
 }
 
 export default class AiAssistantChatInput extends Component<Signature> {
   <template>
-    <div
-      class='chat-input-container'
-      data-test-chat-input-sending={{@isSending}}
-    >
+    <div class='chat-input-container'>
       <label for='ai-chat-input' class='boxel-sr-only'>
         Enter text to chat with AI Assistant
       </label>
@@ -48,8 +45,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
           value={{@value}}
           placeholder='Enter a prompt'
           rows='1'
-          disabled={{@isSending}}
-          aria-busy={{if @isSending 'true' 'false'}}
           {{on 'input' (pick 'target.value' @onInput)}}
           {{on 'paste' this.onPaste}}
           {{onKeyMod 'Shift+Enter' this.insertNewLine}}
