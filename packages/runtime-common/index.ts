@@ -271,6 +271,48 @@ export interface RenderTimeoutDiagnostics {
   computedCacheHits?: number;
   serializeMs?: number;
   searchDocMs?: number;
+  // The following four are captured server-side on the timeout path
+  // only (the in-page hooks above can come back empty when the render's
+  // JS thread is wedged). Together they discriminate the render-hang
+  // failure mode: an unresponsive main thread with `scriptBusyFraction`
+  // near 1 is a CPU-spinning render (runaway loop / never-settling
+  // Glimmer, possibly starved by co-tenant renders — see
+  // `concurrentRenders`); a responsive main thread with a low script
+  // fraction is a render *waiting* on something, in which case
+  // `pendingNetworkRequests` names the fetch it never got back.
+  //
+  // Whether a probe `page.evaluate` could even round-trip within a
+  // short budget. `false` means the page's JS thread is wedged (it
+  // couldn't run a trivial expression), which is the signature of a
+  // CPU-bound stall as opposed to a waiting one.
+  mainThreadResponsive?: boolean;
+  // Fraction of wall-clock the renderer's main thread spent running JS
+  // (CDP `Performance` ScriptDuration delta / wall delta) over a short
+  // sampling window at timeout. ~1.0 means the thread is pegged
+  // executing JavaScript — a runaway sync loop or a render that never
+  // settles. Near 0 means the thread is idle-waiting.
+  scriptBusyFraction?: number;
+  // Fraction of wall-clock spent in any main-thread task (CDP
+  // `Performance` TaskDuration delta / wall delta) — a superset of
+  // `scriptBusyFraction` that also counts layout / style / GC. High
+  // task but low script points at non-JS main-thread work.
+  taskBusyFraction?: number;
+  // Renderer JS heap in use at timeout (CDP `Performance`
+  // JSHeapUsedSize, bytes → MB). A climbing heap alongside a pegged
+  // thread suggests an allocation-heavy runaway rather than a tight
+  // CPU loop.
+  jsHeapUsedMB?: number;
+  // Requests the browser process still had outstanding at timeout,
+  // observed out-of-band via CDP `Network` so they survive a wedged
+  // JS thread. Oldest first; capped. The longest-lived entry is the
+  // resource a *waiting* render is hung on.
+  pendingNetworkRequests?: Array<{ url: string; ageMs: number }>;
+  // How many renders this prerender process was running concurrently
+  // when the timeout fired (every render passes through the same
+  // server-side timeout wrapper, which keeps the count). A high value
+  // alongside an unresponsive thread points at CPU starvation by
+  // co-tenant renders rather than a single render's own runaway.
+  concurrentRenders?: number;
 }
 
 export interface RenderError extends ErrorEntry {
