@@ -11,10 +11,10 @@ export interface PositionAdornLabelSignature {
 // Builds a modifier that positions an Adorn type-label tab manually
 // inside the containing card's footprint, so its slope stays anchored
 // to the card and long type-names get truncated with an ellipsis when
-// they would otherwise spill into the chrome around the card. Attach
-// the returned modifier to the label element and pass the anchor
-// `cardEl`; it bounds growth to the region resolved by the
-// `getBoundaryElement` baked in here.
+// they would otherwise spill past the card's edges. Attach the returned
+// modifier to the label element and pass the anchor `cardEl`; the
+// boundary resolved by the `getBoundaryElement` baked in here is used
+// only to decide whether the tab sits above or below the card.
 //
 // AdornContext calls this factory with its own boundary resolver and
 // yields the resulting `positionLabel` modifier, so consumers go
@@ -32,10 +32,9 @@ export interface PositionAdornLabelSignature {
 //   flips below; a [data-side] attribute drives the CSS that mirrors
 //   the clip-path vertically so the slope still points toward the
 //   card.
-// - The label's max-width is capped to the space available between
-//   the anchored edge and the boundary; CSS text-overflow:ellipsis
-//   truncates the type-name rather than letting the label spill
-//   outside the boundary.
+// - The label's max-width is capped to the card's own width; CSS
+//   text-overflow:ellipsis truncates the type-name rather than letting
+//   the label spill past the card tile's edges.
 //
 // The boundary is resolved from the label itself (the label is always
 // rendered inside the AdornContext subtree, whereas the anchor card may
@@ -96,19 +95,23 @@ export function makePositionAdornLabel(
       if (shouldOverflow) {
         let anchorRightX = cardRect.right - (radius - 4);
         let unclampedLeft = anchorRightX - labelWidth;
-        let boundaryLeftLimit = boundaryRect.left + 4;
-        if (unclampedLeft >= boundaryLeftLimit) {
-          // Natural width fits inside the boundary — use max-content so
-          // the browser sizes to the true intrinsic width (scrollWidth is
+        // Don't let the label spill past the card tile's own left edge —
+        // pin its left edge to the card (matching the non-overflow anchor)
+        // and let text-overflow:ellipsis truncate the type-name so the tab
+        // never exceeds the tile's footprint.
+        let cardLeftLimit = cardRect.left - 4;
+        if (unclampedLeft >= cardLeftLimit) {
+          // Natural width fits inside the card — use max-content so the
+          // browser sizes to the true intrinsic width (scrollWidth is
           // integer-rounded, so writing it back as `max-width: Npx` would
           // shave a sub-pixel remainder and trip text-overflow:ellipsis
           // even though there's room to spare).
           anchorLeftX = unclampedLeft;
           label.style.maxWidth = 'max-content';
         } else {
-          // Label can't fit inside the boundary at natural width; clamp
-          // the un-anchored edge and let the ellipsis show.
-          anchorLeftX = boundaryLeftLimit;
+          // Label can't fit inside the card at natural width; clamp the
+          // un-anchored edge to the card and let the ellipsis show.
+          anchorLeftX = cardLeftLimit;
           let width = Math.max(0, anchorRightX - anchorLeftX);
           label.style.maxWidth = width + 'px';
         }

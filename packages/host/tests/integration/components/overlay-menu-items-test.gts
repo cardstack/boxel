@@ -362,14 +362,15 @@ module('Integration | overlay-menu-items', function (hooks) {
     if (label.hasAttribute('data-overflow')) {
       // Long-name case: right edge sits at the start of the card's
       // top-right corner radius (with the 4px stroke bleed), and the
-      // extra width spills off the card's left edge.
+      // left edge is clamped to the card's own left edge — the type-name
+      // truncates with an ellipsis rather than spilling off the tile.
       assert.ok(
         Math.abs(cardRect.right - labelRect.right - (radius - 4)) <= 2,
         "overflowing label's right edge sits at the card's corner-radius point",
       );
       assert.ok(
-        labelRect.left < cardRect.left,
-        'overflowing label extends past the card left edge',
+        Math.abs(labelRect.left - (cardRect.left - 4)) <= 2,
+        "overflowing label's left edge is clamped to the card's left edge",
       );
     } else {
       // Short-name case: hugs the card's left edge with the 4px bleed.
