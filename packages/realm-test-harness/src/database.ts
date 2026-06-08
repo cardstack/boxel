@@ -17,11 +17,11 @@ import {
   type PortReservation,
   type RealmConfig,
   type RealmPermissions,
-} from './shared';
+} from './shared.ts';
 import {
   startIsolatedRealmStack,
   stopIsolatedRealmStack,
-} from './isolated-realm-stack';
+} from './isolated-realm-stack.ts';
 
 export async function canConnectToPg(): Promise<boolean> {
   let client = new PgClient({

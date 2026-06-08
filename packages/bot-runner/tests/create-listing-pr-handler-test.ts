@@ -1,9 +1,9 @@
 import { module, test } from 'qunit';
-import type { GitHubClient } from '../lib/github';
+import type { GitHubClient } from '../lib/github.ts';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
-} from '../lib/pr-listing/create-listing-pr-handler';
+} from '../lib/pr-listing/create-listing-pr-handler.ts';
 
 const BRANCH_PATTERN = /^[a-f0-9]{6}-/;
 
@@ -51,7 +51,11 @@ module('create-listing-pr handler', () => {
     );
 
     assert.strictEqual(result?.prNumber, 1, 'returns PR number');
-    assert.strictEqual(result?.prUrl, 'https://example.com/pr/1', 'returns PR URL');
+    assert.strictEqual(
+      result?.prUrl,
+      'https://example.com/pr/1',
+      'returns PR URL',
+    );
     assert.strictEqual(
       result?.prTitle,
       'Add My Listing listing',
@@ -156,7 +160,10 @@ module('create-listing-pr handler', () => {
     );
 
     assert.strictEqual(opened.length, 1, 'opens exactly one PR');
-    let body = (opened[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
+    let body =
+      (
+        opened[0] as { params: Record<string, unknown> }
+      ).params.body?.toString() ?? '';
     assert.true(
       body.includes(`[${workflowCardUrl}](${workflowCardUrl})`),
       'summary body includes workflow card URL as a markdown link',
@@ -193,7 +200,10 @@ module('create-listing-pr handler', () => {
   });
 
   test('addContentsToCommit wraps files under the {hash}-{slug} folder', async (assert) => {
-    let writeCalls: { files: { path: string; content: string }[]; message: string }[] = [];
+    let writeCalls: {
+      files: { path: string; content: string }[];
+      message: string;
+    }[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
@@ -360,10 +370,6 @@ module('create-listing-pr handler', () => {
       '@alice:localhost',
     );
 
-    assert.strictEqual(
-      result,
-      null,
-      'returns null when no PR can be opened',
-    );
+    assert.strictEqual(result, null, 'returns null when no PR can be opened');
   });
 });

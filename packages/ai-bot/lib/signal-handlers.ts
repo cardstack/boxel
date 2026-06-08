@@ -1,5 +1,5 @@
 import { logger } from '@cardstack/runtime-common';
-import { handleShutdown } from './shutdown';
+import { handleShutdown } from './shutdown.ts';
 
 let log = logger('ai-bot:signals');
 

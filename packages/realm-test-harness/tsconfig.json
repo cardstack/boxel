@@ -6,6 +6,7 @@
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "lib": ["es2022", "dom", "dom.iterable"],
     "noImplicitAny": true,
     "noImplicitThis": true,
