@@ -214,6 +214,8 @@ export default class MatrixService extends Service {
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   @tracked private _systemCard: SystemCard | undefined;
   @tracked private _systemCardLoadFailed = false;
+  private _userChoiceId: string | undefined;
+  private _systemCardInvalidationUnsub: (() => void) | undefined;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -1512,6 +1514,9 @@ export default class MatrixService extends Service {
     this.initialSyncCompleted = false;
     this.initialSyncCompletedDeferred = new Deferred<void>();
     this.roomsWaitingForSync.clear();
+    this._systemCardInvalidationUnsub?.();
+    this._systemCardInvalidationUnsub = undefined;
+    this._userChoiceId = undefined;
     this._systemCard = undefined;
     this._systemCardLoadFailed = false;
     this.startedAtTs = -1;
@@ -2347,6 +2352,7 @@ export default class MatrixService extends Service {
   }
 
   private async setSystemCard(userChoiceId: string | undefined) {
+    this._userChoiceId = userChoiceId;
     let envDefaultId = ENV.defaultSystemCardId;
 
     if (userChoiceId && userChoiceId === this._systemCard?.id) {
@@ -2385,13 +2391,51 @@ export default class MatrixService extends Service {
       envDefaultFailed || (userChoiceFailed && !envDefaultId);
 
     if (loadedCard?.id !== this._systemCard?.id) {
+      this._systemCardInvalidationUnsub?.();
+      this._systemCardInvalidationUnsub = undefined;
       this.store.dropReference(this._systemCard?.id);
       if (loadedCard) {
         this.store.addReference(loadedCard.id);
+        // Capture the id in the closure — by the time the callback fires, the
+        // store has evicted the card, so we cannot read it off `_systemCard`.
+        let subscribedId = loadedCard.id;
+        this._systemCardInvalidationUnsub =
+          this.store.subscribeToCardInvalidation(subscribedId, () =>
+            this.onSystemCardInvalidated(subscribedId),
+          );
       }
       this._systemCard = loadedCard;
     }
   }
+
+  // Fires when the active SystemCard is deleted in the same session (either
+  // via the in-tab UI or via a matrix-auth-room invalidation originating
+  // elsewhere). Re-evaluate the chain so the fallback banner surfaces or the
+  // env-default silently takes over, and clear the matrix preference when the
+  // dangling id was the user's own pick so it does not keep being rebroadcast.
+  private onSystemCardInvalidated = async (invalidatedId: string) => {
+    let wasUserChoice = this._userChoiceId === invalidatedId;
+    // Drop the doomed reference so setSystemCard does not take its id-match
+    // fast path against the now-evicted instance.
+    this._systemCardInvalidationUnsub?.();
+    this._systemCardInvalidationUnsub = undefined;
+    this.store.dropReference(this._systemCard?.id);
+    this._systemCard = undefined;
+    await this.setSystemCard(this._userChoiceId);
+    let chainStillBroken = this._systemCardLoadFailed;
+    if (wasUserChoice) {
+      await this.setUserSystemCard(undefined);
+      // Clearing the preference round-trips through the account-data event
+      // and re-enters setSystemCard(undefined). When no env default is
+      // configured that path looks identical to MVP steady state and writes
+      // `_systemCardLoadFailed = false` — but we are *not* in steady state
+      // here; the user just lost their chosen card with no fallback to take
+      // over. Re-assert the broken signal so the banner persists.
+      if (chainStillBroken) {
+        this._systemCardLoadFailed = true;
+      }
+    }
+  };
 
   async setUserSystemCard(systemCardId: string | undefined) {
     // This sets the users account data for their preferred system card
