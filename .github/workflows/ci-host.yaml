@@ -405,7 +405,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        shardIndex:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+          ]
         shardTotal: [20]
     env:
       BOXEL_ENVIRONMENT: ci
@@ -472,9 +494,14 @@ jobs:
           ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
           info='_info'
           base_ready="https://realm-server.ci.localhost/base/${ready}"
+          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
           skills_info="https://realm-server.ci.localhost/skills/${info}"
           base_info="https://realm-server.ci.localhost/base/${info}"
 
+          # base/_readiness-check returns 200 only after the from-scratch index
+          # of the base realm finishes. In env-mode CI the per-slug Postgres is
+          # fresh every run so this always runs, ~60s. Tests that load base
+          # cards block on this being indexed.
           ok=0
           for i in $(seq 1 120); do
             code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
@@ -485,6 +512,25 @@ jobs:
           done
           if [ "$ok" != "1" ]; then
             echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
+          # skills/_readiness-check is the parallel gate for the skills realm.
+          # The realm-server boots base and skills in sequence, so skills
+          # indexing only starts after base finishes; the AI-assistant skills
+          # tests fetch Skill/boxel-environment, which requires skills to be
+          # indexed before testem launches its chrome. Without this wait the
+          # test would 404 on skills cards even though base is ready.
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
             exit 1
           fi
 
