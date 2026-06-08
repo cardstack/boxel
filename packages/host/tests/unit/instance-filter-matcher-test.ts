@@ -244,6 +244,26 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
   });
 
+  test('an unset interior linksTo resolves to NULL at the leaf', function (assert) {
+    let { ringo } = cards;
+    // ringo.bestFriend is unset (present-and-null, not not-loaded). The server
+    // traverses `bestFriend -> name` to SQL NULL, so `eq null` matches and a
+    // non-null eq does not. Distinct from the not-loaded case, which is
+    // unresolvable.
+    assert.strictEqual(
+      match(ringo, { on: personRef, eq: { 'bestFriend.name': null } }),
+      'match',
+    );
+    assert.strictEqual(
+      match(ringo, { on: personRef, eq: { 'bestFriend.name': 'Van Gogh' } }),
+      'no-match',
+    );
+    assert.strictEqual(
+      match(ringo, { on: personRef, in: { 'bestFriend.name': [null] } }),
+      'match',
+    );
+  });
+
   // -- in ---------------------------------------------------------------------
 
   test('in matches when the value is in the set', function (assert) {

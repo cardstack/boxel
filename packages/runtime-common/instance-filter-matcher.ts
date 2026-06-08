@@ -187,6 +187,12 @@ function resolvePath(
 
   // Walk interior segments, descending into contained / linked instances.
   let sawUnresolvable = false;
+  // Count branches that bottom out at a null/unset interior segment. The
+  // server's JSON-path traversal yields a NULL leaf in that case (e.g.
+  // `search_doc -> 'bestFriend' -> 'name'` with `bestFriend` null is SQL
+  // NULL), so each such branch contributes one `null` leaf value below — only
+  // a null-valued predicate (`eq`/`in`/`contains` null) can match it.
+  let nullLeafCount = 0;
   for (let i = 0; i < segments.length - 1; i++) {
     let segment = segments[i];
     let next: BaseDef[] = [];
@@ -211,12 +217,15 @@ function resolvePath(
       let elements = isPlural ? (Array.isArray(raw) ? raw : []) : [raw];
       for (let element of elements) {
         if (api.isNonPresentLink(element)) {
+          // A not-loaded link can't be followed — distinct from present-and-null.
           sawUnresolvable = true;
           continue;
         }
-        if (element != null) {
-          next.push(element);
+        if (element == null) {
+          nullLeafCount++;
+          continue;
         }
+        next.push(element);
       }
     }
     nodes = next;
@@ -226,6 +235,9 @@ function resolvePath(
   let leaf = segments[segments.length - 1];
   let values: any[] = [];
   let leafField: Field<any> | undefined;
+  for (let i = 0; i < nullLeafCount; i++) {
+    values.push(null);
+  }
   for (let node of nodes) {
     if (node == null) {
       continue;
