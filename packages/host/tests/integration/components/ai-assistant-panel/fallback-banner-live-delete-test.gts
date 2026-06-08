@@ -84,15 +84,15 @@ async function seedRealm(
   mockMatrixUtils: ReturnType<typeof setupMockMatrix>,
   opts: { withEnvDefault: boolean; withUserChoice: boolean },
 ): Promise<Realm> {
-  let contents: Record<string, unknown> = {
+  let contents = {
     '.realm.json': `{ "name": "Fallback Banner Live Delete Test Realm" }`,
+    ...(opts.withUserChoice && {
+      'SystemCard/user-choice.json': SYSTEM_CARD_CONTENT,
+    }),
+    ...(opts.withEnvDefault && {
+      'SystemCard/env-default.json': SYSTEM_CARD_CONTENT,
+    }),
   };
-  if (opts.withUserChoice) {
-    contents['SystemCard/user-choice.json'] = SYSTEM_CARD_CONTENT;
-  }
-  if (opts.withEnvDefault) {
-    contents['SystemCard/env-default.json'] = SYSTEM_CARD_CONTENT;
-  }
   let realm!: Realm;
   await withCachedRealmSetup(async () => {
     let setup = await setupIntegrationTestRealm({
