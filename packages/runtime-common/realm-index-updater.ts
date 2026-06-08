@@ -1,4 +1,3 @@
-import { Memoize } from 'typescript-memoize';
 import {
   IndexWriter,
   Deferred,
@@ -26,6 +25,7 @@ import ignore, { type Ignore } from 'ignore';
 
 export class RealmIndexUpdater {
   #realm: Realm;
+  #realmURL: URL | undefined;
   #log = logger('realm-index-updater');
   #ignoreData: Record<string, string> = {};
   // Bumped every time a from-scratch result writes #ignoreData. Concurrent
@@ -78,9 +78,8 @@ export class RealmIndexUpdater {
     return this.#stats;
   }
 
-  @Memoize()
   private get realmURL() {
-    return new URL(this.#realm.url);
+    return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
   private get ignoreMap() {

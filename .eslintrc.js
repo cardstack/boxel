@@ -162,27 +162,5 @@ module.exports = {
         ],
       },
     },
-    {
-      // Files exempted only for the `Decorator` selector because they use
-      // `@Memoize()` from typescript-memoize, which is not erasable. The
-      // remaining erasable-syntax guards still apply here. This exemption is
-      // removed once typescript-memoize is dropped from node-run code. Do not
-      // add new files here; remove the decorator to remove the entry.
-      files: [
-        'packages/realm-server/server.ts',
-        'packages/runtime-common/index-runner.ts',
-        'packages/runtime-common/index-writer.ts',
-        'packages/runtime-common/realm-index-query-engine.ts',
-        'packages/runtime-common/realm-index-updater.ts',
-      ],
-      rules: {
-        'no-restricted-syntax': [
-          'error',
-          ...NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
-            (s) => s.selector !== 'Decorator',
-          ),
-        ],
-      },
-    },
   ],
 };

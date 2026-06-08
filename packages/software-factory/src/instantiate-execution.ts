@@ -485,11 +485,11 @@ async function prepareExampleInstance(
   // `CodeRef`. Running it first means the nested accesses below cannot
   // throw.
   //
-  // NB: we import from the decorator-free `/card-document-shape` subpath
-  // (not the `/document-types` barrel entry that re-exports it) because
-  // this module is exercised by the software-factory Playwright harness,
-  // which can't compile the `@Memoize()` decorators reachable through
-  // the heavier runtime-common entry points.
+  // NB: we import from the lightweight `/card-document-shape` subpath
+  // (not the `/document-types` barrel entry that re-exports it) so the
+  // software-factory Playwright harness that exercises this module does
+  // not have to pull in the heavier, Node-oriented runtime-common entry
+  // points.
   if (!isSingleCardDocument(parsedDoc)) {
     return {
       error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,
