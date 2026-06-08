@@ -136,7 +136,7 @@ export default class ItemButton extends Component<Signature> {
   @tracked private prerenderedTypeName: string | undefined;
   @tracked private prerenderedTypeIconHtml: string | undefined;
 
-  // The catalog-item button element, captured so the shared
+  // The item-button element, captured so the shared
   // positionAdornLabel modifier can anchor the type-label tab to the
   // card's footprint (the same way the stack-item overlay anchors to
   // the rendered card). Tracked so the label positioner re-runs once
@@ -286,7 +286,7 @@ export default class ItemButton extends Component<Signature> {
     <Button
       @rectangular={{true}}
       class={{cn
-        'catalog-item'
+        'item-button'
         (if @adorn @adornStrokeClass)
         selected=@isSelected
         create-new-button=this.isNewCard
@@ -369,31 +369,31 @@ export default class ItemButton extends Component<Signature> {
       {{/if}}
     </Button>
     <style scoped>
-      .catalog-item {
+      .item-button {
         height: 100%;
         width: 100%;
         max-width: 100%;
         position: relative;
       }
-      .catalog-item:not(.create-new-button) {
+      .item-button:not(.create-new-button) {
         --boxel-button-padding: 0;
 
         box-sizing: content-box;
         text-align: start;
       }
-      .catalog-item :deep(*) {
+      .item-button :deep(*) {
         box-sizing: border-box;
       }
-      .catalog-item:focus {
+      .item-button:focus {
         --host-outline-offset: -1px;
       }
-      .catalog-item.selected {
+      .item-button.selected {
         border-color: var(--boxel-highlight);
       }
-      .catalog-item:hover {
+      .item-button:hover {
         box-shadow: var(--boxel-box-shadow);
       }
-      .catalog-item.selected:hover {
+      .item-button.selected:hover {
         border-color: var(--boxel-highlight);
         box-shadow:
           0 0 0 1px var(--boxel-highlight),
@@ -439,8 +439,8 @@ export default class ItemButton extends Component<Signature> {
          catalog-rendered wrappers around those primitives and drop the
          Button's default border so AdornContext's teal outline shows
          through when adorn is active. */
-      .catalog-item.adorn:hover,
-      .catalog-item.adorn.selected {
+      .item-button.adorn:hover,
+      .item-button.adorn.selected {
         border-color: transparent;
       }
       /* Selection ring for adorn catalog items. Defined here on the item
@@ -448,11 +448,17 @@ export default class ItemButton extends Component<Signature> {
          which the portaled catalog item didn't reliably inherit — leaving
          only the thin 1px button border) so the ring stays a full-weight
          4px whether or not the item is hovered, darkening on hover to match
-         the rest of the Adorn treatment. */
-      .catalog-item.adorn.selected {
+         the rest of the Adorn treatment. `transition: none` makes the ring
+         appear in lockstep with the selection tag/chip (which render
+         instantly) instead of fading in ~0.2s later — and it's needed on the
+         hover variant too, since a card is normally hovered at the moment
+         it's clicked to select, so that rule governs the ring's first paint. */
+      .item-button.adorn.selected,
+      .item-button.adorn.selected:hover {
         box-shadow: 0 0 0 0.25rem var(--boxel-highlight);
+        transition: none;
       }
-      .catalog-item.adorn.selected:hover {
+      .item-button.adorn.selected:hover {
         box-shadow: 0 0 0 0.25rem var(--boxel-highlight-hover);
       }
       /* The type-label tab is placed by the shared positionAdornLabel
@@ -465,7 +471,7 @@ export default class ItemButton extends Component<Signature> {
         transition: opacity 0.1s;
         z-index: 1;
       }
-      .catalog-item.adorn:hover .search-type-label {
+      .item-button.adorn:hover .search-type-label {
         opacity: 1;
       }
       /* Selection chip in the bottom-right corner — purely

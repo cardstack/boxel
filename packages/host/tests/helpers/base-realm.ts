@@ -157,8 +157,40 @@ let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
 let CSSField: (typeof CardAPIModule)['CSSField'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
-let serializeCard: (typeof CardAPIModule)['serializeCard'];
-let serializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
+let rawSerializeCard: (typeof CardAPIModule)['serializeCard'];
+let rawSerializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
+
+// Test-side wrappers around the raw card-api serialize functions that
+// auto-supply `virtualNetwork` from the active loader. Tests that need a
+// non-default VN can still pass one in `opts` and it overrides the
+// defaulted value.
+function serializeCard(
+  card: Parameters<(typeof CardAPIModule)['serializeCard']>[0],
+  opts?: Partial<Parameters<(typeof CardAPIModule)['serializeCard']>[1]>,
+): ReturnType<(typeof CardAPIModule)['serializeCard']> {
+  let loader = getService('loader-service').loader;
+  let vn = loader.getVirtualNetwork();
+  if (!vn) {
+    throw new Error(
+      `base-realm test helper's serializeCard requires the active loader to have a VirtualNetwork`,
+    );
+  }
+  return rawSerializeCard(card, { virtualNetwork: vn, ...opts });
+}
+
+function serializeFileDef(
+  fileDef: Parameters<(typeof CardAPIModule)['serializeFileDef']>[0],
+  opts?: Partial<Parameters<(typeof CardAPIModule)['serializeFileDef']>[1]>,
+): ReturnType<(typeof CardAPIModule)['serializeFileDef']> {
+  let loader = getService('loader-service').loader;
+  let vn = loader.getVirtualNetwork();
+  if (!vn) {
+    throw new Error(
+      `base-realm test helper's serializeFileDef requires the active loader to have a VirtualNetwork`,
+    );
+  }
+  return rawSerializeFileDef(fileDef, { virtualNetwork: vn, ...opts });
+}
 let isSaved: (typeof CardAPIModule)['isSaved'];
 let getRelationship: (typeof CardAPIModule)['getRelationship'];
 let getBrokenLinks: (typeof CardAPIModule)['getBrokenLinks'];
@@ -362,8 +394,8 @@ async function initialize() {
     getFields,
     createFromSerialized,
     updateFromSerialized,
-    serializeCard,
-    serializeFileDef,
+    serializeCard: rawSerializeCard,
+    serializeFileDef: rawSerializeFileDef,
     isSaved,
     getRelationship,
     getBrokenLinks,
