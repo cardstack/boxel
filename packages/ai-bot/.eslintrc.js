@@ -20,6 +20,19 @@ const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
     message:
       '`export =` syntax requires TypeScript compilation. Use a standard ES module `export default` (or named exports) instead.',
   },
+  {
+    selector: 'Decorator',
+    message:
+      "Decorators are not erasable and require compilation, so they break under Node's native `--experimental-strip-types`. Avoid decorators here (e.g. replace `@Memoize()` with a manual cache).",
+  },
+  {
+    // Non-ambient `namespace`/`module` blocks emit runtime code. Ambient
+    // declarations (`declare module`, `declare global`, `declare namespace`)
+    // are type-only and erasable, so they are exempt via `:not([declare=true])`.
+    selector: 'TSModuleDeclaration:not([declare=true])',
+    message:
+      'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable. Use standard ES modules instead.',
+  },
 ];
 
 module.exports = {

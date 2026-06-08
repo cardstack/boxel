@@ -20,6 +20,19 @@ const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
     message:
       '`export =` syntax requires TypeScript compilation. Use a standard ES module `export default` (or named exports) instead.',
   },
+  {
+    selector: 'Decorator',
+    message:
+      "Decorators are not erasable and require compilation, so they break under Node's native `--experimental-strip-types`. Avoid decorators here (e.g. replace `@Memoize()` with a manual cache).",
+  },
+  {
+    // Non-ambient `namespace`/`module` blocks emit runtime code. Ambient
+    // declarations (`declare module`, `declare global`, `declare namespace`)
+    // are type-only and erasable, so they are exempt via `:not([declare=true])`.
+    selector: 'TSModuleDeclaration:not([declare=true])',
+    message:
+      'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable. Use standard ES modules instead.',
+  },
 ];
 
 const DATA_TEST_SELECTORS = [
@@ -145,6 +158,28 @@ module.exports = {
           'error',
           ...NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
             (s) => s.selector !== 'TSEnumDeclaration',
+          ),
+        ],
+      },
+    },
+    {
+      // Files exempted only for the `Decorator` selector because they use
+      // `@Memoize()` from typescript-memoize, which is not erasable. The
+      // remaining erasable-syntax guards still apply here. This exemption is
+      // removed once typescript-memoize is dropped from node-run code. Do not
+      // add new files here; remove the decorator to remove the entry.
+      files: [
+        'packages/realm-server/server.ts',
+        'packages/runtime-common/index-runner.ts',
+        'packages/runtime-common/index-writer.ts',
+        'packages/runtime-common/realm-index-query-engine.ts',
+        'packages/runtime-common/realm-index-updater.ts',
+      ],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          ...NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
+            (s) => s.selector !== 'Decorator',
           ),
         ],
       },
