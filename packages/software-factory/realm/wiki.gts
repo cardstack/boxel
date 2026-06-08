@@ -181,6 +181,12 @@ export class Wiki extends CardDef {
   @field tags = containsMany(StringField);
   @field relatedPages = linksToMany(() => Wiki);
 
+  // Software-factory brief contract: when this Wiki card is used as a
+  // factory brief, an optional absolute URL of an existing card to
+  // improve. When set, the factory runs the improve flow (seed from that
+  // card, then apply the brief adjustments); when empty, greenfield.
+  @field sourceCardUrl = contains(StringField);
+
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Wiki) {
       return this.cardInfo.name?.trim()?.length

@@ -320,6 +320,36 @@ cardName, error, stackTrace? }`). Without `path`, searches the realm
 9. **Record progress** by appending to the issue's `comments` array
    (Read + Edit the issue JSON). Never modify the issue's `description`.
 
+## Adjustment issues (improve flow)
+
+When the issue you picked up has `issueType: adjustment`, you are
+**editing an existing, already-seeded card** — not creating one from
+scratch. The bootstrap step seeded the source card and its same-realm
+dependency graph into the workspace and confirmed a green baseline
+before this issue existed, so the files named in the issue's
+description are **already present**.
+
+How adjustment work differs from a greenfield `feature` issue:
+
+- **Read the seeded files first.** The issue description names the
+  target file(s). `Read` each one (and grep for siblings) before
+  touching anything — you are modifying working code, not authoring a
+  blank slate.
+- **Apply only the delta.** Use `Edit` for surgical changes to the
+  seeded `.gts` / `.json`. Don't rewrite the card; change exactly what
+  the delta calls for.
+- **Guard the baseline.** The pre-existing tests are part of the
+  contract. Extend `.test.gts` with assertions for the new behavior,
+  but the **existing tests must still pass** — `run_tests` covers both.
+  A delta that breaks a baseline test is not done; fix it or
+  `request_clarification`.
+- **Keep instances and Spec coherent.** If the delta adds/renames a
+  field, update the sample instances and the Catalog Spec's
+  `linkedExamples` so `run_instantiate` and `run_parse` stay green.
+- **Then the standard loop applies unchanged** — self-validate with the
+  `run_*` tools, `signal_done`, fix on feedback, record progress in
+  `comments`. Same validators, same invariants.
+
 ## Target Realm Artifact Structure
 
 ```

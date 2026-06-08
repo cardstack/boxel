@@ -111,18 +111,59 @@ function buildSeedIssueDocument(
   darkfactoryModuleUrl: string,
 ) {
   let now = new Date().toISOString();
+  let improve = Boolean(brief.sourceCardUrl);
 
-  let description = [
+  let briefHeader = [
     `## Brief`,
     ``,
     `**URL:** ${brief.sourceUrl}`,
     `**Title:** ${brief.title}`,
     `**Summary:** ${brief.contentSummary}`,
+    ...(improve ? [`**Source card to improve:** ${brief.sourceCardUrl}`] : []),
     ``,
     `### Full content`,
     ``,
     brief.content,
     ``,
+  ];
+
+  let { instructions, acceptanceCriteria, summary } = improve
+    ? improveSeedInstructions(brief)
+    : greenfieldSeedInstructions();
+
+  let description = [...briefHeader, ...instructions].join('\n');
+
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        issueId: 'BOOT-1',
+        summary,
+        description,
+        issueType: 'bootstrap',
+        status: 'backlog',
+        priority: 'critical',
+        order: 0,
+        acceptanceCriteria,
+        createdAt: now,
+        updatedAt: now,
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Issue',
+        },
+      },
+    },
+  };
+}
+
+function greenfieldSeedInstructions(): {
+  instructions: string[];
+  acceptanceCriteria: string;
+  summary: string;
+} {
+  let instructions = [
     `## Instructions`,
     ``,
     `Read the brief above and create the following project artifacts in the workspace:`,
@@ -141,7 +182,7 @@ function buildSeedIssueDocument(
     `- \`blockedBy\` relationships to any prior issues it depends on`,
     ``,
     `Use the **\`Write\`** tool to create each \`.json\` file. When every artifact is on disk, call **\`signal_done\`** — the orchestrator marks this bootstrap issue done.`,
-  ].join('\n');
+  ];
 
   let acceptanceCriteria = [
     '- [ ] Project card created with objective, scope, and success criteria from the brief',
@@ -156,26 +197,91 @@ function buildSeedIssueDocument(
   ].join('\n');
 
   return {
-    data: {
-      type: 'card' as const,
-      attributes: {
-        issueId: 'BOOT-1',
-        summary: 'Process brief and create project artifacts',
-        description,
-        issueType: 'bootstrap',
-        status: 'backlog',
-        priority: 'critical',
-        order: 0,
-        acceptanceCriteria,
-        createdAt: now,
-        updatedAt: now,
-      },
-      meta: {
-        adoptsFrom: {
-          module: darkfactoryModuleUrl,
-          name: 'Issue',
-        },
-      },
-    },
+    instructions,
+    acceptanceCriteria,
+    summary: 'Process brief and create project artifacts',
+  };
+}
+
+function improveSeedInstructions(brief: FactoryBrief): {
+  instructions: string[];
+  acceptanceCriteria: string;
+  summary: string;
+} {
+  let instructions = [
+    `## Mode: IMPROVE EXISTING CARD`,
+    ``,
+    `This brief carries a \`sourceCardUrl\`, so you are **improving an existing**`,
+    `card rather than building one from scratch. Follow the "Improve flow"`,
+    `section of the \`software-factory-bootstrap\` skill. The steps:`,
+    ``,
+    `1. **Project artifacts** — create the \`Project\`, \`IssueTracker\`, and`,
+    `   \`Knowledge Articles\` exactly as in greenfield, from the brief above.`,
+    `2. **Seed the source card** — \`${brief.sourceCardUrl}\` — and its`,
+    `   same-realm dependency graph into the workspace (read-only from the`,
+    `   source realm; never write to it):`,
+    `   - Determine the source card's realm, then \`boxel realm pull`,
+    `     <source-realm-url> <scratch-dir>\` into a fresh \`mktemp -d\` (a`,
+    `     download — it does not mutate the source realm).`,
+    `   - Copy into the workspace, preserving relative paths: the source`,
+    `     card's module (\`.gts\`), its co-located test (\`.test.gts\`) if one`,
+    `     exists, every **same-realm** module it imports (transitively), its`,
+    `     sample instances (\`<CardType>/*.json\`), and its Catalog Spec`,
+    `     (\`Spec/*.json\`). Leave cross-realm imports`,
+    `     (\`https://cardstack.com/base/...\`) untouched.`,
+    `   - **If the source card has no co-located test** (common for catalog`,
+    `     cards), write **characterization tests** that capture its current`,
+    `     behavior — field defaults, computed-field values, and key rendered`,
+    `     output. These tests are what make the baseline green and what the`,
+    `     adjustment must not regress; without them there is nothing to`,
+    `     protect.`,
+    `3. **Confirm a GREEN BASELINE** — run \`run_parse\`, \`run_evaluate\`,`,
+    `   \`run_instantiate\`, and \`run_tests\` against the seeded copy. They`,
+    `   must **all pass before you create any adjustment Issue** (\`run_tests\``,
+    `   needs the co-located or characterization tests from step 2 — a`,
+    `   zero-test run counts as failed). If the baseline is not green, fix`,
+    `   the seeded copy first; if it cannot be made green,`,
+    `   \`request_clarification\` — do **not** proceed to adjustments on a red`,
+    `   baseline.`,
+    `4. **Provenance Knowledge Article** — record where the seed came from`,
+    `   (the \`sourceCardUrl\`, which files were copied) in a`,
+    `   \`Knowledge Articles/<slug>-source-provenance.json\`.`,
+    `5. **Adjustment Issues** — create one Issue per coherent adjustment the`,
+    `   brief describes, with **\`issueType\` \`adjustment\`** (not \`feature\`).`,
+    `   Each adjustment Issue's \`description\` must name:`,
+    `   - the workspace-relative **target file(s) to edit** (the seeded`,
+    `     card and any support files the delta touches),`,
+    `   - the **delta** — what changes, as a diff against the baseline, not`,
+    `     a full card spec,`,
+    `   - **acceptance** — the new expected behavior and its test`,
+    `     assertions, **plus** that the pre-existing baseline tests keep`,
+    `     passing (the delta must not regress the green baseline).`,
+    ``,
+    `Each adjustment Issue must have a \`project\` relationship, the relevant`,
+    `\`relatedKnowledge\` links (including the provenance article), and`,
+    `\`blockedBy\` links where one delta depends on another.`,
+    ``,
+    `Use the **\`Write\`** tool for every \`.json\` and copied file. When the`,
+    `baseline is green and all adjustment Issues are on disk, call`,
+    `**\`signal_done\`** — the orchestrator marks this bootstrap issue done.`,
+  ];
+
+  let acceptanceCriteria = [
+    '- [ ] Project card created with objective, scope, and success criteria from the brief',
+    '- [ ] IssueTracker card created and linked to the Project card',
+    '- [ ] Knowledge Articles for brief context and agent onboarding created',
+    '- [ ] Source card + its same-realm dependency graph copied into the workspace (module, imported modules, instances, Spec)',
+    '- [ ] Tests present on the seeded copy — the source card’s co-located tests, or characterization tests written here if it had none',
+    '- [ ] Green baseline confirmed: parse, evaluate, instantiate, and tests all pass on the seeded copy BEFORE any adjustment issue is created',
+    '- [ ] Source-provenance Knowledge Article created (sourceCardUrl + copied files)',
+    '- [ ] One `adjustment` issue per coherent delta, each naming target file(s), the delta, and acceptance (incl. baseline tests still pass)',
+    '- [ ] Adjustment issues have project and relatedKnowledge relationships, and blockedBy where appropriate',
+    '- [ ] This bootstrap issue marked as done',
+  ].join('\n');
+
+  return {
+    instructions,
+    acceptanceCriteria,
+    summary: 'Seed the source card and create adjustment issues',
   };
 }

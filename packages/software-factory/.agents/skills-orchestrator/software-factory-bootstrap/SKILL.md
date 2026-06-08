@@ -9,6 +9,84 @@ Use this skill when the current issue has `issueType: bootstrap`. Your job is
 to read the brief, create project artifacts, and set up the issue backlog for
 the implementation phase.
 
+## Two modes: greenfield vs improve
+
+The bootstrap issue's description tells you which mode you're in:
+
+- **Greenfield** (no source card) — build new cards from scratch. Create
+  Project / IssueTracker / Knowledge Articles, then one `feature` Issue per
+  entry-point card. This is the default; the rest of this skill describes it.
+- **Improve** (the brief carries a `sourceCardUrl`, surfaced in the bootstrap
+  issue as **"Source card to improve:"**) — seed the target realm with a
+  working copy of an existing card, confirm it's green, then create
+  `adjustment` Issues that describe deltas to it. See **"Improve flow"** below.
+
+Everything from the implementation loop onward (scheduling, the validators,
+status transitions, project completion) is identical for both modes — improve
+is a superset, not a fork. The only differences are the seed-from-source
+sub-phase below and that improve emits `adjustment` Issues instead of
+`feature` Issues.
+
+## Improve flow (when a source card is present)
+
+Do this **in addition to** the standard Project / IssueTracker / Knowledge
+Article artifacts (steps still apply), and **instead of** creating `feature`
+Issues per entry-point card.
+
+1. **Seed the source card + its same-realm dependency graph.** Read-only from
+   the source realm — never write to it; the "never write to the source realm"
+   rule still holds. Mechanics:
+   - Determine the source card's realm from its URL (fetch the card and read
+     `data.meta.realmURL`, or strip the card path back to the realm root).
+   - `boxel realm pull <source-realm-url> <scratch-dir>` into a fresh
+     `mktemp -d`. This is a download into a scratch dir — it does not mutate
+     the source realm, so it doesn't violate the no-write rule.
+   - Copy into the workspace, preserving relative paths: the source card's
+     module (`.gts`), its co-located test (`.test.gts`) **if one exists**,
+     **every same-realm module it imports** (follow the imports transitively
+     — read the `.gts` and resolve relative/same-origin imports), its sample
+     instances (`<CardType>/*.json`), and its Catalog Spec (`Spec/*.json`).
+     Leave cross-realm imports (`https://cardstack.com/base/...`, other
+     realms) as-is — they resolve at runtime.
+   - **If the source card has no co-located test** — common for catalog
+     cards, which rarely ship `.test.gts` — write **characterization tests**
+     that capture its current behavior: field defaults, computed-field
+     outputs (e.g. a `displayName` / `valueChange`), and the key rendered
+     output of its formats. These establish the green baseline; they are
+     what the adjustment must not regress. Without them there is nothing to
+     protect and `run_tests` (which fails on zero tests) can never go green.
+2. **Confirm a green baseline.** Run `run_parse`, `run_evaluate`,
+   `run_instantiate`, and `run_tests` against the seeded copy. They must **all
+   pass before you create any adjustment Issue** — `run_tests` relies on the
+   co-located or characterization tests from step 1; a zero-test run counts
+   as failed. A red parse/eval/instantiate baseline usually means the copy is
+   incomplete (a missed same-realm dependency) — copy the missing file and
+   re-run. If you cannot get green, `request_clarification` rather than
+   proceeding.
+3. **Write a source-provenance Knowledge Article**
+   (`Knowledge Articles/<slug>-source-provenance.json`, `articleType` per the
+   schema): the `sourceCardUrl`, the list of files copied, and the baseline
+   validator results. This is what later issues read to understand what the
+   seed was.
+4. **Create `adjustment` Issues** — one per coherent delta the brief
+   describes (not one-per-entry-point-card; that's the greenfield rule). Use
+   `issueType: "adjustment"` (confirm the enum via `get_card_schema`). Each
+   adjustment Issue's `description` (immutable after creation) must name:
+   - the **workspace-relative target file(s)** to edit — the seeded card and
+     any support files the delta touches (they already exist in the workspace);
+   - the **delta** — what changes, phrased as a diff against the seeded
+     baseline, not a from-scratch card spec;
+   - **acceptance** — the new expected behavior and its test assertions, plus
+     the standing requirement that the **pre-existing baseline tests keep
+     passing** (the delta must not regress the green baseline).
+
+   Wire `project` / `relatedKnowledge` (include the provenance article) /
+   `blockedBy` exactly as for `feature` Issues.
+
+The implementation agent that later picks up an `adjustment` Issue **edits**
+the seeded files rather than creating cards from scratch — see the
+"Adjustment issues" section of `software-factory-operations`.
+
 ## How to write tracker-schema cards
 
 Project, KnowledgeArticle, and Issue cards are plain `.json` files in
