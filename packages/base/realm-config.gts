@@ -9,6 +9,7 @@ import {
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
+import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import {
   findDuplicateRoutingPaths,
   validateRoutingPath,
@@ -17,9 +18,7 @@ import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
-import GlimmerComponent from '@glimmer/component';
 import { action } from '@ember/object';
-import type { ComponentLike } from '@glint/template';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -218,38 +217,29 @@ class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   </template>
 }
 
-// Wrap-style editor wired via the per-usage `edit:` option on the
-// hostRoutingRules field. Receives `@model` (the realm config card),
-// `@values` (the current rules array), and `@defaultEditor` (the
-// pre-bound default ContainsManyEditor) — adds a cross-rule advisory
-// banner above the standard iteration / add / remove UI, without
-// reimplementing it.
-class RealmConfigRoutingRulesEditor extends GlimmerComponent<{
-  Args: {
-    model: RealmConfig;
-    values: RoutingRuleField[];
-    defaultEditor: ComponentLike<{}>;
-  };
-  Element: HTMLElement;
-}> {
+// Custom CardDef edit template. Wraps the default CardDef edit so the
+// standard CardInfo header, generic field section, and notes footer all
+// render unchanged; the only addition is a cross-rule advisory banner
+// for duplicate routing paths above the form.
+class RealmConfigEdit extends Component<typeof RealmConfig> {
   get duplicatePaths(): string[] {
-    return findDuplicateRoutingPaths(this.args.values);
+    return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
   <template>
     {{#if this.duplicatePaths.length}}
-      <div
-        class='warning'
-        role='status'
-        data-test-duplicate-path-warning
-      >
+      <div class='warning' role='status' data-test-duplicate-path-warning>
         Duplicate paths:
         {{#each this.duplicatePaths as |p i|}}
           {{#if i}}, {{/if}}<code>{{p}}</code>
         {{/each}}
       </div>
     {{/if}}
-    <@defaultEditor />
+    <DefaultCardDefTemplate
+      @model={{@model}}
+      @fields={{@fields}}
+      @format={{@format}}
+    />
     <style scoped>
       .warning {
         background: #fef3c7;
@@ -258,7 +248,7 @@ class RealmConfigRoutingRulesEditor extends GlimmerComponent<{
         border-radius: var(--boxel-border-radius-sm, 6px);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-size: var(--boxel-font-size-sm);
-        margin-bottom: var(--boxel-sp-xs);
+        margin: var(--boxel-sp-sm) var(--boxel-sp-xl) 0;
       }
       .warning code {
         font-family: var(--boxel-font-family-mono, monospace);
@@ -345,9 +335,7 @@ export class RealmConfig extends CardDef {
 
   @field backgroundURL = contains(StringField);
   @field iconURL = contains(StringField);
-  @field hostRoutingRules = containsMany(RoutingRuleField, {
-    edit: RealmConfigRoutingRulesEditor,
-  });
+  @field hostRoutingRules = containsMany(RoutingRuleField);
   // Opt-in to keeping the full prerendered isolated HTML for the
   // realm's default CardsGrid index card. Default behaviour for this
   // card writes a small boilerplate placeholder instead — the
@@ -369,4 +357,5 @@ export class RealmConfig extends CardDef {
 
   static embedded = RealmConfigEmbedded;
   static isolated = RealmConfigIsolated;
+  static edit = RealmConfigEdit;
 }

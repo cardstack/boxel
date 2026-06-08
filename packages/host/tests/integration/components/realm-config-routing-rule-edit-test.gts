@@ -176,21 +176,6 @@ module(
         .containsText('/', 'the duplicate banner names the conflicting path');
     });
 
-    test('the containsMany override wraps the default editor via @defaultEditor', async function (assert) {
-      await renderRealmConfigEdit([{ path: '/docs' }, { path: '/about' }]);
-
-      assert.dom('[data-test-host-routing-rules-edit-wrap]').doesNotExist();
-      // The custom override renders its own banner-bearing template AND
-      // the default ContainsManyEditor (via @defaultEditor) below it —
-      // both must be present to prove the wrap contract is honoured.
-      assert
-        .dom('[data-test-contains-many="hostRoutingRules"]')
-        .exists('the default ContainsManyEditor renders via @defaultEditor');
-      assert
-        .dom('[data-test-contains-many="hostRoutingRules"] [data-test-item]')
-        .exists({ count: 2 }, 'all rules render through the default iteration');
-    });
-
     test('typing into the path input always stores a leading slash', async function (assert) {
       await renderRealmConfigEdit([{}]);
 
