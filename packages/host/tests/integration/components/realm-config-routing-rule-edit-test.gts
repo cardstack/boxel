@@ -104,6 +104,13 @@ module(
         .dom('[data-test-realm-picker-locked="true"]')
         .exists('the realm picker is locked');
       assert
+        .dom(
+          '[data-test-realm-picker-locked="true"] [data-test-boxel-picker-remove-button]',
+        )
+        .doesNotExist(
+          'the consuming-realm pill does not offer a remove affordance when the picker is locked',
+        );
+      assert
         .dom(`[data-test-realm="${realmName}"]`)
         .exists('candidates from the consuming realm are shown');
       assert
