@@ -8,6 +8,9 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format';
+import { type Format, formats, isValidFormat } from './formats';
+import type { CodeRef } from './code-ref';
+import { isCodeRef } from './card-document-shape';
 import type {
   LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
@@ -19,6 +22,7 @@ export type SearchRequestErrorCode =
   | 'invalid-json'
   | 'unsupported-method'
   | 'invalid-query'
+  | 'invalid-render'
   | 'invalid-prerendered-html-format';
 
 type PrerenderedRenderType = {
@@ -252,6 +256,139 @@ export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
     htmlFormat,
     cardUrls,
     renderType,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Unified search request (the /_search + /_federated-search request body).
+//
+// On top of the query (filter / sort / page / realms), the body grows two
+// optional members — `render` (how to render the preferred HTML) and
+// `dataOnly` (opt-in live-cards-only) — plus `cardUrls` (promoted from the
+// prerendered opts). Prefer-HTML is the DEFAULT: a missing `render` is NOT
+// read as data-only; `dataOnly: true` is the only way to get live-only.
+// ---------------------------------------------------------------------------
+
+// `render.renderType`: an explicit CodeRef to render every result as, or the
+// literal "native" escape valve (each result in its own most-derived type).
+// Omitted → the searched `filter.on` common-ancestor type (resolved by the
+// server).
+export type SearchRenderType = CodeRef | 'native';
+
+export interface SearchRenderSpec {
+  // The format to render; defaults to "fitted" when the caller omits it.
+  format: Format;
+  renderType?: SearchRenderType;
+}
+
+export interface UnifiedSearchOpts {
+  // The prefer-HTML rendering spec. Present unless `dataOnly` is set.
+  render?: SearchRenderSpec;
+  // Opt-in live-cards-only (e.g. boxel-cli): full cards, never HTML.
+  dataOnly?: boolean;
+  cardUrls?: string[];
+}
+
+export interface UnifiedSearchRequest extends UnifiedSearchOpts {
+  cardsQuery: Query;
+}
+
+export const DEFAULT_RENDER_FORMAT: Format = 'fitted';
+
+function normalizeRenderSpec(value: unknown): SearchRenderSpec {
+  let spec: SearchRenderSpec = { format: DEFAULT_RENDER_FORMAT };
+  if (value === undefined) {
+    return spec;
+  }
+  if (typeof value !== 'object' || value === null) {
+    throw new SearchRequestError('invalid-render', 'render must be an object');
+  }
+  let { format, renderType } = value as {
+    format?: unknown;
+    renderType?: unknown;
+  };
+  if (format !== undefined) {
+    if (typeof format !== 'string' || !isValidFormat(format)) {
+      throw new SearchRequestError(
+        'invalid-render',
+        `render.format must be one of ${formats.join(', ')}`,
+      );
+    }
+    spec.format = format;
+  }
+  if (renderType !== undefined) {
+    if (renderType === 'native') {
+      spec.renderType = 'native';
+    } else if (isCodeRef(renderType)) {
+      spec.renderType = renderType;
+    } else {
+      throw new SearchRequestError(
+        'invalid-render',
+        'render.renderType must be a CodeRef or "native"',
+      );
+    }
+  }
+  return spec;
+}
+
+export async function parseUnifiedSearchRequestFromRequest(
+  request: Request,
+): Promise<UnifiedSearchRequest> {
+  let payload = await parseSearchRequestPayload(request);
+  return parseUnifiedSearchRequestFromPayload(payload);
+}
+
+export function parseUnifiedSearchRequestFromPayload(
+  payload: unknown,
+): UnifiedSearchRequest {
+  let payloadRecord =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, any>)
+      : {};
+
+  // `dataOnly: true` is the only way to get live-only results; anything else
+  // (including a missing `render`) keeps the prefer-HTML default.
+  let dataOnly = payloadRecord.dataOnly === true;
+
+  let hasCardUrls = 'cardUrls' in payloadRecord;
+  let cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
+  if (hasCardUrls && !cardUrls) {
+    throw new SearchRequestError(
+      'invalid-query',
+      'cardUrls must be a string or array of strings',
+    );
+  }
+
+  // Materialize the prefer-HTML spec (format defaulting to "fitted") whenever
+  // the caller hasn't opted into data-only — so a request with no `render` is
+  // prefer-HTML/fitted, not live-only.
+  let render = dataOnly ? undefined : normalizeRenderSpec(payloadRecord.render);
+
+  let {
+    render: _remove1,
+    dataOnly: _remove2,
+    cardUrls: _remove3,
+    ...rest
+  } = payloadRecord;
+  let cardsQuery: unknown = rest;
+
+  try {
+    assertQuery(cardsQuery);
+  } catch (e) {
+    if (e instanceof InvalidQueryError) {
+      throw new SearchRequestError(
+        'invalid-query',
+        `Invalid query: ${e.message}`,
+      );
+    }
+    throw e;
+  }
+
+  return {
+    cardsQuery: cardsQuery as Query,
+    render,
+    dataOnly,
+    cardUrls,
   };
 }
 

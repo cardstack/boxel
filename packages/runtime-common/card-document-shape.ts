@@ -24,9 +24,11 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type {
   CardFields,
   CardResource,
+  CssResource,
   FileMetaResource,
   Meta,
   Relationship,
+  RenderedHtmlResource,
   Saved,
 } from './resource-types';
 import type {
@@ -42,6 +44,8 @@ import type {
 // `FileMetaResource['type']` field types.
 const CardResourceType: CardResource['type'] = 'card';
 const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
+const RenderedHtmlResourceType: RenderedHtmlResource['type'] = 'rendered-html';
+const CssResourceType: CssResource['type'] = 'css';
 
 // ---------------------------------------------------------------------------
 // Code refs
@@ -279,6 +283,59 @@ export function isFileMetaResource(
   }
   let { adoptsFrom } = meta;
   return isCodeRef(adoptsFrom);
+}
+
+export function isRenderedHtmlResource(
+  resource: any,
+): resource is RenderedHtmlResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== RenderedHtmlResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  if (typeof resource.attributes !== 'object' || resource.attributes == null) {
+    return false;
+  }
+  return typeof resource.attributes.html === 'string';
+}
+
+export function isCssResource(resource: any): resource is CssResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== CssResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  if (typeof resource.attributes !== 'object' || resource.attributes == null) {
+    return false;
+  }
+  return typeof resource.attributes.href === 'string';
+}
+
+// An "identity-only" card: the server's representation for an HTML-backed
+// result — identity (`id`/`meta`/`links.self`) plus a `rendered-html`
+// relationship, with the live serialization deliberately withheld (no
+// `attributes`; hydration fetches it on demand).
+//
+// The definitive signal is the explicit `meta.identityOnly` flag the server
+// stamps on the wire — NOT the absence of `attributes`, which is a weak tell
+// (a full card with only relationship-typed fields can also serialize without
+// `attributes`). The flag means a consumer must not treat this resource as a
+// complete instance (it must not enter the Store; hydrate via `links.self`).
+export function isIdentityOnlyCardResource(
+  resource: any,
+): resource is CardResource {
+  if (!isCardResource(resource)) {
+    return false;
+  }
+  return resource.meta?.identityOnly === true;
 }
 
 // ---------------------------------------------------------------------------

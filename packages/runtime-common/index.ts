@@ -778,6 +778,8 @@ export type {
   CardCollectionDocument,
   FileMetaCollectionDocument,
   LinkableCollectionDocument,
+  UnifiedSearchCollectionDocument,
+  UnifiedSearchIncludedResource,
 } from './document-types';
 export type {
   CardResource,
