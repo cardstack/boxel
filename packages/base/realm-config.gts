@@ -286,16 +286,8 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         <h2 class='section-title'>Host Routing Rules</h2>
         {{#if @model.hostRoutingRules.length}}
           <ul class='rules' data-test-routing-rules>
-            {{#each @model.hostRoutingRules as |rule|}}
-              <li class='rule' data-test-routing-rule={{rule.path}}>{{rule.path}}
-                {{#if rule.instance}}
-                  <span class='arrow' aria-hidden='true'>→</span>
-                  <span
-                    class='target'
-                    data-test-routing-rule-target
-                  >{{rule.instance.cardTitle}}</span>
-                {{/if}}
-              </li>
+            {{#each @fields.hostRoutingRules as |Rule|}}
+              <li class='rule'><Rule @format='atom' /></li>
             {{/each}}
           </ul>
         {{else}}
@@ -339,10 +331,6 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       .rule {
         font-family: var(--boxel-font-family-mono, monospace);
         font-size: var(--boxel-font-size-sm);
-      }
-      .arrow {
-        opacity: 0.6;
-        margin: 0 var(--boxel-sp-xxs);
       }
       .empty {
         color: var(--boxel-450);
