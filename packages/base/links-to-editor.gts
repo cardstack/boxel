@@ -36,7 +36,7 @@ import BrokenLinkTemplate from './default-templates/broken-link-template';
 import { type RelationshipState } from './field-support';
 
 // A broken singular link surfaces as a terminal failure state from
-// `getRelationship`. The owning `linksTo` component reads it (it has the
+// `getRelationshipMembershipState`. The owning `linksTo` component reads it (it has the
 // containing instance in scope) and hands it down so the editor can show the
 // placeholder alongside a remove control, rather than the bare "Link" button it
 // shows for a never-set field. To swap in a working link, the user removes the

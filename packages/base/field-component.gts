@@ -241,28 +241,9 @@ export function getBoxComponent(
     ) {
       viewSlot = 'embedded';
     }
-    // Per-usage `edit` override on an atomic field wins over the
-    // FieldDef's `static edit`. Restricted to `contains` / `linksTo`
-    // here — collection fields (`containsMany` / `linksToMany`) carry
-    // their own override path in their component files, where the
-    // wrap-style contract can pass `@defaultEditor`. Without this
-    // gate the collection's field descriptor would also reach each
-    // iterated item and replace its template, blanking the item rows.
-    // The per-usage override expresses stronger intent than the
-    // view-slot dedup above: if the consumer explicitly supplied
-    // `edit:`, they asked for a different component in edit format,
-    // so it must win even when the FieldDef aliases its embedded /
-    // isolated slot to the same reference as its `static edit`.
-    // (Toggling embedded↔edit will remount as a result — that's
-    // correct; the consumer opted into a different component.)
-    let isAtomicFieldType =
-      field?.fieldType === 'contains' || field?.fieldType === 'linksTo';
-    let CardOrFieldFormatComponent: BaseDefComponent =
-      effectiveFormat === 'edit' && isAtomicFieldType && field?.edit
-        ? field.edit
-        : viewSlot
-          ? componentClass[viewSlot]
-          : componentClass[effectiveFormat];
+    let CardOrFieldFormatComponent: BaseDefComponent = viewSlot
+      ? componentClass[viewSlot]
+      : componentClass[effectiveFormat];
     return {
       CardOrFieldFormatComponent,
       fields,

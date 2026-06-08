@@ -359,7 +359,7 @@ module('Integration | Store', function (hooks) {
     await settled();
 
     assert.strictEqual(
-      (api.getRelationship(hassan, 'bestFriend') as CardAPI.RelationshipState)
+      api.getRelationshipMembershipState(hassan, 'bestFriend').membership![0]
         .kind,
       'present',
       'the consumer link resolves to the target before the delete',
@@ -367,10 +367,8 @@ module('Integration | Store', function (hooks) {
 
     await storeService.delete(`${testRealmURL}Person/boris`);
 
-    let after = api.getRelationship(
-      hassan,
-      'bestFriend',
-    ) as CardAPI.RelationshipState;
+    let after = api.getRelationshipMembershipState(hassan, 'bestFriend')
+      .membership![0];
     assert.strictEqual(
       after.kind,
       'not-found',
@@ -396,10 +394,10 @@ module('Integration | Store', function (hooks) {
     (hassan as any).friends = [jade, boris];
     await settled();
 
-    let before = api.getRelationship(
+    let before = api.getRelationshipMembershipState(
       hassan,
       'friends',
-    ) as CardAPI.RelationshipState[];
+    ).membership!;
     assert.deepEqual(
       before.map((s) => s.kind),
       ['present', 'present'],
@@ -408,10 +406,10 @@ module('Integration | Store', function (hooks) {
 
     await storeService.delete(`${testRealmURL}Person/boris`);
 
-    let after = api.getRelationship(
+    let after = api.getRelationshipMembershipState(
       hassan,
       'friends',
-    ) as CardAPI.RelationshipState[];
+    ).membership!;
     let borisEntry = after.find(
       (s) => s.reference === `${testRealmURL}Person/boris`,
     );

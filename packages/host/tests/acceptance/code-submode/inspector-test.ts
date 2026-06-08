@@ -249,6 +249,16 @@ const commandModuleSource = `
   }
 `;
 
+const componentModuleSource = `
+  import GlimmerComponent from '@glimmer/component';
+
+  export default class SampleComponent extends GlimmerComponent {
+    <template>
+      <div data-test-sample-component>Hello</div>
+    </template>
+  }
+`;
+
 const friendCardSource = `
   import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
@@ -504,6 +514,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'images/sample.png': makeMinimalPng(),
           'images/logo.png': makeMinimalPng(2, 2),
           'command-module.gts': commandModuleSource,
+          'component-module.gts': componentModuleSource,
           'erroring-module.gts': erroringModuleSource,
           'empty-file.gts': '',
           'sample-styles.css': 'body { color: red; }',
@@ -1258,6 +1269,28 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-boxel-selector-item-selected]')
       .hasText('SampleCommand command', 'selector shows command type');
+  });
+
+  test('shows component panel and Create Listing action for component declarations', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}component-module.gts`,
+    });
+
+    await waitFor('[data-test-component-panel-header]');
+    assert
+      .dom('[data-test-component-panel-header]')
+      .hasText('Component', 'renders component panel');
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('Create Listing action is available for a component');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .exists('clicking Create Listing opens the create listing modal');
   });
 
   test('can delete a misc file', async function (assert) {

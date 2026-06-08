@@ -15,7 +15,10 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type { RelationshipState } from 'https://cardstack.com/base/card-api';
+import type {
+  RelationshipState,
+  RelationshipStatus,
+} from 'https://cardstack.com/base/card-api';
 import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import {
@@ -40,22 +43,19 @@ class StubRealmService extends RealmService {
   }
 }
 
-function singularState(
-  state: RelationshipState | RelationshipState[],
-): RelationshipState {
-  if (Array.isArray(state)) {
+function singularState(rel: RelationshipStatus): RelationshipState {
+  let membership = rel.membership;
+  if (!membership || membership.length !== 1) {
     throw new Error('expected singular relationship state');
   }
-  return state;
+  return membership[0];
 }
 
-function pluralState(
-  state: RelationshipState | RelationshipState[],
-): RelationshipState[] {
-  if (!Array.isArray(state)) {
+function pluralState(rel: RelationshipStatus): RelationshipState[] {
+  if (!rel.membership) {
     throw new Error('expected plural relationship states');
   }
-  return state;
+  return rel.membership;
 }
 
 module(
@@ -97,7 +97,7 @@ module(
     // These tests pin down the *recognizer* side of the tolerance machine for
     // query-field linksTo / linksToMany: hand-plant a sentinel into the bucket
     // and assert the getters surface `undefined` / `emptyValue`, that
-    // `getRelationship` exposes the typed failure state, and that
+    // `getRelationshipMembershipState` exposes the typed failure state, and that
     // `getBrokenLinks` keeps its declared-`linksTo`-only contract by skipping
     // query-field findings. The producer side (`ensureQueryFieldSearchResource`
     // mirroring `searchResource.errors` onto the bucket on a real fetch
@@ -159,7 +159,7 @@ module(
       let host = (await makeHost('Anchor')) as CardDefType & {
         favorite: unknown;
       };
-      let { getDataBucket, getRelationship } = cardApi;
+      let { getDataBucket, getRelationshipMembershipState } = cardApi;
       let { isLinkError } = fieldSupport;
 
       let errorDoc: SerializedError = {
@@ -181,14 +181,15 @@ module(
       );
       assert.true(isLinkError(getDataBucket(host).get('favorite')));
 
-      let state = singularState(getRelationship(host, 'favorite'));
+      let state = singularState(
+        getRelationshipMembershipState(host, 'favorite'),
+      );
       assert.strictEqual(
         state.kind,
         'error',
-        "getRelationship kind === 'error'",
+        "getRelationshipMembershipState kind === 'error'",
       );
       if (state.kind === 'error') {
-        assert.true(state.isError);
         assert.strictEqual(state.value, undefined);
         assert.strictEqual(state.errorDoc, errorDoc);
       }
@@ -199,7 +200,7 @@ module(
       let host = (await makeHost('Anchor')) as CardDefType & {
         favorite: unknown;
       };
-      let { getDataBucket, getRelationship } = cardApi;
+      let { getDataBucket, getRelationshipMembershipState } = cardApi;
       let { isLinkNotFound } = fieldSupport;
 
       let errorDoc: SerializedError = {
@@ -217,7 +218,9 @@ module(
       assert.strictEqual(host.favorite, undefined);
       assert.true(isLinkNotFound(getDataBucket(host).get('favorite')));
 
-      let state = singularState(getRelationship(host, 'favorite'));
+      let state = singularState(
+        getRelationshipMembershipState(host, 'favorite'),
+      );
       assert.strictEqual(state.kind, 'not-found');
       if (state.kind === 'not-found') {
         assert.strictEqual(state.errorDoc, errorDoc);
@@ -230,7 +233,7 @@ module(
       let host = (await makeHost('Anchor')) as CardDefType & {
         matches: unknown;
       };
-      let { getDataBucket, getRelationship } = cardApi;
+      let { getDataBucket, getRelationshipMembershipState } = cardApi;
       let { isLinkError } = fieldSupport;
 
       let errorDoc: SerializedError = {
@@ -254,11 +257,11 @@ module(
       );
       assert.true(isLinkError(getDataBucket(host).get('matches')));
 
-      let states = pluralState(getRelationship(host, 'matches'));
+      let states = pluralState(getRelationshipMembershipState(host, 'matches'));
       assert.strictEqual(
         states.length,
         1,
-        'getRelationship returns a one-element array describing the resource-level error',
+        'getRelationshipMembershipState returns a one-element array describing the resource-level error',
       );
       assert.strictEqual(states[0].kind, 'error');
       if (states[0].kind === 'error') {
@@ -268,7 +271,7 @@ module(
 
     test('getBrokenLinks skips query-field sentinels (declared-linksTo-only contract)', async function (this: RenderingTestContext, assert) {
       // Query-backed `linksTo` / `linksToMany` participate in the tolerance
-      // state machine via `getRelationship`, but they intentionally do NOT
+      // state machine via `getRelationshipMembershipState`, but they intentionally do NOT
       // flow through `getBrokenLinks`. The scan is for the declared-`linksTo`
       // path; including query-field findings would mis-classify cards whose
       // query failed for soft reasons (cross-realm assertions, federated
@@ -277,7 +280,8 @@ module(
       let host = (await makeHost('Anchor')) as CardDefType & {
         favorite: unknown;
       };
-      let { getBrokenLinks, getDataBucket, getRelationship } = cardApi;
+      let { getBrokenLinks, getDataBucket, getRelationshipMembershipState } =
+        cardApi;
 
       let errorDoc: SerializedError = {
         status: 500,
@@ -298,9 +302,11 @@ module(
         'getBrokenLinks does NOT report query-field findings',
       );
 
-      // The structured state is still observable through getRelationship —
+      // The structured state is still observable through getRelationshipMembershipState —
       // that is the public surface query-field consumers branch on.
-      let state = singularState(getRelationship(host, 'favorite'));
+      let state = singularState(
+        getRelationshipMembershipState(host, 'favorite'),
+      );
       assert.strictEqual(state.kind, 'error');
     });
   },

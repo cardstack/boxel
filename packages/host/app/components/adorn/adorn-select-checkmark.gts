@@ -1,5 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { CheckMark } from '@cardstack/boxel-ui/icons';
+
 // The Adorn selection-chip artwork as standalone Icon components, so the
 // selection control can be a shared boxel-ui ContextButton: the consumer
 // passes the empty variant when unselected and the checked variant when
@@ -48,6 +50,7 @@ export const AdornCheckmarkEmpty: TemplateOnlyComponent<Signature> = <template>
 export const AdornCheckmarkSelected: TemplateOnlyComponent<Signature> =
   <template>
     <svg
+      class='adorn-checkmark-selected'
       viewBox='0 0 20 20'
       fill='none'
       xmlns='http://www.w3.org/2000/svg'
@@ -61,12 +64,12 @@ export const AdornCheckmarkSelected: TemplateOnlyComponent<Signature> =
         fill='var(--adorn-chip-bg, var(--adorn-accent-light))'
       />
       <circle cx='10' cy='10' r='7' fill='var(--boxel-highlight-foreground)' />
-      <path
-        d='M6.5 10.5L8.5 12.5L13.5 7.5'
-        stroke='var(--adorn-accent-light)'
-        stroke-width='1.5'
-        stroke-linecap='round'
-        stroke-linejoin='round'
-      />
+      <CheckMark x='6' y='6' width='8' height='8' />
     </svg>
+    <style scoped>
+      /* Tint the nested CheckMark glyph; the chip and circle keep their fills. */
+      .adorn-checkmark-selected {
+        --icon-color: var(--adorn-accent-light);
+      }
+    </style>
   </template>;
