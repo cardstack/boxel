@@ -104,6 +104,11 @@ module(
       // placeholder during initial render — search-result-section.gts
       // documents the race).
       await waitFor(`[data-test-realm-url="${testRealmURL}"]`);
+      // The realm picker is wrapped in WithKnownRealmsLoaded, which
+      // renders a `<:loading>` block (no `data-test-realm-picker-locked`
+      // attribute) until the realms list resolves. Wait for the loaded
+      // state so the picker-locked assertion has something to match.
+      await waitFor('[data-test-realm-picker-locked]');
 
       assert
         .dom('[data-test-realm-picker-locked="true"]')
