@@ -287,10 +287,13 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         {{#if @model.hostRoutingRules.length}}
           <ul class='rules' data-test-routing-rules>
             {{#each @model.hostRoutingRules as |rule|}}
-              <li class='rule'>{{rule.path}}
+              <li class='rule' data-test-routing-rule={{rule.path}}>{{rule.path}}
                 {{#if rule.instance}}
                   <span class='arrow' aria-hidden='true'>→</span>
-                  {{rule.instance.title}}
+                  <span
+                    class='target'
+                    data-test-routing-rule-target
+                  >{{rule.instance.cardTitle}}</span>
                 {{/if}}
               </li>
             {{/each}}
