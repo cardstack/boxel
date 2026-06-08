@@ -98,7 +98,12 @@ module(
 
       await click('[data-test-add-new="instance"]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-realm="${realmName}"]`);
+      // Wait on `data-test-realm-url` (always present) rather than
+      // `data-test-realm` (the user-visible name, which races
+      // `realm.info()` and may show the "Unknown Workspace"
+      // placeholder during initial render — search-result-section.gts
+      // documents the race).
+      await waitFor(`[data-test-realm-url="${testRealmURL}"]`);
 
       assert
         .dom('[data-test-realm-picker-locked="true"]')
@@ -111,10 +116,10 @@ module(
           'the consuming-realm pill does not offer a remove affordance when the picker is locked',
         );
       assert
-        .dom(`[data-test-realm="${realmName}"]`)
+        .dom(`[data-test-realm-url="${testRealmURL}"]`)
         .exists('candidates from the consuming realm are shown');
       assert
-        .dom('[data-test-realm="Base Workspace"]')
+        .dom(`[data-test-realm-url="${baseRealm.url}"]`)
         .doesNotExist('cross-realm candidates are excluded by the lock');
     });
 
