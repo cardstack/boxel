@@ -356,7 +356,15 @@ test.describe('Commands', () => {
       .locator('[data-test-boxel-input-id="ai-chat-input"]')
       .fill('Switch to code mode');
     await page.locator('[data-test-send-message-btn]').click();
-    await page.locator('[data-test-message-idx="0"]').waitFor();
+    // Wait for the optimistic bubble's real echo to land in synapse (pending
+    // attribute drops once matrix-js-sdk has accepted the send). Without this
+    // wait the test's putEvent below races the user message to synapse, and
+    // the bot ends up timestamped *before* the user — flipping idx 0/1.
+    await page
+      .locator(
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+      )
+      .waitFor();
 
     let roomId = await getRoomId(page);
     let roomEvents = await getRoomEvents(username, password, roomId);
