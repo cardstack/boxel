@@ -625,18 +625,14 @@ export class PublishTarget extends FieldDef {
 export class PublishRealmInput extends CardDef {
   @field realmURL = contains(StringField);
   @field targets = containsMany(PublishTarget);
-  // Whether to wait for publish (copy + reindex) to finish before resolving.
-  // Defaults to true when omitted (the command applies the default).
-  @field wait = contains(BooleanField);
-  // How long to wait when wait is true, in milliseconds; on expiry the
-  // command returns the current pending state with timedOut set.
-  @field timeoutMs = contains(NumberField);
   // Bypass the pre-publish publishability gate (private-dependency and
   // error-document violations). Defaults to false.
   @field force = contains(BooleanField);
 }
 
-// Per-target outcome. 'status' is 'published' | 'pending' | 'error'.
+// Per-target outcome. The command resolves once the publish request is
+// accepted (the realm-server reindex then runs in the background), so 'status'
+// is 'published' (request accepted) or 'error'.
 export class PublishTargetResult extends FieldDef {
   @field publishedRealmURL = contains(StringField);
   @field status = contains(StringField);
@@ -645,8 +641,6 @@ export class PublishTargetResult extends FieldDef {
 
 export class PublishRealmResult extends CardDef {
   @field results = containsMany(PublishTargetResult);
-  // True if wait elapsed before every target finished (targets still pending).
-  @field timedOut = contains(BooleanField);
 }
 
 export class UnpublishRealmInput extends CardDef {
@@ -654,15 +648,12 @@ export class UnpublishRealmInput extends CardDef {
   // Supply either a typed target or a fully-resolved publishedRealmURL.
   @field target = contains(PublishTarget);
   @field publishedRealmURL = contains(StringField);
-  @field wait = contains(BooleanField);
-  @field timeoutMs = contains(NumberField);
 }
 
-// 'status' is 'unpublished' | 'pending' | 'error'.
+// 'status' is 'unpublished' or 'error'.
 export class UnpublishRealmResult extends CardDef {
   @field publishedRealmURL = contains(StringField);
   @field status = contains(StringField);
-  @field timedOut = contains(BooleanField);
   @field error = contains(StringField);
 }
 
