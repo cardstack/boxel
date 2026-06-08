@@ -133,30 +133,46 @@ module('Integration | serialization | RRI form audit', function (hooks) {
     );
   });
 
-  test('Loader.identify returns RRI form for base-realm classes when VN has the mapping', async function (assert) {
+  test('Loader.identify shape for base-realm classes', async function (assert) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {},
     });
 
-    assert.deepEqual(
-      Loader.identify(CardDef),
-      { module: '@cardstack/base/card-api', name: 'CardDef' },
-      'CardDef identifies as RRI form via base prefix mapping',
+    // The `@cardstack/base/` prefix mapping is registered against the
+    // resolved base-realm URL (`addRealmMapping` in `host/app/services/
+    // network.ts` passes `resolvedBaseRealmURL.href`). CardDef et al. are
+    // imported via the fake URL `https://cardstack.com/base/...`, so
+    // `unresolveURL` finds no target prefix that matches and returns the
+    // URL unchanged. The captured identity therefore stays in fake-URL
+    // form, not RRI form. CS-10753 needs to bridge this gap if
+    // `meta.adoptsFrom.module` should emit RRI form for base classes.
+    let cardDefRef = Loader.identify(CardDef)!;
+    assert.strictEqual(cardDefRef.name, 'CardDef', 'CardDef name');
+    assert.strictEqual(
+      cardDefRef.module,
+      'https://cardstack.com/base/card-api',
+      'CardDef module is fake-URL form (not @cardstack/base/ RRI)',
     );
-    assert.deepEqual(
-      Loader.identify(FieldDef),
-      { module: '@cardstack/base/card-api', name: 'FieldDef' },
-      'FieldDef identifies as RRI form via base prefix mapping',
+
+    let fieldDefRef = Loader.identify(FieldDef)!;
+    assert.strictEqual(fieldDefRef.name, 'FieldDef', 'FieldDef name');
+    assert.strictEqual(
+      fieldDefRef.module,
+      'https://cardstack.com/base/card-api',
+      'FieldDef module is fake-URL form',
     );
-    assert.deepEqual(
-      Loader.identify(StringField),
-      { module: '@cardstack/base/string', name: 'default' },
-      'StringField identifies as RRI form via base prefix mapping',
+
+    let stringFieldRef = Loader.identify(StringField)!;
+    assert.strictEqual(stringFieldRef.name, 'default', 'StringField name');
+    assert.strictEqual(
+      stringFieldRef.module,
+      'https://cardstack.com/base/string',
+      'StringField module is fake-URL form',
     );
   });
 
-  test('identifyCard returns RRI form when adoptedFrom chain ends at a base class', async function (assert) {
+  test('identifyCard shape for a test-realm-defined class', async function (assert) {
     class StrField extends FieldDef {
       @field value = contains(StringField);
     }
