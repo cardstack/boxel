@@ -64,7 +64,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
   @service declare private moduleContentsService: ModuleContentsService;
 
   static actionVerb = 'Create';
-  description = 'Create a catalog listing for an example card';
+  description =
+    'Create a catalog listing for a card, field, skill, theme, or component';
 
   private async getCatalogRealm(): Promise<string> {
     const { realmIdentifiers } = await new GetCatalogRealmIdentifiersCommand(

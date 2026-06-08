@@ -248,13 +248,6 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get definitionActions() {
-    if (
-      this.args.selectedDeclaration &&
-      !isCardOrFieldDeclaration(this.args.selectedDeclaration) &&
-      !isComponentDeclaration(this.args.selectedDeclaration)
-    ) {
-      return [];
-    }
     // A component declaration isn't instantiable or inheritable like a card def,
     // so the only definition action it supports is being published as a listing.
     if (
@@ -271,6 +264,12 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : [];
+    }
+    if (
+      this.args.selectedDeclaration &&
+      !isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return [];
     }
     return [
       // internal cards are not really meant to be addressable instances, but
