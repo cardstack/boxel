@@ -318,37 +318,39 @@ export function formatTopFrames(
     .join(' | ');
 }
 
-// The affinity-scoped profiling target, read from the environment.
-// `PRERENDER_PROFILE_AFFINITY` holds the exact affinity key to profile
-// (e.g. `realm:https://realms.example/team/my-realm/`). Unset or empty
-// means the affinity trigger is entirely inert. Read at call time rather
-// than module load so the value is never frozen against a stale process
-// snapshot in tests.
-export function getAffinityProfileTarget(): string | undefined {
+// The affinity-scoped profiling targets, read from the environment.
+// `PRERENDER_PROFILE_AFFINITY` holds a comma-separated list of exact
+// affinity keys to profile (e.g.
+// `realm:https://realms.example/a/,realm:https://realms.example/b/`),
+// so several realms can be profiled in one pass. Each entry is trimmed
+// and empty entries are dropped; an unset/empty value — or one with no
+// non-empty entries — leaves the affinity trigger entirely inert. Read
+// at call time rather than module load so the value is never frozen
+// against a stale process snapshot in tests.
+export function getAffinityProfileTargets(): string[] {
   let raw = process.env.PRERENDER_PROFILE_AFFINITY;
   if (typeof raw !== 'string') {
-    return undefined;
+    return [];
   }
-  let trimmed = raw.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }
 
 // The airtight gate for the affinity-scoped trigger. A render is
-// profiled ONLY when a target is configured AND the render's affinity
-// key is exactly equal to it. An unset/empty target, or any other
-// affinity, profiles nothing — so every realm other than the one
-// deliberately targeted incurs zero profiling and zero CDP overhead.
-// Kept as a small pure function so the gate can be unit-tested without
-// any Chrome / CDP dependency.
+// profiled ONLY when its affinity key exactly matches one of the
+// configured targets. An empty target list, or any affinity not in the
+// list, profiles nothing — so every realm other than those deliberately
+// targeted incurs zero profiling and zero CDP overhead. Kept as a small
+// pure function so the gate can be unit-tested without any Chrome / CDP
+// dependency.
 export function shouldProfileAffinity(
   affinityKey: string | undefined,
-  target: string | undefined,
+  targets: string[],
 ): boolean {
-  if (target === undefined || target === '') {
-    return false;
-  }
   if (affinityKey === undefined || affinityKey === '') {
     return false;
   }
-  return affinityKey === target;
+  return targets.includes(affinityKey);
 }

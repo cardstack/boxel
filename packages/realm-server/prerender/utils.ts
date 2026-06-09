@@ -12,7 +12,7 @@ import { getPendingNetworkRequests } from './network-inflight-tracker.ts';
 import {
   profileWindow,
   formatTopFrames,
-  getAffinityProfileTarget,
+  getAffinityProfileTargets,
   shouldProfileAffinity,
 } from './cpu-profiler.ts';
 
@@ -1477,18 +1477,18 @@ export async function withTimeout<T>(
   // one stalled on its own.
   activeRenderCount++;
   let concurrentRenders = activeRenderCount;
-  // Affinity-scoped CPU profiling (opt-in, one realm). When
-  // `PRERENDER_PROFILE_AFFINITY` is set and this render's affinity key
-  // exactly matches it, wrap the render work in a CDP CPU profile and
-  // log the top self-time frames once it completes. The gate short-
-  // circuits on the env read for every other realm, so unrelated
-  // affinities issue no CDP calls and pay nothing. Profiling the
-  // already-targeted realm's renders (fine-grained sampling, every
-  // render) is the accepted cost of this trigger.
-  let affinityTarget = getAffinityProfileTarget();
+  // Affinity-scoped CPU profiling (opt-in). When
+  // `PRERENDER_PROFILE_AFFINITY` lists one or more affinity keys and
+  // this render's affinity key is one of them, wrap the render work in a
+  // CDP CPU profile and log the top self-time frames once it completes.
+  // The gate short-circuits on the env read for every other realm, so
+  // unrelated affinities issue no CDP calls and pay nothing. Profiling
+  // the targeted realms' renders (fine-grained sampling, every render)
+  // is the accepted cost of this trigger.
+  let affinityTargets = getAffinityProfileTargets();
   let profileThisRender = shouldProfileAffinity(
     profileContext?.affinityKey,
-    affinityTarget,
+    affinityTargets,
   );
   let renderFn = fn;
   if (profileThisRender) {
