@@ -4,8 +4,12 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { baseRealm, type Loader } from '@cardstack/runtime-common';
+
 import UnpublishRealmCommand from '@cardstack/host/commands/unpublish-realm';
 import RealmService from '@cardstack/host/services/realm';
+
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import {
   setupIntegrationTestRealm,
@@ -31,6 +35,8 @@ class StubRealmService extends RealmService {
 
 let unpublishShouldFail: boolean;
 let unpublishedURLs: string[];
+let loader: Loader;
+let PublishTarget: typeof BaseCommandModule.PublishTarget;
 
 module('Integration | commands | unpublish-realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -69,6 +75,10 @@ module('Integration | commands | unpublish-realm', function (hooks) {
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
+    loader = getService('loader-service').loader;
+    PublishTarget = (
+      await loader.import<typeof BaseCommandModule>(`${baseRealm.url}command`)
+    ).PublishTarget;
     unpublishShouldFail = false;
     unpublishedURLs = [];
 
@@ -106,7 +116,7 @@ module('Integration | commands | unpublish-realm', function (hooks) {
 
     let result = await makeCommand().execute({
       realmURL,
-      target: { type: 'subdirectory', name: 'my-space' } as any,
+      target: new PublishTarget({ type: 'subdirectory', name: 'my-space' }),
     });
 
     assert.strictEqual(unpublishedURLs.length, 1);

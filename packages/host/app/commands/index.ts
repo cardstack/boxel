@@ -89,6 +89,7 @@ import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as SyncOpenRouterModelsCommandModule from './sync-openrouter-models';
 import * as TransformCardsCommandModule from './transform-cards';
+import * as UnpublishRealmCommandModule from './unpublish-realm';
 import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
@@ -366,6 +367,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     TransformCardsCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/unpublish-realm',
+    UnpublishRealmCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/unregister-bot',
     UnregisterBotCommandModule,
   );
@@ -581,6 +586,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SwitchSubmodeCommandModule.default,
   SyncOpenRouterModelsCommandModule.default,
   TransformCardsCommandModule.default,
+  UnpublishRealmCommandModule.default,
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,

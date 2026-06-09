@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
@@ -72,15 +73,17 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
         'Provide either a `target` or a `publishedRealmURL` to unpublish',
       );
     }
-    let userId = this.realm.getOrCreateRealmResource(input.realmURL).claims
-      ?.user;
+    // Normalize so the cached RealmResource (token/claims) is found even when
+    // the caller omits the trailing slash.
+    let realmURL = ensureTrailingSlash(input.realmURL);
+    let userId = this.realm.getOrCreateRealmResource(realmURL).claims?.user;
     return resolvePublishedRealmUrl(
       {
         type: input.target.type as PublishTargetType,
         name: input.target.name,
       },
       {
-        sourceRealmURL: input.realmURL,
+        sourceRealmURL: realmURL,
         matrixUsername: userId ? getMatrixUsername(userId) : undefined,
         spaceDomain: config.publishedRealmBoxelSpaceDomain,
       },
