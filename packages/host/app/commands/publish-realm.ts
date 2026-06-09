@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
@@ -42,7 +43,10 @@ export default class PublishRealmCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     let { PublishRealmResult, PublishTargetResult } = commandModule;
 
-    let realmURL = input.realmURL;
+    // Normalize so endpoint URLs like `${realmURL}_publishability` are well
+    // formed and the cached RealmResource (token/claims) is found even when the
+    // caller omits the trailing slash.
+    let realmURL = ensureTrailingSlash(input.realmURL);
     let matrixUsername = this.matrixUsernameFor(realmURL);
 
     let publishedRealmURLs = input.targets.map((target) =>
