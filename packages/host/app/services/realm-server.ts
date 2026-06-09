@@ -46,8 +46,7 @@ export interface RealmServerTokenClaims {
 
 export interface SubdomainAvailabilityResult {
   available: boolean;
-  domain: string;
-  error?: string;
+  hostname: string;
 }
 
 export interface ClaimedDomain {

@@ -29,11 +29,8 @@ class StubRealmService extends RealmService {
   }
 }
 
-let availabilityResponse: {
-  available: boolean;
-  domain: string;
-  error?: string;
-};
+// Matches the realm-server /_check-boxel-domain-availability response shape.
+let availabilityResponse: { available: boolean; hostname: string };
 let checkedSubdomains: string[];
 
 module('Integration | commands | check-domain-availability', function (hooks) {
@@ -65,7 +62,7 @@ module('Integration | commands | check-domain-availability', function (hooks) {
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    availabilityResponse = { available: true, domain: '' };
+    availabilityResponse = { available: true, hostname: '' };
     checkedSubdomains = [];
 
     await withCachedRealmSetup(async () =>
@@ -82,8 +79,8 @@ module('Integration | commands | check-domain-availability', function (hooks) {
     return new CheckDomainAvailabilityCommand(commandService.commandContext);
   }
 
-  test('reports an available custom subdomain with its published URL', async function (assert) {
-    availabilityResponse = { available: true, domain: 'my-site' };
+  test('reports an available custom subdomain, deriving the URL from the server hostname', async function (assert) {
+    availabilityResponse = { available: true, hostname: 'my-site.boxel.test' };
 
     let result = await makeCommand().execute({
       type: 'custom',
@@ -92,23 +89,19 @@ module('Integration | commands | check-domain-availability', function (hooks) {
 
     assert.deepEqual(checkedSubdomains, ['my-site'], 'checked the subdomain');
     assert.true(result.available);
-    assert.ok(
-      /^https:\/\/my-site\..+\/$/.test(result.publishedRealmURL),
-      `publishedRealmURL "${result.publishedRealmURL}" is the my-site custom URL`,
+    assert.strictEqual(
+      result.publishedRealmURL,
+      'https://my-site.boxel.test/',
+      'published URL is built from the canonical hostname the server returned',
     );
   });
 
-  test('reports an unavailable subdomain with the reason', async function (assert) {
-    availabilityResponse = {
-      available: false,
-      domain: 'taken',
-      error: 'This name is already taken',
-    };
+  test('reports an unavailable subdomain', async function (assert) {
+    availabilityResponse = { available: false, hostname: 'taken.boxel.test' };
 
     let result = await makeCommand().execute({ type: 'custom', name: 'taken' });
 
     assert.false(result.available);
-    assert.strictEqual(result.reason, 'This name is already taken');
   });
 
   test('rejects a non-custom target type', async function (assert) {

@@ -599,8 +599,7 @@ export default class PublishRealmModal extends Component<Signature> {
         let result = await command.execute({ type: 'custom', name: subdomain });
         this.customSubdomainAvailability = {
           available: result.available,
-          domain: subdomain,
-          error: result.reason,
+          hostname: `${subdomain}.${this.customSubdomainBase}`,
         };
 
         if (result.available) {

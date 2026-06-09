@@ -43,18 +43,22 @@ export default class CheckDomainAvailabilityCommand extends HostBaseCommand<
       );
     }
 
-    // `name` is the subdomain (e.g. "my-site"); the result URL appends the
-    // configured custom-site base domain.
+    // `name` is the subdomain (e.g. "my-site"). The server returns the
+    // canonical hostname (built from its own custom-site base domain); use it
+    // so the published URL can't drift from the server's config, falling back
+    // to the client config only if it's somehow absent.
     let result = await this.realmServer.checkDomainAvailability(input.name);
+    let hostname =
+      result.hostname ||
+      `${input.name}.${config.publishedRealmBoxelSiteDomain}`;
     let publishedRealmURL = resolvePublishedRealmUrl({
       type: 'custom',
-      name: `${input.name}.${config.publishedRealmBoxelSiteDomain}`,
+      name: hostname,
     });
 
     return new CheckDomainAvailabilityResult({
       available: result.available,
       publishedRealmURL,
-      reason: result.error,
     });
   }
 }
