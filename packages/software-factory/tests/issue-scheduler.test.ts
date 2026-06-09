@@ -468,3 +468,48 @@ module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// RealmIssueStore.listIssues — match Issue cards from either re-export module
+// ---------------------------------------------------------------------------
+
+module('issue-scheduler > RealmIssueStore issue-type filter', function () {
+  // The `Issue` class is defined in `issue-tracker` and re-exported by
+  // `darkfactory`. Factory-written issues adopt darkfactory#Issue; an issue a
+  // human adds via the IssueTracker board adopts issue-tracker#Issue. A type
+  // filter is module-URL-specific, so listIssues must match BOTH — otherwise
+  // UI-added issues are invisible to the loop (observed in factory:go: a
+  // backlog issue added in the host UI was never picked).
+  test('listIssues matches both darkfactory#Issue and issue-tracker#Issue', async function (assert) {
+    let realmUrl = 'http://localhost:4201/user/my-test-realm/';
+    let darkfactoryModuleUrl =
+      'http://localhost:4201/software-factory/darkfactory';
+    let captured: { filter?: { any?: { type?: { module?: string } }[] } } = {};
+
+    let mockClient = {
+      async search(_realm: string, query: typeof captured) {
+        captured = query;
+        return { ok: true, data: [] };
+      },
+    } as unknown as BoxelCLIClient;
+
+    let store = new RealmIssueStore({
+      realmUrl,
+      darkfactoryModuleUrl,
+      client: mockClient,
+      workspaceDir: '/tmp/scheduler-issue-type-filter-fixture',
+    });
+
+    await store.listIssues();
+
+    let modules = (captured.filter?.any ?? []).map((c) => c.type?.module);
+    assert.ok(
+      modules.includes(darkfactoryModuleUrl),
+      'matches factory-written darkfactory#Issue cards',
+    );
+    assert.ok(
+      modules.includes('http://localhost:4201/software-factory/issue-tracker'),
+      'matches UI-added issue-tracker#Issue cards',
+    );
+  });
+});
