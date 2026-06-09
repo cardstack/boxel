@@ -284,10 +284,21 @@ module(basename(__filename), function () {
 
     module('env-mode permission parity', function (envHooks) {
       let priorBoxelEnvironment: string | undefined;
+      // Use a synthetic `/probe-realm/` pathname for tests that deepEqual
+      // the full row set at the env-mode URL. The skills + base + catalog
+      // migrations already seed standard-mode rows the template DB carries
+      // into every test, so a test that uses `/skills/` would silently
+      // pick those rows up alongside its own and yield an "actual" that
+      // looks reasonable but isn't what the test set up. The publicReadGranted
+      // tests below stay on `/skills/` because they only assert one specific
+      // property and aren't affected by extra rows.
       const envSkillsURL = 'https://realm-server.test-env.localhost/skills/';
       const envPrivateURL = 'https://realm-server.test-env.localhost/private/';
       const stdSkillsURL = 'http://localhost:4201/skills/';
-      const altStdSkillsURL = 'http://localhost:4205/skills/';
+      const envProbeURL =
+        'https://realm-server.test-env.localhost/probe-realm/';
+      const stdProbeURL = 'http://localhost:4201/probe-realm/';
+      const altStdProbeURL = 'http://localhost:4205/probe-realm/';
 
       envHooks.beforeEach(function () {
         priorBoxelEnvironment = process.env.BOXEL_ENVIRONMENT;
@@ -365,25 +376,25 @@ module(basename(__filename), function () {
       });
 
       test('mirrors realm-owner, write, and named-user rows from the matching standard-mode URL', async function (assert) {
-        // Standard-mode migration seeds realm-owner + read + write for the
+        // Stand in for the migration seed: realm-owner + read + write for the
         // realm bot, read+write for a writer, and public read.
-        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
-          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
-          '@skills_writer:localhost': ['read', 'write'],
+        await insertPermissions(dbAdapter, new URL(stdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
+          '@probe_writer:localhost': ['read', 'write'],
           '*': ['read'],
         });
-        const bootstrapPath = join(dir.name, 'skills');
-        seedRealmJson(bootstrapPath, { name: 'skills' });
+        const bootstrapPath = join(dir.name, 'probe-realm');
+        seedRealmJson(bootstrapPath, { name: 'probe-realm' });
 
         await runRegistryBackfill({
           dbAdapter,
           realmsRootPath,
           serverURL,
-          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envProbeURL }],
         });
 
         assert.deepEqual(
-          await userPermissionsAt(dbAdapter, envSkillsURL),
+          await userPermissionsAt(dbAdapter, envProbeURL),
           [
             {
               username: '*',
@@ -392,13 +403,13 @@ module(basename(__filename), function () {
               realm_owner: false,
             },
             {
-              username: '@skills_realm:localhost',
+              username: '@probe_realm:localhost',
               read: true,
               write: true,
               realm_owner: true,
             },
             {
-              username: '@skills_writer:localhost',
+              username: '@probe_writer:localhost',
               read: true,
               write: true,
               realm_owner: false,
@@ -412,25 +423,25 @@ module(basename(__filename), function () {
         // Some migrations seed BOTH localhost:4201 and localhost:4205 for
         // the same realm with the same grants. Either alone (or both) must
         // produce a single env-mode row carrying the union.
-        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
-          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        await insertPermissions(dbAdapter, new URL(stdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
         });
-        await insertPermissions(dbAdapter, new URL(altStdSkillsURL), {
-          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        await insertPermissions(dbAdapter, new URL(altStdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
         });
-        const bootstrapPath = join(dir.name, 'skills');
-        seedRealmJson(bootstrapPath, { name: 'skills' });
+        const bootstrapPath = join(dir.name, 'probe-realm');
+        seedRealmJson(bootstrapPath, { name: 'probe-realm' });
 
         await runRegistryBackfill({
           dbAdapter,
           realmsRootPath,
           serverURL,
-          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envProbeURL }],
         });
 
-        assert.deepEqual(await userPermissionsAt(dbAdapter, envSkillsURL), [
+        assert.deepEqual(await userPermissionsAt(dbAdapter, envProbeURL), [
           {
-            username: '@skills_realm:localhost',
+            username: '@probe_realm:localhost',
             read: true,
             write: true,
             realm_owner: true,
@@ -439,27 +450,27 @@ module(basename(__filename), function () {
       });
 
       test('preserves a custom env-mode permission row across reruns', async function (assert) {
-        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
-          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        await insertPermissions(dbAdapter, new URL(stdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
         });
         // Operator pre-seeded a downgraded permission for the same user at
         // the env URL — backfill must not clobber it.
-        await insertPermissions(dbAdapter, new URL(envSkillsURL), {
-          '@skills_realm:localhost': ['read'],
+        await insertPermissions(dbAdapter, new URL(envProbeURL), {
+          '@probe_realm:localhost': ['read'],
         });
-        const bootstrapPath = join(dir.name, 'skills');
-        seedRealmJson(bootstrapPath, { name: 'skills' });
+        const bootstrapPath = join(dir.name, 'probe-realm');
+        seedRealmJson(bootstrapPath, { name: 'probe-realm' });
 
         await runRegistryBackfill({
           dbAdapter,
           realmsRootPath,
           serverURL,
-          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envProbeURL }],
         });
 
-        assert.deepEqual(await userPermissionsAt(dbAdapter, envSkillsURL), [
+        assert.deepEqual(await userPermissionsAt(dbAdapter, envProbeURL), [
           {
-            username: '@skills_realm:localhost',
+            username: '@probe_realm:localhost',
             read: true,
             write: false,
             realm_owner: false,
