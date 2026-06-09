@@ -7,9 +7,9 @@ import {
   sendResponseForForbiddenRequest,
   setContextResponse,
   fetchRequestFromContext,
-} from '../middleware';
-import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
-import { handleStreamingRequest } from '../lib/proxy-forward';
+} from '../middleware/index.ts';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { handleStreamingRequest } from '../lib/proxy-forward.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');

@@ -1,6 +1,6 @@
 import isEqual from 'lodash/isEqual';
 
-import { getField, identifyCard } from './code-ref';
+import { getField, identifyCard } from './code-ref.ts';
 import {
   isAnyFilter,
   isCardTypeFilter,
@@ -13,9 +13,9 @@ import {
   type RangeFilterValue,
   type RangeOperator,
   type Sort,
-} from './query';
+} from './query.ts';
 
-import type { CodeRef } from './code-ref';
+import type { CodeRef } from './code-ref.ts';
 import type {
   BaseDef,
   CardDef,

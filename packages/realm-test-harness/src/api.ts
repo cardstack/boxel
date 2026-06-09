@@ -5,8 +5,8 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
-} from './runtime-metadata';
-import { configureLogger } from './logger';
+} from './runtime-metadata.ts';
+import { configureLogger } from './logger.ts';
 
 /**
  * Suppress console.log/warn during a callback. Used during template DB builds
@@ -53,7 +53,7 @@ import {
   type RealmAction,
   type RealmConfig,
   type StartedFactoryRealm,
-} from './shared';
+} from './shared.ts';
 import {
   buildCombinedTemplateDatabase,
   clearRealmPermissions,
@@ -64,12 +64,12 @@ import {
   resetQueueState,
   rewriteClonedRealmServerUrls,
   seedRealmPermissions,
-} from './database';
-import { startFactorySupportServices } from './support-services';
+} from './database.ts';
+import { startFactorySupportServices } from './support-services.ts';
 import {
   startIsolatedRealmStack,
   stopIsolatedRealmStack,
-} from './isolated-realm-stack';
+} from './isolated-realm-stack.ts';
 
 export function getFactoryTestContext(): FactoryTestContext {
   let context = parseFactoryContext();

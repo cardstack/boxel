@@ -6,12 +6,12 @@ import type {
   QueuePublisher,
   RunCommandResponse,
 } from '@cardstack/runtime-common';
-import type { GitHubClient } from '../lib/github';
-import { CommandRunner, makeEnqueueRunCommand } from '../lib/command-runner';
+import type { GitHubClient } from '../lib/github.ts';
+import { CommandRunner, makeEnqueueRunCommand } from '../lib/command-runner.ts';
 import {
   PrListingWorkflowHandler,
   type LintSubmissionFilesFn,
-} from '../lib/pr-listing/pr-listing-workflow-handler';
+} from '../lib/pr-listing/pr-listing-workflow-handler.ts';
 
 const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   passed: true,
@@ -810,8 +810,7 @@ module('command runner', () => {
                             // title is the display-formatted "Submit <X>";
                             // retry must NOT derive branchName from it.
                             title: 'Submit My Listing',
-                            branchName:
-                              'a1b2c3-my-listing',
+                            branchName: 'a1b2c3-my-listing',
                           },
                           relationships: {
                             listing: {

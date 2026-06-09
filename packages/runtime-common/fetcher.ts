@@ -1,5 +1,5 @@
-import { buildWaiter, waitForPromise } from './test-waiters';
-import type { VirtualNetwork } from './virtual-network';
+import { buildWaiter, waitForPromise } from './test-waiters.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 const fetcherWaiter = buildWaiter('fetcher');
 
@@ -110,4 +110,4 @@ function responseWithWaiters(response: Response): Response {
 
 // Re-exported for backwards compatibility – these were previously defined here
 // and may be consumed via deep imports from this module.
-export { useTestWaiters, type Waiters } from './test-waiters';
+export { useTestWaiters, type Waiters } from './test-waiters.ts';

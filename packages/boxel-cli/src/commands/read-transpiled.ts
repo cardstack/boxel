@@ -1,8 +1,11 @@
 import type { Command } from 'commander';
-import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-import { FG_RED, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
+import { FG_RED, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
 
 export interface ReadTranspiledResult {
   ok: boolean;

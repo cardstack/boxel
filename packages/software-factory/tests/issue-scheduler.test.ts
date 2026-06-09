@@ -2,13 +2,13 @@ import { module, test } from 'qunit';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import type { SchedulableIssue } from '../src/factory-agent';
+import type { SchedulableIssue } from '../src/factory-agent/index.ts';
 
 import {
   IssueScheduler,
   RealmIssueStore,
   type IssueStore,
-} from '../src/issue-scheduler';
+} from '../src/issue-scheduler.ts';
 
 // ---------------------------------------------------------------------------
 // MockIssueStore

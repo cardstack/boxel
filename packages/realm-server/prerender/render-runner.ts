@@ -18,9 +18,9 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
-import type { ConsoleErrorEntry, PagePool } from './page-pool';
-import { toAffinityKey } from './affinity';
-import { throwIfAborted } from './prerender-cancel';
+import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
+import { toAffinityKey } from './affinity.ts';
+import { throwIfAborted } from './prerender-cancel.ts';
 import {
   captureResult,
   captureModule,
@@ -44,7 +44,7 @@ import {
   buildInvalidModuleResponseError,
   buildInvalidFileExtractResponseError,
   type RenderProfileContext,
-} from './utils';
+} from './utils.ts';
 import { randomUUID } from 'crypto';
 
 const log = logger('prerenderer');

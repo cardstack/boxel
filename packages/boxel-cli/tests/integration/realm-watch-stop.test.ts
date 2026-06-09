@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { stopWatchProcesses } from '../../src/commands/realm/watch/stop';
+import { stopWatchProcesses } from '../../src/commands/realm/watch/stop.ts';
 
 const FIXTURE_PATH = path.resolve(
   __dirname,

@@ -2,12 +2,12 @@ import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { runLintInMemory } from '../src/lint-execution';
-import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { runLintInMemory } from '../src/lint-execution.ts';
+import { BAD_LINT_GTS } from './helpers/lint-test-fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

@@ -11,8 +11,8 @@ import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
-import MatrixResponsePublisher from './matrix/response-publisher';
-import ResponseState from './response-state';
+import MatrixResponsePublisher from './matrix/response-publisher.ts';
+import ResponseState from './response-state.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');

@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import {
   shouldProfileAffinity,
   getAffinityProfileTarget,
-} from '../prerender/cpu-profiler';
+} from '../prerender/cpu-profiler.ts';
 
 // The affinity-scoped CPU profiler is the one trigger that could harm a
 // production realm if it ever profiled the wrong one, so the gate must be

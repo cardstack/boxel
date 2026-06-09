@@ -20,20 +20,20 @@ import {
   ecsMetadata,
   methodOverrideSupport,
   proxyAsset,
-} from './middleware';
-import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
+} from './middleware/index.ts';
+import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { createRoutes } from './routes';
-import { JobScopedSearchCache } from './job-scoped-search-cache';
-import { createSendEvent } from './handlers/send-event';
-import { createServeFromRealm } from './handlers/serve-from-realm';
-import { createServeIndex } from './handlers/serve-index';
-import { findOrMountRealm } from './lib/realm-routing';
+import { createRoutes } from './routes.ts';
+import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import { createSendEvent } from './handlers/send-event.ts';
+import { createServeFromRealm } from './handlers/serve-from-realm.ts';
+import { createServeIndex } from './handlers/serve-index.ts';
+import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';

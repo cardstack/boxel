@@ -20,7 +20,7 @@
  * import from `@cardstack/runtime-common/card-document-shape` directly.
  */
 
-import type { CodeRef, ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type {
   CardFields,
   CardResource,
@@ -30,11 +30,11 @@ import type {
   Relationship,
   RenderedHtmlResource,
   Saved,
-} from './resource-types';
+} from './resource-types.ts';
 import type {
   CardCollectionDocument,
   SingleCardDocument,
-} from './document-types';
+} from './document-types.ts';
 
 // Inlined — reading these via a runtime `import` from `resource-types.ts`
 // would pull in `code-ref.ts` → `loader.ts`, which is exactly the

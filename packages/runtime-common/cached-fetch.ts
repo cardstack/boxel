@@ -1,6 +1,6 @@
 import merge from 'lodash/merge';
 
-import { isNode } from './index';
+import { isNode } from './index.ts';
 
 const cache = new Map<string, { etag: string; body: string }>();
 

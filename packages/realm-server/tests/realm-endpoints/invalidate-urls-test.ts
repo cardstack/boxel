@@ -3,7 +3,7 @@ import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import { createJWT, setupPermissionedRealmCached } from '../helpers';
+import { createJWT, setupPermissionedRealmCached } from '../helpers/index.ts';
 import type { PgAdapter as TestPgAdapter } from '@cardstack/postgres';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {

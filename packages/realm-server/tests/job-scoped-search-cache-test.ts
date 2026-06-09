@@ -2,8 +2,8 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { query, type Query, type Expression } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
-import { JobScopedSearchCache } from '../job-scoped-search-cache';
+import { setupDB } from './helpers/index.ts';
+import { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 
 const realmA = 'http://localhost:4201/test/';
 const realmB = 'http://localhost:4201/other/';

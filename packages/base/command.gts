@@ -614,6 +614,83 @@ export class ExecuteAtomicOperationsResult extends CardDef {
   @field results = containsMany(JsonField);
 }
 
+// A publish destination for a realm. 'type' is 'subdirectory' (a Boxel Space
+// under the user's space domain, where 'name' is the realm-name path segment)
+// or 'custom' (a claimed custom domain, where 'name' is the full hostname).
+export class PublishTarget extends FieldDef {
+  @field type = contains(StringField);
+  @field name = contains(StringField);
+}
+
+export class PublishRealmInput extends CardDef {
+  @field realmURL = contains(StringField);
+  @field targets = containsMany(PublishTarget);
+  // Pre-resolved published-realm URLs. The publish UI builds these with live
+  // Matrix state, so it passes them directly instead of typed targets; they are
+  // merged with any resolved 'targets'. Provide at least one of the two.
+  @field publishedRealmURLs = containsMany(StringField);
+  // Bypass the pre-publish publishability gate (private-dependency and
+  // error-document violations). Defaults to false.
+  @field force = contains(BooleanField);
+}
+
+// Per-target outcome. The command resolves once the publish request is
+// accepted (the realm-server reindex then runs in the background), so 'status'
+// is 'published' (request accepted) or 'error'.
+export class PublishTargetResult extends FieldDef {
+  @field publishedRealmURL = contains(StringField);
+  @field status = contains(StringField);
+  @field error = contains(StringField);
+}
+
+export class PublishRealmResult extends CardDef {
+  @field results = containsMany(PublishTargetResult);
+}
+
+export class UnpublishRealmInput extends CardDef {
+  @field realmURL = contains(StringField);
+  // Supply either a typed target or a fully-resolved publishedRealmURL.
+  @field target = contains(PublishTarget);
+  @field publishedRealmURL = contains(StringField);
+}
+
+// 'status' is 'unpublished' or 'error'.
+export class UnpublishRealmResult extends CardDef {
+  @field publishedRealmURL = contains(StringField);
+  @field status = contains(StringField);
+  @field error = contains(StringField);
+}
+
+export class GetPublishedRealmsInput extends CardDef {
+  @field realmURL = contains(StringField);
+}
+
+// One published destination for a source realm. lastPublishedAt mirrors the
+// realm-server value: epoch milliseconds rendered as a string (Date.now()
+// .toString()); absent when the realm has never been published.
+export class PublishedRealmInfo extends FieldDef {
+  @field publishedRealmURL = contains(StringField);
+  @field lastPublishedAt = contains(StringField);
+  @field isPublishing = contains(BooleanField);
+}
+
+export class GetPublishedRealmsResult extends CardDef {
+  @field results = containsMany(PublishedRealmInfo);
+}
+
+// 'type' is 'subdirectory' | 'custom'; 'name' matches PublishTarget.name.
+export class CheckDomainAvailabilityInput extends CardDef {
+  @field type = contains(StringField);
+  @field name = contains(StringField);
+  @field realmURL = contains(StringField);
+}
+
+export class CheckDomainAvailabilityResult extends CardDef {
+  @field available = contains(BooleanField);
+  @field publishedRealmURL = contains(StringField);
+  @field reason = contains(StringField);
+}
+
 export class StoreAddInput extends CardDef {
   @field document = contains(JsonField);
   @field realm = contains(StringField);

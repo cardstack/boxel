@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { resolveRealmSecretSeed } from '../../src/lib/prompt';
+import { resolveRealmSecretSeed } from '../../src/lib/prompt.ts';
 
 describe('resolveRealmSecretSeed', () => {
   let originalEnv: string | undefined;

@@ -1,4 +1,4 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -10,8 +10,8 @@ import {
   formatEntry,
   type IndexingErrorEntry,
   type BrokenLinkEntry,
-} from '../../src/commands/realm/indexing-errors';
-import { ProfileManager } from '../../src/lib/profile-manager';
+} from '../../src/commands/realm/indexing-errors.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -19,7 +19,7 @@ import {
   setupTestProfile,
   getTestDbAdapter,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;

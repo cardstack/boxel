@@ -6,8 +6,8 @@ import {
   resolveConflict,
   type FileClassification,
   type SyncOptions,
-} from '../../src/lib/sync-logic';
-import type { SyncManifest } from '../../src/lib/sync-manifest';
+} from '../../src/lib/sync-logic.ts';
+import type { SyncManifest } from '../../src/lib/sync-manifest.ts';
 
 function makeManifest(
   files: Record<string, string> = {},

@@ -4,9 +4,9 @@ import {
   PrerenderCancelledError,
   isPrerenderCancellation,
   throwIfAborted,
-} from '../prerender/prerender-cancel';
-import { TabQueue } from '../prerender/page-pool';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
+} from '../prerender/prerender-cancel.ts';
+import { TabQueue } from '../prerender/page-pool.ts';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
 
 // These tests cover the cancellation plumbing added in CS-10873 at the
 // level closest to the logic — no Chrome, no HTTP. They pin down the

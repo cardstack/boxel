@@ -1,4 +1,4 @@
-import type { VirtualNetwork } from '../virtual-network';
+import type { VirtualNetwork } from '../virtual-network.ts';
 
 export function canonicalURL(
   url: string,

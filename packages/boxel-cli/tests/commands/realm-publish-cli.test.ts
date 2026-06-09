@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import {
   publishCliOptsToOptions,
   registerPublishCommand,
-} from '../../src/commands/realm/publish';
+} from '../../src/commands/realm/publish.ts';
 
 // Regression test for the negated-flag bug fixed in CS-11161. Commander
 // exposes `--no-foo` options on the positive key (`foo`) defaulting to

@@ -4,12 +4,12 @@ import {
   fieldSerializer,
   isResolvedCodeRef,
   type CodeRef,
-} from './index';
-import type { SerializerName } from './serializers';
+} from './index.ts';
+import type { SerializerName } from './serializers/index.ts';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { Query } from './query';
+import type { Query } from './query.ts';
 
 export interface FieldDefinition {
   type: FieldType;

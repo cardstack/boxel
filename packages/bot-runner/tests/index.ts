@@ -1,5 +1,5 @@
-import '../setup-logger';
-import './bot-runner-test';
-import './command-runner-test';
-import './create-listing-pr-handler-test';
-import './lint-runner-test';
+import '../setup-logger.ts';
+import './bot-runner-test.ts';
+import './command-runner-test.ts';
+import './create-listing-pr-handler-test.ts';
+import './lint-runner-test.ts';

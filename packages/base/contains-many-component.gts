@@ -29,7 +29,7 @@ import {
   uuidv4,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce } from '@cardstack/boxel-ui/helpers';
 import { IconTrash, FourLines, IconPlus } from '@cardstack/boxel-ui/icons';
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
@@ -271,10 +271,6 @@ function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
   return effectiveFormat;
 }
 
-function coalesce<T>(arg1: T | undefined, arg2: T): T {
-  return arg1 ?? arg2;
-}
-
 const componentCache = initSharedState(
   'containsManyComponentCache',
   () => new WeakMap<Box<BaseDef[]>, { component: BoxComponent }>(),
@@ -365,23 +361,36 @@ export function getContainsManyComponent({
             (coalesce @format defaultFormats.fieldDef)
             as |effectiveFormat|
           }}
-            <div
-              class='plural-field containsMany-field
-                {{effectiveFormat}}-format
-                {{unless arrayField.children.length "empty"}}'
-              data-test-plural-view={{field.fieldType}}
-              data-test-plural-view-field={{field.name}}
-              data-test-plural-view-format={{effectiveFormat}}
-              ...attributes
-            >
-              {{#each (getComponents) as |Item i|}}
-                <div class='containsMany-item' data-test-plural-view-item={{i}}>
-                  <Item
-                    @format={{getPluralChildFormat effectiveFormat model}}
-                  />
-                </div>
+            {{#if (coalesce @displayContainer true)}}
+              <div
+                class='plural-field containsMany-field
+                  {{effectiveFormat}}-format
+                  {{unless arrayField.children.length "empty"}}'
+                data-test-plural-view={{field.fieldType}}
+                data-test-plural-view-field={{field.name}}
+                data-test-plural-view-format={{effectiveFormat}}
+                ...attributes
+              >
+                {{#each (getComponents) as |Item i|}}
+                  <div
+                    class='containsMany-item'
+                    data-test-plural-view-item={{i}}
+                  >
+                    <Item
+                      @format={{getPluralChildFormat effectiveFormat model}}
+                    />
+                  </div>
+
+                {{/each}}
+              </div>
+            {{else}}
+              {{#each (getComponents) as |Item|}}
+                <Item
+                  @format={{getPluralChildFormat effectiveFormat model}}
+                  @displayContainer={{false}}
+                />
               {{/each}}
-            </div>
+            {{/if}}
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>

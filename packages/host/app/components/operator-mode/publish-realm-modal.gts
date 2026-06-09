@@ -32,6 +32,10 @@ import PrivateDependencyViolationComponent from '@cardstack/host/components/oper
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
+import {
+  deriveRealmName,
+  resolvePublishedRealmUrl,
+} from '@cardstack/host/lib/published-realm-url';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -319,12 +323,14 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get subdirectoryRealmUrl() {
-    const protocol = this.getProtocol();
-    const matrixUsername = this.getMatrixUsername();
-    const domain = this.getDefaultPublishedRealmDomain();
-    const realmName = this.getRealmName();
-
-    return `${protocol}://${matrixUsername}.${domain}/${realmName}/`;
+    return resolvePublishedRealmUrl(
+      { type: 'subdirectory', name: this.getRealmName() },
+      {
+        protocol: this.getProtocol(),
+        matrixUsername: this.getMatrixUsername(),
+        spaceDomain: this.getDefaultPublishedRealmDomain(),
+      },
+    );
   }
 
   get subdirectoryRealmParts() {
@@ -366,8 +372,10 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private buildPublishedRealmUrl(hostname: string): string {
-    let protocol = this.getProtocol();
-    return `${protocol}://${hostname}/`;
+    return resolvePublishedRealmUrl(
+      { type: 'custom', name: hostname },
+      { protocol: this.getProtocol() },
+    );
   }
 
   private clearCustomSubdomainFeedback() {
@@ -476,24 +484,7 @@ export default class PublishRealmModal extends Component<Signature> {
     if (!realmUrl) {
       throw new Error('Current realm URL is not available');
     }
-
-    try {
-      const pathSegments = new URL(realmUrl).pathname
-        .split('/')
-        .filter((segment) => segment);
-      const lastSegment = pathSegments[pathSegments.length - 1];
-
-      if (!lastSegment) {
-        throw new Error('Could not extract realm name from URL path');
-      }
-
-      return lastSegment.toLowerCase();
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Failed to parse realm URL: ${error.message}`);
-      }
-      throw new Error('Failed to parse realm URL');
-    }
+    return deriveRealmName(realmUrl);
   }
 
   @action

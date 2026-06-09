@@ -1,4 +1,4 @@
-import type { DBAdapter } from './db';
+import type { DBAdapter } from './db.ts';
 import {
   dbAdapterQuerier,
   dbExpression,
@@ -8,7 +8,7 @@ import {
   type Expression,
   type PgPrimitive,
   type Querier,
-} from './expression';
+} from './expression.ts';
 
 export const userInitiatedJobCancellationResult = Object.freeze({
   status: 418,

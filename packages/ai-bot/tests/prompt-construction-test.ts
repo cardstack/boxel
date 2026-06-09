@@ -27,7 +27,7 @@ import { EventStatus } from 'matrix-js-sdk';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import {
   type LooseCardResource,
   ensureTrailingSlash,

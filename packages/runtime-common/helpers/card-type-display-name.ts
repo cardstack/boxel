@@ -4,7 +4,7 @@ import type {
   Field,
 } from 'https://cardstack.com/base/card-api';
 
-import { getField } from '../code-ref';
+import { getField } from '../code-ref.ts';
 
 export function cardTypeDisplayName(cardOrField: BaseDef): string {
   return cardOrField.constructor.getDisplayName(cardOrField);

@@ -11,7 +11,7 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import { logger } from '@cardstack/runtime-common';
 
-import { createListener } from '../server';
+import { createListener } from '../server.ts';
 
 // Coverage for the same-port HTTPS+HTTP/2 dispatcher (CS-11114). Exercises
 // every branch a peer can land in: TLS h2, TLS HTTP/1.1 via ALPN fallback,

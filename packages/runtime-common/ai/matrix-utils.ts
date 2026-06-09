@@ -1,10 +1,14 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
-import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '../constants';
-import { logger } from '../log';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '../constants.ts';
+import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
-import type { CommandRequest } from '../commands';
-import { encodeCommandRequests } from '../commands';
+import type { CommandRequest } from '../commands.ts';
+import { encodeCommandRequests } from '../commands.ts';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_RELOAD_BILLING_DATA_KEY,
@@ -13,13 +17,13 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-} from '../matrix-constants';
+} from '../matrix-constants.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import type { PromptParts } from './types';
+import type { PromptParts } from './types.ts';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
-import { isTextBasedContentType } from './modality';
+import { isTextBasedContentType } from './modality.ts';
 
 function getLog() {
   return logger('ai-bot');

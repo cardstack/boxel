@@ -1,7 +1,7 @@
-import { escapeHtml } from './helpers/html';
-import type { VirtualNetwork } from './virtual-network';
-import { trimJsonExtension } from './url';
-import { FITTED_FORMATS } from './formats';
+import { escapeHtml } from './helpers/html.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { trimJsonExtension } from './url.ts';
+import { FITTED_FORMATS } from './formats.ts';
 import type { TokenizerAndRendererExtension } from './marked.mts';
 
 // Regex patterns for stripping code before extraction.

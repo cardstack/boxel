@@ -2,7 +2,7 @@ import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
+import { FactoryEntrypointUsageError } from './factory-entrypoint-errors.ts';
 
 export interface ResolveFactoryTargetRealmOptions {
   targetRealm: string | null;

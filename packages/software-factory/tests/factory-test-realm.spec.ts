@@ -1,20 +1,20 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
 import {
   createTestRun,
   executeTestRunFromRealm,
   type TestRunRealmOptions,
-} from '../src/factory-test-realm';
-import { buildTestClient } from './helpers/test-client';
-import { createMockClient } from './helpers/mock-client';
+} from '../src/factory-test-realm.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createMockClient } from './helpers/mock-client.ts';
 import {
   FAILING_TEST_GTS,
   PASSING_TEST_GTS,
   writeAndAwaitIndex,
-} from './helpers/qunit-test-fixtures';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from './helpers/qunit-test-fixtures.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

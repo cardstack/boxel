@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { resolveFullIndexOnStartup } from '../lib/full-index-on-startup';
+import { resolveFullIndexOnStartup } from '../lib/full-index-on-startup.ts';
 
 module(basename(__filename), function () {
   module('default behavior (env var unset)', function () {

@@ -3,22 +3,22 @@ import {
   RealmSyncBase,
   isProtectedFile,
   type SyncOptions,
-} from '../../lib/realm-sync-base';
+} from '../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   type SyncManifest,
   computeFileHash,
   loadManifest,
   saveManifest,
   pathExists,
-} from '../../lib/sync-manifest';
+} from '../../lib/sync-manifest.ts';
 import * as path from 'path';
 import {
   FG_GREEN,
@@ -27,7 +27,7 @@ import {
   FG_CYAN,
   DIM,
   RESET,
-} from '../../lib/colors';
+} from '../../lib/colors.ts';
 import {
   classifyLocal,
   classifyRemote,
@@ -35,7 +35,7 @@ import {
   resolveConflict,
   type FileClassification,
   type ConflictStrategy,
-} from '../../lib/sync-logic';
+} from '../../lib/sync-logic.ts';
 
 interface BiSyncOptions extends SyncOptions {
   preferLocal?: boolean;

@@ -1,12 +1,12 @@
-import type { ProfileManager } from '../lib/profile-manager';
+import type { ProfileManager } from '../lib/profile-manager.ts';
 import {
   getProfileManager,
   formatProfileBadge,
   getDomainFromMatrixId,
   getEnvironmentFromMatrixId,
   getUsernameFromMatrixId,
-} from '../lib/profile-manager';
-import { prompt, promptPassword } from '../lib/prompt';
+} from '../lib/profile-manager.ts';
+import { prompt, promptPassword } from '../lib/prompt.ts';
 import {
   FG_GREEN,
   FG_YELLOW,
@@ -16,7 +16,7 @@ import {
   DIM,
   BOLD,
   RESET,
-} from '../lib/colors';
+} from '../lib/colors.ts';
 
 export interface ProfileCommandOptions {
   user?: string;

@@ -51,6 +51,7 @@ import {
 import {
   and,
   bool,
+  coalesce,
   eq,
   gt,
   gte,
@@ -73,6 +74,7 @@ export {
   buildCssGroups,
   buildCssVariableName,
   cn,
+  coalesce,
   compact,
   copyCardURLToClipboard,
   cssVar,

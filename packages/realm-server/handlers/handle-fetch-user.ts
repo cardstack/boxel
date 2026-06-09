@@ -5,8 +5,8 @@ import {
   sendResponseForNotFound,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   getCurrentActiveSubscription,
   getDailyCreditGrantInfo,
@@ -15,11 +15,11 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import type { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes.ts';
 import {
   getLowCreditThreshold,
   getNextDailyCreditGrantAt,
-} from '../lib/daily-credit-grant-config';
+} from '../lib/daily-credit-grant-config.ts';
 
 type FetchUserResponse = {
   data: {

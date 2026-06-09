@@ -55,6 +55,7 @@ import * as PatchThemeCommandModule from './patch-theme';
 import * as PersistModuleInspectorViewCommandModule from './persist-module-inspector-view';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
+import * as PublishRealmCommandModule from './publish-realm';
 import * as ReadBinaryFileCommandModule from './read-binary-file';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
@@ -228,6 +229,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
     PreviewFormatCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/publish-realm',
+    PublishRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-binary-file',
@@ -507,6 +512,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   PersistModuleInspectorViewCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
   PreviewFormatCommandModule.default,
+  PublishRealmCommandModule.default,
   ReadBinaryFileCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,

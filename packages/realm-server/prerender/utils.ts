@@ -7,14 +7,14 @@ import {
   type RenderError,
   type RenderTimeoutDiagnostics,
 } from '@cardstack/runtime-common';
-import { prerenderRenderTimeoutMs } from './prerender-constants';
-import { getPendingNetworkRequests } from './network-inflight-tracker';
+import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
+import { getPendingNetworkRequests } from './network-inflight-tracker.ts';
 import {
   profileWindow,
   formatTopFrames,
   getAffinityProfileTarget,
   shouldProfileAffinity,
-} from './cpu-profiler';
+} from './cpu-profiler.ts';
 
 import type { CDPSession, Page } from 'puppeteer';
 

@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import type { RealmAuth } from './realm-auth';
+import type { RealmAuth } from './realm-auth.ts';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { LocalFileSystem } from './local-file-system';
+import type { LocalFileSystem } from './local-file-system.ts';
 
 export interface StoredSkillData {
   skillLists: {

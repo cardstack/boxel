@@ -1,8 +1,8 @@
 import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
-import type { ResolvedCodeRef } from './index';
-import type { RealmResourceIdentifier } from './realm-identifiers';
+import type { ResolvedCodeRef } from './index.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import {
   type CardResource,
   type CodeRef,
@@ -11,12 +11,12 @@ import {
   isResolvedCodeRef,
   baseRealm,
   getSerializer,
-} from './index';
+} from './index.ts';
 import {
   isValidPrerenderedHtmlFormat,
   type PrerenderedHtmlFormat,
-} from './prerendered-html-format';
-import type { DBSpecificExpression, Param } from './expression';
+} from './prerendered-html-format.ts';
+import type { DBSpecificExpression, Param } from './expression.ts';
 import {
   type Expression,
   type CardExpression,
@@ -40,8 +40,8 @@ import {
   query,
   dbExpression,
   isDbExpression,
-} from './expression';
-import type { RangeOperator, RangeFilterValue } from './query';
+} from './expression.ts';
+import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
   type Query,
   type Filter,
@@ -54,28 +54,28 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   isCardTypeFilter,
-} from './query';
-import type { SerializedError } from './error';
-import type { DBAdapter } from './db';
+} from './query.ts';
+import type { SerializedError } from './error.ts';
+import type { DBAdapter } from './db.ts';
 import {
   coerceTypes,
   normalizeRealmMetaValue,
   type BoxelIndexTable,
   type RealmMetaValue,
-} from './index-structure';
+} from './index-structure.ts';
 import {
   getFieldDef,
   type Definition,
   type FieldDefinition,
-} from './definitions';
+} from './definitions.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
-} from './definition-lookup';
-import { isScopedCSSRequest } from './scoped-css';
-import type { FileMetaResource } from './resource-types';
-import type { VirtualNetwork } from './virtual-network';
-import type { RequestTimings } from './request-timings';
+} from './definition-lookup.ts';
+import { isScopedCSSRequest } from './scoped-css.ts';
+import type { FileMetaResource } from './resource-types.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RequestTimings } from './request-timings.ts';
 
 export interface IndexedFile {
   type: 'file';
