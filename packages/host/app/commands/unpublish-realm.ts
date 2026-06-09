@@ -70,7 +70,9 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
     if (input.publishedRealmURL) {
       return input.publishedRealmURL;
     }
-    if (!input.target) {
+    // `target` is a contains field, so it's an empty PublishTarget instance
+    // (not undefined) when unset — check that it actually carries a type.
+    if (!input.target?.type) {
       throw new Error(
         'Provide either a `target` or a `publishedRealmURL` to unpublish',
       );
