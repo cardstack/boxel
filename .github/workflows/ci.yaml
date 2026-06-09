@@ -716,6 +716,13 @@ jobs:
       - name: Build boxel-ui and boxel-icons
         run: mise run build:ui
 
+      # See the matching step in ci-host.yaml: must clone boxel-skills BEFORE
+      # any later pnpm workspace op creates an empty packages/skills-realm/
+      # contents directory, or services/realm-server's `[ -d contents ]`
+      # check will skip the clone and the skills realm will boot empty.
+      - name: Populate skills-realm content
+        run: pnpm --dir=packages/skills-realm skills:setup
+
       # The prerender (used by realm-server indexing) loads the host app from
       # host.ci.localhost, so the host dist must be built with the same slug
       # baked into its realm URLs.

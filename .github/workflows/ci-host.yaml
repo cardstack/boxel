@@ -468,6 +468,21 @@ jobs:
       - name: Build boxel-ui and boxel-icons
         run: mise run build:ui
 
+      # Clone the boxel-skills repo into packages/skills-realm/contents now,
+      # before any pnpm workspace operation can materialize an empty contents/
+      # directory. services/realm-server invokes `pnpm skills:setup` later
+      # whose `[ -d contents ] || git clone ...` heuristic skips the clone if
+      # ANY directory exists at that path — and pnpm-driven workspace
+      # materialization (e.g. the env-mode `pnpm build` below) creates an
+      # empty contents/ directory, leaving the skills realm to boot empty.
+      # An empty skills realm responds 200 to /_readiness-check (no work to
+      # do) but 404s on Skill/boxel-environment, which breaks every
+      # ai-assistant-panel | skills + commands test in env mode. Running the
+      # clone first guarantees real content is on disk before anything else
+      # touches the workspace.
+      - name: Populate skills-realm content
+        run: pnpm --dir=packages/skills-realm skills:setup
+
       # The host test bundle bakes its realm URLs from BOXEL_ENVIRONMENT at
       # build time, so the dist must be built with the same slug the running
       # realm-server uses (realm-server.ci.localhost), not the standard-mode
