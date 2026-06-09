@@ -3126,9 +3126,6 @@ importers:
       statuses:
         specifier: 'catalog:'
         version: 2.0.2
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@25.7.0)(typescript@5.9.3)
 
   packages/skills-realm: {}
 
