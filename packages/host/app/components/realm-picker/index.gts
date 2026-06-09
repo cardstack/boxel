@@ -101,17 +101,19 @@ export default class RealmPicker extends Component<Signature> {
   <template>
     <WithKnownRealmsLoaded>
       <:default>
-        {{!-- Wrap the Picker so dynamic data-test attributes don't have
-              to thread through the BoxelMultiSelectBasic → PowerSelect →
-              ember-basic-dropdown `...attributes` chain. That chain
-              forwards static attrs fine, but dynamic bindings lose their
-              reactivity: e.g. `data-test-realm-picker-locked={{@filter.locked}}`
-              ends up rendered as "" on the trigger even when @filter.locked
-              flips to true. Setting the attribute on a wrapper div under
-              our own control keeps the binding reactive. --}}
+        {{!-- The dynamic `data-test-realm-picker-locked={{@filter.locked}}`
+              binding must NOT flow through the
+              `<Picker>` → BoxelMultiSelectBasic → PowerSelect →
+              ember-basic-dropdown `...attributes` chain: that chain
+              forwards static attrs fine, but dynamic attribute bindings
+              lose their reactivity (the attribute renders as "" on the
+              trigger even when @filter.locked flips to true). Put it on
+              a wrapper element we own so the binding stays live. The
+              wrapper carries ONLY the locked attribute — `data-test-realm-picker`
+              stays on `<Picker>` so existing tests that
+              `click('[data-test-realm-picker]')` still hit the trigger. --}}
         <div
           class='realm-picker-wrap'
-          data-test-realm-picker
           data-test-realm-picker-locked={{@filter.locked}}
         >
           <Picker
@@ -126,6 +128,7 @@ export default class RealmPicker extends Component<Signature> {
             @destination={{@destination}}
             @matchTriggerWidth={{false}}
             @disabled={{@filter.locked}}
+            data-test-realm-picker
           />
         </div>
       </:default>
