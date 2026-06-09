@@ -101,17 +101,16 @@ export default class RealmPicker extends Component<Signature> {
   <template>
     <WithKnownRealmsLoaded>
       <:default>
-        {{!-- The dynamic `data-test-realm-picker-locked={{@filter.locked}}`
-              binding must NOT flow through the
-              `<Picker>` → BoxelMultiSelectBasic → PowerSelect →
-              ember-basic-dropdown `...attributes` chain: that chain
-              forwards static attrs fine, but dynamic attribute bindings
-              lose their reactivity (the attribute renders as "" on the
-              trigger even when @filter.locked flips to true). Put it on
-              a wrapper element we own so the binding stays live. The
-              wrapper carries ONLY the locked attribute — `data-test-realm-picker`
-              stays on `<Picker>` so existing tests that
-              `click('[data-test-realm-picker]')` still hit the trigger. --}}
+        {{! The dynamic data-test-realm-picker-locked binding must
+              NOT flow through the Picker → BoxelMultiSelectBasic →
+              PowerSelect → ember-basic-dropdown attribute chain: that
+              chain forwards static attrs fine, but dynamic bindings
+              lose their reactivity (the attribute renders as empty on
+              the trigger even when filter.locked flips to true). Put it
+              on a wrapper element we own so the binding stays live. The
+              wrapper carries only the locked attribute;
+              data-test-realm-picker stays on Picker so existing tests
+              that click data-test-realm-picker still hit the trigger. }}
         <div
           class='realm-picker-wrap'
           data-test-realm-picker-locked={{@filter.locked}}
