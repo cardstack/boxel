@@ -81,26 +81,20 @@ export function resolveSameRealmFile(
   return null;
 }
 
-interface IngestOptions extends SyncOptions {
-  withLinkedInstances?: boolean;
-}
-
 class RealmCardIngester extends RealmSyncBase {
   hasError = false;
   copiedFiles: string[] = [];
   private profileManager: ProfileManager;
-  private withLinkedInstances: boolean;
   private cardUrl: string;
   private sourceCache = new Map<string, string | null>();
 
   constructor(
-    options: IngestOptions & { cardUrl: string },
+    options: SyncOptions & { cardUrl: string },
     authenticator: RealmAuthenticator,
     profileManager: ProfileManager,
   ) {
     super(options, authenticator);
     this.profileManager = profileManager;
-    this.withLinkedInstances = options.withLinkedInstances ?? false;
     this.cardUrl = options.cardUrl;
   }
 
@@ -146,14 +140,6 @@ class RealmCardIngester extends RealmSyncBase {
     );
   }
 
-  /** Map an extension-less module rel to the actual source file in the realm. */
-  private relToModuleFile(rel: string, fileSet: Set<string>): string | null {
-    let candidates = MODULE_EXTENSIONS.some((ext) => rel.endsWith(ext))
-      ? [rel]
-      : [rel, ...MODULE_EXTENSIONS.map((ext) => rel + ext)];
-    return candidates.find((c) => fileSet.has(c)) ?? null;
-  }
-
   /** Fetch a realm file's source text (cached). Null on non-OK. */
   private async fetchText(rel: string): Promise<string | null> {
     if (this.sourceCache.has(rel)) return this.sourceCache.get(rel)!;
@@ -190,7 +176,7 @@ class RealmCardIngester extends RealmSyncBase {
       if (test !== f && fileSet.has(test)) toCopy.add(test);
     }
 
-    // 3. The entry card's own instances + (optionally) their link graph.
+    // 3. The entry card's own instances.
     let entryModuleAbs = entry.moduleRels.map((r) => this.relToAbs(r));
     let instanceRels = await this.findEntryInstances(
       moduleFiles,
@@ -198,18 +184,11 @@ class RealmCardIngester extends RealmSyncBase {
       fileSet,
     );
     for (let r of entry.instanceRels) instanceRels.add(r);
-    if (this.withLinkedInstances) {
-      await this.followLinkedInstances(instanceRels, toCopy, fileSet);
-    }
     for (let r of instanceRels) toCopy.add(r);
 
     // 4. The card's own Catalog Spec(s) — card/app specType only.
     let specRels = await this.findCardSpecs(moduleFiles, fileSet);
     for (let r of specRels) toCopy.add(r);
-
-    // 5. Same-realm binary assets referenced by any copied file (best effort).
-    let assetRels = await this.findReferencedAssets(toCopy, fileSet);
-    for (let r of assetRels) toCopy.add(r);
 
     if (toCopy.size === 0) {
       throw new Error(`Nothing to ingest for ${cardUrl}.`);
@@ -310,50 +289,6 @@ class RealmCardIngester extends RealmSyncBase {
     return out;
   }
 
-  /** Follow each instance's linksTo graph (JSON:API `included`). */
-  private async followLinkedInstances(
-    instanceRels: Set<string>,
-    toCopy: Set<string>,
-    fileSet: Set<string>,
-  ): Promise<void> {
-    let queue = [...instanceRels];
-    let visited = new Set<string>();
-    while (queue.length) {
-      let rel = queue.shift()!;
-      if (visited.has(rel)) continue;
-      visited.add(rel);
-      let res = await this.authenticator.authedRealmFetch(
-        this.buildFileUrl(rel),
-        {
-          headers: { Accept: CARD_JSON },
-        },
-      );
-      if (!res.ok) continue;
-      let doc = (await res.json()) as { included?: CardResource[] };
-      for (let inc of doc.included ?? []) {
-        let incRel = this.cardIdToInstanceRel(inc.id);
-        let adoptsFrom = inc.meta?.adoptsFrom?.module;
-        if (incRel && fileSet.has(incRel) && !instanceRels.has(incRel)) {
-          instanceRels.add(incRel);
-          queue.push(incRel);
-        }
-        if (adoptsFrom && inc.id) {
-          let moduleFile = this.relToModuleFile(
-            this.refToRel(adoptsFrom, this.relativize(inc.id)),
-            fileSet,
-          );
-          if (moduleFile) {
-            for (let f of await this.crawlModules([moduleFile], fileSet)) {
-              toCopy.add(f);
-              let test = f.replace(/\.(gts|gjs|ts|js)$/, '.test.$1');
-              if (test !== f && fileSet.has(test)) toCopy.add(test);
-            }
-          }
-        }
-      }
-    }
-  }
-
   /** Card/app Spec cards whose `ref` resolves to a seeded module. */
   private async findCardSpecs(
     moduleFiles: Set<string>,
@@ -377,32 +312,6 @@ class RealmCardIngester extends RealmSyncBase {
       if (!moduleRelsNoExt.has(refRel)) continue;
       let r = this.cardIdToInstanceRel(spec.id);
       if (r && fileSet.has(r)) out.add(r);
-    }
-    return out;
-  }
-
-  /** Same-realm asset files (images/fonts) referenced by copied files. */
-  private async findReferencedAssets(
-    copied: Set<string>,
-    fileSet: Set<string>,
-  ): Promise<Set<string>> {
-    let assetRe =
-      /['"(]([^'"()\s]+\.(?:png|jpe?g|webp|gif|svg|avif|ico|woff2?|ttf|otf))['")]/gi;
-    let out = new Set<string>();
-    for (let rel of copied) {
-      if (!/\.(gts|gjs|ts|js|json)$/.test(rel)) continue;
-      let source = await this.fetchText(rel);
-      if (source == null) continue;
-      let m: RegExpExecArray | null;
-      while ((m = assetRe.exec(source))) {
-        let asset = resolveSameRealmFile(
-          m[1],
-          this.relToAbs(rel),
-          this.realmRoot,
-          fileSet,
-        );
-        if (asset && !copied.has(asset)) out.add(asset);
-      }
     }
     return out;
   }
@@ -476,7 +385,6 @@ class RealmCardIngester extends RealmSyncBase {
 interface CardResource {
   id?: string;
   attributes?: { specType?: string; ref?: unknown; [k: string]: unknown };
-  meta?: { adoptsFrom?: { module?: string } };
 }
 
 function tryParseCardDoc(
@@ -492,7 +400,6 @@ function tryParseCardDoc(
 
 export interface IngestCardCommandOptions {
   realm?: string;
-  withLinkedInstances?: boolean;
   dryRun?: boolean;
   realmSecretSeed?: string;
   profileManager?: ProfileManager;
@@ -539,7 +446,6 @@ export async function ingestCard(
         realmUrl: realmRoot,
         localDir,
         dryRun: options.dryRun,
-        withLinkedInstances: options.withLinkedInstances,
         cardUrl,
       },
       authenticator,
@@ -568,8 +474,12 @@ export function registerIngestCardCommand(realm: Command): void {
   realm
     .command('ingest-card')
     .description(
-      'Copy a card and its same-realm dependency graph (module + imports + ' +
-        'instances + Catalog Spec) from a source realm into a local directory',
+      'Copy a card from a source realm into a local directory, bundling the ' +
+        "deps that live in the card's own realm: the module, the modules it " +
+        'imports from the same realm, its sample instances, and its Catalog ' +
+        'Spec. Imports that resolve to the base realm or other realms are ' +
+        'left as references (they resolve at runtime). Works across realms; ' +
+        'source and target must be on the same realm server.',
     )
     .argument(
       '<source-card-url>',
@@ -583,10 +493,6 @@ export function registerIngestCardCommand(realm: Command): void {
       '--realm <url>',
       'Source realm URL (defaults to the realm the card belongs to)',
     )
-    .option(
-      '--with-linked-instances',
-      'Also follow the card instances’ linksTo graph and ingest linked cards',
-    )
     .option('--dry-run', 'Show what would be copied without writing files')
     .option(
       '--realm-secret-seed',
@@ -598,7 +504,6 @@ export function registerIngestCardCommand(realm: Command): void {
         localDir: string,
         options: {
           realm?: string;
-          withLinkedInstances?: boolean;
           dryRun?: boolean;
           realmSecretSeed?: boolean;
         },
@@ -608,7 +513,6 @@ export function registerIngestCardCommand(realm: Command): void {
         );
         let result = await ingestCard(sourceCardUrl, localDir, {
           realm: options.realm,
-          withLinkedInstances: options.withLinkedInstances,
           dryRun: options.dryRun,
           realmSecretSeed,
         });
