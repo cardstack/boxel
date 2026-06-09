@@ -8,152 +8,152 @@
   },
   "modules": {
     "Acceptance | AI Assistant tests": {
-      "delta_mb": 87.3,
-      "samples": [87.2, 87.2, 87.2, 87.6, 87.5]
+      "delta_mb": 87.4,
+      "samples": [87.2, 87.2, 87.6, 87.5, 87.4]
     },
     "Acceptance | avif image def": {
-      "delta_mb": 5.1,
-      "samples": [4.4, 4.4, 4.5, 8, 4.4]
+      "delta_mb": 5.7,
+      "samples": [4.4, 4.5, 8, 4.4, 7]
     },
     "Acceptance | basic tests": {
-      "delta_mb": -1.2,
-      "samples": [4.8, 4.8, 4.7, -10.1, -10.1]
+      "delta_mb": -1.1,
+      "samples": [4.8, 4.7, -10.1, -10.1, 5.2]
     },
     "Acceptance | Code patches tests": {
       "delta_mb": 55.2,
-      "samples": [55.1, 55.2, 55.2, 55.3, 55.3]
+      "samples": [55.2, 55.2, 55.3, 55.3, 55.2]
     },
     "Acceptance | code submode | create-file tests": {
-      "delta_mb": 62.9,
-      "samples": [68.8, 69, 68.7, 39, 69.1]
+      "delta_mb": 63,
+      "samples": [69, 68.7, 39, 69.1, 69]
     },
     "Acceptance | code submode | editor tests": {
       "delta_mb": 25.7,
-      "samples": [25.6, 25.8, 25.8, 25.7, 25.7]
+      "samples": [25.8, 25.8, 25.7, 25.7, 25.7]
     },
     "Acceptance | code submode | file def live reload": {
       "delta_mb": 16,
-      "samples": [16, 16, 16, 16.1, 16]
+      "samples": [16, 16, 16.1, 16, 16]
     },
     "Acceptance | code submode | file def navigation": {
-      "delta_mb": 25.2,
-      "samples": [25.2, 25.2, 25.2, 25.3, 25.3]
+      "delta_mb": 25.3,
+      "samples": [25.2, 25.2, 25.3, 25.3, 25.3]
     },
     "Acceptance | code submode | file-tree tests": {
-      "delta_mb": 83.5,
-      "samples": [81.1, 84.1, 84.6, 84, 83.8]
+      "delta_mb": 84.1,
+      "samples": [84.1, 84.6, 84, 83.8, 84]
     },
     "Acceptance | code submode | head format preview": {
       "delta_mb": 28.7,
-      "samples": [28.7, 28.6, 28.8, 28.8, 28.7]
+      "samples": [28.6, 28.8, 28.8, 28.7, 28.7]
     },
     "Acceptance | code submode | inspector tests": {
-      "delta_mb": 81.2,
-      "samples": [78.6, 81.9, 81.8, 81.9, 81.8]
+      "delta_mb": 81.8,
+      "samples": [81.9, 81.8, 81.9, 81.8, 81.7]
     },
     "Acceptance | code submode | recent files tests": {
       "delta_mb": 46.3,
-      "samples": [46.2, 46.3, 46.2, 46.4, 46.3]
+      "samples": [46.3, 46.2, 46.4, 46.3, 46.4]
     },
     "Acceptance | code submode | schema editor tests": {
-      "delta_mb": 72.7,
-      "samples": [72.4, 72.4, 72.4, 73.7, 72.5]
+      "delta_mb": 69.5,
+      "samples": [72.4, 72.4, 73.7, 72.5, 56.7]
     },
     "Acceptance | code submode tests": {
       "delta_mb": 5.2,
-      "samples": [43.6, -52.2, 43.7, 43.3, -52.6]
+      "samples": [-52.2, 43.7, 43.3, -52.6, 43.7]
     },
     "Acceptance | code-submode | card playground": {
-      "delta_mb": 127.4,
-      "samples": [127, 127.1, 126.7, 128.1, 128.2]
+      "delta_mb": 127.7,
+      "samples": [127.1, 126.7, 128.1, 128.2, 128.2]
     },
     "Acceptance | code-submode | field playground": {
-      "delta_mb": 71,
-      "samples": [71, 71, 71, 71, 71.2]
+      "delta_mb": 71.1,
+      "samples": [71, 71, 71, 71.2, 71.1]
     },
     "Acceptance | Commands tests": {
       "delta_mb": 49.9,
-      "samples": [53.2, 53.1, 40, 49.7, 53.3]
+      "samples": [53.1, 40, 49.7, 53.3, 53.3]
     },
     "Acceptance | csv file def": {
-      "delta_mb": 16.9,
-      "samples": [17, 16.9, 17, 17, 16.8]
+      "delta_mb": 16.5,
+      "samples": [16.9, 17, 17, 16.8, 14.6]
     },
     "Acceptance | file chooser keyboard tests": {
       "delta_mb": -13.2,
-      "samples": [-13.7, -13.8, -12.4, -13.4, -12.6]
+      "samples": [-13.8, -12.4, -13.4, -12.6, -13.8]
     },
     "Acceptance | file chooser tests": {
-      "delta_mb": 18.7,
-      "samples": [18.8, 9.8, 21.4, 21.6, 21.9]
+      "delta_mb": 16.9,
+      "samples": [9.8, 21.4, 21.6, 21.9, 9.9]
     },
     "Acceptance | file chooser tests | upload size limit": {
       "delta_mb": 0,
-      "samples": [0, 0.1, 0, 0.1, 0]
+      "samples": [0.1, 0, 0.1, 0, 0]
     },
     "Acceptance | file def": {
       "delta_mb": 10.9,
-      "samples": [10.3, 15.4, 10.3, 1.1, 17.4]
+      "samples": [15.4, 10.3, 1.1, 17.4, 10.3]
     },
     "Acceptance | flac audio def": {
       "delta_mb": 22.2,
-      "samples": [22.1, 22.2, 22.1, 22.2, 22.2]
+      "samples": [22.2, 22.1, 22.2, 22.2, 22.1]
     },
     "Acceptance | Freestyle": {
       "delta_mb": 6.9,
-      "samples": [7, 6.9, 7.1, 6.8, 6.8]
+      "samples": [6.9, 7.1, 6.8, 6.8, 6.8]
     },
     "Acceptance | getRelationshipMembershipState loading state": {
-      "delta_mb": 7.1,
-      "samples": [5.2, 0.5, 5.2, 10.4, 14.3]
+      "delta_mb": 9,
+      "samples": [0.5, 5.2, 10.4, 14.3, 14.4]
     },
     "Acceptance | gif image def": {
       "delta_mb": 20.9,
-      "samples": [21, 20.9, 20.8, 20.8, 20.9]
+      "samples": [20.9, 20.8, 20.8, 20.9, 20.9]
     },
     "Acceptance | gts file def": {
-      "delta_mb": 21.2,
-      "samples": [20.6, 20.6, 20.6, 22.1, 22.1]
+      "delta_mb": 21.1,
+      "samples": [20.6, 20.6, 22.1, 22.1, 20.3]
     },
     "Acceptance | host mode tests": {
-      "delta_mb": 58.8,
-      "samples": [61.7, 61.6, 47.5, 61.7, 61.4]
+      "delta_mb": 58.7,
+      "samples": [61.6, 47.5, 61.7, 61.4, 61.4]
     },
     "Acceptance | host submode": {
-      "delta_mb": -8.4,
-      "samples": [-6.8, -6.8, -6.8, -28.7, 6.9]
+      "delta_mb": -8.1,
+      "samples": [-6.8, -6.8, -28.7, 6.9, -5]
     },
     "Acceptance | interact submode | create-file tests": {
       "delta_mb": -2.7,
-      "samples": [-3.2, -3.2, -3.3, -3.3, -0.5]
+      "samples": [-3.2, -3.3, -3.3, -0.5, -3.2]
     },
     "Acceptance | interact submode creation & permissions": {
-      "delta_mb": 19.2,
-      "samples": [30.7, 17.5, 17.6, 12.3, 17.7]
+      "delta_mb": 16.5,
+      "samples": [17.5, 17.6, 12.3, 17.7, 17.6]
     },
     "Acceptance | interact submode tests": {
-      "delta_mb": 92.4,
-      "samples": [91.9, 91.8, 91.5, 94.4, 92.3]
+      "delta_mb": 92.9,
+      "samples": [91.8, 91.5, 94.4, 92.3, 94.4]
     },
     "Acceptance | jpg image def": {
       "delta_mb": 5.6,
-      "samples": [5.5, 5.6, 5.6, 5.6, 5.5]
+      "samples": [5.6, 5.6, 5.6, 5.5, 5.5]
     },
     "Acceptance | json file def": {
-      "delta_mb": 12.9,
-      "samples": [10.6, 10.7, 10.5, 22.2, 10.5]
+      "delta_mb": 15.3,
+      "samples": [10.7, 10.5, 22.2, 10.5, 22.4]
     },
     "Acceptance | m4a audio def": {
       "delta_mb": 22.4,
-      "samples": [22.4, 22.3, 22.4, 22.4, 22.4]
+      "samples": [22.3, 22.4, 22.4, 22.4, 22.5]
     },
     "Acceptance | markdown BFM card references": {
       "delta_mb": 11.3,
-      "samples": [8.8, 8.8, 8.9, 20.8, 9]
+      "samples": [8.8, 8.9, 20.8, 9, 9]
     },
     "Acceptance | markdown file def": {
       "delta_mb": 15.9,
-      "samples": [20.1, 20.1, 20.1, 22.6, -3.2]
+      "samples": [20.1, 20.1, 22.6, -3.2, 20.1]
     },
     "Acceptance | mp3 audio def": {
       "delta_mb": 22.2,
@@ -161,115 +161,115 @@
     },
     "Acceptance | ogg audio def": {
       "delta_mb": 20.4,
-      "samples": [23, 23, 23, 23, 10.2]
+      "samples": [23, 23, 23, 10.2, 22.9]
     },
     "Acceptance | operator mode tests": {
-      "delta_mb": 87.1,
-      "samples": [60.4, 126.7, 60.5, 60.9, 126.9]
+      "delta_mb": 91,
+      "samples": [126.7, 60.5, 60.9, 126.9, 80]
     },
     "Acceptance | png image def": {
       "delta_mb": 11.6,
-      "samples": [12.3, 8.8, 12.3, 12.3, 12.3]
+      "samples": [8.8, 12.3, 12.3, 12.3, 12.3]
     },
     "Acceptance | prerender | file-extract": {
       "delta_mb": 19.7,
-      "samples": [22.2, 22.2, 13.5, 18.5, 22.3]
+      "samples": [22.2, 13.5, 18.5, 22.3, 22.2]
     },
     "Acceptance | prerender | html": {
-      "delta_mb": 20.1,
-      "samples": [21, 18.6, 21, 21.1, 18.7]
+      "delta_mb": 18.2,
+      "samples": [18.6, 21, 21.1, 18.7, 11.8]
     },
     "Acceptance | prerender | meta": {
-      "delta_mb": 10.3,
-      "samples": [3.1, 10.9, 12.4, 12.5, 12.7]
+      "delta_mb": 12.6,
+      "samples": [10.9, 12.4, 12.5, 12.7, 14.7]
     },
     "Acceptance | prerender | module": {
       "delta_mb": 7.7,
-      "samples": [5.7, 3.7, 5.7, 11.9, 11.3]
+      "samples": [3.7, 5.7, 11.9, 11.3, 5.8]
     },
     "Acceptance | Query Fields | host respects server-populated results": {
       "delta_mb": -2,
-      "samples": [4.2, 4.1, -5.2, -13, -0.3]
+      "samples": [4.1, -5.2, -13, -0.3, 4.3]
     },
     "Acceptance | Spec preview": {
-      "delta_mb": 59.7,
-      "samples": [66.3, 66.4, 66.3, 31.7, 68]
+      "delta_mb": 59.8,
+      "samples": [66.4, 66.3, 31.7, 68, 66.4]
     },
     "Acceptance | svg image def": {
-      "delta_mb": 4.6,
-      "samples": [4.7, 4.7, 4.7, 4.7, 4.3]
+      "delta_mb": 4.5,
+      "samples": [4.7, 4.7, 4.7, 4.3, 4.3]
     },
     "Acceptance | text file def": {
       "delta_mb": 20.3,
-      "samples": [20.2, 20.2, 20.4, 20.3, 20.4]
+      "samples": [20.2, 20.4, 20.3, 20.4, 20.4]
     },
     "Acceptance | theme-card-test": {
-      "delta_mb": 12.8,
-      "samples": [5.2, 11.4, 1.9, 23.2, 22.5]
+      "delta_mb": 12.6,
+      "samples": [11.4, 1.9, 23.2, 22.5, 4.2]
     },
     "Acceptance | ts file def": {
-      "delta_mb": 19.2,
-      "samples": [20.2, 20.1, 20.2, 22.2, 13.3]
+      "delta_mb": 15.9,
+      "samples": [20.1, 20.2, 22.2, 13.3, 3.6]
     },
     "Acceptance | wav audio def": {
       "delta_mb": 22.2,
-      "samples": [22.2, 22.3, 22, 22.3, 22.1]
+      "samples": [22.3, 22, 22.3, 22.1, 22.2]
     },
     "Acceptance | webp image def": {
-      "delta_mb": 14.7,
-      "samples": [23, 12.6, 12.6, 12.6, 12.6]
+      "delta_mb": 12.6,
+      "samples": [12.6, 12.6, 12.6, 12.6, 12.6]
     },
     "Acceptance | workspace-chooser": {
-      "delta_mb": -0.8,
-      "samples": [-0.8, -0.8, -0.8, -0.9, -0.9]
+      "delta_mb": -0.9,
+      "samples": [-0.8, -0.8, -0.9, -0.9, -0.9]
     },
     "Acceptance | workspace-chooser-delete": {
-      "delta_mb": 0.8,
-      "samples": [-4.6, 0.2, 0.3, 7.6, 0.3]
+      "delta_mb": 1.7,
+      "samples": [0.2, 0.3, 7.6, 0.3, 0.2]
     },
     "Acceptance | workspace-delete-multiple": {
       "delta_mb": 11.4,
-      "samples": [11.3, 11.8, 4.6, 14.6, 14.6]
+      "samples": [11.8, 4.6, 14.6, 14.6, 11.5]
     },
     "code-ref": {
-      "delta_mb": 12.1,
-      "samples": [12.3, 12.3, 11.9, 12.4, 11.7]
+      "delta_mb": 12,
+      "samples": [12.3, 11.9, 12.4, 11.7, 11.7]
     },
     "Integration | add-workspace": {
       "delta_mb": 4.4,
-      "samples": [4.4, 4.4, 4.4, 4.4, 4.4]
+      "samples": [4.4, 4.4, 4.4, 4.4, 4.3]
     },
     "Integration | ai-assistant-panel | binary upload dedupe": {
-      "delta_mb": -5.1,
-      "samples": [-11.6, 2.7, -11.6, -11.6, 6.6]
+      "delta_mb": -2.6,
+      "samples": [2.7, -11.6, -11.6, 6.6, 0.8]
     },
     "Integration | ai-assistant-panel | codeblocks": {
-      "delta_mb": -2.1,
-      "samples": [4.9, -2.3, -9.6, -2.3, -1.2]
+      "delta_mb": -7.3,
+      "samples": [-2.3, -9.6, -2.3, -1.2, -21.1]
     },
     "Integration | ai-assistant-panel | commands": {
-      "delta_mb": 33.9,
-      "samples": [38.6, 42.6, 39.8, 42.6, 6.1]
+      "delta_mb": 33.2,
+      "samples": [42.6, 39.8, 42.6, 6.1, 34.7]
     },
     "Integration | ai-assistant-panel | debug-message": {
-      "delta_mb": 6,
-      "samples": [7.7, 7.7, 7.6, 9, -1.9]
+      "delta_mb": -0.5,
+      "samples": [7.7, 7.6, 9, -1.9, -24.9]
     },
     "Integration | ai-assistant-panel | fallback-banner | broken chain (env default fails)": {
       "delta_mb": 8,
-      "samples": [8, 8, 8, 8, 8.1]
+      "samples": [8, 8, 8, 8.1, 8]
     },
     "Integration | ai-assistant-panel | fallback-banner | broken chain (user pick fails + no env default)": {
-      "delta_mb": -6.8,
-      "samples": [-3.2, -22.5, 5.5, 5.4, -19.1]
+      "delta_mb": -4.5,
+      "samples": [-22.5, 5.5, 5.4, -19.1, 8.4]
     },
     "Integration | ai-assistant-panel | fallback-banner | healthy SystemCard": {
       "delta_mb": 1.2,
-      "samples": [1.2, 1.2, 1.2, 1.2, 1.1]
+      "samples": [1.2, 1.2, 1.2, 1.1, 1.1]
     },
     "Integration | ai-assistant-panel | fallback-banner | live recovery when the user switches to a working SystemCard": {
       "delta_mb": -5.9,
-      "samples": [-5.9, -5.9, -5.9, -5.9, -6]
+      "samples": [-5.9, -5.9, -5.9, -6, -6]
     },
     "Integration | ai-assistant-panel | fallback-banner | MVP steady state (no SystemCard configured)": {
       "delta_mb": 13.8,
@@ -277,71 +277,71 @@
     },
     "Integration | ai-assistant-panel | fallback-banner | silent env-default recovery": {
       "delta_mb": 14.9,
-      "samples": [14.9, 14.9, 14.8, 15, 14.9]
+      "samples": [14.9, 14.8, 15, 14.9, 15]
     },
     "Integration | ai-assistant-panel | fallback-models": {
-      "delta_mb": -19.2,
-      "samples": [-19.8, -30, -19.8, -19.8, -6.8]
+      "delta_mb": -12.8,
+      "samples": [-30, -19.8, -19.8, -6.8, 12.2]
     },
     "Integration | ai-assistant-panel | file-attachment": {
-      "delta_mb": -23.3,
-      "samples": [-19.9, -18.8, -53.6, -25, 0.9]
+      "delta_mb": -21.8,
+      "samples": [-18.8, -53.6, -25, 0.9, -12.4]
     },
     "Integration | ai-assistant-panel | general": {
-      "delta_mb": 30.9,
-      "samples": [34.2, 27.6, 34.3, 20.6, 37.8]
+      "delta_mb": 33.9,
+      "samples": [27.6, 34.3, 20.6, 37.8, 49.1]
     },
     "Integration | ai-assistant-panel | past sessions": {
-      "delta_mb": -10.4,
-      "samples": [-32.5, -4.5, -4.5, -4.5, -5.9]
+      "delta_mb": -4.4,
+      "samples": [-4.5, -4.5, -4.5, -5.9, -2.8]
     },
     "Integration | ai-assistant-panel | reasoning": {
-      "delta_mb": 11.8,
-      "samples": [16.8, 8.9, 8.9, -1.5, 26]
+      "delta_mb": 9.5,
+      "samples": [8.9, 8.9, -1.5, 26, 5.4]
     },
     "Integration | ai-assistant-panel | scrolling": {
-      "delta_mb": 26.1,
-      "samples": [26.8, 34.1, 26.8, 16.4, 26.5]
+      "delta_mb": 23.2,
+      "samples": [34.1, 26.8, 16.4, 26.5, 12.2]
     },
     "Integration | ai-assistant-panel | sending": {
-      "delta_mb": 37.4,
-      "samples": [45.3, 38, 45.4, 45.4, 12.8]
+      "delta_mb": 26.1,
+      "samples": [38, 45.4, 45.4, 12.8, -11.2]
     },
     "Integration | ai-assistant-panel | skills": {
-      "delta_mb": -20.9,
-      "samples": [-13.8, -4, -18.4, -19.4, -48.8]
+      "delta_mb": -15.9,
+      "samples": [-4, -18.4, -19.4, -48.8, 11.3]
     },
     "Integration | brand-guide | brand image attachments": {
-      "delta_mb": 5.5,
-      "samples": [3.8, 3.7, 4.2, 12.7, 2.9]
+      "delta_mb": 5.1,
+      "samples": [3.7, 4.2, 12.7, 2.9, 1.9]
     },
     "Integration | brand-guide | custom-css section": {
-      "delta_mb": 10.2,
-      "samples": [9.2, 10.8, 10.7, 9.3, 11.2]
+      "delta_mb": 10.6,
+      "samples": [10.8, 10.7, 9.3, 11.2, 11]
     },
     "Integration | brand-logo | MarkField edit": {
-      "delta_mb": -0.9,
-      "samples": [-1.3, -1.3, -1.3, -1.3, 0.6]
+      "delta_mb": -0.4,
+      "samples": [-1.3, -1.3, -1.3, 0.6, 1.2]
     },
     "Integration | card api (Usage of publicAPI actions)": {
-      "delta_mb": 0.7,
-      "samples": [7.5, -10.5, -5.8, 3.2, 8.9]
+      "delta_mb": -1.9,
+      "samples": [-10.5, -5.8, 3.2, 8.9, -5.3]
     },
     "Integration | card-basics": {
-      "delta_mb": 26.3,
-      "samples": [16.3, 21.8, 35.7, 22, 35.7]
+      "delta_mb": 28.6,
+      "samples": [21.8, 35.7, 22, 35.7, 27.9]
     },
     "Integration | card-catalog": {
-      "delta_mb": -3.9,
-      "samples": [1.7, -3.7, 1.8, 1.7, -21.1]
+      "delta_mb": -7.6,
+      "samples": [-3.7, 1.8, 1.7, -21.1, -16.6]
     },
     "Integration | card-copy": {
-      "delta_mb": 12.7,
-      "samples": [22.6, 12.7, 22.7, 22.7, -17]
+      "delta_mb": 13.4,
+      "samples": [12.7, 22.7, 22.7, -17, 26.1]
     },
     "Integration | card-delete": {
-      "delta_mb": -15.2,
-      "samples": [-20.6, -20.5, -20.6, -38.1, 23.6]
+      "delta_mb": -10.1,
+      "samples": [-20.5, -20.6, -38.1, 23.6, 5]
     },
     "Integration | card-search/item-button (adorn)": {
       "delta_mb": 4.1,
@@ -349,294 +349,298 @@
     },
     "Integration | card-search/search-result-header (selection menu)": {
       "delta_mb": 4.2,
-      "samples": [4.1, 4.2, 4.2, 4.2, 4.2]
+      "samples": [4.2, 4.2, 4.2, 4.2, 4.3]
     },
     "Integration | CardDef-FieldDef relationships test": {
-      "delta_mb": 2.3,
-      "samples": [10.7, -3.9, 10.7, -3.7, -2.4]
+      "delta_mb": 0.9,
+      "samples": [-3.9, 10.7, -3.7, -2.4, 3.6]
     },
     "Integration | codemirror-context": {
       "delta_mb": 5.4
     },
     "Integration | color field configuration": {
       "delta_mb": 7.9,
-      "samples": [9.8, 4.8, 9.8, 4.8, 10.1]
+      "samples": [4.8, 9.8, 4.8, 10.1, 10.1]
     },
     "Integration | Command | create-specs": {
       "delta_mb": -4.1,
-      "samples": [11.7, 11.7, 11.7, -20.9, -34.6]
+      "samples": [11.7, 11.7, -20.9, -34.6, 11.7]
     },
     "Integration | Command | generate-example-cards (one-shot)": {
-      "delta_mb": -4.8,
-      "samples": [-2.9, 0.1, -9.3, -2.8, -9.3]
+      "delta_mb": -6.1,
+      "samples": [0.1, -9.3, -2.8, -9.3, -9.3]
     },
     "Integration | Command | host command schema generation test": {
-      "delta_mb": 5.8,
-      "samples": [5.8, 5.9, 5.8, 5.8, 5.6]
+      "delta_mb": 5.7,
+      "samples": [5.9, 5.8, 5.8, 5.6, 5.6]
     },
     "Integration | Command | patch-fields": {
-      "delta_mb": 8.7,
-      "samples": [-0.9, 9.5, 7.2, 21.9, 5.9]
+      "delta_mb": 12.1,
+      "samples": [9.5, 7.2, 21.9, 5.9, 16.2]
     },
     "Integration | Command | preview-format": {
-      "delta_mb": 4.6,
-      "samples": [4.3, 0.3, 0.3, 4.3, 13.7]
+      "delta_mb": 6.5,
+      "samples": [0.3, 0.3, 4.3, 13.7, 13.8]
     },
     "Integration | Command | show-card": {
-      "delta_mb": 5.8,
-      "samples": [16.9, -12.6, 4.4, 4.4, 15.8]
+      "delta_mb": 4,
+      "samples": [-12.6, 4.4, 4.4, 15.8, 7.8]
     },
     "Integration | Command | update-room-skills": {
-      "delta_mb": 7.1,
-      "samples": [6.9, -14.9, 6.9, 17.9, 18.6]
+      "delta_mb": 6.5,
+      "samples": [-14.9, 6.9, 17.9, 18.6, 4.2]
     },
     "Integration | commands | add-field-to-card-definition": {
-      "delta_mb": 2.5,
-      "samples": [-4.6, 7.7, 7.7, -6, 7.7]
+      "delta_mb": 2.2,
+      "samples": [7.7, 7.7, -6, 7.7, -6]
     },
     "Integration | commands | ai-assistant": {
-      "delta_mb": 7.2,
-      "samples": [3.5, 4.2, 9.2, 9.8, 9.5]
+      "delta_mb": 8.4,
+      "samples": [4.2, 9.2, 9.8, 9.5, 9.1]
     },
     "Integration | commands | apply-markdown-edit": {
       "delta_mb": 12.4,
-      "samples": [15.7, 15.8, 15.8, 15.8, -1.3]
+      "samples": [15.8, 15.8, 15.8, -1.3, 15.8]
     },
     "Integration | commands | apply-search-replace-block": {
       "delta_mb": 5.3,
-      "samples": [5.3, 5.3, 5.3, 5.4, 5.3]
+      "samples": [5.3, 5.3, 5.4, 5.3, 5.3]
     },
     "Integration | commands | authed-fetch": {
-      "delta_mb": 1.4,
-      "samples": [1.7, 1.8, 1.8, -0.1, 1.8]
+      "delta_mb": 1,
+      "samples": [1.8, 1.8, -0.1, 1.8, -0.2]
     },
     "Integration | commands | bot-registration": {
-      "delta_mb": 0.9,
-      "samples": [-3.1, -3, 11, -11.4, 11]
+      "delta_mb": -0.8,
+      "samples": [-3, 11, -11.4, 11, -11.4]
     },
     "Integration | commands | can-read-realm": {
       "delta_mb": 10.7,
-      "samples": [11.4, 11.4, 11.4, 9.7, 9.7]
+      "samples": [11.4, 11.4, 9.7, 9.7, 11.4]
     },
     "Integration | commands | cancel-indexing-job": {
-      "delta_mb": -1.4,
-      "samples": [-11, 7.4, -10.9, 0, 7.4]
+      "delta_mb": -2.4,
+      "samples": [7.4, -10.9, 0, 7.4, -15.9]
     },
     "Integration | commands | check-correctness": {
-      "delta_mb": 29.7,
-      "samples": [31.4, 23.3, 31.1, 38.6, 24.3]
+      "delta_mb": 28.1,
+      "samples": [23.3, 31.1, 38.6, 24.3, 23.3]
     },
     "Integration | commands | commands-calling": {
-      "delta_mb": 1.1,
-      "samples": [0, 0, 0, 0, 5.7]
+      "delta_mb": 3,
+      "samples": [0, 0, 0, 5.7, 9.3]
     },
     "Integration | commands | copy-and-edit": {
-      "delta_mb": 11.2,
-      "samples": [2.8, 6.5, 15.6, 15.6, 15.7]
+      "delta_mb": 11.3,
+      "samples": [6.5, 15.6, 15.6, 15.7, 2.9]
     },
     "Integration | commands | copy-card": {
-      "delta_mb": 11.5,
-      "samples": [5.8, 20.8, 5.9, 19.3, 5.9]
+      "delta_mb": 14.2,
+      "samples": [20.8, 5.9, 19.3, 5.9, 19.2]
     },
     "Integration | commands | copy-file-to-realm": {
       "delta_mb": 7.3,
-      "samples": [6.9, 7, 11.4, 2.8, 8.5]
+      "samples": [7, 11.4, 2.8, 8.5, 7]
     },
     "Integration | commands | copy-source": {
-      "delta_mb": -1.9,
-      "samples": [-5.2, -0.2, -5, 1, -0.3]
+      "delta_mb": -1,
+      "samples": [-0.2, -5, 1, -0.3, -0.4]
     },
     "Integration | commands | create-listing-pr-request": {
-      "delta_mb": -18.9,
-      "samples": [-27.9, -7.9, -13.9, -27.9, -16.7]
+      "delta_mb": -13,
+      "samples": [-7.9, -13.9, -27.9, -16.7, 1.6]
     },
     "Integration | commands | evaluate-module": {
-      "delta_mb": 9.8,
-      "samples": [8, 13.5, 8, 6.1, 13.5]
+      "delta_mb": 10.9,
+      "samples": [13.5, 8, 6.1, 13.5, 13.4]
     },
     "Integration | commands | execute-atomic-operations": {
-      "delta_mb": 3.1,
-      "samples": [11, 5.9, 0, -7.4, 5.9]
+      "delta_mb": 2.1,
+      "samples": [5.9, 0, -7.4, 5.9, 5.9]
     },
     "Integration | commands | fetch-card-json": {
       "delta_mb": -14.5,
-      "samples": [-14.6, -14.5, -14.5, -14.6, -14.5]
+      "samples": [-14.5, -14.5, -14.6, -14.5, -14.5]
     },
     "Integration | commands | full-reindex-realm": {
-      "delta_mb": 8.7,
-      "samples": [3.3, 8.2, 3.4, 14.4, 14.4]
+      "delta_mb": 8.8,
+      "samples": [8.2, 3.4, 14.4, 14.4, 3.4]
     },
     "Integration | commands | get-available-realm-identifiers": {
-      "delta_mb": -8.4,
-      "samples": [0, -13.6, -13.6, -1, -13.6]
+      "delta_mb": -8.6,
+      "samples": [-13.6, -13.6, -1, -13.6, -1]
     },
     "Integration | commands | get-catalog-realm-identifiers": {
       "delta_mb": 7.8,
-      "samples": [9.8, 9.7, 9.7, 9.7, 0]
+      "samples": [9.7, 9.7, 9.7, 0, 9.7]
     },
     "Integration | commands | get-default-writable-realm": {
       "delta_mb": -11.9,
-      "samples": [-12.9, -12.9, -12.9, -7.7, -12.9]
+      "samples": [-12.9, -12.9, -7.7, -12.9, -12.9]
     },
     "Integration | commands | get-realm-of-resource-identifier": {
       "delta_mb": 0.2,
-      "samples": [0.3, 0.2, 0.4, 0, 0.2]
+      "samples": [0.2, 0.4, 0, 0.2, 0]
     },
     "Integration | commands | get-user-system-card": {
-      "delta_mb": -2.8,
-      "samples": [0, 0, 0.1, 0, -13.9]
+      "delta_mb": -2.7,
+      "samples": [0, 0.1, 0, -13.9, 0.1]
     },
     "Integration | commands | instantiate-card": {
       "delta_mb": -1.6,
-      "samples": [-19.3, 13.4, 3.9, -9.9, 3.9]
+      "samples": [13.4, 3.9, -9.9, 3.9, -19.4]
     },
     "Integration | commands | invalidate-realm-identifiers": {
-      "delta_mb": -14.4,
-      "samples": [0, -30.5, 0, -11, -30.5]
+      "delta_mb": -17.3,
+      "samples": [-30.5, 0, -11, -30.5, -14.7]
     },
     "Integration | commands | invite-user-to-room": {
       "delta_mb": 1.4,
-      "samples": [1, 1, 6.5, -7, 5.4]
+      "samples": [1, 6.5, -7, 5.4, 1]
     },
     "Integration | commands | open-create-listing-modal": {
-      "delta_mb": -9.8,
-      "samples": [-15.2, -1.8, -15.1, -15.2, -1.9]
+      "delta_mb": -7.2,
+      "samples": [-1.8, -15.1, -15.2, -1.9, -1.8]
     },
     "Integration | commands | open-workspace": {
-      "delta_mb": -14.3,
-      "samples": [10.3, 11.1, -30.8, -31, -31.1]
+      "delta_mb": -14.1,
+      "samples": [11.1, -30.8, -31, -31.1, 11.1]
     },
     "Integration | commands | patch-code": {
-      "delta_mb": -11.7,
-      "samples": [-16.2, -1.6, -16.2, -8.1, -16.2]
+      "delta_mb": -10.6,
+      "samples": [-1.6, -16.2, -8.1, -16.2, -11.1]
     },
     "Integration | commands | patch-instance": {
-      "delta_mb": -0.5,
-      "samples": [-0.4, -0.6, -6.5, 3.2, 1.7]
+      "delta_mb": -0.1,
+      "samples": [-0.6, -6.5, 3.2, 1.7, 1.8]
     },
     "Integration | commands | persist-module-inspector-view": {
-      "delta_mb": -3.5,
-      "samples": [7.4, -29.5, 7.4, -1.3, -1.3]
+      "delta_mb": -8.6,
+      "samples": [-29.5, 7.4, -1.3, -1.3, -18.3]
     },
     "Integration | commands | publish-realm": {
-      "delta_mb": -10.7,
-      "samples": [-10.7]
+      "delta_mb": -3.7,
+      "samples": [-10.7, 3.3]
     },
     "Integration | commands | read-card-for-ai-assistant": {
-      "delta_mb": -2.7,
-      "samples": [-0.7, -5.8, -5.8, -8.8, 7.4]
+      "delta_mb": -1.1,
+      "samples": [-5.8, -5.8, -8.8, 7.4, 7.4]
     },
     "Integration | commands | read-file-for-ai-assistant": {
-      "delta_mb": 5.5,
-      "samples": [0.6, 6.7, 6.8, 6.8, 6.8]
+      "delta_mb": 6.8,
+      "samples": [6.7, 6.8, 6.8, 6.8, 6.8]
     },
     "Integration | commands | read-source": {
-      "delta_mb": 7.9,
-      "samples": [6, 13.2, 13.2, 13.2, -6.3]
+      "delta_mb": 6.9,
+      "samples": [13.2, 13.2, 13.2, -6.3, 1]
     },
     "Integration | commands | read-text-file": {
-      "delta_mb": 4.1,
-      "samples": [3, 8.2, 8.3, -4.3, 5.3]
+      "delta_mb": 4.7,
+      "samples": [8.2, 8.3, -4.3, 5.3, 6.2]
     },
     "Integration | commands | reindex-realm": {
-      "delta_mb": 4.9,
-      "samples": [-6.3, 8.6, 13, 3.1, 5.9]
+      "delta_mb": 7.5,
+      "samples": [8.6, 13, 3.1, 5.9, 7]
     },
     "Integration | commands | sanitize-module-list": {
-      "delta_mb": 0.1,
-      "samples": [-7.4, -1, -1, 0.1, 9.8]
+      "delta_mb": 1.6,
+      "samples": [-1, -1, 0.1, 9.8, 0.1]
     },
     "Integration | commands | search": {
-      "delta_mb": 15.3,
-      "samples": [16.7, 16.7, 16.8, 9.5, 16.7]
+      "delta_mb": 15.6,
+      "samples": [16.7, 16.8, 9.5, 16.7, 18.1]
     },
     "Integration | commands | search-and-choose": {
-      "delta_mb": 3.8,
-      "samples": [-10.2, 7.3, 7.3, 7.3, 7.3]
+      "delta_mb": 7.3,
+      "samples": [7.3, 7.3, 7.3, 7.3, 7.3]
     },
     "Integration | commands | search-google-images": {
-      "delta_mb": -5.4,
-      "samples": [0.1, 0.1, -13.8, 0.3, -13.7]
+      "delta_mb": -8.2,
+      "samples": [0.1, -13.8, 0.3, -13.7, -13.7]
     },
     "Integration | commands | send-ai-assistant-message": {
-      "delta_mb": -1.9,
-      "samples": [0.1, 0.1, -16.6, 0.1, 6.7]
+      "delta_mb": -0.6,
+      "samples": [0.1, -16.6, 0.1, 6.7, 6.7]
     },
     "Integration | commands | send-bot-trigger-event": {
-      "delta_mb": 5.3,
-      "samples": [6.5, 6.6, 6.6, 6.6, 0]
+      "delta_mb": 4,
+      "samples": [6.6, 6.6, 6.6, 0, 0]
     },
     "Integration | commands | send-request-via-proxy": {
-      "delta_mb": 22.6,
-      "samples": [21.4, 28.5, 28.7, 28.5, 5.9]
+      "delta_mb": 20.6,
+      "samples": [28.5, 28.7, 28.5, 5.9, 11.6]
     },
     "Integration | commands | set-user-system-card": {
-      "delta_mb": 6.8,
-      "samples": [6.5, 7.9, 6.6, 6.6, 6.6]
+      "delta_mb": 6.9,
+      "samples": [7.9, 6.6, 6.6, 6.6, 6.6]
     },
     "Integration | commands | store-add": {
-      "delta_mb": -7.3,
-      "samples": [0.7, -31.9, 0.7, -2.9, -3.3]
+      "delta_mb": -10.8,
+      "samples": [-31.9, 0.7, -2.9, -3.3, -16.8]
     },
     "Integration | commands | summarize-session": {
-      "delta_mb": 14.5,
-      "samples": [22.2, 4.7, 22.3, 10.7, 12.8]
+      "delta_mb": 12.7,
+      "samples": [4.7, 22.3, 10.7, 12.8, 13.1]
     },
     "Integration | commands | switch-submode": {
-      "delta_mb": -1.3,
-      "samples": [0.9, 0.9, 0.8, -0.1, -9.2]
+      "delta_mb": -3.6,
+      "samples": [0.9, 0.8, -0.1, -9.2, -10.5]
     },
     "Integration | commands | transform-cards": {
-      "delta_mb": 6.5,
-      "samples": [2.7, 4.3, 2.7, 11.5, 11.2]
+      "delta_mb": 4,
+      "samples": [4.3, 2.7, 11.5, 11.2, -9.9]
+    },
+    "Integration | commands | unpublish-realm": {
+      "delta_mb": 14.7,
+      "samples": [14.7]
     },
     "Integration | commands | validate-realm": {
-      "delta_mb": -0.1,
-      "samples": [0.6, 0.1, 5.9, -5.7, -1.3]
+      "delta_mb": 0,
+      "samples": [0.1, 5.9, -5.7, -1.3, 1]
     },
     "Integration | commands | write-binary-file": {
-      "delta_mb": 7.4,
-      "samples": [18, 4.8, 4.8, 4.8, 4.8]
+      "delta_mb": 4.7,
+      "samples": [4.8, 4.8, 4.8, 4.8, 4.5]
     },
     "Integration | commands | write-text-file": {
-      "delta_mb": 3.5,
-      "samples": [7.7, 0.6, 2, 0.6, 6.5]
+      "delta_mb": 3.3,
+      "samples": [0.6, 2, 0.6, 6.5, 7]
     },
     "Integration | Component | ai-assistant/fallback-banner": {
       "delta_mb": 4.1,
-      "samples": [4.1, 4.1, 4.1, 4.1, 4]
+      "samples": [4.1, 4.1, 4.1, 4, 4]
     },
     "Integration | Component | broken-link-template": {
       "delta_mb": 4.2,
-      "samples": [4.2, 4.2, 4.2, 4.3, 4.3]
+      "samples": [4.2, 4.2, 4.3, 4.3, 4.2]
     },
     "Integration | Component | ErrorDisplay | diagnostics": {
       "delta_mb": 4.2,
-      "samples": [4.2, 4.1, 4.2, 4.1, 4.2]
+      "samples": [4.1, 4.2, 4.1, 4.2, 4.2]
     },
     "Integration | Component | FormattedAiBotMessage": {
-      "delta_mb": 11.4,
-      "samples": [5.2, 12.9, 12.9, 12.9, 12.9]
+      "delta_mb": 12.9,
+      "samples": [12.9, 12.9, 12.9, 12.9, 13]
     },
     "Integration | Component | FormattedUserMessage": {
       "delta_mb": 4,
-      "samples": [4, 4, 4, 4.1, 4]
+      "samples": [4, 4, 4.1, 4, 4]
     },
     "Integration | Component | RoomMessage": {
-      "delta_mb": 8.4,
-      "samples": [8.9, 8.9, 9.7, 9.7, 4.9]
+      "delta_mb": 7.6,
+      "samples": [8.9, 9.7, 9.7, 4.9, 4.9]
     },
     "Integration | components | create-listing-modal": {
-      "delta_mb": 24.5,
-      "samples": [24.2, 22.3, 23.9, 24.8, 27.1]
+      "delta_mb": 25.6,
+      "samples": [22.3, 23.9, 24.8, 27.1, 29.9]
     },
     "Integration | components | realm field": {
-      "delta_mb": -2.3,
-      "samples": [-2, -1.9, -2.8, -1.9, -2.8]
+      "delta_mb": -0.5,
+      "samples": [-1.9, -2.8, -1.9, -2.8, 6.8]
     },
     "Integration | computeds": {
-      "delta_mb": -5.1,
-      "samples": [-5.4, -17.9, -5.4, 1.6, 1.6]
+      "delta_mb": -7.5,
+      "samples": [-17.9, -5.4, 1.6, 1.6, -17.5]
     },
     "Integration | create app module via ai-assistant": {
       "delta_mb": 0,
@@ -644,31 +648,31 @@
     },
     "Integration | date-time fields": {
       "delta_mb": 3.3,
-      "samples": [6.1, 6.2, -0.9, -1.1, 6.2]
+      "samples": [6.2, -0.9, -1.1, 6.2, 6.2]
     },
     "Integration | EmailField": {
-      "delta_mb": 5.9,
-      "samples": [5.8, 5.8, 5.9, 5.9, 5.9]
+      "delta_mb": 4.7,
+      "samples": [5.8, 5.9, 5.9, 5.9, 0.1]
     },
     "Integration | enumField": {
-      "delta_mb": 33.3,
-      "samples": [32.7, 32.7, 32.7, 31.3, 37.2]
+      "delta_mb": 34.2,
+      "samples": [32.7, 32.7, 31.3, 37.2, 37.2]
     },
     "Integration | field configuration": {
       "delta_mb": 2.5,
-      "samples": [2.4, 2.5, 2.4, 2.4, 2.6]
+      "samples": [2.5, 2.4, 2.4, 2.6, 2.5]
     },
     "Integration | field markdown domain": {
-      "delta_mb": 7,
-      "samples": [5.7, 8.5, 8.5, 6.9, 5.5]
+      "delta_mb": 5.8,
+      "samples": [8.5, 8.5, 6.9, 5.5, -0.2]
     },
     "Integration | field markdown primitives": {
-      "delta_mb": 6.1,
-      "samples": [6.3, 6, 6, 6, 6.1]
+      "delta_mb": 6,
+      "samples": [6, 6, 6, 6.1, 6.1]
     },
     "Integration | field markdown specialized": {
-      "delta_mb": 6.5,
-      "samples": [6.5, 6.7, 6.6, 6.3, 6.5]
+      "delta_mb": 6.4,
+      "samples": [6.7, 6.6, 6.3, 6.5, 5.8]
     },
     "Integration | field-support | linksTo sentinel predicates": {
       "delta_mb": 6.2,
@@ -680,39 +684,39 @@
     },
     "Integration | getRelationshipMembershipState": {
       "delta_mb": 1.6,
-      "samples": [6.6, -0.8, -2.2, 6.6, -2.3]
+      "samples": [-0.8, -2.2, 6.6, -2.3, 6.6]
     },
     "Integration | linksTo broken-link placeholder (singular)": {
-      "delta_mb": -5.8,
-      "samples": [-10.1, -4.7, -4.7, -4.8, -4.5]
+      "delta_mb": -4.6,
+      "samples": [-4.7, -4.7, -4.8, -4.5, -4.3]
     },
     "Integration | linksTo error sentinel producer": {
-      "delta_mb": -0.2,
-      "samples": [1.4, -5.8, 1.2, -5.1, 7.4]
+      "delta_mb": -1.4,
+      "samples": [-5.8, 1.2, -5.1, 7.4, -4.7]
     },
     "Integration | linksTo sentinel serialization round-trip": {
-      "delta_mb": 2.5,
-      "samples": [8.2, -13.2, 8.3, 8.3, 0.8]
+      "delta_mb": 0,
+      "samples": [-13.2, 8.3, 8.3, 0.8, -4.4]
     },
     "Integration | linksTo singular JS-access contract": {
-      "delta_mb": 2.5,
-      "samples": [1.2, 0.9, 8.2, 1, 1]
+      "delta_mb": 1,
+      "samples": [0.9, 8.2, 1, 1, -6.3]
     },
     "Integration | linksToMany broken-link placeholder (per element)": {
-      "delta_mb": -0.9,
-      "samples": [1, 1, -3.8, 0.9, -3.8]
+      "delta_mb": -1.1,
+      "samples": [1, -3.8, 0.9, -3.8, 0.2]
     },
     "Integration | linksToMany per-slot JS-access contract": {
-      "delta_mb": 9.2,
-      "samples": [6.3, 8.3, 8.3, 8.3, 14.7]
+      "delta_mb": 9.3,
+      "samples": [8.3, 8.3, 8.3, 14.7, 7.1]
     },
     "Integration | loading": {
-      "delta_mb": 2.2,
-      "samples": [-1.2, -1.1, -1.2, 7.2, 7.4]
+      "delta_mb": 2.6,
+      "samples": [-1.1, -1.2, 7.2, 7.4, 0.6]
     },
     "Integration | markdown highlighting error scenarios": {
-      "delta_mb": -1.8,
-      "samples": [4.5, 4.5, -15.2, 6, -8.7]
+      "delta_mb": -3.2,
+      "samples": [4.5, -15.2, 6, -8.7, -2.4]
     },
     "Integration | markdown-fallback": {
       "delta_mb": 5.8,
@@ -720,63 +724,63 @@
     },
     "Integration | markdown-preview": {
       "delta_mb": 4.9,
-      "samples": [4.9, 4.9, 4.8, 4.9, 4.9]
+      "samples": [4.9, 4.8, 4.9, 4.9, 4.9]
     },
     "Integration | matrix-service | sliding-sync timeline_limit bump": {
-      "delta_mb": 7.7,
-      "samples": [8.7, 7, 8.7, 7, 7]
+      "delta_mb": 7.3,
+      "samples": [7, 8.7, 7, 7, 7]
     },
     "Integration | message service subscription": {
       "delta_mb": 6,
       "samples": [6, 6, 6, 6, 6]
     },
     "Integration | number field configuration": {
-      "delta_mb": 0.9,
-      "samples": [-0.4, -0.3, 5.9, -0.4, -0.4]
+      "delta_mb": 0.8,
+      "samples": [-0.3, 5.9, -0.4, -0.4, -0.6]
     },
     "Integration | operator-mode | basics": {
-      "delta_mb": 158.3,
-      "samples": [157.7, 155.7, 155.6, 159.5, 162.9]
+      "delta_mb": 158,
+      "samples": [155.7, 155.6, 159.5, 162.9, 156.3]
     },
     "Integration | operator-mode | card catalog": {
-      "delta_mb": 86.7,
-      "samples": [86.6, 86.6, 86.5, 87, 86.7]
+      "delta_mb": 84,
+      "samples": [86.6, 86.5, 87, 86.7, 73.3]
     },
     "Integration | operator-mode | links": {
       "delta_mb": 39.1,
       "samples": [59.8, 37.7, 37.8, 37.8, 22.2]
     },
     "Integration | operator-mode | ui": {
-      "delta_mb": 25.4,
-      "samples": [22.4, 22, 22.6, 21.8, 38.2]
+      "delta_mb": 17.1,
+      "samples": [22, 22.6, 21.8, 38.2, -19]
     },
     "Integration | overlay-menu-items": {
-      "delta_mb": 5.6,
-      "samples": [10, -0.3, 10, 10.2, -1.9]
+      "delta_mb": -1.8,
+      "samples": [-0.3, 10, 10.2, -1.9, -27.2]
     },
     "Integration | per-usage edit override": {
       "delta_mb": 4.2,
       "samples": [0.9, 6.3, 6.4, 6.5, 0.8]
     },
     "Integration | PhoneNumberField": {
-      "delta_mb": 2.9,
-      "samples": [6.2, 0.6, 0.6, 0.8, 6.4]
+      "delta_mb": 1.7,
+      "samples": [0.6, 0.6, 0.8, 6.4, 0.3]
     },
     "Integration | prerendered-card-search": {
-      "delta_mb": -8.3,
-      "samples": [-14.9, -9.3, -9.4, -9.3, 1.3]
+      "delta_mb": -5.1,
+      "samples": [-9.3, -9.4, -9.3, 1.3, 1.1]
     },
     "Integration | preview": {
-      "delta_mb": 4.8,
-      "samples": [4.8, 4.8, 4.8, 4.8, 4.8]
+      "delta_mb": 5.9,
+      "samples": [4.8, 4.8, 4.8, 4.8, 10.2]
     },
     "Integration | query field render-cycle barrier": {
-      "delta_mb": -3,
-      "samples": [0.4, 0.4, 0.4, -7.8, -8.5]
+      "delta_mb": -4.8,
+      "samples": [0.4, 0.4, -7.8, -8.5, -8.5]
     },
     "Integration | query-field linksTo/linksToMany error sentinel": {
-      "delta_mb": -5.2,
-      "samples": [-0.6, -8.8, -8.7, -7.4, -0.3]
+      "delta_mb": -5.1,
+      "samples": [-8.8, -8.7, -7.4, -0.3, -0.3]
     },
     "Integration | realm": {
       "delta_mb": -4.8,
@@ -791,44 +795,44 @@
       "samples": [40, 45.6, 40, 40, 40.1]
     },
     "Integration | rendered-markdown": {
-      "delta_mb": 4.9,
-      "samples": [5, 4.9, 4.9, 5, 4.9]
+      "delta_mb": 5,
+      "samples": [4.9, 4.9, 5, 4.9, 5.1]
     },
     "Integration | RichMarkdownField": {
-      "delta_mb": 8.2,
-      "samples": [-1.5, 5.1, 12.5, 12.4, 12.5]
+      "delta_mb": 8.1,
+      "samples": [5.1, 12.5, 12.4, 12.5, -1.9]
     },
     "Integration | search correlation id": {
-      "delta_mb": 6.5,
-      "samples": [8.1, 8.2, 8.1, 7.4, 0.7]
+      "delta_mb": 6.4,
+      "samples": [8.2, 8.1, 7.4, 0.7, 7.6]
     },
     "Integration | search data resource": {
-      "delta_mb": -0.6,
-      "samples": [2.3, -4, -1.7, 2.4, -1.8]
+      "delta_mb": -3.7,
+      "samples": [-4, -1.7, 2.4, -1.8, -13.4]
     },
     "Integration | search resource": {
-      "delta_mb": -8.8,
-      "samples": [-22.5, -3.1, -8.5, -7.8, -1.9]
+      "delta_mb": -4.6,
+      "samples": [-3.1, -8.5, -7.8, -1.9, -1.5]
     },
     "Integration | serialization": {
-      "delta_mb": -4.4,
-      "samples": [-4.3, -4.3, -4.3, -4.5, -4.6]
+      "delta_mb": -4.7,
+      "samples": [-4.3, -4.3, -4.5, -4.6, -6]
     },
     "Integration | serializeFileDef": {
       "delta_mb": 4.2,
-      "samples": [5.7, 5.7, -1.7, 5.6, 5.7]
+      "samples": [5.7, -1.7, 5.6, 5.7, 5.6]
     },
     "Integration | Store": {
-      "delta_mb": 28,
-      "samples": [35.5, 35.4, 40.3, 35.5, -6.7]
+      "delta_mb": 30.2,
+      "samples": [35.4, 40.3, 35.5, -6.7, 46.5]
     },
     "Integration | text-input-validator": {
-      "delta_mb": 12.9,
-      "samples": [13, 12.9, 12.8, 12.9, 12.7]
+      "delta_mb": 12.7,
+      "samples": [12.9, 12.8, 12.9, 12.7, 12.4]
     },
     "Integration | text-suggestion | card-chooser-title": {
-      "delta_mb": 13.3,
-      "samples": [13.3, 13.3, 13.3, 13.3, 13.3]
+      "delta_mb": 11.3,
+      "samples": [13.3, 13.3, 13.3, 13.3, 3.3]
     },
     "normalizeQueryDefinition": {
       "delta_mb": 0,
@@ -848,7 +852,7 @@
     },
     "Unit | auth-service-worker": {
       "delta_mb": -0.1,
-      "samples": [0.1, 0.1, 0.1, -1, 0.1]
+      "samples": [0.1, 0.1, -1, 0.1, 0]
     },
     "Unit | auth-service-worker | createTokenRequestHandler": {
       "delta_mb": 0,
@@ -856,7 +860,7 @@
     },
     "Unit | bfm-card-references": {
       "delta_mb": 0.1,
-      "samples": [0.1, 0.1, 0.1, 0.1, 0]
+      "samples": [0.1, 0.1, 0.1, 0, 0.1]
     },
     "Unit | box": {
       "delta_mb": 4.7,
@@ -900,7 +904,7 @@
     },
     "Unit | file-def-manager canonicalize": {
       "delta_mb": 0,
-      "samples": [0.1, 0, 0, 0, 0]
+      "samples": [0, 0, 0, 0, 0]
     },
     "Unit | FileDef menu items": {
       "delta_mb": 4.7,
@@ -916,15 +920,15 @@
     },
     "Unit | identity-context garbage collection": {
       "delta_mb": 5.9,
-      "samples": [5.9, 5.8, 5.9, 5.9, 5.9]
+      "samples": [5.8, 5.9, 5.9, 5.9, 5.9]
     },
     "Unit | index-writer": {
       "delta_mb": 152.8,
       "samples": [152.7, 152.7, 152.7, 152.9, 152.8]
     },
     "Unit | instance-filter-matcher": {
-      "delta_mb": 1.1,
-      "samples": [1, 1.1, 1.1, 1]
+      "delta_mb": 1,
+      "samples": [1, 1.1, 1.1, 1, 1]
     },
     "Unit | isolated-render": {
       "delta_mb": 4,
@@ -951,8 +955,8 @@
       "samples": [0, 0, 0, 0, 0]
     },
     "Unit | loader": {
-      "delta_mb": 10.7,
-      "samples": [12.6, 12.5, 7.9, 7.9, 12.5]
+      "delta_mb": 10.9,
+      "samples": [12.5, 7.9, 7.9, 12.5, 13.6]
     },
     "Unit | loader | iconNotFoundMessage": {
       "delta_mb": 0,
@@ -964,7 +968,7 @@
     },
     "Unit | loader prefetch": {
       "delta_mb": 16.8,
-      "samples": [18.1, 12, 18, 18, 18]
+      "samples": [12, 18, 18, 18, 18.1]
     },
     "Unit | Loader transient 5xx retry (CS-10820)": {
       "delta_mb": 0,
@@ -972,7 +976,7 @@
     },
     "Unit | markdown-helpers | card link helpers": {
       "delta_mb": 4.1,
-      "samples": [4.1, 4.2, 4.1, 4.1, 4.1]
+      "samples": [4.2, 4.1, 4.1, 4.1, 4.1]
     },
     "Unit | marked-sync": {
       "delta_mb": 0.2,
@@ -988,7 +992,7 @@
     },
     "Unit | published-realm-url": {
       "delta_mb": 0,
-      "samples": [0, 0, 0]
+      "samples": [0, 0, 0, 0]
     },
     "Unit | qs | parse": {
       "delta_mb": 0,
