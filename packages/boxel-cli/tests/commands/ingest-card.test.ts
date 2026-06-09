@@ -95,5 +95,28 @@ describe('ingest-card helpers', () => {
         resolveSameRealmFile('./missing', fromAbs, realmRoot, fileSet),
       ).toBeNull();
     });
+
+    it('resolves registered-prefix (@cardstack/<realm>/…) same-realm imports', () => {
+      expect(
+        resolveSameRealmFile(
+          '@cardstack/catalog/04868f-mortgage-calculator/mortgage-calculator',
+          fromAbs,
+          realmRoot,
+          fileSet,
+        ),
+      ).toBe('04868f-mortgage-calculator/mortgage-calculator.gts');
+    });
+
+    it('returns null for prefix imports that point at another realm', () => {
+      // npm-scoped packages and other realms don't contain this realm's tail.
+      expect(
+        resolveSameRealmFile(
+          '@cardstack/skills/foo',
+          fromAbs,
+          realmRoot,
+          fileSet,
+        ),
+      ).toBeNull();
+    });
   });
 });

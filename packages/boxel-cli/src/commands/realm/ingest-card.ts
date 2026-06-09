@@ -53,8 +53,10 @@ export function extractExportedClassNames(source: string): string[] {
 
 /**
  * Resolve a same-realm import specifier to a realm-relative file path that
- * exists in `fileSet`. Returns null for external specifiers (bare npm,
- * base realm, other realms) — those resolve at runtime and aren't copied.
+ * exists in `fileSet`. Handles relative (`./`, `../`), same-origin absolute
+ * (`https://…/<realm>/…`), and registered-prefix (`@cardstack/<realm>/…`)
+ * forms. Returns null for anything outside this realm (base realm, other
+ * realms, bare npm packages) — those resolve at runtime and aren't copied.
  */
 export function resolveSameRealmFile(
   spec: string,
@@ -62,16 +64,25 @@ export function resolveSameRealmFile(
   realmRoot: string,
   fileSet: Set<string>,
 ): string | null {
-  let absUrl: string;
+  let rel: string;
   if (spec.startsWith('.') || spec.startsWith('/')) {
-    absUrl = new URL(spec, fromAbsUrl).href;
+    let absUrl = new URL(spec, fromAbsUrl).href;
+    if (!absUrl.startsWith(realmRoot)) return null; // base realm / other realm
+    rel = absUrl.slice(realmRoot.length).replace(/^\/+/, '');
   } else if (/^https?:\/\//.test(spec)) {
-    absUrl = spec;
+    if (!spec.startsWith(realmRoot)) return null;
+    rel = spec.slice(realmRoot.length).replace(/^\/+/, '');
+  } else if (spec.startsWith('@')) {
+    // Registered-prefix form (`@cardstack/<realm>/…`). Map onto this realm by
+    // its path tail (e.g. `catalog/`). npm-scoped packages (`@glimmer/…`)
+    // won't contain the realm tail and fall through to null (external).
+    let tail = new URL(realmRoot).pathname.replace(/^\/+/, '');
+    let idx = tail ? spec.indexOf(tail) : -1;
+    if (idx < 0) return null;
+    rel = spec.slice(idx + tail.length).replace(/^\/+/, '');
   } else {
-    return null; // bare module (npm, @cardstack/*) — external
+    return null; // bare npm module — external
   }
-  if (!absUrl.startsWith(realmRoot)) return null; // base realm / other realm
-  let rel = absUrl.slice(realmRoot.length).replace(/^\/+/, '');
   let candidates = MODULE_EXTENSIONS.some((ext) => rel.endsWith(ext))
     ? [rel]
     : [rel, ...MODULE_EXTENSIONS.map((ext) => rel + ext)];
@@ -204,22 +215,26 @@ class RealmCardIngester extends RealmSyncBase {
     fileSet: Set<string>,
   ): Promise<{ moduleRels: string[]; instanceRels: string[] }> {
     let rel = this.toRel(cardUrl.replace(/\/$/, ''));
-    let source = await this.fetchText(rel);
-    if (source != null) {
-      let doc = tryParseCardDoc(source);
-      let adoptsFrom = doc?.data?.meta?.adoptsFrom?.module;
+    // Instance? Canonical instance URLs omit the `.json` (e.g. `.../Person/1`),
+    // so probe the `.json` file rather than the bare path (which 404s).
+    let instanceRel = rel.endsWith('.json') ? rel : `${rel}.json`;
+    if (fileSet.has(instanceRel)) {
+      let source = await this.fetchText(instanceRel);
+      let adoptsFrom =
+        source != null
+          ? tryParseCardDoc(source)?.data?.meta?.adoptsFrom?.module
+          : undefined;
       if (adoptsFrom) {
         // Instance: seed from its definition module, copy the instance.
         let moduleFile = resolveSameRealmFile(
           adoptsFrom,
-          this.relToAbs(rel),
+          this.relToAbs(instanceRel),
           this.realmRoot,
           fileSet,
         );
-        let instanceRel = rel.endsWith('.json') ? rel : `${rel}.json`;
         return {
           moduleRels: moduleFile ? [moduleFile] : [],
-          instanceRels: fileSet.has(instanceRel) ? [instanceRel] : [],
+          instanceRels: [instanceRel],
         };
       }
     }

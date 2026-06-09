@@ -44,9 +44,8 @@ Issues per entry-point card.
    which a runtime dep graph would miss but `boxel parse` needs), its sample
    instances, and its **card-level** Catalog Spec. Cross-realm imports
    (`https://cardstack.com/base/...`) and component/function Specs are left out
-   on purpose. Add `--with-linked-instances` when the card's instances
-   `linksTo` other cards you also need; pass `--realm <url>` only if the source
-   realm can't be auto-detected.
+   on purpose. Pass `--realm <url>` only if the source realm can't be
+   auto-detected.
    - **If the source card has no co-located test** — common for catalog
      cards, which rarely ship `.test.gts` — write **characterization tests**
      that capture its current behavior: field defaults, computed-field
