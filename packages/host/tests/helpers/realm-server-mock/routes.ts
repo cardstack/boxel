@@ -56,7 +56,7 @@ export function resetCatalogRealmURL() {
 type SearchableRealm = {
   url?: string;
   // Returns the unified document: a `Realm.search` resolves here, and the
-  // live-realm passthrough below returns today's `LinkableCollectionDocument`,
+  // live-realm passthrough below returns a `LinkableCollectionDocument`,
   // which is a unified document with only `card`/`file-meta` `included`.
   search: (query: Query) => Promise<UnifiedSearchCollectionDocument>;
   searchPrerendered: (

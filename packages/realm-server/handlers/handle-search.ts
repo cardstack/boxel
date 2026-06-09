@@ -64,8 +64,8 @@ export default function handleSearch(opts: {
     // Parse the unified request body: the query plus the optional
     // `render` / `dataOnly` / `cardUrls` members. Prefer-HTML emission is
     // driven by an explicitly-provided `render` member; a request that omits
-    // it (and `dataOnly`) resolves to the full live-card document, so callers
-    // not yet consuming the rendered-html shape are unaffected.
+    // it (and `dataOnly`) resolves to the full live-card document, so a
+    // consumer reading only the live-card shape receives exactly that.
     let parsed;
     let renderRequested = false;
     let request = await fetchRequestFromContext(ctxt);

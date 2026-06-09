@@ -91,7 +91,8 @@ export type CardResourceMeta = Meta & {
   // The ancestor type this result's HTML was rendered as, echoed on an
   // identity-only `card` so a consumer renders the hydrated/fallback card as
   // the same type as its HTML sibling. A full live `card` never carries this
-  // (its wireformat is unchanged); it rides only on identity-only results.
+  // (it ships the standard live wireformat); it rides only on identity-only
+  // results.
   renderType?: CodeRef;
 };
 

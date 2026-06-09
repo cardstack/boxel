@@ -438,7 +438,7 @@ export class RealmIndexQueryEngine {
     }
 
     // `includeErrors` so error rows reach the mapper as `rendered-html` with
-    // `isError` (the data-only path excludes them, matching today's `/_search`).
+    // `isError` (the data-only path excludes them, matching the live `/_search`).
     let runSql = () =>
       this.#indexQueryEngine.search(
         new URL(this.#realm.url),

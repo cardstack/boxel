@@ -332,7 +332,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     // job-scoped cache key: the resolved prefer-HTML spec (only when the caller
     // explicitly asks to render), `dataOnly`, and a non-empty `cardUrls`. A
     // request differing on any of them gets a distinct entry + ETag; one that
-    // matches an earlier key hits the cache. A plain query (no `render`) and an
+    // matches an existing key hits the cache. A plain query (no `render`) and an
     // empty `cardUrls` are the same live request and share an entry.
     test('QUERY /_federated-search cache key segregates entries by render / dataOnly / cardUrls', async function (assert) {
       let realmServerToken = createRealmServerJWT(
