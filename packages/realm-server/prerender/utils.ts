@@ -1415,34 +1415,53 @@ export interface RenderProfileContext {
   label?: string;
 }
 
-// Runs `fn` inside a CDP CPU profile and logs the top self-time frames
-// once it resolves, keyed by the render's label and wall-duration.
-// Best-effort: the profiler never throws and never alters `fn`'s result
-// or error — `profileWindow` re-throws whatever `fn` threw and discards
-// the profile in that case. Used only by the affinity-scoped trigger,
-// for renders whose affinity exactly matches the configured target.
-async function runWithAffinityProfile<T>(
+// Runs `fn` under a CDP CPU profile and logs the top self-time frames,
+// keyed by the render's label and wall-duration. Used only by the
+// affinity-scoped trigger, for renders whose affinity exactly matches
+// the configured target.
+//
+// The render promise drives the return value directly — this resolves
+// or rejects exactly as `fn` does, so the caller's error/timeout
+// handling is unchanged and a render that hangs leaves this awaiting (the
+// outer `withTimeout` race owns the timeout). The profile runs alongside
+// as a detached best-effort task, bounded by `timeoutMs`: if the render
+// hangs past its own timeout, the profiler still stops and detaches at
+// the bound rather than holding a CDP session open on the wedged page.
+function runWithAffinityProfile<T>(
   page: Page,
   fn: () => Promise<T>,
+  timeoutMs: number,
   profileContext: RenderProfileContext | undefined,
 ): Promise<T> {
-  let result!: T;
-  let summary = await profileWindow(page, {
+  let render = fn();
+  // Detached: the profile's log line is diagnostic and must not gate the
+  // render's return. `profileWindow` observes `render` only for timing
+  // (it never consumes the result/rejection) and stops on whichever of
+  // render-settles / `timeoutMs` comes first.
+  void profileWindow(page, {
     samplingIntervalUs: AFFINITY_PROFILE_SAMPLING_INTERVAL_US,
-    run: async () => {
-      result = await fn();
-    },
-  });
-  let top = formatTopFrames(summary);
-  if (top && summary) {
-    log.warn(
-      `affinity CPU profile ${profileContext?.label ?? '<render>'}` +
-        ` durationMs=${summary.durationMs}` +
-        ` samples=${summary.totalSamples}` +
-        ` topFrames: ${top}`,
-    );
-  }
-  return result;
+    maxRunMs: timeoutMs,
+    run: () =>
+      render.then(
+        () => undefined,
+        () => undefined,
+      ),
+  })
+    .then((summary) => {
+      let top = formatTopFrames(summary);
+      if (top && summary) {
+        log.warn(
+          `affinity CPU profile ${profileContext?.label ?? '<render>'}` +
+            ` durationMs=${summary.durationMs}` +
+            ` samples=${summary.totalSamples}` +
+            ` topFrames: ${top}`,
+        );
+      }
+    })
+    .catch(() => {
+      // Best-effort: profiling failures never perturb the render.
+    });
+  return render;
 }
 
 export async function withTimeout<T>(
@@ -1473,7 +1492,8 @@ export async function withTimeout<T>(
   );
   let renderFn = fn;
   if (profileThisRender) {
-    renderFn = () => runWithAffinityProfile(page, fn, profileContext);
+    renderFn = () =>
+      runWithAffinityProfile(page, fn, timeoutMs, profileContext);
   }
   let result!: T | { timeout: true };
   // Capture the timeout timer so we can clear it once the race settles —

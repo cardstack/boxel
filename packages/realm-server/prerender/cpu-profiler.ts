@@ -99,20 +99,36 @@ export interface ProfileWindowOptions {
   // Number of hottest self-time frames to return. Defaults to
   // `DEFAULT_TOP_FRAMES`.
   topFrames?: number;
-  // Work to run between `Profiler.start` and `Profiler.stop`. For the
+  // Work to observe between `Profiler.start` and `Profiler.stop`. For the
   // timeout trigger this just waits while the wedged thread keeps
-  // spinning; for the affinity trigger this runs the render itself
-  // (capturing its result in an outer closure). If `run` throws, the
-  // profiler is still stopped and the error is re-thrown so the caller's
-  // own error handling is unchanged.
+  // spinning; for the affinity trigger this is the render itself. The
+  // profiler stops as soon as `run` settles OR `maxRunMs` elapses,
+  // whichever comes first. `run`'s own result and rejection are NOT
+  // consumed or surfaced here — the caller owns them (the affinity
+  // wrapper captures the render result in an outer closure and lets the
+  // render promise flow on to its own error/timeout handling). `run`
+  // must therefore not reject in a way that escapes; callers pass a
+  // never-rejecting observer.
   run: () => Promise<void>;
+  // Upper bound on how long to keep the profiler running while waiting
+  // for `run` to settle. A render can hang past its timeout (the exact
+  // case the affinity trigger targets), and the outer caller will have
+  // moved on; without this bound the CDP profiler session would stay
+  // active on the wedged page until the tab is torn down. When the bound
+  // fires first, the profiler stops and detaches with whatever samples
+  // accrued, and `run` is left to settle on its own. Omitted (the
+  // timeout trigger's short fixed window) means "wait for `run`".
+  maxRunMs?: number;
 }
 
-// Runs a CDP CPU profile across the window defined by `run`, then
-// summarizes self-time by call frame. Returns the summary plus whatever
-// `run` resolved to. Never throws: any CDP failure resolves the summary
-// to `null` while still awaiting `run` so the caller's own work
-// completes regardless of profiler health.
+// Runs a CDP CPU profile across the window defined by `run` (or by
+// `maxRunMs`, whichever settles first) and summarizes self-time by call
+// frame. Never throws and never consumes `run`'s result or rejection:
+// any CDP failure resolves the summary to `null`, and the caller retains
+// full ownership of the work it asked to be profiled. Because the
+// profiler stops on `min(run settles, maxRunMs)`, a render that hangs
+// past its timeout can't leave the CDP profiler session running on the
+// wedged page after the caller has moved on.
 export async function profileWindow(
   page: Page,
   options: ProfileWindowOptions,
@@ -121,8 +137,17 @@ export async function profileWindow(
     options.samplingIntervalUs ?? DEFAULT_SAMPLING_INTERVAL_US;
   let topFrames = options.topFrames ?? DEFAULT_TOP_FRAMES;
 
+  // Kick off the observed work immediately. Its settlement is one of the
+  // two stop triggers; its outcome is the caller's to handle, so we
+  // attach a no-op catch to keep an early rejection from surfacing as an
+  // unhandled rejection here while still letting the caller's own
+  // reference to the same work observe it.
+  let runSettled = options.run();
+  runSettled.catch(() => {
+    // Owned by the caller — see ProfileWindowOptions.run.
+  });
+
   let client: CDPSession | undefined;
-  let started = false;
   let startedAt = 0;
   try {
     client = await page.createCDPSession();
@@ -131,41 +156,58 @@ export async function profileWindow(
       interval: samplingIntervalUs,
     });
     await client.send('Profiler.start');
-    started = true;
     startedAt = Date.now();
   } catch (e) {
-    // Couldn't even start (page closing, session race). Still run the
-    // caller's work so its result and side effects are unaffected.
+    // Couldn't even start (page closing, session race, profiler already
+    // active for this isolate). The observed work is already running and
+    // remains the caller's to handle; just detach and report nothing.
     log.debug('CPU profiler failed to start:', e);
-    await runQuietly(options.run);
     await detachQuietly(client);
     return null;
   }
 
-  // Run the caller's work inside the profiling window. If it throws we
-  // still stop the profiler and surface whatever we collected — but we
-  // re-throw so the caller's own error handling is unchanged.
-  let runError: unknown;
-  try {
-    await options.run();
-  } catch (e) {
-    runError = e;
-  }
+  // Stop the profiler as soon as the observed work settles or the bound
+  // elapses. Awaiting a never-rejecting reflection of `runSettled` keeps
+  // this path from throwing on a render rejection.
+  await waitForRunOrBound(runSettled, options.maxRunMs);
 
   let durationMs = Date.now() - startedAt;
   let profile = await stopProfilerWithTimeout(client);
   await detachQuietly(client);
 
-  if (runError !== undefined) {
-    // The profile (if any) is discarded — the caller's failure path owns
-    // the outcome. Re-throwing keeps `profileWindow` transparent to the
-    // work it wraps.
-    throw runError;
-  }
-  if (!started || !profile) {
+  if (!profile) {
     return null;
   }
   return summarizeProfile(profile, durationMs, topFrames);
+}
+
+// Resolves when the observed work settles or `maxRunMs` elapses,
+// whichever is first. Reflects `runSettled` so a rejection resolves this
+// (rather than throwing) — the rejection is the caller's to surface.
+// With no bound, waits for the work to settle.
+async function waitForRunOrBound(
+  runSettled: Promise<void>,
+  maxRunMs: number | undefined,
+): Promise<void> {
+  let reflected = runSettled.then(
+    () => undefined,
+    () => undefined,
+  );
+  if (typeof maxRunMs !== 'number' || maxRunMs <= 0) {
+    await reflected;
+    return;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      reflected,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, maxRunMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Races `Profiler.stop` against a hard timeout. A wedged renderer can
@@ -196,15 +238,6 @@ async function detachQuietly(client: CDPSession | undefined): Promise<void> {
     await client?.detach();
   } catch {
     // Session may already be gone with the page; ignore.
-  }
-}
-
-async function runQuietly(run: () => Promise<void>): Promise<void> {
-  try {
-    await run();
-  } catch {
-    // The caller's work owns its own error handling; on the
-    // profiler-failed-to-start path we only need it to have run.
   }
 }
 
