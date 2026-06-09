@@ -371,6 +371,15 @@ export class Prerenderer {
       // result we return, not earlier retries. Reset the marker at the
       // top of each iteration so launch+render still sums to ~total.
       let attemptStart = Date.now();
+      // A module error on a *reused* page may mean the page is running a
+      // stale host bundle (an export the bundle predates) rather than that
+      // the module is actually broken. Realm affinity would otherwise pin
+      // every revalidation to that page and reproduce the error forever.
+      // The first such error recycles the affinity's page (dropping its
+      // context so a fresh page reloads the bundle) and retries once; a
+      // genuinely broken module errors again on the fresh page and is
+      // cached as before. One recycle per call — see the guard below.
+      let recycledStalePage = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         throwIfAborted(signal);
         attemptStart = Date.now();
@@ -465,6 +474,38 @@ export class Prerenderer {
               ' | ',
             )} for ${url}`,
           );
+        }
+
+        // Escape an affinity pinned to a stale page: if a reused page
+        // returned a module error that did NOT evict the page, the page may
+        // be running a stale host bundle. Recycle the affinity's page
+        // (cold, so the replacement reloads the host bundle) and retry once
+        // on a fresh page. Skipped cases: auth failures (not a bad bundle)
+        // and already-evicted errors like render timeouts and dead-runloop
+        // desyncs (the eviction path already replaces the page on the next
+        // render). Bounded to a single recycle per call by
+        // `recycledStalePage`; a still-broken module on the fresh page
+        // falls through and is cached normally.
+        let errorStatus = Number(result.response.error?.error?.status);
+        let isAuthError = errorStatus === 401 || errorStatus === 403;
+        if (
+          result.response.status === 'error' &&
+          result.pool?.reused &&
+          !result.pool?.evicted &&
+          !isAuthError &&
+          !recycledStalePage
+        ) {
+          recycledStalePage = true;
+          log.warn(
+            `module prerender for ${url} errored on reused page ${result.pool.pageId}; recycling affinity ${affinityKey} and retrying on a fresh page in case the page is on a stale host bundle`,
+          );
+          // Drop the shared context too (default), so the replacement
+          // page reloads the host bundle cold rather than reusing the
+          // stale page's warm HTTP cache.
+          await this.#pagePool.disposeAffinity(affinityKey, {
+            retainSharedContext: false,
+          });
+          continue;
         }
 
         Prerenderer.decorateRenderErrorsWithTimings(
