@@ -52,6 +52,7 @@
     "@cardstack/runtime-common": "workspace:*",
     "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
+    "@types/semver": "^7.7.0",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "concurrently": "catalog:",
@@ -60,6 +61,7 @@
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
+    "semver": "^7.7.0",
     "ts-node": "^10.9.1",
     "vite": "catalog:",
     "vitest": "catalog:"

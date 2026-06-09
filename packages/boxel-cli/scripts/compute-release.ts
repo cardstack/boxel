@@ -13,6 +13,8 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { resolve } from 'path';
 
+import semver from 'semver';
+
 import bumpByPrefixJson from './release-prefixes.json';
 import { lastStableTag } from './lib/tags';
 
@@ -101,38 +103,20 @@ export function detectSurfaces(changedFiles: string[]): {
   return { npmTouched, pluginTouched };
 }
 
-export interface ParsedVersion {
-  major: number;
-  minor: number;
-  patch: number;
-  prerelease: string | null;
-}
-
-export function parseSemver(version: string): ParsedVersion {
-  const m = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/);
-  if (!m) {
+function parse(version: string): semver.SemVer {
+  const parsed = semver.parse(version);
+  if (!parsed) {
     throw new Error(`Invalid semver: ${version}`);
   }
-  return {
-    major: parseInt(m[1], 10),
-    minor: parseInt(m[2], 10),
-    patch: parseInt(m[3], 10),
-    prerelease: m[4] ?? null,
-  };
+  return parsed;
 }
 
+// Apply a release bump to the stable `major.minor.patch` of `baseVersion`,
+// discarding any prerelease suffix. `none` returns that clean base unchanged.
 function applyBump(baseVersion: string, bump: BumpLevel): string {
-  const { major, minor, patch } = parseSemver(baseVersion);
-  switch (bump) {
-    case 'major':
-      return `${major + 1}.0.0`;
-    case 'minor':
-      return `${major}.${minor + 1}.0`;
-    case 'patch':
-      return `${major}.${minor}.${patch + 1}`;
-    case 'none':
-      return `${major}.${minor}.${patch}`;
-  }
+  const { major, minor, patch } = parse(baseVersion);
+  const base = `${major}.${minor}.${patch}`;
+  return bump === 'none' ? base : semver.inc(base, bump)!;
 }
 
 const BUMP_RANK: Record<BumpLevel, number> = {
@@ -147,12 +131,10 @@ function maxBump(a: BumpLevel, b: BumpLevel): BumpLevel {
 }
 
 function impliedBumpBetween(stable: string, prereleaseBase: string): BumpLevel {
-  const s = parseSemver(stable);
-  const p = parseSemver(prereleaseBase);
-  if (p.major > s.major) return 'major';
-  if (p.minor > s.minor) return 'minor';
-  if (p.patch > s.patch) return 'patch';
-  return 'none';
+  // Both arguments are clean `major.minor.patch` strings, so semver.diff only
+  // ever yields 'major' | 'minor' | 'patch' | null (equal → no bump).
+  const d = semver.diff(stable, prereleaseBase);
+  return d === 'major' || d === 'minor' || d === 'patch' ? d : 'none';
 }
 
 function nextUnstableVersion(
@@ -161,8 +143,8 @@ function nextUnstableVersion(
   bump: BumpLevel,
   prereleaseN: number,
 ): string {
-  const current = parseSemver(currentNpm);
-  if (current.prerelease) {
+  const current = parse(currentNpm);
+  if (current.prerelease.length > 0) {
     // Already on a prerelease base. Decide whether this commit's bump
     // escalates the base or stays.
     const currentBase = `${current.major}.${current.minor}.${current.patch}`;
@@ -245,16 +227,31 @@ function readJsonVersion(path: string): string {
 }
 
 // Pure: the `-unstable.<n>` counters already published for `base`. Tolerates
-// any npm output shape — non-string entries are dropped rather than throwing.
+// any npm output shape — non-string / unparseable entries are dropped rather
+// than throwing, and semver's own parsing keeps the `0.3.20` vs `0.3.2` bases
+// distinct (patch 20 ≠ 2) where a naive prefix match would conflate them.
 export function unstableCounters(base: string, versions: unknown[]): number[] {
-  const re = new RegExp(
-    '^' + base.replace(/\./g, '\\.') + '-unstable\\.(\\d+)$',
-  );
-  return versions
-    .filter((v): v is string => typeof v === 'string')
-    .map((v) => (v.match(re) || [])[1])
-    .filter((x): x is string => x != null)
-    .map(Number);
+  const b = parse(base);
+  const counters: number[] = [];
+  for (const v of versions) {
+    if (typeof v !== 'string') continue;
+    const p = semver.parse(v);
+    if (
+      !p ||
+      p.major !== b.major ||
+      p.minor !== b.minor ||
+      p.patch !== b.patch
+    ) {
+      continue;
+    }
+    // semver coerces a numeric prerelease identifier to a number, so a
+    // `<base>-unstable.<n>` version parses to prerelease `['unstable', <n>]`.
+    const [tag, n] = p.prerelease;
+    if (tag === 'unstable' && typeof n === 'number') {
+      counters.push(n);
+    }
+  }
+  return counters;
 }
 
 function fetchNpmVersions(): unknown[] {

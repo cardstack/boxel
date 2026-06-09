@@ -1080,6 +1080,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
         version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
@@ -1104,6 +1107,9 @@ importers:
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
+      semver:
+        specifier: ^7.7.0
+        version: 7.8.0
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)

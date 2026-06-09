@@ -3,7 +3,6 @@ import {
   classifyBumpFromTitle,
   computeRelease,
   detectSurfaces,
-  parseSemver,
   unstableCounters,
   type ComputeReleaseInput,
 } from '../../scripts/compute-release';
@@ -123,30 +122,6 @@ describe('detectSurfaces', () => {
   it('neither touched when only docs at repo root changed', () => {
     const s = detectSurfaces(['docs/cs-11112-plan.md', 'README.md']);
     expect(s).toEqual({ npmTouched: false, pluginTouched: false });
-  });
-});
-
-describe('parseSemver', () => {
-  it('parses stable versions', () => {
-    expect(parseSemver('0.1.4')).toEqual({
-      major: 0,
-      minor: 1,
-      patch: 4,
-      prerelease: null,
-    });
-  });
-
-  it('parses unstable prereleases', () => {
-    expect(parseSemver('0.2.0-unstable.5')).toEqual({
-      major: 0,
-      minor: 2,
-      patch: 0,
-      prerelease: 'unstable.5',
-    });
-  });
-
-  it('throws on invalid input', () => {
-    expect(() => parseSemver('not-a-version')).toThrow();
   });
 });
 
