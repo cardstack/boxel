@@ -2072,6 +2072,10 @@ module(basename(__filename), function () {
           testCreatePrerenderAuth,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+        virtualNetwork.addRealmMapping(
+          '@cardstack/base/',
+          localBaseRealmURL.href,
+        );
 
         ({ realm: base } = await createRealm({
           definitionLookup,
