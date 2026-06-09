@@ -142,6 +142,7 @@ export class RenderRunner {
     queue: PrerenderQueue,
     signal?: AbortSignal,
     priority?: number,
+    freshPage?: boolean,
   ) {
     let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
     if (lastAuth) {
@@ -160,6 +161,7 @@ export class RenderRunner {
     let pageInfo = await this.#pagePool.getPage(affinityKey, queue, {
       signal,
       ...(priority !== undefined ? { priority } : {}),
+      ...(freshPage ? { freshPage: true } : {}),
     });
     this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
@@ -525,6 +527,7 @@ export class RenderRunner {
     priority,
     signal,
     onTabAcquired,
+    freshPage,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -535,6 +538,10 @@ export class RenderRunner {
     renderOptions?: RenderRouteOptions;
     priority?: number;
     signal?: AbortSignal;
+    // Error-cache revalidation hint — see ModulePrerenderArgs.freshPage.
+    // Routes this render onto a fresh page instead of the affinity's warm
+    // (possibly stale-bundle) tab.
+    freshPage?: boolean;
     // Fires after `getPageForAffinity` resolves AND the per-page
     // console/exception bucket has been reset — i.e. when this attempt
     // has a page AND the bucket is empty for THIS render. The reset
@@ -565,6 +572,7 @@ export class RenderRunner {
         'module',
         signal,
         priority,
+        freshPage,
       );
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',

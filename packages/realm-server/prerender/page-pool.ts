@@ -894,7 +894,7 @@ export class PagePool {
   async getPage(
     affinityKey: string,
     queue: PrerenderQueue = 'file',
-    opts?: { signal?: AbortSignal; priority?: number },
+    opts?: { signal?: AbortSignal; priority?: number; freshPage?: boolean },
   ): Promise<{
     page: Page;
     reused: boolean;
@@ -985,6 +985,7 @@ export class PagePool {
           queue,
           signal,
           priority,
+          opts?.freshPage === true,
         ));
     } catch (e) {
       releaseAdmission?.();
@@ -1895,6 +1896,7 @@ export class PagePool {
     queue: PrerenderQueue,
     signal?: AbortSignal,
     priority: number = 0,
+    freshPage: boolean = false,
   ): Promise<{
     entry: PoolEntry;
     reused: boolean;
@@ -1926,6 +1928,36 @@ export class PagePool {
     let entryList = entries
       ? [...entries].filter((entry) => !entry.closing)
       : [];
+    // Error-cache revalidation: the affinity's warm tab may be on a stale
+    // host bundle and would otherwise reproduce the cached module error on
+    // every retry. Prefer a fresh standby (a different page that reloads
+    // the bundle) over reusing the warm tab. Falls through to the normal
+    // selection below when no standby is free, so a render is never
+    // starved — and unlike disposing the affinity, this leaves the warm
+    // tab and any in-flight renders on it untouched.
+    if (freshPage) {
+      let standby = this.#commandeerDormantTab(affinityKey, {
+        standbyOnly: true,
+      });
+      if (
+        !standby &&
+        this.#currentStandbyCount() < this.#desiredStandbyCount()
+      ) {
+        // No standby free this instant but the pool has room for one —
+        // warm it so the hint reliably routes off the stale tab rather
+        // than racing the fire-and-forget refill and falling back to reuse.
+        let startedAt = Date.now();
+        await this.#ensureStandbyPool();
+        tabStartupMs += Date.now() - startedAt;
+        standby = this.#commandeerDormantTab(affinityKey, {
+          standbyOnly: true,
+        });
+      }
+      if (standby) {
+        let releaseTab = await standby.queue.acquire(signal, priority);
+        return { entry: standby, reused: false, releaseTab, tabStartupMs };
+      }
+    }
     let idle = entryList.filter((entry) => entry.queue.pendingCount === 0);
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);

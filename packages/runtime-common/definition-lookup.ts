@@ -698,6 +698,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return cached;
     }
 
+    // Past the guard above, a still-present `cached` can only be an
+    // expired error entry — i.e. we are revalidating a cached module
+    // error. Ask the prerenderer for a fresh page so a pool page running
+    // a stale host bundle can't keep reproducing the same error on every
+    // revalidation (it would otherwise pin the realm affinity). First
+    // renders and pre-warm have no cached error, so they don't set this.
+    let isErrorRevalidation = Boolean(cached?.error);
+
     for (let candidateURL of this.populationCandidates(moduleURL)) {
       if (candidateURL !== moduleURL) {
         let candidateCached = await this.readFromDatabaseCache(
@@ -721,6 +729,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         realmURL,
         prerenderUserId,
         priority,
+        isErrorRevalidation,
       );
       if (
         response.status === 'error' &&
@@ -1246,6 +1255,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     realmURL: string,
     userId: string,
     priority?: number,
+    freshPage?: boolean,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
@@ -1256,6 +1266,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       url: moduleUrl,
       auth,
       priority,
+      ...(freshPage ? { freshPage: true } : {}),
     });
   }
 

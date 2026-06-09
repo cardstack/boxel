@@ -112,6 +112,9 @@ export function buildPrerenderApp(options: {
     // affinity admission semaphore / global render semaphore for
     // priority-aware dequeue.
     priority?: number;
+    // Error-cache revalidation hint — see ModulePrerenderArgs.freshPage.
+    // Honored by prerenderModule; ignored by visit/command routes.
+    freshPage?: boolean;
   };
 
   type PrerenderArgs = RouteBaseArgs & {
@@ -203,6 +206,7 @@ export function buildPrerenderApp(options: {
       { value: rawAffinityValue, name: 'affinityValue' },
     ]);
     let priority = parsePriority(attrs);
+    let freshPage = attrs?.freshPage === true;
     return {
       args:
         missing.length > 0
@@ -215,6 +219,7 @@ export function buildPrerenderApp(options: {
               auth: rawAuth as string,
               renderOptions,
               ...(priority !== undefined ? { priority } : {}),
+              ...(freshPage ? { freshPage: true } : {}),
             },
       missing,
       missingMessage:

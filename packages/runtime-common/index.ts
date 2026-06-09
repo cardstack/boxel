@@ -454,6 +454,13 @@ export type ModulePrerenderArgs = {
   // in-flight low-priority render runs to completion. Defaults to 0
   // when absent (system-priority).
   priority?: number;
+  // Set when re-rendering a module whose cached entry is an expired
+  // error (error-cache revalidation). Asks the prerenderer to serve this
+  // render on a fresh page rather than reusing the affinity's warm tab,
+  // so a page running a stale host bundle can't pin the affinity and
+  // reproduce the same module error on every revalidation. Never set for
+  // first renders or pre-warm, so the indexing path is unaffected.
+  freshPage?: boolean;
 };
 
 export type PrerenderCardArgs = ModulePrerenderArgs;

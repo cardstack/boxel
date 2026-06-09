@@ -94,7 +94,21 @@ module(basename(__filename), function () {
       });
     }
 
-    test('a stale pool page keeps the realm affinity pinned to its failures', async function (assert) {
+    // A render carrying the error-cache revalidation hint: the prerenderer
+    // serves it on a fresh page instead of the affinity's warm tab.
+    function revalidateModule() {
+      return prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+        renderOptions: { clearCache: true },
+        freshPage: true,
+      });
+    }
+
+    test('without the revalidation hint a reused page stays pinned (default behavior preserved)', async function (assert) {
       let first = await renderModule();
       assert.strictEqual(
         first.response.status,
@@ -145,32 +159,29 @@ module(basename(__filename), function () {
       );
     });
 
-    // The realm should not stay stuck on a stale page when a healthy one
-    // is available: revalidation should escape the pin — whether by
-    // recycling the stale page or routing the retry elsewhere — and
-    // recover on its own. Today every same-affinity render reuses the
-    // stale page, so none of the revalidations recover while a healthy
-    // page sits idle, and this fails. It is expected to fail until
-    // revalidation can escape affinity pinning.
-    test('revalidation recovers while a healthy page is available', async function (assert) {
+    // With a healthy page available, an error-cache revalidation (the
+    // freshPage hint) escapes the pinned stale page: it is served on a
+    // different page and recovers, instead of reproducing the cached error.
+    test('a freshPage revalidation escapes the pinned stale page and recovers', async function (assert) {
       let first = await renderModule();
+      assert.strictEqual(
+        first.response.status,
+        'ready',
+        'the initial module render succeeds on a healthy page',
+      );
       let poisonedPageId = first.pool.pageId;
       prerenderer.__test_poisonPage(poisonedPageId, moduleURL);
 
-      let statuses: string[] = [];
-      for (let attempt = 0; attempt < 3; attempt++) {
-        let result = await renderModule();
-        statuses.push(result.response.status);
-        if (result.response.status === 'ready') {
-          break;
-        }
-      }
-
-      assert.ok(
-        statuses.includes('ready'),
-        `a revalidation should recover without manual intervention; got statuses: ${statuses.join(
-          ', ',
-        )}`,
+      let revalidated = await revalidateModule();
+      assert.strictEqual(
+        revalidated.response.status,
+        'ready',
+        'the revalidation recovers instead of reproducing the stale-page error',
+      );
+      assert.notStrictEqual(
+        revalidated.pool.pageId,
+        poisonedPageId,
+        'the revalidation was served on a fresh page, not the pinned stale one',
       );
     });
   });

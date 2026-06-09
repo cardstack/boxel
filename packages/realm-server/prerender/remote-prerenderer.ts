@@ -212,7 +212,14 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderModule({ realm, url, auth, renderOptions, priority }) {
+    async prerenderModule({
+      realm,
+      url,
+      auth,
+      renderOptions,
+      priority,
+      freshPage,
+    }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
@@ -224,6 +231,7 @@ export function createRemotePrerenderer(
           auth,
           renderOptions: renderOptions ?? {},
           ...(priority !== undefined ? { priority } : {}),
+          ...(freshPage ? { freshPage: true } : {}),
         },
       );
     },

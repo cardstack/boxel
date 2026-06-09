@@ -319,6 +319,7 @@ export class Prerenderer {
     renderOptions,
     priority,
     signal,
+    freshPage,
   }: {
     affinityType: AffinityType;
     affinityValue: string;
@@ -333,6 +334,8 @@ export class Prerenderer {
     // global render semaphore for priority-aware dequeue.
     priority?: number;
     signal?: AbortSignal;
+    // Error-cache revalidation hint — see ModulePrerenderArgs.freshPage.
+    freshPage?: boolean;
   }): Promise<{
     response: ModuleRenderResponse;
     timings: Timings;
@@ -390,6 +393,7 @@ export class Prerenderer {
             renderOptions: attemptOptions,
             priority,
             signal,
+            freshPage,
             onTabAcquired: activity.markRunning,
           });
         } catch (e) {
