@@ -16,9 +16,9 @@ import {
 // much more simplistic than postgres.
 
 const args = process.argv;
-const migrationsDir = resolve(join(__dirname, '..', 'migrations'));
+const migrationsDir = resolve(join(import.meta.dirname, '..', 'migrations'));
 const sqliteSchemaDir = resolve(
-  join(__dirname, '..', '..', 'host', 'config', 'schema'),
+  join(import.meta.dirname, '..', '..', 'host', 'config', 'schema'),
 );
 const INDENT = '  ';
 const SQLITE_PK_COLUMN_MAPPING: Record<string, Record<string, string>> = {
