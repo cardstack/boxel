@@ -17,7 +17,7 @@ import type { Options as RemoveOptions } from './remove-field-plugin.ts';
 import { removeFieldPlugin } from './remove-field-plugin.ts';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
-import isEqual from 'lodash/isEqual';
+import isEqual from 'lodash/isEqual.js';
 import * as ContentTag from 'content-tag';
 
 import {

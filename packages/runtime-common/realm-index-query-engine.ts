@@ -1,5 +1,5 @@
 import { isScopedCSSRequest } from './scoped-css.ts';
-import cloneDeep from 'lodash/cloneDeep';
+import cloneDeep from 'lodash/cloneDeep.js';
 import {
   SupportedMimeType,
   isJsonContentType,
@@ -24,7 +24,7 @@ import {
   visitInstanceURLs,
   maybeRelativeReference,
   codeRefFromInternalKey,
-} from '.';
+} from './index.ts';
 import type { Realm } from './realm.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';

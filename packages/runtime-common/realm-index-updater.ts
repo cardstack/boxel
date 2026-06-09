@@ -10,7 +10,7 @@ import {
   type QueuePublisher,
   type CopyArgs,
   type CopyResult,
-} from '.';
+} from './index.ts';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
