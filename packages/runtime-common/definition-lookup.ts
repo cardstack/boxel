@@ -931,8 +931,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       (codeRef.module.includes('system-card') ||
         codeRef.module.includes('card-api') ||
         codeRef.module.includes('person') ||
+        codeRef.module.includes('linked-card') ||
+        codeRef.module.includes('test-realm') ||
         codeRef.name === 'SystemCard' ||
-        codeRef.name === 'GtsFileDef')
+        codeRef.name === 'GtsFileDef' ||
+        codeRef.name === 'LinkedCard' ||
+        codeRef.name === 'FileLinkCard')
     ) {
       console.log(
         `[CS-10753-DEBUG][definition-lookup READ] codeRef=${JSON.stringify(codeRef)} canonicalModule=${canonicalModuleURL} readKey=${moduleId} foundEntry=${!!defOrError} availableKeys=${JSON.stringify(Object.keys(moduleEntry.definitions))}`,
