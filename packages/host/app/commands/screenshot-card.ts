@@ -76,17 +76,17 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
     // Resolve alias-form RRI to HTTP URL — the realm server does not know
     // the alias mapping and will fail to construct a URL from alias form.
     let vn = this.loaderService.loader.getVirtualNetwork()!;
-    cardId = vn.toURL(cardId).href;
+    let cardURL = vn.toURL(cardId).href;
 
     // Target realm = the card's own realm. If the caller can't write there,
     // fail fast — no silent fallback to a different realm.
-    let cardRealm = this.realm.realmOf(rri(cardId));
+    let cardRealm = this.realm.realmOf(rri(cardURL));
     if (!cardRealm) {
-      throw new Error(`Cannot determine realm for card ${cardId}.`);
+      throw new Error(`Cannot determine realm for card ${cardURL}.`);
     }
     if (!this.realm.canWrite(cardRealm)) {
       throw new Error(
-        `Cannot screenshot ${cardId}: no write access to its realm ${cardRealm}.`,
+        `Cannot screenshot ${cardURL}: no write access to its realm ${cardRealm}.`,
       );
     }
 
@@ -105,7 +105,7 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
           type: 'screenshot-card',
           attributes: {
             realmURL: cardRealm,
-            cardId,
+            cardId: cardURL, // wire field name kept as-is; CS-11458 will update endpoint to accept RRI
             format: normalizedFormat,
           },
         },
@@ -128,7 +128,7 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
 
     // Write binary to the card's realm under Screenshots/. The realm indexer
     // promotes the PNG into a PngDef / ImageDef card automatically.
-    let filename = `${generateFilenameFromCard(cardId)}.png`;
+    let filename = `${generateFilenameFromCard(cardURL)}.png`;
     let filePath = `Screenshots/${filename}`;
     let writeResult = await new WriteBinaryFileCommand(
       this.commandContext,
