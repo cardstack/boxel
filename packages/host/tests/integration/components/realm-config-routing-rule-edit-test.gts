@@ -123,8 +123,12 @@ module(
       await waitFor('[data-test-realm-picker-locked]');
 
       assert
-        .dom('[data-test-realm-picker-locked="true"]')
-        .exists('the realm picker is locked');
+        .dom('[data-test-realm-picker]')
+        .hasAttribute(
+          'data-test-realm-picker-locked',
+          'true',
+          'the realm picker is locked',
+        );
       assert
         .dom(
           '[data-test-realm-picker-locked="true"] [data-test-boxel-picker-remove-button]',
