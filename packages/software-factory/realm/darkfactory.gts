@@ -8,20 +8,18 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
-import {
-  Issue as _Issue,
-  Project as _Project,
-  IssueTracker as _Board,
-} from './issue-tracker';
+// Re-export the tracker card types as the SAME classes defined in
+// `issue-tracker` — not subclasses. `darkfactory` stays a single convenience
+// module, but `darkfactory#Issue` is now identical to `issue-tracker#Issue`.
+// Subclassing here used to fork the type identity: factory-written cards
+// adopted `darkfactory#Issue` while cards added through the IssueTracker board
+// UI adopt the canonical `issue-tracker#Issue`, and a type filter on one
+// didn't match the other — so human-added issues were invisible to the loop.
+import { Issue, Project, IssueTracker } from './issue-tracker';
+export { Issue, Project, IssueTracker };
 export { AgentProfile } from './agent-profile';
 export { Comment } from './comment';
 export { KnowledgeArticle } from './knowledge-article';
-
-export class Issue extends _Issue {}
-
-export class Project extends _Project {}
-
-export class IssueTracker extends _Board {}
 
 export class DarkFactory extends CardDef {
   static displayName = 'Dark Factory';
