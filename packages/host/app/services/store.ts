@@ -1747,12 +1747,16 @@ export default class StoreService extends Service implements StoreInterface {
 
     // An identity-only result (HTML-backed) carries no live attributes — they
     // are withheld on the wire and fetched on demand at hydration. Never
-    // deposit it: storing an attribute-less stub would misrepresent the
-    // instance and could clobber a correctly-loaded full instance for the same
-    // id. The row still renders from its rendered-html; it just isn't in the
-    // Store.
+    // deposit it: an attribute-less stub would misrepresent the instance. But
+    // if the card is already fully loaded, return that resident instance —
+    // it stays represented in the results and a hydrated row keeps its live
+    // presentation rather than being dropped (and is still never clobbered). A
+    // not-yet-loaded identity-only row is skipped and renders from its HTML.
     if (resource.meta?.identityOnly === true) {
-      return undefined;
+      let existingInstance = this.peek(resource.id);
+      return existingInstance && isCardInstance(existingInstance)
+        ? (existingInstance as T)
+        : undefined;
     }
 
     // Handle file-meta resources

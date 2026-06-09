@@ -1773,7 +1773,7 @@ module('Integration | Store', function (hooks) {
     }
   });
 
-  test('an identity-only row does not clobber a pre-resident full instance', async function (assert) {
+  test('an identity-only row for an already-resident card returns the resident instance without clobbering it', async function (assert) {
     let id = `${testRealmURL}Person/hassan`;
     // Seed the full instance into the Store first.
     storeService.addReference(id);
@@ -1786,7 +1786,17 @@ module('Integration | Store', function (hooks) {
 
     overrideSearchWith(identityOnlyDoc(id));
     try {
-      await storeService.search(personQuery, [testRealmURL]);
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        1,
+        'the resident instance is still returned (not dropped from results)',
+      );
+      assert.strictEqual(
+        results[0],
+        before,
+        'the returned instance is the resident full one',
+      );
       let after = storeService.peek(id);
       assert.strictEqual(
         after,
