@@ -96,6 +96,18 @@ module(
     test('the card chooser is locked to the consuming realm', async function (assert) {
       await renderRealmConfigEdit([{ path: '/docs' }]);
 
+      // DIAGNOSTIC: read the lockConsumingRealm value LinksToEditor sees
+      // so the CI log tells us whether the arg flows from RoutingRuleEdit
+      // through <@fields.instance>. Reveals where the chain breaks if the
+      // picker-locked assertion below fails.
+      assert
+        .dom('[data-test-lockarg-value]')
+        .hasAttribute(
+          'data-test-lockarg-value',
+          'true',
+          'lockConsumingRealm reaches LinksToEditor as true',
+        );
+
       await click('[data-test-add-new="instance"]');
       await waitFor('[data-test-card-catalog-modal]');
       // Wait on `data-test-realm-url` (always present) rather than

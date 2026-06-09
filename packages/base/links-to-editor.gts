@@ -71,6 +71,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         class='links-to-editor
           {{if permissions.canWrite "can-write" "read-only"}}'
         data-test-links-to-editor={{@field.name}}
+        data-test-lockarg-value='{{@lockConsumingRealm}}'
         ...attributes
       >
         {{#if @brokenLink}}
