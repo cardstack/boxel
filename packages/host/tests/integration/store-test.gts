@@ -21,6 +21,7 @@ import {
   baseCardRef,
   realmURL,
   Deferred,
+  SupportedMimeType,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -66,6 +67,10 @@ import {
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  registerDefaultRoutes,
+  registerRealmServerRoute,
+} from '../helpers/realm-server-mock/routes';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -1705,6 +1710,93 @@ module('Integration | Store', function (hooks) {
       `${testRealmURL}Person/hassan`,
       'the result is correct',
     );
+  });
+
+  // A prefer-HTML search resolves some rows to an identity-only `card` (no
+  // attributes, HTML-backed). Those must never enter the Store — an
+  // attribute-less stub would misrepresent the instance and could clobber a
+  // correctly-loaded full one. The route is overridden to return such a doc.
+  function overrideSearchWith(doc: unknown) {
+    registerRealmServerRoute({
+      path: '/_federated-search',
+      handler: async () =>
+        new Response(JSON.stringify(doc), {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        }),
+    });
+  }
+
+  function identityOnlyDoc(id: string) {
+    return {
+      data: [
+        {
+          type: 'card',
+          id,
+          relationships: {
+            'rendered-html': { data: { type: 'rendered-html', id } },
+          },
+          meta: {
+            adoptsFrom: { module: `${testRealmURL}person`, name: 'Person' },
+            identityOnly: true,
+          },
+          links: { self: id },
+        },
+      ],
+      meta: { page: { total: 1 } },
+    };
+  }
+
+  let personQuery = {
+    filter: {
+      on: { module: testRRI('person'), name: 'Person' },
+      eq: { name: 'Hassan' },
+    },
+  };
+
+  test('a prefer-HTML search does not deposit identity-only rows into the Store', async function (assert) {
+    let id = `${testRealmURL}Person/identity-only`;
+    overrideSearchWith(identityOnlyDoc(id));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        0,
+        'the identity-only row is not returned as a hydrated instance',
+      );
+      assert.notOk(
+        isCardInstance(storeService.peek(id)),
+        'the identity-only row is not deposited in the Store',
+      );
+    } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('an identity-only row does not clobber a pre-resident full instance', async function (assert) {
+    let id = `${testRealmURL}Person/hassan`;
+    // Seed the full instance into the Store first.
+    storeService.addReference(id);
+    await storeService.flush();
+    let before = storeService.peek(id);
+    assert.true(
+      isCardInstance(before),
+      'the full instance is resident before the search',
+    );
+
+    overrideSearchWith(identityOnlyDoc(id));
+    try {
+      await storeService.search(personQuery, [testRealmURL]);
+      let after = storeService.peek(id);
+      assert.strictEqual(
+        after,
+        before,
+        'the identity-only row left the resident full instance untouched',
+      );
+      assert.true(isCardInstance(after), 'still a full card instance');
+    } finally {
+      registerDefaultRoutes();
+    }
   });
 
   test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {

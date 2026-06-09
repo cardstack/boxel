@@ -76,7 +76,7 @@ function normalizeRoutePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
-function registerRealmServerRoute(route: RealmServerMockRoute) {
+export function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
 }
 
