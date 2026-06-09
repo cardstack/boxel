@@ -21,20 +21,20 @@ import type {
   QueuePublisher,
   QueueRunner,
 } from '@cardstack/runtime-common';
-import type { runTestRealmServer } from './helpers';
+import type { runTestRealmServer } from './helpers/index.ts';
 import {
   cleanWhiteSpace,
   waitUntil,
   cardInfo,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
-} from './helpers';
+} from './helpers/index.ts';
 import {
   depsForIndexEntry,
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
   typeForIndexEntry,
-} from './helpers/indexing';
+} from './helpers/indexing.ts';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';

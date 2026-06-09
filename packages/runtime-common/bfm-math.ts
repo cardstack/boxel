@@ -1,4 +1,4 @@
-import { escapeHtml } from './helpers/html';
+import { escapeHtml } from './helpers/html.ts';
 import type {
   MarkedExtension,
   TokenizerAndRendererExtension,

@@ -14,8 +14,8 @@ import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleReindex({
   queue,

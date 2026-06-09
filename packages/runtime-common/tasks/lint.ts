@@ -1,9 +1,9 @@
 import type { Linter } from 'eslint';
-import type { Task } from './index';
+import type { Task } from './index.ts';
 
-import { jobIdentity } from '../index';
+import { jobIdentity } from '../index.ts';
 
-import { resolvePrettierConfig } from '../prettier-config';
+import { resolvePrettierConfig } from '../prettier-config.ts';
 
 export interface LintArgs {
   source: string;

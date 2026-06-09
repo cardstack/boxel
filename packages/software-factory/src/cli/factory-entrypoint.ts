@@ -1,5 +1,5 @@
 // This should be first
-import '../setup-logger';
+import '../setup-logger.ts';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
@@ -9,9 +9,9 @@ import {
   parseFactoryEntrypointArgs,
   runFactoryEntrypoint,
   wantsFactoryEntrypointHelp,
-} from '../factory-entrypoint';
-import { FactoryBriefError } from '../factory-brief';
-import { configureLogger, logger } from '../logger';
+} from '../factory-entrypoint.ts';
+import { FactoryBriefError } from '../factory-brief.ts';
+import { configureLogger, logger } from '../logger.ts';
 
 let log = logger('factory-entrypoint');
 

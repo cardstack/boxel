@@ -20,13 +20,13 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { logger } from '../../src/logger';
-import { createDefaultPipeline } from '../../src/validators/validation-pipeline';
-import type { TestValidationDetails } from '../../src/validators/test-step';
+import { logger } from '../../src/logger.ts';
+import { createDefaultPipeline } from '../../src/validators/validation-pipeline.ts';
+import type { TestValidationDetails } from '../../src/validators/test-step.ts';
 
 // ---------------------------------------------------------------------------
 // Sample LLM output -- what the agent would produce in the implementation phase

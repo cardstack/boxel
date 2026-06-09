@@ -1,7 +1,7 @@
-import type { DBAdapter } from '../db';
+import type { DBAdapter } from '../db.ts';
 
-import { query, asExpressions, insert, param } from '../expression';
-import type { User } from './db-types';
+import { query, asExpressions, insert, param } from '../expression.ts';
+import type { User } from './db-types.ts';
 
 export async function insertUser(
   dbAdapter: DBAdapter,

@@ -5,7 +5,7 @@ import {
   detectSurfaces,
   unstableCounters,
   type ComputeReleaseInput,
-} from '../../scripts/compute-release';
+} from '../../scripts/compute-release.ts';
 
 function baseInput(
   overrides: Partial<ComputeReleaseInput> = {},

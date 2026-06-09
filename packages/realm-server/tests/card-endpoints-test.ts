@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
 import type {
@@ -31,10 +31,10 @@ import {
   cardInfo,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
-import { expectIncrementalIndexEvent } from './helpers/indexing';
+} from './helpers/index.ts';
+import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 
 function parseSearchQuery(searchURL: URL) {

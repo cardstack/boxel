@@ -10,15 +10,15 @@ import {
   dockerLogs,
   dockerRun,
   dockerStop,
-} from '../docker';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '../matrix-constants';
-import { appURL } from '../isolated-realm-server';
+} from '../docker.ts';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../matrix-constants.ts';
+import { appURL } from '../isolated-realm-server.ts';
 import {
   isEnvironmentMode,
   getSynapseContainerName,
   getSynapseURL,
   registerSynapseWithTraefik,
-} from '../environment-config';
+} from '../environment-config.ts';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;

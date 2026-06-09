@@ -17,10 +17,10 @@ import {
   fullRequestURL,
   livenessCheck,
   fetchRequestFromContext,
-} from '../middleware';
-import { Prerenderer } from './index';
-import type { Timings } from './render-runner';
-import { resolvePrerenderManagerURL } from './config';
+} from '../middleware/index.ts';
+import { Prerenderer } from './index.ts';
+import type { Timings } from './render-runner.ts';
+import { resolvePrerenderManagerURL } from './config.ts';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
@@ -29,7 +29,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
-} from './prerender-constants';
+} from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
 type PrerenderServer = Server & {

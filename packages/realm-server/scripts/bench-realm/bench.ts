@@ -32,7 +32,7 @@ import { performance } from 'node:perf_hooks';
 
 import { startFactoryRealmServer } from '@cardstack/realm-test-harness';
 
-import { realmSnapshotDir } from './paths';
+import { realmSnapshotDir } from './paths.ts';
 
 // The harness's template-DB cache key already includes the fixture realm
 // and the software-factory source-realm contents, but not the host/dist

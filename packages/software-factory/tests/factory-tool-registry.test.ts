@@ -5,7 +5,7 @@ import {
   REALM_API_TOOLS,
   ToolRegistry,
   type ToolManifest,
-} from '../src/factory-tool-registry';
+} from '../src/factory-tool-registry.ts';
 
 // ---------------------------------------------------------------------------
 // ToolRegistry construction

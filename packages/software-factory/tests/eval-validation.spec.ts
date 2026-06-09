@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { EvalValidationStep } from '../src/validators/eval-step';
-import type { EvalValidationDetails } from '../src/validators/eval-step';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { EvalValidationStep } from '../src/validators/eval-step.ts';
+import type { EvalValidationDetails } from '../src/validators/eval-step.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

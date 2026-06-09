@@ -1,5 +1,5 @@
 // This should be first
-import '../setup-logger';
+import '../setup-logger.ts';
 
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -9,7 +9,7 @@ import {
   startFactorySupportServices,
   writeSupportMetadata,
 } from '@cardstack/realm-test-harness';
-import { logger } from '../logger';
+import { logger } from '../logger.ts';
 
 let log = logger('serve-support');
 

@@ -166,7 +166,7 @@ QUnit.done(() => {
 });
 
 import 'decorator-transforms/globals';
-import '../setup-logger'; // This should be first
+import '../setup-logger.ts'; // This should be first
 
 const ALL_TEST_FILES: string[] = [
   './atomic-endpoints-test',

@@ -13,14 +13,17 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
-import { executeTestRunFromRealm } from '../test-run-execution';
-import type { ExecuteTestRunOptions, TestRunHandle } from '../test-run-types';
-import { logger } from '../logger';
-import { readCard } from '../workspace-fs';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
+import { executeTestRunFromRealm } from '../test-run-execution.ts';
+import type {
+  ExecuteTestRunOptions,
+  TestRunHandle,
+} from '../test-run-types.ts';
+import { logger } from '../logger.ts';
+import { readCard } from '../workspace-fs.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
 
 let log = logger('test-validation-step');
 

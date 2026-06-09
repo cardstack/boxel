@@ -1,4 +1,4 @@
-import type { Checkpoint } from './checkpoint-manager';
+import type { Checkpoint } from './checkpoint-manager.ts';
 
 /**
  * Length of a checkpoint's `shortHash`. SHA-1's first 7 hex chars, set in

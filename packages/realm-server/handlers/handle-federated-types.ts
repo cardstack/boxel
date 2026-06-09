@@ -10,14 +10,14 @@ import {
   makeFederatedCardTypeSummaryDoc,
   type FederatedCardTypeSummaryEntry,
 } from '@cardstack/runtime-common/document-types';
-import { setContextResponse } from '../middleware';
+import { setContextResponse } from '../middleware/index.ts';
 import {
   getMultiRealmAuthorization,
   getSearchRequestPayload,
-} from '../middleware/multi-realm-authorization';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
-import { getPublicReadableRealms } from '../utils/realm-readability';
+} from '../middleware/multi-realm-authorization.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { getPublicReadableRealms } from '../utils/realm-readability.ts';
 
 const log = logger('realm-server');
 

@@ -8,7 +8,7 @@ import type {
   ResolvedSkill,
   ToolManifest,
   ToolResult,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
 // ---------------------------------------------------------------------------
 // Constants

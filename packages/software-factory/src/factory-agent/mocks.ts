@@ -6,8 +6,8 @@
  * a real LLM.
  */
 
-import type { AgentContext, LoopAgent, AgentRunResult } from './types';
-import type { FactoryTool } from '../factory-tool-builder';
+import type { AgentContext, LoopAgent, AgentRunResult } from './types.ts';
+import type { FactoryTool } from '../factory-tool-builder.ts';
 
 // ---------------------------------------------------------------------------
 // MockLoopAgent — deterministic LoopAgent for tool-use model tests

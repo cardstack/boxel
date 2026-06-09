@@ -1,16 +1,16 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { pull } from '../../src/commands/realm/pull';
-import { SeedAuthenticator } from '../../src/lib/seed-auth';
+import { pull } from '../../src/commands/realm/pull.ts';
+import { SeedAuthenticator } from '../../src/lib/seed-auth.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 // The test realm server in helpers/integration.ts uses `realmSecretSeed =
 // "shhh! it's a secret"` to sign realm JWTs and

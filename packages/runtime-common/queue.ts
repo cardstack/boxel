@@ -1,5 +1,5 @@
-import type { PgPrimitive } from './index';
-import type { Deferred } from './deferred';
+import type { PgPrimitive } from './index.ts';
+import type { Deferred } from './deferred.ts';
 
 export const systemInitiatedPriority = 0;
 export const userInitiatedPriority = 10;

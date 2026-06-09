@@ -7,11 +7,11 @@ import {
   X_BOXEL_CONSUMING_REALM_HEADER,
 } from '@cardstack/runtime-common';
 
-import { setContextResponse } from '../middleware';
-import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
-import { getPublicReadableRealms } from '../utils/realm-readability';
+import { setContextResponse } from '../middleware/index.ts';
+import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { getPublicReadableRealms } from '../utils/realm-readability.ts';
 
 const log = logger('realm-server');
 

@@ -14,7 +14,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 
 // Build a resolved code ref; the cast brands the module URL as the
 // RealmResourceIdentifier the CodeRef types expect.
