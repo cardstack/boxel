@@ -1,10 +1,13 @@
 import type { RealmInfo } from './realm';
 import type { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure';
+import type { CodeRef } from './code-ref';
 import {
   type CardResource,
+  type CssResource,
   type FileMetaResource,
   type PrerenderedCardResource,
+  type RenderedHtmlResource,
   type Saved,
   type Unsaved,
   isCardResource,
@@ -28,6 +31,31 @@ export interface PrerenderedCardCollectionDocument {
     scopedCssUrls?: string[];
     realmInfo?: RealmInfo;
     isFileMeta?: boolean;
+  };
+}
+
+// The unified search response is heterogeneous, per row: a result resolves
+// either to a full live `card`/`file-meta` (its `attributes`/`relationships`
+// shipped in `data`, exactly as `/_search` returns today) or — preferentially —
+// to prerendered HTML, in which case `data` carries an identity-only `card`
+// (no `attributes`) and the rendering rides in `included` as a `rendered-html`
+// plus its deduped `css` stylesheets.
+export type UnifiedSearchIncludedResource =
+  | CardResource<Saved>
+  | FileMetaResource
+  | RenderedHtmlResource
+  | CssResource;
+
+export interface UnifiedSearchCollectionDocument<
+  Identity extends Unsaved = Saved,
+> {
+  data: (CardResource<Identity> | FileMetaResource)[];
+  included?: UnifiedSearchIncludedResource[];
+  meta: QueryResultsMeta & {
+    // The render type resolved for this search, echoed at the collection level
+    // so a live/fallback row renders as the same ancestor type as its HTML
+    // siblings.
+    renderType?: CodeRef;
   };
 }
 

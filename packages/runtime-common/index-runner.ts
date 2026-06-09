@@ -4,8 +4,6 @@ import ignore, { type Ignore } from 'ignore';
 // `crypto.randomUUID` is not available).
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
-import { Memoize } from 'typescript-memoize';
-
 import {
   logger,
   hasCardExtension,
@@ -85,6 +83,7 @@ export class IndexRunner {
   #perfLog = logger('index-perf');
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
+  #ignoreMap: Map<string, Ignore> | undefined;
   #prerenderer: Prerenderer;
   #auth: string;
   #realmURL: URL;
@@ -889,12 +888,15 @@ export class IndexRunner {
     return true;
   }
 
-  @Memoize()
   private get ignoreMap() {
+    if (this.#ignoreMap) {
+      return this.#ignoreMap;
+    }
     let ignoreMap = new Map<string, Ignore>();
     for (let [url, contents] of Object.entries(this.#ignoreData)) {
       ignoreMap.set(url, ignore().add(contents));
     }
+    this.#ignoreMap = ignoreMap;
     return ignoreMap;
   }
 

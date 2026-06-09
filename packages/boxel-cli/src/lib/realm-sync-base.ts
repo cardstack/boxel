@@ -103,14 +103,15 @@ const REMOTE_CONCURRENCY = 10;
 const ALWAYS_IGNORED_DIRS = new Set(['node_modules']);
 
 export abstract class RealmSyncBase {
+  protected options: SyncOptions;
+  protected authenticator: RealmAuthenticator;
   protected normalizedRealmUrl: string;
   private ignoreCache = new Map<string, Promise<Ignore>>();
   protected remoteLimit = pLimit(REMOTE_CONCURRENCY);
 
-  constructor(
-    protected options: SyncOptions,
-    protected authenticator: RealmAuthenticator,
-  ) {
+  constructor(options: SyncOptions, authenticator: RealmAuthenticator) {
+    this.options = options;
+    this.authenticator = authenticator;
     this.normalizedRealmUrl = this.normalizeRealmUrl(options.realmUrl);
   }
 

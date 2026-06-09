@@ -128,13 +128,17 @@ class RealmStatusInspector extends RealmSyncBase {
   hasError = false;
   error?: string;
   remoteMtimes: Map<string, number> = new Map();
+  private statusOptions: StatusInspectorOptions;
+  private loadedManifest: SyncManifest;
 
   constructor(
-    private statusOptions: StatusInspectorOptions,
-    private loadedManifest: SyncManifest,
+    statusOptions: StatusInspectorOptions,
+    loadedManifest: SyncManifest,
     authenticator: RealmAuthenticator,
   ) {
     super(statusOptions, authenticator);
+    this.statusOptions = statusOptions;
+    this.loadedManifest = loadedManifest;
   }
 
   async sync(): Promise<void> {

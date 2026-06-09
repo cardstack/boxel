@@ -192,7 +192,7 @@ function serializeFileDef(
   return rawSerializeFileDef(fileDef, { virtualNetwork: vn, ...opts });
 }
 let isSaved: (typeof CardAPIModule)['isSaved'];
-let getRelationship: (typeof CardAPIModule)['getRelationship'];
+let getRelationshipMembershipState: (typeof CardAPIModule)['getRelationshipMembershipState'];
 let getBrokenLinks: (typeof CardAPIModule)['getBrokenLinks'];
 let getDataBucket: (typeof CardAPIModule)['getDataBucket'];
 let getQueryableValue: (typeof CardAPIModule)['getQueryableValue'];
@@ -397,7 +397,7 @@ async function initialize() {
     serializeCard: rawSerializeCard,
     serializeFileDef: rawSerializeFileDef,
     isSaved,
-    getRelationship,
+    getRelationshipMembershipState,
     getBrokenLinks,
     getDataBucket,
     getQueryableValue,
@@ -480,7 +480,7 @@ export {
   serializeCard,
   serializeFileDef,
   isSaved,
-  getRelationship,
+  getRelationshipMembershipState,
   getBrokenLinks,
   getDataBucket,
   getQueryableValue,

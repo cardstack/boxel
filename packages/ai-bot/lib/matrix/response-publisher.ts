@@ -41,6 +41,10 @@ function toCommandRequest(
 export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
 
 export default class MatrixResponsePublisher {
+  readonly client: MatrixClient;
+  readonly roomId: string;
+  readonly agentId: string;
+  readonly responseState: ResponseState;
   eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   responseEvents: ResponseEventData[] | undefined;
   private sendingMessage = Promise.resolve(); // track pending send operation
@@ -65,11 +69,16 @@ export default class MatrixResponsePublisher {
   }
 
   constructor(
-    readonly client: MatrixClient,
-    readonly roomId: string,
-    readonly agentId: string,
-    readonly responseState: ResponseState,
-  ) {}
+    client: MatrixClient,
+    roomId: string,
+    agentId: string,
+    responseState: ResponseState,
+  ) {
+    this.client = client;
+    this.roomId = roomId;
+    this.agentId = agentId;
+    this.responseState = responseState;
+  }
 
   async sendMessage() {
     let responseStateSnapshot = this.responseState.snapshot();

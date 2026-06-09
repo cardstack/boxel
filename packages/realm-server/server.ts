@@ -1,6 +1,5 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import { Memoize } from 'typescript-memoize';
 import http from 'http';
 import http2 from 'http2';
 import net from 'net';
@@ -42,9 +41,12 @@ const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 // Opt-in HTTP/2 stall diagnostics (see installHttp2Diagnostics). Off by
 // default; set in the host-test CI job so an intermittent "request accepted
 // but never answered" h2 stall dumps its full session/stream state instead of
-// surfacing only as an opaque 60s host-test timeout. The h2 path is never
-// reached in production (BOXEL_ENVIRONMENT short-circuits to plain HTTP above),
-// so this only ever runs in local dev / CI.
+// surfacing only as an opaque 60s host-test timeout. The h2 path is taken only
+// when a TLS cert/key is provided (see createListener): local dev and CI
+// provision an mkcert leaf, so they run h2, while staging/prod set no cert and
+// so fall into the no-cert branch and serve plain HTTP/1.1 (TLS terminates at
+// the proxy in front). BOXEL_ENVIRONMENT is the local Traefik-in-front mode,
+// not the production mechanism.
 const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
 
 export type RealmHttpServer =
@@ -602,6 +604,7 @@ export class RealmServer {
   private prerenderer: Prerenderer | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
+  private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
     serverURL,
@@ -697,8 +700,11 @@ export class RealmServer {
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
-  @Memoize()
   get app() {
+    return (this.cachedApp ??= this.buildApp());
+  }
+
+  private buildApp() {
     let { serveIndex, serveHostApp } = createServeIndex({
       serverURL: this.serverURL,
       assetsURL: this.assetsURL,

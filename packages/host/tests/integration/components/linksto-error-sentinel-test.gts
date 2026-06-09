@@ -13,7 +13,10 @@ import {
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type { RelationshipState } from 'https://cardstack.com/base/card-api';
+import type {
+  RelationshipState,
+  RelationshipStatus,
+} from 'https://cardstack.com/base/card-api';
 import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import {
@@ -30,7 +33,7 @@ import {
   field,
   getBrokenLinks,
   getDataBucket,
-  getRelationship,
+  getRelationshipMembershipState,
   linksTo,
   linksToMany,
   setupBaseRealm,
@@ -43,18 +46,17 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 // A terminal sentinel never escapes the field getter — userland reads
 // `undefined` — so tests read the raw bucket entry to observe the planted
-// shape, and `getRelationship` to observe the structured failure.
+// shape, and `getRelationshipMembershipState` to observe the structured failure.
 function bucketEntry(instance: CardDefType, fieldName: string): any {
   return getDataBucket(instance).get(fieldName);
 }
 
-function singularState(
-  state: RelationshipState | RelationshipState[],
-): RelationshipState {
-  if (Array.isArray(state)) {
+function singularState(rel: RelationshipStatus): RelationshipState {
+  let membership = rel.membership;
+  if (!membership || membership.length !== 1) {
     throw new Error('expected a singular relationship state');
   }
-  return state;
+  return membership[0];
 }
 
 // The base-realm helpers (CardDef, field, …) are only populated once
@@ -182,19 +184,22 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
       'the field getter surfaces the terminal sentinel as undefined',
     );
 
-    let state = singularState(getRelationship(person, 'pet'));
-    assert.strictEqual(state.kind, 'not-found', 'getRelationship kind');
+    let state = singularState(getRelationshipMembershipState(person, 'pet'));
+    assert.strictEqual(
+      state.kind,
+      'not-found',
+      'getRelationshipMembershipState kind',
+    );
     if (state.kind === 'not-found') {
       assert.strictEqual(
         state.reference,
         `${testRealmURL}Pet/ghost`,
-        'getRelationship reference',
+        'getRelationshipMembershipState reference',
       );
-      assert.true(state.isError, 'getRelationship marks the state as an error');
       assert.strictEqual(
         state.errorDoc.status,
         404,
-        'getRelationship carries the errorDoc',
+        'getRelationshipMembershipState carries the errorDoc',
       );
     }
   });
@@ -235,11 +240,11 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
       return '';
     };
     // Reading `person.pet` drives the lazy load (and entangles card tracking),
-    // so the template re-renders once when the sentinel lands. `getRelationship`
+    // so the template re-renders once when the sentinel lands. `getRelationshipMembershipState`
     // reports the resulting state without itself scheduling a render.
     let petKind = () => {
       void person.pet;
-      return singularState(getRelationship(person, 'pet')).kind;
+      return singularState(getRelationshipMembershipState(person, 'pet')).kind;
     };
 
     await render(
@@ -284,7 +289,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     );
     assert.true(isLinkError(bucketEntry(person, 'pet')));
 
-    let state = singularState(getRelationship(person, 'pet'));
+    let state = singularState(getRelationshipMembershipState(person, 'pet'));
     assert.strictEqual(state.kind, 'error');
     if (state.kind === 'error') {
       assert.strictEqual(state.reference, `${testRealmURL}Pet/exploded`);
@@ -319,7 +324,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     }
   });
 
-  test('getBrokenLinks reports a real 404 lazy-load failure read through getRelationship', async function (assert) {
+  test('getBrokenLinks reports a real 404 lazy-load failure read through getRelationshipMembershipState', async function (assert) {
     await setupRealm();
     let person = await createPerson({
       pet: { links: { self: `${testRealmURL}Pet/ghost` } },
@@ -363,9 +368,9 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     // Both slots load concurrently; wait until neither is still in-flight so
     // the good slot has resolved to a card and the broken one to a sentinel.
     // Per-slot index access is masked to `Card | undefined`, so settle on the
-    // typed `getRelationship` surface rather than probing the array for shapes.
+    // typed `getRelationshipMembershipState` surface rather than probing the array for shapes.
     await waitUntil(() => {
-      let states = getRelationship(person, 'pets');
+      let states = getRelationshipMembershipState(person, 'pets').membership;
       if (!Array.isArray(states)) {
         return false;
       }
@@ -380,7 +385,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
       'WatchedArray identity is preserved — the sentinel was swapped in place',
     );
 
-    let states = getRelationship(person, 'pets');
+    let states = getRelationshipMembershipState(person, 'pets').membership;
     if (!Array.isArray(states)) {
       throw new Error('expected plural relationship states');
     }

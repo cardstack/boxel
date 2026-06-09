@@ -11,7 +11,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { RelationshipState } from 'https://cardstack.com/base/card-api';
+import type {
+  RelationshipState,
+  RelationshipStatus,
+} from 'https://cardstack.com/base/card-api';
 import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import {
@@ -28,7 +31,7 @@ import {
   field,
   FieldDef,
   getDataBucket,
-  getRelationship,
+  getRelationshipMembershipState,
   linksTo,
   linksToMany,
   serializeCard,
@@ -44,13 +47,12 @@ function bucketEntry(instance: any, fieldName: string): any {
   return getDataBucket(instance).get(fieldName);
 }
 
-function singularState(
-  state: RelationshipState | RelationshipState[],
-): RelationshipState {
-  if (Array.isArray(state)) {
+function singularState(rel: RelationshipStatus): RelationshipState {
+  let membership = rel.membership;
+  if (!membership || membership.length !== 1) {
     throw new Error('expected a singular relationship state');
   }
-  return state;
+  return membership[0];
 }
 
 const GHOST = `${testRealmURL}Pet/ghost`;
@@ -225,7 +227,9 @@ module(
       reloaded.pet;
       await waitUntil(() => isLinkNotFound(bucketEntry(reloaded, 'pet')));
 
-      let state = singularState(getRelationship(reloaded, 'pet'));
+      let state = singularState(
+        getRelationshipMembershipState(reloaded, 'pet'),
+      );
       assert.strictEqual(state.kind, 'not-found', 'not-found state reproduces');
       assert.strictEqual(
         state.reference,
@@ -239,7 +243,7 @@ module(
       let person = await createPerson({ pet: { links: { self: MANGO } } });
       await waitUntil(() => person.pet != null);
       assert.strictEqual(
-        singularState(getRelationship(person, 'pet')).kind,
+        singularState(getRelationshipMembershipState(person, 'pet')).kind,
         'present',
         'the live link is present',
       );
@@ -253,7 +257,7 @@ module(
       reloaded.pet; // drive the lazy load against the still-present target
       await waitUntil(() => reloaded.pet != null);
       assert.strictEqual(
-        singularState(getRelationship(reloaded, 'pet')).kind,
+        singularState(getRelationshipMembershipState(reloaded, 'pet')).kind,
         'present',
         'present state reproduces after reload',
       );
@@ -268,9 +272,9 @@ module(
       });
       broken.pets; // triggers lazy loads for both slots
       // Per-slot index access is masked to `Card | undefined`, so observe the
-      // planted broken state through the typed `getRelationship` surface.
+      // planted broken state through the typed `getRelationshipMembershipState` surface.
       await waitUntil(() => {
-        let states = getRelationship(broken, 'pets');
+        let states = getRelationshipMembershipState(broken, 'pets').membership;
         return (
           Array.isArray(states) && states.some((s) => s.kind === 'not-found')
         );

@@ -1,4 +1,3 @@
-import { Memoize } from 'typescript-memoize';
 import flatten from 'lodash/flatten';
 import flattenDeep from 'lodash/flattenDeep';
 import {
@@ -172,6 +171,7 @@ export interface FileEntry {
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  #nodeResolvedInvalidations: string[] | undefined;
   // URLs already written to boxel_index_working by an earlier attempt
   // of *this same job*, with the last_modified value the previous
   // attempt observed. Populated during `ready`. The visit loop in
@@ -194,13 +194,19 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   declare private realmVersion: number;
+  private realmURL: URL; // this assumes that we only index cards in our own realm...
+  private virtualNetwork: VirtualNetwork;
+  private jobInfo?: JobInfo;
 
   constructor(
     dbAdapter: DBAdapter,
-    private realmURL: URL, // this assumes that we only index cards in our own realm...
-    private virtualNetwork: VirtualNetwork,
-    private jobInfo?: JobInfo,
+    realmURL: URL,
+    virtualNetwork: VirtualNetwork,
+    jobInfo?: JobInfo,
   ) {
+    this.realmURL = realmURL;
+    this.virtualNetwork = virtualNetwork;
+    this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
@@ -313,11 +319,10 @@ export class Batch {
     return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
-  @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map((href) =>
-      trimExecutableExtension(rri(href)),
-    );
+    return (this.#nodeResolvedInvalidations ??= [...this.invalidations].map(
+      (href) => trimExecutableExtension(rri(href)),
+    ));
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
