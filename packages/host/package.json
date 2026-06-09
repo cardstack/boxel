@@ -196,7 +196,7 @@
     "unique-names-generator": "^4.7.1"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">= 20"
   },
   "ember": {
     "edition": "octane"
