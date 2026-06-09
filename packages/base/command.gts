@@ -625,6 +625,10 @@ export class PublishTarget extends FieldDef {
 export class PublishRealmInput extends CardDef {
   @field realmURL = contains(StringField);
   @field targets = containsMany(PublishTarget);
+  // Pre-resolved published-realm URLs. The publish UI builds these with live
+  // Matrix state, so it passes them directly instead of typed targets; they are
+  // merged with any resolved 'targets'. Provide at least one of the two.
+  @field publishedRealmURLs = containsMany(StringField);
   // Bypass the pre-publish publishability gate (private-dependency and
   // error-document violations). Defaults to false.
   @field force = contains(BooleanField);
