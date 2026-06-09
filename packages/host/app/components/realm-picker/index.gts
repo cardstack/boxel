@@ -101,35 +101,20 @@ export default class RealmPicker extends Component<Signature> {
   <template>
     <WithKnownRealmsLoaded>
       <:default>
-        {{! The dynamic data-test-realm-picker-locked binding must
-              NOT flow through the Picker → BoxelMultiSelectBasic →
-              PowerSelect → ember-basic-dropdown attribute chain: that
-              chain forwards static attrs fine, but dynamic bindings
-              lose their reactivity (the attribute renders as empty on
-              the trigger even when filter.locked flips to true). Put it
-              on a wrapper element we own so the binding stays live. The
-              wrapper carries only the locked attribute;
-              data-test-realm-picker stays on Picker so existing tests
-              that click data-test-realm-picker still hit the trigger. }}
-        <div
-          class='realm-picker-wrap'
-          data-test-realm-picker-locked={{@filter.locked}}
-        >
-          <Picker
-            @label={{if @label @label 'Realm'}}
-            @options={{this.realmOptions}}
-            @selected={{this.pickerSelected}}
-            @onChange={{this.onChange}}
-            @placeholder={{@placeholder}}
-            @searchPlaceholder='Search for a realm'
-            @maxSelectedDisplay={{3}}
-            @renderInPlace={{false}}
-            @destination={{@destination}}
-            @matchTriggerWidth={{false}}
-            @disabled={{@filter.locked}}
-            data-test-realm-picker
-          />
-        </div>
+        <Picker
+          @label={{if @label @label 'Realm'}}
+          @options={{this.realmOptions}}
+          @selected={{this.pickerSelected}}
+          @onChange={{this.onChange}}
+          @placeholder={{@placeholder}}
+          @searchPlaceholder='Search for a realm'
+          @maxSelectedDisplay={{3}}
+          @renderInPlace={{false}}
+          @destination={{@destination}}
+          @matchTriggerWidth={{false}}
+          @disabled={{@filter.locked}}
+          data-test-realm-picker
+        />
       </:default>
       <:loading>
         <div
@@ -144,9 +129,6 @@ export default class RealmPicker extends Component<Signature> {
       </:loading>
     </WithKnownRealmsLoaded>
     <style scoped>
-      .realm-picker-wrap {
-        display: contents;
-      }
       .loading {
         display: flex;
         align-items: center;
