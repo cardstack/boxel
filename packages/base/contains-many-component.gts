@@ -29,7 +29,7 @@ import {
   uuidv4,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce } from '@cardstack/boxel-ui/helpers';
 import { IconTrash, FourLines, IconPlus } from '@cardstack/boxel-ui/icons';
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
@@ -269,10 +269,6 @@ function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
     return 'atom';
   }
   return effectiveFormat;
-}
-
-function coalesce<T>(arg1: T | undefined, arg2: T): T {
-  return arg1 ?? arg2;
 }
 
 const componentCache = initSharedState(
