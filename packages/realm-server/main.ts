@@ -605,7 +605,12 @@ const smokeTestHostApp = async () => {
       port: actualPort,
     });
     if (isEnvironmentMode()) {
-      registerService(httpServer, serviceName, { wildcardSubdomains: true });
+      // The realm-server serves HTTP/2 over TLS in env mode (see
+      // createListener); Traefik must negotiate h2 to this backend.
+      registerService(httpServer, serviceName, {
+        wildcardSubdomains: true,
+        http2: true,
+      });
     }
   });
   let stopping = false;
@@ -630,11 +635,12 @@ const smokeTestHostApp = async () => {
         console.error(`error unsubscribing realm ${r.url}:`, err);
       }
     }
-    // Both the plain `http.Server` and the TLS-mode `net.Server`
-    // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
-    // dispatcher's mirror force-closes in-flight TLS / HTTP/2 /
-    // keep-alive sessions instead of waiting for peers to release them
-    // — without it `close()` can hang for a tab-keep-alive lifetime.
+    // The plain `http.Server`, the standard-mode `net.Server` dispatcher,
+    // and the env-mode `Http2SecureServer` (see `server.ts`) all expose
+    // `closeAllConnections()`. It force-closes in-flight TLS / HTTP/2 /
+    // keep-alive sessions instead of waiting for peers to release them —
+    // without it `close()` can hang for a tab-keep-alive (or Traefik
+    // backend session) lifetime.
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }

@@ -11,17 +11,20 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import { logger } from '@cardstack/runtime-common';
 
-import { createListener } from '../server.ts';
+import { createListener, type RealmHttpServer } from '../server.ts';
 
-// Coverage for the same-port HTTPS+HTTP/2 dispatcher (CS-11114). Exercises
-// every branch a peer can land in: TLS h2, TLS HTTP/1.1 via ALPN fallback,
-// plain HTTP redirect, and malformed-cert downgrade. Spawns minimal Koa
-// apps with raw http/https clients rather than supertest so we control the
-// negotiation explicitly.
+// Coverage for the realm-server's HTTP/2 listener. Exercises every branch a
+// peer can land in: standard-mode TLS h2 via the same-port dispatcher, TLS
+// HTTP/1.1 via ALPN fallback, plain-HTTP 308 redirect, env-mode (Traefik in
+// front) h2, and the fail-loud paths — a configured-but-unusable cert, or a
+// cert-less env mode — which must crash startup rather than silently serve
+// HTTP/1.1 (HTTP/2 is a system invariant). Spawns minimal Koa apps with raw
+// http/https clients rather than supertest so we control the negotiation
+// explicitly.
 //
-// Tests bootstrap clears REALM_SERVER_TLS_CERT_FILE/_KEY_FILE globally;
-// this suite restores them per-test via a module-scoped setup that
-// generates a fresh self-signed cert into a tmp dir.
+// The test bootstrap clears REALM_SERVER_TLS_CERT_FILE/_KEY_FILE globally;
+// this suite sets them (and BOXEL_ENVIRONMENT) per-test and restores them,
+// using a module-scoped self-signed cert generated into a tmp dir.
 
 let tmpCertDir: string;
 let certFile: string;
@@ -67,13 +70,16 @@ function makeApp(): Koa {
 async function startListener(opts: {
   cert?: string | null;
   key?: string | null;
+  boxelEnvironment?: string | null;
 }): Promise<{
   port: number;
+  server: RealmHttpServer;
   isHttp2: boolean;
   close: () => Promise<void>;
 }> {
   let priorCert = process.env.REALM_SERVER_TLS_CERT_FILE;
   let priorKey = process.env.REALM_SERVER_TLS_KEY_FILE;
+  let priorBoxelEnv = process.env.BOXEL_ENVIRONMENT;
   if (opts.cert == null) {
     delete process.env.REALM_SERVER_TLS_CERT_FILE;
   } else {
@@ -83,6 +89,14 @@ async function startListener(opts: {
     delete process.env.REALM_SERVER_TLS_KEY_FILE;
   } else {
     process.env.REALM_SERVER_TLS_KEY_FILE = opts.key;
+  }
+  // Default BOXEL_ENVIRONMENT to unset so the standard-mode dispatcher tests
+  // aren't perturbed by a parent shell that exported it; the env-mode test
+  // opts in explicitly.
+  if (opts.boxelEnvironment == null) {
+    delete process.env.BOXEL_ENVIRONMENT;
+  } else {
+    process.env.BOXEL_ENVIRONMENT = opts.boxelEnvironment;
   }
   let { server, proto } = createListener(logger('test:dispatcher'), makeApp());
   let isHttp2 = proto === 'https/h2';
@@ -101,6 +115,11 @@ async function startListener(opts: {
     } else {
       delete process.env.REALM_SERVER_TLS_KEY_FILE;
     }
+    if (priorBoxelEnv !== undefined) {
+      process.env.BOXEL_ENVIRONMENT = priorBoxelEnv;
+    } else {
+      delete process.env.BOXEL_ENVIRONMENT;
+    }
     let force = (server as { closeAllConnections?: () => void })
       .closeAllConnections;
     if (typeof force === 'function') {
@@ -110,7 +129,7 @@ async function startListener(opts: {
       server.close((err) => (err ? reject(err) : resolve())),
     );
   };
-  return { port, isHttp2, close };
+  return { port, server, isHttp2, close };
 }
 
 function h1Request(opts: {
@@ -199,6 +218,44 @@ function h2Request(opts: {
     req.on('error', reject);
     req.end();
   });
+}
+
+// Run `fn` with the given env overrides applied (a key absent from
+// `overrides` means "unset for the duration"), restoring the prior values
+// afterward — so a synchronously-throwing createListener can't leak
+// TLS/env-mode state into later tests.
+function withEnv<T>(
+  overrides: Record<string, string | undefined>,
+  fn: () => T,
+): T {
+  let keys = [
+    'REALM_SERVER_TLS_CERT_FILE',
+    'REALM_SERVER_TLS_KEY_FILE',
+    'BOXEL_ENVIRONMENT',
+  ];
+  let prior: Record<string, string | undefined> = {};
+  for (let k of keys) {
+    prior[k] = process.env[k];
+  }
+  try {
+    for (let k of keys) {
+      let v = overrides[k];
+      if (v === undefined) {
+        delete process.env[k];
+      } else {
+        process.env[k] = v;
+      }
+    }
+    return fn();
+  } finally {
+    for (let k of keys) {
+      if (prior[k] !== undefined) {
+        process.env[k] = prior[k];
+      } else {
+        delete process.env[k];
+      }
+    }
+  }
 }
 
 module(basename(__filename), function (hooks) {
@@ -350,31 +407,113 @@ module(basename(__filename), function (hooks) {
     }
   });
 
-  test('malformed cert downgrades to plain HTTP listener', async function (assert) {
+  test('malformed cert fails startup loudly instead of downgrading', function (assert) {
+    // HTTP/2 is a system invariant: a configured-but-unusable cert must
+    // crash boot, not silently fall back to HTTP/1.1 and mask the
+    // misconfiguration.
     let badCert = join(tmpCertDir, 'bad-cert.pem');
     let badKey = join(tmpCertDir, 'bad-key.pem');
     writeFileSync(badCert, 'not a real cert');
     writeFileSync(badKey, 'not a real key');
+    assert.throws(
+      () =>
+        withEnv(
+          {
+            REALM_SERVER_TLS_CERT_FILE: badCert,
+            REALM_SERVER_TLS_KEY_FILE: badKey,
+          },
+          () => createListener(logger('test:dispatcher'), makeApp()),
+        ),
+      /Unable to construct HTTPS\/h2 server/,
+      'malformed cert throws rather than serving plain HTTP/1.1',
+    );
+  });
+
+  test('env mode (BOXEL_ENVIRONMENT) serves h2 directly', async function (assert) {
+    // Env mode keeps HTTP/2: Traefik terminates the browser's TLS and
+    // re-originates an h2/TLS connection to this backend. The listener is a
+    // bare h2 secure server — no first-byte dispatcher and no 308 redirect,
+    // since Traefik is the only client and always connects over TLS.
     let { port, isHttp2, close } = await startListener({
-      cert: badCert,
-      key: badKey,
+      cert: certFile,
+      key: keyFile,
+      boxelEnvironment: 'cs-test-env',
     });
     try {
-      assert.false(isHttp2, 'listener falls back to plain HTTP');
-      let res = await h1Request({
-        host: '127.0.0.1',
-        port,
-        path: '/_alive',
-        scheme: 'http',
-      });
-      assert.strictEqual(res.status, 200, 'plain http GET returns 200');
+      assert.true(isHttp2, 'env mode advertises h2 (no downgrade to HTTP/1.1)');
+      let res = await h2Request({ port, path: '/_alive' });
+      assert.strictEqual(res.status, 200, 'env-mode h2 GET returns 200');
       assert.true(
-        res.body.includes('ok via 1.1'),
-        `body indicates HTTP/1.1 — got "${res.body}"`,
+        res.body.includes('ok via 2.0'),
+        `body indicates HTTP/2 — got "${res.body}"`,
       );
     } finally {
       await close();
     }
+  });
+
+  test('env mode h2 server force-closes connections on shutdown', async function (assert) {
+    // The env-mode listener is a bare Http2SecureServer, which — unlike
+    // http.Server — has no native closeAllConnections(). main.ts force-
+    // closes through that method on shutdown; without a mirror, a
+    // persistent h2 session (Traefik's backend connection, an open tab)
+    // wedges server.close() until the peer disconnects. Assert the mirror
+    // exists and actually tears a live session down.
+    let { port, server, close } = await startListener({
+      cert: certFile,
+      key: keyFile,
+      boxelEnvironment: 'cs-test-env',
+    });
+    let forceClose = (server as { closeAllConnections?: () => void })
+      .closeAllConnections;
+    assert.strictEqual(
+      typeof forceClose,
+      'function',
+      'env-mode h2 server mirrors http.Server.closeAllConnections',
+    );
+    let client = http2.connect(`https://127.0.0.1:${port}`, {
+      rejectUnauthorized: false,
+    });
+    client.on('error', () => {});
+    // Complete a request so the session is established and kept alive.
+    await new Promise<void>((resolve, reject) => {
+      let req = client.request({ ':method': 'GET', ':path': '/_alive' });
+      req.on('error', reject);
+      req.resume();
+      req.on('end', () => resolve());
+      req.end();
+    });
+    try {
+      let sessionClosed = new Promise<string>((resolve) =>
+        client.once('close', () => resolve('closed')),
+      );
+      let timedOut = new Promise<string>((resolve) =>
+        setTimeout(() => resolve('timeout'), 3000),
+      );
+      forceClose!.call(server);
+      assert.strictEqual(
+        await Promise.race([sessionClosed, timedOut]),
+        'closed',
+        'closeAllConnections() tears down the live h2 session (no shutdown hang)',
+      );
+    } finally {
+      client.close();
+      await close();
+    }
+  });
+
+  test('env mode without a TLS cert fails startup loudly', function (assert) {
+    // In env mode the dev cert is mandatory: a missing cert must crash boot,
+    // not serve plain HTTP/1.1 (which Traefik, expecting h2, would turn into
+    // all-502s).
+    assert.throws(
+      () =>
+        withEnv({ BOXEL_ENVIRONMENT: 'cs-test-env' }, () =>
+          createListener(logger('test:dispatcher'), makeApp()),
+        ),
+      /HTTP\/2 requires a TLS cert\/key/,
+      'env mode with no cert throws rather than serving plain HTTP/1.1',
+    );
   });
 
   test('h2 diagnostics (passive ping + session snapshot) do not disrupt serving', async function (assert) {
