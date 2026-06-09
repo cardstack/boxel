@@ -1,9 +1,22 @@
 import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
-import { rri, type RealmResourceIdentifier } from './realm-identifiers';
+import {
+  ri,
+  rri,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
+} from './realm-identifiers';
 import type { RealmPermissions } from './index';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+
+/**
+ * The base realm's canonical RRI prefix. Use this when building code
+ * refs that should match what `Loader.identify` / `identifyCard` emit
+ * for base-realm classes (which canonicalise via `vn.unresolveURL`
+ * to the registered `@cardstack/base/` prefix).
+ */
+export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
 
 /**
  * Build a `RealmResourceIdentifier` for a module inside the base realm.
@@ -17,27 +30,27 @@ export const devSkillLocalPath = 'Skill/boxel-development';
 export const envSkillLocalPath = 'Skill/boxel-environment';
 
 export const baseRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+  module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
   name: 'BaseDef',
 };
 export const specRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}spec` as RealmResourceIdentifier,
+  module: `${baseRealmRRI}spec` as RealmResourceIdentifier,
   name: 'Spec',
 };
 export const baseCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+  module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
   name: 'CardDef',
 };
 export const baseFieldRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+  module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
   name: 'FieldDef',
 };
 export const skillCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}skill` as RealmResourceIdentifier,
+  module: `${baseRealmRRI}skill` as RealmResourceIdentifier,
   name: 'Skill',
 };
 export const baseFileRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api` as RealmResourceIdentifier,
+  module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
   name: 'FileDef',
 };
 
