@@ -13,23 +13,23 @@ import type {
   ValidationStep,
   ValidationStepResult,
   ValidationResults,
-} from '../factory-agent';
+} from '../factory-agent/index.ts';
 
-import type { Validator } from '../issue-loop';
+import type { Validator } from '../issue-loop.ts';
 
-import { TestValidationStep } from './test-step';
-import { LintValidationStep } from './lint-step';
-import { EvalValidationStep } from './eval-step';
-import { InstantiateValidationStep } from './instantiate-step';
-import { ParseValidationStep } from './parse-step';
+import { TestValidationStep } from './test-step.ts';
+import { LintValidationStep } from './lint-step.ts';
+import { EvalValidationStep } from './eval-step.ts';
+import { InstantiateValidationStep } from './instantiate-step.ts';
+import { ParseValidationStep } from './parse-step.ts';
 
-import type { TestValidationStepConfig } from './test-step';
-import type { LintValidationStepConfig } from './lint-step';
-import type { EvalValidationStepConfig } from './eval-step';
-import type { InstantiateValidationStepConfig } from './instantiate-step';
-import type { ParseValidationStepConfig } from './parse-step';
+import type { TestValidationStepConfig } from './test-step.ts';
+import type { LintValidationStepConfig } from './lint-step.ts';
+import type { EvalValidationStepConfig } from './eval-step.ts';
+import type { InstantiateValidationStepConfig } from './instantiate-step.ts';
+import type { ParseValidationStepConfig } from './parse-step.ts';
 
-import { logger } from '../logger';
+import { logger } from '../logger.ts';
 
 let log = logger('validation-pipeline');
 

@@ -7,7 +7,7 @@ import {
 import type { Expression } from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
-import type { JobScopedSearchCache } from '../job-scoped-search-cache';
+import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 
 const log = logger('realm-server:jobs-finished-listener');
 

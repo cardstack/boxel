@@ -10,7 +10,7 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { expect } from '../fixtures';
+import { expect } from '../fixtures.ts';
 
 export const PASSING_TEST_GTS = `import { module, test } from 'qunit';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

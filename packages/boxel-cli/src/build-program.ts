@@ -1,16 +1,16 @@
 import { Command } from 'commander';
-import { profileCommand } from './commands/profile';
-import { registerConsolidateWorkspacesCommand } from './commands/consolidate-workspaces';
-import { registerLintCommand } from './commands/lint';
-import { registerParseCommand } from './commands/parse';
-import { registerReadTranspiledCommand } from './commands/read-transpiled';
-import { registerRealmCommand } from './commands/realm/index';
-import { registerFileCommand } from './commands/file/index';
-import { registerRunCommand } from './commands/run-command';
-import { registerSearchCommand } from './commands/search';
-import { registerTestCommand } from './commands/test';
-import { setQuiet } from './lib/cli-log';
-import { warnIfMisplacedLocalRealmDirs } from './lib/realm-local-paths';
+import { profileCommand } from './commands/profile.ts';
+import { registerConsolidateWorkspacesCommand } from './commands/consolidate-workspaces.ts';
+import { registerLintCommand } from './commands/lint.ts';
+import { registerParseCommand } from './commands/parse.ts';
+import { registerReadTranspiledCommand } from './commands/read-transpiled.ts';
+import { registerRealmCommand } from './commands/realm/index.ts';
+import { registerFileCommand } from './commands/file/index.ts';
+import { registerRunCommand } from './commands/run-command.ts';
+import { registerSearchCommand } from './commands/search.ts';
+import { registerTestCommand } from './commands/test.ts';
+import { setQuiet } from './lib/cli-log.ts';
+import { warnIfMisplacedLocalRealmDirs } from './lib/realm-local-paths.ts';
 
 /**
  * Construct the boxel CLI program with every command registered. Pure builder

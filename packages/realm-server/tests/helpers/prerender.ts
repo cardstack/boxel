@@ -6,7 +6,7 @@ import type {
   RenderResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import type { Prerenderer as ServerPrerenderer } from '../../prerender';
+import type { Prerenderer as ServerPrerenderer } from '../../prerender/index.ts';
 
 type PoolMeta = {
   pageId: string;

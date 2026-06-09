@@ -1,8 +1,8 @@
 import type { ComponentLike } from '@glint/template';
-import type { Query } from './query';
-import type { Format } from './formats';
-import type { QueryResultsMeta } from './index-query-engine';
-import type { ResolvedCodeRef } from './code-ref';
+import type { Query } from './query.ts';
+import type { Format } from './formats.ts';
+import type { QueryResultsMeta } from './index-query-engine.ts';
+import type { ResolvedCodeRef } from './code-ref.ts';
 
 export interface PrerenderedCardData {
   url: string;

@@ -1,6 +1,6 @@
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
 import { logger } from '@cardstack/runtime-common';
-import { getSearchInFlight } from './search-inflight';
+import { getSearchInFlight } from './search-inflight.ts';
 
 // Periodically samples the realm-server process's event-loop health and
 // in-flight search count, logging a `realm:health` line whenever there's a

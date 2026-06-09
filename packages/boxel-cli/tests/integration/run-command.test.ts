@@ -1,18 +1,18 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { runCommand } from '../../src/commands/run-command';
-import { createRealm } from '../../src/commands/realm/create';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { runCommand } from '../../src/commands/run-command.ts';
+import { createRealm } from '../../src/commands/realm/create.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupTestProfile,
   uniqueRealmName,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;

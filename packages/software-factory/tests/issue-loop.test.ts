@@ -5,11 +5,14 @@ import type {
   SchedulableIssue,
   IssueData,
   ValidationResults,
-} from '../src/factory-agent';
+} from '../src/factory-agent/index.ts';
 
-import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
-import type { AgentRunResult, LoopAgent } from '../src/factory-agent';
-import type { IssueStore } from '../src/issue-scheduler';
+import type {
+  FactoryTool,
+  ToolCallEntry,
+} from '../src/factory-tool-builder.ts';
+import type { AgentRunResult, LoopAgent } from '../src/factory-agent/index.ts';
+import type { IssueStore } from '../src/issue-scheduler.ts';
 
 import {
   runIssueLoop,
@@ -17,7 +20,7 @@ import {
   type IssueContextBuilderLike,
   type IssueLoopConfig,
   type Validator,
-} from '../src/issue-loop';
+} from '../src/issue-loop.ts';
 
 // ---------------------------------------------------------------------------
 // MockIssueStore

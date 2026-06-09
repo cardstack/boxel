@@ -1,9 +1,9 @@
 import * as childProcess from 'child_process';
 
-import { loginUser } from '../support/synapse';
-import { getSynapseContainerName } from '../support/environment-config';
+import { loginUser } from '../support/synapse/index.ts';
+import { getSynapseContainerName } from '../support/environment-config.ts';
 
-import { realmPassword } from '../helpers/realm-credentials';
+import { realmPassword } from '../helpers/realm-credentials.ts';
 
 let realmSecretSeed = process.env.REALM_SECRET_SEED;
 

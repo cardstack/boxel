@@ -4,10 +4,10 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { unpublishRealm } from './unpublish';
-import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors';
-import { describeFetchError } from '../../lib/describe-fetch-error';
+} from '../../lib/profile-manager.ts';
+import { unpublishRealm } from './unpublish.ts';
+import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
+import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 const READINESS_POLL_INTERVAL_MS = 1000;

@@ -5,12 +5,12 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../lib/profile-manager';
-import { FG_RED, FG_YELLOW, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
-import { validateRealmRelativePath } from '../lib/realm-relative-path';
-import { lint as lintSingleFile, type LintMessage } from './file/lint';
-import { listFiles } from './file/list';
+} from '../lib/profile-manager.ts';
+import { FG_RED, FG_YELLOW, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
+import { validateRealmRelativePath } from '../lib/realm-relative-path.ts';
+import { lint as lintSingleFile, type LintMessage } from './file/lint.ts';
+import { listFiles } from './file/list.ts';
 
 const LINTABLE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'] as const;
 

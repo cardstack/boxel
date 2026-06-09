@@ -1,8 +1,8 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { realmSecretSeed, insertUser } from '../helpers';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { realmSecretSeed, insertUser } from '../helpers/index.ts';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('/_run-command endpoint', function (hooks) {

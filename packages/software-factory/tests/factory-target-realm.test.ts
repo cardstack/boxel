@@ -8,12 +8,12 @@ import {
   resetProfileManager,
 } from '@cardstack/boxel-cli/api';
 
-import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
+import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors.ts';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
-} from '../src/factory-target-realm';
-import { installTestProfile } from './helpers/test-profile';
+} from '../src/factory-target-realm.ts';
+import { installTestProfile } from './helpers/test-profile.ts';
 
 const targetRealm = 'https://realms.example.test/testuser/personal/';
 

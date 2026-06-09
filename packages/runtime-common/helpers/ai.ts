@@ -1,6 +1,6 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { primitive } from '../constants';
-import type { Loader } from '../loader';
+import { primitive } from '../constants.ts';
+import type { Loader } from '../loader.ts';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 

@@ -5,12 +5,12 @@ import {
   RealmSyncBase,
   isProtectedFile,
   type SyncOptions,
-} from '../../lib/realm-sync-base';
+} from '../../lib/realm-sync-base.ts';
 import {
   classifyLocal,
   classifyRemote,
   type SideStatus,
-} from '../../lib/sync-logic';
+} from '../../lib/sync-logic.ts';
 import {
   computeFileHash,
   isValidManifest,
@@ -18,11 +18,11 @@ import {
   saveManifest,
   pathExists,
   type SyncManifest,
-} from '../../lib/sync-manifest';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/sync-manifest.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   FG_GREEN,
   FG_YELLOW,
@@ -30,7 +30,7 @@ import {
   FG_RED,
   DIM,
   RESET,
-} from '../../lib/colors';
+} from '../../lib/colors.ts';
 
 export type StatusFileState =
   | 'new-remote'

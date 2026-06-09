@@ -1,4 +1,4 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -19,7 +19,7 @@ import {
   TEST_USERNAME,
   TEST_PASSWORD,
   matrixURL,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 const cliEntry = resolve(__dirname, '../../dist/index.js');
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;

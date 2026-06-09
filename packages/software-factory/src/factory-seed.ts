@@ -8,10 +8,10 @@
  * cards, then marks the seed issue as done.
  */
 
-import type { FactoryBrief } from './factory-brief';
+import type { FactoryBrief } from './factory-brief.ts';
 
-import { logger } from './logger';
-import { readCard, writeCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import { readCard, writeCard } from './workspace-fs.ts';
 
 /**
  * Infer the darkfactory module URL from a target realm URL.

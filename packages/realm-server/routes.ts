@@ -9,67 +9,71 @@ import type {
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
-import handleCreateSessionRequest from './handlers/handle-create-session';
+import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
-} from './handlers/create-realm';
-import handleDeleteRealm from './handlers/handle-delete-realm';
-import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
-import handleFetchUserRequest from './handlers/handle-fetch-user';
-import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
-import handlePublishRealm from './handlers/handle-publish-realm';
-import handleUnpublishRealm from './handlers/handle-unpublish-realm';
-import { healthCheck, jwtMiddleware, grafanaAuthorization } from './middleware';
+} from './handlers/create-realm.ts';
+import handleDeleteRealm from './handlers/handle-delete-realm.ts';
+import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
+import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
+import handlePublishRealm from './handlers/handle-publish-realm.ts';
+import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
+import {
+  healthCheck,
+  jwtMiddleware,
+  grafanaAuthorization,
+} from './middleware/index.ts';
 import type Koa from 'koa';
-import handleCreateUserRequest from './handlers/handle-create-user';
-import handleQueueStatusRequest from './handlers/handle-queue-status';
-import handleReindex from './handlers/handle-reindex';
-import handleFullReindex from './handlers/handle-full-reindex';
-import handleRemoveJob from './handlers/handle-remove-job';
-import handleAddCredit from './handlers/handle-add-credit';
-import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission';
-import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
-import handleRequestForward from './handlers/handle-request-forward';
-import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough';
-import handlePostDeployment from './handlers/handle-post-deployment';
-import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
-import handleRealmAuth from './handlers/handle-realm-auth';
-import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
-import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
-import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
-import handlePrerenderProxy from './handlers/handle-prerender-proxy';
-import handleSearch from './handlers/handle-search';
-import type { JobScopedSearchCache } from './job-scoped-search-cache';
-import handleSearchPrerendered from './handlers/handle-search-prerendered';
-import handleRealmInfo from './handlers/handle-realm-info';
-import handleFederatedTypes from './handlers/handle-federated-types';
-import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
-import handleDownloadRealm from './handlers/handle-download-realm';
+import handleCreateUserRequest from './handlers/handle-create-user.ts';
+import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
+import handleReindex from './handlers/handle-reindex.ts';
+import handleFullReindex from './handlers/handle-full-reindex.ts';
+import handleRemoveJob from './handlers/handle-remove-job.ts';
+import handleAddCredit from './handlers/handle-add-credit.ts';
+import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
+import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
+import handleRequestForward from './handlers/handle-request-forward.ts';
+import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
+import handlePostDeployment from './handlers/handle-post-deployment.ts';
+import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
+import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
+import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
+import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
+import handleSearch from './handlers/handle-search.ts';
+import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import handleSearchPrerendered from './handlers/handle-search-prerendered.ts';
+import handleRealmInfo from './handlers/handle-realm-info.ts';
+import handleFederatedTypes from './handlers/handle-federated-types.ts';
+import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
+import handleDownloadRealm from './handlers/handle-download-realm.ts';
 import {
   handleBotRegistrationRequest,
   handleBotRegistrationsRequest,
   handleBotUnregistrationRequest,
-} from './handlers/handle-bot-registration';
+} from './handlers/handle-bot-registration.ts';
 import {
   handleBotCommandDeleteRequest,
   handleBotCommandsListRequest,
   handleBotCommandsRequest,
-} from './handlers/handle-bot-commands';
+} from './handlers/handle-bot-commands.ts';
 import {
   handleCreateIncomingWebhookRequest,
   handleListIncomingWebhooksRequest,
   handleDeleteIncomingWebhookRequest,
-} from './handlers/handle-incoming-webhook';
+} from './handlers/handle-incoming-webhook.ts';
 import {
   handleCreateWebhookCommandRequest,
   handleListWebhookCommandsRequest,
   handleDeleteWebhookCommandRequest,
-} from './handlers/handle-webhook-commands';
-import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
-import handleRunCommand from './handlers/handle-run-command';
-import handleScreenshotCard from './handlers/handle-screenshot-card';
-import { buildCreatePrerenderAuth } from './prerender/auth';
-import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
+} from './handlers/handle-webhook-commands.ts';
+import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts';
+import handleRunCommand from './handlers/handle-run-command.ts';
+import handleScreenshotCard from './handlers/handle-screenshot-card.ts';
+import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -384,7 +388,7 @@ function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
       handler = (
         createRequire(__filename)(
           './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr')
+        ) as typeof import('./handlers/handle-github-pr.ts')
       ).default(args);
     }
     return await handler(ctxt, next);

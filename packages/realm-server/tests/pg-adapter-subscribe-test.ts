@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { query, param } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 
 // Tests for the multiplexed LISTEN API on PgAdapter. Every assertion exercises
 // the shared notification client — there is no way to "stub" subscribe(); the

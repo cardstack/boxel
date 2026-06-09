@@ -9,18 +9,18 @@ import type {
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
-import type { Prerenderer } from '../prerender/index';
-import { PagePool } from '../prerender/page-pool';
-import { RenderRunner } from '../prerender/render-runner';
-import { BrowserManager } from '../prerender/browser-manager';
+import type { Prerenderer } from '../prerender/index.ts';
+import { PagePool } from '../prerender/page-pool.ts';
+import { RenderRunner } from '../prerender/render-runner.ts';
+import { BrowserManager } from '../prerender/browser-manager.ts';
 
 import {
   setupPermissionedRealmsCached,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
-} from './helpers';
-import { prerenderCard, prerenderFileExtract } from './helpers/prerender';
+} from './helpers/index.ts';
+import { prerenderCard, prerenderFileExtract } from './helpers/prerender.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
@@ -36,7 +36,7 @@ import {
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
   installThrottledRAFPatch,
-} from './helpers/prerender-page-patches';
+} from './helpers/prerender-page-patches.ts';
 
 class TestSemaphore {
   #available: number;

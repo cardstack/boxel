@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import jwt from 'jsonwebtoken';
-import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors';
+import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors.ts';
 import {
   matrixLogin,
   MatrixAuthError,
@@ -12,9 +12,9 @@ import {
   removeRealmFromMatrixAccountData,
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
-} from './auth';
-import { promptPassword as defaultPromptPassword } from './prompt';
-import type { RealmAuthenticator } from './realm-authenticator';
+} from './auth.ts';
+import { promptPassword as defaultPromptPassword } from './prompt.ts';
+import type { RealmAuthenticator } from './realm-authenticator.ts';
 
 export interface ProfileManagerDeps {
   matrixLogin?: typeof matrixLogin;

@@ -1,8 +1,8 @@
 import { module, test } from 'qunit';
 
-import type { SchedulableIssue } from '../src/factory-agent';
-import type { IssueStore } from '../src/issue-scheduler';
-import { retryBlockedIssues } from '../src/factory-issue-loop-wiring';
+import type { SchedulableIssue } from '../src/factory-agent/index.ts';
+import type { IssueStore } from '../src/issue-scheduler.ts';
+import { retryBlockedIssues } from '../src/factory-issue-loop-wiring.ts';
 
 // ---------------------------------------------------------------------------
 // MockIssueStore

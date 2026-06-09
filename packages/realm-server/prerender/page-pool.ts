@@ -6,12 +6,12 @@ import {
 } from '@cardstack/runtime-common';
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
-import { resolvePrerenderManagerURL } from './config';
-import type { BrowserManager } from './browser-manager';
-import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
-import { AsyncSemaphore } from './async-semaphore';
-import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
-import { attachNetworkInflightTracker } from './network-inflight-tracker';
+import { resolvePrerenderManagerURL } from './config.ts';
+import type { BrowserManager } from './browser-manager.ts';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import { AsyncSemaphore } from './async-semaphore.ts';
+import { attachRuntimeExceptionCapture } from './runtime-exception-capture.ts';
+import { attachNetworkInflightTracker } from './network-inflight-tracker.ts';
 
 type RenderSemaphore = {
   acquire(signal?: AbortSignal, priority?: number): Promise<() => void>;

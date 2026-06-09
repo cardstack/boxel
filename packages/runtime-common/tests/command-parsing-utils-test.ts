@@ -1,8 +1,8 @@
-import type { SharedTests } from '../helpers';
+import type { SharedTests } from '../helpers/index.ts';
 import {
   commandUrlToCodeRef,
   parseBoxelHostCommandSpecifier,
-} from '../command-parsing-utils';
+} from '../command-parsing-utils.ts';
 
 const tests = Object.freeze({
   'parseBoxelHostCommandSpecifier parses scoped command specifier': async (

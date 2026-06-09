@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { buildBoxelProgram } from './build-program';
-import { setQuiet } from './lib/cli-log';
+import { buildBoxelProgram } from './build-program.ts';
+import { setQuiet } from './lib/cli-log.ts';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),

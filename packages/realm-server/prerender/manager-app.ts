@@ -1,7 +1,10 @@
 import Koa from 'koa';
 import Router from '@koa/router';
 import { logger } from '@cardstack/runtime-common';
-import { fetchRequestFromContext, fullRequestURL } from '../middleware';
+import {
+  fetchRequestFromContext,
+  fullRequestURL,
+} from '../middleware/index.ts';
 import { format } from 'date-fns';
 import {
   PRERENDER_JOB_ID_HEADER,
@@ -12,9 +15,9 @@ import {
   resolvePrerenderServerProxyTimeoutMs,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
-} from './prerender-constants';
+} from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
-import { fromAffinityKey, toAffinityKey } from './affinity';
+import { fromAffinityKey, toAffinityKey } from './affinity.ts';
 import type { AffinityType } from '@cardstack/runtime-common';
 
 // Per-affinity vacancy reported by a prerender server in its heartbeat.

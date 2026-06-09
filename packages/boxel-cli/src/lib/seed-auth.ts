@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import type { RealmAuthenticator } from './realm-authenticator';
+import type { RealmAuthenticator } from './realm-authenticator.ts';
 
 /**
  * The realm server's shared matrix-client username in every deployed

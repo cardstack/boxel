@@ -13,12 +13,15 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { parseArgs } from 'node:util';
-import { logger } from '../../src/logger';
+import { logger } from '../../src/logger.ts';
 
-import type { AgentAction, AgentContext } from '../../src/factory-agent';
+import type {
+  AgentAction,
+  AgentContext,
+} from '../../src/factory-agent/index.ts';
 
 import {
   assembleImplementPrompt,
@@ -27,7 +30,7 @@ import {
   assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
-} from '../../src/factory-prompt-loader';
+} from '../../src/factory-prompt-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Sample data

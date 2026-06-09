@@ -13,15 +13,15 @@ import type {
   IssueStatus,
   IssuePriority,
   SchedulableIssue,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
 import {
   addCommentToIssue,
   ensureJsonExtension,
   toRealmRelativePath,
-} from './realm-operations';
-import { readCard, writeCard } from './workspace-fs';
-import { logger } from './logger';
+} from './realm-operations.ts';
+import { readCard, writeCard } from './workspace-fs.ts';
+import { logger } from './logger.ts';
 
 let log = logger('issue-scheduler');
 

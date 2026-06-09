@@ -10,7 +10,7 @@ import {
   insertPlan,
   insertUser,
   setupPermissionedRealmCached,
-} from '../helpers';
+} from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { Realm } from '@cardstack/runtime-common';
 

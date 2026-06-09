@@ -1,8 +1,8 @@
 import type Koa from 'koa';
 import { query, SupportedMimeType } from '@cardstack/runtime-common';
-import { setContextResponse } from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import { monitoringAuthToken } from '../utils/monitoring';
+import { setContextResponse } from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { monitoringAuthToken } from '../utils/monitoring.ts';
 
 function isAuthorizedToViewMonitoring(
   request: Koa.Request,

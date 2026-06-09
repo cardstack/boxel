@@ -1,36 +1,39 @@
-import { deleteFile, type DeleteResult } from '../commands/file/delete';
-import { read as fileRead, type ReadResult } from '../commands/file/read';
+import { deleteFile, type DeleteResult } from '../commands/file/delete.ts';
+import { read as fileRead, type ReadResult } from '../commands/file/read.ts';
 import {
   lint as coreLint,
   type LintResult,
   type LintMessage,
-} from '../commands/file/lint';
+} from '../commands/file/lint.ts';
 import {
   listFiles as coreListFiles,
   type ListFilesResult,
-} from '../commands/file/list';
+} from '../commands/file/list.ts';
 import {
   search as fileSearch,
   type SearchResult,
   type SearchCommandOptions,
-} from '../commands/search';
+} from '../commands/search.ts';
 import {
   readTranspiledModule,
   type ReadTranspiledResult,
-} from '../commands/read-transpiled';
+} from '../commands/read-transpiled.ts';
 import {
   touchFiles as coreTouchFiles,
   type TouchResult,
   type TouchCommandOptions,
-} from '../commands/file/touch';
-import { write as coreWrite, type WriteResult } from '../commands/file/write';
+} from '../commands/file/touch.ts';
+import {
+  write as coreWrite,
+  type WriteResult,
+} from '../commands/file/write.ts';
 import {
   cancelIndexing as coreCancelIndexing,
   type CancelIndexingResult,
-} from '../commands/realm/cancel-indexing';
-import { createRealm as coreCreateRealm } from '../commands/realm/create';
-import { pull as realmPull } from '../commands/realm/pull';
-import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
+} from '../commands/realm/cancel-indexing.ts';
+import { createRealm as coreCreateRealm } from '../commands/realm/create.ts';
+import { pull as realmPull } from '../commands/realm/pull.ts';
+import { sync as realmSync, type SyncResult } from '../commands/realm/sync.ts';
 import {
   indexingErrors as coreIndexingErrors,
   type IndexingErrorsResult,
@@ -39,9 +42,9 @@ import {
   type IndexingErrorEntry,
   type BrokenLinkEntry,
   type BrokenLinkLike,
-} from '../commands/realm/indexing-errors';
-import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
-import { getProfileManager, type ProfileManager } from './profile-manager';
+} from '../commands/realm/indexing-errors.ts';
+import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready.ts';
+import { getProfileManager, type ProfileManager } from './profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type {

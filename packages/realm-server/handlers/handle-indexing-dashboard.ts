@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import type { RealmIndexingState } from '../indexing-event-sink';
+import type { RealmIndexingState } from '../indexing-event-sink.ts';
 
 // morphdom's UMD build, inlined into the dashboard so the auto-refresh can
 // patch the live DOM in place instead of reloading the page. Read once at

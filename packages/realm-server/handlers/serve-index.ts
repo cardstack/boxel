@@ -17,17 +17,17 @@ import {
   injectIsolatedHTML,
   retrieveHeadHTML,
   retrieveIsolatedHTML,
-} from '../lib/index-html-injection';
-import { retrieveScopedCSS } from '../lib/retrieve-scoped-css';
-import { fullRequestURL } from '../middleware';
+} from '../lib/index-html-injection.ts';
+import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
+import { fullRequestURL } from '../middleware/index.ts';
 import {
   findOrMountRealm,
   getPublishedRealmInfo,
   hasPublicPermissions,
   isIndexedCardInstance,
   type RealmRoutingDeps,
-} from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
+} from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 
 export type ServeIndexDeps = {
   serverURL: URL;

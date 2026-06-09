@@ -2,14 +2,14 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, createJWT } from '../helpers';
+import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
   createConcurrentTestData,
   createErrorTestCases,
   createPerformanceAssertion,
   forceGc,
-} from '../helpers/prettier-test-utils';
+} from '../helpers/prettier-test-utils.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {

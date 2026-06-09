@@ -2,15 +2,15 @@ import { isEqual, uniqWith, kebabCase } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { RealmPaths, join } from './paths';
-import type { ResolvedCodeRef } from './code-ref';
-import { resolveAdoptedCodeRef } from './code-ref';
-import { realmURL } from './constants';
-import { logger } from './log';
-import type { LocalPath } from './paths';
-import { rri } from './realm-identifiers';
-import type { RealmResourceIdentifier } from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+import { RealmPaths, join } from './paths.ts';
+import type { ResolvedCodeRef } from './code-ref.ts';
+import { resolveAdoptedCodeRef } from './code-ref.ts';
+import { realmURL } from './constants.ts';
+import { logger } from './log.ts';
+import type { LocalPath } from './paths.ts';
+import { rri } from './realm-identifiers.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 // Local mirror of the boxel-catalog Listing shape — that repo isn't cloned in boxel CI. (CS-11166)
 export interface Listing extends CardDef {
