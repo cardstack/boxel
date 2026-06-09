@@ -415,6 +415,16 @@ export default class CardCatalogModal extends Component<Signature> {
         preselectConsumingRealm: opts.preselectConsumingRealm,
         lockConsumingRealm: opts.lockConsumingRealm,
       });
+      // [diagnostic] surface what opts the modal actually received
+      console.log(
+        '[lock-diag] CardCatalogModal._chooseCard',
+        JSON.stringify({
+          optsLockConsumingRealm: opts.lockConsumingRealm,
+          stateLockConsumingRealm: cardCatalogState.lockConsumingRealm,
+          consumingRealm:
+            opts.consumingRealm?.toString?.() ?? String(opts.consumingRealm),
+        }),
+      );
       this.stateStack.push(cardCatalogState);
       return await request.deferred.promise;
     },

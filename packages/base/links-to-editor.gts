@@ -232,6 +232,15 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
+    // [diagnostic] surface what we're about to pass to chooseCard
+    console.log(
+      '[lock-diag] LinksToEditor.chooseCard',
+      JSON.stringify({
+        fieldName: this.args.field.name,
+        lockConsumingRealm: this.args.lockConsumingRealm,
+        consumingRealm: this.realmURL?.toString(),
+      }),
+    );
     let cardId = await chooseCard(
       { filter: { type } },
       {
