@@ -1745,6 +1745,16 @@ export default class StoreService extends Service implements StoreInterface {
       throw new Error('resource must have an id');
     }
 
+    // An identity-only result (HTML-backed) carries no live attributes — they
+    // are withheld on the wire and fetched on demand at hydration. Never
+    // deposit it: storing an attribute-less stub would misrepresent the
+    // instance and could clobber a correctly-loaded full instance for the same
+    // id. The row still renders from its rendered-html; it just isn't in the
+    // Store.
+    if (resource.meta?.identityOnly === true) {
+      return undefined;
+    }
+
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
       let existingInstance = this.peek(resource.id, { type: 'file-meta' });

@@ -16,6 +16,7 @@ import {
   cardTypeIcon,
   isCardInstance,
   rri,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import AdornLabel from '@cardstack/host/components/adorn/adorn-label';
@@ -100,6 +101,12 @@ interface Signature {
     multiSelect?: boolean;
     onSelect: (selection: string | NewCardArgs) => void;
     onSubmit?: (selection: string | NewCardArgs) => void;
+    // The ancestor type to render a live/fallback card as — the search's
+    // resolved render type, so a live row renders identically to its
+    // prerendered-HTML siblings. Omitted by callers that haven't adopted the
+    // unified render type yet, which then fall back to the default fitted card
+    // template.
+    renderType?: ResolvedCodeRef;
     // When true, render the Adorn visual treatment: a teal hover type-label
     // tab, teal hover/selection outline, and a teal selection chip in place
     // of the legacy grey selection circle.
@@ -120,8 +127,9 @@ interface Signature {
   };
 }
 
-// Render CardDef default fitted template for visual consistency of cards in search results
-let resultsCardRef = {
+// The default render type for a live search result — the CardDef fitted
+// template — used when the caller doesn't thread a resolved render type.
+let defaultResultsCardRef: ResolvedCodeRef = {
   name: 'CardDef',
   module: rri('https://cardstack.com/base/card-api'),
 };
@@ -214,6 +222,12 @@ export default class ItemButton extends Component<Signature> {
     return isCardInstance(this.args.item)
       ? (this.args.item as CardDef)
       : undefined;
+  }
+
+  // The type to render a live card as: the search's resolved render type when
+  // threaded, else the default fitted card template.
+  private get resolvedRenderType(): ResolvedCodeRef {
+    return this.args.renderType ?? defaultResultsCardRef;
   }
 
   private get isComponent(): boolean {
@@ -362,7 +376,7 @@ export default class ItemButton extends Component<Signature> {
         <CardRenderer
           @card={{this.cardItem}}
           @format='fitted'
-          @codeRef={{resultsCardRef}}
+          @codeRef={{this.resolvedRenderType}}
           @displayContainer={{false}}
           data-test-search-result={{removeFileExtension this.resolvedItemId}}
         />
