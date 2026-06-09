@@ -193,17 +193,20 @@ export default function handleSearch(opts: {
       cacheKeyOpts.cardUrls = parsed.cardUrls;
     }
     // Run-time opts threaded to `searchRealms` → `Realm.search`. The resolved
-    // `render` spec drives the prefer-HTML resolution there. `render` is also
-    // folded into the cache key above; `loggingCorrelationId` / `timings` are
+    // `render` spec drives the prefer-HTML resolution there; `dataOnly` rides
+    // alongside it so the run-time opts name the requested mode (live-only vs
+    // prefer-HTML) the same members the cache key folds. Both are also folded
+    // into the cache key above; `loggingCorrelationId` / `timings` are
     // deliberately kept OUT of the cache-key opts (per-request values would
     // make every key unique and defeat the cache) and ride here instead, where
     // `searchRealms` stamps the SQL + loadLinks stages onto the collector this
     // handler emits.
     let runSearchOpts =
-      renderSpec || loggingCorrelationId !== null
+      renderSpec || parsed.dataOnly || loggingCorrelationId !== null
         ? {
             ...(normalizedSearchOpts ?? {}),
             ...(renderSpec ? { render: renderSpec } : {}),
+            ...(parsed.dataOnly ? { dataOnly: true } : {}),
             ...(loggingCorrelationId !== null ? { loggingCorrelationId } : {}),
             ...(timings ? { timings } : {}),
           }

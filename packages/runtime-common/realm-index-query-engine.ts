@@ -567,7 +567,7 @@ export class RealmIndexQueryEngine {
     if (opts.render.renderType) {
       doc.meta.renderType = opts.render.renderType;
     }
-    await this.attachRealmInfo(doc as unknown as LinkableCollectionDocument);
+    await this.attachRealmInfo(doc);
     return doc;
   }
 
@@ -1296,11 +1296,23 @@ export class RealmIndexQueryEngine {
   }
 
   private async attachRealmInfo(
-    doc: SingleCardDocument | LinkableCollectionDocument,
+    doc:
+      | SingleCardDocument
+      | LinkableCollectionDocument
+      | UnifiedSearchCollectionDocument,
   ): Promise<void> {
     let realmInfo = await this.#realm.getRealmInfo();
     let resources = Array.isArray(doc.data) ? doc.data : [doc.data];
     for (let resource of [...resources, ...(doc.included ?? [])]) {
+      // Only `card` / `file-meta` resources carry realm metadata. A unified
+      // `included` also holds `rendered-html` / `css` resources, which have no
+      // `realmURL`; they fall through this discriminant untouched.
+      if (
+        resource.type !== CardResourceType &&
+        resource.type !== FileMetaResourceType
+      ) {
+        continue;
+      }
       if (resource.meta?.realmURL === this.realmURL.href) {
         resource.meta.realmInfo = realmInfo;
       }
