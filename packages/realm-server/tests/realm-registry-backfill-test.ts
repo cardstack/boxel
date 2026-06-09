@@ -26,6 +26,30 @@ async function publicReadGranted(
   return rows.length > 0 && rows[0].read === true;
 }
 
+interface UserPermissionRow {
+  username: string;
+  read: boolean;
+  write: boolean;
+  realm_owner: boolean;
+}
+
+async function userPermissionsAt(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+): Promise<UserPermissionRow[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT username, read, write, realm_owner FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL),
+    `ORDER BY username`,
+  ])) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    username: r.username as string,
+    read: r.read as boolean,
+    write: r.write as boolean,
+    realm_owner: r.realm_owner as boolean,
+  }));
+}
+
 interface RegistryRow {
   url: string;
   kind: string;
@@ -258,11 +282,12 @@ module(basename(__filename), function () {
       );
     });
 
-    module('env-mode public-read parity', function (envHooks) {
+    module('env-mode permission parity', function (envHooks) {
       let priorBoxelEnvironment: string | undefined;
       const envSkillsURL = 'https://realm-server.test-env.localhost/skills/';
       const envPrivateURL = 'https://realm-server.test-env.localhost/private/';
       const stdSkillsURL = 'http://localhost:4201/skills/';
+      const altStdSkillsURL = 'http://localhost:4205/skills/';
 
       envHooks.beforeEach(function () {
         priorBoxelEnvironment = process.env.BOXEL_ENVIRONMENT;
@@ -337,6 +362,109 @@ module(basename(__filename), function () {
           await publicReadGranted(dbAdapter, envSkillsURL),
           'standard mode does not seed env-mode parity rows',
         );
+      });
+
+      test('mirrors realm-owner, write, and named-user rows from the matching standard-mode URL', async function (assert) {
+        // Standard-mode migration seeds realm-owner + read + write for the
+        // realm bot, read+write for a writer, and public read.
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+          '@skills_writer:localhost': ['read', 'write'],
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.deepEqual(
+          await userPermissionsAt(dbAdapter, envSkillsURL),
+          [
+            {
+              username: '*',
+              read: true,
+              write: false,
+              realm_owner: false,
+            },
+            {
+              username: '@skills_realm:localhost',
+              read: true,
+              write: true,
+              realm_owner: true,
+            },
+            {
+              username: '@skills_writer:localhost',
+              read: true,
+              write: true,
+              realm_owner: false,
+            },
+          ],
+          'env-mode URL gets the full standard-mode permission set',
+        );
+      });
+
+      test('coalesces multiple standard-mode source URLs sharing the bootstrap path', async function (assert) {
+        // Some migrations seed BOTH localhost:4201 and localhost:4205 for
+        // the same realm with the same grants. Either alone (or both) must
+        // produce a single env-mode row carrying the union.
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        });
+        await insertPermissions(dbAdapter, new URL(altStdSkillsURL), {
+          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.deepEqual(await userPermissionsAt(dbAdapter, envSkillsURL), [
+          {
+            username: '@skills_realm:localhost',
+            read: true,
+            write: true,
+            realm_owner: true,
+          },
+        ]);
+      });
+
+      test('preserves a custom env-mode permission row across reruns', async function (assert) {
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        });
+        // Operator pre-seeded a downgraded permission for the same user at
+        // the env URL — backfill must not clobber it.
+        await insertPermissions(dbAdapter, new URL(envSkillsURL), {
+          '@skills_realm:localhost': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.deepEqual(await userPermissionsAt(dbAdapter, envSkillsURL), [
+          {
+            username: '@skills_realm:localhost',
+            read: true,
+            write: false,
+            realm_owner: false,
+          },
+        ]);
       });
     });
 
