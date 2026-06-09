@@ -441,16 +441,15 @@ export function resolveRenderType(input: {
 // `meta.page.total`, and dedupe `included` by the JSON:API identity pair
 // `(type, id)`.
 //
-// Deduping on `(type, id)` rather than `id` alone is required by the unified
-// model: a `card` and its `rendered-html` share the same `id` (the bare card
-// URL — `type` is the only discriminator), so an id-only key would wrongly
-// collapse the two. The pair also dedupes first-class `css` resources (whose
-// `id` is a content hash) and the transitively-linked `card`/`file-meta`
-// resources, so a stylesheet or a linked card referenced by results from more
-// than one realm travels exactly once. Today's live `included` carries only
-// `card`/`file-meta` with URL ids, for which `(type, id)` and `id` agree, so
-// this is parity-preserving until the prefer-HTML path begins emitting
-// `rendered-html`/`css`.
+// Deduping on `(type, id)` rather than `id` alone is what the JSON:API
+// identity model requires: a `card` and its `rendered-html` share the same
+// `id` (the bare card URL — `type` is the only discriminator), so an id-only
+// key would wrongly collapse the two. The pair also dedupes first-class `css`
+// resources (whose `id` is a content hash) and the transitively-linked
+// `card`/`file-meta` resources, so a stylesheet or a linked card referenced by
+// results from more than one realm travels exactly once. For `included` made
+// up solely of `card`/`file-meta` with URL ids, `(type, id)` and `id` select
+// the same entries.
 export function combineSearchResults(
   docs: UnifiedSearchCollectionDocument[],
 ): UnifiedSearchCollectionDocument {
@@ -469,7 +468,7 @@ export function combineSearchResults(
         if (resource.id) {
           // NUL-separated so a `(type, id)` pair can't alias another by
           // concatenation (no resource type or id contains a NUL byte).
-          let identity = `${resource.type} ${resource.id}`;
+          let identity = `${resource.type}\u0000${resource.id}`;
           if (includedByIdentity.has(identity)) {
             continue;
           }
@@ -487,11 +486,11 @@ export function combineSearchResults(
   return combined;
 }
 
-// The legacy prerendered-shape merge. Unlike the unified `combineSearchResults`
-// (which dedupes first-class `css` resources inside `included`), this folds CSS
-// into a flat `meta.scopedCssUrls` Set and recovers "is this a file?" via
-// `meta.isFileMeta` — the shape the prerendered endpoint still emits. It stays
-// until that endpoint is retired in favor of the unified document.
+// Merges results into the prerendered-card document shape: CSS folds into a
+// flat `meta.scopedCssUrls` Set and "is this a file?" rides in
+// `meta.isFileMeta`. This contrasts with `combineSearchResults`, where CSS is a
+// first-class `css` resource deduped inside `included` and the resource `type`
+// distinguishes a card from a file.
 export function combinePrerenderedSearchResults(
   docs: PrerenderedCardCollectionDocument[],
 ): PrerenderedCardCollectionDocument {
@@ -644,9 +643,9 @@ export async function searchRealms(
     (label, queryLabel) =>
       `searchRealms realm search failed: ${label} query=${queryLabel}`,
   );
-  // The live runner produces only `card`/`file-meta` `included`, so the
-  // unified merge's value is a `LinkableCollectionDocument` here; the prefer-
-  // HTML path that adds `rendered-html`/`css` `included` lands later.
+  // `realm.search` returns `LinkableCollectionDocument` (only `card`/`file-meta`
+  // `included`), so the unified merge over those docs is itself a
+  // `LinkableCollectionDocument` — narrowing the return type to it is sound.
   let combined = combineSearchResults(docs) as LinkableCollectionDocument;
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);

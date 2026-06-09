@@ -57,9 +57,9 @@ export default function handleSearch(opts: {
     let { realmList } = getMultiRealmAuthorization(ctxt);
 
     // Parse the unified request body: the query plus the optional
-    // `render` / `dataOnly` / `cardUrls` members. In this step the extra
-    // members only segregate the cache key (below) — the response is still
-    // the live-card document; the prefer-HTML emission lands later.
+    // `render` / `dataOnly` / `cardUrls` members. These members segregate the
+    // job-scoped cache key (below); the response body is the live-card
+    // document.
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
     try {
@@ -134,7 +134,8 @@ export default function handleSearch(opts: {
     // prefer-HTML default, so an absent `render` and an explicit
     // `{ render: { format: "fitted" } }` canonicalize to the same key (both
     // carry `render`); `dataOnly` is folded only when true and `cardUrls`
-    // only when present, so today's plain-query traffic keeps one entry.
+    // only when non-empty, so a plain query without those members keeps one
+    // entry.
     let cacheKeyOpts: Record<string, unknown> = { ...searchOpts };
     if (parsed.render) {
       cacheKeyOpts.render = parsed.render;
@@ -142,7 +143,11 @@ export default function handleSearch(opts: {
     if (parsed.dataOnly) {
       cacheKeyOpts.dataOnly = true;
     }
-    if (parsed.cardUrls) {
+    // Only a non-empty `cardUrls` belongs in the key: an empty array is a
+    // no-op filter (the SQL applies the `IN` clause only when there are urls),
+    // so folding `[]` would fragment the cache against an equivalent request
+    // that omits `cardUrls`.
+    if (parsed.cardUrls?.length) {
       cacheKeyOpts.cardUrls = parsed.cardUrls;
     }
     // `loggingCorrelationId` / `timings` are deliberately kept OUT of `searchOpts`:

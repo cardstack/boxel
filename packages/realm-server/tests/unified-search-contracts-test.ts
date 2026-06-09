@@ -304,7 +304,7 @@ module(basename(__filename), function () {
   // The unified federated merge. Its `included` dedup keys on the JSON:API
   // identity pair `(type, id)` — not `id` alone — so it can carry a `card` and
   // its `rendered-html` (which share the card's URL as their id) side by side
-  // while still collapsing a `css` or a linked `card` shared across realms to a
+  // while collapsing a `css` or a linked `card` shared across realms to a
   // single entry.
   module('combineSearchResults (unified federated merge)', function () {
     test('dedupes `included` by (type, id): a shared css and a shared linked card travel once across realms', function (assert) {

@@ -329,9 +329,9 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     // The unified request members fold into the job-scoped cache key, so two
     // requests that differ only on `render` (format / renderType), `dataOnly`,
     // or `cardUrls` segregate into distinct entries + ETags — even though this
-    // endpoint still emits the live document for all of them — while an
-    // identical repeat hits the cache. This is what lets the live and
-    // prerendered endpoints share one job-scoped cache without colliding.
+    // endpoint emits the live document for all of them — while an identical
+    // repeat hits the cache. This is what lets the live and prerendered
+    // endpoints share one job-scoped cache without colliding.
     test('QUERY /_federated-search cache key segregates entries by render / dataOnly / cardUrls', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
@@ -395,6 +395,20 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           'explicit default render matched the plain-query key (cache hit)',
         );
 
+        // 3b. An empty `cardUrls` is a no-op filter, so it shares the
+        // plain-query entry rather than fragmenting the cache.
+        let emptyCardUrls = await post({ cardUrls: [] });
+        assert.strictEqual(
+          primaryCalls,
+          1,
+          'empty cardUrls matched the plain-query key (cache hit)',
+        );
+        assert.strictEqual(
+          emptyCardUrls.headers['etag'],
+          first.headers['etag'],
+          'empty cardUrls → same ETag as the plain query',
+        );
+
         // 4. A different render.format → miss.
         let embedded = await post({ render: { format: 'embedded' } });
         assert.strictEqual(
@@ -406,7 +420,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         assert.deepEqual(
           embedded.body,
           first.body,
-          'render does not yet change the response body (still the live document)',
+          'the render member segregates the cache key but not the response body (the live document)',
         );
 
         // 5. A render.renderType → miss.

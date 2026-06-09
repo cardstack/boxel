@@ -26,13 +26,12 @@ import {
 } from '../prerender/prerender-constants';
 import { respondWithJobScopedSearchCache } from './handle-search';
 
-// The legacy prerendered federated endpoint. It parses its own request shape
-// (`prerenderedHtmlFormat` / `cardUrls` / `renderType`) and still emits today's
-// prerendered-card document, but shares the job-scoped cache + ETag/304
-// protocol with `_federated-search` through `respondWithJobScopedSearchCache`.
-// Its `htmlFormat` / `cardUrls` / `renderType` opts are the inner-key opts, so
-// its cache entries segregate from the live endpoint's. Retired once the
-// unified document subsumes it.
+// The prerendered federated endpoint. It parses its own request shape
+// (`prerenderedHtmlFormat` / `cardUrls` / `renderType`) and emits the
+// prerendered-card document, sharing the job-scoped cache + ETag/304 protocol
+// with `_federated-search` through `respondWithJobScopedSearchCache`. Its
+// `htmlFormat` / `cardUrls` / `renderType` are the inner-key opts, so its cache
+// entries segregate from the live endpoint's.
 export default function handleSearchPrerendered(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;
