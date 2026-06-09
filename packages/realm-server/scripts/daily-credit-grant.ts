@@ -1,9 +1,9 @@
-import '../instrument';
-import '../setup-logger'; // This should be first
+import '../instrument.ts';
+import '../setup-logger.ts'; // This should be first
 import { logger } from '@cardstack/runtime-common';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import * as Sentry from '@sentry/node';
-export { parseLowCreditThreshold } from '../lib/daily-credit-grant-config';
+export { parseLowCreditThreshold } from '../lib/daily-credit-grant-config.ts';
 
 const log = logger('daily-credit-grant');
 const DAILY_CREDIT_GRANT_JOB_TIMEOUT_SEC = 10 * 60;

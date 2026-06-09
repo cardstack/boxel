@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
+import { PagePool } from '../prerender/page-pool.ts';
 
 // Chrome reconfigures its certificate-verifier service shortly after the
 // browser launches. A standby page created in that window has its in-flight

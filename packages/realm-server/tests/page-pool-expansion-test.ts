@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
+import { PagePool } from '../prerender/page-pool.ts';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
 
 // Configuration + dynamic-pool envelope tests for `PagePool`. The full
 // expansion / contraction state machine drives a real Chrome under the

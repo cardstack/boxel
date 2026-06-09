@@ -4,8 +4,6 @@ import ignore, { type Ignore } from 'ignore';
 // `crypto.randomUUID` is not available).
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
-import { Memoize } from 'typescript-memoize';
-
 import {
   logger,
   hasCardExtension,
@@ -30,23 +28,23 @@ import {
   type Reader,
   type Stats,
   type Diagnostics,
-} from './index';
-import { moduleFrom } from './code-ref';
-import type { RealmResourceIdentifier } from './realm-identifiers';
-import type { CacheScope, DefinitionLookup } from './definition-lookup';
-import type { VirtualNetwork } from './virtual-network';
-import { isCardError } from './error';
-import type { IndexingProgressEvent } from './worker';
-import { canonicalURL } from './index-runner/dependency-url';
-import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
-import { isScopedCSSRequest } from './scoped-css';
+} from './index.ts';
+import { moduleFrom } from './code-ref.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { isCardError } from './error.ts';
+import type { IndexingProgressEvent } from './worker.ts';
+import { canonicalURL } from './index-runner/dependency-url.ts';
+import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
+import { isScopedCSSRequest } from './scoped-css.ts';
 import {
   discoverInvalidations,
   type DiscoverInvalidationsResult,
-} from './index-runner/discover-invalidations';
-import { visitFileForIndexingFused } from './index-runner/visit-file';
-import { performCardIndexing } from './index-runner/card-indexer';
-import { performFileIndexing } from './index-runner/file-indexer';
+} from './index-runner/discover-invalidations.ts';
+import { visitFileForIndexingFused } from './index-runner/visit-file.ts';
+import { performCardIndexing } from './index-runner/card-indexer.ts';
+import { performFileIndexing } from './index-runner/file-indexer.ts';
 
 // Default module pre-warm concurrency. Serial by default: a cold/shared
 // prerender pool serves serial pre-warm by reusing a single warm tab,
@@ -85,6 +83,7 @@ export class IndexRunner {
   #perfLog = logger('index-perf');
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
+  #ignoreMap: Map<string, Ignore> | undefined;
   #prerenderer: Prerenderer;
   #auth: string;
   #realmURL: URL;
@@ -889,12 +888,15 @@ export class IndexRunner {
     return true;
   }
 
-  @Memoize()
   private get ignoreMap() {
+    if (this.#ignoreMap) {
+      return this.#ignoreMap;
+    }
     let ignoreMap = new Map<string, Ignore>();
     for (let [url, contents] of Object.entries(this.#ignoreData)) {
       ignoreMap.set(url, ignore().add(contents));
     }
+    this.#ignoreMap = ignoreMap;
     return ignoreMap;
   }
 

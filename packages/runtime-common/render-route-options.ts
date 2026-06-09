@@ -1,6 +1,6 @@
 import stringify from 'safe-stable-stringify';
-import { isResolvedCodeRef } from './code-ref';
-import type { ResolvedCodeRef } from './code-ref';
+import { isResolvedCodeRef } from './code-ref.ts';
+import type { ResolvedCodeRef } from './code-ref.ts';
 
 export interface RenderRouteOptions {
   clearCache?: true;

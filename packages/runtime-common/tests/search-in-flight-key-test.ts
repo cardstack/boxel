@@ -1,7 +1,7 @@
-import type { RealmResourceIdentifier } from '../realm-identifiers';
-import type { SharedTests } from '../helpers';
-import type { Query } from '../query';
-import { searchInFlightKey } from '../realm-index-query-engine';
+import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
+import type { SharedTests } from '../helpers/index.ts';
+import type { Query } from '../query.ts';
+import { searchInFlightKey } from '../realm-index-query-engine.ts';
 
 const realmURL = 'http://localhost:4201/test/';
 

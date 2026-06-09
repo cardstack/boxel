@@ -12,9 +12,9 @@ import {
   type ClassDeclaration,
   type Reexport,
   isInternalReference,
-} from './schema-analysis-plugin';
-import type { Options as RemoveOptions } from './remove-field-plugin';
-import { removeFieldPlugin } from './remove-field-plugin';
+} from './schema-analysis-plugin.ts';
+import type { Options as RemoveOptions } from './remove-field-plugin.ts';
+import { removeFieldPlugin } from './remove-field-plugin.ts';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import isEqual from 'lodash/isEqual';
@@ -30,9 +30,9 @@ import {
   type CodeRef,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
-} from './index';
-import { rri } from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+} from './index.ts';
+import { rri } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -40,7 +40,7 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
-import { getBabelOptions } from './babel-options';
+import { getBabelOptions } from './babel-options.ts';
 
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';

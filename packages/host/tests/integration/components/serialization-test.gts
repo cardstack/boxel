@@ -61,7 +61,7 @@ import {
   updateFromSerialized,
   CodeRefField,
   linksTo,
-  getRelationship,
+  getRelationshipMembershipState,
   FieldDef,
   containsMany,
   linksToMany,
@@ -1475,11 +1475,12 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"pet" field value is not an instance of Pet');
     }
 
-    let relationship = getRelationship(card, 'pet');
+    let relationship = getRelationshipMembershipState(card, 'pet')
+      .membership![0];
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'getRelationship should not be an array for linksTo relationship',
+        'getRelationshipMembershipState should not be an array for linksTo relationship',
       );
     } else {
       if (relationship.kind === 'present') {
@@ -1495,9 +1496,9 @@ module('Integration | serialization', function (hooks) {
     }
 
     assert.throws(
-      () => getRelationship(card, 'firstName'),
+      () => getRelationshipMembershipState(card, 'firstName'),
       /requires a 'linksTo' or 'linksToMany' field/,
-      'getRelationship throws for a non-relationship field',
+      'getRelationshipMembershipState throws for a non-relationship field',
     );
   });
 
@@ -1572,11 +1573,12 @@ module('Integration | serialization', function (hooks) {
 
     hassan.pet; // should no longer throw NotLoaded errors
 
-    let relationship = getRelationship(hassan, 'pet');
+    let relationship = getRelationshipMembershipState(hassan, 'pet')
+      .membership![0];
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'getRelationship should not be an array for linksTo relationship',
+        'getRelationshipMembershipState should not be an array for linksTo relationship',
       );
     } else {
       if (relationship.kind === 'not-loaded') {
@@ -1845,11 +1847,12 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
     }
 
-    let relationship = getRelationship(card, 'owner');
+    let relationship = getRelationshipMembershipState(card, 'owner')
+      .membership![0];
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'getRelationship should not be an array for linksTo relationship',
+        'getRelationshipMembershipState should not be an array for linksTo relationship',
       );
     } else {
       if (relationship.kind === 'present') {
@@ -1866,9 +1869,9 @@ module('Integration | serialization', function (hooks) {
 
     ['firstName', 'toys', 'favoriteToy'].map((fieldName) =>
       assert.throws(
-        () => getRelationship(card, fieldName),
+        () => getRelationshipMembershipState(card, fieldName),
         /requires a 'linksTo' or 'linksToMany' field/,
-        `getRelationship throws for non-relationship field ${fieldName}`,
+        `getRelationshipMembershipState throws for non-relationship field ${fieldName}`,
       ),
     );
   });
@@ -3520,11 +3523,12 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"friendPet" field value is not an instance of Pet');
       }
 
-      let relationship = getRelationship(card, 'friendPet');
+      let relationship = getRelationshipMembershipState(card, 'friendPet')
+        .membership![0];
       if (Array.isArray(relationship)) {
         assert.ok(
           false,
-          'getRelationship should not be an array for linksTo relationship',
+          'getRelationshipMembershipState should not be an array for linksTo relationship',
         );
       } else {
         if (relationship.kind === 'present') {
@@ -3642,11 +3646,10 @@ module('Integration | serialization', function (hooks) {
         'an explicitly-null computed linksTo surfaces as undefined to userland',
       );
 
-      let relationship = getRelationship(card, 'friendPet');
+      let relationship = getRelationshipMembershipState(card, 'friendPet')
+        .membership![0];
       assert.deepEqual(relationship, {
         kind: 'not-set',
-        isLoaded: false,
-        isError: false,
         value: undefined,
         reference: undefined,
       });
@@ -3695,20 +3698,18 @@ module('Integration | serialization', function (hooks) {
       );
 
       card.friendPet; // Should no longer throw NotLoaded error
-      let friendRel = getRelationship(card, 'friend');
+      let friendRel = getRelationshipMembershipState(card, 'friend')
+        .membership![0];
       assert.deepEqual(friendRel, {
         kind: 'not-loaded',
-        isLoaded: false,
-        isError: false,
         value: undefined,
         reference: `${testRealmURL}Person/hassan`,
       });
 
-      let friendPetRel = getRelationship(card, 'friendPet');
+      let friendPetRel = getRelationshipMembershipState(card, 'friendPet')
+        .membership![0];
       assert.deepEqual(friendPetRel, {
         kind: 'not-set',
-        isLoaded: false,
-        isError: false,
         value: undefined,
         reference: undefined,
       });
@@ -6306,7 +6307,10 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationships = getRelationship(card, 'pets');
+      let relationships = getRelationshipMembershipState(
+        card,
+        'pets',
+      ).membership;
       if (Array.isArray(relationships)) {
         let [mangoRelationship, vanGoghRelationship] = relationships;
 
@@ -6331,12 +6335,15 @@ module('Integration | serialization', function (hooks) {
           );
         }
         assert.throws(
-          () => getRelationship(card, 'firstName'),
+          () => getRelationshipMembershipState(card, 'firstName'),
           /requires a 'linksTo' or 'linksToMany' field/,
-          'getRelationship throws for a non-relationship field',
+          'getRelationshipMembershipState throws for a non-relationship field',
         );
       } else {
-        assert.ok(false, 'getRelationship returned an unexpected value');
+        assert.ok(
+          false,
+          'getRelationshipMembershipState returned an unexpected value',
+        );
       }
     });
 
@@ -6445,7 +6452,10 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationships = getRelationship(card, 'pets');
+      let relationships = getRelationshipMembershipState(
+        card,
+        'pets',
+      ).membership;
       if (Array.isArray(relationships)) {
         let [mangoRelationship, vanGoghRelationship] = relationships;
 
@@ -6470,7 +6480,10 @@ module('Integration | serialization', function (hooks) {
           );
         }
       } else {
-        assert.ok(false, 'getRelationship returned an unexpected value');
+        assert.ok(
+          false,
+          'getRelationshipMembershipState returned an unexpected value',
+        );
       }
     });
 
@@ -6856,11 +6869,14 @@ module('Integration | serialization', function (hooks) {
 
       hassan.pets; // no longer throws NotLoaded
 
-      let relationships = getRelationship(hassan, 'pets');
+      let relationships = getRelationshipMembershipState(
+        hassan,
+        'pets',
+      ).membership;
       if (!Array.isArray(relationships)) {
         assert.ok(
           false,
-          'getRelationship should be an array for linksToMany relationship',
+          'getRelationshipMembershipState should be an array for linksToMany relationship',
         );
       } else {
         let [mango, vanGogh] = relationships;
@@ -7395,10 +7411,13 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationship = getRelationship(card, 'friendPets');
+      let relationship = getRelationshipMembershipState(
+        card,
+        'friendPets',
+      ).membership;
       assert.ok(
         Array.isArray(relationship),
-        'getRelationship returns an array for linksToMany relationship',
+        'getRelationshipMembershipState returns an array for linksToMany relationship',
       );
       if (Array.isArray(relationship)) {
         let [mangoRel, vanGoghRel] = relationship;
@@ -7594,9 +7613,12 @@ module('Integration | serialization', function (hooks) {
       card.friendPets; // No longer throws NotLoaded
       card.ownPets; // No longer throws NotLoaded
 
-      let relationships = getRelationship(card, 'ownPets');
+      let relationships = getRelationshipMembershipState(
+        card,
+        'ownPets',
+      ).membership;
       if (!Array.isArray(relationships)) {
-        assert.ok(false, 'getRelationship should be an array');
+        assert.ok(false, 'getRelationshipMembershipState should be an array');
       } else {
         let [mango, vanGogh] = relationships;
         if (mango?.kind === 'present') {

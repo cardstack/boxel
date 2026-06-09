@@ -1,5 +1,4 @@
-import { Memoize } from 'typescript-memoize';
-import { isScopedCSSRequest } from './scoped-css';
+import { isScopedCSSRequest } from './scoped-css.ts';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
@@ -26,29 +25,29 @@ import {
   maybeRelativeReference,
   codeRefFromInternalKey,
 } from '.';
-import type { Realm } from './realm';
-import type { VirtualNetwork } from './virtual-network';
-import { FILE_META_RESERVED_KEYS } from './realm';
-import { RealmPaths } from './paths';
-import type { RequestTimings } from './request-timings';
+import type { Realm } from './realm.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { FILE_META_RESERVED_KEYS } from './realm.ts';
+import { RealmPaths } from './paths.ts';
+import type { RequestTimings } from './request-timings.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './realm-identifiers';
-import { rri } from './realm-identifiers';
+} from './realm-identifiers.ts';
+import { rri } from './realm-identifiers.ts';
 import {
   normalizeQueryForSignature,
   sortKeysDeep,
   type Filter,
   type Query,
-} from './query';
-import { CardError, type SerializedError } from './error';
+} from './query.ts';
+import { CardError, type SerializedError } from './error.ts';
 import {
   isCodeRef,
   isResolvedCodeRef,
   visitModuleDeps,
   type CodeRef,
-} from './code-ref';
+} from './code-ref.ts';
 import {
   isSingleCardDocument,
   isSingleFileMetaDocument,
@@ -57,29 +56,29 @@ import {
   type UnifiedSearchCollectionDocument,
   type UnifiedSearchIncludedResource,
   isLinkableCollectionDocument,
-} from './document-types';
-import { relationshipEntries } from './relationship-utils';
+} from './document-types.ts';
+import { relationshipEntries } from './relationship-utils.ts';
 import type {
   CardResource,
   CssResource,
   FileMetaResource,
   QueryFieldMeta,
   Saved,
-} from './resource-types';
-import type { PrerenderedHtmlFormat } from './prerendered-html-format';
+} from './resource-types.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import {
   buildCssResource,
   buildIdentityOnlyCard,
   buildRenderedHtmlResource,
   parseUsedRenderType,
   scopedCssHrefsFromDeps,
-} from './unified-search';
-import { getImmediateFieldDef, type FieldDefinition } from './definitions';
+} from './unified-search.ts';
+import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
   getValueForResourcePath,
-} from './query-field-utils';
+} from './query-field-utils.ts';
 
 // We allow up to this many traversals into the same card type per
 // `populateQueryFields` walk, matching the field-set the host emits at
@@ -224,6 +223,7 @@ function absolutizeInstanceURL(
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
+  #realmURL: URL | undefined;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
@@ -289,9 +289,8 @@ export class RealmIndexQueryEngine {
     this.#fetch = fetch;
   }
 
-  @Memoize()
   private get realmURL() {
-    return new URL(this.#realm.url);
+    return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
   async searchCards(
@@ -621,7 +620,7 @@ export class RealmIndexQueryEngine {
       return false;
     }
     try {
-      let definition: import('./definitions').Definition | undefined;
+      let definition: import('./definitions.ts').Definition | undefined;
       if (opts?.cacheOnlyDefinitions) {
         definition =
           await this.#definitionLookup.lookupCachedDefinition(codeRef);
@@ -887,7 +886,7 @@ export class RealmIndexQueryEngine {
   // emitted.
   private async walkAndPopulateQueryFields(
     resource: LooseCardResource | FileMetaResource,
-    definition: import('./definitions').Definition,
+    definition: import('./definitions.ts').Definition,
     prefix: string,
     realmURL: URL,
     opts: Options | undefined,
@@ -965,9 +964,9 @@ export class RealmIndexQueryEngine {
   }
 
   private async lookupDefinitionForOpts(
-    codeRef: import('./code-ref').ResolvedCodeRef,
+    codeRef: import('./code-ref.ts').ResolvedCodeRef,
     opts: Options | undefined,
-  ): Promise<import('./definitions').Definition | undefined> {
+  ): Promise<import('./definitions.ts').Definition | undefined> {
     if (opts?.cacheOnlyDefinitions) {
       return await this.#definitionLookup.lookupCachedDefinition(codeRef);
     }
@@ -1526,7 +1525,7 @@ export class RealmIndexQueryEngine {
       // and accumulate URL sets for the batched DB queries.
       type Entry = {
         item: LayerItem;
-        relationship: import('./resource-types').Relationship;
+        relationship: import('./resource-types.ts').Relationship;
         linkURL: URL;
         relationshipId: URL;
         relationshipIdStr: string;

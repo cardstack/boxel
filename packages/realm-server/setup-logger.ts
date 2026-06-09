@@ -1,5 +1,5 @@
-import './setup-localhost-resolver';
-import './lib/unbuffer-stdio';
+import './setup-localhost-resolver.ts';
+import './lib/unbuffer-stdio.ts';
 import {
   makeLogDefinitions,
   reapplyLogLevels,

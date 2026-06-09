@@ -2,16 +2,16 @@ import type {
   DependencyIndexRow,
   SearchIndexErrorEntry,
   SingleCardDocument,
-} from '../index';
-import type { DefinitionCacheEntries } from '../definition-lookup';
-import type { SerializedError } from '../error';
-import type { VirtualNetwork } from '../virtual-network';
-import { canonicalURL } from './dependency-url';
-import { IndexBackedDependencyErrors } from './index-backed-dependency-errors';
+} from '../index.ts';
+import type { DefinitionCacheEntries } from '../definition-lookup.ts';
+import type { SerializedError } from '../error.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import { canonicalURL } from './dependency-url.ts';
+import { IndexBackedDependencyErrors } from './index-backed-dependency-errors.ts';
 import {
   RelationshipDependencyExtractor,
   type RelationshipSource,
-} from './relationship-dependency-extractor';
+} from './relationship-dependency-extractor.ts';
 
 type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
 

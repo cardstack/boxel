@@ -4,8 +4,8 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { BOLD, DIM, FG_CYAN, FG_RED, RESET } from '../../lib/colors';
+} from '../../lib/profile-manager.ts';
+import { BOLD, DIM, FG_CYAN, FG_RED, RESET } from '../../lib/colors.ts';
 
 const MUTUALLY_EXCLUSIVE_FLAGS_ERROR =
   '--all-accessible and --hidden are mutually exclusive';

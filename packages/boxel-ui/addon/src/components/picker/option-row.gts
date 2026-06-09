@@ -202,19 +202,22 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         box-shadow: 0 0 0 2px var(--boxel-dark-teal);
       }
 
+      /* Checked treatment matches the canonical BoxelInput checkbox
+         (highlight fill, dark border, #333 checkmark) so every checkbox in
+         the host UI chrome reads as the same control. */
       .picker-option-row__checkbox--selected {
-        border-color: var(--boxel-dark-teal);
-        background-color: var(--boxel-dark-teal);
+        border-color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
       }
 
       .picker-option-row__check-icon {
-        --icon-color: var(--boxel-dark-teal);
+        --icon-color: var(--boxel-highlight);
         visibility: collapse;
         display: contents;
       }
 
       .picker-option-row__check-icon--selected {
-        --icon-color: var(--boxel-dark);
+        --icon-color: #333;
         visibility: visible;
       }
 

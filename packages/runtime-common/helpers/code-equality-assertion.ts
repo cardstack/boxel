@@ -2,7 +2,7 @@ import { transform } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { StringLiteral } from '@babel/types';
 import { createPatch } from 'diff';
-import { isNode } from '../index';
+import { isNode } from '../index.ts';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -11,7 +11,7 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
 import * as QUnit from 'qunit';
-import { gjsToPlaceholderJS } from '../module-syntax';
+import { gjsToPlaceholderJS } from '../module-syntax.ts';
 
 declare global {
   interface Assert {

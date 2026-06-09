@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { buildTestClient } from './helpers/test-client';
+import { buildTestClient } from './helpers/test-client.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

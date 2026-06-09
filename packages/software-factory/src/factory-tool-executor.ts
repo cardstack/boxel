@@ -1,5 +1,5 @@
-import type { ToolResult } from './factory-agent';
-import type { ToolRegistry } from './factory-tool-registry';
+import type { ToolResult } from './factory-agent/index.ts';
+import type { ToolRegistry } from './factory-tool-registry.ts';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 

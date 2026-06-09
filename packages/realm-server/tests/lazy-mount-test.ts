@@ -5,12 +5,12 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
 import { asExpressions, insert, query } from '@cardstack/runtime-common';
 
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
-} from '../lib/realm-registry-reconciler';
-import { RealmServer } from '../server';
+} from '../lib/realm-registry-reconciler.ts';
+import { RealmServer } from '../server.ts';
 
 // Phase 3 PR 1 lazy-mount integration tests.
 //

@@ -5,7 +5,7 @@ import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/bro
 import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
 //@ts-ignore breaks esbuild for VS Code extension
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
-import { loaderPlugin } from './loader-plugin';
+import { loaderPlugin } from './loader-plugin.ts';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available

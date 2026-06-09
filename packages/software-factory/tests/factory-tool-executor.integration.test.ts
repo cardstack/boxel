@@ -3,9 +3,9 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { ToolExecutor } from '../src/factory-tool-executor';
-import { ToolRegistry } from '../src/factory-tool-registry';
-import { buildTestClient } from './helpers/test-client';
+import { ToolExecutor } from '../src/factory-tool-executor.ts';
+import { ToolRegistry } from '../src/factory-tool-registry.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 
 // ---------------------------------------------------------------------------
 // Test server helpers

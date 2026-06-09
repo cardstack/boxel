@@ -21,9 +21,9 @@ import {
   setupPermissionedRealmCached,
   testRealmInfo,
   testRealmURL as rootTestRealmURL,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {

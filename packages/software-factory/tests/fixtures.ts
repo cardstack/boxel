@@ -19,12 +19,15 @@ import {
   startHarnessPrerenderServer,
   type StartedCompatRealmProxy,
 } from '@cardstack/realm-test-harness';
-import { logger } from '../src/logger';
-import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
+import { logger } from '../src/logger.ts';
+import {
+  buildBrowserState,
+  installBrowserState,
+} from './helpers/browser-auth.ts';
 import {
   allocateTestWorkerPortSet,
   type TestWorkerPortReservation,
-} from './helpers/port-allocator';
+} from './helpers/port-allocator.ts';
 
 // Same name `playwright.global-setup.ts` already uses, and already
 // configured at `info` in `playwright.config.ts` so heartbeat lines

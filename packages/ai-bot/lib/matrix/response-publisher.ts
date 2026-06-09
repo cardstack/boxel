@@ -1,14 +1,14 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import { thinkingMessage } from '../../constants';
-import type ResponseState from '../response-state';
+import { thinkingMessage } from '../../constants.ts';
+import type ResponseState from '../response-state.ts';
 import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
-import ResponseEventData from './response-event-data';
+import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
@@ -41,6 +41,10 @@ function toCommandRequest(
 export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
 
 export default class MatrixResponsePublisher {
+  readonly client: MatrixClient;
+  readonly roomId: string;
+  readonly agentId: string;
+  readonly responseState: ResponseState;
   eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   responseEvents: ResponseEventData[] | undefined;
   private sendingMessage = Promise.resolve(); // track pending send operation
@@ -65,11 +69,16 @@ export default class MatrixResponsePublisher {
   }
 
   constructor(
-    readonly client: MatrixClient,
-    readonly roomId: string,
-    readonly agentId: string,
-    readonly responseState: ResponseState,
-  ) {}
+    client: MatrixClient,
+    roomId: string,
+    agentId: string,
+    responseState: ResponseState,
+  ) {
+    this.client = client;
+    this.roomId = roomId;
+    this.agentId = agentId;
+    this.responseState = responseState;
+  }
 
   async sendMessage() {
     let responseStateSnapshot = this.responseState.snapshot();

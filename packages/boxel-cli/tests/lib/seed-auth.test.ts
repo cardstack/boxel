@@ -6,7 +6,7 @@ import {
   deriveBotUserId,
   deriveHostFromRealmUrl,
   deriveRealmServerUrl,
-} from '../../src/lib/seed-auth';
+} from '../../src/lib/seed-auth.ts';
 
 const SEED = 'shhh-its-a-secret';
 

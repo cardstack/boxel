@@ -40,7 +40,7 @@ import type {
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import { createJWT, verifyJWT } from './jwt';
+import { createJWT, verifyJWT } from './jwt.ts';
 
 const realmEventsLog = logger('realm:events');
 
@@ -79,10 +79,13 @@ function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
 }
 
 export class NodeAdapter implements RealmAdapter {
-  constructor(
-    private realmDir: string,
-    private enableFileWatcher?: boolean,
-  ) {}
+  private realmDir: string;
+  private enableFileWatcher?: boolean;
+
+  constructor(realmDir: string, enableFileWatcher?: boolean) {
+    this.realmDir = realmDir;
+    this.enableFileWatcher = enableFileWatcher;
+  }
 
   get dir(): string {
     return this.realmDir;

@@ -1,17 +1,17 @@
-import * as DateSerializer from './date';
-import * as DatetimeSerializer from './datetime';
-import * as BigIntegerSerializer from './big-integer';
-import * as BooleanSerializer from './boolean';
-import * as CodeRefSerializer from './code-ref';
-import * as AbsoluteCodeRefSerializer from './absolute-code-ref';
-import * as EthereumAddressSerializer from './ethereum-address';
-import * as NumberSerializer from './number';
-import * as EmailSerializer from './email';
-import * as ImageSizeSerializer from './image-size';
-import * as PhoneSerializer from './phone';
-import * as StringToContentSerializer from './string-to-content';
+import * as DateSerializer from './date.ts';
+import * as DatetimeSerializer from './datetime.ts';
+import * as BigIntegerSerializer from './big-integer.ts';
+import * as BooleanSerializer from './boolean.ts';
+import * as CodeRefSerializer from './code-ref.ts';
+import * as AbsoluteCodeRefSerializer from './absolute-code-ref.ts';
+import * as EthereumAddressSerializer from './ethereum-address.ts';
+import * as NumberSerializer from './number.ts';
+import * as EmailSerializer from './email.ts';
+import * as ImageSizeSerializer from './image-size.ts';
+import * as PhoneSerializer from './phone.ts';
+import * as StringToContentSerializer from './string-to-content.ts';
 
-import type { CardDocument, RealmResourceIdentifier } from '../index';
+import type { CardDocument, RealmResourceIdentifier } from '../index.ts';
 import type {
   JSONAPISingleResourceDocument,
   SerializeOpts,

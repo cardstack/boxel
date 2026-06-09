@@ -1,7 +1,10 @@
 import type Koa from 'koa';
-import { fetchRequestFromContext, setContextResponse } from '../middleware';
-import { createPullRequest } from '../lib/github';
-import type { CreateRoutesArgs } from '../routes';
+import {
+  fetchRequestFromContext,
+  setContextResponse,
+} from '../middleware/index.ts';
+import { createPullRequest } from '../lib/github.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
 export interface CreateGitHubPRRequestBody {

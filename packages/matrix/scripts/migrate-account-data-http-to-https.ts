@@ -21,7 +21,7 @@
 // Safe to re-run: rows already in the target scheme are left
 // untouched, and the PUT only fires when at least one URL changed.
 
-import { getSynapseURL } from '../support/environment-config';
+import { getSynapseURL } from '../support/environment-config.ts';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'password';

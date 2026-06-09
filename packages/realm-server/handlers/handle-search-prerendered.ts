@@ -12,19 +12,19 @@ import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   setContextResponse,
-} from '../middleware';
+} from '../middleware/index.ts';
 import {
   getMultiRealmAuthorization,
   getSearchRequestPayload,
-} from '../middleware/multi-realm-authorization';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
-import type { JobScopedSearchCache } from '../job-scoped-search-cache';
+} from '../middleware/multi-realm-authorization.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 import {
   PRERENDER_JOB_ID_HEADER,
   sanitizePrerenderJobId,
-} from '../prerender/prerender-constants';
-import { respondWithJobScopedSearchCache } from './handle-search';
+} from '../prerender/prerender-constants.ts';
+import { respondWithJobScopedSearchCache } from './handle-search.ts';
 
 // The prerendered federated endpoint. It parses its own request shape
 // (`prerenderedHtmlFormat` / `cardUrls` / `renderType`) and emits the

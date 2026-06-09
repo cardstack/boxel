@@ -33,6 +33,7 @@ import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
 import {
+  bumpFieldLoadingSignal,
   getDataBucket,
   type LinkErrorValue,
   type LinkNotFoundValue,
@@ -197,6 +198,10 @@ export function ensureQueryFieldSearchResource(
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+  // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
+  // a `peek` before it existed entangled nothing, so nudge observers to
+  // re-read now that the resource (and its tracked running flag) is available.
+  bumpFieldLoadingSignal(instance, field.name);
 
   return searchResource;
 }
@@ -214,7 +219,7 @@ export function peekQueryFieldSearchResource(
 }
 
 // Mirror the SearchResource's resource-level error state onto the data bucket
-// so the field getter and `getRelationship` recognize the same sentinels they
+// so the field getter and `getRelationshipMembershipState` recognize the same sentinels they
 // already handle for direct `linksTo`. Reading `searchResource.errors` here
 // also entangles the calling field-getter render with the resource's tracked
 // failure channel — a later transition into or out of an errored state
@@ -308,7 +313,7 @@ function queryFieldErrorReference(instance: BaseDef, field: Field): string {
   // (qualified with the field name) when available so the reference is
   // diagnosable in logs and persisted error docs. Unsaved owners fall back to
   // a synthetic identifier; the reference is read by humans / by
-  // `getRelationship` consumers but never resolved as a URL.
+  // `getRelationshipMembershipState` consumers but never resolved as a URL.
   let owner = (instance as CardDef).id;
   if (typeof owner === 'string' && owner.length > 0) {
     return `${owner}#${field.name}`;

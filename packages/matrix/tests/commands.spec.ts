@@ -1,5 +1,5 @@
-import { expect, test } from './fixtures';
-import { putEvent } from '../support/synapse';
+import { expect, test } from './fixtures.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   getRoomId,
   sendMessage,
@@ -9,7 +9,7 @@ import {
   getAgentId,
   createRealm,
   postNewCard,
-} from '../helpers';
+} from '../helpers/index.ts';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -17,8 +17,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-} from '../support/matrix-constants';
-import { appURL } from '../support/isolated-realm-server';
+} from '../support/matrix-constants.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 

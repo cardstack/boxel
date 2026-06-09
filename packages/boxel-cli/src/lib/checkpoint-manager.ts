@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { isProtectedFile } from './realm-sync-base';
+import { isProtectedFile } from './realm-sync-base.ts';
 
 export interface Checkpoint {
   hash: string;

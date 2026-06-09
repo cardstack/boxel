@@ -1,8 +1,8 @@
 import isEqual from 'lodash/isEqual';
-import { assertJSONValue, assertJSONPrimitive } from './json-validation';
+import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
 import qs from 'qs';
 
-import { type CodeRef, isCodeRef, generalSortFields } from './index';
+import { type CodeRef, isCodeRef, generalSortFields } from './index.ts';
 type JSONValue =
   | string
   | number

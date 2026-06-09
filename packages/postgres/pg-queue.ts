@@ -1,4 +1,4 @@
-import './instrument';
+import './instrument.ts';
 import {
   type QueuePublisher,
   type QueueRunner,
@@ -34,7 +34,7 @@ import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/in
 // coalesce handlers registered before publish() is called.
 import '@cardstack/runtime-common/tasks/copy';
 import '@cardstack/runtime-common/tasks/full-reindex';
-import type { PgAdapter } from './pg-adapter';
+import type { PgAdapter } from './pg-adapter.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
@@ -89,11 +89,13 @@ export class WorkLoop {
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
   private runnerPromise: Promise<void> | undefined;
+  private label: string;
+  private pollInterval: number;
 
-  constructor(
-    private label: string,
-    private pollInterval: number,
-  ) {}
+  constructor(label: string, pollInterval: number) {
+    this.label = label;
+    this.pollInterval = pollInterval;
+  }
 
   // 1. Your fn should loop until workLoop.shuttingDown is true.
   // 2. When it has no work to do, it should await workLoop.sleep().

@@ -15,7 +15,7 @@ import type {
 } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 // ---------------------------------------------------------------------------
 // Runtime schema fetching

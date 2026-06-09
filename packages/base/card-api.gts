@@ -98,6 +98,7 @@ import {
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
+  peekQueryFieldSearchResource,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -165,8 +166,12 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
-  getRelationship,
+  getRelationshipMembershipState,
   getter,
+  registerRelationshipProbe,
+  relationshipStateForEntry,
+  readFieldLoadingSignal,
+  bumpFieldLoadingSignal,
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
@@ -185,6 +190,7 @@ import {
   type LinkErrorValue,
   type LinkNotFoundValue,
   type NotLoadedValue,
+  type RelationshipStatus,
   type RelationshipState,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
@@ -213,7 +219,7 @@ export {
   getDataBucket,
   getFieldDescription,
   getFields,
-  getRelationship,
+  getRelationshipMembershipState,
   isNonPresentLink,
   peekAtField,
   isCard,
@@ -235,6 +241,7 @@ export {
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type RelationshipStatus,
   type RelationshipState,
   type ResourceID,
   type SerializeOpts,
@@ -317,16 +324,6 @@ interface Options {
   isUsed?: true;
   // Optional: per-usage configuration provider merged with FieldDef-level configuration
   configuration?: ConfigurationInput<any>;
-  // Optional: per-usage edit component that overrides the FieldDef's
-  // `static edit` for this specific field declaration. Lets a parent
-  // card customize the editor for one of its fields without having
-  // to subclass the FieldDef or replace its own `static edit`.
-  // ComponentLike<any> rather than BaseDefComponent so that wrap-style
-  // overrides on collection fields (containsMany / linksToMany) can
-  // declare their own Args shape — e.g. accepting `@values` and
-  // `@defaultEditor`. The runtime contract per field type is documented
-  // at the rendering sites.
-  edit?: ComponentLike<any>;
 }
 
 interface RelationshipOptions extends Options {
@@ -480,10 +477,10 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 
 export interface CardStore {
   // The VirtualNetwork that owns this store's realm mappings, used for
-  // prefix/RRI resolution during (de)serialization. Optional so test doubles
-  // don't need to implement it; resolution sites degrade — URL-form refs
-  // still URL-join, prefix-form refs pass through unchanged.
-  virtualNetwork?: VirtualNetwork;
+  // prefix/RRI resolution during (de)serialization. Required — every store
+  // implementation must supply one (production stores, test stubs, the
+  // FallbackCardStore).
+  virtualNetwork: VirtualNetwork;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -549,15 +546,6 @@ export interface Field<
   computeVia: undefined | (() => unknown);
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
-  // Optional per-usage edit component override — when set, the field
-  // renders with this Component in edit format instead of the
-  // FieldDef's `static edit`.
-  // ComponentLike<any> rather than BaseDefComponent so that wrap-style
-  // overrides on collection fields (containsMany / linksToMany) can
-  // declare their own Args shape — e.g. accepting `@values` and
-  // `@defaultEditor`. The runtime contract per field type is documented
-  // at the rendering sites.
-  edit?: ComponentLike<any>;
   // Declarative relationship query definition, if provided
   queryDefinition?: QueryWithInterpolations;
   captureQueryFieldSeedData?(
@@ -643,7 +631,6 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly edit?: ComponentLike<any>;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   configuration: ConfigurationInput<any> | undefined;
@@ -971,7 +958,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly edit?: ComponentLike<any>;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   configuration: ConfigurationInput<any> | undefined;
@@ -1200,7 +1186,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly edit?: ComponentLike<any>;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
@@ -1250,7 +1235,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // `ensureQueryFieldSearchResource` mirrors the resource's error state
       // into the bucket. The recognition pattern mirrors the declared
       // `linksTo` path above — a terminal `link-error` / `link-not-found`
-      // sentinel surfaces as `undefined`, and `getRelationship` is the
+      // sentinel surfaces as `undefined`, and `getRelationshipMembershipState` is the
       // structured read.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
@@ -1283,7 +1268,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     // link-error / link-not-found are terminal failure states planted by
     // lazilyLoadLink. They surface to userland as `undefined` (the same shape a
     // not-loaded link produces) and are NOT retried — re-reading must not kick
-    // off another fetch. `getRelationship` is the only way to observe the
+    // off another fetch. `getRelationshipMembershipState` is the only way to observe the
     // structured failure from outside this module.
     if (isLinkError(maybeNotLoaded) || isLinkNotFound(maybeNotLoaded)) {
       return undefined;
@@ -1451,7 +1436,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveRef(store, reference, relativeTo);
+    let href = resolveRef(store.virtualNetwork, reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1593,25 +1578,14 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
               {{#if
                 (shouldRenderEditor @format defaultFormats.cardDef isComputed)
               }}
-                {{#if linksToField.edit}}
-                  <linksToField.edit
-                    @model={{(getInnerModel)}}
-                    @field={{linksToField}}
-                    @brokenLink={{broken}}
-                    @typeConstraint={{@typeConstraint}}
-                    @createCard={{cardCrudFunctions.createCard}}
-                    ...attributes
-                  />
-                {{else}}
-                  <LinksToEditor
-                    @model={{(getInnerModel)}}
-                    @field={{linksToField}}
-                    @brokenLink={{broken}}
-                    @typeConstraint={{@typeConstraint}}
-                    @createCard={{cardCrudFunctions.createCard}}
-                    ...attributes
-                  />
-                {{/if}}
+                <LinksToEditor
+                  @model={{(getInnerModel)}}
+                  @field={{linksToField}}
+                  @brokenLink={{broken}}
+                  @typeConstraint={{@typeConstraint}}
+                  @createCard={{cardCrudFunctions.createCard}}
+                  ...attributes
+                />
               {{else if broken}}
                 <BrokenLinkTemplate
                   @brokenUrl={{broken.reference}}
@@ -1713,7 +1687,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // Resource-level failure: `ensureQueryFieldSearchResource` plants a
       // single whole-field sentinel in the bucket (the search fails as a
       // unit, not per element). The empty array hands callers a usable
-      // shape; the structured failure surfaces through `getRelationship`.
+      // shape; the structured failure surfaces through `getRelationshipMembershipState`.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
@@ -1785,7 +1759,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // for the resolved card (success) or a terminal error/not-found sentinel
       // (failure). The array identity never changes, so Glimmer re-renders on
       // the in-place swap. A failed slot becomes terminal and surfaces as
-      // `undefined` per-slot — `getRelationship` is the only way to read its
+      // `undefined` per-slot — `getRelationshipMembershipState` is the only way to read its
       // structured failure state.
       for (let entry of rawEntries) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
@@ -1810,7 +1784,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // Treat a non-present whole-field sentinel as an empty plural for index
     // purposes; the broken reference is preserved on the wire via the
     // serializer (`relationships.{field}` carries the sentinel's `reference`),
-    // and `getRelationship` is the structured read surface for the failure
+    // and `getRelationshipMembershipState` is the structured read surface for the failure
     // state outside the index.
     if (isNonPresentLink(instances)) {
       return null;
@@ -2031,7 +2005,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveRef(store, reference, relativeTo);
+        let normalizedReference = resolveRef(
+          store.virtualNetwork,
+          reference,
+          relativeTo,
+        );
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2201,7 +2179,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
 // is a terminal failure (`error` / `not-found`). Every other kind — including
 // `not-loaded` and `not-set`, which the field getter also surfaces as
 // `undefined` — yields `undefined` here so the caller falls through to the
-// normal render path. `getRelationship` is a pure read (it never retriggers
+// normal render path. `getRelationshipMembershipState` is a pure read (it never retriggers
 // `lazilyLoadLink`), so this is the single call per render that distinguishes a
 // broken link from an absent one.
 function brokenSingularLink(
@@ -2212,12 +2190,9 @@ function brokenSingularLink(
   if (owner == null) {
     return undefined;
   }
-  let state = getRelationship(owner, fieldName);
-  if (Array.isArray(state)) {
-    return undefined;
-  }
-  if (state.kind === 'error' || state.kind === 'not-found') {
-    return state;
+  let slot = getRelationshipMembershipState(owner, fieldName).membership?.[0];
+  if (slot && (slot.kind === 'error' || slot.kind === 'not-found')) {
+    return slot;
   }
   return undefined;
 }
@@ -2332,7 +2307,6 @@ export function containsMany<FieldT extends FieldDefConstructor>(
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
-      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2353,7 +2327,6 @@ export function contains<FieldT extends FieldDefConstructor>(
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
-      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2380,7 +2353,6 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
-      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2407,7 +2379,6 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
-      (instance as any).edit = options?.edit;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2489,7 +2460,7 @@ export class BaseDef {
           return maybeRelativeReference;
         }
         return resolveRef(
-          getStore(value),
+          getStore(value).virtualNetwork,
           maybeRelativeReference,
           value[relativeTo],
         );
@@ -2516,7 +2487,7 @@ export class BaseDef {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
               normalizedId = resolveRef(
-                getStore(value),
+                getStore(value).virtualNetwork,
                 normalizedId,
                 value[relativeTo],
               );
@@ -3489,7 +3460,11 @@ function lazilyLoadLink(
     inflightLinkLoads.set(instance, inflightLoads);
   }
   let store = getStore(instance);
-  let reference = resolveRef(store, link, instance.id ?? instance[relativeTo]);
+  let reference = resolveRef(
+    store.virtualNetwork,
+    link,
+    instance.id ?? instance[relativeTo],
+  );
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   if (promise) {
@@ -3498,6 +3473,8 @@ function lazilyLoadLink(
   }
   let deferred = new Deferred<void>();
   inflightLoads.set(key, deferred.promise);
+  // Surface the in-flight state to `getRelationshipMembershipState(...).isLoading` observers.
+  bumpFieldLoadingSignal(instance, field.name);
   store.trackLoad(
     // we wrap the promise with a catch that will prevent the rejections from bubbling up but
     // not interfere with the original deferred. this prevents QUnit from being really noisy
@@ -3561,7 +3538,7 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store,
+            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3627,7 +3604,7 @@ function lazilyLoadLink(
       // array slot(s) (plural), replacing the legacy `field = null` write. The
       // field getter surfaces these as `undefined` to userland — the same
       // surface a not-loaded link produces — and never retriggers the loader
-      // for them; `getRelationship` is the only way to read the structured
+      // for them; `getRelationshipMembershipState` is the only way to read the structured
       // failure from outside this module. HTTP 404 → `link-not-found`, every
       // other failure → `link-error`.
       let errorDoc: SerializedError = {
@@ -3649,7 +3626,7 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store,
+            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3672,9 +3649,64 @@ function lazilyLoadLink(
       if (inflightLoads.size === 0) {
         inflightLinkLoads.delete(instance);
       }
+      // The load settled — re-evaluate `getRelationshipMembershipState(...).isLoading`.
+      bumpFieldLoadingSignal(instance, field.name);
     }
   })();
 }
+
+// Whether a declared `linksTo` / `linksToMany` field has a lazy load in flight
+// right now. Pure read of the in-flight load registry — the observe-only signal
+// behind `getRelationshipMembershipState(...).isLoading` for declared links. A `not-loaded`
+// slot that nothing is fetching is NOT loading.
+function hasInflightLoadForField(
+  instance: CardDef,
+  fieldName: string,
+): boolean {
+  let loads = inflightLinkLoads.get(instance);
+  if (!loads) {
+    return false;
+  }
+  let prefix = `${fieldName}/`;
+  for (let key of loads.keys()) {
+    if (key.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Supply `getRelationshipMembershipState` with the loading status and query-field membership
+// that live above field-support: in-flight link loads (here) and per-field
+// search resources (in query-field-support). Observe-only — this never starts a
+// load or a search; the template's field getter does that.
+registerRelationshipProbe((instance, field) => {
+  // Entangle the reading render with the field's loading signal so a deferred
+  // bump (load start / settle, or query resource creation) re-evaluates this.
+  readFieldLoadingSignal(instance, field.name);
+  if (field.queryDefinition) {
+    let resource = peekQueryFieldSearchResource(instance, field.name);
+    let isLoading = resource?.isLoading ?? false;
+    let bucketEntry = getDataBucket(instance).get(field.name);
+    let queryMembership: RelationshipState[] | undefined;
+    if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+      // A search that failed as a unit surfaces one whole-field sentinel —
+      // independent of whether a live resource exists (it may have been planted
+      // directly), so this takes precedence.
+      queryMembership = [relationshipStateForEntry(bucketEntry)];
+    } else if (!isLoading && resource) {
+      queryMembership = (resource.instances ?? []).map((card) =>
+        relationshipStateForEntry(card),
+      );
+    }
+    // Otherwise membership stays undefined: in flight, or never queried.
+    return { isLoading, isQueryField: true, queryMembership };
+  }
+  return {
+    isLoading: hasInflightLoadForField(instance, field.name),
+    isQueryField: false,
+  };
+});
 
 // Replace any linksTo / linksToMany bucket entry on `consumer` that points
 // to `deletedRef` with a `link-not-found` sentinel, and notify subscribers
@@ -4695,30 +4727,34 @@ function getStore(instance: BaseDef): CardStore {
 }
 
 // The VirtualNetwork associated with an instance's store, for prefix/RRI
-// resolution outside this module. Returns undefined when the store can't
-// supply one — callers handle that by degrading to URL math or throwing.
+// resolution outside this module. Returns undefined when the instance is
+// detached (no store, no loader-attached VN) — callers handle that by
+// degrading to URL math or throwing.
 export function virtualNetworkFor(
   instance: BaseDef,
 ): VirtualNetwork | undefined {
-  return getStore(instance).virtualNetwork;
+  try {
+    return getStore(instance).virtualNetwork;
+  } catch {
+    return undefined;
+  }
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the store's VirtualNetwork. When the store doesn't carry
-// a VN (test stubs, detached instances), fall back to plain URL math: it
+// string through the supplied VirtualNetwork. When the caller can't supply
+// one (test stubs, detached instances), fall back to plain URL math: it
 // covers URL-form refs and relative refs against URL-form bases. Prefix-form
 // refs and refs against prefix-form bases can't be resolved without a VN —
 // `new URL()` throws on those, so we return the raw reference unchanged
 // instead of bubbling the error to callers (e.g. relationship deserialize
 // uses the returned string as a "did this resolve?" signal).
 function resolveRef(
-  store: CardStore | undefined,
+  virtualNetwork: VirtualNetwork | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
-  let vn = store?.virtualNetwork;
-  if (vn) {
-    return vn.resolveURL(reference, relativeTo).href;
+  if (virtualNetwork) {
+    return virtualNetwork.resolveURL(reference, relativeTo).href;
   }
   let base: URL | string | undefined;
   if (relativeTo instanceof URL) {
@@ -4755,8 +4791,14 @@ class FallbackCardStore implements CardStore {
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
-  get virtualNetwork(): VirtualNetwork | undefined {
-    return myLoader().getVirtualNetwork();
+  get virtualNetwork(): VirtualNetwork {
+    let vn = myLoader().getVirtualNetwork();
+    if (!vn) {
+      throw new Error(
+        `FallbackCardStore.virtualNetwork requires the active Loader to have a VirtualNetwork`,
+      );
+    }
+    return vn;
   }
 
   getCard(id: string) {
@@ -4817,13 +4859,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let vn = this.virtualNetwork;
-    if (!vn) {
-      throw new Error(
-        `CardStore.loadCardDocument requires a Loader with a VirtualNetwork`,
-      );
-    }
-    let promise = loadCardDocument(fetch, url, vn);
+    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }
@@ -4833,13 +4869,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let vn = this.virtualNetwork;
-    if (!vn) {
-      throw new Error(
-        `CardStore.loadFileMetaDocument requires a Loader with a VirtualNetwork`,
-      );
-    }
-    let promise = loadFileMetaDocument(fetch, url, vn);
+    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
     this.trackLoad(promise);
     return await promise;
   }

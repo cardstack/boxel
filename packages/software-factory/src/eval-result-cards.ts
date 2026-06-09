@@ -1,7 +1,7 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { readCard, writeCard } from './workspace-fs';
+import { readCard, writeCard } from './workspace-fs.ts';
 
 // ---------------------------------------------------------------------------
 // Types

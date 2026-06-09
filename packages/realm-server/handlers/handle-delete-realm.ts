@@ -23,17 +23,17 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   removeRealmDatabaseArtifacts,
   removeRealmFiles,
-} from './realm-destruction-utils';
+} from './realm-destruction-utils.ts';
 import {
   deletePublishedRowsBySourceUrl,
   deleteRegistryRowByUrl,
-} from '../lib/realm-registry-writes';
+} from '../lib/realm-registry-writes.ts';
 
 interface DeleteRealmJSON {
   data: {

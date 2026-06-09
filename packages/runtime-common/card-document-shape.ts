@@ -6,21 +6,21 @@
  * to know whether a payload *looks* like a card document can import them
  * without pulling the transitive runtime chain rooted at
  * `resource-types.ts` → `realm-identifiers.ts` → `loader.ts` →
- * `realm.ts` → `realm-index-query-engine.ts`. The latter uses
- * `@Memoize()` decorators that some downstream TS loaders (notably
- * Playwright's) can't compile.
+ * `realm.ts` → `realm-index-query-engine.ts` — a heavy, Node-oriented
+ * chain that lightweight callers (e.g. browser or Playwright loaders)
+ * should not have to pull in just to shape-check a payload.
  *
  * This module only `import type`s from those neighbors — all runtime
  * type-guards are defined inline — so it has no runtime dependency on
- * anything that reaches the decorator chain.
+ * that chain.
  *
  * The original `code-ref.ts` / `resource-types.ts` / `document-types.ts`
  * re-export these predicates for backward compat, so existing imports
- * keep working; new callers that must avoid the decorator chain should
+ * keep working; new callers that must avoid the heavy chain should
  * import from `@cardstack/runtime-common/card-document-shape` directly.
  */
 
-import type { CodeRef, ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type {
   CardFields,
   CardResource,
@@ -30,11 +30,11 @@ import type {
   Relationship,
   RenderedHtmlResource,
   Saved,
-} from './resource-types';
+} from './resource-types.ts';
 import type {
   CardCollectionDocument,
   SingleCardDocument,
-} from './document-types';
+} from './document-types.ts';
 
 // Inlined — reading these via a runtime `import` from `resource-types.ts`
 // would pull in `code-ref.ts` → `loader.ts`, which is exactly the

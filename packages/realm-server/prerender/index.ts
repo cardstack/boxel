@@ -1,2 +1,2 @@
-export * from './prerenderer';
-export { buildCreatePrerenderAuth } from './auth';
+export * from './prerenderer.ts';
+export { buildCreatePrerenderAuth } from './auth.ts';

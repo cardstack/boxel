@@ -1,8 +1,8 @@
 import * as childProcess from 'child_process';
 
-import { loginUser } from '../support/synapse';
-import { ensureUserRecord } from '../helpers/ensure-user-record';
-import { getSynapseContainerName } from '../support/environment-config';
+import { loginUser } from '../support/synapse/index.ts';
+import { ensureUserRecord } from '../helpers/ensure-user-record.ts';
+import { getSynapseContainerName } from '../support/environment-config.ts';
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
 

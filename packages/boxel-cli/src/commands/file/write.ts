@@ -4,12 +4,12 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
+} from '../../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
-import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
-import { cliLog } from '../../lib/cli-log';
+import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
+import { cliLog } from '../../lib/cli-log.ts';
 
 export interface WriteResult {
   ok: boolean;

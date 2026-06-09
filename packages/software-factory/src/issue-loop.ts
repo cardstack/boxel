@@ -18,15 +18,15 @@ import type {
   SchedulableIssue,
   ValidationResults,
   ValidationStepResult,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
-import type { LoopAgent } from './factory-agent';
-import type { FactoryTool, ToolCallEntry } from './factory-tool-builder';
-import type { IssueStore } from './issue-scheduler';
+import type { LoopAgent } from './factory-agent/index.ts';
+import type { FactoryTool, ToolCallEntry } from './factory-tool-builder.ts';
+import type { IssueStore } from './issue-scheduler.ts';
 
-import { IssueScheduler } from './issue-scheduler';
-import { logger } from './logger';
-import { retryWithPoll } from './retry-with-poll';
+import { IssueScheduler } from './issue-scheduler.ts';
+import { logger } from './logger.ts';
+import { retryWithPoll } from './retry-with-poll.ts';
 
 let log = logger('issue-loop');
 
@@ -68,7 +68,7 @@ export {
   createDefaultPipeline,
   type ValidationStepRunner,
   type ValidationPipelineConfig,
-} from './validators/validation-pipeline';
+} from './validators/validation-pipeline.ts';
 
 // ---------------------------------------------------------------------------
 // Context builder interface for issue-driven loop

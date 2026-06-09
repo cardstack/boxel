@@ -14,25 +14,25 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
 import {
   discoverRealmSpecs,
   instantiateRealmSpecs,
   type InstantiateCardFn,
   type InstanceInstantiationRecord,
   type SpecInfo,
-} from '../instantiate-execution';
+} from '../instantiate-execution.ts';
 import {
   createInstantiateResult,
   completeInstantiateResult,
   type InstantiateCardEntryData,
-} from '../instantiate-result-cards';
-import { logger } from '../logger';
+} from '../instantiate-result-cards.ts';
+import { logger } from '../logger.ts';
 
-import { getNextValidationSequenceNumber } from '../realm-operations';
+import { getNextValidationSequenceNumber } from '../realm-operations.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
 
 let log = logger('instantiate-validation-step');
 
@@ -43,7 +43,7 @@ let log = logger('instantiate-validation-step');
 export type {
   InstantiateModuleResult,
   SpecInfo,
-} from '../instantiate-execution';
+} from '../instantiate-execution.ts';
 
 export interface InstantiateValidationStepConfig {
   client: BoxelCLIClient;

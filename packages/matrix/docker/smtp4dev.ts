@@ -3,7 +3,7 @@ import {
   dockerRun,
   dockerStop,
   dockerRm,
-} from '../support/docker';
+} from '../support/docker.ts';
 
 interface Options {
   mailClientPort?: number;

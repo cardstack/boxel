@@ -2,10 +2,10 @@ import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { runEvaluateInMemory } from '../src/eval-execution';
-import { buildTestClient } from './helpers/test-client';
+import { runEvaluateInMemory } from '../src/eval-execution.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

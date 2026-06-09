@@ -9,8 +9,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 import jwt from 'jsonwebtoken';
-import './setup-logger';
-import { logger } from './logger';
+import './setup-logger.ts';
+import { logger } from './logger.ts';
 
 // Strip ambient env vars that could break the hermetic test seal.
 // The harness always passes its own listen ports and should control
@@ -837,7 +837,7 @@ export {
   fileExists,
   findRootRepoCheckoutDir,
   findHostDistPackageDir,
-} from './host-dist';
+} from './host-dist.ts';
 
 export function browserPassword(username: string): string {
   let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
