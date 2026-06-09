@@ -1,12 +1,12 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { createServer } from 'http';
-import { createRemotePrerenderer } from '../prerender/remote-prerenderer';
+import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
-} from '../prerender/prerender-constants';
+} from '../prerender/prerender-constants.ts';
 
 module(basename(__filename), function (hooks) {
   hooks.afterEach(function () {

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
-import { TabQueue } from '../prerender/page-pool';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
+import { TabQueue } from '../prerender/page-pool.ts';
 
 // Priority-aware dequeue for both `AsyncSemaphore` (the per-server
 // render-cap + per-affinity file-admission) and `TabQueue` (the per-

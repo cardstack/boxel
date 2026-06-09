@@ -11,9 +11,9 @@ import type {
   Room,
   RoomMember,
 } from 'matrix-js-sdk';
-import type { GitHubClient } from '../lib/github';
-import { onMembershipEvent } from '../lib/membership-handler';
-import { onTimelineEvent } from '../lib/timeline-handler';
+import type { GitHubClient } from '../lib/github.ts';
+import { onMembershipEvent } from '../lib/membership-handler.ts';
+import { onTimelineEvent } from '../lib/timeline-handler.ts';
 
 function makeBotTriggerEvent(
   sender: string | null | undefined,

@@ -1,4 +1,4 @@
-import { query, param, type DBAdapter, type Expression } from './index';
+import { query, param, type DBAdapter, type Expression } from './index.ts';
 
 // Returns created_at (epoch seconds) or undefined if not found
 export async function getCreatedTime(

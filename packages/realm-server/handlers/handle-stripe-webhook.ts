@@ -1,7 +1,10 @@
 import type Koa from 'koa';
-import { fetchRequestFromContext, setContextResponse } from '../middleware';
+import {
+  fetchRequestFromContext,
+  setContextResponse,
+} from '../middleware/index.ts';
 import stripeWebhookHandler from '@cardstack/billing/stripe-webhook-handlers';
-import type { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleStripeWebhookRequest({
   dbAdapter,

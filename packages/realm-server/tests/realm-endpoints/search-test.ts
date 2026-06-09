@@ -7,7 +7,7 @@ import {
   setupPermissionedRealmCached,
   createJWT,
   testRealmURLFor,
-} from '../helpers';
+} from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {

@@ -8,18 +8,18 @@ import type {
   RealmPermissions,
   DefinitionLookup,
   VirtualNetwork,
-} from '../index';
-import type { JobInfo, IndexingProgressEvent } from '../worker';
-export type * from './lint';
+} from '../index.ts';
+import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
+export type * from './lint.ts';
 export * from '#lint-task';
-export * from './full-reindex';
-export * from './daily-credit-grant';
-export * from './copy';
-export * from './indexer';
-export * from './run-command';
-export * from './screenshot-card';
+export * from './full-reindex.ts';
+export * from './daily-credit-grant.ts';
+export * from './copy.ts';
+export * from './indexer.ts';
+export * from './run-command.ts';
+export * from './screenshot-card.ts';
 
-type LoggerInstance = ReturnType<typeof import('../index').logger>;
+type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
 
 export interface TaskArgs {
   dbAdapter: DBAdapter;

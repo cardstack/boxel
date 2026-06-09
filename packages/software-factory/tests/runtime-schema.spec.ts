@@ -10,14 +10,14 @@
  * in the source realm (software-factory/).
  */
 
-import { test } from './fixtures';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
 
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
-import { buildTestClient } from './helpers/test-client';
+import { fetchCardTypeSchema } from '../src/darkfactory-schemas.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';

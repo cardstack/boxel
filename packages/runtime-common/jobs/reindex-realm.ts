@@ -1,9 +1,9 @@
-import type { DBAdapter, QueuePublisher } from '../';
-import { param, query } from '../';
+import type { DBAdapter, QueuePublisher } from '..//index.ts';
+import { param, query } from '..//index.ts';
 import {
   FROM_SCRATCH_JOB_TIMEOUT_SEC,
   type FromScratchResult,
-} from '../tasks/indexer';
+} from '../tasks/indexer.ts';
 
 interface EnqueueReindexRealmJobOptions {
   clearLastModified?: boolean;

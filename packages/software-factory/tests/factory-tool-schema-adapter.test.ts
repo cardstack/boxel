@@ -4,8 +4,8 @@ import { z, type ZodObject } from 'zod';
 import {
   adaptFactoryToolsToZod,
   jsonSchemaToZodShape,
-} from '../src/factory-tool-schema-adapter';
-import type { FactoryTool } from '../src/factory-tool-builder';
+} from '../src/factory-tool-schema-adapter.ts';
+import type { FactoryTool } from '../src/factory-tool-builder.ts';
 
 function makeTool(
   name: string,

@@ -40,7 +40,7 @@ import type {
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import { createJWT, verifyJWT } from './jwt';
+import { createJWT, verifyJWT } from './jwt.ts';
 
 const realmEventsLog = logger('realm:events');
 

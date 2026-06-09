@@ -17,7 +17,7 @@
 import { writeFileSync, readFileSync, mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
-import { fixturesDir, repoRoot } from './paths';
+import { fixturesDir, repoRoot } from './paths.ts';
 
 const baseDir = path.join(repoRoot, 'packages/base');
 
@@ -39,7 +39,7 @@ const fixtures: { name: string; file: string }[] = [
   // `.ts` extension via require.
   const { transpileJS } =
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('../../transpile') as typeof import('../../transpile');
+    require('../../transpile') as typeof import('../../transpile.ts');
 
   mkdirSync(fixturesDir, { recursive: true });
 

@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { NetworkInflightTracker } from '../prerender/network-inflight-tracker';
+import { NetworkInflightTracker } from '../prerender/network-inflight-tracker.ts';
 
 // The tracker is the one render-hang signal that survives a wedged page
 // JS thread: a passive CDP-side map of in-flight requests, read only on

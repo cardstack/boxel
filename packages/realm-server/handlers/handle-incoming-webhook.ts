@@ -16,9 +16,9 @@ import {
   sendResponseForNotFound,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import type { CreateRoutesArgs } from '../routes';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 const SUPPORTED_VERIFICATION_TYPES = ['HMAC_SHA256_HEADER'] as const;
 

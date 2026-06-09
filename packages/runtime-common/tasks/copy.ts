@@ -1,12 +1,12 @@
-import type { Task, WorkerArgs } from './index';
+import type { Task, WorkerArgs } from './index.ts';
 
-import { jobIdentity } from '../index';
+import { jobIdentity } from '../index.ts';
 import {
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
-} from '../queue';
+} from '../queue.ts';
 
 export { copy };
 

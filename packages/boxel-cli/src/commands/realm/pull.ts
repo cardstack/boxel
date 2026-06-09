@@ -1,13 +1,13 @@
 import type { Command } from 'commander';
-import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base';
+import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

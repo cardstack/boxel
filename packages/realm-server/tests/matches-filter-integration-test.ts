@@ -10,7 +10,7 @@ import {
   type DefinitionLookup,
 } from '@cardstack/runtime-common';
 
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 
 const testRealmURL = 'http://matches-filter-test/';
 

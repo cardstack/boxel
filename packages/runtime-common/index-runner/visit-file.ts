@@ -17,10 +17,10 @@ import {
   type RenderRouteOptions,
   type RenderVisitResponse,
   type Diagnostics,
-} from '../index';
-import { CardError } from '../error';
-import { resolveFileDefCodeRef } from '../file-def-code-ref';
-import type { VirtualNetwork } from '../virtual-network';
+} from '../index.ts';
+import { CardError } from '../error.ts';
+import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
 
 interface VisitFileFusedOptions {
   url: URL;

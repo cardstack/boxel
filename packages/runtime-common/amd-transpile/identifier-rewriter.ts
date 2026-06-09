@@ -14,7 +14,10 @@
 // thrown away after `run()`. Construction is cheap.
 import type { Program, AnyNode } from 'acorn';
 import type MagicString from 'magic-string';
-import { collectPatternBindings, isReferencePosition } from './pattern-helpers';
+import {
+  collectPatternBindings,
+  isReferencePosition,
+} from './pattern-helpers.ts';
 
 // One scope on the rewriter's scope stack. `function` scopes own `var`
 // / function-decl / parameter bindings; `block` scopes own

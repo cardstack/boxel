@@ -4,8 +4,8 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import type { RealmHttpServer as Server } from '../../server';
-import { closeServer, setupPermissionedRealmCached } from '../helpers';
+import type { RealmHttpServer as Server } from '../../server.ts';
+import { closeServer, setupPermissionedRealmCached } from '../helpers/index.ts';
 
 // CS-10789 end-to-end tests for the markdown rendering pipeline (CS-10782
 // through CS-10787) as served via the realm HTTP endpoint added in CS-10798.

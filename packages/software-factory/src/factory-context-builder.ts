@@ -5,15 +5,15 @@ import type {
   ProjectData,
   TestResult,
   ValidationResults,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
-import type { ResolvedSkill } from './factory-agent';
+import type { ResolvedSkill } from './factory-agent/index.ts';
 
 import {
   enforceSkillBudget,
   type SkillLoaderInterface,
   type SkillResolver,
-} from './factory-skill-loader';
+} from './factory-skill-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Issue relationship loader

@@ -1,7 +1,7 @@
 // Run database migrations and exit. Used to ensure the schema is ready
 // before user registration in environment mode.
 
-import '../setup-logger';
+import '../setup-logger.ts';
 import { PgAdapter } from '@cardstack/postgres';
 
 async function main() {

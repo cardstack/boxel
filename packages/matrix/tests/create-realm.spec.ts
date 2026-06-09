@@ -1,10 +1,10 @@
-import { test, expect } from './fixtures';
-import { appURL } from '../support/isolated-realm-server';
+import { test, expect } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Create Realm via Dashboard', () => {
   test('it can create a new realm', async ({ page }) => {

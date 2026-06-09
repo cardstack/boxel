@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Family",
+        "module": "../family"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "people": [
+        {
+          "firstName": "Mango",
+          "lastName": "A."
+        },
+        {
+          "firstName": "Marco",
+          "lastName": "N."
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

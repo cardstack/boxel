@@ -4,7 +4,7 @@ import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import sinon from 'sinon';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
@@ -16,8 +16,8 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
-import { RealmFileChangesListener } from '../lib/realm-file-changes-listener';
+import { ModuleCacheCoordinator } from '../lib/module-cache-coordination.ts';
+import { RealmFileChangesListener } from '../lib/realm-file-changes-listener.ts';
 import {
   setupPermissionedRealmCached,
   setupDB,
@@ -28,7 +28,7 @@ import {
   testCreatePrerenderAuth,
   withRealmPath,
   type RealmRequest,
-} from './helpers';
+} from './helpers/index.ts';
 
 // CS-11028: regression coverage for the persist-after-invalidate race in
 // Realm.#transpiledModuleCache. The scenario: reader A enters fallbackHandle for

@@ -11,7 +11,7 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import { logger } from '@cardstack/runtime-common';
 
-import { createListener, type RealmHttpServer } from '../server';
+import { createListener, type RealmHttpServer } from '../server.ts';
 
 // Coverage for the realm-server's HTTP/2 listener. Exercises every branch a
 // peer can land in: standard-mode TLS h2 via the same-port dispatcher, TLS

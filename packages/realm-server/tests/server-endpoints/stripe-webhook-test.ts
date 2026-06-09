@@ -16,8 +16,8 @@ import {
   realmSecretSeed,
   realmServerTestMatrix,
   setupPermissionedRealmCached,
-} from '../helpers';
-import { createRealmServerSession } from './helpers';
+} from '../helpers/index.ts';
+import { createRealmServerSession } from './helpers.ts';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   MatrixEvent,

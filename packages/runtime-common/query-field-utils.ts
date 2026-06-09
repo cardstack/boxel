@@ -1,12 +1,12 @@
-import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref';
-import type { VirtualNetwork } from './virtual-network';
-import type { FieldDefinition } from './definitions';
+import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { FieldDefinition } from './definitions.ts';
 import type {
   FileMetaResource,
   LooseCardResource,
   Relationship,
   ResourceID,
-} from './resource-types';
+} from './resource-types.ts';
 import {
   buildQueryParamValue,
   isAnyFilter,
@@ -17,7 +17,7 @@ import {
   type Filter,
   type Query,
   type QueryWithInterpolations,
-} from './query';
+} from './query.ts';
 
 const EMPTY_PREDICATE_KEYS = new Set([
   'eq',

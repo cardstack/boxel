@@ -1,8 +1,8 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createRealm } from '../../src/commands/realm/create';
-import { publishRealm } from '../../src/commands/realm/publish';
-import { unpublishRealm } from '../../src/commands/realm/unpublish';
+import { createRealm } from '../../src/commands/realm/create.ts';
+import { publishRealm } from '../../src/commands/realm/publish.ts';
+import { unpublishRealm } from '../../src/commands/realm/unpublish.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -10,8 +10,8 @@ import {
   setupTestProfile,
   uniqueRealmName,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
-import type { ProfileManager } from '../../src/lib/profile-manager';
+} from '../helpers/integration.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 
 let profileManager: ProfileManager;
 let cleanup: () => void;

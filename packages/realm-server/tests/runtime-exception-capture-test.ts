@@ -1,12 +1,12 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { EventEmitter } from 'events';
-import { attachRuntimeExceptionCapture } from '../prerender/runtime-exception-capture';
+import { attachRuntimeExceptionCapture } from '../prerender/runtime-exception-capture.ts';
 import {
   titleForConsoleErrorEntry,
   stackHeaderForConsoleErrorEntry,
-} from '../prerender/render-runner';
-import type { ConsoleErrorEntry } from '../prerender/page-pool';
+} from '../prerender/render-runner.ts';
+import type { ConsoleErrorEntry } from '../prerender/page-pool.ts';
 
 // Verifies the V8-layer uncaught-exception capture wired up in
 // `runtime-exception-capture.ts`. We test against a fake CDP client

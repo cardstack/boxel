@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 
-import { createServeIndex } from '../handlers/serve-index';
+import { createServeIndex } from '../handlers/serve-index.ts';
 
 function buildDeps(getIndexHTML: () => Promise<string>) {
   return {

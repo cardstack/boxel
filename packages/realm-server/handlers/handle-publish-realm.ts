@@ -34,14 +34,14 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
-} from '../middleware';
-import { createJWT } from '../jwt';
-import type { CreateRoutesArgs } from '../routes';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import { registerUser } from '../synapse';
+} from '../middleware/index.ts';
+import { createJWT } from '../jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import { registerUser } from '../synapse.ts';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
-import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
+import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 
 const log = logger('handle-publish');
 

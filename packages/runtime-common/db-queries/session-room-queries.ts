@@ -1,5 +1,5 @@
-import type { DBAdapter } from '../db';
-import { query, param } from '../expression';
+import type { DBAdapter } from '../db.ts';
+import { query, param } from '../expression.ts';
 
 /**
  * Returns the stored session room id for the given matrix user or null when none exists.

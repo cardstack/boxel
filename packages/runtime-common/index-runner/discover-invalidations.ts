@@ -6,7 +6,7 @@ import {
   type JobInfo,
   type LastModifiedTimes,
   type Reader,
-} from '../index';
+} from '../index.ts';
 
 interface DiscoverInvalidationsOptions {
   url: URL;

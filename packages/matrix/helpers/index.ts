@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { Credentials } from '../support/synapse';
+import type { Credentials } from '../support/synapse/index.ts';
 import {
   loginUser,
   getAllRoomEvents,
@@ -9,11 +9,11 @@ import {
   sync,
   updateUser,
   type UpdateUserOptions,
-} from '../support/synapse';
-import { realmPassword } from './realm-credentials';
-import type { SQLExecutor } from '../support/isolated-realm-server';
-import { appURL, BasicSQLExecutor } from '../support/isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants';
+} from '../support/synapse/index.ts';
+import { realmPassword } from './realm-credentials.ts';
+import type { SQLExecutor } from '../support/isolated-realm-server.ts';
+import { appURL, BasicSQLExecutor } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 import { randomUUID } from 'crypto';
 
 export const testHost = 'https://localhost:4205/test';

@@ -15,7 +15,7 @@ import {
   RealmPaths,
   rri,
 } from '@cardstack/runtime-common';
-import { testRealm } from './helpers';
+import { testRealm } from './helpers/index.ts';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
 const virtualNetwork = new VirtualNetwork();
