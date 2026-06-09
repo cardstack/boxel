@@ -211,7 +211,7 @@ function adjustSeedInstructions(brief: FactoryBrief): {
   let instructions = [
     `## Mode: ADJUST EXISTING CARD`,
     ``,
-    `This brief carries a \`sourceCardUrl\`, so you are **improving an existing**`,
+    `This brief carries a \`sourceCardUrl\`, so you are **adjusting an existing**`,
     `card rather than building one from scratch. Follow the "Adjust flow"`,
     `section of the \`software-factory-bootstrap\` skill. The steps:`,
     ``,

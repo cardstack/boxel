@@ -1,10 +1,7 @@
 # Adjust-existing-card flow — contract & brief schema
 
-> **Status:** foundational design note for the "Software factory for
-> improving existing cards" project (CS-11399). It locks the contract
-> the implementation tickets (CS-11400–CS-11407) build on. No code
-> ships from this ticket; the schema/skill changes it specifies land
-> in the tickets it blocks.
+> Design note for the adjust-existing-card flow — the contract between the
+> brief, the seed-from-source bootstrap step, and the adjustment issue loop.
 
 ## Goal
 
@@ -39,7 +36,7 @@ Everything from the scheduler down is shared.
 The brief is a `Wiki` card (`realm/wiki.gts`). Add one optional field:
 
 ```ts
-// realm/wiki.gts — added by the bootstrap-flavor work (CS-11403)
+// realm/wiki.gts
 @field sourceCardUrl = contains(StringField);   // optional
 ```
 
@@ -76,8 +73,8 @@ A string field has no referential integrity, no realm-index dependency
 edge, and no host-UI navigation. We accept that because the adjust
 flow fetches the URL at seed time anyway:
 
-- **Validate at seed time, fail loud.** The bootstrap step (CS-11401)
-  must fetch the source card before seeding. A missing, malformed, or
+- **Validate at seed time, fail loud.** The bootstrap step must fetch
+  the source card before seeding. A missing, malformed, or
   unreachable `sourceCardUrl` is a hard bootstrap failure with a clear
   message — not a silent greenfield fallback. (A typo'd URL must never
   be mistaken for "no source card.")
@@ -96,7 +93,7 @@ currently `bootstrap, feature, bug, task, research, infrastructure`).
 Add:
 
 ```ts
-// realm/kanban-config.gts — added by CS-11403/CS-11404
+// realm/kanban-config.gts
 export const issueTypeOptions: Option[] = [
   { value: 'bootstrap', label: 'Bootstrap' },
   { value: 'feature', label: 'Feature' }, // greenfield implementation
@@ -162,20 +159,16 @@ read brief
                                     its same-realm dependency graph
                                     (modules, sample instances,
                                     Catalog Spec, co-located tests)
-                                    — CS-11400 (ingestion) + CS-11401
-                                    (seed)
                                  2. confirm a GREEN BASELINE: run the
                                     standard validators on the seeded
                                     card; they must all pass before any
                                     adjustment Issue is created
-                                    — CS-11401
                                  3. write a baseline Knowledge Article
                                     capturing source provenance (where
-                                    the copy came from) — CS-11402
+                                    the copy came from)
                                  4. create Project, IssueTracker,
                                     Knowledge Articles, and one
                                     `adjustment` Issue per delta
-                                    — CS-11403
 ```
 
 The seed + green-baseline sub-phase has **no greenfield analog**, but
@@ -195,9 +188,9 @@ software-factory-scheduling   pick next eligible Issue (status,
         ▼
 software-factory-operations   dispatch on issueType:
         │                       feature    → greenfield operations
-        │                       adjustment → adjustment operations
-        │                                    (CS-11404): edit existing
-        │                                    files, preserve baseline
+        │                       adjustment → adjustment operations:
+        │                                    edit existing files,
+        │                                    preserve the baseline
         ▼
 the five validators           lint, parse, evaluate, instantiate,
                               test — IDENTICAL, same Validations/
@@ -219,29 +212,11 @@ What is **shared, untouched** between the two flows:
 
 What is **new or flavored** for adjust:
 
-- The seed + green-baseline + provenance sub-phase inside bootstrap
-  (CS-11400, CS-11401, CS-11402).
-- An adjustment-flavored bootstrap that emits `adjustment` Issues
-  (CS-11403).
+- The seed + green-baseline + provenance sub-phase inside bootstrap.
+- An adjustment-flavored bootstrap that emits `adjustment` Issues.
 - An adjustment-flavored operations skill that **edits** seeded files
-  and guards the baseline instead of creating cards from scratch
-  (CS-11404).
+  and guards the baseline instead of creating cards from scratch.
 
 This is the precise sense in which adjust is a **superset**: the only
 new control flow is one bootstrap sub-phase and one `issueType`-keyed
 dispatch; everything downstream is the existing loop.
-
----
-
-## Reference map for the implementation tickets
-
-| Ticket   | Builds on this note                                                              |
-| -------- | -------------------------------------------------------------------------------- |
-| CS-11400 | Same-server ingestion capability — crawls the `sourceCardUrl` dependency graph   |
-| CS-11401 | Seeds the target realm from the source card; confirms the green baseline         |
-| CS-11402 | Baseline Knowledge Article + source provenance (where the seeded copy came from) |
-| CS-11403 | Adjustment-flavored bootstrap — reads `sourceCardUrl`, emits `adjustment` Issues |
-| CS-11404 | Adjustment-flavored operations — edits seeded files, preserves the baseline      |
-| CS-11405 | Runbook + prompt for the adjust flow (still 2-input)                             |
-| CS-11406 | E2E fixture + Playwright covering the seed-from-source path                      |
-| CS-11407 | Architecture doc + diagram update for the seed-from-source sub-phase             |
