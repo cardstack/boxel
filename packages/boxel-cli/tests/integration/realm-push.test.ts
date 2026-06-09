@@ -1,24 +1,24 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { pushCommand } from '../../src/commands/realm/push';
-import { createRealm } from '../../src/commands/realm/create';
-import { CheckpointManager } from '../../src/lib/checkpoint-manager';
+import { pushCommand } from '../../src/commands/realm/push.ts';
+import { createRealm } from '../../src/commands/realm/create.ts';
+import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupTestProfile,
   uniqueRealmName,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 import {
   TINY_PNG_BYTES,
   TINY_PDF_BYTES,
   TINY_MP3_BYTES,
-} from '../helpers/binary-fixtures';
-import type { ProfileManager } from '../../src/lib/profile-manager';
+} from '../helpers/binary-fixtures.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;

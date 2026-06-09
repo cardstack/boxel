@@ -4,10 +4,10 @@ import type {
   Prerenderer,
   QueuePublisher,
   RunCommandResponse,
-} from '../index';
-import type { SharedTests } from '../helpers';
-import type { TaskArgs } from '../tasks';
-import { runCommand } from '../tasks/run-command';
+} from '../index.ts';
+import type { SharedTests } from '../helpers/index.ts';
+import type { TaskArgs } from '../tasks/index.ts';
+import { runCommand } from '../tasks/run-command.ts';
 
 function makeDBAdapter(
   rows: Record<string, unknown>[],

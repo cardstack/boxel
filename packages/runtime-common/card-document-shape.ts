@@ -6,33 +6,35 @@
  * to know whether a payload *looks* like a card document can import them
  * without pulling the transitive runtime chain rooted at
  * `resource-types.ts` → `realm-identifiers.ts` → `loader.ts` →
- * `realm.ts` → `realm-index-query-engine.ts`. The latter uses
- * `@Memoize()` decorators that some downstream TS loaders (notably
- * Playwright's) can't compile.
+ * `realm.ts` → `realm-index-query-engine.ts` — a heavy, Node-oriented
+ * chain that lightweight callers (e.g. browser or Playwright loaders)
+ * should not have to pull in just to shape-check a payload.
  *
  * This module only `import type`s from those neighbors — all runtime
  * type-guards are defined inline — so it has no runtime dependency on
- * anything that reaches the decorator chain.
+ * that chain.
  *
  * The original `code-ref.ts` / `resource-types.ts` / `document-types.ts`
  * re-export these predicates for backward compat, so existing imports
- * keep working; new callers that must avoid the decorator chain should
+ * keep working; new callers that must avoid the heavy chain should
  * import from `@cardstack/runtime-common/card-document-shape` directly.
  */
 
-import type { CodeRef, ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type {
   CardFields,
   CardResource,
+  CssResource,
   FileMetaResource,
   Meta,
   Relationship,
+  RenderedHtmlResource,
   Saved,
-} from './resource-types';
+} from './resource-types.ts';
 import type {
   CardCollectionDocument,
   SingleCardDocument,
-} from './document-types';
+} from './document-types.ts';
 
 // Inlined — reading these via a runtime `import` from `resource-types.ts`
 // would pull in `code-ref.ts` → `loader.ts`, which is exactly the
@@ -42,6 +44,8 @@ import type {
 // `FileMetaResource['type']` field types.
 const CardResourceType: CardResource['type'] = 'card';
 const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
+const RenderedHtmlResourceType: RenderedHtmlResource['type'] = 'rendered-html';
+const CssResourceType: CssResource['type'] = 'css';
 
 // ---------------------------------------------------------------------------
 // Code refs
@@ -279,6 +283,69 @@ export function isFileMetaResource(
   }
   let { adoptsFrom } = meta;
   return isCodeRef(adoptsFrom);
+}
+
+export function isRenderedHtmlResource(
+  resource: any,
+): resource is RenderedHtmlResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== RenderedHtmlResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
+    return false;
+  }
+  if (
+    typeof attributes.html !== 'string' ||
+    typeof attributes.cardType !== 'string'
+  ) {
+    return false;
+  }
+  // The has-many `styles` relationship is part of the type, so a sound guard
+  // must confirm it before a consumer reads the stylesheet links.
+  let styles = resource.relationships?.styles;
+  return Boolean(styles && Array.isArray(styles.data));
+}
+
+export function isCssResource(resource: any): resource is CssResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== CssResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  if (typeof resource.attributes !== 'object' || resource.attributes == null) {
+    return false;
+  }
+  return typeof resource.attributes.href === 'string';
+}
+
+// An "identity-only" card: the server's representation for an HTML-backed
+// result — identity (`id`/`meta`/`links.self`) plus a `rendered-html`
+// relationship, with the live serialization deliberately withheld (no
+// `attributes`; hydration fetches it on demand).
+//
+// The definitive signal is the explicit `meta.identityOnly` flag the server
+// stamps on the wire — NOT the absence of `attributes`, which is a weak tell
+// (a full card with only relationship-typed fields can also serialize without
+// `attributes`). The flag means a consumer must not treat this resource as a
+// complete instance (it must not enter the Store; hydrate via `links.self`).
+export function isIdentityOnlyCardResource(
+  resource: any,
+): resource is CardResource {
+  if (!isCardResource(resource)) {
+    return false;
+  }
+  return resource.meta?.identityOnly === true;
 }
 
 // ---------------------------------------------------------------------------

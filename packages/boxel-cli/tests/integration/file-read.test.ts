@@ -1,18 +1,18 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { read } from '../../src/commands/file/read';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { read } from '../../src/commands/file/read.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
-import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
+} from '../helpers/integration.ts';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;

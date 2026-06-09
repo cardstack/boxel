@@ -13,11 +13,11 @@ import type {
   ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 
-import handleScreenshotCard from '../handlers/handle-screenshot-card';
-import type { CreateRoutesArgs } from '../routes';
-import { jwtMiddleware } from '../middleware';
-import { createJWT } from '../utils/jwt';
-import { realmSecretSeed } from './helpers';
+import handleScreenshotCard from '../handlers/handle-screenshot-card.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { jwtMiddleware } from '../middleware/index.ts';
+import { createJWT } from '../utils/jwt.ts';
+import { realmSecretSeed } from './helpers/index.ts';
 
 module(basename(__filename), function () {
   module('/_screenshot-card endpoint', function () {

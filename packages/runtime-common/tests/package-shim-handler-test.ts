@@ -1,4 +1,4 @@
-import type { SharedTests } from '../helpers';
+import type { SharedTests } from '../helpers/index.ts';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
@@ -7,7 +7,7 @@ import {
   isRetryableShimResolveError,
   withResolveRetry,
   type ShimRetryLogger,
-} from '../package-shim-handler';
+} from '../package-shim-handler.ts';
 
 // No-op logger so the retry-focused tests don't print warn/debug
 // noise to CI output. The realm-server harness defaults to

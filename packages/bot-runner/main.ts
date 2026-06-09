@@ -1,12 +1,12 @@
-import './instrument';
-import './setup-logger'; // This should be first
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-import { onMembershipEvent } from './lib/membership-handler';
-import { onTimelineEvent } from './lib/timeline-handler';
-import { createGitHubClientFromEnv } from './lib/github';
+import { onMembershipEvent } from './lib/membership-handler.ts';
+import { onTimelineEvent } from './lib/timeline-handler.ts';
+import { createGitHubClientFromEnv } from './lib/github.ts';
 import { cleanupOrphanedSubmissionTemps } from '@cardstack/runtime-common/lint/submission-lint';
 
 const log = logger('bot-runner');

@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached } from './helpers';
+import { setupPermissionedRealmCached } from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4452/test/');
 

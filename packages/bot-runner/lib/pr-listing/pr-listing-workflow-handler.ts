@@ -12,9 +12,12 @@ import {
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
-} from './create-listing-pr-handler';
-import type { BotCommandHandler, EnqueueRunCommandFn } from '../command-runner';
-import type { GitHubClient } from '../github';
+} from './create-listing-pr-handler.ts';
+import type {
+  BotCommandHandler,
+  EnqueueRunCommandFn,
+} from '../command-runner.ts';
+import type { GitHubClient } from '../github.ts';
 
 export type LintSubmissionFilesFn = (
   files: SubmissionFile[],
@@ -62,11 +65,11 @@ interface WorkflowContext {
 }
 
 class StepError extends Error {
-  constructor(
-    readonly step: FailedStep,
-    cause: unknown,
-  ) {
+  readonly step: FailedStep;
+
+  constructor(step: FailedStep, cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.step = step;
     this.name = 'StepError';
   }
 }

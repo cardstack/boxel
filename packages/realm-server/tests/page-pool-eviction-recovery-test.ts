@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
+import { PagePool } from '../prerender/page-pool.ts';
 
 // Eviction + shared-context recovery contracts (CS-11140).
 //

@@ -16,13 +16,13 @@ import {
   fixtureDir,
   matrixURL,
   closeServer,
-} from './helpers';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
-import { realmSecretSeed } from './helpers';
+} from './helpers/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { realmSecretSeed } from './helpers/index.ts';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 

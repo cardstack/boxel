@@ -1,15 +1,15 @@
 import { module, test } from 'qunit';
 
-import type { ValidationStepResult } from '../src/factory-agent';
+import type { ValidationStepResult } from '../src/factory-agent/index.ts';
 
 import {
   EvalValidationStep,
   type EvalValidationStepConfig,
   type EvalValidationDetails,
   type EvalModuleResult,
-} from '../src/validators/eval-step';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from '../src/validators/eval-step.ts';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Mock helpers

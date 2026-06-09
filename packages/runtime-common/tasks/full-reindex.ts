@@ -1,18 +1,18 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task } from './index';
+import type { Task } from './index.ts';
 
 import {
   jobIdentity,
   fetchAllRealmsWithOwners,
   systemInitiatedPriority,
-} from '../index';
+} from '../index.ts';
 import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
-} from '../queue';
+} from '../queue.ts';
 
-import { enqueueReindexRealmJob } from '../jobs/reindex-realm';
+import { enqueueReindexRealmJob } from '../jobs/reindex-realm.ts';
 
 export interface RealmReindexTarget extends JSONTypes.Object {
   realmUrl: string;

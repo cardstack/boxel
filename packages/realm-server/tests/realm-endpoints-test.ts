@@ -2,7 +2,7 @@ import QUnit, { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import {
   copySync,
@@ -51,13 +51,13 @@ import {
   testCreatePrerenderAuth,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
+} from './helpers/index.ts';
 import {
   expectIncrementalIndexEvent,
   waitForIncrementalIndexEvent,
-} from './helpers/indexing';
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { RealmServer } from '../server';
+import { RealmServer } from '../server.ts';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 

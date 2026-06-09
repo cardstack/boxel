@@ -1,5 +1,5 @@
-import type { LooseCardResource, Relationship } from './index';
-import { relationshipEntries } from './relationship-utils';
+import type { LooseCardResource, Relationship } from './index.ts';
+import { relationshipEntries } from './relationship-utils.ts';
 import mergeWith from 'lodash/mergeWith';
 
 export function mergeRelationships(

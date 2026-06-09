@@ -1,13 +1,13 @@
-import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index';
-import type { DefinitionCacheEntries } from '../definition-lookup';
-import type { SerializedError } from '../error';
-import type { VirtualNetwork } from '../virtual-network';
-import { canonicalURL } from './dependency-url';
+import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index.ts';
+import type { DefinitionCacheEntries } from '../definition-lookup.ts';
+import type { SerializedError } from '../error.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import { canonicalURL } from './dependency-url.ts';
 import {
   canTraverseRelationshipDependency,
   normalizeDependencyForLookup,
   normalizeStoredDependency,
-} from './dependency-normalization';
+} from './dependency-normalization.ts';
 
 interface IndexBackedDependencyErrorOptions {
   realmURL: URL;
@@ -399,7 +399,8 @@ export class IndexBackedDependencyErrors {
       // Instance→instance error doc propagation terminates here. The consumer
       // stays indexable through the broken-link placeholder render; the
       // referenced instance's error_doc reaches AI / humans via the
-      // placeholder's own `getRelationship(...).reference / .errorDoc` read.
+      // placeholder's own `getRelationshipMembershipState(...)` read — its
+      // `membership[i].reference` / `.errorDoc`.
       if (selected.type === 'instance') {
         continue;
       }

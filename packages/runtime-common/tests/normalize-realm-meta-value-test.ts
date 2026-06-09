@@ -1,8 +1,8 @@
-import type { SharedTests } from '../helpers';
+import type { SharedTests } from '../helpers/index.ts';
 import {
   normalizeRealmMetaValue,
   type CardTypeSummary,
-} from '../index-structure';
+} from '../index-structure.ts';
 
 const personSummary: CardTypeSummary = {
   code_ref: 'http://example.test/realm/person/Person',

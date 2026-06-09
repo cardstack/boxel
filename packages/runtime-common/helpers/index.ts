@@ -1,6 +1,6 @@
 import { parse } from 'date-fns';
 
-export * from './card-type-display-name';
+export * from './card-type-display-name.ts';
 
 export interface SharedTests<T> {
   [testName: string]: (assert: Assert, args: T) => Promise<void>;

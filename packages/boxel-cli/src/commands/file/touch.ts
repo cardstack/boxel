@@ -3,12 +3,12 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { isProtectedFile } from '../../lib/realm-sync-base';
-import { listFiles } from './list';
-import { read } from './read';
-import { write } from './write';
-import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
+} from '../../lib/profile-manager.ts';
+import { isProtectedFile } from '../../lib/realm-sync-base.ts';
+import { listFiles } from './list.ts';
+import { read } from './read.ts';
+import { write } from './write.ts';
+import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
 
 export interface TouchResult {
   ok: boolean;

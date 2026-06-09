@@ -54,8 +54,8 @@ import {
   type RunningFactoryStack,
   type SpawnedProcess,
   type StartedCompatRealmProxy,
-} from './shared';
-import { startHarnessPrerenderServer } from './support-services';
+} from './shared.ts';
+import { startHarnessPrerenderServer } from './support-services.ts';
 
 const { copySync, ensureDirSync } = fsExtra;
 

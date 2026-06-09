@@ -1,7 +1,10 @@
 import type { Command } from 'commander';
-import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
-import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../lib/profile-manager.ts';
+import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
 
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';

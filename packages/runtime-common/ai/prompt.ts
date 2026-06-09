@@ -8,15 +8,15 @@ import type {
   CodePatchCorrectnessFile,
   PromptParts,
   TextContent,
-} from './types';
-import { constructHistory } from './history';
+} from './types.ts';
+import { constructHistory } from './history.ts';
 import {
   downloadFile,
   downloadFileAsBase64DataUrl,
   extractCodePatchBlocks,
   isCommandOrCodePatchResult,
-} from './matrix-utils';
-import { isRecognisedDebugCommand } from './debug';
+} from './matrix-utils.ts';
+import { isRecognisedDebugCommand } from './debug.ts';
 import {
   isImageContentType,
   isPdfContentType,
@@ -24,7 +24,7 @@ import {
   isVideoContentType,
   isTextBasedContentType,
   requiredModality,
-} from './modality';
+} from './modality.ts';
 import type {
   ActiveLLMEvent,
   BoxelContext,
@@ -54,22 +54,26 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
-} from '../matrix-constants';
-import { decodeCommandRequest } from '../commands';
-import type { CommandRequest } from '../commands';
+} from '../matrix-constants.ts';
+import { decodeCommandRequest } from '../commands.ts';
+import type { CommandRequest } from '../commands.ts';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
   CardResource,
   LooseCardResource,
   LooseSingleCardDocument,
-} from '../index';
-import type { ToolChoice } from '../helpers/ai';
-import { logger } from '../log';
+} from '../index.ts';
+import type { ToolChoice } from '../helpers/ai.ts';
+import { logger } from '../log.ts';
 
-import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';
-import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants';
-import { humanReadable } from '../code-ref';
-import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
+import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
+import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
+import { humanReadable } from '../code-ref.ts';
+import {
+  SEARCH_MARKER,
+  REPLACE_MARKER,
+  SEPARATOR_MARKER,
+} from '../constants.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';

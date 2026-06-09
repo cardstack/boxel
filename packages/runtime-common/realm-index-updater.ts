@@ -1,4 +1,3 @@
-import { Memoize } from 'typescript-memoize';
 import {
   IndexWriter,
   Deferred,
@@ -17,15 +16,19 @@ import {
   makeIncrementalArgsWithCallerMetadata,
   mapIncrementalDoneResult,
   type IncrementalIndexEnqueueArgs,
-} from './jobs/indexing';
-import { enqueueReindexRealmJob } from './jobs/reindex-realm';
-import type { FromScratchResult, IncrementalDoneResult } from './tasks/indexer';
-import type { Realm } from './realm';
-import { RealmPaths } from './paths';
+} from './jobs/indexing.ts';
+import { enqueueReindexRealmJob } from './jobs/reindex-realm.ts';
+import type {
+  FromScratchResult,
+  IncrementalDoneResult,
+} from './tasks/indexer.ts';
+import type { Realm } from './realm.ts';
+import { RealmPaths } from './paths.ts';
 import ignore, { type Ignore } from 'ignore';
 
 export class RealmIndexUpdater {
   #realm: Realm;
+  #realmURL: URL | undefined;
   #log = logger('realm-index-updater');
   #ignoreData: Record<string, string> = {};
   // Bumped every time a from-scratch result writes #ignoreData. Concurrent
@@ -78,9 +81,8 @@ export class RealmIndexUpdater {
     return this.#stats;
   }
 
-  @Memoize()
   private get realmURL() {
-    return new URL(this.#realm.url);
+    return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
   private get ignoreMap() {

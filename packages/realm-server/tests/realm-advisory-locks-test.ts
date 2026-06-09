@@ -5,7 +5,7 @@ import {
   hashUserIdForCostLock,
   type PgAdapter,
 } from '@cardstack/postgres';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 
 // Records each event with a relative timestamp so a failed ordering assertion
 // can tell us *when* each entry happened, not just the final order. The

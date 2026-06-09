@@ -1,14 +1,14 @@
-import { test, expect } from './fixtures';
+import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { appURL } from '../support/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
   openRoot,
   postCardSource,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Head tags', () => {
   // These tests mutate shared published-realm/head-tag state in the same

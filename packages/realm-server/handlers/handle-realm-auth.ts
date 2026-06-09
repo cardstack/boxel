@@ -1,6 +1,6 @@
 import type Koa from 'koa';
 
-import type { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes.ts';
 import {
   fetchSessionRoom,
   fetchUserPermissions,
@@ -13,8 +13,11 @@ import {
 } from '@cardstack/runtime-common';
 import type { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
-import { createJWT } from '../jwt';
-import { sendResponseForError, setContextResponse } from '../middleware';
+import { createJWT } from '../jwt.ts';
+import {
+  sendResponseForError,
+  setContextResponse,
+} from '../middleware/index.ts';
 import * as Sentry from '@sentry/node';
 
 export default function handleRealmAuth({

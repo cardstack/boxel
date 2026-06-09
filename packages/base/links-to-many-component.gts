@@ -17,7 +17,10 @@ import {
   brokenLinkFormat,
 } from './card-api';
 import BrokenLinkTemplate from './default-templates/broken-link-template';
-import { getRelationship, type RelationshipState } from './field-support';
+import {
+  getRelationshipMembershipState,
+  type RelationshipState,
+} from './field-support';
 import { rawArrayValues } from './watched-array';
 import {
   BoxComponentSignature,
@@ -50,7 +53,7 @@ import {
   FourLines,
   IconPlus,
 } from '@cardstack/boxel-ui/icons';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce, eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
 import {
   SortableGroupModifier as sortableGroup,
@@ -229,7 +232,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     // read directly from @model (instead of <@fields>) in sync.
     //
     // `broken` carries the per-slot terminal failure state (read once here via a
-    // pure `getRelationship`) so a broken element shows the placeholder + remove
+    // pure `getRelationshipMembershipState`) so a broken element shows the placeholder + remove
     // affordance instead of trying to render a sentinel as a card. The `{{#each}}`
     // still keys on the stable index `key`, so adding this never changes block
     // identity and an input elsewhere in the edit form keeps focus.
@@ -436,7 +439,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
   @consume(CardContextName) declare cardContext: CardContext;
 
   // Per-slot broken-link state, read once per render via a pure
-  // `getRelationship`. The `{{#each}}` keeps keying on the stable child box, so
+  // `getRelationshipMembershipState`. The `{{#each}}` keeps keying on the stable child box, so
   // this only drives the inner branch that swaps a broken card for the
   // placeholder and never destabilizes a sibling pill mid-edit.
   get brokenSlots() {
@@ -580,10 +583,6 @@ function getPluralChildFormat(
   return effectiveFormat;
 }
 
-function coalesce<T>(arg1: T | undefined, arg2: T): T {
-  return arg1 ?? arg2;
-}
-
 function shouldRenderEditor(
   format: Format | undefined,
   defaultFormat: Format,
@@ -599,7 +598,7 @@ type BrokenSlot = Extract<RelationshipState, { kind: 'error' | 'not-found' }>;
 // surfaces here; every other kind — `present`, `not-loaded`, `not-set` — is
 // `undefined`, so the caller falls through to its normal per-item render.
 //
-// `getRelationship` is a pure read (it never retriggers `lazilyLoadLink`) and
+// `getRelationshipMembershipState` is a pure read (it never retriggers `lazilyLoadLink`) and
 // returns a FRESH array on every call, so callers MUST NOT key a `{{#each}}` on
 // these entries; read it once per render and index into the result by the slot
 // position the surrounding loop already keys on. A computed whole-field sentinel
@@ -614,9 +613,8 @@ function brokenSlotsFor(
   if (owner == null) {
     return [];
   }
-  let state = getRelationship(owner, fieldName);
-  let states = Array.isArray(state) ? state : [state];
-  return states.map((rel) =>
+  let { membership } = getRelationshipMembershipState(owner, fieldName);
+  return (membership ?? []).map((rel) =>
     rel.kind === 'error' || rel.kind === 'not-found' ? rel : undefined,
   );
 }
@@ -659,46 +657,19 @@ export function getLinksToManyComponent({
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
         {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
-          {{#if field.edit}}
-            {{!-- Per-usage edit override on a linksToMany. Contract
-                  mirrors containsMany: the override receives the
-                  containing card as @model, the current values array
-                  as @values, and a pre-bound default LinksToManyEditor
-                  as @defaultEditor so it can wrap the standard iteration
-                  / add / remove UI without reimplementing it. --}}
-            <field.edit
-              @model={{model.value}}
-              @values={{arrayField.value}}
-              @defaultEditor={{component
-                LinksToManyEditor
-                model=model
-                arrayField=arrayField
-                field=field
-                cardTypeFor=cardTypeFor
-                childFormat=(getEditorChildFormat
-                  @format
-                  defaultFormats.cardDef
-                  model
-                )
-                typeConstraint=@typeConstraint
-              }}
-              ...attributes
-            />
-          {{else}}
-            <LinksToManyEditor
-              @model={{model}}
-              @arrayField={{arrayField}}
-              @field={{field}}
-              @cardTypeFor={{cardTypeFor}}
-              @childFormat={{getEditorChildFormat
-                @format
-                defaultFormats.cardDef
-                model
-              }}
-              @typeConstraint={{@typeConstraint}}
-              ...attributes
-            />
-          {{/if}}
+          <LinksToManyEditor
+            @model={{model}}
+            @arrayField={{arrayField}}
+            @field={{field}}
+            @cardTypeFor={{cardTypeFor}}
+            @childFormat={{getEditorChildFormat
+              @format
+              defaultFormats.cardDef
+              model
+            }}
+            @typeConstraint={{@typeConstraint}}
+            ...attributes
+          />
         {{else}}
           {{#let
             (coalesce @format defaultFormats.cardDef)

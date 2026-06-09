@@ -8,10 +8,10 @@ import {
   isUrlLike,
   isResolvedCodeRef,
   executableExtensions,
-} from '../index';
-import { resolveModuleHref } from '../code-ref';
-import { rri, type RealmResourceIdentifier } from '../realm-identifiers';
-import type { VirtualNetwork } from '../virtual-network';
+} from '../index.ts';
+import { resolveModuleHref } from '../code-ref.ts';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';

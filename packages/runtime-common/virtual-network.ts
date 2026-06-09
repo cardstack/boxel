@@ -1,17 +1,17 @@
-import { RealmPaths, ensureTrailingSlash } from './paths';
-import { baseRealm } from './index';
+import { RealmPaths, ensureTrailingSlash } from './paths.ts';
+import { baseRealm } from './index.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './realm-identifiers';
-import type { ModuleDescriptor } from './package-shim-handler';
+} from './realm-identifiers.ts';
+import type { ModuleDescriptor } from './package-shim-handler.ts';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
   type ModuleLike,
-} from './package-shim-handler';
+} from './package-shim-handler.ts';
 import type { Readable } from 'stream';
-import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
+import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
 import { createEnvironmentAwareFetch } from '#fetch';
 
 export interface ResponseWithNodeStream extends Response {

@@ -4,7 +4,7 @@ import { readFileSync, utimesSync, writeFileSync } from 'fs';
 import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import type { DirResult } from 'tmp';
 import {
   createJWT,
@@ -12,7 +12,7 @@ import {
   setupPermissionedRealmCached,
   testRealmHref,
   waitUntil,
-} from '../helpers';
+} from '../helpers/index.ts';
 import type { PgAdapter as TestPgAdapter } from '@cardstack/postgres';
 
 const PERSON_CARD_SOURCE = `

@@ -1,11 +1,11 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   loginUser,
   registerUser,
   getAccountData,
   type SynapseInstance,
-} from '../support/synapse';
-import { appURL } from '../support/isolated-realm-server';
+} from '../support/synapse/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   validateEmail,
   gotoRegistration,
@@ -20,8 +20,8 @@ import {
   getUniquePassword,
   REGISTRATION_TOKEN,
   getMatrixTestContext,
-} from '../helpers';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '../support/matrix-constants';
+} from '../helpers/index.ts';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../support/matrix-constants.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 

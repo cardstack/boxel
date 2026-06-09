@@ -79,7 +79,6 @@
     "safe-stable-stringify": "catalog:",
     "super-fast-md5": "catalog:",
     "transform-modules-amd-plugin": "workspace:*",
-    "typescript-memoize": "catalog:",
     "uuid": "catalog:",
     "zod": "^3.24.4"
   },

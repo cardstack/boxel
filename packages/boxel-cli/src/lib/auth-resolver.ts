@@ -2,9 +2,9 @@ import {
   getProfileManager,
   type ProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
-} from './profile-manager';
-import type { RealmAuthenticator } from './realm-authenticator';
-import { SeedAuthenticator } from './seed-auth';
+} from './profile-manager.ts';
+import type { RealmAuthenticator } from './realm-authenticator.ts';
+import { SeedAuthenticator } from './seed-auth.ts';
 
 export interface AuthResolverOptions {
   /** Realm URL the command is operating on (used for registering the seed-auth cache). */

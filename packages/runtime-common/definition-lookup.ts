@@ -1,4 +1,4 @@
-import type { DBAdapter, TypeCoercion } from './db';
+import type { DBAdapter, TypeCoercion } from './db.ts';
 import {
   addExplicitParens,
   any,
@@ -9,9 +9,9 @@ import {
   separatedByCommas,
   type Expression,
   type Querier,
-} from './expression';
-import { clampSerializedError, type SerializedError } from './error';
-import { logger } from './log';
+} from './expression.ts';
+import { clampSerializedError, type SerializedError } from './error.ts';
+import { logger } from './log.ts';
 
 // Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
 // mismatches: every cache read logs its exact key + HIT/MISS, every write
@@ -43,9 +43,9 @@ import {
   executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
-} from './index';
-import { rri, type RealmResourceIdentifier } from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+} from './index.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
