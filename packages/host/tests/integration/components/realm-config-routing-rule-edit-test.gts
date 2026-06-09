@@ -118,6 +118,33 @@ module(
         '[data-test-card-catalog-modal] [data-test-realm-picker-locked]',
       );
 
+      // [diagnostic] enumerate post-wrapper-fix matched elements
+      let allPickers = Array.from(
+        document.querySelectorAll('[data-test-realm-picker]'),
+      );
+      let modalPickers = Array.from(
+        document.querySelectorAll(
+          '[data-test-card-catalog-modal] [data-test-realm-picker]',
+        ),
+      );
+      console.log(
+        '[lock-diag] post-fix enumeration',
+        JSON.stringify({
+          globalCount: allPickers.length,
+          modalCount: modalPickers.length,
+          global: allPickers.map((el) => ({
+            tag: el.tagName.toLowerCase(),
+            cls: (el.className?.toString?.() ?? '').slice(0, 50),
+            locked: el.getAttribute('data-test-realm-picker-locked'),
+            isWrapper: (el.className?.toString?.() ?? '').includes(
+              'realm-picker-wrap',
+            ),
+            inModal: !!el.closest('[data-test-card-catalog-modal]'),
+            inSearchSheet: !!el.closest('[data-test-search-sheet]'),
+          })),
+        }),
+      );
+
       assert
         .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
         .hasAttribute(
