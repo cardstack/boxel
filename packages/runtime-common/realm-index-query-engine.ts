@@ -514,10 +514,18 @@ export class RealmIndexQueryEngine {
           );
         }
       } else {
-        // No HTML: fall back to the full live card, exactly as `/_search`.
+        // No HTML: fall back to the full live card, exactly as `/_search` —
+        // honoring any sparse fieldset the query requested, so a fallback row
+        // carries the same attributes/relationships the data-only path would.
         let pristine = row.pristine_doc as CardResource<Saved> | null;
         if (pristine) {
-          let card = { ...pristine, links: { self: pristine.id } };
+          let card: CardResource<Saved> = {
+            ...pristine,
+            links: { self: pristine.id },
+          };
+          if (query.fields?.['card'] !== undefined) {
+            card = applySparseFieldset(card, query.fields['card']);
+          }
           data.push(card);
           fallbackRoots.push(card);
         }
@@ -532,13 +540,17 @@ export class RealmIndexQueryEngine {
 
     // Assemble the transitive `included` for the live fallback cards only.
     // Same gating as the data-only path: skipped inside a prerender, where the
-    // host re-resolves each result from its card+source file.
+    // host re-resolves each result from its card+source file. The query's
+    // `fields.card` (when present) scopes the link expansion, matching
+    // `/_search`.
     if (fallbackRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+      let linkFields = query.fields?.['card'];
+      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
       let omit = data.map((r) => r.id).filter(Boolean) as string[];
       let runLoadLinks = () =>
         this.loadLinks(
           { realmURL: this.realmURL, rootResources: fallbackRoots, omit },
-          opts,
+          linkOpts,
         );
       let fallbackIncluded = opts?.timings
         ? await opts.timings.time('loadLinks', runLoadLinks)

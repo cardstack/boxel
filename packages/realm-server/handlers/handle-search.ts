@@ -4,6 +4,7 @@ import {
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
   isValidPrerenderedHtmlFormat,
+  PRERENDERED_HTML_FORMATS,
   resolveRenderType,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
@@ -108,11 +109,20 @@ export default function handleSearch(opts: {
       | { format: PrerenderedHtmlFormat; renderType?: CodeRef }
       | undefined;
     if (renderRequested && parsed.render) {
-      let format: PrerenderedHtmlFormat = isValidPrerenderedHtmlFormat(
-        parsed.render.format,
-      )
-        ? parsed.render.format
-        : 'fitted';
+      // An explicit `render` must name a format backed by prerendered HTML.
+      // A format that's a valid `Format` but not renderable here (e.g.
+      // `isolated` / `edit`) is rejected rather than silently substituted, so
+      // the caller learns their requested format wasn't honored.
+      if (!isValidPrerenderedHtmlFormat(parsed.render.format)) {
+        await setContextResponse(
+          ctxt,
+          buildSearchErrorResponse(
+            `render.format must be one of ${PRERENDERED_HTML_FORMATS.join(', ')}`,
+          ),
+        );
+        return;
+      }
+      let format = parsed.render.format;
       let filterOn = (cardsQuery.filter as { on?: CodeRef } | undefined)?.on;
       let renderType = resolveRenderType({
         renderType: parsed.render.renderType,

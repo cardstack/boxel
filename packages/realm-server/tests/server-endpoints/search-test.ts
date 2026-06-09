@@ -606,6 +606,76 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
+    test('QUERY /_federated-search prefer-HTML honors a sparse fieldset on live fallback rows', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let liveUrl = `${testRealm.url}test-card`;
+      // Null the HTML so this row falls back to a full live card.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url =`,
+        param(`${liveUrl}.json`),
+        `AND realm_url =`,
+        param(testRealm.url),
+      ] as Expression);
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // An empty sparse fieldset → a live fallback row carries no attributes,
+        // exactly as the same `/_search` query would return it. `fields`
+        // requires `asData: true` at the query level.
+        .send({
+          realms: [testRealm.url],
+          render: { format: 'fitted' },
+          asData: true,
+          fields: { card: [] },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let liveCard = (response.body.data as any[]).find(
+        (r) => r.id === liveUrl,
+      );
+      assert.ok(liveCard, 'the live fallback card is present');
+      assert.deepEqual(
+        liveCard.attributes,
+        {},
+        'the fallback row honors the empty sparse fieldset (no attributes)',
+      );
+    });
+
+    test('QUERY /_federated-search rejects an explicit render.format not backed by prerendered HTML', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      // `isolated` is a valid Format but not a prerendered HTML format, so it
+      // must be rejected rather than silently rendered as another format.
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ realms: [testRealm.url], render: { format: 'isolated' } });
+
+      assert.strictEqual(
+        response.status,
+        400,
+        'an unsupported render.format is a 400',
+      );
+      assert.ok(
+        JSON.stringify(response.body).includes('render.format'),
+        'the error names render.format',
+      );
+    });
+
     test('QUERY /_federated-search emits an ETag on cacheable responses', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
