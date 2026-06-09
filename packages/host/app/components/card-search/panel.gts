@@ -79,22 +79,12 @@ export default class SearchPanel extends Component<Signature> {
   // -- Filter objects --
 
   private get realmFilter(): RealmFilter {
-    let filter = {
+    return {
       selected: this.selectedRealms,
       onChange: this.onRealmChange,
       selectedURLs: this.selectedRealmURLs,
       locked: this.args.lockSelectedRealms,
     };
-    // [diagnostic] surface SearchPanel arg + computed filter.locked
-    console.log(
-      '[lock-diag] SearchPanel.realmFilter',
-      JSON.stringify({
-        argsLockSelectedRealms: this.args.lockSelectedRealms,
-        filterLocked: filter.locked,
-        selectedCount: this.selectedRealms.length,
-      }),
-    );
-    return filter;
   }
 
   private get typeFilter(): TypeFilter {

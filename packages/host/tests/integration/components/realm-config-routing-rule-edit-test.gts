@@ -22,24 +22,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 const realmName = 'Local Workspace';
 const noop = () => {};
 
-function ancestorPath(el: Element | null): string {
-  let parts: string[] = [];
-  let cursor: Element | null = el;
-  while (cursor && parts.length < 8) {
-    let tag = cursor.tagName.toLowerCase();
-    let cls = (cursor.className?.toString?.() ?? '').slice(0, 30);
-    let testAttrs = Array.from(cursor.attributes)
-      .filter((a) => a.name.startsWith('data-test-'))
-      .map((a) => a.name)
-      .join('|');
-    parts.push(
-      `${tag}${cls ? '.' + cls : ''}${testAttrs ? '[' + testAttrs + ']' : ''}`,
-    );
-    cursor = cursor.parentElement;
-  }
-  return parts.join(' > ');
-}
-
 module(
   'Integration | realm-config | routing rule instance editor',
   function (hooks) {
@@ -134,32 +116,6 @@ module(
       // pick up that picker instead of the modal's.
       await waitFor(
         '[data-test-card-catalog-modal] [data-test-realm-picker-locked]',
-      );
-
-      // [diagnostic] enumerate all picker elements globally and within
-      // the modal to find out which ones the selector matches.
-      let allPickers = Array.from(
-        document.querySelectorAll('[data-test-realm-picker]'),
-      );
-      let modalPickers = Array.from(
-        document.querySelectorAll(
-          '[data-test-card-catalog-modal] [data-test-realm-picker]',
-        ),
-      );
-      console.log(
-        '[lock-diag] picker enumeration',
-        JSON.stringify({
-          global: allPickers.map((el) => ({
-            locked: el.getAttribute('data-test-realm-picker-locked'),
-            lockedViaGetter: el.getAttribute(
-              'data-test-realm-picker-locked-via-getter',
-            ),
-            inModal: !!el.closest('[data-test-card-catalog-modal]'),
-            parentClass: el.parentElement?.className?.toString?.() ?? null,
-            ancestorPath: ancestorPath(el),
-          })),
-          modalCount: modalPickers.length,
-        }),
       );
 
       assert
