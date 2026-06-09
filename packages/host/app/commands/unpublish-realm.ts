@@ -68,7 +68,10 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
     realmURL: string,
   ): string {
     if (input.publishedRealmURL) {
-      return input.publishedRealmURL;
+      // Normalize so the lookup keys (_unPublishingRealms,
+      // info.lastPublishedAt) match the trailing-slash URLs produced by
+      // resolvePublishedRealmUrl and stored on publish.
+      return ensureTrailingSlash(input.publishedRealmURL);
     }
     // `target` is a contains field, so it's an empty PublishTarget instance
     // (not undefined) when unset — check that it actually carries a type.
