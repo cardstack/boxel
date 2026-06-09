@@ -213,10 +213,11 @@ export class RealmIssueStore implements IssueStore {
     // `issue-tracker` module instead. A type filter is module-URL-specific,
     // so the scheduler must match either — otherwise UI-added issues are
     // silently invisible to the loop.
-    this.issueTrackerModuleUrl = config.darkfactoryModuleUrl.replace(
-      /\/darkfactory$/,
-      '/issue-tracker',
-    );
+    // Swap the final path segment (`darkfactory` → `issue-tracker`),
+    // tolerating a trailing slash or other equivalent canonicalization.
+    this.issueTrackerModuleUrl = config.darkfactoryModuleUrl
+      .replace(/\/+$/, '')
+      .replace(/[^/]+$/, 'issue-tracker');
     this.client = config.client;
     this.workspaceDir = config.workspaceDir;
   }

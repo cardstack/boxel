@@ -73,14 +73,16 @@ A string field has no referential integrity, no realm-index dependency
 edge, and no host-UI navigation. We accept that because the adjust
 flow fetches the URL at seed time anyway:
 
-- **Validate at seed time, fail loud.** The bootstrap step must fetch
-  the source card before seeding. A missing, malformed, or
-  unreachable `sourceCardUrl` is a hard bootstrap failure with a clear
-  message — not a silent greenfield fallback. (A typo'd URL must never
-  be mistaken for "no source card.")
-- **Assert same-server.** The URL's origin must match the target realm
-  server's origin (the locked no-cross-server-auth assumption). The
-  bootstrap step rejects a cross-origin `sourceCardUrl`.
+- **Fails loud at seed time.** The bootstrap step fetches/ingests the
+  source card before seeding, so a missing, malformed, or unreachable
+  `sourceCardUrl` surfaces as an ingest error there — it doesn't quietly
+  fall back to greenfield.
+- **Same-server is a procedural assumption, not a code check.** The
+  locked no-cross-server-auth assumption means the bootstrap step only
+  reaches a source card on the same realm server; a cross-server URL
+  simply fails to fetch under the active profile rather than being
+  rejected by an explicit origin check. (If we later support
+  cross-server sources, that's where an explicit check would live.)
 
 ---
 

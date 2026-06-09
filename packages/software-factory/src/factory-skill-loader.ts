@@ -80,7 +80,6 @@ const GTS_KEYWORDS = [
   'FieldDef',
 ];
 
-/** Keywords that indicate factory workflow / delivery issues. */
 /**
  * Reference files in `boxel-development/references/` and the keywords that
  * trigger their inclusion. When an issue doesn't match any keyword, only the
