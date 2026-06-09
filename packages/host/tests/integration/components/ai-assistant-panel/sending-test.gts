@@ -276,6 +276,15 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       .exists({ count: 1 }, 'optimistic bubble exists before uploads complete');
     assert.dom('[data-test-user-message]').hasClass('is-pending');
     assert.dom('[data-test-send-message-btn]').isDisabled();
+    // Regression guard: the "Generating results" banner is for the bot's reply,
+    // not the user's own pending bubble. The synthetic event deliberately omits
+    // `isStreamingFinished` so `generatingResults` (which reads
+    // `!lastMessage.isStreamingFinished`) doesn't misclassify it. If anyone
+    // later "completes" the synthetic shape by setting that key, this assertion
+    // fires before the flicker reaches users.
+    assert
+      .dom('[data-test-stop-generating]')
+      .doesNotExist('no generating-results banner on the user pending bubble');
 
     releaseUpload();
 
@@ -671,7 +680,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       attachedCardIds: [],
       attachedFiles: [],
     });
-    matrixService.updateOptimisticEvent(roomId, cgi, { status: 'sending' });
+    matrixService.patchPendingSend(roomId, cgi, { status: 'sending' });
 
     let beforeStatus = matrixService.findPendingMatrixEventStatus(
       roomId,
@@ -684,7 +693,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     );
 
     // The catch block branch we care about: when findPendingMatrixEventStatus
-    // is 'sent', updateOptimisticEvent is skipped and the bubble stays in
+    // is 'sent', patchPendingSend is skipped and the bubble stays in
     // 'sending'. Verifying the helper exists + returns sensible defaults is
     // enough to lock the contract; full reconciliation flow is covered by the
     // matrix mock in other tests.

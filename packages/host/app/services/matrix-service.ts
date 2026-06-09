@@ -126,6 +126,10 @@ import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type LocalPersistenceService from './local-persistence-service';
+import type {
+  PendingSendStatus,
+  StoredPendingFile,
+} from './local-persistence-service';
 import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -1325,41 +1329,42 @@ export default class MatrixService extends Service {
   }
 
   // Patch an in-flight optimistic event's status (and optional error message)
-  // in place. Used to flip the synthetic bubble between 'sending' and
-  // 'not_sent' from doSendMessage's catch / retry paths without evicting it
-  // from `roomData.events`. Replays through Room.addEvent's existing
-  // replace-by-id machinery so the Message instance held by RoomResource picks
-  // up the new status via MessageBuilder.updateMessage.
-  updateOptimisticEvent(
+  // Flip an in-flight pending send between 'sending' and 'not_sent' from
+  // doSendMessage's catch / retry paths. Updates both the in-memory synthetic
+  // event (so the rendered bubble re-runs through MessageBuilder.updateMessage)
+  // and the persisted localStorage entry as one operation, so the two sources
+  // of truth can't desync.
+  patchPendingSend(
     roomId: string,
     clientGeneratedId: string,
-    patch: { status: 'sending' | 'not_sent'; errorMessage?: string },
+    patch: { status: PendingSendStatus; errorMessage?: string },
   ) {
-    let roomData = this.getRoomData(roomId);
-    if (!roomData) {
-      return;
-    }
     let syntheticEventId = `local-${clientGeneratedId}`;
-    let existing = roomData.events.find(
-      (e) => (e as any).event_id === syntheticEventId,
+    let roomData = this.getRoomData(roomId);
+    let existing = roomData?.events.find(
+      (e) => e.event_id === syntheticEventId,
     );
-    if (!existing) {
-      return;
+    if (existing) {
+      let nextContent: Record<string, unknown> = {
+        ...(existing.content ?? {}),
+      };
+      if (patch.status === 'not_sent') {
+        nextContent.errorMessage = patch.errorMessage ?? 'Failed to send';
+      } else {
+        delete nextContent.errorMessage;
+      }
+      let next: TempEvent = {
+        ...existing,
+        status: patch.status as MatrixSDK.EventStatus,
+        content: nextContent as TempEvent['content'],
+      };
+      void this.addRoomEvent(next, syntheticEventId);
     }
-    let nextContent: any = {
-      ...((existing as any).content ?? {}),
-    };
-    if (patch.status === 'not_sent') {
-      nextContent.errorMessage = patch.errorMessage ?? 'Failed to send';
-    } else {
-      delete nextContent.errorMessage;
-    }
-    let next: TempEvent = {
-      ...(existing as any),
-      status: patch.status as MatrixSDK.EventStatus,
-      content: nextContent,
-    };
-    void this.addRoomEvent(next, syntheticEventId);
+    this.localPersistenceService.updatePendingSendStatus(
+      roomId,
+      clientGeneratedId,
+      patch,
+    );
   }
 
   async sendMessage(
@@ -2337,7 +2342,7 @@ export default class MatrixService extends Service {
 
     // Real echo for an optimistic send: drop the persisted pending entry now
     // that the room timeline has accepted the event. Status transitions to
-    // failure flow through updatePersistedPendingSendStatus instead.
+    // failure flow through patchPendingSend instead.
     if (
       cgi &&
       event.status !== 'not_sent' &&
@@ -2665,30 +2670,10 @@ export default class MatrixService extends Service {
       clientGeneratedId: entry.clientGeneratedId,
       body: entry.body,
       attachedCardIds: entry.attachedCardIds,
-      attachedFiles: entry.attachedFiles.map((f) => ({
-        sourceUrl: f.sourceUrl,
-        ...(f.name ? { name: f.name } : {}),
-        ...(f.url ? { url: f.url } : {}),
-        ...(f.contentType ? { contentType: f.contentType } : {}),
-        ...((f as any).contentHash
-          ? { contentHash: (f as any).contentHash }
-          : {}),
-      })),
+      attachedFiles: entry.attachedFiles.map(serializeFileForPersistence),
       createdAt: Date.now(),
       status: 'sending',
     });
-  }
-
-  updatePersistedPendingSendStatus(
-    roomId: string,
-    clientGeneratedId: string,
-    update: { status: 'sending' | 'not_sent'; errorMessage?: string },
-  ) {
-    this.localPersistenceService.updatePendingSendStatus(
-      roomId,
-      clientGeneratedId,
-      update,
-    );
   }
 
   // Look up matrix-js-sdk's view of an outgoing send by clientGeneratedId.
@@ -2704,12 +2689,10 @@ export default class MatrixService extends Service {
     if (!room) {
       return undefined;
     }
-    let pending = (
-      room as unknown as {
-        getPendingEvents?: () => MatrixEvent[];
-      }
-    ).getPendingEvents?.();
-    let matches = (pending ?? []).filter((e) => {
+    // Optional-chained — the mock Room in tests doesn't implement
+    // getPendingEvents. The real SDK Room always does.
+    let pending = room.getPendingEvents?.() ?? [];
+    let matches = pending.filter((e) => {
       let c = e.getContent() as { clientGeneratedId?: string };
       return c?.clientGeneratedId === clientGeneratedId;
     });
@@ -2774,6 +2757,21 @@ async function getStorage() {
   }
 
   return storage;
+}
+
+function serializeFileForPersistence(
+  f: ReturnType<FileDef['serialize']>,
+): StoredPendingFile {
+  // Conditional spreads avoid emitting `{ name: undefined }` keys, which
+  // matters under exactOptionalPropertyTypes — see sanitizePendingFile in
+  // local-persistence-service.ts for the symmetric reader.
+  return {
+    sourceUrl: f.sourceUrl,
+    ...(f.name ? { name: f.name } : {}),
+    ...(f.url ? { url: f.url } : {}),
+    ...(f.contentType ? { contentType: f.contentType } : {}),
+    ...(f.contentHash ? { contentHash: f.contentHash } : {}),
+  } as StoredPendingFile;
 }
 
 declare module '@ember/service' {

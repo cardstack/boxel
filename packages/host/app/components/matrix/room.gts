@@ -1647,14 +1647,9 @@ export default class Room extends Component<Signature> {
       } else {
         // Retry — flip the existing bubble back to 'sending' and clear any
         // prior error so the alert / Retry button hides while the pipeline runs.
-        this.matrixService.updateOptimisticEvent(roomId, clientGeneratedId, {
+        this.matrixService.patchPendingSend(roomId, clientGeneratedId, {
           status: 'sending',
         });
-        this.matrixService.updatePersistedPendingSendStatus(
-          roomId,
-          clientGeneratedId,
-          { status: 'sending' },
-        );
       }
 
       let openCardIds = new Set([
@@ -1726,15 +1721,10 @@ export default class Room extends Component<Signature> {
         this.unknownMessageSendError =
           'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
-        this.matrixService.updateOptimisticEvent(roomId, clientGeneratedId, {
+        this.matrixService.patchPendingSend(roomId, clientGeneratedId, {
           status: 'not_sent',
           errorMessage: 'Failed to send',
         });
-        this.matrixService.updatePersistedPendingSendStatus(
-          roomId,
-          clientGeneratedId,
-          { status: 'not_sent', errorMessage: 'Failed to send' },
-        );
       }
     },
   );
