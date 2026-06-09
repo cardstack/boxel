@@ -1939,13 +1939,16 @@ export class PagePool {
       let standby = this.#commandeerDormantTab(affinityKey, {
         standbyOnly: true,
       });
-      if (
-        !standby &&
-        this.#currentStandbyCount() < this.#desiredStandbyCount()
-      ) {
-        // No standby free this instant but the pool has room for one —
-        // warm it so the hint reliably routes off the stale tab rather
-        // than racing the fire-and-forget refill and falling back to reuse.
+      if (!standby) {
+        // No standby free this instant — await the standby machinery
+        // before falling back to reuse. This is UNCONDITIONAL (not gated
+        // on `currentStandbyCount() < desiredStandbyCount()`) for the same
+        // reason the deadlock-escape path below is: a standby mid-creation
+        // inflates `currentStandbyCount` (= size + creating) to meet
+        // `desired` while `#standbys.size` is still 0, so a count guard
+        // would skip the await and fall through to reusing the stale tab.
+        // `#ensureStandbyPool` returns the in-flight refill if one is
+        // creating, and is a no-op when the pool genuinely has no room.
         let startedAt = Date.now();
         await this.#ensureStandbyPool();
         tabStartupMs += Date.now() - startedAt;
