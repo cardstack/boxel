@@ -3,6 +3,7 @@ import { registerCancelIndexingCommand } from './cancel-indexing';
 import { registerCreateCommand } from './create';
 import { registerHistoryCommand } from './history';
 import { registerIndexingErrorsCommand } from './indexing-errors';
+import { registerIngestCardCommand } from './ingest-card';
 import { registerListCommand } from './list';
 import { registerMilestoneCommand } from './milestone';
 import { registerPublishCommand } from './publish';
@@ -24,6 +25,7 @@ export function registerRealmCommand(program: Command): void {
   registerCreateCommand(realm);
   registerHistoryCommand(realm);
   registerIndexingErrorsCommand(realm);
+  registerIngestCardCommand(realm);
   registerListCommand(realm);
   registerMilestoneCommand(realm);
   registerPublishCommand(realm);
