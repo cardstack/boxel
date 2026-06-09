@@ -320,7 +320,7 @@ cardName, error, stackTrace? }`). Without `path`, searches the realm
 9. **Record progress** by appending to the issue's `comments` array
    (Read + Edit the issue JSON). Never modify the issue's `description`.
 
-## Adjustment issues (improve flow)
+## Adjustment issues (adjust flow)
 
 When the issue you picked up has `issueType: adjustment`, you are
 **editing an existing, already-seeded card** — not creating one from

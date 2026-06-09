@@ -1,0 +1,34 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["software-factory-brief", "adjust", "mortgage-calculator"],
+      "sourceCardUrl": "https://localhost:4201/catalog/04868f-mortgage-calculator/mortgage-calculator",
+      "content": "## Adjust the Mortgage Calculator card\n\n`sourceCardUrl` above points at the Mortgage Calculator card in the catalog.\n\n## The changes\n\nTwo things:\n\n1. **Add an extra-monthly-payment input, and show its impact on the loan.** Borrowers constantly ask: *what if I pay a bit extra toward the principal each month?* The calculator can't answer that today.\n\n2. **Restyle it to look like a 90s-era corporate insurance app.** Think the beige, boxy, all-business desktop software an insurance office ran back then — chunky bordered panels, system fonts, dense form layout, that kind of vibe. Lean into it.\n\nWork the details out yourself from how the card already behaves — it already computes the full amortization (loan amount, monthly payment, lifetime interest, and so on). Decide what fields, math, and presentation make sense, and keep everything the card already does working.\n\n## Done when\n\nSomeone can enter an extra monthly payment and see how it changes the payoff, and the calculator has that 90s corporate-insurance look.",
+      "cardInfo": {
+        "name": "Adjust Mortgage Calculator: extra-payment input + 90s insurance-app restyle",
+        "notes": null,
+        "summary": "Add an extra-monthly-payment input to the catalog Mortgage Calculator and restyle it as a 90s-era corporate insurance app — details left to the implementer.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

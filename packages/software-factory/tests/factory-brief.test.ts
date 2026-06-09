@@ -39,9 +39,9 @@ module('factory-brief', function () {
     assert.deepEqual(brief.tags, ['documents-content', 'sticky', 'note']);
   });
 
-  test('normalizeFactoryBrief reads sourceCardUrl when present (improve flow)', function (assert) {
+  test('normalizeFactoryBrief reads sourceCardUrl when present (adjust flow)', function (assert) {
     let sourceUrl =
-      'https://briefs.example.test/software-factory/Wiki/improve-sticky-note';
+      'https://briefs.example.test/software-factory/Wiki/adjust-sticky-note';
     let brief = normalizeFactoryBrief(
       {
         data: {

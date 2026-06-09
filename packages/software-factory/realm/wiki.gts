@@ -183,7 +183,7 @@ export class Wiki extends CardDef {
 
   // Software-factory brief contract: when this Wiki card is used as a
   // factory brief, an optional absolute URL of an existing card to
-  // improve. When set, the factory runs the improve flow (seed from that
+  // adjust. When set, the factory runs the adjust flow (seed from that
   // card, then apply the brief adjustments); when empty, greenfield.
   @field sourceCardUrl = contains(StringField);
 

@@ -111,7 +111,7 @@ function buildSeedIssueDocument(
   darkfactoryModuleUrl: string,
 ) {
   let now = new Date().toISOString();
-  let improve = Boolean(brief.sourceCardUrl);
+  let adjust = Boolean(brief.sourceCardUrl);
 
   let briefHeader = [
     `## Brief`,
@@ -119,7 +119,7 @@ function buildSeedIssueDocument(
     `**URL:** ${brief.sourceUrl}`,
     `**Title:** ${brief.title}`,
     `**Summary:** ${brief.contentSummary}`,
-    ...(improve ? [`**Source card to improve:** ${brief.sourceCardUrl}`] : []),
+    ...(adjust ? [`**Source card to adjust:** ${brief.sourceCardUrl}`] : []),
     ``,
     `### Full content`,
     ``,
@@ -127,8 +127,8 @@ function buildSeedIssueDocument(
     ``,
   ];
 
-  let { instructions, acceptanceCriteria, summary } = improve
-    ? improveSeedInstructions(brief)
+  let { instructions, acceptanceCriteria, summary } = adjust
+    ? adjustSeedInstructions(brief)
     : greenfieldSeedInstructions();
 
   let description = [...briefHeader, ...instructions].join('\n');
@@ -203,16 +203,16 @@ function greenfieldSeedInstructions(): {
   };
 }
 
-function improveSeedInstructions(brief: FactoryBrief): {
+function adjustSeedInstructions(brief: FactoryBrief): {
   instructions: string[];
   acceptanceCriteria: string;
   summary: string;
 } {
   let instructions = [
-    `## Mode: IMPROVE EXISTING CARD`,
+    `## Mode: ADJUST EXISTING CARD`,
     ``,
     `This brief carries a \`sourceCardUrl\`, so you are **improving an existing**`,
-    `card rather than building one from scratch. Follow the "Improve flow"`,
+    `card rather than building one from scratch. Follow the "Adjust flow"`,
     `section of the \`software-factory-bootstrap\` skill. The steps:`,
     ``,
     `1. **Project artifacts** — create the \`Project\`, \`IssueTracker\`, and`,

@@ -9,25 +9,25 @@ Use this skill when the current issue has `issueType: bootstrap`. Your job is
 to read the brief, create project artifacts, and set up the issue backlog for
 the implementation phase.
 
-## Two modes: greenfield vs improve
+## Two modes: greenfield vs adjust
 
 The bootstrap issue's description tells you which mode you're in:
 
 - **Greenfield** (no source card) — build new cards from scratch. Create
   Project / IssueTracker / Knowledge Articles, then one `feature` Issue per
   entry-point card. This is the default; the rest of this skill describes it.
-- **Improve** (the brief carries a `sourceCardUrl`, surfaced in the bootstrap
-  issue as **"Source card to improve:"**) — seed the target realm with a
+- **Adjust** (the brief carries a `sourceCardUrl`, surfaced in the bootstrap
+  issue as **"Source card to adjust:"**) — seed the target realm with a
   working copy of an existing card, confirm it's green, then create
-  `adjustment` Issues that describe deltas to it. See **"Improve flow"** below.
+  `adjustment` Issues that describe deltas to it. See **"Adjust flow"** below.
 
 Everything from the implementation loop onward (scheduling, the validators,
-status transitions, project completion) is identical for both modes — improve
+status transitions, project completion) is identical for both modes — adjust
 is a superset, not a fork. The only differences are the seed-from-source
-sub-phase below and that improve emits `adjustment` Issues instead of
+sub-phase below and that adjust emits `adjustment` Issues instead of
 `feature` Issues.
 
-## Improve flow (when a source card is present)
+## Adjust flow (when a source card is present)
 
 Do this **in addition to** the standard Project / IssueTracker / Knowledge
 Article artifacts (steps still apply), and **instead of** creating `feature`

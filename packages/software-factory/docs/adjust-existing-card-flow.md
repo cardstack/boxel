@@ -1,4 +1,4 @@
-# Improve-existing-card flow — contract & brief schema
+# Adjust-existing-card flow — contract & brief schema
 
 > **Status:** foundational design note for the "Software factory for
 > improving existing cards" project (CS-11399). It locks the contract
@@ -8,14 +8,14 @@
 
 ## Goal
 
-Extend the interactive factory so it can **improve an existing card**
+Extend the interactive factory so it can **adjust an existing card**
 instead of only generating new ones. The brief points at a **source
 card**; the factory creates a fresh target realm, seeds it with a
 working copy of that card and its same-realm dependency graph,
 confirms a green baseline, and then runs the _standard_ issue loop —
 where the Issues describe **adjustments (deltas)** to the seeded card.
 
-Improve is a **superset** of greenfield, not a fork: the only
+Adjust is a **superset** of greenfield, not a fork: the only
 divergences are (1) one extra sub-phase inside bootstrap and (2) which
 operations-skill flavor an Issue's `issueType` dispatches to.
 Everything from the scheduler down is shared.
@@ -59,7 +59,7 @@ prose parsing, by reading a single attribute:
 ```
 
 **Branch signal:** `data.attributes.sourceCardUrl` present and non-empty
-→ improve flow. Absent or empty → greenfield. This is the single value
+→ adjust flow. Absent or empty → greenfield. This is the single value
 the bootstrap branch reads (see Decision 3).
 
 ### Why a string field, not a typed `linksTo`
@@ -73,7 +73,7 @@ the bootstrap branch reads (see Decision 3).
 ### The cost, and how we cover it
 
 A string field has no referential integrity, no realm-index dependency
-edge, and no host-UI navigation. We accept that because the improve
+edge, and no host-UI navigation. We accept that because the adjust
 flow fetches the URL at seed time anyway:
 
 - **Validate at seed time, fail loud.** The bootstrap step (CS-11401)
@@ -100,7 +100,7 @@ Add:
 export const issueTypeOptions: Option[] = [
   { value: 'bootstrap', label: 'Bootstrap' },
   { value: 'feature', label: 'Feature' }, // greenfield implementation
-  { value: 'adjustment', label: 'Adjustment' }, // improve-flow delta  ← NEW
+  { value: 'adjustment', label: 'Adjustment' }, // adjust-flow delta  ← NEW
   // …bug, task, research, infrastructure…
 ];
 ```
@@ -110,7 +110,7 @@ The two implementation issue types are deliberately distinct:
 | `issueType`  | Flow       | What it produces                              |
 | ------------ | ---------- | --------------------------------------------- |
 | `feature`    | greenfield | a card built from scratch (today's behavior)  |
-| `adjustment` | improve    | a **delta** applied to an already-seeded card |
+| `adjustment` | adjust     | a **delta** applied to an already-seeded card |
 
 ### What an `adjustment` Issue carries
 
@@ -140,7 +140,7 @@ describes against the source card.
 
 ## Decision 3 — Branch point and rejoin point
 
-Improve diverges from greenfield in exactly one place and rejoins in
+Adjust diverges from greenfield in exactly one place and rejoins in
 exactly one place.
 
 ### Branch — inside the bootstrap Issue
@@ -156,7 +156,7 @@ read brief
   │                              Knowledge Articles, and one
   │                              `feature` Issue per entry-point card
   │
-  └─ sourceCardUrl present ──▶  IMPROVE (new sub-phase)
+  └─ sourceCardUrl present ──▶  ADJUST (new sub-phase)
                                  1. seed the target realm with a
                                     working copy of the source card +
                                     its same-realm dependency graph
@@ -217,7 +217,7 @@ What is **shared, untouched** between the two flows:
 - Project completion (`projectStatus: completed` only when every Issue
   is `done`).
 
-What is **new or flavored** for improve:
+What is **new or flavored** for adjust:
 
 - The seed + green-baseline + provenance sub-phase inside bootstrap
   (CS-11400, CS-11401, CS-11402).
@@ -227,7 +227,7 @@ What is **new or flavored** for improve:
   and guards the baseline instead of creating cards from scratch
   (CS-11404).
 
-This is the precise sense in which improve is a **superset**: the only
+This is the precise sense in which adjust is a **superset**: the only
 new control flow is one bootstrap sub-phase and one `issueType`-keyed
 dispatch; everything downstream is the existing loop.
 
@@ -242,6 +242,6 @@ dispatch; everything downstream is the existing loop.
 | CS-11402 | Baseline Knowledge Article + source provenance (where the seeded copy came from) |
 | CS-11403 | Adjustment-flavored bootstrap — reads `sourceCardUrl`, emits `adjustment` Issues |
 | CS-11404 | Adjustment-flavored operations — edits seeded files, preserves the baseline      |
-| CS-11405 | Runbook + prompt for the improve flow (still 2-input)                            |
+| CS-11405 | Runbook + prompt for the adjust flow (still 2-input)                             |
 | CS-11406 | E2E fixture + Playwright covering the seed-from-source path                      |
 | CS-11407 | Architecture doc + diagram update for the seed-from-source sub-phase             |

@@ -17,7 +17,7 @@ export interface FactoryBrief {
   tags: string[];
   /**
    * Absolute URL of an existing card the brief asks the factory to
-   * improve. When present, the factory runs the improve flow (seed the
+   * adjust. When present, the factory runs the adjust flow (seed the
    * target realm from this card, then apply the brief's adjustments);
    * when absent, the run is greenfield. Read from the brief card's
    * `sourceCardUrl` attribute (see `realm/wiki.gts`).
