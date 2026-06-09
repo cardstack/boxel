@@ -1,6 +1,6 @@
-import { unixTime, delay, isBrowserTestEnv } from './index';
+import { unixTime, delay, isBrowserTestEnv } from './index.ts';
 
-import type { TokenClaims } from './realm';
+import type { TokenClaims } from './realm.ts';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
@@ -74,13 +74,19 @@ export class RealmAuthClient {
   private _jwt: string | undefined;
   private isRealmServerAuth: boolean;
   private registrationToken: string | undefined;
+  private realmURL: URL;
+  private matrixClient: RealmAuthMatrixClientInterface;
+  private fetch: typeof globalThis.fetch;
 
   constructor(
-    private realmURL: URL,
-    private matrixClient: RealmAuthMatrixClientInterface,
-    private fetch: typeof globalThis.fetch,
+    realmURL: URL,
+    matrixClient: RealmAuthMatrixClientInterface,
+    fetch: typeof globalThis.fetch,
     options?: Options,
   ) {
+    this.realmURL = realmURL;
+    this.matrixClient = matrixClient;
+    this.fetch = fetch;
     this.isRealmServerAuth = Boolean(options?.authWithRealmServer);
     this.registrationToken = options?.registrationToken;
   }

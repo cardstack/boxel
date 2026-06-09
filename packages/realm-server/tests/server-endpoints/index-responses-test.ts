@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import {
   DEFAULT_PERMISSIONS,
@@ -12,7 +12,7 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { testRealmURL } from './helpers';
+import { testRealmURL } from './helpers.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -22,8 +22,8 @@ import {
   setupDB,
   setupPermissionedRealmCached,
   waitUntil,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { ensureDirSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 

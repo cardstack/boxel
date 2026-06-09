@@ -1,5 +1,5 @@
 import { test } from 'qunit';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import type { Method } from 'matrix-js-sdk';
 import type {
   CardMessageEvent,

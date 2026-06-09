@@ -1,22 +1,22 @@
-import type { RealmResourceIdentifier } from './realm-identifiers';
-import { logger } from './log';
-import { ensureTrailingSlash } from './paths';
-import { assertQuery, InvalidQueryError, type Query } from './query';
-import { RequestTimings } from './request-timings';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import { logger } from './log.ts';
+import { ensureTrailingSlash } from './paths.ts';
+import { assertQuery, InvalidQueryError, type Query } from './query.ts';
+import { RequestTimings } from './request-timings.ts';
 import {
   isValidPrerenderedHtmlFormat,
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
-} from './prerendered-html-format';
-import { type Format, formats, isValidFormat } from './formats';
-import type { CodeRef } from './code-ref';
-import { isCodeRef } from './card-document-shape';
+} from './prerendered-html-format.ts';
+import { type Format, formats, isValidFormat } from './formats.ts';
+import type { CodeRef } from './code-ref.ts';
+import { isCodeRef } from './card-document-shape.ts';
 import type {
   LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
   UnifiedSearchCollectionDocument,
-} from './document-types';
-import { SupportedMimeType } from './router';
+} from './document-types.ts';
+import { SupportedMimeType } from './router.ts';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'

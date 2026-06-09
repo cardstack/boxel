@@ -3,6 +3,14 @@
 module.exports = {
   overrides: [
     {
+      // contents/ .ts files are Boxel card/command modules that go through the
+      // realm compilation pipeline — decorators are valid here.
+      files: ['contents/**/*.ts'],
+      rules: {
+        'no-restricted-syntax': 'off',
+      },
+    },
+    {
       files: ['contents/**/*.gts'],
       parser: 'ember-eslint-parser',
       parserOptions: {
@@ -27,6 +35,10 @@ module.exports = {
         'plugin:prettier/recommended',
       ],
       rules: {
+        // .gts files always go through the Ember build pipeline, so decorators
+        // like @tracked and @action are valid here — the no-erasable-syntax
+        // restriction only applies to Node-native strip-types contexts.
+        'no-restricted-syntax': 'off',
         '@typescript-eslint/no-explicit-any': 'off',
         '@typescript-eslint/no-unused-vars': [
           'error',

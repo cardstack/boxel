@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { createTestPgAdapter, prepareTestDB } from './helpers';
+import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
 
 import {
   PgAdapter,

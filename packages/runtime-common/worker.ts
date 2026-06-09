@@ -25,9 +25,9 @@ import {
   type RealmPermissions,
   CachingDefinitionLookup,
 } from '.';
-import { MatrixClient } from './matrix-client';
-import * as Tasks from './tasks';
-import type { WorkerArgs, TaskArgs } from './tasks';
+import { MatrixClient } from './matrix-client.ts';
+import * as Tasks from './tasks/index.ts';
+import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;

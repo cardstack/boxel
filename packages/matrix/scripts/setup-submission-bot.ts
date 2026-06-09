@@ -1,4 +1,4 @@
-import { registerRealmUser } from './register-realm-user-using-api';
+import { registerRealmUser } from './register-realm-user-using-api.ts';
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 

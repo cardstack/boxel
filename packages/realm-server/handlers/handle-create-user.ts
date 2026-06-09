@@ -5,11 +5,11 @@ import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import type { CreateRoutesArgs } from '../routes';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
-import { parseLowCreditThreshold } from '../lib/daily-credit-grant-config';
+import { parseLowCreditThreshold } from '../lib/daily-credit-grant-config.ts';
 
 export default function handleCreateUserRequest({
   dbAdapter,

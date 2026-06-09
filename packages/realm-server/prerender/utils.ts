@@ -7,11 +7,30 @@ import {
   type RenderError,
   type RenderTimeoutDiagnostics,
 } from '@cardstack/runtime-common';
-import { prerenderRenderTimeoutMs } from './prerender-constants';
+import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
+import { getPendingNetworkRequests } from './network-inflight-tracker.ts';
 
-import type { Page } from 'puppeteer';
+import type { CDPSession, Page } from 'puppeteer';
 
 const log = logger('prerenderer');
+
+// Number of renders this prerender process is running concurrently.
+// Every render funnels through `withTimeout`, which increments on entry
+// and decrements when the race resolves, so on the timeout path this is
+// the live count of co-tenant renders competing for the same Node
+// process and shared Chrome — the signal that distinguishes a render
+// starved by neighbours from one stalled on its own.
+let activeRenderCount = 0;
+
+// CDP `Performance` reports cumulative ScriptDuration / TaskDuration in
+// seconds and JSHeapUsedSize in bytes. We sample twice across this
+// window and diff against wall-clock to derive the busy fractions, so
+// the window must be long enough for V8 to accrue a meaningful delta
+// but short enough not to materially extend the already-timed-out call.
+const CPU_SAMPLE_WINDOW_MS = 750;
+// Budget for the main-thread responsiveness probe. If a trivial
+// `page.evaluate` can't return inside this, the JS thread is wedged.
+const RESPONSIVENESS_PROBE_MS = 2000;
 export const cardRenderTimeout = prerenderRenderTimeoutMs;
 export const renderTimeoutMs = cardRenderTimeout;
 
@@ -1273,26 +1292,136 @@ export async function captureScreenshot(
   return { base64, width: dims.width, height: dims.height };
 }
 
+// Best-effort main-thread responsiveness probe. Races a trivial
+// `page.evaluate` against a short timer: if the evaluate can't even
+// return `true` within the budget, the page's JS thread is wedged
+// (a runaway sync loop or a never-settling render), which is exactly
+// the condition where the in-page `__boxelRenderDiagnostics` hook also
+// goes dark. Never throws — resolves to a boolean.
+async function probeMainThreadResponsive(page: Page): Promise<boolean> {
+  // Clear the loser timer so a fast `evaluate` doesn't leave a pending
+  // timeout holding the event loop for the rest of the probe window.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      page
+        .evaluate(() => true)
+        .then(() => true)
+        .catch(() => false),
+      new Promise<boolean>((r) => {
+        timer = setTimeout(() => r(false), RESPONSIVENESS_PROBE_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Best-effort CPU / heap capture via the CDP `Performance` domain. Runs
+// out-of-process, so it works even when the page's JS thread is pegged
+// and `page.evaluate` would block. Samples `Performance.getMetrics`
+// twice ~CPU_SAMPLE_WINDOW_MS apart and diffs the cumulative
+// ScriptDuration / TaskDuration (seconds) against wall-clock to derive
+// the fraction of the window the main thread spent running JS / any
+// task; reads JSHeapUsedSize (bytes) for the in-use heap. Any field
+// that can't be read is omitted. Never throws.
+async function captureCpuMetrics(page: Page): Promise<{
+  scriptBusyFraction?: number;
+  taskBusyFraction?: number;
+  jsHeapUsedMB?: number;
+}> {
+  let client: CDPSession | undefined;
+  try {
+    client = await page.createCDPSession();
+    await client.send('Performance.enable');
+    let readMetrics = async (): Promise<Map<string, number>> => {
+      let { metrics } = (await client!.send('Performance.getMetrics')) as {
+        metrics: Array<{ name: string; value: number }>;
+      };
+      let map = new Map<string, number>();
+      for (let m of metrics) {
+        map.set(m.name, m.value);
+      }
+      return map;
+    };
+    let firstWall = Date.now();
+    let first = await readMetrics();
+    await new Promise((r) => setTimeout(r, CPU_SAMPLE_WINDOW_MS));
+    let secondWall = Date.now();
+    let second = await readMetrics();
+
+    let wallSec = (secondWall - firstWall) / 1000;
+    let result: {
+      scriptBusyFraction?: number;
+      taskBusyFraction?: number;
+      jsHeapUsedMB?: number;
+    } = {};
+
+    let s1 = first.get('ScriptDuration');
+    let s2 = second.get('ScriptDuration');
+    if (typeof s1 === 'number' && typeof s2 === 'number' && wallSec > 0) {
+      result.scriptBusyFraction = (s2 - s1) / wallSec;
+    }
+    let t1 = first.get('TaskDuration');
+    let t2 = second.get('TaskDuration');
+    if (typeof t1 === 'number' && typeof t2 === 'number' && wallSec > 0) {
+      result.taskBusyFraction = (t2 - t1) / wallSec;
+    }
+    let heap = second.get('JSHeapUsedSize');
+    if (typeof heap === 'number') {
+      result.jsHeapUsedMB = heap / (1024 * 1024);
+    }
+    return result;
+  } catch {
+    // CDP unavailable (page closing, session race) — omit these fields.
+    return {};
+  } finally {
+    try {
+      await client?.detach();
+    } catch {
+      // Session may already be gone with the page; ignore.
+    }
+  }
+}
+
 export async function withTimeout<T>(
   page: Page,
   fn: () => Promise<T>,
   timeoutMs = cardRenderTimeout,
 ): Promise<T | RenderError> {
-  let result = await Promise.race([
-    fn().catch((err) => {
-      // Puppeteer's own TimeoutError (from waitForFunction/waitForSelector)
-      // should be treated the same as our outer timeout
-      if (err instanceof Error && err.name === 'TimeoutError') {
-        return { timeout: true } as { timeout: true };
-      }
-      throw err;
-    }),
-    new Promise<{ timeout: true }>((r) =>
-      setTimeout(() => {
-        r({ timeout: true });
-      }, timeoutMs),
-    ),
-  ]);
+  // Every render funnels through here, so this counter is the live
+  // count of concurrent renders in this process. Capture it (including
+  // this render) at the moment the race resolves — the timeout block
+  // below reports it to distinguish a render starved by neighbours from
+  // one stalled on its own.
+  activeRenderCount++;
+  let concurrentRenders = activeRenderCount;
+  let result!: T | { timeout: true };
+  // Capture the timeout timer so we can clear it once the race settles —
+  // otherwise a render that finishes fast leaves a pending timer holding
+  // the event loop for the full `timeoutMs`.
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    result = await Promise.race([
+      fn().catch((err) => {
+        // Puppeteer's own TimeoutError (from waitForFunction/waitForSelector)
+        // should be treated the same as our outer timeout
+        if (err instanceof Error && err.name === 'TimeoutError') {
+          return { timeout: true } as { timeout: true };
+        }
+        throw err;
+      }),
+      new Promise<{ timeout: true }>((r) => {
+        timeoutTimer = setTimeout(() => {
+          r({ timeout: true });
+        }, timeoutMs);
+      }),
+    ]);
+    concurrentRenders = activeRenderCount;
+  } finally {
+    activeRenderCount--;
+    clearTimeout(timeoutTimer);
+  }
   if (
     result &&
     typeof result == 'object' &&
@@ -1303,7 +1432,44 @@ export async function withTimeout<T>(
     let [_a, _b, encodedId] = url.pathname.split('/');
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
-    // Capture diagnostics only if the page is still alive; timeouts can close the target.
+    // Render-hang discriminators, captured here only on the timeout
+    // path — the responsiveness probe and CPU sampling do real work, so
+    // they must never touch the success path. Order matters: the
+    // out-of-process / bounded signals run FIRST because they survive a
+    // wedged JS thread (the probe races a short timer; CPU capture and
+    // the network tracker read via CDP / a passive Map). The in-page
+    // `page.evaluate` diagnostics run LAST and only when the thread is
+    // responsive — on a CPU-spinning render (exactly what this is meant
+    // to diagnose) an evaluate blocks until the protocol timeout and
+    // would starve the RenderError we owe the caller.
+    let mainThreadResponsive: boolean | null = null;
+    let cpuMetrics: {
+      scriptBusyFraction?: number;
+      taskBusyFraction?: number;
+      jsHeapUsedMB?: number;
+    } = {};
+    if (!page.isClosed()) {
+      try {
+        mainThreadResponsive = await probeMainThreadResponsive(page);
+      } catch {
+        mainThreadResponsive = null;
+      }
+      cpuMetrics = await captureCpuMetrics(page);
+    }
+    // Out-of-band CDP view of fetches still outstanding — survives a
+    // wedged JS thread, so it's available even when the in-page hooks
+    // below are skipped. The longest-lived entry is what a waiting
+    // render is hung on.
+    let pendingNetworkRequests = getPendingNetworkRequests(page);
+
+    // In-page diagnostics last. Together with the signals above they
+    // tell apart a CPU-spinning render (unresponsive thread,
+    // scriptBusyFraction ≈ 1) from a render waiting on a resource
+    // (responsive thread, low script fraction → look at
+    // pendingNetworkRequests for the hung fetch). Gate on a responsive
+    // thread: a wedged one can't service `page.evaluate`, so these would
+    // block until the protocol timeout — skip them and lean on the
+    // out-of-process signals above.
     let dom: string | null = null;
     let docsInFlight: number | null = null;
     let richDiagnostics: {
@@ -1322,7 +1488,7 @@ export async function withTimeout<T>(
       recentQueryLoads?: unknown[];
     } | null = null;
     let timerSummary: string | null = null;
-    if (!page.isClosed()) {
+    if (mainThreadResponsive === true && !page.isClosed()) {
       try {
         dom = await page.evaluate(() => {
           let el = document.querySelector('[data-prerender]');
@@ -1332,9 +1498,9 @@ export async function withTimeout<T>(
           let err = document.querySelector('[data-prerender-error]');
           return err?.outerHTML ?? null;
         });
-        // CS-10872: prefer the richer per-URL diagnostic hook when the
-        // host exposes it; fall back to the count-only `__docsInFlight`
-        // so the old host build path still produces a sensible log.
+        // Prefer the richer per-URL diagnostic hook when the host
+        // exposes it; fall back to the count-only `__docsInFlight` so the
+        // old host build path still produces a sensible log.
         richDiagnostics = await page.evaluate(() => {
           try {
             let diag = (globalThis as any).__boxelRenderDiagnostics;
@@ -1375,6 +1541,8 @@ export async function withTimeout<T>(
         timerSummary = null;
       }
     }
+
+    let topPending = pendingNetworkRequests?.[0];
     log.warn(
       `render of ${id} timed out after ${timeoutMs}ms` +
         ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
@@ -1383,6 +1551,15 @@ export async function withTimeout<T>(
         ` fileMetaDocsInFlight=${richDiagnostics?.fileMetaDocsInFlight?.length ?? 0}` +
         ` inFlightModuleImports=${richDiagnostics?.inFlightModuleImports?.length ?? 0}` +
         ` evaluating=${richDiagnostics?.currentlyEvaluatingModule ?? 'none'}` +
+        ` mainThreadResponsive=${mainThreadResponsive ?? '<unknown>'}` +
+        ` scriptBusy=${
+          typeof cpuMetrics.scriptBusyFraction === 'number'
+            ? cpuMetrics.scriptBusyFraction.toFixed(2)
+            : '<unknown>'
+        }` +
+        ` pendingFetches=${pendingNetworkRequests?.length ?? '<unknown>'}` +
+        (topPending ? `(top: ${topPending.url} ${topPending.ageMs}ms)` : '') +
+        ` concurrentRenders=${concurrentRenders}` +
         ` DOM:\n${dom?.trim()}`,
     );
     // Diagnostics ride on the outer `RenderError.diagnostics` as a
@@ -1450,6 +1627,20 @@ export async function withTimeout<T>(
       ...(typeof timerSummary === 'string' && timerSummary.trim()
         ? { blockedTimerSummary: timerSummary.trim() }
         : {}),
+      ...(typeof mainThreadResponsive === 'boolean'
+        ? { mainThreadResponsive }
+        : {}),
+      ...(typeof cpuMetrics.scriptBusyFraction === 'number'
+        ? { scriptBusyFraction: cpuMetrics.scriptBusyFraction }
+        : {}),
+      ...(typeof cpuMetrics.taskBusyFraction === 'number'
+        ? { taskBusyFraction: cpuMetrics.taskBusyFraction }
+        : {}),
+      ...(typeof cpuMetrics.jsHeapUsedMB === 'number'
+        ? { jsHeapUsedMB: cpuMetrics.jsHeapUsedMB }
+        : {}),
+      ...(pendingNetworkRequests ? { pendingNetworkRequests } : {}),
+      concurrentRenders,
     };
     let timeoutError: RenderError = {
       type: 'instance-error',

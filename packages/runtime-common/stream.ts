@@ -1,6 +1,10 @@
-import { isNode, executableExtensions, hasExecutableExtension } from './index';
-import type { FileRef } from './realm';
-import type { LocalPath } from './paths';
+import {
+  isNode,
+  executableExtensions,
+  hasExecutableExtension,
+} from './index.ts';
+import type { FileRef } from './realm.ts';
+import type { LocalPath } from './paths.ts';
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 

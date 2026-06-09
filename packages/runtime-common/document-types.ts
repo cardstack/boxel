@@ -1,7 +1,10 @@
-import type { RealmInfo } from './realm';
-import type { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
-import type { CardTypeSummary, RealmMetaValue } from './index-structure';
-import type { CodeRef } from './code-ref';
+import type { RealmInfo } from './realm.ts';
+import type {
+  QueryResultsMeta,
+  PrerenderedCard,
+} from './index-query-engine.ts';
+import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
+import type { CodeRef } from './code-ref.ts';
 import {
   type CardResource,
   type CssResource,
@@ -13,7 +16,7 @@ import {
   isCardResource,
   isFileMetaResource,
   isPrerenderedCardResource,
-} from './resource-types';
+} from './resource-types.ts';
 
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
@@ -101,7 +104,7 @@ export function isCardDocumentString(maybeJsonString: string) {
 import {
   isSingleCardDocument,
   isCardCollectionDocument,
-} from './card-document-shape';
+} from './card-document-shape.ts';
 export { isSingleCardDocument, isCardCollectionDocument };
 
 export function isFileMetaCollectionDocument(

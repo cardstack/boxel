@@ -1,7 +1,7 @@
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './realm-identifiers';
+} from './realm-identifiers.ts';
 
 interface LocalOptions {
   preserveQuerystring?: boolean;

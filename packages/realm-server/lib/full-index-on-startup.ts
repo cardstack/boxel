@@ -1,4 +1,4 @@
-import type { RealmRegistryRow } from './realm-registry-reconciler';
+import type { RealmRegistryRow } from './realm-registry-reconciler.ts';
 
 // Resolves whether a realm should run a from-scratch index when its process
 // boots, given the registry row's `kind` and the value of

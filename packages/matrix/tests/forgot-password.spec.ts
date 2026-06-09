@@ -1,5 +1,5 @@
-import { expect, test } from './fixtures';
-import { appURL } from '../support/isolated-realm-server';
+import { expect, test } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   assertLoggedIn,
@@ -8,7 +8,7 @@ import {
   login,
   createSubscribedUser,
   updateSynapseUser,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Forgot password', () => {
   let user: { username: string; password: string; credentials: any };

@@ -1,8 +1,12 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
-import { logger } from './logger';
+import type {
+  IssueData,
+  ProjectData,
+  ResolvedSkill,
+} from './factory-agent/index.ts';
+import { logger } from './logger.ts';
 
 const log = logger('factory-skill-loader');
 

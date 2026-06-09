@@ -7,7 +7,7 @@ import type {
   FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Loader } from './loader';
+import { Loader } from './loader.ts';
 import {
   isField,
   isSpec,
@@ -17,13 +17,13 @@ import {
   isBaseInstance,
   meta,
   relativeTo,
-} from './constants';
-import { CardError } from './error';
-import type { VirtualNetwork } from './virtual-network';
-import type { RealmResourceIdentifier } from './realm-identifiers';
-import type { LooseCardResource, FileMetaResource } from './index';
-import { isUrlLike, trimExecutableExtension } from './index';
-import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
+} from './constants.ts';
+import { CardError } from './error.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { LooseCardResource, FileMetaResource } from './index.ts';
+import { isUrlLike, trimExecutableExtension } from './index.ts';
+import type { RuntimeDependencyTrackingContext } from './dependency-tracker.ts';
 
 export type ResolvedCodeRef = {
   module: RealmResourceIdentifier;
@@ -53,7 +53,7 @@ let localIdentities = new WeakMap<
 // only need to recognize a CodeRef don't pull the transitive runtime
 // chain rooted in this file. Re-exported here for backward compat; the
 // local imports let the remainder of this file call them directly.
-import { isResolvedCodeRef, isCodeRef } from './card-document-shape';
+import { isResolvedCodeRef, isCodeRef } from './card-document-shape.ts';
 export { isResolvedCodeRef, isCodeRef };
 
 export function assertIsResolvedCodeRef(

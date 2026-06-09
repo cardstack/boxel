@@ -20,20 +20,20 @@ import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   setContextResponse,
-} from '../middleware';
+} from '../middleware/index.ts';
 import {
   getMultiRealmAuthorization,
   getSearchRequestPayload,
-} from '../middleware/multi-realm-authorization';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
-import type { JobScopedSearchCache } from '../job-scoped-search-cache';
+} from '../middleware/multi-realm-authorization.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
   sanitizeJobPriorityHeader,
   sanitizePrerenderJobId,
-} from '../prerender/prerender-constants';
+} from '../prerender/prerender-constants.ts';
 
 export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;

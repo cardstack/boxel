@@ -14,12 +14,12 @@ import { verifyURLSignature } from '@cardstack/runtime-common/url-signature';
 import archiver from 'archiver';
 import { existsSync, statSync } from 'fs-extra';
 import { join, relative, resolve, sep, isAbsolute } from 'path';
-import type { CreateRoutesArgs } from '../routes';
-import { retrieveTokenClaim } from '../utils/jwt';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { retrieveTokenClaim } from '../utils/jwt.ts';
 import {
   buildReadableRealms,
   getPublishedRealmURLs,
-} from '../utils/realm-readability';
+} from '../utils/realm-readability.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -27,7 +27,7 @@ import {
   sendResponseForNotFound,
   sendResponseForSystemError,
   sendResponseForUnauthorizedRequest,
-} from '../middleware';
+} from '../middleware/index.ts';
 
 const log = logger('download-realm');
 

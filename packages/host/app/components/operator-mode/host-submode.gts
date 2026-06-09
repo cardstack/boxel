@@ -15,10 +15,12 @@ import perform from 'ember-concurrency/helpers/perform';
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
+import PublishRealmCommand from '@cardstack/host/commands/publish-realm';
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
+import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -44,6 +46,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
   @service declare private hostModeService: HostModeService;
+  @service declare private commandService: CommandService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
@@ -94,19 +97,24 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
-    const results = await this.realm.publish(this.realmURL, publishedRealmURLs);
+    // Publish through the same command exposed to boxel-cli so the UI and
+    // headless callers share one path. The modal already enforces the
+    // publishability gate, so force past the command's redundant re-check.
+    let command = new PublishRealmCommand(this.commandService.commandContext);
+    let result = await command.execute({
+      realmURL: this.realmURL,
+      publishedRealmURLs,
+      force: true,
+    });
 
     const errors = new Map<string, string>();
-    if (results) {
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          const url = publishedRealmURLs[index];
-          const error = result as PromiseRejectedResult;
-          const errorMessage =
-            error.reason?.message || 'Failed to publish to this domain';
-          errors.set(url, errorMessage);
-        }
-      });
+    for (let target of result.results) {
+      if (target.status === 'error') {
+        errors.set(
+          target.publishedRealmURL,
+          target.error || 'Failed to publish to this domain',
+        );
+      }
     }
 
     if (errors.size > 0) {

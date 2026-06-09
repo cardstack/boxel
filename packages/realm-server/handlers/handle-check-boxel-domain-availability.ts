@@ -4,9 +4,9 @@ import {
   sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import { validateSubdomain } from '../lib/user-subdomain-validation';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { validateSubdomain } from '../lib/user-subdomain-validation.ts';
 
 type CheckBoxelDomainAvailabilityResponse = {
   available: boolean;

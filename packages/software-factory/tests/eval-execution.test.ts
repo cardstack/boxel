@@ -5,7 +5,7 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import {
   discoverEvaluableFiles,
   runEvaluateInMemory,
-} from '../src/eval-execution';
+} from '../src/eval-execution.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

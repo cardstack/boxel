@@ -1,9 +1,9 @@
 // This should be first
-import '../src/setup-logger';
+import '../src/setup-logger.ts';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { logger } from '../src/logger';
+import { logger } from '../src/logger.ts';
 
 let log = logger('boxel-search');
 

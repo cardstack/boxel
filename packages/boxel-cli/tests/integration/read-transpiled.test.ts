@@ -1,17 +1,17 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readTranspiledModule } from '../../src/commands/read-transpiled';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { readTranspiledModule } from '../../src/commands/read-transpiled.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { realmMilestone } from '../../src/commands/realm/milestone';
-import { CheckpointManager } from '../../src/lib/checkpoint-manager';
+import { realmMilestone } from '../../src/commands/realm/milestone.ts';
+import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
 
 let workspaceDir: string;
 

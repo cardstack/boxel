@@ -315,7 +315,7 @@ export default class FileDefManagerImpl
       serialization: LooseSingleCardDocument;
     }[] = await Promise.all(
       cards.map(async (card) => {
-        let opts: CardAPI.SerializeOpts = {
+        let opts: Omit<CardAPI.SerializeOpts, 'virtualNetwork'> = {
           useAbsoluteURL: true,
           includeComputeds: true,
         };

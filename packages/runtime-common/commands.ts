@@ -2,14 +2,14 @@ import {
   type ResolvedCodeRef,
   isCardDef,
   codeRefWithAbsoluteIdentifier,
-} from './code-ref';
-import type { RealmResourceIdentifier } from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+} from './code-ref.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
-import type { AttributesSchema, CardSchema } from './helpers/ai';
-import { generateJsonSchemaForCardType } from './helpers/ai';
-import { simpleHash } from './utils';
+import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
+import { generateJsonSchemaForCardType } from './helpers/ai.ts';
+import { simpleHash } from './utils.ts';
 import type { EncodedCommandRequest } from '../base/matrix-event';
 
 export interface CommandRequest {
@@ -50,7 +50,11 @@ export abstract class Command<
   name: string = this.constructor.name;
   description = '';
 
-  constructor(protected readonly commandContext: CommandContext) {}
+  protected readonly commandContext: CommandContext;
+
+  constructor(commandContext: CommandContext) {
+    this.commandContext = commandContext;
+  }
 
   async execute(): Promise<CardInstance<CardResultType>>;
   async execute(

@@ -1,4 +1,4 @@
-import type { SyncManifest } from './sync-manifest';
+import type { SyncManifest } from './sync-manifest.ts';
 
 export type SideStatus = 'unchanged' | 'changed' | 'added' | 'deleted';
 export type SyncAction =

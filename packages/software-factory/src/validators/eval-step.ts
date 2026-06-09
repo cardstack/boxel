@@ -13,23 +13,23 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
 import {
   discoverEvaluableFiles,
   evaluateRealmModules,
   type EvalModuleResult,
   type EvalModuleRecord,
-} from '../eval-execution';
-import { getNextValidationSequenceNumber } from '../realm-operations';
+} from '../eval-execution.ts';
+import { getNextValidationSequenceNumber } from '../realm-operations.ts';
 import {
   createEvalResult,
   completeEvalResult,
   type EvalModuleErrorData,
-} from '../eval-result-cards';
-import { logger } from '../logger';
+} from '../eval-result-cards.ts';
+import { logger } from '../logger.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
 
 let log = logger('eval-validation-step');
 

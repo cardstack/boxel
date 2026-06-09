@@ -1,5 +1,5 @@
-import { CardError, coerceErrorMessage } from '../error';
-import type { SharedTests } from '../helpers';
+import { CardError, coerceErrorMessage } from '../error.ts';
+import type { SharedTests } from '../helpers/index.ts';
 
 const PLACEHOLDER = 'placeholder fallback message';
 

@@ -1,12 +1,12 @@
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
 
-import type { TestResult } from './factory-agent';
+import type { TestResult } from './factory-agent/index.ts';
 import type {
   QunitResults,
   TestModuleResultData,
   TestResultEntryData,
   TestRunAttributes,
-} from './test-run-types';
+} from './test-run-types.ts';
 
 /**
  * Convert QUnit test results (collected via QUnit.on callbacks in the browser)

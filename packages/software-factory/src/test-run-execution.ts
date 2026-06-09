@@ -4,13 +4,13 @@ import { join, normalize, resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 import { chromium } from '@playwright/test';
 
-import { getNextValidationSequenceNumber } from './realm-operations';
-import { createTestRun, completeTestRun } from './test-run-cards';
-import { parseQunitResults } from './test-run-parsing';
+import { getNextValidationSequenceNumber } from './realm-operations.ts';
+import { createTestRun, completeTestRun } from './test-run-cards.ts';
+import { parseQunitResults } from './test-run-parsing.ts';
 import type {
   ExecuteTestRunOptions,
   QunitResults,
@@ -19,7 +19,7 @@ import type {
   RunTestsResult,
   TestRunHandle,
   TestRunRealmOptions,
-} from './test-run-types';
+} from './test-run-types.ts';
 import { findHostDistPackageDir } from '@cardstack/realm-test-harness';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 

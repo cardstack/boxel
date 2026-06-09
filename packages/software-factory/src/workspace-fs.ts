@@ -21,8 +21,8 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 
-import { ensureJsonExtension } from './realm-operations';
-import { validateRealmRelativePath } from './realm-relative-path';
+import { ensureJsonExtension } from './realm-operations.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
 
 // ---------------------------------------------------------------------------
 // Result shapes

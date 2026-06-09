@@ -1,6 +1,6 @@
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
-import type { JobInfo } from './worker';
+import type { JobInfo } from './worker.ts';
 
 export async function retry<T>(
   fn: () => Promise<T | null>,

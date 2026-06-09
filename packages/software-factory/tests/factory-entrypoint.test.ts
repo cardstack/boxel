@@ -9,11 +9,11 @@ import {
   parseFactoryEntrypointArgs,
   runFactoryEntrypoint,
   wantsFactoryEntrypointHelp,
-} from '../src/factory-entrypoint';
-import type { FactoryBrief } from '../src/factory-brief';
-import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
-import type { SeedIssueResult } from '../src/factory-seed';
-import { installTestProfile } from './helpers/test-profile';
+} from '../src/factory-entrypoint.ts';
+import type { FactoryBrief } from '../src/factory-brief.ts';
+import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm.ts';
+import type { SeedIssueResult } from '../src/factory-seed.ts';
+import { installTestProfile } from './helpers/test-profile.ts';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';

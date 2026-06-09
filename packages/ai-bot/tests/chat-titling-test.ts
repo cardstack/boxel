@@ -3,7 +3,7 @@ import {
   getLatestResultMessage,
   setTitle,
   shouldSetRoomTitle,
-} from '../lib/set-title';
+} from '../lib/set-title.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -18,7 +18,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import type { IEvent, IRoomEvent, IStateEvent } from 'matrix-js-sdk';
 import { EventStatus, type MatrixClient, MatrixEvent } from 'matrix-js-sdk';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import type OpenAI from 'openai';
 import {
   REPLACE_MARKER,

@@ -1,15 +1,15 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { ParseValidationStep } from '../src/validators/parse-step';
-import type { ParseValidationDetails } from '../src/validators/parse-step';
+import { ParseValidationStep } from '../src/validators/parse-step.ts';
+import type { ParseValidationDetails } from '../src/validators/parse-step.ts';
 import {
   BROKEN_TEMPLATE_GTS,
   VALID_MODULE_GTS,
-} from './helpers/parse-test-fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from './helpers/parse-test-fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

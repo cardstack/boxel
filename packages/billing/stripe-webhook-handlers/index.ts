@@ -1,10 +1,10 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { handlePaymentSucceeded } from './payment-succeeded';
-import { handleCheckoutSessionCompleted } from './checkout-session-completed';
+import { handlePaymentSucceeded } from './payment-succeeded.ts';
+import { handleCheckoutSessionCompleted } from './checkout-session-completed.ts';
 
 import Stripe from 'stripe';
-import { handleSubscriptionDeleted } from './subscription-deleted';
-import { getUserByStripeId } from '../billing-queries';
+import { handleSubscriptionDeleted } from './subscription-deleted.ts';
+import { getUserByStripeId } from '../billing-queries.ts';
 
 export type StripeEvent = {
   id: string;

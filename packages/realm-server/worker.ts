@@ -1,6 +1,6 @@
-import './instrument';
-import './setup-logger'; // This should be first
-import './lib/wtfnode-on-signal';
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
+import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 
 // Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
@@ -43,9 +43,9 @@ import {
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import { createRemotePrerenderer } from './prerender/remote-prerenderer';
-import { buildCreatePrerenderAuth } from './prerender/auth';
-import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
+import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
 
 let log = logger('worker');
 

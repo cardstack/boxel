@@ -3,8 +3,8 @@ import { basename } from 'path';
 import {
   computeBatchClearCacheGate,
   type BatchOwner,
-} from '../prerender/batch-ownership-gate';
-import { toAffinityKey } from '../prerender/affinity';
+} from '../prerender/batch-ownership-gate.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import type { PrerenderVisitArgs } from '@cardstack/runtime-common';
 
 // These tests exercise CS-10758 step 3 (`clearCache` batch ownership) at

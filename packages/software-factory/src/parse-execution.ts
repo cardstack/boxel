@@ -27,11 +27,14 @@ import { join, resolve, dirname } from 'node:path';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { specRef } from '@cardstack/runtime-common/constants';
 
-import { logger } from './logger';
-import type { ParseErrorData, ParseFileResultData } from './parse-result-cards';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { retryWithPoll } from './retry-with-poll';
-import { readCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import type {
+  ParseErrorData,
+  ParseFileResultData,
+} from './parse-result-cards.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { retryWithPoll } from './retry-with-poll.ts';
+import { readCard } from './workspace-fs.ts';
 
 let log = logger('parse-execution');
 

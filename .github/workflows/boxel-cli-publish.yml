@@ -9,9 +9,11 @@ name: boxel-cli publish
 #         tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>` under
 #         dist-tag `unstable`.
 #       - Via "Run workflow" with the `confirm` field left blank — skip the
-#         bump/commit/tag dance and publish whatever version is currently in
-#         `packages/boxel-cli/package.json` under dist-tag `unstable`. Fails
-#         loudly if that version is already on npm (npm refuses to clobber).
+#         PR-driven bump/commit/tag dance, derive the next free
+#         `<base>-unstable.<n>` from npm (npm is the source of truth; the bump
+#         is not committed back to main), and publish it under dist-tag
+#         `unstable`. Resolving the counter from npm keeps the manual path from
+#         clobbering an existing version or colliding with the push path.
 #
 #   • `stable` job — "Run workflow" with `confirm = promote`. Strips
 #     `-unstable.<n>` from the current version and publishes the resulting
@@ -238,6 +240,38 @@ jobs:
           fi
           git push origin main --follow-tags
           echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bump to next unstable version
+        # Manual (`workflow_dispatch`, blank confirm) path only. The push path
+        # already computes a fresh `-unstable.<n>` via compute-release.ts; this
+        # step gives the manual path the same guarantee. The manual path
+        # deliberately doesn't commit the bump back to main, so the repo can't
+        # track the counter — npm is the source of truth. The script reads the
+        # published versions and picks the next free `<base>-unstable.<n>`, so a
+        # manual publish can never collide with an already-published version
+        # (the E403 this step exists to prevent). The push path resolves its
+        # counter from npm too (compute-release.ts), so they can't collide either.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: packages/boxel-cli
+        run: |
+          set -euo pipefail
+          node -e '
+            const { execSync } = require("child_process"), fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            // Drop any existing -unstable.<n> to get the base we iterate on.
+            const base = pkg.version.split("-unstable.")[0];
+            // `npm view ... versions --json` is an array, or a bare string when
+            // exactly one version is published; `[].concat` normalizes both.
+            // A non-zero exit (npm outage) is left to abort the run rather than
+            // be treated as "nothing published" — the latter would pick
+            // -unstable.0 and re-create the collision this step prevents.
+            const pub = [].concat(JSON.parse(execSync("npm view @cardstack/boxel-cli versions --json")));
+            const re = new RegExp("^" + base.replace(/\./g, "\\.") + "-unstable\\.(\\d+)$");
+            const ns = pub.filter((v) => typeof v === "string").map((v) => (v.match(re) || [])[1]).filter((x) => x != null).map(Number);
+            pkg.version = base + "-unstable." + (ns.length ? Math.max(...ns) + 1 : 0);
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+            console.log("next unstable version → " + pkg.version);
+          '
 
       - name: Publish to npm
         if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none')
