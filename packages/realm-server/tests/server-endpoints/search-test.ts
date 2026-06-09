@@ -326,6 +326,143 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       }
     });
 
+    // The unified request members fold into the job-scoped cache key, so two
+    // requests that differ only on `render` (format / renderType), `dataOnly`,
+    // or `cardUrls` segregate into distinct entries + ETags — even though this
+    // endpoint emits the live document for all of them — while an identical
+    // repeat hits the cache. This is what lets the live and prerendered
+    // endpoints share one job-scoped cache without colliding.
+    test('QUERY /_federated-search cache key segregates entries by render / dataOnly / cardUrls', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let primaryCalls = 0;
+      let primaryProto = testRealm.search;
+      (testRealm as unknown as { search: typeof testRealm.search }).search =
+        function (
+          this: typeof testRealm,
+          ...args: Parameters<typeof testRealm.search>
+        ) {
+          primaryCalls++;
+          return primaryProto.apply(this, args);
+        };
+
+      try {
+        let query: Query = {
+          filter: { on: baseCardRef, eq: { cardTitle: 'Shared Card' } },
+        };
+        let searchURL = new URL('/_federated-search', testRealm.url);
+        let post = (body: Record<string, unknown>) =>
+          request
+            .post(`${searchURL.pathname}${searchURL.search}`)
+            .set('Accept', 'application/vnd.card+json')
+            .set('Content-Type', 'application/json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Authorization', `Bearer ${realmServerToken}`)
+            .set('x-boxel-job-id', '42.1')
+            .set('x-boxel-consuming-realm', testRealm.url)
+            .send({ ...query, realms: [testRealm.url], ...body });
+
+        let etags = new Set<string>();
+
+        // 1. Plain query — prefer-HTML default (render.format defaults to fitted).
+        let first = await post({});
+        assert.strictEqual(first.status, 200, 'plain query: HTTP 200');
+        assert.strictEqual(primaryCalls, 1, 'plain query populated');
+        etags.add(first.headers['etag']);
+
+        // 2. Identical plain query — same key → cache hit, same ETag.
+        let firstRepeat = await post({});
+        assert.strictEqual(
+          primaryCalls,
+          1,
+          'identical plain query was a cache hit',
+        );
+        assert.strictEqual(
+          firstRepeat.headers['etag'],
+          first.headers['etag'],
+          'identical request → identical ETag',
+        );
+
+        // 3. Explicit `{ render: { format: 'fitted' } }` is the prefer-HTML
+        // default, so it canonicalizes to the plain-query key → cache hit.
+        await post({ render: { format: 'fitted' } });
+        assert.strictEqual(
+          primaryCalls,
+          1,
+          'explicit default render matched the plain-query key (cache hit)',
+        );
+
+        // 3b. An empty `cardUrls` is a no-op filter, so it shares the
+        // plain-query entry rather than fragmenting the cache.
+        let emptyCardUrls = await post({ cardUrls: [] });
+        assert.strictEqual(
+          primaryCalls,
+          1,
+          'empty cardUrls matched the plain-query key (cache hit)',
+        );
+        assert.strictEqual(
+          emptyCardUrls.headers['etag'],
+          first.headers['etag'],
+          'empty cardUrls → same ETag as the plain query',
+        );
+
+        // 4. A different render.format → miss.
+        let embedded = await post({ render: { format: 'embedded' } });
+        assert.strictEqual(
+          primaryCalls,
+          2,
+          'different render.format fired a fresh populate',
+        );
+        etags.add(embedded.headers['etag']);
+        assert.deepEqual(
+          embedded.body,
+          first.body,
+          'the render member segregates the cache key but not the response body (the live document)',
+        );
+
+        // 5. A render.renderType → miss.
+        let withRenderType = await post({
+          render: {
+            format: 'fitted',
+            renderType: { module: `${testRealm.url}author`, name: 'Author' },
+          },
+        });
+        assert.strictEqual(
+          primaryCalls,
+          3,
+          'different render.renderType fired a fresh populate',
+        );
+        etags.add(withRenderType.headers['etag']);
+
+        // 6. `dataOnly` → miss (live-only mode; mutually exclusive with render).
+        let dataOnly = await post({ dataOnly: true });
+        assert.strictEqual(primaryCalls, 4, 'dataOnly fired a fresh populate');
+        etags.add(dataOnly.headers['etag']);
+
+        // 7. `cardUrls` → miss.
+        let withCardUrls = await post({
+          cardUrls: [`${testRealm.url}test-card`],
+        });
+        assert.strictEqual(
+          primaryCalls,
+          5,
+          'different cardUrls fired a fresh populate',
+        );
+        etags.add(withCardUrls.headers['etag']);
+
+        assert.strictEqual(
+          etags.size,
+          5,
+          'each distinct request shape produced a distinct ETag',
+        );
+      } finally {
+        delete (testRealm as unknown as { search?: unknown }).search;
+      }
+    });
+
     test('QUERY /_federated-search emits an ETag on cacheable responses', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
