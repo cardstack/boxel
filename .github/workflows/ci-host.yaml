@@ -497,6 +497,20 @@ jobs:
         run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
         working-directory: packages/host
 
+      # DIAGNOSTIC: confirm skills-realm content is still on disk right before
+      # the realm-server reads it. Previous runs showed the explicit clone
+      # populated contents/ but the skills realm still indexed zero files;
+      # this verifies whether something between the clone and realm-server
+      # start is clobbering the content.
+      - name: Verify skills-realm content on disk before services start
+        run: |
+          echo "=== packages/skills-realm/contents/ at $(date -Iseconds) ==="
+          ls -la packages/skills-realm/contents/ || echo "MISSING"
+          echo "=== Skill subdir ==="
+          ls -la packages/skills-realm/contents/Skill/ 2>/dev/null | head -10 || echo "MISSING"
+          echo "=== resolved from realm-server cwd (../skills-realm/contents) ==="
+          (cd packages/realm-server && ls -la ../skills-realm/contents/Skill/ 2>/dev/null | head -10) || echo "MISSING"
+
       - name: Start env-mode test services
         run: mise run test-services:host | tee -a /tmp/server.log &
 
