@@ -4,8 +4,12 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { baseRealm, type Loader } from '@cardstack/runtime-common';
+
 import PublishRealmCommand from '@cardstack/host/commands/publish-realm';
 import RealmService from '@cardstack/host/services/realm';
+
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import {
   setupIntegrationTestRealm,
@@ -37,6 +41,8 @@ let publishabilityResponse: {
 let publishShouldFail: boolean;
 let publishabilityRequested: boolean;
 let publishedURLs: string[];
+let loader: Loader;
+let PublishTarget: typeof BaseCommandModule.PublishTarget;
 
 module('Integration | commands | publish-realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -97,6 +103,10 @@ module('Integration | commands | publish-realm', function (hooks) {
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
+    loader = getService('loader-service').loader;
+    PublishTarget = (
+      await loader.import<typeof BaseCommandModule>(`${baseRealm.url}command`)
+    ).PublishTarget;
     publishabilityResponse = { publishable: true, violations: [] };
     publishShouldFail = false;
     publishabilityRequested = false;
@@ -122,7 +132,9 @@ module('Integration | commands | publish-realm', function (hooks) {
 
     let result = await makeCommand().execute({
       realmURL,
-      targets: [{ type: 'custom', name: 'mysite.example.com' }] as any,
+      targets: [
+        new PublishTarget({ type: 'custom', name: 'mysite.example.com' }),
+      ],
     });
 
     assert.deepEqual(
@@ -144,7 +156,7 @@ module('Integration | commands | publish-realm', function (hooks) {
 
     let result = await makeCommand().execute({
       realmURL,
-      targets: [{ type: 'subdirectory', name: 'my-space' }] as any,
+      targets: [new PublishTarget({ type: 'subdirectory', name: 'my-space' })],
     });
 
     assert.strictEqual(publishedURLs.length, 1);
@@ -173,7 +185,9 @@ module('Integration | commands | publish-realm', function (hooks) {
     await assert.rejects(
       makeCommand().execute({
         realmURL,
-        targets: [{ type: 'custom', name: 'mysite.example.com' }] as any,
+        targets: [
+          new PublishTarget({ type: 'custom', name: 'mysite.example.com' }),
+        ],
       }),
       /not publishable/,
       'rejects with a publishability error',
@@ -188,7 +202,9 @@ module('Integration | commands | publish-realm', function (hooks) {
 
     let result = await makeCommand().execute({
       realmURL,
-      targets: [{ type: 'custom', name: 'mysite.example.com' }] as any,
+      targets: [
+        new PublishTarget({ type: 'custom', name: 'mysite.example.com' }),
+      ],
       force: true,
     });
 
@@ -207,7 +223,9 @@ module('Integration | commands | publish-realm', function (hooks) {
 
     let result = await makeCommand().execute({
       realmURL,
-      targets: [{ type: 'custom', name: 'mysite.example.com' }] as any,
+      targets: [
+        new PublishTarget({ type: 'custom', name: 'mysite.example.com' }),
+      ],
     });
 
     assert.strictEqual(result.results[0].status, 'error');
