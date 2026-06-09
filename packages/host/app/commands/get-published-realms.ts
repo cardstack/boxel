@@ -42,14 +42,16 @@ export default class GetPublishedRealmsCommand extends HostBaseCommand<
 
     // For a source realm lastPublishedAt is a { publishedRealmURL: at } map; a
     // plain string (the realm is itself a published realm) or null means no
-    // publications to report.
+    // publications to report. A published destination is reported even if its
+    // timestamp is missing — coerce to a string so the result keeps the
+    // declared StringField contract rather than dropping a real publication.
     let results =
       lastPublishedAt && typeof lastPublishedAt === 'object'
         ? Object.entries(lastPublishedAt).map(
             ([publishedRealmURL, at]) =>
               new PublishedRealmInfo({
                 publishedRealmURL,
-                lastPublishedAt: at,
+                lastPublishedAt: at == null ? '' : String(at),
               }),
           )
         : [];

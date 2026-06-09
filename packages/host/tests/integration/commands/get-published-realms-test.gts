@@ -114,4 +114,19 @@ module('Integration | commands | get-published-realms', function (hooks) {
 
     assert.strictEqual(result.results.length, 0);
   });
+
+  test('keeps a published destination whose timestamp is missing, coerced to a string', async function (assert) {
+    let realmServer = getService('realm-server');
+    let realmURL = new URL('test/', realmServer.url).href;
+    lastPublishedAtFixture = {
+      'https://mysite.boxel.site/': null as unknown as string,
+    };
+
+    let result = await makeCommand().execute({ realmURL });
+
+    assert.deepEqual(
+      result.results.map((r) => [r.publishedRealmURL, r.lastPublishedAt]),
+      [['https://mysite.boxel.site/', '']],
+    );
+  });
 });
