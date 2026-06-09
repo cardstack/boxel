@@ -2,6 +2,7 @@
   "name": "@cardstack/runtime-common",
   "version": "1.0.0",
   "license": "MIT",
+  "type": "module",
   "imports": {
     "#lint-task": {
       "node": "./tasks/lint.ts",
