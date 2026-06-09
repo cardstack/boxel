@@ -96,18 +96,6 @@ module(
     test('the card chooser is locked to the consuming realm', async function (assert) {
       await renderRealmConfigEdit([{ path: '/docs' }]);
 
-      // DIAGNOSTIC: read the lockConsumingRealm value LinksToEditor sees
-      // so the CI log tells us whether the arg flows from RoutingRuleEdit
-      // through <@fields.instance>. Reveals where the chain breaks if the
-      // picker-locked assertion below fails.
-      assert
-        .dom('[data-test-lockarg-value]')
-        .hasAttribute(
-          'data-test-lockarg-value',
-          'true',
-          'lockConsumingRealm reaches LinksToEditor as true',
-        );
-
       await click('[data-test-add-new="instance"]');
       await waitFor('[data-test-card-catalog-modal]');
       // Wait on `data-test-realm-url` (always present) rather than
@@ -115,15 +103,23 @@ module(
       // `realm.info()` and may show the "Unknown Workspace"
       // placeholder during initial render — search-result-section.gts
       // documents the race).
-      await waitFor(`[data-test-realm-url="${testRealmURL}"]`);
+      await waitFor(
+        `[data-test-card-catalog-modal] [data-test-realm-url="${testRealmURL}"]`,
+      );
       // The realm picker is wrapped in WithKnownRealmsLoaded, which
       // renders a `<:loading>` block (no `data-test-realm-picker-locked`
       // attribute) until the realms list resolves. Wait for the loaded
       // state so the picker-locked assertion has something to match.
-      await waitFor('[data-test-realm-picker-locked]');
+      // Scoped to `[data-test-card-catalog-modal]` because the
+      // operator-mode SearchSheet renders its own (unscoped, unlocked)
+      // SearchPanel + RealmPicker — without scoping, the assertions
+      // pick up that picker instead of the modal's.
+      await waitFor(
+        '[data-test-card-catalog-modal] [data-test-realm-picker-locked]',
+      );
 
       assert
-        .dom('[data-test-realm-picker]')
+        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
         .hasAttribute(
           'data-test-realm-picker-locked',
           'true',
@@ -131,16 +127,20 @@ module(
         );
       assert
         .dom(
-          '[data-test-realm-picker-locked="true"] [data-test-boxel-picker-remove-button]',
+          '[data-test-card-catalog-modal] [data-test-realm-picker-locked="true"] [data-test-boxel-picker-remove-button]',
         )
         .doesNotExist(
           'the consuming-realm pill does not offer a remove affordance when the picker is locked',
         );
       assert
-        .dom(`[data-test-realm-url="${testRealmURL}"]`)
+        .dom(
+          `[data-test-card-catalog-modal] [data-test-realm-url="${testRealmURL}"]`,
+        )
         .exists('candidates from the consuming realm are shown');
       assert
-        .dom(`[data-test-realm-url="${baseRealm.url}"]`)
+        .dom(
+          `[data-test-card-catalog-modal] [data-test-realm-url="${baseRealm.url}"]`,
+        )
         .doesNotExist('cross-realm candidates are excluded by the lock');
     });
 
