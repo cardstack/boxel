@@ -11,7 +11,7 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import { logger } from '@cardstack/runtime-common';
 
-import { createListener } from '../server';
+import { createListener, type RealmHttpServer } from '../server';
 
 // Coverage for the realm-server's HTTP/2 listener. Exercises every branch a
 // peer can land in: standard-mode TLS h2 via the same-port dispatcher, TLS
@@ -73,6 +73,7 @@ async function startListener(opts: {
   boxelEnvironment?: string | null;
 }): Promise<{
   port: number;
+  server: RealmHttpServer;
   isHttp2: boolean;
   close: () => Promise<void>;
 }> {
@@ -128,7 +129,7 @@ async function startListener(opts: {
       server.close((err) => (err ? reject(err) : resolve())),
     );
   };
-  return { port, isHttp2, close };
+  return { port, server, isHttp2, close };
 }
 
 function h1Request(opts: {
@@ -447,6 +448,56 @@ module(basename(__filename), function (hooks) {
         `body indicates HTTP/2 — got "${res.body}"`,
       );
     } finally {
+      await close();
+    }
+  });
+
+  test('env mode h2 server force-closes connections on shutdown', async function (assert) {
+    // The env-mode listener is a bare Http2SecureServer, which — unlike
+    // http.Server — has no native closeAllConnections(). main.ts force-
+    // closes through that method on shutdown; without a mirror, a
+    // persistent h2 session (Traefik's backend connection, an open tab)
+    // wedges server.close() until the peer disconnects. Assert the mirror
+    // exists and actually tears a live session down.
+    let { port, server, close } = await startListener({
+      cert: certFile,
+      key: keyFile,
+      boxelEnvironment: 'cs-test-env',
+    });
+    let forceClose = (server as { closeAllConnections?: () => void })
+      .closeAllConnections;
+    assert.strictEqual(
+      typeof forceClose,
+      'function',
+      'env-mode h2 server mirrors http.Server.closeAllConnections',
+    );
+    let client = http2.connect(`https://127.0.0.1:${port}`, {
+      rejectUnauthorized: false,
+    });
+    client.on('error', () => {});
+    // Complete a request so the session is established and kept alive.
+    await new Promise<void>((resolve, reject) => {
+      let req = client.request({ ':method': 'GET', ':path': '/_alive' });
+      req.on('error', reject);
+      req.resume();
+      req.on('end', () => resolve());
+      req.end();
+    });
+    try {
+      let sessionClosed = new Promise<string>((resolve) =>
+        client.once('close', () => resolve('closed')),
+      );
+      let timedOut = new Promise<string>((resolve) =>
+        setTimeout(() => resolve('timeout'), 3000),
+      );
+      forceClose!.call(server);
+      assert.strictEqual(
+        await Promise.race([sessionClosed, timedOut]),
+        'closed',
+        'closeAllConnections() tears down the live h2 session (no shutdown hang)',
+      );
+    } finally {
+      client.close();
       await close();
     }
   });

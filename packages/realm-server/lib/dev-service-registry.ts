@@ -120,7 +120,9 @@ export function registerService(
   let upstreamScheme = opts?.http2 ? 'https' : 'http';
   let serversTransportKey = `${routerKey}-h2`;
   let loadBalancer: any = {
-    servers: [{ url: `${upstreamScheme}://host.docker.internal:${actualPort}` }],
+    servers: [
+      { url: `${upstreamScheme}://host.docker.internal:${actualPort}` },
+    ],
   };
   if (opts?.http2) {
     loadBalancer.serversTransport = serversTransportKey;

@@ -124,7 +124,9 @@ export function createListener(
   // serving HTTP/1.1 — which Traefik (expecting h2) would turn into all-502s.
   if (process.env.BOXEL_ENVIRONMENT) {
     return {
-      server: buildHttp2SecureServer(certFile, keyFile, app, log),
+      server: withForcedConnectionClose(
+        buildHttp2SecureServer(certFile, keyFile, app, log),
+      ),
       proto: 'https/h2',
     };
   }
@@ -256,6 +258,39 @@ function buildHttp2SecureServer(
     installHttp2Diagnostics(tlsServer, log);
   }
   return tlsServer;
+}
+
+// Node's http2 secure server — like net/tls servers, and unlike
+// `http.Server` — has no `closeAllConnections()`. A graceful shutdown's
+// `server.close()` then waits for peers to end their sessions, so a single
+// persistent h2 session (Traefik's backend connection in env mode, or an
+// open browser tab) can keep the realm-server from ever exiting. Track
+// accepted sockets and expose a `closeAllConnections()` that force-closes
+// them, mirroring `http.Server`'s API so main.ts's existing `typeof` guard
+// force-closes on shutdown without a special case. (Standard mode doesn't
+// need this here — its h2 server is wrapped by the dispatcher, which already
+// tracks sockets and mirrors the same method.)
+function withForcedConnectionClose(
+  server: http2.Http2SecureServer,
+): http2.Http2SecureServer {
+  let activeSockets = new Set<net.Socket>();
+  server.on('connection', (socket: net.Socket) => {
+    activeSockets.add(socket);
+    socket.once('close', () => activeSockets.delete(socket));
+  });
+  (
+    server as http2.Http2SecureServer & { closeAllConnections: () => void }
+  ).closeAllConnections = () => {
+    for (let s of activeSockets) {
+      try {
+        s.destroy();
+      } catch {
+        // best-effort
+      }
+    }
+    activeSockets.clear();
+  };
+  return server;
 }
 
 // Instrument the HTTP/2 secure server so an intermittent stall — a stream that
