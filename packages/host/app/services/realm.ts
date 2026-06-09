@@ -692,9 +692,6 @@ class RealmResource {
           ...this.info,
         };
       }
-    } catch (error) {
-      console.error(`Error unpublishing from URL ${url}:`, error);
-      return;
     } finally {
       this._unPublishingRealms.splice(this._unPublishingRealms.indexOf(url), 1);
     }

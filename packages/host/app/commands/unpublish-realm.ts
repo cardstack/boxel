@@ -14,7 +14,6 @@ import {
 } from '../lib/published-realm-url';
 
 import type RealmService from '../services/realm';
-import type RealmServerService from '../services/realm-server';
 
 // Unpublishes a realm from a single published destination. Resolves once the
 // realm-server accepts the request; there is no reindex on unpublish (the
@@ -24,7 +23,6 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
   typeof BaseCommandModule.UnpublishRealmResult
 > {
   @service declare private realm: RealmService;
-  @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Unpublish';
   description = 'Unpublish a realm from a published destination';
@@ -42,13 +40,16 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     let { UnpublishRealmResult } = commandModule;
 
-    let publishedRealmURL = this.resolvePublishedRealmURL(input);
+    // Normalize so the cached RealmResource (token/claims, _unPublishingRealms
+    // tracking the UI observes) is the one the request acts on.
+    let realmURL = ensureTrailingSlash(input.realmURL);
+    let publishedRealmURL = this.resolvePublishedRealmURL(input, realmURL);
 
-    // Call the realm server directly rather than RealmService.unpublish: the
-    // latter swallows errors (it only updates UI bookkeeping) and always
-    // resolves to undefined, so it can't report a failed unpublish.
+    // Go through RealmService.unpublish so the UI's reactive unpublish state
+    // (_unPublishingRealms, info.lastPublishedAt) updates. It now propagates
+    // failures, which we map to an error result.
     try {
-      await this.realmServer.unpublishRealm(publishedRealmURL);
+      await this.realm.unpublish(realmURL, publishedRealmURL);
       return new UnpublishRealmResult({
         publishedRealmURL,
         status: 'unpublished',
@@ -64,6 +65,7 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
 
   private resolvePublishedRealmURL(
     input: BaseCommandModule.UnpublishRealmInput,
+    realmURL: string,
   ): string {
     if (input.publishedRealmURL) {
       return input.publishedRealmURL;
@@ -73,9 +75,6 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
         'Provide either a `target` or a `publishedRealmURL` to unpublish',
       );
     }
-    // Normalize so the cached RealmResource (token/claims) is found even when
-    // the caller omits the trailing slash.
-    let realmURL = ensureTrailingSlash(input.realmURL);
     let userId = this.realm.getOrCreateRealmResource(realmURL).claims?.user;
     return resolvePublishedRealmUrl(
       {
