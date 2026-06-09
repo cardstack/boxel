@@ -94,7 +94,7 @@ module(basename(__filename), function () {
       });
     }
 
-    test('a module error on a reused page recycles the affinity and recovers on a fresh page', async function (assert) {
+    test('a stale pool page keeps the realm affinity pinned to its failures', async function (assert) {
       let first = await renderModule();
       assert.strictEqual(
         first.response.status,
@@ -107,25 +107,51 @@ module(basename(__filename), function () {
       // the module, every other page still can.
       prerenderer.__test_poisonPage(poisonedPageId, moduleURL);
 
-      // The revalidation lands on the pinned (now stale) page. Rather than
-      // caching its error, the prerenderer recycles the page and retries on
-      // a fresh one, so the call recovers instead of reproducing the error.
       let second = await renderModule();
-      assert.strictEqual(
-        second.response.status,
-        'ready',
-        'the revalidation recovers instead of reproducing the stale-page error',
+      assert.true(
+        second.pool.reused,
+        'the revalidation reuses the affinity-pinned page',
       );
-      assert.notStrictEqual(
+      assert.strictEqual(
         second.pool.pageId,
         poisonedPageId,
-        'recovery is served by a fresh page, not the pinned stale one',
+        'the revalidation routes back to the same (stale) page',
+      );
+      assert.strictEqual(
+        second.response.status,
+        'error',
+        'the stale page reproduces the failure',
+      );
+      assert.ok(
+        JSON.stringify(second.response.error ?? {}).includes(
+          'has no exported member',
+        ),
+        'the failure is the stale-bundle module error',
+      );
+
+      // Once the page is no longer stale, the same pinned page recovers —
+      // the page itself was never broken, only its loaded bundle.
+      prerenderer.__test_clearPoisonedPages();
+      let third = await renderModule();
+      assert.strictEqual(
+        third.pool.pageId,
+        poisonedPageId,
+        'recovery happens on the same pinned page',
+      );
+      assert.strictEqual(
+        third.response.status,
+        'ready',
+        'a fresh bundle on the pinned page renders cleanly again',
       );
     });
 
-    // The realm should not stay stuck on a stale page when a healthy one is
-    // available: a revalidation escapes the pin (the stale page is recycled
-    // and the retry lands on a fresh page) and recovers on its own.
+    // The realm should not stay stuck on a stale page when a healthy one
+    // is available: revalidation should escape the pin — whether by
+    // recycling the stale page or routing the retry elsewhere — and
+    // recover on its own. Today every same-affinity render reuses the
+    // stale page, so none of the revalidations recover while a healthy
+    // page sits idle, and this fails. It is expected to fail until
+    // revalidation can escape affinity pinning.
     test('revalidation recovers while a healthy page is available', async function (assert) {
       let first = await renderModule();
       let poisonedPageId = first.pool.pageId;
