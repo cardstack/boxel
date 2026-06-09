@@ -199,7 +199,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   virtualNetwork.shimAsyncModule({
     id: '@cardstack/runtime-common/marked-sync',
-    resolve: () => import('@cardstack/runtime-common/marked-sync.ts'),
+    resolve: () => import('@cardstack/runtime-common/marked-sync'),
   });
 
   shimModulesForLiveTests(virtualNetwork);
