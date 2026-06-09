@@ -14,6 +14,7 @@ import { isCodeRef } from './card-document-shape';
 import type {
   LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
+  UnifiedSearchCollectionDocument,
 } from './document-types';
 import { SupportedMimeType } from './router';
 
@@ -436,15 +437,29 @@ export function resolveRenderType(input: {
   return filterOn ?? types?.[0];
 }
 
+// The unified federated merge: concatenate `data` in realm order, sum
+// `meta.page.total`, and dedupe `included` by the JSON:API identity pair
+// `(type, id)`.
+//
+// Deduping on `(type, id)` rather than `id` alone is required by the unified
+// model: a `card` and its `rendered-html` share the same `id` (the bare card
+// URL — `type` is the only discriminator), so an id-only key would wrongly
+// collapse the two. The pair also dedupes first-class `css` resources (whose
+// `id` is a content hash) and the transitively-linked `card`/`file-meta`
+// resources, so a stylesheet or a linked card referenced by results from more
+// than one realm travels exactly once. Today's live `included` carries only
+// `card`/`file-meta` with URL ids, for which `(type, id)` and `id` agree, so
+// this is parity-preserving until the prefer-HTML path begins emitting
+// `rendered-html`/`css`.
 export function combineSearchResults(
-  docs: LinkableCollectionDocument[],
-): LinkableCollectionDocument {
-  let combined: LinkableCollectionDocument = {
+  docs: UnifiedSearchCollectionDocument[],
+): UnifiedSearchCollectionDocument {
+  let combined: UnifiedSearchCollectionDocument = {
     data: [],
     meta: { page: { total: 0 } },
   };
-  let included: NonNullable<LinkableCollectionDocument['included']> = [];
-  let includedById = new Set<string>();
+  let included: NonNullable<UnifiedSearchCollectionDocument['included']> = [];
+  let includedByIdentity = new Set<string>();
 
   for (let doc of docs) {
     combined.data.push(...doc.data);
@@ -452,10 +467,13 @@ export function combineSearchResults(
     if (doc.included) {
       for (let resource of doc.included) {
         if (resource.id) {
-          if (includedById.has(resource.id)) {
+          // NUL-separated so a `(type, id)` pair can't alias another by
+          // concatenation (no resource type or id contains a NUL byte).
+          let identity = `${resource.type} ${resource.id}`;
+          if (includedByIdentity.has(identity)) {
             continue;
           }
-          includedById.add(resource.id);
+          includedByIdentity.add(identity);
         }
         included.push(resource);
       }
@@ -469,6 +487,11 @@ export function combineSearchResults(
   return combined;
 }
 
+// The legacy prerendered-shape merge. Unlike the unified `combineSearchResults`
+// (which dedupes first-class `css` resources inside `included`), this folds CSS
+// into a flat `meta.scopedCssUrls` Set and recovers "is this a file?" via
+// `meta.isFileMeta` — the shape the prerendered endpoint still emits. It stays
+// until that endpoint is retired in favor of the unified document.
 export function combinePrerenderedSearchResults(
   docs: PrerenderedCardCollectionDocument[],
 ): PrerenderedCardCollectionDocument {
@@ -555,6 +578,46 @@ export function emitSearchTiming(line: string): void {
   (searchTimingLog ??= logger('realm:search-timing')).info(line);
 }
 
+// Shared fan-out for the federated search runners. Filters out dead realms,
+// runs each surviving realm's search concurrently, logs (never throws on) a
+// per-realm failure so one realm can't sink the whole federation, and returns
+// the fulfilled docs in input order for the caller to merge. The two public
+// runners differ only in which per-realm method they call, how they label a
+// failure, and which merge they apply — the settle semantics, input ordering,
+// and per-realm error isolation are identical and live here.
+async function fanOutRealmSearch<R extends { url?: string }, Doc>(
+  realms: Array<R | null | undefined>,
+  query: Query,
+  call: (realm: R) => Promise<Doc>,
+  describeFailure: (label: string, queryLabel: string) => string,
+): Promise<Doc[]> {
+  let realmEntries = realms
+    .filter((realm): realm is R => Boolean(realm))
+    .map((realm) => ({
+      realm,
+      label: realm.url ? String(realm.url) : undefined,
+    }));
+  let searchPromises = realmEntries.map(({ realm }) =>
+    Promise.resolve().then(() => call(realm)),
+  );
+  let results = await Promise.allSettled(searchPromises);
+  let queryLabel = '[unserializable query]';
+  try {
+    queryLabel = JSON.stringify(query);
+  } catch {
+    // ignore stringify errors, fallback label already set
+  }
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      let label = realmEntries[index]?.label ?? `index ${index}`;
+      console.error(describeFailure(label, queryLabel), result.reason);
+    }
+  });
+  return results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  );
+}
+
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
@@ -574,42 +637,24 @@ export async function searchRealms(
     opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
   let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
   let startedAt = ownsTimings ? Date.now() : 0;
-  let realmEntries = realms
-    .filter((realm): realm is SearchableRealm => Boolean(realm))
-    .map((realm) => ({
-      realm,
-      label: realm.url ? String(realm.url) : undefined,
-    }));
-  let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.search(query, perRealmOpts)),
+  let docs = await fanOutRealmSearch(
+    realms,
+    query,
+    (realm) => realm.search(query, perRealmOpts),
+    (label, queryLabel) =>
+      `searchRealms realm search failed: ${label} query=${queryLabel}`,
   );
-  let results = await Promise.allSettled(searchPromises);
-  let queryLabel = '[unserializable query]';
-  try {
-    queryLabel = JSON.stringify(query);
-  } catch {
-    // ignore stringify errors, fallback label already set
-  }
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      let label = realmEntries[index]?.label ?? `index ${index}`;
-      console.error(
-        `searchRealms realm search failed: ${label} query=${queryLabel}`,
-        result.reason,
-      );
-    }
-  });
-  let docs = results.flatMap((result) =>
-    result.status === 'fulfilled' ? [result.value] : [],
-  );
-  let combined = combineSearchResults(docs);
+  // The live runner produces only `card`/`file-meta` `included`, so the
+  // unified merge's value is a `LinkableCollectionDocument` here; the prefer-
+  // HTML path that adds `rendered-html`/`css` `included` lands later.
+  let combined = combineSearchResults(docs) as LinkableCollectionDocument;
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }
   if (ownsTimings && timings) {
     emitSearchTiming(
       `corr=${opts!.loggingCorrelationId}` +
-        ` realms=${realmEntries.length}` +
+        ` realms=${realms.filter((realm) => Boolean(realm)).length}` +
         ` total=${Date.now() - startedAt}ms ` +
         timings.toLogFragment(),
     );
@@ -638,33 +683,12 @@ export async function searchPrerenderedRealms(
     renderType?: PrerenderedRenderType;
   },
 ): Promise<PrerenderedCardCollectionDocument> {
-  let realmEntries = realms
-    .filter((realm): realm is PrerenderedSearchableRealm => Boolean(realm))
-    .map((realm) => ({
-      realm,
-      label: realm.url ? String(realm.url) : undefined,
-    }));
-  let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.searchPrerendered(query, opts)),
-  );
-  let results = await Promise.allSettled(searchPromises);
-  let queryLabel = '[unserializable query]';
-  try {
-    queryLabel = JSON.stringify(query);
-  } catch {
-    // ignore stringify errors, fallback label already set
-  }
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      let label = realmEntries[index]?.label ?? `index ${index}`;
-      console.error(
-        `searchPrerenderedRealms realm search failed: ${label} query=${queryLabel} htmlFormat=${opts.htmlFormat}`,
-        result.reason,
-      );
-    }
-  });
-  let docs = results.flatMap((result) =>
-    result.status === 'fulfilled' ? [result.value] : [],
+  let docs = await fanOutRealmSearch(
+    realms,
+    query,
+    (realm) => realm.searchPrerendered(query, opts),
+    (label, queryLabel) =>
+      `searchPrerenderedRealms realm search failed: ${label} query=${queryLabel} htmlFormat=${opts.htmlFormat}`,
   );
   return combinePrerenderedSearchResults(docs);
 }

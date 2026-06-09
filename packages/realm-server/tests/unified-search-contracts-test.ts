@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
+  combineSearchResults,
   cssResourceId,
   isCardResource,
   isCssResource,
@@ -11,6 +12,7 @@ import {
   type CardResource,
   type CssResource,
   type RenderedHtmlResource,
+  type UnifiedSearchCollectionDocument,
 } from '@cardstack/runtime-common';
 
 const realmURL = 'http://localhost:4201/test/';
@@ -295,6 +297,152 @@ module(basename(__filename), function () {
         cssResourceId(href),
         cssResourceId(`${realmURL}Pet.gts.WHpublished.glimmer-scoped.css`),
         'different CSS URL → different id',
+      );
+    });
+  });
+
+  // The unified federated merge. Its `included` dedup keys on the JSON:API
+  // identity pair `(type, id)` — not `id` alone — so it can carry a `card` and
+  // its `rendered-html` (which share the card's URL as their id) side by side
+  // while still collapsing a `css` or a linked `card` shared across realms to a
+  // single entry.
+  module('combineSearchResults (unified federated merge)', function () {
+    test('dedupes `included` by (type, id): a shared css and a shared linked card travel once across realms', function (assert) {
+      let linkedId = rri(`${realmURL}Tag/1`);
+      let linkedCard = (): CardResource => ({
+        type: 'card',
+        id: linkedId,
+        attributes: { name: 'green' },
+        meta: { adoptsFrom: { module: rri(`${realmURL}tag`), name: 'Tag' } },
+        links: { self: linkedId },
+      });
+
+      let docA: UnifiedSearchCollectionDocument = {
+        data: [identityOnlyCard()],
+        included: [renderedHtml(), css(), linkedCard()],
+        meta: { page: { total: 1 } },
+      };
+
+      // A second realm's result: a distinct card + rendering, but it links the
+      // same Tag and references the same scoped stylesheet (identical href →
+      // identical css hash id).
+      let url2 = rri(`${realmURL}Author/2`);
+      let docB: UnifiedSearchCollectionDocument = {
+        data: [
+          {
+            type: 'card',
+            id: url2,
+            relationships: {
+              'rendered-html': { data: { type: 'rendered-html', id: url2 } },
+            },
+            meta: { adoptsFrom: authorRef, identityOnly: true },
+            links: { self: url2 },
+          },
+        ],
+        included: [
+          {
+            type: 'rendered-html',
+            id: url2,
+            attributes: { html: '<div>Van Gogh</div>', cardType: 'Author' },
+            relationships: {
+              styles: { data: [{ type: 'css', id: css().id }] },
+            },
+          },
+          css(),
+          linkedCard(),
+        ],
+        meta: { page: { total: 1 } },
+      };
+
+      let merged = combineSearchResults([docA, docB]);
+      let included = merged.included ?? [];
+
+      assert.strictEqual(merged.data.length, 2, 'both result cards survive');
+      assert.strictEqual(
+        included.filter((r) => r.type === 'css').length,
+        1,
+        'the shared css resource appears exactly once',
+      );
+      assert.strictEqual(
+        included.filter((r) => r.type === 'card' && r.id === linkedId).length,
+        1,
+        'the shared linked card appears exactly once',
+      );
+      assert.strictEqual(
+        included.filter((r) => r.type === 'rendered-html').length,
+        2,
+        'distinct renderings (different ids) both survive',
+      );
+      assert.strictEqual(merged.meta.page.total, 2, 'page totals sum');
+    });
+
+    test('keeps a `card` and a `rendered-html` that share an id — `(type, id)` discriminates where `id` alone would collapse them', function (assert) {
+      let url = rri(`${realmURL}Author/9`);
+      let doc: UnifiedSearchCollectionDocument = {
+        data: [],
+        included: [
+          {
+            type: 'card',
+            id: url,
+            attributes: { name: 'Mango' },
+            meta: { adoptsFrom: authorRef },
+            links: { self: url },
+          },
+          {
+            type: 'rendered-html',
+            id: url,
+            attributes: { html: '<div>Mango</div>', cardType: 'Author' },
+            relationships: { styles: { data: [] } },
+          },
+        ],
+        meta: { page: { total: 1 } },
+      };
+
+      let included = combineSearchResults([doc]).included ?? [];
+      assert.strictEqual(
+        included.length,
+        2,
+        'both the card and its rendered-html (same id) survive',
+      );
+      assert.ok(
+        included.some((r) => r.type === 'card' && r.id === url),
+        'the card is kept',
+      );
+      assert.ok(
+        included.some((r) => r.type === 'rendered-html' && r.id === url),
+        'the rendered-html is kept',
+      );
+    });
+
+    test('concatenates `data` in realm order, sums `meta.page.total`, and omits an empty `included`', function (assert) {
+      let a = rri(`${realmURL}A`);
+      let b = rri(`${realmURL}B`);
+      let mk = (
+        id: ReturnType<typeof rri>,
+        total: number,
+      ): UnifiedSearchCollectionDocument => ({
+        data: [
+          {
+            type: 'card',
+            id,
+            attributes: {},
+            meta: { adoptsFrom: authorRef },
+            links: { self: id },
+          },
+        ],
+        meta: { page: { total } },
+      });
+
+      let merged = combineSearchResults([mk(a, 3), mk(b, 5)]);
+      assert.deepEqual(
+        merged.data.map((r) => r.id),
+        [a, b],
+        'data preserves realm order',
+      );
+      assert.strictEqual(merged.meta.page.total, 8, 'page totals sum');
+      assert.notOk(
+        'included' in merged,
+        'no included key when nothing to include',
       );
     });
   });
