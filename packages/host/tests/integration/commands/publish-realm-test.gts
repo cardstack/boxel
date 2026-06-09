@@ -150,6 +150,42 @@ module('Integration | commands | publish-realm', function (hooks) {
     assert.strictEqual(result.results[0].status, 'published');
   });
 
+  test('publishes pre-resolved publishedRealmURLs (the publish UI path)', async function (assert) {
+    let realmServer = getService('realm-server');
+    let realmURL = new URL('test/', realmServer.url).href;
+
+    let result = await makeCommand().execute({
+      realmURL,
+      publishedRealmURLs: [
+        'https://mysite.example.com/',
+        'https://other.example.com/',
+      ],
+    });
+
+    assert.deepEqual(publishedURLs, [
+      'https://mysite.example.com/',
+      'https://other.example.com/',
+    ]);
+    assert.deepEqual(
+      result.results.map((r) => [r.publishedRealmURL, r.status]),
+      [
+        ['https://mysite.example.com/', 'published'],
+        ['https://other.example.com/', 'published'],
+      ],
+    );
+  });
+
+  test('throws when neither targets nor publishedRealmURLs are provided', async function (assert) {
+    let realmServer = getService('realm-server');
+    let realmURL = new URL('test/', realmServer.url).href;
+
+    await assert.rejects(
+      makeCommand().execute({ realmURL }),
+      /at least one entry in `targets` or `publishedRealmURLs`/,
+    );
+    assert.deepEqual(publishedURLs, [], 'did not call the publish endpoint');
+  });
+
   test('derives a subdirectory URL from the realm session username', async function (assert) {
     let realmServer = getService('realm-server');
     let realmURL = new URL('test/', realmServer.url).href;

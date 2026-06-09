@@ -35,7 +35,7 @@ export default class PublishRealmCommand extends HostBaseCommand<
     return commandModule.PublishRealmInput;
   }
 
-  requireInputFields = ['realmURL', 'targets'];
+  requireInputFields = ['realmURL'];
 
   protected async run(
     input: BaseCommandModule.PublishRealmInput,
@@ -49,7 +49,10 @@ export default class PublishRealmCommand extends HostBaseCommand<
     let realmURL = ensureTrailingSlash(input.realmURL);
     let matrixUsername = this.matrixUsernameFor(realmURL);
 
-    let publishedRealmURLs = input.targets.map((target) =>
+    // Targets are resolved to published-realm URLs; callers that already hold
+    // resolved URLs (e.g. the publish UI) pass them via `publishedRealmURLs`.
+    // Merge both, de-duplicated, preserving order.
+    let resolvedFromTargets = (input.targets ?? []).map((target) =>
       resolvePublishedRealmUrl(
         { type: target.type as PublishTargetType, name: target.name },
         {
@@ -59,6 +62,14 @@ export default class PublishRealmCommand extends HostBaseCommand<
         },
       ),
     );
+    let publishedRealmURLs = [
+      ...new Set([...resolvedFromTargets, ...(input.publishedRealmURLs ?? [])]),
+    ];
+    if (publishedRealmURLs.length === 0) {
+      throw new Error(
+        'Provide at least one entry in `targets` or `publishedRealmURLs`',
+      );
+    }
 
     // Pre-publish gate: refuse to publish a realm with private-dependency or
     // error-document violations unless the caller explicitly forces it.
