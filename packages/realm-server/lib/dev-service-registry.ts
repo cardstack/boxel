@@ -76,7 +76,7 @@ export function isEnvironmentMode(): boolean {
 export function registerService(
   server: Server,
   serviceName: string,
-  opts?: { env?: string; wildcardSubdomains?: boolean },
+  opts?: { env?: string; wildcardSubdomains?: boolean; http2?: boolean },
 ): void {
   let slug = opts?.env ?? getEnvironmentSlug();
   let addr = server.address() as AddressInfo;
@@ -103,13 +103,28 @@ export function registerService(
     ? `Host(\`${hostname}\`) || HostRegexp(\`^.+\\.${escapedHostname}$\`)`
     : `Host(\`${hostname}\`)`;
 
-  // Two routers per service. `websecure` (port 443) terminates TLS at
-  // Traefik using the mkcert leaf in traefik/dynamic/tls.yml. The
-  // `-http` router on :80 308-redirects to https so a stale http://
-  // link still works. Both point at the same upstream — the
-  // realm-server / worker / prerender process serves plain HTTP on
-  // its dynamic port; Traefik is the only place TLS is terminated.
+  // Two routers per service. `websecure` (port 443) terminates the
+  // browser's TLS at Traefik using the mkcert leaf in
+  // traefik/dynamic/tls.yml. The `-http` router on :80 308-redirects to
+  // https so a stale http:// link still works.
+  //
+  // The upstream scheme depends on the service. worker / prerender / vite
+  // serve plain HTTP on their dynamic port, so Traefik proxies plain HTTP
+  // to them. The realm-server (http2: true) terminates TLS and serves
+  // HTTP/2 — HTTP/2 is a system invariant — so Traefik re-originates an
+  // HTTPS connection to it and negotiates h2 via ALPN. The mkcert leaf's
+  // SAN covers `*.localhost`, not the `host.docker.internal` address
+  // Traefik dials, so the h2 upstream uses a serversTransport with
+  // insecureSkipVerify (a localhost-only dev backend).
   let redirectMiddleware = `${routerKey}-https-redirect`;
+  let upstreamScheme = opts?.http2 ? 'https' : 'http';
+  let serversTransportKey = `${routerKey}-h2`;
+  let loadBalancer: any = {
+    servers: [{ url: `${upstreamScheme}://host.docker.internal:${actualPort}` }],
+  };
+  if (opts?.http2) {
+    loadBalancer.serversTransport = serversTransportKey;
+  }
   let config: any = {
     http: {
       routers: {
@@ -135,12 +150,15 @@ export function registerService(
         },
       },
       services: {
-        [routerKey]: {
-          loadBalancer: {
-            servers: [{ url: `http://host.docker.internal:${actualPort}` }],
-          },
-        },
+        [routerKey]: { loadBalancer },
       },
+      ...(opts?.http2
+        ? {
+            serversTransports: {
+              [serversTransportKey]: { insecureSkipVerify: true },
+            },
+          }
+        : {}),
     },
   };
 

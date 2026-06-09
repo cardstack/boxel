@@ -605,7 +605,12 @@ const smokeTestHostApp = async () => {
       port: actualPort,
     });
     if (isEnvironmentMode()) {
-      registerService(httpServer, serviceName, { wildcardSubdomains: true });
+      // The realm-server serves HTTP/2 over TLS in env mode (see
+      // createListener); Traefik must negotiate h2 to this backend.
+      registerService(httpServer, serviceName, {
+        wildcardSubdomains: true,
+        http2: true,
+      });
     }
   });
   let stopping = false;

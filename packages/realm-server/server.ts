@@ -41,12 +41,13 @@ const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 // Opt-in HTTP/2 stall diagnostics (see installHttp2Diagnostics). Off by
 // default; set in the host-test CI job so an intermittent "request accepted
 // but never answered" h2 stall dumps its full session/stream state instead of
-// surfacing only as an opaque 60s host-test timeout. The h2 path is taken only
-// when a TLS cert/key is provided (see createListener): local dev and CI
-// provision an mkcert leaf, so they run h2, while staging/prod set no cert and
-// so fall into the no-cert branch and serve plain HTTP/1.1 (TLS terminates at
-// the proxy in front). BOXEL_ENVIRONMENT is the local Traefik-in-front mode,
-// not the production mechanism.
+// surfacing only as an opaque 60s host-test timeout. The h2 path is taken
+// whenever a TLS cert/key is provided (see createListener): local dev — both
+// standard mode and env mode behind Traefik — and CI provision an mkcert leaf
+// and run h2. Hosted staging/prod set no cert (TLS terminates at the load
+// balancer in front) and fall into the no-cert branch, serving plain
+// HTTP/1.1. BOXEL_ENVIRONMENT is the local Traefik-in-front mode, not the
+// production mechanism.
 const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
 
 export type RealmHttpServer =
@@ -108,53 +109,38 @@ export function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
 ): { server: RealmHttpServer; proto: 'http' | 'https/h2' } {
-  // Env mode (Traefik in front): force plain HTTP regardless of
-  // whether the TLS env vars are set. They may have leaked in from a
-  // parent shell that ran env-vars.sh in standard mode before
-  // BOXEL_ENVIRONMENT was exported, which would otherwise make us
-  // terminate TLS while Traefik plain-HTTP-proxies to us — every
-  // request then fails with "HTTP/0.9 when not allowed" → 502.
-  if (process.env.BOXEL_ENVIRONMENT) {
-    return { server: http.createServer(app.callback()), proto: 'http' };
-  }
   let certFile = process.env[TLS_CERT_FILE_ENV];
   let keyFile = process.env[TLS_KEY_FILE_ENV];
+
+  // Env mode (Traefik in front): Traefik terminates the browser's TLS and
+  // re-originates an HTTP/2-over-TLS connection to this backend — the dev
+  // service registry registers an https:// upstream and Traefik negotiates h2
+  // via ALPN. So the realm-server terminates TLS and serves h2 here too. There
+  // is no first-byte dispatcher or :80→:443 redirect server in this mode:
+  // Traefik is the only client, always connects over TLS, and owns the
+  // plain-HTTP redirect on :80. HTTP/2 is a system invariant we never
+  // downgrade; a missing or unreadable cert is a hard misconfiguration, so
+  // buildHttp2SecureServer throws and boot fails loudly rather than quietly
+  // serving HTTP/1.1 — which Traefik (expecting h2) would turn into all-502s.
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return {
+      server: buildHttp2SecureServer(certFile, keyFile, app, log),
+      proto: 'https/h2',
+    };
+  }
+
+  // No TLS cert configured: plain HTTP/1.1. This is the hosted staging/prod
+  // path today — TLS is terminated at the load balancer, which forwards plain
+  // HTTP to the realm-server. Enabling h2 there (provisioning certs) is owned
+  // separately; this branch is intentionally the plain-HTTP path.
   if (!certFile || !keyFile) {
     return { server: http.createServer(app.callback()), proto: 'http' };
   }
-  // We only need the patch on the h2 path — but it's idempotent and
-  // cheap, so we apply it unconditionally once cert/key are present.
-  patchKoaResponseForH2Head();
-  let cert: Buffer;
-  let key: Buffer;
-  try {
-    cert = readFileSync(certFile);
-    key = readFileSync(keyFile);
-  } catch (e) {
-    log.warn(
-      `Unable to read TLS cert/key (%s, %s): %s — falling back to HTTP/1.1`,
-      certFile,
-      keyFile,
-      (e as Error).message,
-    );
-    return { server: http.createServer(app.callback()), proto: 'http' };
-  }
-  let tlsServer: http2.Http2SecureServer;
-  try {
-    tlsServer = http2.createSecureServer(
-      { cert, key, allowHTTP1: true },
-      app.callback(),
-    );
-  } catch (e) {
-    log.warn(
-      `Unable to construct HTTPS/h2 server (malformed cert?): %s — falling back to HTTP/1.1`,
-      (e as Error).message,
-    );
-    return { server: http.createServer(app.callback()), proto: 'http' };
-  }
-  if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
-    installHttp2Diagnostics(tlsServer, log);
-  }
+
+  // Standard local-dev mode: a browser hits this port directly, so wrap the h2
+  // secure server in a first-byte dispatcher that routes TLS handshakes to h2
+  // and plain-HTTP to a 308-redirect server.
+  let tlsServer = buildHttp2SecureServer(certFile, keyFile, app, log);
   let redirectServer = http.createServer(redirectToHttps);
   // Track every accepted socket so shutdown can force-close them. Without
   // this, `dispatcher.close()` waits for active HTTP/2 sessions and
@@ -225,6 +211,51 @@ export function createListener(
     activeSockets.clear();
   };
   return { server: dispatcher, proto: 'https/h2' };
+}
+
+// Read the configured TLS cert/key and construct the HTTP/2 secure server.
+// HTTP/2 is a system invariant: any failure here — cert/key not configured,
+// unreadable, or malformed — throws so the realm-server fails startup with a
+// non-zero exit instead of silently downgrading to HTTP/1.1 and masking the
+// misconfiguration.
+function buildHttp2SecureServer(
+  certFile: string | undefined,
+  keyFile: string | undefined,
+  app: { callback: Koa['callback'] },
+  log: ReturnType<typeof logger>,
+): http2.Http2SecureServer {
+  if (!certFile || !keyFile) {
+    throw new Error(
+      `HTTP/2 requires a TLS cert/key but ${TLS_CERT_FILE_ENV} / ${TLS_KEY_FILE_ENV} are not set`,
+    );
+  }
+  // Idempotent and cheap; applied once before the h2 server is constructed.
+  patchKoaResponseForH2Head();
+  let cert: Buffer;
+  let key: Buffer;
+  try {
+    cert = readFileSync(certFile);
+    key = readFileSync(keyFile);
+  } catch (e) {
+    throw new Error(
+      `Unable to read TLS cert/key (${certFile}, ${keyFile}): ${(e as Error).message}`,
+    );
+  }
+  let tlsServer: http2.Http2SecureServer;
+  try {
+    tlsServer = http2.createSecureServer(
+      { cert, key, allowHTTP1: true },
+      app.callback(),
+    );
+  } catch (e) {
+    throw new Error(
+      `Unable to construct HTTPS/h2 server (malformed cert?): ${(e as Error).message}`,
+    );
+  }
+  if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
+    installHttp2Diagnostics(tlsServer, log);
+  }
+  return tlsServer;
 }
 
 // Instrument the HTTP/2 secure server so an intermittent stall — a stream that
