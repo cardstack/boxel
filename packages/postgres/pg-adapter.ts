@@ -658,7 +658,7 @@ export class PgAdapter implements DBAdapter {
             port: config.port,
           },
           count: Infinity,
-          dir: join(__dirname, 'migrations'),
+          dir: join(import.meta.dirname, 'migrations'),
           ignorePattern: '.*\\.eslintrc\\.js',
           log: enableLogging ? (...args) => log.info(...args) : () => undefined,
         });
