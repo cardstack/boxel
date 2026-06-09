@@ -1,7 +1,7 @@
 import type * as JSONTypes from 'json-typescript';
-import isPlainObject from 'lodash/isPlainObject';
+import isPlainObject from 'lodash/isPlainObject.js';
 import stringify from 'safe-stable-stringify';
-import flattenDeep from 'lodash/flattenDeep';
+import flattenDeep from 'lodash/flattenDeep.js';
 
 import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 

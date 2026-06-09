@@ -1,4 +1,4 @@
-import isEqual from 'lodash/isEqual';
+import isEqual from 'lodash/isEqual.js';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
 import qs from 'qs';
 
