@@ -726,6 +726,10 @@ export class IndexQueryEngine {
         ' as html,',
         ...usedRenderTypeColumnExpression,
         ' as used_render_type,',
+        // The adoption chain (most-derived first). An HTML-backed row ships an
+        // identity-only `card` with no live serialization, so its actual type
+        // — distinct from the ancestor it was rendered as — comes from here.
+        'ANY_VALUE(types) as types,',
         'ANY_VALUE(deps) as deps,',
         'ANY_VALUE(display_names) as display_names,',
         'ANY_VALUE(icon_html) as icon_html,',

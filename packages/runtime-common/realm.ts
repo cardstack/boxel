@@ -15,7 +15,7 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type LinkableCollectionDocument,
+  type UnifiedSearchCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types';
 import type { CardResource, Relationship } from './resource-types';
@@ -5272,16 +5272,26 @@ export class Realm {
   public async search(
     query: Query,
     opts?: SearchOpts,
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<UnifiedSearchCollectionDocument> {
     assertQuery(query);
-    return await this.#realmIndexQueryEngine.searchCards(query, {
-      loadLinks: true,
+    let engineOpts = {
+      loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
-    });
+    };
+    // Prefer-HTML: resolve each result to prerendered HTML where indexed and
+    // fall back to the full live card otherwise. Absent `render` (data-only or
+    // unspecified) keeps the full live-card document.
+    if (opts?.render) {
+      return await this.#realmIndexQueryEngine.searchUnified(query, {
+        ...engineOpts,
+        render: opts.render,
+      });
+    }
+    return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
   }
 
   private async searchResponse(

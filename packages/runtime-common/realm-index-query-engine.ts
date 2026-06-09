@@ -54,15 +54,26 @@ import {
   isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
+  type UnifiedSearchCollectionDocument,
+  type UnifiedSearchIncludedResource,
   isLinkableCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
 import type {
   CardResource,
+  CssResource,
   FileMetaResource,
   QueryFieldMeta,
   Saved,
 } from './resource-types';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format';
+import {
+  buildCssResource,
+  buildIdentityOnlyCard,
+  buildRenderedHtmlResource,
+  parseUsedRenderType,
+  scopedCssHrefsFromDeps,
+} from './unified-search';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
@@ -404,6 +415,148 @@ export class RealmIndexQueryEngine {
       }
     }
     await this.attachRealmInfo(doc);
+    return doc;
+  }
+
+  // Prefer-HTML unified search. Runs the single `render` projection and applies
+  // the per-row resolution policy:
+  //   - a row WITH html → an identity-only `card` (no live serialization) plus
+  //     a `rendered-html` (+ its `css`) in `included`;
+  //   - a row WITHOUT html → the full live `card` from its pristine row,
+  //     exactly as the data-only path returns it.
+  // Only the no-HTML fallback cards go through `loadLinks` — an identity-only
+  // card has no relationships to expand. `css` resources dedupe by their
+  // content-hash id across rows. A query that targets file-meta has no HTML
+  // projection, so it resolves to the full live file-meta document.
+  async searchUnified(
+    query: Query,
+    opts: Options & {
+      render: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
+    },
+  ): Promise<UnifiedSearchCollectionDocument> {
+    if (await this.queryTargetsFileMeta(query.filter, opts)) {
+      return await this.searchCardsUncoalesced(query, opts);
+    }
+
+    // `includeErrors` so error rows reach the mapper as `rendered-html` with
+    // `isError` (the data-only path excludes them, matching today's `/_search`).
+    let runSql = () =>
+      this.#indexQueryEngine.search(
+        new URL(this.#realm.url),
+        query,
+        { ...opts, includeErrors: true },
+        {
+          kind: 'render',
+          htmlFormat: opts.render.format,
+          // `internalKeyFor` (used by the HTML-column expression) resolves a
+          // relative module, so a plain `CodeRef` is accepted here; a render type
+          // is always a concrete `{module,name}`, never an ancestorOf/fieldOf ref.
+          renderType: opts.render.renderType as ResolvedCodeRef | undefined,
+        },
+      );
+    let { results, meta } = opts?.timings
+      ? await opts.timings.time('sql', runSql)
+      : await runSql();
+
+    let data: (CardResource<Saved> | FileMetaResource)[] = [];
+    let renderedResources: UnifiedSearchIncludedResource[] = [];
+    let cssById = new Map<string, CssResource>();
+    let fallbackRoots: (CardResource<Saved> | FileMetaResource)[] = [];
+
+    for (let row of results) {
+      let fileUrl = row.url;
+      if (!fileUrl) {
+        continue;
+      }
+      // The index `url` column is the instance's file URL; a card's identity
+      // (the live card's `id`, shared with its `rendered-html`) drops the
+      // `.json` extension. Fallback rows take their id from `pristine_doc`,
+      // which already carries the identity form.
+      let cardUrl = fileUrl.endsWith('.json') ? fileUrl.slice(0, -5) : fileUrl;
+      let hasError = Boolean(row.has_error);
+      let html = (row.html as string | null) ?? null;
+
+      if (html != null || hasError) {
+        // HTML-backed (or error) row: rendered-html + identity-only card.
+        let cssIds: string[] = [];
+        for (let href of scopedCssHrefsFromDeps(row.deps as string[] | null)) {
+          let css = buildCssResource(href);
+          if (!cssById.has(css.id)) {
+            cssById.set(css.id, css);
+          }
+          cssIds.push(css.id);
+        }
+        let renderType = parseUsedRenderType(
+          row.used_render_type as string | null,
+        );
+        // The actual (most-derived) type rides in `types[0]`; the type the HTML
+        // was rendered as is `renderType` — they differ when an ancestor type
+        // was requested. The identity-only card's `adoptsFrom` is the actual
+        // type.
+        let adoptsFrom =
+          parseUsedRenderType((row.types as string[] | null)?.[0]) ??
+          renderType;
+        let cardType = (row.display_names as string[] | null)?.[0] ?? '';
+        renderedResources.push(
+          buildRenderedHtmlResource({
+            url: cardUrl,
+            html: html ?? '',
+            cardType,
+            iconHtml: (row.icon_html as string | null) ?? undefined,
+            isError: hasError || undefined,
+            renderType,
+            cssIds,
+          }),
+        );
+        if (adoptsFrom) {
+          data.push(
+            buildIdentityOnlyCard({ url: cardUrl, adoptsFrom, renderType }),
+          );
+        }
+      } else {
+        // No HTML: fall back to the full live card, exactly as `/_search`.
+        let pristine = row.pristine_doc as CardResource<Saved> | null;
+        if (pristine) {
+          let card = { ...pristine, links: { self: pristine.id } };
+          data.push(card);
+          fallbackRoots.push(card);
+        }
+      }
+    }
+
+    // first-seen render-html order, then deduped css.
+    let included: UnifiedSearchIncludedResource[] = [
+      ...renderedResources,
+      ...cssById.values(),
+    ];
+
+    // Assemble the transitive `included` for the live fallback cards only.
+    // Same gating as the data-only path: skipped inside a prerender, where the
+    // host re-resolves each result from its card+source file.
+    if (fallbackRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+      let omit = data.map((r) => r.id).filter(Boolean) as string[];
+      let runLoadLinks = () =>
+        this.loadLinks(
+          { realmURL: this.realmURL, rootResources: fallbackRoots, omit },
+          opts,
+        );
+      let fallbackIncluded = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
+      included.push(...fallbackIncluded);
+    }
+
+    let doc: UnifiedSearchCollectionDocument = { data, meta };
+    if (included.length > 0) {
+      doc.included = included;
+    }
+    // Echo the collection-level render type when it's a single resolved type
+    // (an explicit `renderType`); the `"native"` / per-row cases vary by row
+    // and are echoed on each `rendered-html` instead.
+    if (opts.render.renderType) {
+      doc.meta.renderType = opts.render.renderType;
+    }
+    await this.attachRealmInfo(doc as unknown as LinkableCollectionDocument);
     return doc;
   }
 

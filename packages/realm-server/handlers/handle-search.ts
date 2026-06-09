@@ -3,10 +3,12 @@ import {
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
+  isValidPrerenderedHtmlFormat,
+  resolveRenderType,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
+  parseSearchRequestPayload,
   parseUnifiedSearchRequestFromPayload,
-  parseUnifiedSearchRequestFromRequest,
   sanitizeConsumingRealmHeader,
   SearchRequestError,
   searchRealms,
@@ -14,6 +16,8 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
   emitSearchTiming,
+  type CodeRef,
+  type PrerenderedHtmlFormat,
   type Query,
 } from '@cardstack/runtime-common';
 import {
@@ -57,17 +61,25 @@ export default function handleSearch(opts: {
     let { realmList } = getMultiRealmAuthorization(ctxt);
 
     // Parse the unified request body: the query plus the optional
-    // `render` / `dataOnly` / `cardUrls` members. These members segregate the
-    // job-scoped cache key (below); the response body is the live-card
-    // document.
+    // `render` / `dataOnly` / `cardUrls` members. Prefer-HTML emission is
+    // driven by an explicitly-provided `render` member; a request that omits
+    // it (and `dataOnly`) resolves to the full live-card document, so callers
+    // not yet consuming the rendered-html shape are unaffected.
     let parsed;
+    let renderRequested = false;
     let request = await fetchRequestFromContext(ctxt);
     try {
-      let payload = getSearchRequestPayload(ctxt);
-      let parseRequest = async () =>
-        payload !== undefined
-          ? parseUnifiedSearchRequestFromPayload(payload)
-          : await parseUnifiedSearchRequestFromRequest(request);
+      let parseRequest = async () => {
+        let payload = getSearchRequestPayload(ctxt);
+        if (payload === undefined) {
+          payload = await parseSearchRequestPayload(request);
+        }
+        renderRequested =
+          typeof payload === 'object' &&
+          payload !== null &&
+          'render' in payload;
+        return parseUnifiedSearchRequestFromPayload(payload);
+      };
       parsed = timings
         ? await timings.time('parse', parseRequest)
         : await parseRequest();
@@ -86,6 +98,28 @@ export default function handleSearch(opts: {
       throw e;
     }
     let cardsQuery = parsed.cardsQuery;
+
+    // Resolve the prefer-HTML spec when the caller explicitly asked to render.
+    // `render.renderType` resolves to one ancestor type — an explicit CodeRef,
+    // `"native"` (each result's own most-derived type), or the query's
+    // `filter.on` when omitted — which selects the HTML column and is echoed in
+    // the response. `format` is the HTML column to read.
+    let renderSpec:
+      | { format: PrerenderedHtmlFormat; renderType?: CodeRef }
+      | undefined;
+    if (renderRequested && parsed.render) {
+      let format: PrerenderedHtmlFormat = isValidPrerenderedHtmlFormat(
+        parsed.render.format,
+      )
+        ? parsed.render.format
+        : 'fitted';
+      let filterOn = (cardsQuery.filter as { on?: CodeRef } | undefined)?.on;
+      let renderType = resolveRenderType({
+        renderType: parsed.render.renderType,
+        filterOn,
+      });
+      renderSpec = { format, ...(renderType ? { renderType } : {}) };
+    }
 
     let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
     // Inside a prerender the search skips the `loadLinks`
@@ -125,20 +159,18 @@ export default function handleSearch(opts: {
     if (jobPriority !== null) searchOpts.priority = jobPriority;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
-    // The job-scoped cache key folds the unified request members
-    // (`render` → `format` / `renderType`, `dataOnly`, `cardUrls`) on top of
-    // the live search opts. This segregates entries that differ only on a
-    // render member — and, because the prerendered handler keys on its own
-    // `htmlFormat` / `cardUrls` / `renderType`, guarantees the two endpoints
-    // can never collide on a shared key. A missing `render` is the
-    // prefer-HTML default, so an absent `render` and an explicit
-    // `{ render: { format: "fitted" } }` canonicalize to the same key (both
-    // carry `render`); `dataOnly` is folded only when true and `cardUrls`
-    // only when non-empty, so a plain query without those members keeps one
-    // entry.
+    // The job-scoped cache key folds the request members that change the
+    // response body on top of the live search opts: the resolved prefer-HTML
+    // spec (format + render type), `dataOnly`, and `cardUrls`. A prefer-HTML
+    // response and a live one for the same query are distinct bodies, so the
+    // resolved `render` (present only when the caller asked to render)
+    // segregates them; differing formats / render types segregate further. The
+    // prerendered handler keys on its own `htmlFormat` / `cardUrls` /
+    // `renderType`, so the two endpoints can't collide on a shared key.
+    // `dataOnly` is folded only when true and `cardUrls` only when non-empty.
     let cacheKeyOpts: Record<string, unknown> = { ...searchOpts };
-    if (parsed.render) {
-      cacheKeyOpts.render = parsed.render;
+    if (renderSpec) {
+      cacheKeyOpts.render = renderSpec;
     }
     if (parsed.dataOnly) {
       cacheKeyOpts.dataOnly = true;
@@ -150,18 +182,19 @@ export default function handleSearch(opts: {
     if (parsed.cardUrls?.length) {
       cacheKeyOpts.cardUrls = parsed.cardUrls;
     }
-    // `loggingCorrelationId` / `timings` are deliberately kept OUT of `searchOpts`:
-    // that object is the job-scoped search cache's key material (see
-    // `computeETag` / `getOrPopulate` below), and per-request values would
-    // make every key unique and defeat the cache. They only need to reach
-    // `searchRealms` (which stamps the SQL + loadLinks stages onto the same
-    // collector this handler emits), so they ride on the run-time opts and
-    // never touch the cache key.
+    // Run-time opts threaded to `searchRealms` → `Realm.search`. The resolved
+    // `render` spec drives the prefer-HTML resolution there. `render` is also
+    // folded into the cache key above; `loggingCorrelationId` / `timings` are
+    // deliberately kept OUT of the cache-key opts (per-request values would
+    // make every key unique and defeat the cache) and ride here instead, where
+    // `searchRealms` stamps the SQL + loadLinks stages onto the collector this
+    // handler emits.
     let runSearchOpts =
-      loggingCorrelationId !== null
+      renderSpec || loggingCorrelationId !== null
         ? {
             ...(normalizedSearchOpts ?? {}),
-            loggingCorrelationId,
+            ...(renderSpec ? { render: renderSpec } : {}),
+            ...(loggingCorrelationId !== null ? { loggingCorrelationId } : {}),
             ...(timings ? { timings } : {}),
           }
         : normalizedSearchOpts;

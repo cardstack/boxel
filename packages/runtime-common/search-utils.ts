@@ -12,7 +12,6 @@ import { type Format, formats, isValidFormat } from './formats';
 import type { CodeRef } from './code-ref';
 import { isCodeRef } from './card-document-shape';
 import type {
-  LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
   UnifiedSearchCollectionDocument,
 } from './document-types';
@@ -545,13 +544,24 @@ export type SearchOpts = {
   // `searchCards` → `loadLinks` so each post-SQL stage stamps its
   // elapsed time. Callers never supply this directly.
   timings?: RequestTimings;
+  // The prefer-HTML rendering spec, resolved by the handler: `format` is the
+  // HTML column to select and `renderType` is the already-resolved ancestor
+  // type (the `"native"` / `filter.on` defaulting has been applied upstream, so
+  // this is a concrete `CodeRef` or absent). When present, `Realm.search`
+  // resolves each result to prerendered HTML where indexed and falls back to
+  // the full live card otherwise. Absent → the live-card document.
+  render?: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
+  // Opt-in live-cards-only mode. Mutually exclusive with `render`; both absent
+  // is also live-only. Carried so the federated path is explicit about the
+  // mode even though its effect (no `render`) is the live path.
+  dataOnly?: boolean;
 };
 
 type SearchableRealm = {
   search: (
     query: Query,
     opts?: SearchOpts,
-  ) => Promise<LinkableCollectionDocument>;
+  ) => Promise<UnifiedSearchCollectionDocument>;
   url?: string;
 };
 
@@ -621,7 +631,7 @@ export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
   opts?: SearchOpts,
-): Promise<LinkableCollectionDocument> {
+): Promise<UnifiedSearchCollectionDocument> {
   // Instrument only when the caller threaded a correlation id. The
   // prerendered host stamps one; live SPA / API traffic does not — so
   // normal traffic allocates no collector and emits no line.
@@ -643,10 +653,10 @@ export async function searchRealms(
     (label, queryLabel) =>
       `searchRealms realm search failed: ${label} query=${queryLabel}`,
   );
-  // `realm.search` returns `LinkableCollectionDocument` (only `card`/`file-meta`
-  // `included`), so the unified merge over those docs is itself a
-  // `LinkableCollectionDocument` — narrowing the return type to it is sound.
-  let combined = combineSearchResults(docs) as LinkableCollectionDocument;
+  // `realm.search` returns a unified document — full live cards for the
+  // data-only/no-render path, or identity-only cards + `rendered-html`/`css`
+  // `included` under `render`. The merge dedupes `included` by `(type, id)`.
+  let combined = combineSearchResults(docs);
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }

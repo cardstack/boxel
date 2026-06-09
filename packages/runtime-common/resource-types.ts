@@ -88,6 +88,11 @@ export type CardResourceMeta = Meta & {
   // on demand). The authoritative wire signal that a consumer must not treat
   // this resource as a complete instance — see `isIdentityOnlyCardResource`.
   identityOnly?: boolean;
+  // The ancestor type this result's HTML was rendered as, echoed on an
+  // identity-only `card` so a consumer renders the hydrated/fallback card as
+  // the same type as its HTML sibling. A full live `card` never carries this
+  // (its wireformat is unchanged); it rides only on identity-only results.
+  renderType?: CodeRef;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
