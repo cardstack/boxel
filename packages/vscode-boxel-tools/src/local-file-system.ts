@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { RealmAuth } from './realm-auth';
+import type { RealmAuth } from './realm-auth.ts';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
 // Define the metadata structure for realm files
@@ -15,6 +15,8 @@ interface RealmMetadata {
 }
 
 export class LocalFileSystem {
+  private context: vscode.ExtensionContext;
+  private realmAuth: RealmAuth;
   private localStoragePath = '';
   private realmUrlToLocalPath: Map<string, string> = new Map();
   private fileWatchers: Map<string, vscode.FileSystemWatcher> = new Map();
@@ -22,10 +24,12 @@ export class LocalFileSystem {
   private userId: string | null = null;
 
   constructor(
-    private context: vscode.ExtensionContext,
-    private realmAuth: RealmAuth,
+    context: vscode.ExtensionContext,
+    realmAuth: RealmAuth,
     userId: string | null = null,
   ) {
+    this.context = context;
+    this.realmAuth = realmAuth;
     this.userId = userId;
     this.updateLocalStoragePath();
     this.loadExistingRealmMappings();

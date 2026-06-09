@@ -1,11 +1,11 @@
-import { expect, test } from './fixtures';
-import { appURL } from '../support/isolated-realm-server';
+import { expect, test } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   openRoot,
   assertLoggedIn,
   createSubscribedUser,
   updateSynapseUser,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Login using email', () => {
   let user: {

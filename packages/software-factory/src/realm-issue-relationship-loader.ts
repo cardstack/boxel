@@ -12,13 +12,13 @@ import type {
   IssueData,
   KnowledgeArticleData,
   ProjectData,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
-import type { IssueRelationshipLoader } from './factory-context-builder';
+import type { IssueRelationshipLoader } from './factory-context-builder.ts';
 
-import { toRealmRelativePath } from './realm-operations';
-import { readCardById } from './workspace-fs';
-import { logger } from './logger';
+import { toRealmRelativePath } from './realm-operations.ts';
+import { readCardById } from './workspace-fs.ts';
+import { logger } from './logger.ts';
 
 let log = logger('realm-issue-loader');
 

@@ -2,13 +2,13 @@ import { resolve } from 'node:path';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { createSeedIssue } from '../src/factory-seed';
-import type { FactoryBrief } from '../src/factory-brief';
-import { RealmIssueStore } from '../src/issue-scheduler';
-import { retryWithPoll } from '../src/retry-with-poll';
-import { expect, test } from './fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { createSeedIssue } from '../src/factory-seed.ts';
+import type { FactoryBrief } from '../src/factory-brief.ts';
+import { RealmIssueStore } from '../src/issue-scheduler.ts';
+import { retryWithPoll } from '../src/retry-with-poll.ts';
+import { expect, test } from './fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),

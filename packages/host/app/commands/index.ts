@@ -43,13 +43,6 @@ import * as InvalidateRealmIdentifiersCommandModule from './invalidate-realm-ide
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
-import * as ListingInitCommandModule from './listing-action-init';
-import * as ListingCreateCommandModule from './listing-create';
-import * as ListingGenerateExampleCommandModule from './listing-generate-example';
-import * as ListingInstallCommandModule from './listing-install';
-import * as ListingRemixCommandModule from './listing-remix';
-import * as ListingUpdateSpecsCommandModule from './listing-update-specs';
-import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalCommandModule from './open-create-listing-modal';
@@ -205,36 +198,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ListingBuildCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-action-init',
-    ListingInitCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-create',
-    ListingCreateCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-install',
-    ListingInstallCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-use',
-    ListingUseCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-remix',
-    ListingRemixCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-update-specs',
-    ListingUpdateSpecsCommandModule,
-  );
-  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-listing-pr-request',
     CreateListingPRRequestCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-generate-example',
-    ListingGenerateExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-in-interact-mode',
@@ -526,14 +491,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   InvalidateRealmIdentifiersCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
-  ListingInitCommandModule.default,
-  ListingCreateCommandModule.default,
-  ListingGenerateExampleCommandModule.default,
-  ListingInstallCommandModule.default,
-  ListingRemixCommandModule.default,
   CreateListingPRRequestCommandModule.default,
-  ListingUpdateSpecsCommandModule.default,
-  ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
   OpenCreateListingModalCommandModule.default,

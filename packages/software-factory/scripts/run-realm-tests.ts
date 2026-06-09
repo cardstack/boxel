@@ -1,5 +1,5 @@
 // This should be first
-import '../src/setup-logger';
+import '../src/setup-logger.ts';
 
 import {
   spawnSync,

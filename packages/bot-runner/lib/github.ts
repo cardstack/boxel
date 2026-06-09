@@ -66,7 +66,11 @@ export interface GitHubClient {
 }
 
 export class OctokitGitHubClient implements GitHubClient {
-  constructor(private token: string | undefined) {}
+  private token: string | undefined;
+
+  constructor(token: string | undefined) {
+    this.token = token;
+  }
 
   async openPullRequest(
     params: OpenPullRequestParams,
@@ -346,7 +350,5 @@ async function readErrorPayload(response: Response): Promise<unknown> {
 
 function toGitHubError(action: string, error: unknown): Error {
   let payload = error instanceof Error ? error.message : String(error);
-  return new Error(
-    `Failed to ${action} (unknown): ${JSON.stringify(payload)}`,
-  );
+  return new Error(`Failed to ${action} (unknown): ${JSON.stringify(payload)}`);
 }

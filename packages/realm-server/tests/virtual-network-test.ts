@@ -2,7 +2,7 @@ import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import '../setup-logger';
+import '../setup-logger.ts';
 
 module(basename(__filename), function () {
   module('virtual-network', function () {

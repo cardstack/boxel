@@ -6,13 +6,13 @@ import {
 import {
   sendResponseForUnauthorizedRequest,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 import {
   compareCurrentBoxelUIChecksum,
   writeCurrentBoxelUIChecksum,
-} from '../lib/boxel-ui-change-checker';
-import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls';
+} from '../lib/boxel-ui-change-checker.ts';
+import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
 
 export default function handlePostDeployment({
   assetsURL,

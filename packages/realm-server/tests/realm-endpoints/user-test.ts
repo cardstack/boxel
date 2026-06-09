@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -9,7 +9,7 @@ import {
   insertUser,
   insertPlan,
   createJWT,
-} from '../helpers';
+} from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -19,7 +19,7 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | GET _user', function (hooks) {

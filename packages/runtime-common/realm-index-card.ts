@@ -1,8 +1,8 @@
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { realmURL } from './constants';
-import { RealmPaths } from './paths';
-import type { VirtualNetwork } from './virtual-network';
+import { realmURL } from './constants.ts';
+import { RealmPaths } from './paths.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 export function isRealmIndexCardId(
   cardId: string | undefined,

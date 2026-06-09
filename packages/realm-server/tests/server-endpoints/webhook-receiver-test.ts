@@ -1,14 +1,14 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { createHmac } from 'crypto';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { realmSecretSeed, insertUser } from '../helpers';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { realmSecretSeed, insertUser } from '../helpers/index.ts';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
-import { setupServerEndpointsTest } from './helpers';
+import { setupServerEndpointsTest } from './helpers.ts';
 import {
   extractRealmFromPrBody,
   extractBranchNameFromPayload,
-} from '../../handlers/webhook-filter-handlers';
+} from '../../handlers/webhook-filter-handlers.ts';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Webhook Receiver Endpoint', function (hooks) {

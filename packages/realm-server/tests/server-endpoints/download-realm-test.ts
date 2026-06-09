@@ -2,9 +2,9 @@ import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { mkdirSync, writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
-import { realmSecretSeed } from '../helpers';
-import { createJWT } from '../../utils/jwt';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
+import { realmSecretSeed } from '../helpers/index.ts';
+import { createJWT } from '../../utils/jwt.ts';
 import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature';
 import type { Response } from 'superagent';
 

@@ -1,5 +1,5 @@
-import '../instrument';
-import '../setup-logger'; // This should be first
+import '../instrument.ts';
+import '../setup-logger.ts'; // This should be first
 import {
   logger,
   systemInitiatedPriority,

@@ -24,15 +24,15 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { inferDarkfactoryModuleUrl } from '../../src/factory-seed';
-import { logger } from '../../src/logger';
+import { inferDarkfactoryModuleUrl } from '../../src/factory-seed.ts';
+import { logger } from '../../src/logger.ts';
 
 // ---------------------------------------------------------------------------
 // Constants

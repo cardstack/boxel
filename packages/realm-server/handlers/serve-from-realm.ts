@@ -5,10 +5,13 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
-import { fetchRequestFromContext, setContextResponse } from '../middleware';
-import { setupCloseHandler } from '../node-realm';
-import { findOrMountRealm } from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
+import {
+  fetchRequestFromContext,
+  setContextResponse,
+} from '../middleware/index.ts';
+import { setupCloseHandler } from '../node-realm.ts';
+import { findOrMountRealm } from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 
 export type ServeFromRealmDeps = {
   realms: Realm[];

@@ -1,8 +1,8 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 
-import type { Credentials } from '../support/synapse';
-import { putEvent } from '../support/synapse';
+import type { Credentials } from '../support/synapse/index.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   login,
   logout,
@@ -20,9 +20,9 @@ import {
   setupTwoStackItems,
   showAllCards,
   waitUntil,
-} from '../helpers';
-import { appURL } from '../support/isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 
 test.describe('Room messages', () => {
   test(`it can send a message in a room`, async ({ page }) => {

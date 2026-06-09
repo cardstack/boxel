@@ -3,7 +3,7 @@ import isPlainObject from 'lodash/isPlainObject';
 import stringify from 'safe-stable-stringify';
 import flattenDeep from 'lodash/flattenDeep';
 
-import type { CodeRef, DBAdapter, TypeCoercion } from './index';
+import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 
 export type Expression = (
   | string

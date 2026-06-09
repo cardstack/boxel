@@ -1,9 +1,9 @@
 import camelCase from 'camelcase';
 
-import type { CodeRef, ResolvedCodeRef } from '../code-ref';
-import { rri } from '../realm-identifiers';
-import { trimExecutableExtension } from '../index';
-import type { RealmPaths } from '../paths';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
+import { rri } from '../realm-identifiers.ts';
+import { trimExecutableExtension } from '../index.ts';
+import type { RealmPaths } from '../paths.ts';
 
 export function getCardDirectoryName(
   adoptsFrom: CodeRef | undefined,

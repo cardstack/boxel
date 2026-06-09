@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import {
   login,
@@ -14,8 +14,8 @@ import {
   createSubscribedUser,
   createSubscribedUserAndLogin,
   createRealm,
-} from '../helpers';
-import { appURL } from '../support/isolated-realm-server';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import { randomUUID } from 'crypto';
 
 test.describe('Skills', () => {

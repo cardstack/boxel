@@ -1,5 +1,5 @@
 import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
-import { BOT_TRIGGER_EVENT_TYPE } from './matrix-constants';
+import { BOT_TRIGGER_EVENT_TYPE } from './matrix-constants.ts';
 
 export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
   if (!value || typeof value !== 'object') {

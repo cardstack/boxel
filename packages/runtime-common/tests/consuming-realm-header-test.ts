@@ -1,5 +1,5 @@
-import type { SharedTests } from '../helpers';
-import { sanitizeConsumingRealmHeader } from '../prerender-headers';
+import type { SharedTests } from '../helpers/index.ts';
+import { sanitizeConsumingRealmHeader } from '../prerender-headers.ts';
 
 const tests = Object.freeze({
   'accepts a plain http realm URL': async (assert) => {

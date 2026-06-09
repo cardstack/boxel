@@ -13,10 +13,10 @@ import type { BoxelCLIClient, LintResult } from '@cardstack/boxel-cli/api';
 import type {
   LintFileResultData,
   LintViolationData,
-} from './lint-result-cards';
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { readCard } from './workspace-fs';
+} from './lint-result-cards.ts';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { readCard } from './workspace-fs.ts';
 
 let log = logger('lint-execution');
 

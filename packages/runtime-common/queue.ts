@@ -1,5 +1,5 @@
-import type { PgPrimitive } from './index';
-import type { Deferred } from './deferred';
+import type { PgPrimitive } from './index.ts';
+import type { Deferred } from './deferred.ts';
 
 export const systemInitiatedPriority = 0;
 export const userInitiatedPriority = 10;
@@ -136,10 +136,12 @@ export function makeQueueWaiter<TResult>(
 }
 
 export class Job<T> {
-  constructor(
-    readonly id: number,
-    private notifier: Deferred<T>,
-  ) {}
+  readonly id: number;
+  private notifier: Deferred<T>;
+  constructor(id: number, notifier: Deferred<T>) {
+    this.id = id;
+    this.notifier = notifier;
+  }
   get done(): Promise<T> {
     return this.notifier.promise;
   }

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
-import { IndexingEventSink } from '../indexing-event-sink';
+import { IndexingEventSink } from '../indexing-event-sink.ts';
 
 interface RecordedExecute {
   sql: string;

@@ -2,7 +2,7 @@ import {
   getUserByMatrixUserId,
   spendCredits,
   sumUpCreditsLedger,
-} from './billing-queries';
+} from './billing-queries.ts';
 import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { findCheckpoint } from '../../src/lib/find-checkpoint';
-import type { Checkpoint } from '../../src/lib/checkpoint-manager';
+import { findCheckpoint } from '../../src/lib/find-checkpoint.ts';
+import type { Checkpoint } from '../../src/lib/checkpoint-manager.ts';
 
 function cp(hash: string, shortHash?: string): Checkpoint {
   return {

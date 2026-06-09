@@ -10,11 +10,11 @@ import {
   type VirtualNetwork,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   ModuleCacheInvalidationListener,
   parseModuleCacheInvalidationPayload,
-} from '../lib/module-cache-invalidation-listener';
+} from '../lib/module-cache-invalidation-listener.ts';
 
 // Records bump calls on a stub-or-real CachingDefinitionLookup. Used by
 // dispatch tests (stub form) and end-to-end tests (wrapping a real lookup

@@ -12,18 +12,18 @@ import {
   type LooseCardResource,
   type RenderResponse,
   type Diagnostics,
-} from '../index';
+} from '../index.ts';
 import {
   CardError,
   coerceErrorMessage,
   isCardError,
   serializableError,
-} from '../error';
-import { unresolveResourceInstanceURLs } from '../url';
-import type { VirtualNetwork } from '../virtual-network';
-import type { IndexRunnerDependencyManager } from './dependency-resolver';
-import { uniqueDeps } from './dependency-collections';
-import { canonicalURL } from './dependency-url';
+} from '../error.ts';
+import { unresolveResourceInstanceURLs } from '../url.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
+import { uniqueDeps } from './dependency-collections.ts';
+import { canonicalURL } from './dependency-url.ts';
 
 export interface CardIndexerOptions {
   path: LocalPath;

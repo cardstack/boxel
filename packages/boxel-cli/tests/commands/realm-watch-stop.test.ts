@@ -6,8 +6,8 @@ import {
   listRegisteredProcesses,
   registerProcess,
   unregisterCurrentProcess,
-} from '../../src/lib/watch-process-registry';
-import { stopWatchProcesses } from '../../src/commands/realm/watch/stop';
+} from '../../src/lib/watch-process-registry.ts';
+import { stopWatchProcesses } from '../../src/commands/realm/watch/stop.ts';
 
 const ORIGINAL_HOME = process.env.HOME;
 const ORIGINAL_USERPROFILE = process.env.USERPROFILE;

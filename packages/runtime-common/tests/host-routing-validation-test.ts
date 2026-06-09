@@ -1,8 +1,8 @@
 import {
   findDuplicateRoutingPaths,
   validateRoutingPath,
-} from '../host-routing-validation';
-import type { SharedTests } from '../helpers';
+} from '../host-routing-validation.ts';
+import type { SharedTests } from '../helpers.ts';
 
 const INVALID_CHARS_MSG =
   'Path may only contain letters, numbers, /, -, _, ., ~, or %XX-encoded characters';

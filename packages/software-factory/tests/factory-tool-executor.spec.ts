@@ -17,11 +17,14 @@
  * the only surviving registry tool — is a follow-up worth adding here.)
  */
 
-import { test } from './fixtures';
+import { test } from './fixtures.ts';
 
-import { ToolExecutor, ToolNotFoundError } from '../src/factory-tool-executor';
-import { ToolRegistry } from '../src/factory-tool-registry';
-import { buildTestClient } from './helpers/test-client';
+import {
+  ToolExecutor,
+  ToolNotFoundError,
+} from '../src/factory-tool-executor.ts';
+import { ToolRegistry } from '../src/factory-tool-registry.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 
 test('unregistered tool is rejected without reaching the server', async ({
   realm,
