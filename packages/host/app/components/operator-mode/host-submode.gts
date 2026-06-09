@@ -16,6 +16,7 @@ import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import PublishRealmCommand from '@cardstack/host/commands/publish-realm';
+import UnpublishRealmCommand from '@cardstack/host/commands/unpublish-realm';
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
@@ -143,7 +144,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
-    await this.realm.unpublish(this.realmURL, publishedRealmURL);
+    // Unpublish through the same command exposed to boxel-cli so the UI and
+    // headless callers share one path.
+    let command = new UnpublishRealmCommand(this.commandService.commandContext);
+    await command.execute({ realmURL: this.realmURL, publishedRealmURL });
   });
 
   get defaultPublishedSiteURL(): string | undefined {
