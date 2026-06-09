@@ -85,6 +85,21 @@ export default class RealmPicker extends Component<Signature> {
     this.args.filter.onChange(urls);
   };
 
+  // [diagnostic] read @filter.locked in a getter so each template
+  // re-render logs whatever Glimmer is binding to the attribute.
+  get debugFilterLocked() {
+    let locked = this.args.filter?.locked;
+    console.log(
+      '[lock-diag] RealmPicker.debugFilterLocked',
+      JSON.stringify({
+        locked,
+        filterIsObject: typeof this.args.filter === 'object',
+        filterKeys: this.args.filter ? Object.keys(this.args.filter) : null,
+      }),
+    );
+    return locked;
+  }
+
   private realmDisplayNameFromURL(realmURL: string): string {
     try {
       const pathname = new URL(realmURL).pathname;
@@ -115,6 +130,7 @@ export default class RealmPicker extends Component<Signature> {
           @disabled={{@filter.locked}}
           data-test-realm-picker
           data-test-realm-picker-locked={{@filter.locked}}
+          data-test-realm-picker-locked-via-getter={{this.debugFilterLocked}}
         />
       </:default>
       <:loading>
