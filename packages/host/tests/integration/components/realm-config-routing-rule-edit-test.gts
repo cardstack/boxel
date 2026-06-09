@@ -118,6 +118,40 @@ module(
         '[data-test-card-catalog-modal] [data-test-realm-picker-locked]',
       );
 
+      // [diagnostic] enumerate ALL elements with data-test-realm-picker-locked
+      // globally + inside modal, with full ancestor + sibling info to find
+      // why the scoped selector is matching the wrong one.
+      let elems = Array.from(
+        document.querySelectorAll('[data-test-realm-picker-locked]'),
+      );
+      console.log(
+        '[lock-diag] locked-attribute enumeration',
+        JSON.stringify({
+          globalCount: elems.length,
+          modalCount: document.querySelectorAll(
+            '[data-test-card-catalog-modal] [data-test-realm-picker-locked]',
+          ).length,
+          items: elems.map((el, i) => ({
+            index: i,
+            tag: el.tagName.toLowerCase(),
+            cls: (el.className?.toString?.() ?? '').slice(0, 40),
+            locked: el.getAttribute('data-test-realm-picker-locked'),
+            isWrapper: (el.className?.toString?.() ?? '').includes(
+              'realm-picker-wrap',
+            ),
+            inModal: !!el.closest('[data-test-card-catalog-modal]'),
+            modalAncestorCount: el.closest('[data-test-card-catalog-modal]')
+              ? Array.from(
+                  document.querySelectorAll('[data-test-card-catalog-modal]'),
+                ).filter((m) => m.contains(el)).length
+              : 0,
+          })),
+          modalsOnPage: document.querySelectorAll(
+            '[data-test-card-catalog-modal]',
+          ).length,
+        }),
+      );
+
       assert
         .dom('[data-test-card-catalog-modal] [data-test-realm-picker-locked]')
         .hasAttribute(
