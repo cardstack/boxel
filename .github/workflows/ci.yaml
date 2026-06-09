@@ -716,12 +716,23 @@ jobs:
       - name: Build boxel-ui and boxel-icons
         run: mise run build:ui
 
-      # See the matching step in ci-host.yaml: must clone boxel-skills BEFORE
-      # any later pnpm workspace op creates an empty packages/skills-realm/
-      # contents directory, or services/realm-server's `[ -d contents ]`
-      # check will skip the clone and the skills realm will boot empty.
+      # See the matching step in ci-host.yaml: explicit HTTPS clone before
+      # any pnpm workspace op creates an empty packages/skills-realm/contents
+      # directory that would otherwise trip services/realm-server's `[ -d
+      # contents ]` skip in `pnpm skills:setup`. Bypass the SSH-then-HTTPS
+      # fallback to avoid a silent failure mode where SSH leaves a non-empty
+      # contents/ and the HTTPS fallback refuses to overwrite it.
       - name: Populate skills-realm content
-        run: pnpm --dir=packages/skills-realm skills:setup
+        run: |
+          set -eux
+          cd packages/skills-realm
+          if [ -d contents/Skill ]; then
+            echo "skills content already present, skipping clone"
+          else
+            rm -rf contents
+            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+          fi
+          ls contents/Skill/ | head -5
 
       # The prerender (used by realm-server indexing) loads the host app from
       # host.ci.localhost, so the host dist must be built with the same slug

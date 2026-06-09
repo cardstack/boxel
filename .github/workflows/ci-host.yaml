@@ -468,20 +468,26 @@ jobs:
       - name: Build boxel-ui and boxel-icons
         run: mise run build:ui
 
-      # Clone the boxel-skills repo into packages/skills-realm/contents now,
-      # before any pnpm workspace operation can materialize an empty contents/
-      # directory. services/realm-server invokes `pnpm skills:setup` later
-      # whose `[ -d contents ] || git clone ...` heuristic skips the clone if
-      # ANY directory exists at that path — and pnpm-driven workspace
-      # materialization (e.g. the env-mode `pnpm build` below) creates an
-      # empty contents/ directory, leaving the skills realm to boot empty.
-      # An empty skills realm responds 200 to /_readiness-check (no work to
-      # do) but 404s on Skill/boxel-environment, which breaks every
-      # ai-assistant-panel | skills + commands test in env mode. Running the
-      # clone first guarantees real content is on disk before anything else
-      # touches the workspace.
+      # Explicit boxel-skills clone before any pnpm workspace op can
+      # materialize an empty packages/skills-realm/contents directory and trip
+      # services/realm-server's `[ -d contents ]` skip in `pnpm skills:setup`.
+      # The repo is public and CI has no SSH key, so go straight to HTTPS;
+      # skip if a real working copy is already present (idempotent on reruns).
+      # `ls Skill/` confirms the clone actually produced content — a previous
+      # attempt that relied on `pnpm skills:setup` had a silent failure mode
+      # where the SSH step left a non-empty contents/ that the fallback
+      # https clone refused to overwrite, leaving the realm to boot empty.
       - name: Populate skills-realm content
-        run: pnpm --dir=packages/skills-realm skills:setup
+        run: |
+          set -eux
+          cd packages/skills-realm
+          if [ -d contents/Skill ]; then
+            echo "skills content already present, skipping clone"
+          else
+            rm -rf contents
+            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+          fi
+          ls contents/Skill/ | head -5
 
       # The host test bundle bakes its realm URLs from BOXEL_ENVIRONMENT at
       # build time, so the dist must be built with the same slug the running
