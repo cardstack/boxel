@@ -307,6 +307,17 @@ for (let i = 0; i < fromUrls.length; i++) {
     let fromURL = new URL(from);
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);
+    // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Register
+    // the realm-prefix mapping too so unresolveURL on either form
+    // canonicalises to the same RRI form. This matters for cross-process
+    // cache keys (e.g. host prerender writes definitions cache keyed by
+    // internalKeyFor; realm-server reads back with the same VN). Without
+    // this, the realm-server would see only the URL mapping for base and
+    // the host's RRI-form keys would never match.
+    let m = from.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+    if (m) {
+      virtualNetwork.addRealmMapping(`@cardstack/${m[1]}/`, to.href);
+    }
   } else {
     virtualNetwork.addRealmMapping(from, to.href);
     urlMappings.push([to, to]); // use toUrl for both in hrefs
