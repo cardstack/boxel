@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { PgAdapter } from '@cardstack/postgres';
-import { acquireRoomLock, releaseRoomLock } from '../lib/queries';
+import { acquireRoomLock, releaseRoomLock } from '../lib/queries.ts';
 import { Client } from 'pg';
 
 function prepareTestDB() {

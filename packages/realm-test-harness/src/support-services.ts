@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import puppeteer, { type Browser } from 'puppeteer';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 import {
   boxelIconsDir,
@@ -30,8 +30,8 @@ import {
   workspaceRoot,
   type FactorySupportContext,
   type SynapseInstance,
-} from './shared';
-import { canConnectToPg } from './database';
+} from './shared.ts';
+import { canConnectToPg } from './database.ts';
 
 let log = logger('support-services');
 let preparePgPromise: Promise<void> | undefined;
