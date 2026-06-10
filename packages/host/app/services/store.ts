@@ -1748,11 +1748,22 @@ export default class StoreService extends Service implements StoreInterface {
     // An identity-only result (HTML-backed) carries no live attributes — they
     // are withheld on the wire and fetched on demand at hydration. Never
     // deposit it: an attribute-less stub would misrepresent the instance. But
-    // if the card is already fully loaded, return that resident instance —
+    // if the instance is already fully loaded, return that resident instance —
     // it stays represented in the results and a hydrated row keeps its live
     // presentation rather than being dropped (and is still never clobbered). A
     // not-yet-loaded identity-only row is skipped and renders from its HTML.
+    //
+    // The resident lookup is type-aware: a file row peeks (and type-checks) as
+    // a `FileDef`, a card row as a `CardDef`. Without this, an already-loaded
+    // file whose row comes back identity-only would peek against the card type,
+    // fail `isCardInstance`, and drop to HTML — losing its live presentation.
     if (resource.meta?.identityOnly === true) {
+      if (isFileMetaResource(resource)) {
+        let existingInstance = this.peek(resource.id, { type: 'file-meta' });
+        return existingInstance && isFileDefInstance(existingInstance)
+          ? (existingInstance as T)
+          : undefined;
+      }
       let existingInstance = this.peek(resource.id);
       return existingInstance && isCardInstance(existingInstance)
         ? (existingInstance as T)

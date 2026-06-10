@@ -1747,6 +1747,29 @@ module('Integration | Store', function (hooks) {
     };
   }
 
+  function identityOnlyFileMetaDoc(id: string) {
+    return {
+      data: [
+        {
+          type: 'file-meta',
+          id,
+          relationships: {
+            'rendered-html': { data: { type: 'rendered-html', id } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'FileDef',
+            },
+            identityOnly: true,
+          },
+          links: { self: id },
+        },
+      ],
+      meta: { page: { total: 1 } },
+    };
+  }
+
   let personQuery = {
     filter: {
       on: { module: testRRI('person'), name: 'Person' },
@@ -1805,6 +1828,40 @@ module('Integration | Store', function (hooks) {
       );
       assert.true(isCardInstance(after), 'still a full card instance');
     } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('an identity-only file-meta row for an already-resident FileDef returns the live FileDef', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    // Seed the live FileDef into the Store and retain it across the search.
+    let before = await storeService.get(fileUrl, { type: 'file-meta' });
+    storeService.addReference(fileUrl, { type: 'file-meta' });
+    assert.true(
+      (before as any)?.constructor?.isFileDef,
+      'the live FileDef is resident before the search',
+    );
+
+    overrideSearchWith(identityOnlyFileMetaDoc(fileUrl));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        1,
+        'the resident FileDef is returned (a file row is not dropped to HTML)',
+      );
+      assert.ok(
+        Object.is(results[0], before),
+        'the returned instance is the resident live FileDef (type-aware peek)',
+      );
+      assert.true(
+        (storeService.peek(fileUrl, { type: 'file-meta' }) as any)?.constructor
+          ?.isFileDef,
+        'still a live FileDef',
+      );
+    } finally {
+      storeService.dropReference(fileUrl);
       registerDefaultRoutes();
     }
   });

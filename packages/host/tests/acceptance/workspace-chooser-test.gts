@@ -176,6 +176,23 @@ module('Acceptance | workspace-chooser', function (hooks) {
     });
   });
 
+  module('realm settings', function () {
+    test('opens the realm config card in edit mode and closes the chooser', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      await click(`[data-test-workspace-menu-trigger="${realmAURL}"]`);
+      await click('[data-test-boxel-menu-item-text="Realm Settings"]');
+
+      await waitFor(`[data-test-stack-card="${realmAURL}realm"]`);
+      assert
+        .dom('[data-test-workspace-chooser]')
+        .doesNotExist('workspace chooser is dismissed');
+      assert
+        .dom(`[data-test-stack-card="${realmAURL}realm"]`)
+        .exists('realm config card is opened on the stack');
+    });
+  });
+
   module('sort dropdown', function () {
     test('sort dropdown renders with View All as default', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });

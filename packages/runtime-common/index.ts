@@ -734,6 +734,7 @@ export * from './prerender-headers.ts';
 export * from './query.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './unified-search.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -813,6 +814,7 @@ export type {
 export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
+export * from './host-routing-validation.ts';
 
 export type {
   CardDocument,
@@ -903,6 +905,12 @@ interface CardChooserOpts {
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
+  /**
+   * When true, the realm scope is fixed to consumingRealm and the user
+   * cannot broaden it via the realm picker. Use for fields that must
+   * reference cards within the consuming realm (e.g. RoutingRuleField).
+   */
+  lockConsumingRealm?: boolean;
   preselectedCardUrls?: string[];
 }
 

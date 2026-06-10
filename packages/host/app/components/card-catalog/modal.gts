@@ -81,6 +81,7 @@ type State = {
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
+  lockConsumingRealm?: boolean;
 };
 
 function isNewCardArgs(item: string | NewCardArgs): item is NewCardArgs {
@@ -117,6 +118,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @baseFilter={{state.baseFilter}}
             @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
             @initialSelectedTypes={{this.initialSelectedTypesForPanel}}
+            @lockSelectedRealms={{state.lockConsumingRealm}}
             as |Bar Content|
           >
             <ModalContainer
@@ -246,7 +248,10 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   private get initialSelectedRealmsForPanel(): URL[] | undefined {
-    if (!this.state?.preselectConsumingRealm || !this.state?.consumingRealm) {
+    if (!this.state?.consumingRealm) {
+      return undefined;
+    }
+    if (!this.state.preselectConsumingRealm && !this.state.lockConsumingRealm) {
       return undefined;
     }
     return [this.state.consumingRealm];
@@ -299,6 +304,7 @@ export default class CardCatalogModal extends Component<Signature> {
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
       preselectConsumingRealm?: boolean;
+      lockConsumingRealm?: boolean;
       preselectedCardUrls?: string[];
     },
   ): Promise<undefined | string | string[]> {
@@ -339,6 +345,7 @@ export default class CardCatalogModal extends Component<Signature> {
         preselectedCardTypeQuery?: Query;
         consumingRealm?: URL;
         preselectConsumingRealm?: boolean;
+        lockConsumingRealm?: boolean;
         preselectedCardUrls?: string[];
       } = {},
     ) => {
@@ -406,6 +413,7 @@ export default class CardCatalogModal extends Component<Signature> {
         hasPreselectedCard: preselectedCardUrls.length > 0,
         consumingRealm: opts.consumingRealm,
         preselectConsumingRealm: opts.preselectConsumingRealm,
+        lockConsumingRealm: opts.lockConsumingRealm,
       });
       this.stateStack.push(cardCatalogState);
       return await request.deferred.promise;

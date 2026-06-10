@@ -51,6 +51,12 @@ interface Signature {
     field: Field<LinkableDefConstructor>;
     brokenLink?: BrokenLink;
     typeConstraint?: ResolvedCodeRef;
+    /**
+     * When true, hard-scope the card chooser to the consuming realm
+     * (the realm of the parent card). The catalog modal's realm picker
+     * is locked. UI hint only; no runtime validation.
+     */
+    lockConsumingRealm?: boolean;
     createCard?: CreateCardFn;
   };
 }
@@ -235,6 +241,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         },
         createNewCard: this.args.createCard,
         consumingRealm: this.realmURL,
+        lockConsumingRealm: this.args.lockConsumingRealm,
       },
     );
     if (cardId) {
