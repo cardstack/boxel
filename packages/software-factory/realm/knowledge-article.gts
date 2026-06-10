@@ -11,6 +11,11 @@ import StringField from 'https://cardstack.com/base/string';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import enumField from 'https://cardstack.com/base/enum';
 
+import { FittedCard } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+
+import BookOpen from '@cardstack/boxel-icons/book-open';
+
 import { AgentProfile } from './agent-profile';
 
 export const KnowledgeTypeField = enumField(StringField, {
@@ -44,33 +49,46 @@ export class KnowledgeArticle extends CardDef {
 
   static fitted = class Fitted extends Component<typeof KnowledgeArticle> {
     <template>
-      <div class='knowledge-card compact'>
-        <div class='kicker'>{{if
+      <FittedCard class='knowledge-fitted'>
+        <:eyebrow><BookOpen width='16' height='16' aria-hidden='true' />{{if
             @model.articleType
             @model.articleType
-            'article'
-          }}</div>
-        <strong>{{if
-            @model.articleTitle
-            @model.articleTitle
-            'Untitled Article'
-          }}</strong>
-      </div>
+            'Article'
+          }}</:eyebrow>
+        <:title><@fields.cardTitle /></:title>
+        <:subtitle>{{#if @model.tags.length}}<span
+              class='tag-count'
+            >{{@model.tags.length}}
+              {{if
+                (eq @model.tags.length 1)
+                'tag'
+                'tags'
+              }}</span>{{/if}}</:subtitle>
+        <:footer>{{#if @model.updatedAt}}<span
+              class='updated-at'
+            ><@fields.updatedAt @format='atom' /></span>{{/if}}</:footer>
+      </FittedCard>
       <style scoped>
-        .knowledge-card {
-          display: grid;
-          gap: 0.25rem;
+        .knowledge-fitted :deep(.fc-eyebrow) {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
         }
-        .compact {
-          padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
-        }
-        .kicker {
-          font-size: 0.75rem;
-          text-transform: uppercase;
+        .tag-count {
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.2;
           color: var(--muted-foreground);
+        }
+        .updated-at {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground);
+          margin-left: auto;
+        }
+        @container fitted-card (width < 250px) {
+          .tag-count,
+          .updated-at {
+            display: none;
+          }
         }
       </style>
     </template>
