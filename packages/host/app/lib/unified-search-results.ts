@@ -1,8 +1,10 @@
 import {
   isCssResource,
   isIdentityOnlyCardResource,
+  isIdentityOnlyFileMetaResource,
   isRenderedHtmlResource,
   type CodeRef,
+  type StoreReadType,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -15,9 +17,13 @@ import { htmlComponent, type HTMLComponent } from './html-component.ts';
 // One row of a unified search response, reduced to what the search UI renders.
 // An HTML-backed (identity-only) row carries an inert `component` built from its
 // `rendered-html`; a full live row carries no component — the caller renders
-// its Store-resident card live (under `renderType`).
+// its Store-resident instance live (under `renderType`).
 export interface RenderableSearchItem {
   id: string;
+  // The row's resource kind — `card` or `file-meta` — threaded to the
+  // hydratable card's `@type` so the consumer resolves a file row to a live
+  // `FileDef` rather than a `CardDef`.
+  type: StoreReadType;
   // An explicit ancestor render-type override carried from the collection's
   // `meta.renderType`, so a live/fallback row renders as the same ancestor type
   // as its HTML siblings. Absent on the default (native) path: there is no
@@ -25,6 +31,8 @@ export interface RenderableSearchItem {
   // type — `CardRenderer` with no `@codeRef` does exactly this — rather than a
   // forced ancestor. (It does not happen automatically here; this field only
   // carries the override, leaving the per-row native fallback to the consumer.)
+  // A `file-meta` row never carries one regardless: files render natively, with
+  // no ancestor type.
   renderType: CodeRef | undefined;
   // The inert prerendered component, present only for HTML-backed rows.
   component: HTMLComponent | undefined;
@@ -39,10 +47,11 @@ function identityKey(type: string, id: string): string {
 }
 
 // Read a unified search document into renderable rows. Per the resolution
-// policy each row is either an identity-only `card` backed by a `rendered-html`
-// (rendered inert from its HTML, with its scoped `css` imported) or a full live
-// `card`/`file-meta` (rendered live by the caller from the Store). `importCss`
-// is injected so this stays pure/testable; callers pass the loader's import.
+// policy each row is either an identity-only `card`/`file-meta` backed by a
+// `rendered-html` (rendered inert from its HTML, with its scoped `css`
+// imported) or a full live `card`/`file-meta` (rendered live by the caller
+// from the Store). `importCss` is injected so this stays pure/testable;
+// callers pass the loader's import.
 export async function buildRenderableSearchItems(
   doc: UnifiedSearchCollectionDocument,
   importCss: (href: string) => Promise<unknown>,
@@ -65,9 +74,25 @@ export async function buildRenderableSearchItems(
       continue;
     }
 
-    if (!isIdentityOnlyCardResource(resource)) {
+    // The row's JSON:API type, threaded onto the item so the consumer hydrates
+    // it as the right kind. Files render natively (their own FileRender), so a
+    // `file-meta` row carries no ancestor `renderType`; a card carries the
+    // collection's render-type override, if any (absent on the native default).
+    let type: StoreReadType = resource.type;
+    let itemRenderType = type === 'file-meta' ? undefined : renderType;
+
+    if (
+      !isIdentityOnlyCardResource(resource) &&
+      !isIdentityOnlyFileMetaResource(resource)
+    ) {
       // Full live card / file-meta — rendered from its Store-resident instance.
-      items.push({ id, renderType, component: undefined, isError: false });
+      items.push({
+        id,
+        type,
+        renderType: itemRenderType,
+        component: undefined,
+        isError: false,
+      });
       continue;
     }
 
@@ -80,7 +105,13 @@ export async function buildRenderableSearchItems(
     if (!rendered || !isRenderedHtmlResource(rendered)) {
       // Identity-only with no resolvable rendered-html: surface the row with no
       // component so the caller can fall back rather than render nothing.
-      items.push({ id, renderType, component: undefined, isError: false });
+      items.push({
+        id,
+        type,
+        renderType: itemRenderType,
+        component: undefined,
+        isError: false,
+      });
       continue;
     }
 
@@ -101,7 +132,8 @@ export async function buildRenderableSearchItems(
     });
     items.push({
       id,
-      renderType,
+      type,
+      renderType: itemRenderType,
       component,
       isError: rendered.attributes.isError === true,
     });
