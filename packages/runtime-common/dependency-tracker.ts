@@ -152,11 +152,15 @@ export class RuntimeDependencyTracker {
   // Recording a dependency is idempotent, so once a (kind, rawURL) has been
   // tracked under a given context it never needs to run again. A linksToMany of
   // N same-typed cards otherwise re-tracks that type's entire module graph once
-  // per element — O(N) redundant canonicalization. Context objects are built
-  // per render / field-read and never mutated afterward, so their identity is a
-  // sound dedup key; a WeakMap lets entries fall away with the contexts. Reset
-  // alongside #nodes so a cleared node map never leaves a stale "already
-  // tracked" marker that would drop a real dependency.
+  // per element — O(N) redundant canonicalization. This dedups only stack-top
+  // contexts: those frames are built by withContext() (or the shared frozen
+  // EMPTY_CONTEXT) and never mutated, so their identity soundly stands in for
+  // their fields. Caller-supplied explicit contexts are part of the public API
+  // and structurally mutable, so identity is NOT a safe key for them — they are
+  // never deduped (matching the previous short-circuit's `!explicitContext`
+  // guard). A WeakMap lets entries fall away with the contexts; reset alongside
+  // #nodes so a cleared node map never leaves a stale "already tracked" marker
+  // that would drop a real dependency.
   #trackedByContext = new WeakMap<
     RuntimeDependencyTrackingContext,
     Set<string>
@@ -309,10 +313,13 @@ export class RuntimeDependencyTracker {
     let context = explicitContext ?? this.#currentContext();
     let key = normalizeCacheKey(kind, rawURL);
 
-    // Already recorded this (kind, rawURL) under this context — nothing more to
-    // do (see #trackedByContext). A repeat would re-derive the identical node
-    // record, so skipping it is a pure no-op.
-    let seen = this.#trackedByContext.get(context);
+    // Already recorded this (kind, rawURL) under this stack-top context —
+    // nothing more to do (see #trackedByContext). A repeat would re-derive the
+    // identical node record, so skipping it is a pure no-op. Explicit contexts
+    // are mutable public API, so they bypass the dedup and always record.
+    let seen = explicitContext
+      ? undefined
+      : this.#trackedByContext.get(context);
     if (seen?.has(key)) {
       return;
     }
@@ -322,11 +329,13 @@ export class RuntimeDependencyTracker {
       return;
     }
 
-    if (!seen) {
-      seen = new Set();
-      this.#trackedByContext.set(context, seen);
+    if (!explicitContext) {
+      if (!seen) {
+        seen = new Set();
+        this.#trackedByContext.set(context, seen);
+      }
+      seen.add(key);
     }
-    seen.add(key);
 
     let label = contextLabel(context);
     let consumer = this.#normalizeConsumer(context, label);

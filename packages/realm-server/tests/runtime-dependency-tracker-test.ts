@@ -418,6 +418,42 @@ module(basename(__filename), function (hooks) {
     );
   });
 
+  test('does not dedup a mutated explicit context', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'mutated-explicit-context',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // Explicit contexts are public API and structurally mutable. The same
+    // object, tracked first as a query and then mutated to non-query, must
+    // record under both modes — identity must never short-circuit the second
+    // call into dropping the non-query context (which would wrongly exclude the
+    // dep as query-only).
+    let context = {
+      mode: 'query' as 'query' | 'non-query',
+      queryField: 'matches',
+      source: 'test:mutated-explicit',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+    trackRuntimeInstanceDependency('https://example.com/mutating-dep', context);
+    context.mode = 'non-query';
+    trackRuntimeInstanceDependency('https://example.com/mutating-dep', context);
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/mutating-dep.json'),
+      'dep tracked under a mutated explicit context is retained as non-query',
+    );
+    assert.notOk(
+      snapshot.excludedQueryOnlyDeps.includes(
+        'https://example.com/mutating-dep.json',
+      ),
+      'dep is not misclassified as query-only after the context mutated',
+    );
+  });
+
   test('getter-level attribution tracks only accessed relationship targets', async function (assert) {
     beginRuntimeDependencyTrackingSession({
       sessionKey: 'getter-level-attribution',
