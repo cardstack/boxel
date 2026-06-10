@@ -269,16 +269,12 @@ export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
 // read as data-only; `dataOnly: true` is the only way to get live-only.
 // ---------------------------------------------------------------------------
 
-// `render.renderType`: an explicit CodeRef to render every result as, or the
-// literal "native" escape valve (each result in its own most-derived type).
-// Omitted → the searched `filter.on` common-ancestor type (resolved by the
-// server).
-export type SearchRenderType = CodeRef | 'native';
-
 export interface SearchRenderSpec {
   // The format to render; defaults to "fitted" when the caller omits it.
   format: Format;
-  renderType?: SearchRenderType;
+  // An explicit CodeRef to render every result as that ancestor type. Omitted
+  // → each result renders in its own actual (most-derived, "native") type.
+  renderType?: CodeRef;
 }
 
 export interface UnifiedSearchOpts {
@@ -317,14 +313,12 @@ function normalizeRenderSpec(value: unknown): SearchRenderSpec {
     spec.format = format;
   }
   if (renderType !== undefined) {
-    if (renderType === 'native') {
-      spec.renderType = 'native';
-    } else if (isCodeRef(renderType)) {
+    if (isCodeRef(renderType)) {
       spec.renderType = renderType;
     } else {
       throw new SearchRequestError(
         'invalid-render',
-        'render.renderType must be a CodeRef or "native"',
+        'render.renderType must be a CodeRef',
       );
     }
   }
@@ -414,26 +408,16 @@ export function parseUnifiedSearchRequestFromPayload(
 // prefer-HTML path; `dataOnly` results are the actual types (nothing renders),
 // so the caller does not invoke this for them.
 //
-//   - an explicit `renderType` CodeRef  → use it
-//   - the `"native"` escape valve       → the result's own most-derived type (types[0])
-//   - omitted                           → the query's `filter.on` (the common
-//                                          ancestor searched on); when the
-//                                          query has no `filter.on`, fall back
-//                                          to the most-derived type
+//   - an explicit `renderType` CodeRef → render every result as that ancestor
+//   - omitted                          → the result's own actual (most-derived,
+//                                         "native") type (types[0])
 export function resolveRenderType(input: {
-  renderType?: SearchRenderType;
-  filterOn?: CodeRef;
+  renderType?: CodeRef;
   // The result's adoption chain, most-derived first (types[0] is the actual type).
   types?: CodeRef[];
 }): CodeRef | undefined {
-  let { renderType, filterOn, types } = input;
-  if (renderType && renderType !== 'native') {
-    return renderType;
-  }
-  if (renderType === 'native') {
-    return types?.[0];
-  }
-  return filterOn ?? types?.[0];
+  let { renderType, types } = input;
+  return renderType ?? types?.[0];
 }
 
 // The unified federated merge: concatenate `data` in realm order, sum
@@ -465,8 +449,9 @@ export function combineSearchResults(
     // Carry the collection-level render type the per-realm docs echo. The
     // resolved render type is consistent across one search (every realm
     // resolves the same one), so the first non-null value is authoritative;
-    // a host consumer renders live/fallback card rows under it. Absent for
-    // "native"/per-row searches, where each resource echoes its own type.
+    // a host consumer renders live/fallback card rows under it. Present only
+    // for an explicit ancestor override; absent on the default (native) path,
+    // where each result renders in its own type and echoes that per row.
     if (combined.meta.renderType == null && doc.meta?.renderType != null) {
       combined.meta.renderType = doc.meta.renderType;
     }
@@ -553,11 +538,11 @@ export type SearchOpts = {
   // elapsed time. Callers never supply this directly.
   timings?: RequestTimings;
   // The prefer-HTML rendering spec, resolved by the handler: `format` is the
-  // HTML column to select and `renderType` is the already-resolved ancestor
-  // type (the `"native"` / `filter.on` defaulting has been applied upstream, so
-  // this is a concrete `CodeRef` or absent). When present, `Realm.search`
-  // resolves each result to prerendered HTML where indexed and falls back to
-  // the full live card otherwise. Absent → the live-card document.
+  // HTML column to select and `renderType` is an explicit ancestor-type
+  // override (a concrete `CodeRef`); when absent, each result renders in its
+  // own actual (native) type. When `render` is present, `Realm.search` resolves
+  // each result to prerendered HTML where indexed and falls back to the full
+  // live card otherwise. Absent → the live-card document.
   render?: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
   // Opt-in live-cards-only mode. Mutually exclusive with `render`; both absent
   // is also live-only. Carried so the federated path is explicit about the

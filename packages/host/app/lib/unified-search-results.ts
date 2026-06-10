@@ -18,8 +18,10 @@ import { htmlComponent, type HTMLComponent } from './html-component.ts';
 // its Store-resident card live (under `renderType`).
 export interface RenderableSearchItem {
   id: string;
-  // The collection's resolved render type, so a live/fallback row renders as
-  // the same ancestor type as its HTML siblings.
+  // An explicit ancestor render-type override (the collection's
+  // `meta.renderType`), so a live/fallback row renders as the same ancestor
+  // type as its HTML siblings. Absent by default — each row renders in its own
+  // (native) type.
   renderType: CodeRef | undefined;
   // The inert prerendered component, present only for HTML-backed rows.
   component: HTMLComponent | undefined;

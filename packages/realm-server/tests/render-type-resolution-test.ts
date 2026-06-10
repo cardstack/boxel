@@ -28,43 +28,24 @@ module(basename(__filename), function () {
       assert.deepEqual(
         resolveRenderType({
           renderType: explicitRef,
-          filterOn: baseRef,
           types: [subRef, baseRef],
         }),
         explicitRef,
-        'the explicit CodeRef is used regardless of filterOn / types',
+        'the explicit ancestor override is used regardless of the result types',
       );
     });
 
-    test('"native" resolves to the most-derived type (types[0])', function (assert) {
+    test('an omitted renderType resolves to the result’s own actual type (types[0])', function (assert) {
       assert.deepEqual(
         resolveRenderType({
-          renderType: 'native',
-          filterOn: baseRef,
           types: [subRef, baseRef],
         }),
         subRef,
-        'native renders each result in its own actual type',
+        'the default renders each result in its own most-derived (native) type — not the searched-against ancestor',
       );
     });
 
-    test('an omitted renderType resolves to filter.on', function (assert) {
-      assert.deepEqual(
-        resolveRenderType({
-          filterOn: baseRef,
-          types: [subRef, baseRef],
-        }),
-        baseRef,
-        'the default is the common ancestor searched on',
-      );
-    });
-
-    test('an omitted renderType with no filter.on falls back to the most-derived type', function (assert) {
-      assert.deepEqual(
-        resolveRenderType({ types: [subRef, baseRef] }),
-        subRef,
-        'with no filter.on, render as the actual type',
-      );
+    test('an omitted renderType with no types resolves to undefined', function (assert) {
       assert.strictEqual(
         resolveRenderType({}),
         undefined,
