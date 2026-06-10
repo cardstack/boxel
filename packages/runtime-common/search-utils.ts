@@ -402,11 +402,12 @@ export function parseUnifiedSearchRequestFromPayload(
   };
 }
 
-// The single render-type resolution rule, shared by the server (selects the
-// HTML column, echoes `meta.renderType`) and the host (drives the live
-// `CardRenderer @codeRef`) so both pick the same type. Governs only the
-// prefer-HTML path; `dataOnly` results are the actual types (nothing renders),
-// so the caller does not invoke this for them.
+// The single render-type resolution rule. The server applies it (it selects the
+// HTML column and echoes the result in `meta.renderType`); the host then
+// consumes that `meta.renderType` to drive the live `CardRenderer @codeRef`, so
+// both pick the same type. Governs only the prefer-HTML path; `dataOnly`
+// results are the actual types (nothing renders), so the caller does not invoke
+// this for them.
 //
 //   - an explicit `renderType` CodeRef → render every result as that ancestor
 //   - omitted                          → the result's own actual (most-derived,

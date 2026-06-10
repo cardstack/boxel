@@ -18,10 +18,13 @@ import { htmlComponent, type HTMLComponent } from './html-component.ts';
 // its Store-resident card live (under `renderType`).
 export interface RenderableSearchItem {
   id: string;
-  // An explicit ancestor render-type override (the collection's
-  // `meta.renderType`), so a live/fallback row renders as the same ancestor
-  // type as its HTML siblings. Absent by default — each row renders in its own
-  // (native) type.
+  // An explicit ancestor render-type override carried from the collection's
+  // `meta.renderType`, so a live/fallback row renders as the same ancestor type
+  // as its HTML siblings. Absent on the default (native) path: there is no
+  // collection-level override, so the consumer renders each row in its own
+  // type — `CardRenderer` with no `@codeRef` does exactly this — rather than a
+  // forced ancestor. (It does not happen automatically here; this field only
+  // carries the override, leaving the per-row native fallback to the consumer.)
   renderType: CodeRef | undefined;
   // The inert prerendered component, present only for HTML-backed rows.
   component: HTMLComponent | undefined;
