@@ -71,7 +71,7 @@ mise-tasks/
     bot-runner                 # Bot runner
   dev                          # Full dev stack (realm server + workers + test realms)
   dev-all                      # Host app + full dev stack (single command)
-  dev-minimal                  # Dev stack without optional realms
+  dev-minimal                  # Dev stack without optional realms (host started separately)
   dev-without-matrix           # Dev stack (expects Matrix already running)
   build:ui                     # Build boxel-icons + boxel-ui (in dependency order)
   test-services:host           # Services for host test suite
@@ -142,7 +142,7 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `mise run dev`
 
-Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server.
+Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. `dev-minimal` does not start the host app — run it in a second terminal with `mise exec -- pnpm -C packages/host start` (the `mise exec` prefix loads the HTTPS dev cert env so host comes up on `https://localhost:4200`). Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server.
 
 ##### Turbo mode
 
