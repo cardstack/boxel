@@ -348,6 +348,19 @@ export function isIdentityOnlyCardResource(
   return resource.meta?.identityOnly === true;
 }
 
+// The `file-meta` counterpart of `isIdentityOnlyCardResource`: an HTML-backed
+// file row the server emits as identity + a `rendered-html` relationship with
+// no `attributes`, flagged `meta.identityOnly`. Hydrates to a live `FileDef`
+// via `links.self`. (A file carries no `renderType` — it renders natively.)
+export function isIdentityOnlyFileMetaResource(
+  resource: any,
+): resource is FileMetaResource {
+  if (!isFileMetaResource(resource)) {
+    return false;
+  }
+  return resource.meta?.identityOnly === true;
+}
+
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------

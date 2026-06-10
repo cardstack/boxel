@@ -44,7 +44,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
     let ownerUserId = '@mango:localhost';
 
-    let realmFileSystem: Record<string, LooseSingleCardDocument> = {
+    let realmFileSystem: Record<string, LooseSingleCardDocument | string> = {
+      // Two markdown files (FileDef rows that get prerendered HTML) for the
+      // file-meta prefer-HTML test. They don't appear in card queries.
+      'hello.md': '# Hello from a FileDef',
+      'world.md': '# World from a FileDef',
       'test-card.json': {
         data: {
           type: 'card',
@@ -594,6 +598,174 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.notOk(
         included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
         'no rendered-html is emitted for the live fallback row',
+      );
+    });
+
+    // File-meta parity: the same mixed-index manufacture for FileDef rows. A
+    // prefer-HTML search over file-meta emits an identity-only `file-meta` +
+    // `rendered-html` for the HTML-backed file and a full live `file-meta` for
+    // the HTML-nulled file. A file renders natively, so it carries no renderType.
+    test('QUERY /_federated-search prefer-HTML emits identity-only file-meta + rendered-html for HTML files and a full live file-meta for HTML-absent files', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let htmlUrl = `${testRealm.url}hello.md`; // keeps its rendered HTML
+      let liveUrl = `${testRealm.url}world.md`; // HTML nulled → live fallback
+
+      // Null the fitted HTML for one file row. The file index `url` is the bare
+      // file URL (no `.json`).
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url =`,
+        param(liveUrl),
+        `AND realm_url =`,
+        param(testRealm.url),
+      ] as Expression);
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // A pure `type: FileDef` filter → a file-meta query spanning the
+        // realm's .md files (FileDef rows). No `filter.on`, so the render type
+        // resolves to native — a file renders as itself and carries no
+        // renderType.
+        .send({
+          realms: [testRealm.url],
+          filter: {
+            type: {
+              module: rri('https://cardstack.com/base/card-api'),
+              name: 'FileDef',
+            },
+          },
+          render: { format: 'fitted' },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+      let byId = new Map<string, any>(data.map((r) => [r.id, r]));
+
+      assert.ok(byId.has(htmlUrl), 'the HTML-backed file is in data');
+      assert.ok(byId.has(liveUrl), 'the HTML-absent file is in data');
+
+      // HTML-backed file → identity-only file-meta + rendered-html.
+      let htmlFile = byId.get(htmlUrl);
+      assert.strictEqual(htmlFile.type, 'file-meta', 'HTML row is a file-meta');
+      assert.notOk(
+        htmlFile.attributes,
+        'the HTML-backed file-meta is identity-only (no attributes)',
+      );
+      assert.true(htmlFile.meta?.identityOnly, 'marked meta.identityOnly');
+      assert.notOk(
+        htmlFile.meta?.renderType,
+        'a file carries no renderType (renders natively)',
+      );
+      // A `.md` file's most-derived type is the FileDef subclass `MarkdownDef`.
+      // `adoptsFrom` must be that subclass — not the `FileDef` ancestor — even
+      // though the file-meta query targets `FileDef`: files render natively, so
+      // the card-side render type is never coerced onto a file.
+      assert.strictEqual(
+        htmlFile.meta?.adoptsFrom?.name,
+        'MarkdownDef',
+        'adoptsFrom is the file’s own most-derived type, never a coerced ancestor',
+      );
+      assert.deepEqual(
+        htmlFile.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: htmlUrl },
+        'the file-meta links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        htmlFile.links?.self,
+        htmlUrl,
+        'links.self is the hydration target',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === htmlUrl,
+      );
+      assert.ok(
+        rendered,
+        'a rendered-html for the HTML file rides in included',
+      );
+      assert.ok(
+        rendered.attributes.html?.length > 0,
+        'the prerendered html is non-empty',
+      );
+      assert.notOk(
+        rendered.meta?.renderType,
+        'the file rendered-html carries no renderType',
+      );
+
+      // HTML-absent file → full live file-meta, nothing in included for it.
+      let liveFile = byId.get(liveUrl);
+      assert.strictEqual(liveFile.type, 'file-meta', 'live row is a file-meta');
+      assert.ok(
+        liveFile.attributes,
+        'the HTML-absent file is a full live file-meta (attributes present)',
+      );
+      assert.notOk(
+        liveFile.meta?.identityOnly,
+        'the live fallback file-meta is not identity-only',
+      );
+      assert.notOk(
+        included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
+        'no rendered-html is emitted for the live fallback file',
+      );
+    });
+
+    // File-meta parity for the live (no-render) path: a `dataOnly` file query
+    // returns the full live file-meta document, byte-identical to a plain
+    // (no-render) file query — the prefer-HTML emission never touches it.
+    test('QUERY /_federated-search dataOnly over a file query is byte-identical to the live file-meta document', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let fileFilter = {
+        type: {
+          module: rri('https://cardstack.com/base/card-api'),
+          name: 'FileDef',
+        },
+      };
+      let post = (body: Record<string, unknown>) =>
+        request
+          .post(`${searchURL.pathname}${searchURL.search}`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Authorization', `Bearer ${realmServerToken}`)
+          .send({ realms: [testRealm.url], filter: fileFilter, ...body });
+
+      let plain = await post({});
+      let dataOnly = await post({ dataOnly: true });
+      assert.strictEqual(plain.status, 200, 'plain: HTTP 200');
+      assert.strictEqual(dataOnly.status, 200, 'dataOnly: HTTP 200');
+      assert.ok(
+        (dataOnly.body.data as any[]).length > 0,
+        'the realm returns file rows (the parity check is not vacuous)',
+      );
+      assert.deepEqual(
+        dataOnly.body,
+        plain.body,
+        'dataOnly is byte-identical to a plain (no-render) live file query',
+      );
+      assert.notOk(
+        (dataOnly.body.included ?? []).some(
+          (r: any) => r.type === 'rendered-html' || r.type === 'css',
+        ),
+        'dataOnly emits no rendered-html / css',
+      );
+      assert.ok(
+        (dataOnly.body.data as any[]).every(
+          (r) =>
+            r.type === 'file-meta' && r.attributes && !r.meta?.identityOnly,
+        ),
+        'every dataOnly row is a full live file-meta (attributes present, not identity-only)',
       );
     });
 
