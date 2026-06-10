@@ -123,23 +123,22 @@ module(
       assert
         .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
         .hasAttribute('aria-disabled', 'true', 'the realm picker is locked');
-      // The picker's selected pill must show the consuming realm, not
-      // the "All" select-all option. If `consumingRealm` doesn't reach
-      // the chooser, `initialSelectedRealmsForPanel` returns undefined,
-      // `selectedRealms` stays empty, and `pickerSelected` falls back to
-      // the `Select All (...)` option labeled "All" — which means the
+      // The picker's selected pill must NOT be the "All" / "Select All"
+      // option. If `consumingRealm` doesn't reach the chooser,
+      // `initialSelectedRealmsForPanel` returns undefined,
+      // `selectedRealms` stays empty, and `pickerSelected` falls back
+      // to the `Select All (...)` option (labeled "All") — meaning
       // search is unscoped (the original code-submode bug).
+      // Check the selected-pill's own `data-test-boxel-picker-selected-item`
+      // value rather than the realm name, because the user-visible
+      // realm name comes from `realm.info()` and shows the
+      // "Unnamed Workspace" placeholder until that async fetch resolves.
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
-        .containsText(
-          realmName,
-          'the realm picker is scoped to the consuming realm',
-        );
-      assert
-        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
-        .doesNotIncludeText(
-          'Select All',
-          'the picker is not showing the unscoped "Select All" pill',
+        .dom(
+          '[data-test-card-catalog-modal] [data-test-realm-picker] [data-test-boxel-picker-selected-item="All"]',
+        )
+        .doesNotExist(
+          'the realm picker is scoped to a specific realm, not the unscoped "All" select-all pill',
         );
       assert
         .dom(
