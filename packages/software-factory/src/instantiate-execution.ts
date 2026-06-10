@@ -27,6 +27,11 @@ import { validateRealmRelativePath } from './realm-relative-path';
 import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
 import { readCard } from './workspace-fs';
 
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache';
+
 let log = logger('instantiate-execution');
 
 // ---------------------------------------------------------------------------
@@ -94,6 +99,12 @@ export interface InstantiateRealmSpecsOptions {
   workspaceDir: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + spec
+   * set, so the agent's mid-turn `run_instantiate` and the pipeline's
+   * instantiate step don't both instantiate the same unchanged examples.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface InstantiateRealmSpecsOutput {
@@ -123,6 +134,8 @@ export interface RunInstantiateInMemoryOptions {
   path?: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /** See {@link InstantiateRealmSpecsOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunInstantiateFailure {
@@ -190,6 +203,25 @@ export async function discoverRealmSpecs(
  * exercised.
  */
 export async function instantiateRealmSpecs(
+  options: InstantiateRealmSpecsOptions,
+  specs: SpecInfo[],
+): Promise<InstantiateRealmSpecsOutput> {
+  if (options.cache) {
+    let inputs = specs.flatMap((s) => [
+      s.specId,
+      s.moduleUrl,
+      s.cardName,
+      ...s.exampleUrls,
+    ]);
+    let key = `instantiate:${cacheKeyForInputs(inputs)}`;
+    return options.cache.getOrRun(key, () =>
+      instantiateRealmSpecsUncached(options, specs),
+    );
+  }
+  return instantiateRealmSpecsUncached(options, specs);
+}
+
+async function instantiateRealmSpecsUncached(
   options: InstantiateRealmSpecsOptions,
   specs: SpecInfo[],
 ): Promise<InstantiateRealmSpecsOutput> {
@@ -364,6 +396,7 @@ export async function runInstantiateInMemory(
         client: options.client,
         workspaceDir: options.workspaceDir,
         instantiateCardFn,
+        cache: options.cache,
       },
       specsResult.specs,
     );

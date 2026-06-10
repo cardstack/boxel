@@ -48,6 +48,8 @@ export type {
 export interface InstantiateValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: import('../validation-run-cache').ValidationRunCache;
   instantiateResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Example instance
@@ -277,6 +279,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
         instantiateCardFn: this.config.instantiateCardFn,
+        cache: this.config.cache,
       },
       specInfos,
     );

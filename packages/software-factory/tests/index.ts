@@ -1,4 +1,5 @@
 import './factory-brief.test';
+import './validation-run-cache.test';
 import './factory-prompt-loader.test';
 import './factory-entrypoint.test';
 import './factory-entrypoint.integration.test';

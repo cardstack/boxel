@@ -166,6 +166,12 @@ export interface ValidationPipelineConfig {
    */
   workspaceDir: string;
   issueId?: string;
+  /**
+   * Shared with the agent's run_* tools — lets each step reuse an engine
+   * run already executed against the same workspace state instead of
+   * re-running it. Artifact cards are still written per step.
+   */
+  cache?: import('../validation-run-cache').ValidationRunCache;
   /** Injected for testing — passed through to TestValidationStep, LintValidationStep, EvalValidationStep, and ParseValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
   /** Injected for testing — passed through to InstantiateValidationStep and ParseValidationStep. */
@@ -182,6 +188,7 @@ export function createDefaultPipeline(
 ): ValidationPipeline {
   let parseConfig: ParseValidationStepConfig = {
     client: config.client,
+    cache: config.cache,
     realmServerUrl: config.realmServerUrl,
     parseResultsModuleUrl: config.parseResultsModuleUrl,
     workspaceDir: config.workspaceDir,
@@ -192,6 +199,7 @@ export function createDefaultPipeline(
 
   let testConfig: TestValidationStepConfig = {
     client: config.client,
+    cache: config.cache,
     realmServerUrl: config.realmServerUrl,
     hostAppUrl: config.hostAppUrl,
     testResultsModuleUrl: config.testResultsModuleUrl,
@@ -202,6 +210,7 @@ export function createDefaultPipeline(
 
   let lintConfig: LintValidationStepConfig = {
     client: config.client,
+    cache: config.cache,
     realmServerUrl: config.realmServerUrl,
     lintResultsModuleUrl: config.lintResultsModuleUrl,
     workspaceDir: config.workspaceDir,
@@ -211,6 +220,7 @@ export function createDefaultPipeline(
 
   let evalConfig: EvalValidationStepConfig = {
     client: config.client,
+    cache: config.cache,
     realmServerUrl: config.realmServerUrl,
     evalResultsModuleUrl: config.evalResultsModuleUrl,
     workspaceDir: config.workspaceDir,
@@ -220,6 +230,7 @@ export function createDefaultPipeline(
 
   let instantiateConfig: InstantiateValidationStepConfig = {
     client: config.client,
+    cache: config.cache,
     realmServerUrl: config.realmServerUrl,
     instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
     workspaceDir: config.workspaceDir,

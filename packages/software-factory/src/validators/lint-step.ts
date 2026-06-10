@@ -32,6 +32,8 @@ let log = logger('lint-validation-step');
 export interface LintValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: import('../validation-run-cache').ValidationRunCache;
   lintResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Source files are
@@ -200,6 +202,7 @@ export class LintValidationStep implements ValidationStepRunner {
         workspaceDir: this.config.workspaceDir,
         lintFileFn: this.config.lintFileFn,
         readFileFn: this.config.readFileFn,
+        cache: this.config.cache,
       },
       lintableFiles,
     );
