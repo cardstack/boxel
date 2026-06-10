@@ -3,12 +3,15 @@ import { basename } from 'path';
 import {
   buildCssResource,
   buildIdentityOnlyCard,
+  buildIdentityOnlyFileMeta,
   buildRenderedHtmlResource,
   combineSearchResults,
   cssResourceId,
   isCardResource,
   isCssResource,
+  isFileMetaResource,
   isIdentityOnlyCardResource,
+  isIdentityOnlyFileMetaResource,
   isRenderedHtmlResource,
   parseUnifiedSearchRequestFromPayload,
   parseUsedRenderType,
@@ -16,6 +19,7 @@ import {
   scopedCssHrefsFromDeps,
   type CardResource,
   type CssResource,
+  type FileMetaResource,
   type RenderedHtmlResource,
   type UnifiedSearchCollectionDocument,
 } from '@cardstack/runtime-common';
@@ -49,6 +53,36 @@ function identityOnlyCard(): CardResource {
     },
     meta: { adoptsFrom: authorRef, identityOnly: true },
     links: { self: cardUrl },
+  };
+}
+
+const fileUrl = rri(`${realmURL}hero.png`);
+const fileDefRef = {
+  module: rri('https://cardstack.com/base/card-api'),
+  name: 'FileDef',
+};
+
+function fullFileMeta(): FileMetaResource {
+  return {
+    type: 'file-meta',
+    id: fileUrl,
+    attributes: { name: 'hero.png' },
+    meta: { adoptsFrom: fileDefRef },
+    links: { self: fileUrl },
+  };
+}
+
+function identityOnlyFileMeta(): FileMetaResource {
+  return {
+    type: 'file-meta',
+    id: fileUrl,
+    relationships: {
+      'rendered-html': {
+        data: { type: 'rendered-html', id: fileUrl },
+      },
+    },
+    meta: { adoptsFrom: fileDefRef, identityOnly: true },
+    links: { self: fileUrl },
   };
 }
 
@@ -106,6 +140,30 @@ module(basename(__filename), function () {
       assert.false(
         isIdentityOnlyCardResource(noAttributesNoFlag),
         'a full card that merely lacks attributes is not identity-only',
+      );
+    });
+
+    test('isIdentityOnlyFileMetaResource keys on meta.identityOnly', function (assert) {
+      assert.true(
+        isFileMetaResource(fullFileMeta()),
+        'full file-meta is a file-meta resource',
+      );
+      assert.false(
+        isIdentityOnlyFileMetaResource(fullFileMeta()),
+        'a full file-meta (no flag) is not identity-only',
+      );
+      assert.true(
+        isIdentityOnlyFileMetaResource(identityOnlyFileMeta()),
+        'a flagged identity-only file-meta is identity-only',
+      );
+      // The card and file-meta predicates don't cross over.
+      assert.false(
+        isIdentityOnlyFileMetaResource(identityOnlyCard()),
+        'an identity-only card is not an identity-only file-meta',
+      );
+      assert.false(
+        isIdentityOnlyCardResource(identityOnlyFileMeta()),
+        'an identity-only file-meta is not an identity-only card',
       );
     });
 
@@ -569,6 +627,33 @@ module(basename(__filename), function () {
         card.meta.renderType,
         authorRef,
         'carries the render type',
+      );
+    });
+
+    test('buildIdentityOnlyFileMeta builds an attribute-less identity-only file-meta (no renderType — renders natively)', function (assert) {
+      let fileMeta = buildIdentityOnlyFileMeta({
+        url: fileUrl,
+        adoptsFrom: fileDefRef,
+      });
+      assert.true(
+        isIdentityOnlyFileMetaResource(fileMeta),
+        'is an identity-only file-meta resource',
+      );
+      assert.notOk(fileMeta.attributes, 'no attributes are shipped');
+      assert.deepEqual(
+        fileMeta.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: fileUrl },
+        'links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        fileMeta.links?.self,
+        fileUrl,
+        'links.self is the hydration target',
+      );
+      assert.deepEqual(
+        fileMeta.meta.adoptsFrom,
+        fileDefRef,
+        'carries the file type',
       );
     });
   });
