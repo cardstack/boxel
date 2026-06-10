@@ -2136,11 +2136,22 @@ export class PagePool {
       // realm. (`#tryExpand` is a no-op at the tier ceiling or under a
       // fixed-size pool, so this degrades cleanly back to the steal.)
       if (this.#tryExpand(priority)) {
-        if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
-          let startedAt = Date.now();
-          await this.#ensureStandbyPool();
-          tabStartupMs += Date.now() - startedAt;
-        }
+        // Await the refill UNCONDITIONALLY here — not gated on
+        // `#currentStandbyCount() < #desiredStandbyCount()`. When a
+        // post-acquire `#kickStandbyRefill` is already creating a
+        // standby, `#creatingStandbys` inflates `#currentStandbyCount()`
+        // up to the desired count while `#standbys` is still empty, so a
+        // guarded await would skip, the commandeer below would find no
+        // *ready* standby, and the caller would fall through to the very
+        // cross-affinity steal this expansion exists to avoid. The await
+        // dedups onto any in-flight creation via `#ensuringStandbys` and
+        // returns fast when the pool is already warm; only this caller
+        // (which genuinely needs a fresh tab) pays the wait, attributed
+        // to `tabStartupMs`. Same in-flight-refill race the non-file
+        // spawn path above handles with an unconditional await.
+        let startedAt = Date.now();
+        await this.#ensureStandbyPool();
+        tabStartupMs += Date.now() - startedAt;
         let expandedCommandeered = this.#commandeerDormantTab(affinityKey, {
           standbyOnly: true,
         });
