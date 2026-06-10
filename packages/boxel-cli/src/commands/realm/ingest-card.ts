@@ -24,6 +24,15 @@ const MODULE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
 const SPEC_MODULE = 'https://cardstack.com/base/spec';
 
 /**
+ * The realm index identifies modules without their executable extension;
+ * strip it whenever a module path is used in a type filter or compared
+ * against an indexed module reference.
+ */
+function stripModuleExt(moduleRelOrUrl: string): string {
+  return moduleRelOrUrl.replace(/\.(gts|gjs|ts|js)$/, '');
+}
+
+/**
  * Pull every module-specifier out of `.gts`/`.ts` source text. Matches the
  * `from '<spec>'` clause of every `import`/`export … from` (value **and**
  * `import type`, namespace, re-export) plus side-effect `import '<spec>'`.
@@ -293,7 +302,7 @@ class RealmCardIngester extends RealmSyncBase {
       if (source == null) continue;
       for (let name of extractExportedClassNames(source)) {
         let results = await this.searchCards({
-          filter: { type: { module: moduleAbs, name } },
+          filter: { type: { module: stripModuleExt(moduleAbs), name } },
         });
         for (let card of results) {
           let r = this.cardIdToInstanceRel(card.id);
@@ -310,8 +319,7 @@ class RealmCardIngester extends RealmSyncBase {
     fileSet: Set<string>,
   ): Promise<Set<string>> {
     let out = new Set<string>();
-    let stripExt = (r: string) => r.replace(/\.(gts|gjs|ts|js)$/, '');
-    let moduleRelsNoExt = new Set([...moduleFiles].map(stripExt));
+    let moduleRelsNoExt = new Set([...moduleFiles].map(stripModuleExt));
     let specs = await this.searchCards({
       filter: { type: { module: SPEC_MODULE, name: 'Spec' } },
     });
@@ -321,7 +329,7 @@ class RealmCardIngester extends RealmSyncBase {
       if (specType !== 'card' && specType !== 'app') continue;
       let ref = attrs.ref as { module?: string } | undefined;
       if (!ref?.module || !spec.id) continue;
-      let refRel = stripExt(
+      let refRel = stripModuleExt(
         this.refToRel(ref.module, this.relativize(spec.id)),
       );
       if (!moduleRelsNoExt.has(refRel)) continue;
@@ -418,6 +426,11 @@ export interface IngestCardCommandOptions {
   dryRun?: boolean;
   realmSecretSeed?: string;
   profileManager?: ProfileManager;
+  /**
+   * @internal Test hook: supply an already-constructed authenticator,
+   * bypassing both seed resolution and the profile flow.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export async function ingestCard(
@@ -430,6 +443,7 @@ export async function ingestCard(
     realmUrl: options.realm ?? cardUrl,
     realmSecretSeed: options.realmSecretSeed,
     profileManager: pm,
+    authenticator: options.authenticator,
   });
   if (!resolution.ok) return { files: [], error: resolution.error };
   let authenticator = resolution.authenticator;

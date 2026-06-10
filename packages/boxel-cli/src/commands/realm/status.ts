@@ -299,26 +299,22 @@ export async function status(
     // best-effort only
   }
 
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
+  const resolution = resolveRealmAuthenticator({
+    realmUrl: manifest.realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    return {
+      ...baseResult,
       realmUrl: manifest.realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      return {
-        ...baseResult,
-        realmUrl: manifest.realmUrl,
-        manifestMtime,
-        hasError: true,
-        error: resolution.error,
-      };
-    }
-    authenticator = resolution.authenticator;
+      manifestMtime,
+      hasError: true,
+      error: resolution.error,
+    };
   }
+  const authenticator = resolution.authenticator;
 
   const inspector = new RealmStatusInspector(
     {
