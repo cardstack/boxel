@@ -89,8 +89,13 @@ export default class HydratableCard extends Component<Signature> {
   // `links.self`, deposits the instance in the Store, and tracks it live.
   @tracked private hydrationId: string | undefined;
 
-  // A `@cached` getter (not a field initializer) so the consumed `getCard`
-  // provider is injected before it runs.
+  // One `getCard` resource per component instance — `@cached` so reading it
+  // from several getters doesn't spin up a resource each time, and a getter
+  // (not a field initializer) so the consumed `getCard` provider is injected
+  // before it runs. It's parented to `this`, so it's torn down with the
+  // component and `getCard` drops its Store reference then (no leak); it's
+  // only reached once `resolvedId` is set (see `liveCard`), so an inert row
+  // that never hydrates never creates it.
   @cached
   private get cardResource(): ReturnType<getCard> {
     return this.getCard(this, () => this.resolvedId, { type: this.args.type });
@@ -118,9 +123,14 @@ export default class HydratableCard extends Component<Signature> {
     return this.args.mode ?? 'none';
   }
 
-  // The resolved live instance — a `CardDef` or a `FileDef`. `getCard` already
-  // returns it only when the Store holds a real instance (not an error).
+  // The resolved live instance — a `CardDef` or a `FileDef`. Short-circuits
+  // before touching `cardResource` when there's nothing to resolve, so an
+  // inert row that never hydrates never creates a resource. `getCard` returns
+  // the instance only when the Store holds a real one (not an error).
   private get liveCard(): BaseDef | undefined {
+    if (this.resolvedId == null) {
+      return undefined;
+    }
     return this.cardResource.card;
   }
 
@@ -161,6 +171,11 @@ export default class HydratableCard extends Component<Signature> {
 
   <template>
     {{#if this.liveCard}}
+      {{! The diagnostic / test attributes ride `...attributes` onto the
+          card-api's own container (`boxel-card-container` from `getComponent`),
+          which spreads them regardless of the userland template — so no extra
+          wrapper element (which would perturb grid/child-selector styling) is
+          needed. }}
       <CardRenderer
         @card={{this.liveCard}}
         @format='fitted'

@@ -143,6 +143,11 @@ module('Integration | Component | hydratable-card', function (hooks) {
     assert
       .dom('[data-hydration="hover"]')
       .doesNotExist('the inert diagnostic is gone after the swap');
+    assert
+      .dom('[data-hydration="hydrated"]')
+      .exists(
+        'the diagnostic flips to hydrated on the live render (lands on the card container, no wrapper needed)',
+      );
     assert.ok(
       isCardInstance(storeService.peek(HASSAN)),
       'the card entered the Store',
