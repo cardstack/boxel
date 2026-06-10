@@ -215,7 +215,7 @@ class RealmCardIngester extends RealmSyncBase {
     }
 
     await this.downloadAll([...toCopy], fileSet);
-    this.writeCheckpoint();
+    await this.writeCheckpoint();
   }
 
   /** Classify the entry URL as a module or an instance and seed the crawl. */
@@ -381,27 +381,35 @@ class RealmCardIngester extends RealmSyncBase {
     this.copiedFiles = results.filter((r): r is string => r !== null);
   }
 
-  private writeCheckpoint(): void {
+  /**
+   * Best-effort: a checkpoint failure (e.g. unwritable history dir) is
+   * warned about but doesn't fail the ingest — the files are already copied.
+   */
+  private async writeCheckpoint(): Promise<void> {
     if (this.options.dryRun || this.copiedFiles.length === 0) return;
     let changes: CheckpointChange[] = this.copiedFiles.map((file) => ({
       file,
       status: 'modified' as const,
     }));
-    new CheckpointManager(this.options.localDir)
-      .createCheckpoint(
+    try {
+      let checkpoint = await new CheckpointManager(
+        this.options.localDir,
+      ).createCheckpoint(
         'remote',
         changes,
         `Ingest card: ${this.copiedFiles.length} files`,
-      )
-      .then((checkpoint) => {
-        if (checkpoint) {
-          let tag = checkpoint.isMajor ? '[MAJOR]' : '[minor]';
-          console.log(
-            `\nCheckpoint created: ${checkpoint.shortHash} ${tag} ${checkpoint.message}`,
-          );
-        }
-      })
-      .catch(() => {});
+      );
+      if (checkpoint) {
+        let tag = checkpoint.isMajor ? '[MAJOR]' : '[minor]';
+        console.log(
+          `\nCheckpoint created: ${checkpoint.shortHash} ${tag} ${checkpoint.message}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `Warning: failed to create checkpoint: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }
 
@@ -438,6 +446,10 @@ export async function ingestCard(
   localDir: string,
   options: IngestCardCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
+  // A card URL never ends in a slash; strip one a copy-paste may have added.
+  // It would otherwise skew seed-auth registration (a token scoped to the
+  // card path rather than the realm) and realm auto-detection below.
+  cardUrl = cardUrl.replace(/\/$/, '');
   let pm = options.profileManager ?? getProfileManager();
   let resolution = resolveRealmAuthenticator({
     realmUrl: options.realm ?? cardUrl,
