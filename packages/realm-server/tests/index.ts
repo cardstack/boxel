@@ -283,6 +283,8 @@ const ALL_TEST_FILES: string[] = [
   './unified-search-contracts-test',
   './render-type-resolution-test',
   './coerce-error-message-test',
+  './realm-operations-test',
+  './resolve-published-realm-url-test',
   './fallback-models-test',
   './host-routing-validation-test',
   './normalize-realm-meta-value-test',
