@@ -1,4 +1,10 @@
-import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  settled,
+  triggerKeyEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -385,6 +391,109 @@ module('Acceptance | workspace-chooser', function (hooks) {
       } finally {
         restoreA();
       }
+    });
+  });
+
+  module('keyboard navigation', function () {
+    const urlByName: Record<string, string> = {
+      'Workspace A': realmAURL,
+      'Workspace B': realmBURL,
+    };
+
+    // Workspace names rendered as selectable items, in DOM (selection) order.
+    function orderedWorkspaceNames(): string[] {
+      return [
+        ...document.querySelectorAll(
+          '[data-test-workspace-chooser] [data-test-workspace]',
+        ),
+      ].map((el) => el.getAttribute('data-test-workspace') ?? '');
+    }
+
+    async function arrow(key: string) {
+      await triggerKeyEvent(
+        '[data-test-workspace-chooser]',
+        'keydown',
+        key as any,
+      );
+    }
+
+    test('the first workspace is selected when the chooser opens', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [first] = orderedWorkspaceNames();
+      assert
+        .dom('[data-test-workspace-selected]')
+        .exists({ count: 1 }, 'exactly one workspace is selected');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('the first workspace is the selected one');
+      assert
+        .dom(`[data-test-workspace-button="${first}"]`)
+        .isFocused('the selected workspace button receives focus');
+    });
+
+    test('arrow keys move the selection and clamp at the ends', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [first, second] = orderedWorkspaceNames();
+
+      await arrow('ArrowDown');
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .exists('ArrowDown selects the next workspace');
+      assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
+
+      await arrow('ArrowDown');
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .exists('ArrowDown at the end keeps the last workspace selected');
+
+      await arrow('ArrowUp');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('ArrowUp selects the previous workspace');
+
+      await arrow('ArrowUp');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('ArrowUp at the start keeps the first workspace selected');
+
+      // Left/Right behave the same as Up/Down.
+      await arrow('ArrowRight');
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .exists('ArrowRight selects the next workspace');
+      await arrow('ArrowLeft');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('ArrowLeft selects the previous workspace');
+    });
+
+    test('Enter opens the selected workspace', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [, second] = orderedWorkspaceNames();
+      let secondURL = urlByName[second];
+
+      await arrow('ArrowDown');
+      assert.dom(`[data-test-workspace-selected="${second}"]`).exists();
+
+      await triggerKeyEvent(
+        '[data-test-workspace-chooser]',
+        'keydown',
+        'Enter',
+      );
+
+      await waitFor(`[data-test-stack-card="${secondURL}index"]`);
+      assert
+        .dom('[data-test-workspace-chooser]')
+        .doesNotExist('chooser is dismissed after opening a workspace');
+      assert
+        .dom(`[data-test-stack-card="${secondURL}index"]`)
+        .exists('the selected workspace is opened on the stack');
     });
   });
 

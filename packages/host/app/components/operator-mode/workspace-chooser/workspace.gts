@@ -10,6 +10,7 @@ import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 import pluralize from 'pluralize';
 
 import {
@@ -54,8 +55,21 @@ interface Signature {
   Args: {
     realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
+    isSelected?: boolean;
   };
 }
+
+// When the workspace becomes the keyboard-selected item, move DOM focus to its
+// button and scroll it into view, so the selection is visible and reachable as
+// arrow-key navigation walks through the list.
+const focusWhenSelected = modifier(
+  (element: HTMLElement, [isSelected]: [boolean | undefined]) => {
+    if (isSelected && document.activeElement !== element) {
+      element.focus();
+      element.scrollIntoView({ block: 'nearest' });
+    }
+  },
+);
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -63,14 +77,18 @@ export default class Workspace extends Component<Signature> {
       <WorkspaceLoadingIndicator />
     {{else}}
       <div
-        class='workspace-card {{if this.isHostDropdownOpen "is-open"}}'
+        class='workspace-card
+          {{if this.isHostDropdownOpen "is-open"}}
+          {{if @isSelected "is-selected"}}'
         data-test-workspace={{this.name}}
+        data-test-workspace-selected={{if @isSelected this.name}}
         {{on 'mouseleave' this.closeHostDropdown}}
         ...attributes
       >
         <ItemContainer
           data-test-workspace-button={{this.name}}
           {{on 'click' this.openWorkspace}}
+          {{focusWhenSelected @isSelected}}
         >
           <div
             class='tile-icon'
@@ -299,6 +317,10 @@ export default class Workspace extends Component<Signature> {
       }
       .workspace-card:hover::after {
         border-color: rgba(255 255 255 / 50%);
+      }
+      .workspace-card.is-selected::after {
+        border-color: var(--boxel-teal);
+        box-shadow: 0 0 0 1px var(--boxel-teal);
       }
       .tile-favorite-btn {
         position: absolute;

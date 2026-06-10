@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -7,6 +8,7 @@ import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { add, eq } from '@cardstack/boxel-ui/helpers';
 import { IconGlobe, Lock, StarFilled } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
@@ -14,6 +16,7 @@ import { ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -38,6 +41,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   private sortOptions: SortOption[] = [
     { label: 'View All', icon: Shapes, value: 'default' },
@@ -135,8 +139,71 @@ export default class WorkspaceChooser extends Component<Signature> {
     return null;
   }
 
+  // Tracks the keyboard-selected workspace as an index into the flat,
+  // DOM-ordered list of all workspace items across the three sections.
+  @tracked private selectedIndex = 0;
+
+  // Flat list of every selectable workspace, in the same order they render:
+  // Favorites, then Your Workspaces, then Catalogs. The "New Workspace" tile
+  // and the loading placeholder are intentionally excluded.
+  private get orderedRealmIdentifiers() {
+    return [
+      ...this.favoriteRealmIdentifiers,
+      ...this.filteredUserRealmIdentifiers,
+      ...this.filteredCatalogRealmIdentifiers,
+    ];
+  }
+
+  // Section offsets used to map a per-section loop index onto its position in
+  // orderedRealmIdentifiers, so each Workspace can tell if it's selected.
+  private get userWorkspacesOffset() {
+    return this.favoriteRealmIdentifiers.length;
+  }
+
+  private get catalogOffset() {
+    return (
+      this.favoriteRealmIdentifiers.length +
+      this.filteredUserRealmIdentifiers.length
+    );
+  }
+
+  @action private onKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
+    let count = this.orderedRealmIdentifiers.length;
+    if (count === 0) {
+      return;
+    }
+    switch (kbEvent.key) {
+      case 'ArrowDown':
+      case 'ArrowRight':
+        event.preventDefault();
+        this.selectedIndex = Math.min(this.selectedIndex + 1, count - 1);
+        break;
+      case 'ArrowUp':
+      case 'ArrowLeft':
+        event.preventDefault();
+        this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+        break;
+      case 'Enter': {
+        let selected = this.orderedRealmIdentifiers[this.selectedIndex];
+        if (selected) {
+          // preventDefault suppresses the focused workspace button's native
+          // Enter-to-click so the workspace only opens once.
+          event.preventDefault();
+          this.operatorModeStateService.openWorkspace(selected);
+        }
+        break;
+      }
+    }
+  }
+
   <template>
-    <div class='workspace-chooser' data-test-workspace-chooser>
+    {{! template-lint-disable no-invalid-interactive }}
+    <div
+      class='workspace-chooser'
+      data-test-workspace-chooser
+      {{on 'keydown' this.onKeydown}}
+    >
       {{#if @topBarCenterElement}}
         {{#in-element @topBarCenterElement}}
           <div class='sort-controls'>
@@ -170,8 +237,11 @@ export default class WorkspaceChooser extends Component<Signature> {
               >{{this.favoritesEmptyMessage}}</span>
             {{else}}
               <div class='workspace-list' data-test-favorites-list>
-                {{#each this.favoriteRealmIdentifiers as |realmIdentifier|}}
-                  <Workspace @realmIdentifier={{realmIdentifier}} />
+                {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
+                  <Workspace
+                    @realmIdentifier={{realmIdentifier}}
+                    @isSelected={{eq this.selectedIndex i}}
+                  />
                 {{/each}}
               </div>
             {{/if}}
@@ -188,10 +258,17 @@ export default class WorkspaceChooser extends Component<Signature> {
               >{{this.userWorkspacesEmptyMessage}}</span>
             {{else}}
               <div class='workspace-list' data-test-workspace-list>
-                {{#each this.filteredUserRealmIdentifiers as |realmIdentifier|}}
+                {{#each
+                  this.filteredUserRealmIdentifiers
+                  as |realmIdentifier i|
+                }}
                   <Workspace
                     @realmIdentifier={{realmIdentifier}}
                     @showMenu={{true}}
+                    @isSelected={{eq
+                      this.selectedIndex
+                      (add this.userWorkspacesOffset i)
+                    }}
                   />
                 {{/each}}
                 {{#if this.matrixService.isInitializingNewUser}}
@@ -216,9 +293,15 @@ export default class WorkspaceChooser extends Component<Signature> {
                 <div class='workspace-list' data-test-catalog-list>
                   {{#each
                     this.filteredCatalogRealmIdentifiers
-                    as |realmIdentifier|
+                    as |realmIdentifier i|
                   }}
-                    <Workspace @realmIdentifier={{realmIdentifier}} />
+                    <Workspace
+                      @realmIdentifier={{realmIdentifier}}
+                      @isSelected={{eq
+                        this.selectedIndex
+                        (add this.catalogOffset i)
+                      }}
+                    />
                   {{/each}}
                 </div>
               {{/if}}
