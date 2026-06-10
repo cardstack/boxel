@@ -108,9 +108,26 @@ describe('realm publish (integration)', () => {
         profileManager,
         waitForReady: false,
         republish: false,
+        // Bypass the publishability gate so this exercises the publish POST's
+        // failure path (the gate would otherwise fail first on the missing
+        // realm's `_publishability` endpoint).
+        force: true,
       }),
     ).rejects.toThrow(/Publish failed: HTTP/);
   }, 30_000);
+
+  it('blocks publishing only when forced past an unpublishable realm', async () => {
+    // A freshly created realm has no private-dependency or error-document
+    // violations, so the gate (on by default) lets it through.
+    let sourceUrl = await createPublishableSource();
+    let publishedUrl = uniquePublishedUrl();
+
+    let result = await publishRealm(sourceUrl, publishedUrl, {
+      profileManager,
+      waitForReady: false,
+    });
+    expect(result.publishedRealmURL).toBe(publishedUrl);
+  }, 60_000);
 });
 
 describe('realm unpublish (integration)', () => {
