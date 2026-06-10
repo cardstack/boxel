@@ -16,7 +16,7 @@ import {
   setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
-import { renderComponent } from '../../helpers/render-component';
+import { renderCard, renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
@@ -215,6 +215,87 @@ module(
       assert
         .dom('[data-test-duplicate-path-warning]')
         .containsText('/', 'the duplicate banner names the conflicting path');
+    });
+
+    test('the chooser gets a consuming realm even when no RealmURLContext is provided (code submode)', async function (assert) {
+      // The interact-submode test above renders the realm config
+      // through an operator-mode stack item, which provides
+      // `RealmURLContext` — so LinksToEditor could derive
+      // `consumingRealm` either from that context or from the
+      // explicit `@consumingRealm` arg threaded by RoutingRuleEdit.
+      // In code submode the realm config renders through the
+      // playground / spec preview, OUTSIDE any stack item, so
+      // `RealmURLContext` is absent.
+      //
+      // Reproduce that condition directly: load the realm config from
+      // the realm (so its FieldDef instances have `[realmContext]`
+      // populated by `propagateRealmContext`) and render it via
+      // `renderCard`, which does not provide any operator-mode
+      // context. Then stub the global card-chooser registration to
+      // capture the opts that `chooseCard()` was invoked with, so the
+      // test can prove `consumingRealm` (and a derived
+      // `lockConsumingRealm`) flow through the model-level derivation
+      // rather than the context fallback.
+      let cardApi: typeof import('https://cardstack.com/base/card-api') =
+        await getService('loader-service').loader.import(
+          `${baseRealm.url}card-api`,
+        );
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        permissions: {
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: {
+          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': {
+            data: {
+              type: 'card',
+              attributes: { hostRoutingRules: [{ path: '/docs' }] },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/realm-config',
+                  name: 'RealmConfig',
+                },
+              },
+            },
+          },
+        },
+      });
+
+      let store = getService('store');
+      let realmConfig = await store.get(`${testRealmURL}realm`);
+
+      let capturedOpts: any;
+      let originalChooser = (globalThis as any)._CARDSTACK_CARD_CHOOSER;
+      (globalThis as any)._CARDSTACK_CARD_CHOOSER = {
+        chooseCard: async (_query: any, opts: any) => {
+          capturedOpts = opts;
+          return undefined;
+        },
+      };
+
+      try {
+        await renderCard(
+          getService('loader-service').loader,
+          realmConfig as InstanceType<typeof cardApi.CardDef>,
+          'edit',
+        );
+        await click('[data-test-add-new="instance"]');
+
+        assert.ok(capturedOpts, 'chooseCard was invoked');
+        assert.strictEqual(
+          (capturedOpts?.consumingRealm as URL | undefined)?.href,
+          testRealmURL,
+          'consumingRealm reaches the chooser via @consumingRealm, not RealmURLContext',
+        );
+        assert.true(
+          capturedOpts?.lockConsumingRealm,
+          'lockConsumingRealm is honored when a consumingRealm is actually present',
+        );
+      } finally {
+        (globalThis as any)._CARDSTACK_CARD_CHOOSER = originalChooser;
+      }
     });
 
     test('typing into the path input always stores a leading slash', async function (assert) {

@@ -247,6 +247,14 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     // preview, where there is no stack item) can still scope the
     // chooser to the owning card's realm.
     let consumingRealm = this.args.consumingRealm ?? this.realmURL;
+    // Only honor `@lockConsumingRealm` when a realm is actually known.
+    // Locking without a consuming realm leaves the picker disabled but
+    // unscoped — search results would span every realm and the user
+    // couldn't change the (effectively empty) selection. Treat the
+    // lock as advisory and let the picker stay interactive if there's
+    // no realm to lock to.
+    let lockConsumingRealm =
+      this.args.lockConsumingRealm === true && consumingRealm != null;
     let cardId = await chooseCard(
       { filter: { type } },
       {
@@ -257,7 +265,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         },
         createNewCard: this.args.createCard,
         consumingRealm,
-        lockConsumingRealm: this.args.lockConsumingRealm,
+        lockConsumingRealm,
       },
     );
     if (cardId) {
