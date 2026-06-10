@@ -129,11 +129,16 @@ function isPromiseLike<T = unknown>(value: unknown): value is Promise<T> {
 // template render drives). A fresh object literal each call would defeat that.
 const EMPTY_CONTEXT: RuntimeDependencyTrackingContext = Object.freeze({});
 
+// NUL separates the two parts of a composite cache key. It can't appear in a
+// node kind or a URL, so distinct (kind, rawURL) pairs never collide into the
+// same key.
+const CACHE_KEY_SEPARATOR = '\0';
+
 function normalizeCacheKey(
   kind: RuntimeDependencyNodeKind,
   rawURL: string,
 ): string {
-  return `${kind}\0${rawURL}`;
+  return `${kind}${CACHE_KEY_SEPARATOR}${rawURL}`;
 }
 
 export class RuntimeDependencyTracker {
