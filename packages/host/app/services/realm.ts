@@ -226,24 +226,22 @@ class RealmResource {
   }
 
   // Adapts this resource's Ember-side auth/config into the portable
-  // `RealmClient` the shared realm operations consume. `authedFetch` routes by
-  // URL: realm-server endpoints carry the realm-server token, everything else
-  // (per-realm endpoints) goes through the network's per-realm token
-  // middleware.
+  // `RealmClient` the shared realm operations consume. The only operation that
+  // uses this client (`fetchPublishabilityReport`) hits the per-realm
+  // `_publishability` endpoint, so `authedFetch` always goes through the
+  // network's per-realm token middleware. (Realm-server endpoints — published
+  // realms live under the same origin, so a URL prefix can't distinguish them —
+  // are wrapped via `RealmServerService` instead.)
   private get realmClient(): RealmClient {
-    let realmServerURL = ensureTrailingSlash(this.realmServer.url.href);
     let userId = this.claims?.user;
     return {
-      realmServerURL,
+      realmServerURL: ensureTrailingSlash(this.realmServer.url.href),
       config: {
         spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
         siteDomain: ENV.publishedRealmBoxelSiteDomain,
       },
       matrixUsername: userId ? getMatrixUsername(userId) : undefined,
-      authedFetch: (url, init) =>
-        url.startsWith(realmServerURL)
-          ? this.realmServer.authedFetch(url, init)
-          : this.network.authedFetch(url, init),
+      authedFetch: (url, init) => this.network.authedFetch(url, init),
     };
   }
 

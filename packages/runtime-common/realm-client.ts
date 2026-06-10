@@ -5,17 +5,22 @@
 // from its own auth/config plumbing, and the operation only ever touches this
 // interface.
 //
-// The single `authedFetch` covers two auth contexts and is expected to route by
-// URL: realm-*server* endpoints (`{realmServerURL}_publish-realm`, etc.) carry
-// the realm-server token, while per-*realm* endpoints (`{realmURL}_publishability`,
+// Operations reach two auth contexts through `authedFetch`: realm-*server*
+// endpoints (`{realmServerURL}_publish-realm`, etc.) carry the realm-server
+// token, while per-*realm* endpoints (`{realmURL}_publishability`,
 // `{publishedRealmURL}_readiness-check`) carry that realm's token (or none, for
-// public readiness). Keeping the routing inside the injected `authedFetch` is
-// what lets the operations stay environment-agnostic.
+// public readiness). How a client satisfies that is its own concern — the host
+// builds a separate, single-context client per wrapper (a realm-server one and
+// a per-realm one), while boxel-cli's single client routes by URL since its
+// published realms live on a different origin than the realm server. A realm
+// shares its realm server's origin, so a URL prefix alone can't tell the two
+// contexts apart.
 export interface RealmClient {
   // Base URL of the realm server, normalized with a trailing slash.
   realmServerURL: string;
 
-  // Authenticated fetch that picks the right token for `url` (see above).
+  // Authenticated fetch returning a response authed appropriately for `url`
+  // (see above).
   authedFetch(url: string, init?: RequestInit): Promise<Response>;
 
   // Domains used to resolve publish targets. Sourced from host
