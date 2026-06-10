@@ -12,10 +12,15 @@ import { provide } from 'ember-provide-consume-context';
 
 import { module, test } from 'qunit';
 
-import { CardContextName, isCardInstance } from '@cardstack/runtime-common';
+import {
+  CardContextName,
+  GetCardContextName,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 
 import HydratableCard from '@cardstack/host/components/card-search/hydratable-card';
 import { htmlComponent } from '@cardstack/host/lib/html-component';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import ElementTracker from '@cardstack/host/resources/element-tracker';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -35,18 +40,24 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-// Stands in for the operator-mode card context, publishing a real
-// ElementTracker as the cardComponentModifier so a test can assert what the
-// overlay would anchor to. Host mode / published views render HydratableCard
-// with no such context.
-interface OverlayContextSignature {
-  Args: { tracker: ElementTracker };
+// Provides the contexts HydratableCard consumes: `getCard` (always, the way the
+// route does) and — only when a tracker is passed — the operator-mode
+// `cardComponentModifier` via CardContext. Host mode / published views render
+// with no overlay, modeled by omitting the tracker (CardContext stays absent).
+interface TestContextSignature {
+  Args: { tracker?: ElementTracker };
   Blocks: { default: [] };
 }
-class OverlayContext extends GlimmerComponent<OverlayContextSignature> {
+class TestContext extends GlimmerComponent<TestContextSignature> {
+  @provide(GetCardContextName)
+  get getCardFn() {
+    return getCard;
+  }
   @provide(CardContextName)
-  get context() {
-    return { cardComponentModifier: this.args.tracker.trackElement };
+  get cardContext() {
+    return this.args.tracker
+      ? { cardComponentModifier: this.args.tracker.trackElement }
+      : undefined;
   }
 
   <template>
@@ -104,7 +115,13 @@ module('Integration | Component | hydratable-card', function (hooks) {
     let inert = htmlComponent(INERT_HTML);
     await render(
       <template>
-        <HydratableCard @cardId={{HASSAN}} @component={{inert}} @mode='hover' />
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
       </template>,
     );
 
@@ -135,7 +152,13 @@ module('Integration | Component | hydratable-card', function (hooks) {
     let inert = htmlComponent(INERT_HTML);
     await render(
       <template>
-        <HydratableCard @cardId={{HASSAN}} @component={{inert}} @mode='click' />
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='click'
+          />
+        </TestContext>
       </template>,
     );
 
@@ -160,13 +183,13 @@ module('Integration | Component | hydratable-card', function (hooks) {
     let inert = htmlComponent(INERT_HTML);
     await render(
       <template>
-        <OverlayContext @tracker={{tracker}}>
+        <TestContext @tracker={{tracker}}>
           <HydratableCard
             @cardId={{HASSAN}}
             @component={{inert}}
             @mode='hover'
           />
-        </OverlayContext>
+        </TestContext>
       </template>,
     );
 
@@ -196,9 +219,16 @@ module('Integration | Component | hydratable-card', function (hooks) {
       inertElement,
       'the tracked element is the new live element, not the discarded inert one',
     );
+    // The live CardRenderer registers itself through the card context, so the
+    // re-registered entry carries the live card instance.
     assert.ok(
       isCardInstance(tracker.elements[0].meta.card),
-      'the live card instance rides on the re-registered entry',
+      'the re-registered live element carries the live card instance',
+    );
+    assert.strictEqual(
+      tracker.elements[0].meta.card?.id,
+      HASSAN,
+      'and it is the same card',
     );
   });
 
@@ -207,7 +237,13 @@ module('Integration | Component | hydratable-card', function (hooks) {
     let inert = htmlComponent(INERT_HTML);
     await render(
       <template>
-        <HydratableCard @cardId={{HASSAN}} @component={{inert}} @mode='none' />
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='none'
+          />
+        </TestContext>
       </template>,
     );
 
@@ -230,12 +266,14 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
     await render(
       <template>
-        <HydratableCard
-          @cardId={{HASSAN}}
-          @component={{inert}}
-          @isError={{true}}
-          @mode='hover'
-        />
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @isError={{true}}
+            @mode='hover'
+          />
+        </TestContext>
       </template>,
     );
 

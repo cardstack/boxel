@@ -1,20 +1,22 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import {
   CardContextName,
-  isCardInstance,
+  GetCardContextName,
   type ResolvedCodeRef,
+  type StoreReadType,
+  type getCard,
 } from '@cardstack/runtime-common';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
-import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
 
@@ -25,6 +27,10 @@ import CardRenderer from '../card-renderer';
 export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
 
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
+
+// The card context can be torn down out from under a consumer mid-render (realm
+// refresh / unmount); reading it then throws an owner-destroyed error.
+const OWNER_DESTROYED_ERROR = 'destroyed';
 
 // A function-based no-op stands in for the operator-mode tracking modifier so
 // applying it is always type-safe even when no context provides a real one.
@@ -55,14 +61,17 @@ const hydrationTrigger = modifier(
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // The card's identity URL, which is also its `links.self` GET target.
+    // The card/file identity URL, which is also its `links.self` GET target.
     cardId: string;
     // The inert prerendered HTML for an HTML-backed row. Absent for a full
-    // live row, which carries no HTML and resolves to its live card directly.
+    // live row, which carries no HTML and resolves to its live instance.
     component?: HTMLComponent;
     // The ancestor type the HTML was rendered as; the live card renders under
     // the same type so a hydrated row matches its prerendered siblings.
     renderType?: ResolvedCodeRef;
+    // The resource type to resolve — `card` (default) or `file-meta`, so a
+    // full live file-meta row renders its `FileDef` instead of nothing.
+    type?: StoreReadType;
     // An error rendering never hydrates.
     isError?: boolean;
     // The hydration gesture (defaults to `none`).
@@ -71,15 +80,21 @@ interface Signature {
 }
 
 export default class HydratableCard extends Component<Signature> {
+  @consume(GetCardContextName) declare private getCard: getCard;
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
 
-  // Set to the card id once a hydration gesture fires; `getCard` then fetches
+  // Set to the id once a hydration gesture fires; `getCard` then fetches
   // `links.self`, deposits the instance in the Store, and tracks it live.
   @tracked private hydrationId: string | undefined;
 
-  private cardResource = getCard(this, () => this.resolvedId);
+  // A `@cached` getter (not a field initializer) so the consumed `getCard`
+  // provider is injected before it runs.
+  @cached
+  private get cardResource(): ReturnType<getCard> {
+    return this.getCard(this, () => this.resolvedId, { type: this.args.type });
+  }
 
   // A full live row (no inert HTML) has nothing to stay inert as, so it
   // resolves its instance immediately; an HTML-backed row resolves only once
@@ -103,24 +118,38 @@ export default class HydratableCard extends Component<Signature> {
     return this.args.mode ?? 'none';
   }
 
-  private get liveCard(): CardDef | undefined {
-    let card = this.cardResource.card;
-    return isCardInstance(card) ? (card as CardDef) : undefined;
+  // The resolved live instance — a `CardDef` or a `FileDef`. `getCard` already
+  // returns it only when the Store holds a real instance (not an error).
+  private get liveCard(): BaseDef | undefined {
+    return this.cardResource.card;
   }
 
   // The diagnostic attribute value: the configured gesture while inert, and
-  // `hydrated` once the live card has replaced the inert HTML.
+  // `hydrated` once the live instance has replaced the inert HTML.
   private get hydrationState(): string {
     return this.liveCard ? 'hydrated' : this.mode;
   }
 
   // The overlay's element tracker when an operator-mode context provides one,
-  // else a no-op (host mode / published views have no overlay). Applying it to
-  // whichever element is shown lets the overlay anchor to the inert HTML and
-  // re-anchor to the live card after the swap: the inert element's modifier
-  // tears down (unregister) as the live element's installs (register).
+  // else a no-op (host mode / published views have no overlay). Applied to the
+  // inert HTML so the overlay can anchor to it before hydration — raw HTML
+  // isn't a card component, so nothing else registers it. After the swap the
+  // live `CardRenderer` registers itself through the card context (the same way
+  // any delegate-rendered card does), so the overlay re-anchors to the new
+  // element with no extra wiring here. Guarded so reading the context while
+  // this component is being destroyed can't throw.
   private get trackElement(): CardComponentModifier {
-    return this.cardContext?.cardComponentModifier ?? noopCardModifier;
+    if (isDestroying(this) || isDestroyed(this)) {
+      return noopCardModifier;
+    }
+    try {
+      return this.cardContext?.cardComponentModifier ?? noopCardModifier;
+    } catch (e) {
+      if (e instanceof Error && e.message.includes(OWNER_DESTROYED_ERROR)) {
+        return noopCardModifier;
+      }
+      throw e;
+    }
   }
 
   @action private hydrate() {
@@ -137,13 +166,6 @@ export default class HydratableCard extends Component<Signature> {
         @format='fitted'
         @codeRef={{@renderType}}
         @displayContainer={{false}}
-        {{this.trackElement
-          card=this.liveCard
-          cardId=@cardId
-          format='data'
-          fieldType=undefined
-          fieldName=undefined
-        }}
         data-hydration={{this.hydrationState}}
         data-test-hydratable-card={{@cardId}}
         ...attributes
