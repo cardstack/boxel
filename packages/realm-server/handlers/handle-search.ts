@@ -202,11 +202,20 @@ export default function handleSearch(opts: {
     // `searchRealms` stamps the SQL + loadLinks stages onto the collector this
     // handler emits.
     let runSearchOpts =
-      renderSpec || parsed.dataOnly || loggingCorrelationId !== null
+      renderSpec ||
+      parsed.dataOnly ||
+      parsed.cardUrls?.length ||
+      loggingCorrelationId !== null
         ? {
             ...(normalizedSearchOpts ?? {}),
             ...(renderSpec ? { render: renderSpec } : {}),
             ...(parsed.dataOnly ? { dataOnly: true } : {}),
+            // The SQL-side `IN (...)` filter reads `opts.cardUrls`, so the
+            // requested subset must ride the run-time opts — not only the cache
+            // key. Folded only when non-empty (an empty array is a no-op
+            // filter), matching the cache-key treatment so a subset request is
+            // both keyed and filtered by the same members.
+            ...(parsed.cardUrls?.length ? { cardUrls: parsed.cardUrls } : {}),
             ...(loggingCorrelationId !== null ? { loggingCorrelationId } : {}),
             ...(timings ? { timings } : {}),
           }

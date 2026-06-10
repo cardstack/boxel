@@ -450,6 +450,49 @@ module(basename(__filename), function () {
         'no included key when nothing to include',
       );
     });
+
+    test('carries the collection-level meta.renderType from the per-realm docs', function (assert) {
+      let mk = (
+        id: ReturnType<typeof rri>,
+        renderType?: typeof authorRef,
+      ): UnifiedSearchCollectionDocument => ({
+        data: [
+          {
+            type: 'card',
+            id,
+            attributes: {},
+            meta: { adoptsFrom: authorRef },
+            links: { self: id },
+          },
+        ],
+        meta: { page: { total: 1 }, ...(renderType ? { renderType } : {}) },
+      });
+
+      // An explicit-render search: every per-realm doc echoes the same resolved
+      // render type. The merge must preserve it so a host consumer renders
+      // live/fallback card rows under the requested ancestor type.
+      let withType = combineSearchResults([
+        mk(rri(`${realmURL}A`), authorRef),
+        mk(rri(`${realmURL}B`), authorRef),
+      ]);
+      assert.deepEqual(
+        withType.meta.renderType,
+        authorRef,
+        'the resolved render type survives the federated merge',
+      );
+
+      // A native/per-row (or no-render) search omits the collection-level type;
+      // the merge leaves it unset rather than inventing one.
+      let withoutType = combineSearchResults([
+        mk(rri(`${realmURL}A`)),
+        mk(rri(`${realmURL}B`)),
+      ]);
+      assert.strictEqual(
+        withoutType.meta.renderType,
+        undefined,
+        'no render type is fabricated when the per-realm docs carry none',
+      );
+    });
   });
 
   // The per-row resource builders the prefer-HTML result mapper runs. Each

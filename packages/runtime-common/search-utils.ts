@@ -462,6 +462,14 @@ export function combineSearchResults(
   for (let doc of docs) {
     combined.data.push(...doc.data);
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    // Carry the collection-level render type the per-realm docs echo. The
+    // resolved render type is consistent across one search (every realm
+    // resolves the same one), so the first non-null value is authoritative;
+    // a host consumer renders live/fallback card rows under it. Absent for
+    // "native"/per-row searches, where each resource echoes its own type.
+    if (combined.meta.renderType == null && doc.meta?.renderType != null) {
+      combined.meta.renderType = doc.meta.renderType;
+    }
     if (doc.included) {
       for (let resource of doc.included) {
         if (resource.id) {
@@ -555,6 +563,10 @@ export type SearchOpts = {
   // is also live-only. Carried so the federated path is explicit about the
   // mode even though its effect (no `render`) is the live path.
   dataOnly?: boolean;
+  // Restrict the result set to this subset of card URLs. The query engine
+  // applies it as a SQL `i.url IN (...)` filter, so it must reach the engine
+  // opts — not only the cache key — for the subset to actually narrow results.
+  cardUrls?: string[];
 };
 
 type SearchableRealm = {

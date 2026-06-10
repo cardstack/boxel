@@ -5284,6 +5284,9 @@ export class Realm {
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
+      // The SQL-side `i.url IN (...)` subset filter reads `cardUrls` from the
+      // engine opts, so forward it (non-empty only — an empty array is a no-op).
+      ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
     };
     // Prefer-HTML: resolve each result to prerendered HTML where indexed and
     // fall back to the full live card otherwise. Absent `render` (data-only or

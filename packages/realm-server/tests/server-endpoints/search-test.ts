@@ -217,6 +217,39 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.strictEqual(response.body.data.length, 1, 'found one card');
     });
 
+    // `cardUrls` scopes the result set to a subset of cards. The SQL-side
+    // `IN (...)` filter reads it from the run-time search opts, so a
+    // `cardUrls`-scoped request must actually narrow the results — not merely
+    // key the cache while returning the full set.
+    test('QUERY /_federated-search narrows results to the requested cardUrls', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      // `cardUrls` are the index `url` form — the instance's file URL (`.json`);
+      // the result's `id` is its identity URL (the `.json` dropped).
+      let scopedFileUrl = `${testRealm.url}test-card.json`;
+      let scopedId = `${testRealm.url}test-card`;
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // No filter — both realm cards would match — but scoped to one card URL.
+        .send({ realms: [testRealm.url], cardUrls: [scopedFileUrl] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let ids = (response.body.data as { id: string }[]).map((r) => r.id);
+      assert.deepEqual(
+        ids,
+        [scopedId],
+        'only the requested card is returned (the subset filter is applied at runtime)',
+      );
+    });
+
     // Verifies the per-batch search cache (CS-11115 Phase 2 + CS-11133
     // cross-realm expansion) hits at the HTTP handler boundary.
     // Counts populates by spying on each realm's `search` method —
