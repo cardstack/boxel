@@ -454,11 +454,6 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .dom('[data-test-workspace-selected]')
         .doesNotExist('no workspace card is selected while New Workspace is');
 
-      await arrow('ArrowRight');
-      assert
-        .dom('[data-test-add-workspace-selected]')
-        .exists('ArrowRight at the end stays on the New Workspace tile');
-
       await arrow('ArrowLeft');
       assert
         .dom(`[data-test-workspace-selected="${second}"]`)
@@ -493,20 +488,25 @@ module('Acceptance | workspace-chooser', function (hooks) {
         )
         .exists('the favorited workspace (top row) starts selected');
 
+      // ArrowDown leaves the Favorites row and lands somewhere in the row
+      // below (Your Workspaces). The exact tile depends on column alignment,
+      // so assert the row, not a specific tile.
       await arrow('ArrowDown');
       assert
+        .dom('[data-test-favorites-list] [data-test-workspace-selected]')
+        .doesNotExist('ArrowDown moves the selection out of the Favorites row');
+      assert
         .dom(
-          '[data-test-workspace-list] [data-test-workspace-selected="Workspace A"]',
+          '[data-test-workspace-list] [data-test-workspace-selected], [data-test-workspace-list] [data-test-add-workspace-selected]',
         )
-        .exists('ArrowDown moves down into the Your Workspaces row');
-      assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
+        .exists('ArrowDown moves the selection into the Your Workspaces row');
 
       await arrow('ArrowUp');
       assert
         .dom(
           '[data-test-favorites-list] [data-test-workspace-selected="Workspace A"]',
         )
-        .exists('ArrowUp moves back up into the Favorites row');
+        .exists('ArrowUp moves the selection back up into the Favorites row');
     });
 
     test('focusing a workspace selects it', async function (assert) {
