@@ -18,7 +18,7 @@ import { module, skip, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type LooseSingleCardDocument,
   rri,
   fileDefFormats,
@@ -662,7 +662,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${baseRealm.url}spec`,
+                    module: `${baseRealmRRI}spec`,
                     name: 'Spec',
                   },
                 },
@@ -680,7 +680,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${baseRealm.url}spec`,
+                    module: `${baseRealmRRI}spec`,
                     name: 'Spec',
                   },
                 },
@@ -698,7 +698,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${baseRealm.url}spec`,
+                    module: `${baseRealmRRI}spec`,
                     name: 'Spec',
                   },
                 },

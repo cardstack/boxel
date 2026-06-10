@@ -21,7 +21,13 @@ const ADDON_DIR = path.resolve(SCRIPT_DIR, '..');
 const REPO_ROOT = path.resolve(ADDON_DIR, '..', '..', '..');
 
 const COMPONENTS_DIR = path.join(ADDON_DIR, 'src', 'components');
-const CATALOG_DIR = path.join(REPO_ROOT, 'packages', 'catalog', 'contents', 'Spec');
+const CATALOG_DIR = path.join(
+  REPO_ROOT,
+  'packages',
+  'catalog',
+  'contents',
+  'Spec',
+);
 const BARREL_FILE = path.join(ADDON_DIR, 'src', 'components.ts');
 
 const SPEC_MODULE = '@cardstack/boxel-ui/components';
@@ -37,7 +43,8 @@ const SPEC_FILE_PREFIX = 'boxel-ui-';
 // that doesn't actually exist.
 function buildBarrelExportMap() {
   const source = fs.readFileSync(BARREL_FILE, 'utf8');
-  const re = /^import\s+([A-Za-z0-9_$]+)[^;]*\s+from\s+['"]\.\/components\/([a-z0-9-]+)\/index\.gts['"]/gm;
+  const re =
+    /^import\s+([A-Za-z0-9_$]+)[^;]*\s+from\s+['"]\.\/components\/([a-z0-9-]+)\/index\.gts['"]/gm;
   const candidates = new Map();
   let m;
   while ((m = re.exec(source)) !== null) {
@@ -104,7 +111,9 @@ function extractPrimaryUsageBlock(source) {
 
 function extractStringAttr(text, name) {
   // @name='value' or @name="value"
-  const re = new RegExp(`@${name}=(?:'((?:[^'\\\\]|\\\\.)*)'|"((?:[^"\\\\]|\\\\.)*)")`);
+  const re = new RegExp(
+    `@${name}=(?:'((?:[^'\\\\]|\\\\.)*)'|"((?:[^"\\\\]|\\\\.)*)")`,
+  );
   const m = text.match(re);
   if (!m) return null;
   return (m[1] ?? m[2]).replace(/\\'/g, "'").replace(/\\"/g, '"');
@@ -152,10 +161,7 @@ function extractOptions(text, source) {
   // const (`const validBottomTreatments = [...]`) shapes when they're array
   // literals — which is most of the enum cases in usage.gts files.
   if (source) {
-    const re = new RegExp(
-      `(?:^|\\b)${ref}\\s*=\\s*\\[([^\\]]*)\\]`,
-      'm',
-    );
+    const re = new RegExp(`(?:^|\\b)${ref}\\s*=\\s*\\[([^\\]]*)\\]`, 'm');
     const m = source.match(re);
     if (m) {
       const opts = [];
@@ -399,9 +405,7 @@ function buildReadme({
   }
   sections.push('## Import');
   sections.push(
-    '```ts\n' +
-      `import { ${componentName} } from '${SPEC_MODULE}';\n` +
-      '```',
+    '```ts\n' + `import { ${componentName} } from '${SPEC_MODULE}';\n` + '```',
   );
   sections.push('## API');
   sections.push(buildApiTable(args));
@@ -438,7 +442,7 @@ function buildSpecJson({ componentName, cardDescription, readMe }) {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },

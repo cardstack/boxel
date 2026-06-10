@@ -36,7 +36,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -63,7 +63,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -179,7 +179,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },

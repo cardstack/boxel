@@ -341,7 +341,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -437,7 +437,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -448,7 +448,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

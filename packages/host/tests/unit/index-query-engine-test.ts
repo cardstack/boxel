@@ -6,6 +6,7 @@ import {
   Loader,
   VirtualNetwork,
   baseRealm,
+  baseRealmRRI,
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
@@ -137,14 +138,14 @@ module('Unit | query', function (hooks) {
     let stringFieldEntry = new SimpleSpec({
       cardTitle: 'String Field',
       ref: {
-        module: `${baseRealm.url}string`,
+        module: `${baseRealmRRI}string`,
         name: 'default',
       },
     });
     let numberFieldEntry = new SimpleSpec({
       cardTitle: 'Number Field',
       ref: {
-        module: `${baseRealm.url}number`,
+        module: `${baseRealmRRI}number`,
         name: 'default',
       },
     });
@@ -706,7 +707,7 @@ module('Unit | query', function (hooks) {
           on: type,
           eq: {
             ref: {
-              module: `${baseRealm.url}string`,
+              module: `${baseRealmRRI}string`,
               name: 'default',
             },
           },

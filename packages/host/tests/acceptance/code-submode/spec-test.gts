@@ -10,7 +10,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, Deferred, rri } from '@cardstack/runtime-common';
+import { baseRealmRRI, Deferred, rri } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -334,7 +334,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -368,7 +368,7 @@ module('Acceptance | Spec preview', function (hooks) {
                   ],
                 },
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -386,7 +386,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -405,7 +405,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -436,7 +436,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -536,7 +536,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -556,7 +556,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -576,7 +576,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -596,7 +596,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -616,7 +616,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -652,7 +652,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -686,7 +686,7 @@ module('Acceptance | Spec preview', function (hooks) {
                   ],
                 },
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },

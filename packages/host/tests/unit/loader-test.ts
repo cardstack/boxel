@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI, Loader } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -354,7 +354,7 @@ module('Unit | loader', function (hooks) {
     });
 
     assert.deepEqual(Loader.identify(StringField), {
-      module: `${baseRealm.url}card-api`,
+      module: `${baseRealmRRI}card-api`,
       name: 'StringField',
     });
   });

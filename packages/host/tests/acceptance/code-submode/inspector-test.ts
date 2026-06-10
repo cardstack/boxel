@@ -18,7 +18,7 @@ import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   Deferred,
   type ResolvedCodeRef,
   rri,
@@ -74,7 +74,7 @@ const realmAFiles: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -532,7 +532,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },

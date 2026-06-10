@@ -3,7 +3,7 @@ import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
   isJsonContentType,
-  baseRealm,
+  baseRealmRRI,
   inferContentType,
   unixTime,
   maxLinkDepth,
@@ -1837,7 +1837,7 @@ function fileResourceFromIndex(
     (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
       ? fileEntry.resource?.meta?.adoptsFrom
       : {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'FileDef',
         });
   let resourceAttributes = fileEntry.resource?.attributes ?? {};

@@ -9,7 +9,7 @@ import {
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
-  baseRealm,
+  baseRealmRRI,
   getSerializer,
 } from './index.ts';
 import {
@@ -1691,7 +1691,7 @@ async function getField(
         isPrimitive: true,
         isComputed: false,
         fieldOrCard: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'StringField',
         },
       } as FieldDefinition;

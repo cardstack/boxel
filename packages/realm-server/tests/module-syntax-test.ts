@@ -122,7 +122,7 @@ module(basename(__filename), function () {
         field?.card,
         {
           type: 'external',
-          module: 'https://cardstack.com/base/number',
+          module: '@cardstack/base/number',
           name: 'default',
         },
         'the field card is correct',
@@ -131,7 +131,7 @@ module(basename(__filename), function () {
         field?.type,
         {
           type: 'external',
-          module: 'https://cardstack.com/base/card-api',
+          module: '@cardstack/base/card-api',
           name: 'contains',
         },
         'the field type is correct',
@@ -140,7 +140,7 @@ module(basename(__filename), function () {
         field?.decorator,
         {
           type: 'external',
-          module: 'https://cardstack.com/base/card-api',
+          module: '@cardstack/base/card-api',
           name: 'field',
         },
         'the field decorator is correct',
@@ -822,7 +822,7 @@ module(basename(__filename), function () {
         field?.type,
         {
           type: 'external',
-          module: 'https://cardstack.com/base/card-api',
+          module: '@cardstack/base/card-api',
           name: 'containsMany',
         },
         'the field type is correct',
@@ -880,7 +880,7 @@ module(basename(__filename), function () {
         field?.type,
         {
           type: 'external',
-          module: 'https://cardstack.com/base/card-api',
+          module: '@cardstack/base/card-api',
           name: 'linksTo',
         },
         'the field type is correct',
@@ -939,7 +939,7 @@ module(basename(__filename), function () {
         field?.type,
         {
           type: 'external',
-          module: 'https://cardstack.com/base/card-api',
+          module: '@cardstack/base/card-api',
           name: 'linksTo',
         },
         'the field type is correct',

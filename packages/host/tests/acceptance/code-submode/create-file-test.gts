@@ -3,7 +3,13 @@ import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
 
-import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  baseRealmRRI,
+  rri,
+  baseRRI,
+  Deferred,
+} from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
@@ -49,7 +55,7 @@ const files: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -108,7 +114,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -125,7 +131,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -142,7 +148,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -169,13 +175,13 @@ const files: Record<string, any> = {
         cardDescription: 'A field that captures big int values',
         specType: 'field',
         ref: {
-          module: `${baseRealm.url}big-integer`,
+          module: `${baseRealmRRI}big-integer`,
           name: 'default',
         },
       },
       meta: {
         adoptsFrom: {
-          module: `${baseRealm.url}spec`,
+          module: `${baseRealmRRI}spec`,
           name: 'Spec',
         },
       },
@@ -189,13 +195,13 @@ const files: Record<string, any> = {
         cardDescription: 'A FieldDef spec',
         specType: 'field',
         ref: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'FieldDef',
         },
       },
       meta: {
         adoptsFrom: {
-          module: `${baseRealm.url}spec`,
+          module: `${baseRealmRRI}spec`,
           name: 'Spec',
         },
       },
@@ -216,7 +222,7 @@ const filesB: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -242,7 +248,7 @@ const filesB: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },

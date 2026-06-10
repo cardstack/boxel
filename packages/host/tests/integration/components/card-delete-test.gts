@@ -138,7 +138,7 @@ module('Integration | card-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

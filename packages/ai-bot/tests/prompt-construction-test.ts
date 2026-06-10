@@ -2668,7 +2668,7 @@ Attached Files (files with newer versions don't show their content):
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/search-results',
+                      module: '@cardstack/base/search-results',
                       name: 'SearchResults',
                     },
                   },
