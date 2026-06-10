@@ -1,4 +1,4 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import {
   describe,
   it,
@@ -14,18 +14,18 @@ import * as path from 'path';
 import {
   RealmWatcher,
   watchRealms,
-} from '../../src/commands/realm/watch/start';
-import { CheckpointManager } from '../../src/lib/checkpoint-manager';
-import { ProfileManager } from '../../src/lib/profile-manager';
-import type { RealmAuthenticator } from '../../src/lib/realm-authenticator';
+} from '../../src/commands/realm/watch/start.ts';
+import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupJwtTestProfile,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
-import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
+} from '../helpers/integration.ts';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: (() => void) | undefined;

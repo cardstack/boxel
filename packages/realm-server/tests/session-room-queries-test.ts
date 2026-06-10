@@ -8,7 +8,7 @@ import {
   fetchRealmSessionRooms,
   upsertSessionRoom,
 } from '@cardstack/runtime-common/db-queries/session-room-queries';
-import { setupDB, insertUser } from './helpers';
+import { setupDB, insertUser } from './helpers/index.ts';
 
 module(basename(__filename), function () {
   module('fetchRealmSessionRooms', function (hooks) {

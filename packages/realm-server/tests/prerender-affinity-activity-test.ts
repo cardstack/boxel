@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { AffinityActivityTracker } from '../prerender/affinity-activity';
+import { AffinityActivityTracker } from '../prerender/affinity-activity.ts';
 
 // CS-10872 (affinity-snapshot diagnostic). The Prerenderer reads this
 // tracker at render-settle time and merges its output with

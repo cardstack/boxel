@@ -1,4 +1,4 @@
-import type { RealmAuthenticator } from './realm-authenticator';
+import type { RealmAuthenticator } from './realm-authenticator.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';

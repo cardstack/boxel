@@ -1,7 +1,12 @@
-import { test, expect } from './fixtures';
-import { appURL } from '../support/isolated-realm-server';
-import { createSubscribedUser, login, setupPermissions } from '../helpers';
-import type { Credentials } from '../support/synapse';
+import { test, expect } from './fixtures.ts';
+import { readFileSync } from 'fs';
+import { appURL } from '../support/isolated-realm-server.ts';
+import {
+  createSubscribedUser,
+  login,
+  setupPermissions,
+} from '../helpers/index.ts';
+import type { Credentials } from '../support/synapse/index.ts';
 
 test.describe('Download Realm', () => {
   let credentials: Credentials;
@@ -47,24 +52,18 @@ test.describe('Download Realm', () => {
     // Verify the download filename ends with .zip
     expect(download.suggestedFilename()).toMatch(/\.zip$/);
 
-    // Read the downloaded content to verify it's a valid zip file
-    const stream = await download.createReadStream();
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
-      // Only need first few bytes to verify zip signature
-      if (chunks.reduce((acc, c) => acc + c.length, 0) >= 4) {
-        break;
-      }
-    }
-    const buffer = Buffer.concat(chunks);
+    // Verify the download completed and the file is a valid zip. Read from
+    // the saved path rather than consuming `createReadStream()` and breaking
+    // out after the first chunk: a half-consumed download stream left open
+    // throws `readableStreamImpl._read: Test ended` during teardown, which
+    // Playwright reports as an error "not a part of any test" and fails the
+    // run with a non-zero exit even when every test itself passed.
+    const path = await download.path();
+    expect(path).toBeTruthy();
+    const buffer = readFileSync(path!);
 
     // ZIP files start with 'PK' (0x50 0x4B)
     expect(buffer[0]).toBe(0x50);
     expect(buffer[1]).toBe(0x4b);
-
-    // Verify the download completed (streaming worked)
-    const path = await download.path();
-    expect(path).toBeTruthy();
   });
 });

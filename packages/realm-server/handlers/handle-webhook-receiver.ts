@@ -8,9 +8,9 @@ import {
   sendResponseForNotFound,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import { getFilterHandler } from './webhook-filter-handlers';
-import type { CreateRoutesArgs } from '../routes';
+} from '../middleware/index.ts';
+import { getFilterHandler } from './webhook-filter-handlers.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleWebhookReceiverRequest({
   dbAdapter,

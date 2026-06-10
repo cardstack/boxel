@@ -10,7 +10,7 @@ import type {
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
-import { logger } from '../log';
+import { logger } from '../log.ts';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -21,11 +21,11 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
-} from '../matrix-constants';
+} from '../matrix-constants.ts';
 
-import { downloadFile } from './matrix-utils';
+import { downloadFile } from './matrix-utils.ts';
 import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
-import { HistoryConstructionError } from './types';
+import { HistoryConstructionError } from './types.ts';
 
 function getLog() {
   return logger('ai-bot:history');

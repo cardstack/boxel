@@ -8,19 +8,19 @@ import {
   closeServer,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
-} from './helpers';
+} from './helpers/index.ts';
 import {
   buildPrerenderApp,
   createPrerenderHttpServer,
-} from '../prerender/prerender-app';
-import type { Prerenderer } from '../prerender';
+} from '../prerender/prerender-app.ts';
+import type { Prerenderer } from '../prerender/index.ts';
 import { baseCardRef, rri } from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
-} from '../prerender/prerender-constants';
-import { toAffinityKey } from '../prerender/affinity';
+} from '../prerender/prerender-constants.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {

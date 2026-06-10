@@ -16,7 +16,7 @@ import { resolve } from 'path';
 import semver from 'semver';
 
 import bumpByPrefixJson from './release-prefixes.json';
-import { lastStableTag } from './lib/tags';
+import { lastStableTag } from './lib/tags.ts';
 
 export type BumpLevel = 'major' | 'minor' | 'patch' | 'none';
 

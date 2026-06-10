@@ -1,6 +1,6 @@
-import { unixTime, delay, isBrowserTestEnv } from './index';
+import { unixTime, delay, isBrowserTestEnv } from './index.ts';
 
-import type { TokenClaims } from './realm';
+import type { TokenClaims } from './realm.ts';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)

@@ -1,6 +1,6 @@
-import type { QueuePublisher } from '../queue';
-import type { ScreenshotPrerenderResponse, DBAdapter } from '../index';
-import type { ScreenshotCardArgs } from '../tasks/screenshot-card';
+import type { QueuePublisher } from '../queue.ts';
+import type { ScreenshotPrerenderResponse, DBAdapter } from '../index.ts';
+import type { ScreenshotCardArgs } from '../tasks/screenshot-card.ts';
 
 export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 

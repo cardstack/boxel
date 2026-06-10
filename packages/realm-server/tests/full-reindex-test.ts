@@ -15,8 +15,8 @@ import {
   uuidv4,
 } from '@cardstack/runtime-common';
 
-import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
-import { setupDB } from './helpers';
+import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import { setupDB } from './helpers/index.ts';
 
 module(basename(__filename), function (hooks) {
   let dbAdapter: PgAdapter;

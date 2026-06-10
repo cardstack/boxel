@@ -4,17 +4,17 @@ import supertest from 'supertest';
 import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import http, { createServer } from 'http';
-import { buildPrerenderManagerApp } from '../prerender/manager-app';
+import { buildPrerenderManagerApp } from '../prerender/manager-app.ts';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
-} from '../prerender/prerender-constants';
-import { toAffinityKey } from '../prerender/affinity';
+} from '../prerender/prerender-constants.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import { Deferred } from '@cardstack/runtime-common';
-import { testCreatePrerenderAuth } from './helpers';
+import { testCreatePrerenderAuth } from './helpers/index.ts';
 
 module(basename(__filename), function () {
   module('Prerender manager', function (hooks) {

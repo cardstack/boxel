@@ -13,8 +13,8 @@ import {
 import {
   indexCandidateExpressions,
   indexURLCandidates,
-} from './index-url-utils';
-import type { RealmRegistryReconciler } from './realm-registry-reconciler';
+} from './index-url-utils.ts';
+import type { RealmRegistryReconciler } from './realm-registry-reconciler.ts';
 
 const federatedLog = logger('realm-server:federated');
 

@@ -20,7 +20,7 @@
  * import from `@cardstack/runtime-common/card-document-shape` directly.
  */
 
-import type { CodeRef, ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type {
   CardFields,
   CardResource,
@@ -30,11 +30,11 @@ import type {
   Relationship,
   RenderedHtmlResource,
   Saved,
-} from './resource-types';
+} from './resource-types.ts';
 import type {
   CardCollectionDocument,
   SingleCardDocument,
-} from './document-types';
+} from './document-types.ts';
 
 // Inlined — reading these via a runtime `import` from `resource-types.ts`
 // would pull in `code-ref.ts` → `loader.ts`, which is exactly the
@@ -343,6 +343,19 @@ export function isIdentityOnlyCardResource(
   resource: any,
 ): resource is CardResource {
   if (!isCardResource(resource)) {
+    return false;
+  }
+  return resource.meta?.identityOnly === true;
+}
+
+// The `file-meta` counterpart of `isIdentityOnlyCardResource`: an HTML-backed
+// file row the server emits as identity + a `rendered-html` relationship with
+// no `attributes`, flagged `meta.identityOnly`. Hydrates to a live `FileDef`
+// via `links.self`. (A file carries no `renderType` — it renders natively.)
+export function isIdentityOnlyFileMetaResource(
+  resource: any,
+): resource is FileMetaResource {
+  if (!isFileMetaResource(resource)) {
     return false;
   }
   return resource.meta?.identityOnly === true;

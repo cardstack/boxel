@@ -1,6 +1,6 @@
-import { notFound, CardError, responseWithError } from './error';
-import type { RequestContext } from './index';
-import { RealmPaths, logger } from './index';
+import { notFound, CardError, responseWithError } from './error.ts';
+import type { RequestContext } from './index.ts';
+import { RealmPaths, logger } from './index.ts';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
@@ -53,7 +53,7 @@ function formatUnknownError(error: unknown): string {
 
 export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 
-import { SupportedMimeType } from './supported-mime-type';
+import { SupportedMimeType } from './supported-mime-type.ts';
 export { SupportedMimeType };
 
 function isHTTPMethod(method: unknown): method is Method {

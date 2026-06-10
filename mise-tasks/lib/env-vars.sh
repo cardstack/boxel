@@ -49,15 +49,26 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ENV_DB_SLUG
   export ENV_MODE=true
 
-  # Drop standard-mode TLS env vars if they leaked in from a parent
-  # shell or a prior mise activation. In env mode Traefik terminates
-  # TLS in front of plain-HTTP services; leaving these set tells vite
-  # and the realm-server to terminate TLS themselves, so Traefik then
-  # speaks HTTP to a TLS-expecting upstream and every request fails
-  # with "HTTP/0.9 when not allowed". NODE_EXTRA_CA_CERTS is kept —
-  # Node clients still need to trust Traefik's mkcert leaf.
-  unset REALM_SERVER_TLS_CERT_FILE
-  unset REALM_SERVER_TLS_KEY_FILE
+  # Local HTTPS dev access in env mode: the realm-server terminates TLS
+  # and serves HTTP/2 on its dynamic backend port using the same mkcert
+  # leaf Traefik presents to the browser. Traefik re-originates an
+  # HTTP/2-over-TLS connection to that backend (dev-service-registry
+  # registers an https:// upstream and Traefik negotiates h2 via ALPN),
+  # so the realm-server must hold the cert. HTTP/2 is a system invariant —
+  # env mode never serves plain HTTP/1.1. The dev cert is mandatory here
+  # (`mise run infra:ensure-dev-cert`); absent it the realm-server fails
+  # startup loudly rather than silently downgrading. Clear any leaked
+  # paths first, then point at the canonical dev cert if it exists. (vite
+  # stays plain HTTP behind Traefik — it ignores these vars in env mode;
+  # see packages/host/vite.config.mjs. NODE_EXTRA_CA_CERTS is set below so
+  # Node clients trust the mkcert leaf in both modes.)
+  unset REALM_SERVER_TLS_CERT_FILE REALM_SERVER_TLS_KEY_FILE
+  _BOXEL_DEV_CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+  if [ -f "$_BOXEL_DEV_CERT_DIR/localhost.pem" ] && [ -f "$_BOXEL_DEV_CERT_DIR/localhost-key.pem" ]; then
+    export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_DIR/localhost.pem"
+    export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_CERT_DIR/localhost-key.pem"
+  fi
+  unset _BOXEL_DEV_CERT_DIR
 
   # Service URLs (Traefik hostnames). Traefik terminates TLS on :443
   # with the mkcert leaf (`infra:ensure-dev-cert` provisioned;
@@ -240,10 +251,10 @@ else
 fi
 
 # Trust the mkcert root CA in Node clients regardless of env-mode vs
-# standard mode. Both modes serve the same mkcert leaf — standard
-# mode via the realm-server's own h2 dispatcher, env mode via Traefik
-# in front of plain-HTTP services — so any Node-side fetch to
-# `https://host/matrix/realm-server.<...>.localhost` needs the CA
+# standard mode. Both modes present the same mkcert leaf to clients —
+# standard mode via the realm-server's own h2 dispatcher, env mode via
+# Traefik terminating TLS on the public `*.<slug>.localhost` hostnames —
+# so any Node-side fetch to one of those https URLs needs the CA
 # trusted to pass `tls.checkServerIdentity`. Without this, env-mode
 # realm-server's startup `getIndexHTML()` smoke-test fetch fails with
 # `TypeError: fetch failed` and `process.exit(-2)` — the visible

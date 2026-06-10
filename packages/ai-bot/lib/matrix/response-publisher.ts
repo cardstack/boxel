@@ -1,14 +1,14 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import { thinkingMessage } from '../../constants';
-import type ResponseState from '../response-state';
+import { thinkingMessage } from '../../constants.ts';
+import type ResponseState from '../response-state.ts';
 import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
-import ResponseEventData from './response-event-data';
+import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 

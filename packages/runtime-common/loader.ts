@@ -1,15 +1,15 @@
-import { transpileAmd } from './amd-transpile';
-import { Deferred } from './deferred';
-import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
-import { executableExtensions, logger } from './index';
+import { transpileAmd } from './amd-transpile/index.ts';
+import { Deferred } from './deferred.ts';
+import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
+import { executableExtensions, logger } from './index.ts';
 
-import { CardError, iconNotFoundMessage } from './error';
+import { CardError, iconNotFoundMessage } from './error.ts';
 import flatMap from 'lodash/flatMap';
 import {
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
-} from './dependency-tracker';
-import type { VirtualNetwork } from './virtual-network';
+} from './dependency-tracker.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 type FetchingModule = {
   state: 'fetching';

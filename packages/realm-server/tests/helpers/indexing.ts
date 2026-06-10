@@ -1,5 +1,5 @@
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import { findRealmEvent, waitUntil } from './index';
+import { findRealmEvent, waitUntil } from './index.ts';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { trimJsonExtension } from '@cardstack/runtime-common';
 import type { DBAdapter, Expression } from '@cardstack/runtime-common';

@@ -1,4 +1,4 @@
-import type { MatrixClient } from './matrix-client';
+import type { MatrixClient } from './matrix-client.ts';
 
 export interface Utils {
   badRequest(message: string): Response;

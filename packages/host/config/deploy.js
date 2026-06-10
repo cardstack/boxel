@@ -5,7 +5,6 @@ module.exports = function (deployTarget) {
     pipeline: {
       activateOnDeploy: true,
     },
-    plugins: ['build', 'smart-compress', 'revision-data', 's3', 'cloudfront'],
     build: {},
     s3: {
       allowOverwrite: true,
@@ -29,7 +28,8 @@ module.exports = function (deployTarget) {
 
   if (deployTarget === 'build-only') {
     ENV.build.environment = 'production';
-    ENV.plugins = ['build'];
+    // Run only the build; skip S3 upload, CloudFront, compression, etc.
+    ENV.pipeline.disabled = { allExcept: ['build'] };
   }
 
   if (

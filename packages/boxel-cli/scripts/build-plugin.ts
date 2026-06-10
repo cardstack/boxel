@@ -10,7 +10,7 @@
 import type { Command, Option } from 'commander';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
-import { buildBoxelProgram } from '../src/build-program';
+import { buildBoxelProgram } from '../src/build-program.ts';
 
 const PLUGIN_DIR = resolve(__dirname, '..', 'plugin');
 

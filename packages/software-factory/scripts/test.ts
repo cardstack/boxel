@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { configureLogger, logger } from '../src/logger';
+import { configureLogger, logger } from '../src/logger.ts';
 
 configureLogger(process.env.LOG_LEVELS || '*=error');
 

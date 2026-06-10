@@ -1,10 +1,10 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   getJoinedRooms,
   getAccountData,
   type Credentials,
-} from '../support/synapse';
-import { appURL } from '../support/isolated-realm-server';
+} from '../support/synapse/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -13,7 +13,7 @@ import {
   openRoot,
   createSubscribedUser,
   setupPermissions,
-} from '../helpers';
+} from '../helpers/index.ts';
 import jwt from 'jsonwebtoken';
 
 const REALM_SECRET_SEED = "shhh! it's a secret";

@@ -11,8 +11,8 @@ import {
   param,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
-import { runRegistryBackfill } from '../lib/realm-registry-backfill';
+import { setupDB } from './helpers/index.ts';
+import { runRegistryBackfill } from '../lib/realm-registry-backfill.ts';
 
 async function publicReadGranted(
   dbAdapter: PgAdapter,

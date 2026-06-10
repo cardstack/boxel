@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
+import { PagePool } from '../prerender/page-pool.ts';
 
 // The standby refill (`#ensureStandbyPool`) is deduplicated via the
 // `#ensuringStandbys` promise so concurrent callers share one in-flight

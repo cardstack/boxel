@@ -1,38 +1,38 @@
-import { Deferred } from './deferred';
-import type { SearchOpts } from './search-utils';
+import { Deferred } from './deferred.ts';
+import type { SearchOpts } from './search-utils.ts';
 import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './realm-identifiers';
+} from './realm-identifiers.ts';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
   moduleDependencyKey,
-} from './cache/module-cache-invalidation';
+} from './cache/module-cache-invalidation.ts';
 import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type LinkableCollectionDocument,
+  type UnifiedSearchCollectionDocument,
   type PrerenderedCardCollectionDocument,
-} from './document-types';
-import type { CardResource, Relationship } from './resource-types';
-import { normalizeRelationships } from './relationship-utils';
-import type { LocalPath } from './paths';
-import { RealmPaths, ensureTrailingSlash, join } from './paths';
+} from './document-types.ts';
+import type { CardResource, Relationship } from './resource-types.ts';
+import { normalizeRelationships } from './relationship-utils.ts';
+import type { LocalPath } from './paths.ts';
+import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
 import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
-} from './constants';
+} from './constants.ts';
 import {
   persistFileMeta,
   removeFileMeta,
   getCreatedTime,
   getContentMeta,
-} from './file-meta';
+} from './file-meta.ts';
 import {
   systemError,
   notFound,
@@ -44,7 +44,7 @@ import {
   formattedError,
   unsupportedMediaType,
   type SerializedError,
-} from './error';
+} from './error.ts';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import {
@@ -94,25 +94,25 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
-} from './index';
-import type { FromScratchResult } from './tasks/indexer';
-import { isCodeRef, visitModuleDeps } from './code-ref';
+} from './index.ts';
+import type { FromScratchResult } from './tasks/indexer.ts';
+import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
-import { inferContentType } from './infer-content-type';
+import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
   fileContentToBytes,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
-} from './stream';
-import { transpileJS } from './transpile';
-import type { Method, RouteTable } from './router';
+} from './stream.ts';
+import { transpileJS } from './transpile.ts';
+import type { Method, RouteTable } from './router.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -120,34 +120,37 @@ import {
   Router,
   SupportedMimeType,
   lookupRouteTable,
-} from './router';
-import { InvalidQueryError, assertQuery, parseQuery } from './query';
+} from './router.ts';
+import { InvalidQueryError, assertQuery, parseQuery } from './query.ts';
 import type { Readable } from 'stream';
-import { createResponse } from './create-response';
-import { mergeRelationships } from './merge-relationships';
-import { getCardDirectoryName } from './helpers/card-directory-name';
+import { createResponse } from './create-response.ts';
+import { mergeRelationships } from './merge-relationships.ts';
+import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
   type MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
-} from './matrix-client';
-import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
+} from './matrix-client.ts';
+import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
-import RealmPermissionChecker from './realm-permission-checker';
-import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
+import RealmPermissionChecker from './realm-permission-checker.ts';
+import type {
+  ResponseWithNodeStream,
+  VirtualNetwork,
+} from './virtual-network.ts';
 
-import { RealmAuthDataSource } from './realm-auth-data-source';
-import { AliasCache } from './cache/alias-cache';
-import { fetcher } from './fetcher';
-import { RealmIndexQueryEngine } from './realm-index-query-engine';
-import { RealmIndexUpdater } from './realm-index-updater';
-import serialize from './file-serializer';
-import { validateWriteSize } from './write-size-validation';
+import { RealmAuthDataSource } from './realm-auth-data-source.ts';
+import { AliasCache } from './cache/alias-cache.ts';
+import { fetcher } from './fetcher.ts';
+import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
+import { RealmIndexUpdater } from './realm-index-updater.ts';
+import serialize from './file-serializer.ts';
+import { validateWriteSize } from './write-size-validation.ts';
 import { md5 } from 'super-fast-md5';
-import { resolveFileDefCodeRef } from './file-def-code-ref';
+import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
-import type { Utils } from './matrix-backend-authentication';
-import { MatrixBackendAuthentication } from './matrix-backend-authentication';
+import type { Utils } from './matrix-backend-authentication.ts';
+import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
 
 import type {
   FileWatcherEventContent,
@@ -158,28 +161,28 @@ import type {
   AtomicOperation,
   AtomicOperationResult,
   AtomicPayloadValidationError,
-} from './atomic-document';
-import { filterAtomicOperations } from './atomic-document';
+} from './atomic-document.ts';
+import { filterAtomicOperations } from './atomic-document.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
   type PopulateCoordinator,
-} from './definition-lookup';
+} from './definition-lookup.ts';
 import {
   fetchSessionRoom,
   upsertSessionRoom,
-} from './db-queries/session-room-queries';
-import { userExists } from './db-queries/user-queries';
+} from './db-queries/session-room-queries.ts';
+import { userExists } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
   type PublishabilityWarningType,
   type ResourceIndexEntry,
-} from './publishability';
+} from './publishability.ts';
 import {
   cancelAllJobsInConcurrencyGroup,
   cancelRunningJobsInConcurrencyGroup,
-} from './job-utils';
+} from './job-utils.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -5272,16 +5275,29 @@ export class Realm {
   public async search(
     query: Query,
     opts?: SearchOpts,
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<UnifiedSearchCollectionDocument> {
     assertQuery(query);
-    return await this.#realmIndexQueryEngine.searchCards(query, {
-      loadLinks: true,
+    let engineOpts = {
+      loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
-    });
+      // The SQL-side `i.url IN (...)` subset filter reads `cardUrls` from the
+      // engine opts, so forward it (non-empty only — an empty array is a no-op).
+      ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
+    };
+    // Prefer-HTML: resolve each result to prerendered HTML where indexed and
+    // fall back to the full live card otherwise. Absent `render` (data-only or
+    // unspecified) keeps the full live-card document.
+    if (opts?.render) {
+      return await this.#realmIndexQueryEngine.searchUnified(query, {
+        ...engineOpts,
+        render: opts.render,
+      });
+    }
+    return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
   }
 
   private async searchResponse(

@@ -2,8 +2,8 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { query, param } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
-import { JobsFinishedListener } from '../lib/jobs-finished-listener';
+import { setupDB } from './helpers/index.ts';
+import { JobsFinishedListener } from '../lib/jobs-finished-listener.ts';
 
 // Minimal stand-in for JobScopedSearchCache exposing only the surface the
 // listener touches: the set of `<jobId>.<reservationId>` keys it holds and a

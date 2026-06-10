@@ -9,18 +9,18 @@ import {
   RealmPaths,
   unixTime,
   logger,
-} from './index';
+} from './index.ts';
 import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+} from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import {
   getCreatedTime,
   ensureFileCreatedAt,
   getContentMeta,
-} from './file-meta';
+} from './file-meta.ts';
 import {
   type Expression,
   param,
@@ -33,22 +33,22 @@ import {
   upsert,
   dbExpression,
   upsertMultipleRows,
-} from './expression';
+} from './expression.ts';
 import {
   clampSerializedError,
   sanitizeForJsonb,
   type SerializedError,
-} from './error';
-import type { DBAdapter } from './db';
-import type { RealmMetaTable } from './index-structure';
-import type { FileMetaResource } from './resource-types';
-import type { Diagnostics } from './index';
+} from './error.ts';
+import type { DBAdapter } from './db.ts';
+import type { RealmMetaTable } from './index-structure.ts';
+import type { FileMetaResource } from './resource-types.ts';
+import type { Diagnostics } from './index.ts';
 import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
   type RealmVersionsTable,
-} from './index-structure';
+} from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 export class IndexWriter {

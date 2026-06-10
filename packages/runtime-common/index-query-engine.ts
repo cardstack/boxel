@@ -1,8 +1,8 @@
 import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
-import type { ResolvedCodeRef } from './index';
-import type { RealmResourceIdentifier } from './realm-identifiers';
+import type { ResolvedCodeRef } from './index.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import {
   type CardResource,
   type CodeRef,
@@ -11,12 +11,12 @@ import {
   isResolvedCodeRef,
   baseRealm,
   getSerializer,
-} from './index';
+} from './index.ts';
 import {
   isValidPrerenderedHtmlFormat,
   type PrerenderedHtmlFormat,
-} from './prerendered-html-format';
-import type { DBSpecificExpression, Param } from './expression';
+} from './prerendered-html-format.ts';
+import type { DBSpecificExpression, Param } from './expression.ts';
 import {
   type Expression,
   type CardExpression,
@@ -40,8 +40,8 @@ import {
   query,
   dbExpression,
   isDbExpression,
-} from './expression';
-import type { RangeOperator, RangeFilterValue } from './query';
+} from './expression.ts';
+import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
   type Query,
   type Filter,
@@ -54,28 +54,28 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   isCardTypeFilter,
-} from './query';
-import type { SerializedError } from './error';
-import type { DBAdapter } from './db';
+} from './query.ts';
+import type { SerializedError } from './error.ts';
+import type { DBAdapter } from './db.ts';
 import {
   coerceTypes,
   normalizeRealmMetaValue,
   type BoxelIndexTable,
   type RealmMetaValue,
-} from './index-structure';
+} from './index-structure.ts';
 import {
   getFieldDef,
   type Definition,
   type FieldDefinition,
-} from './definitions';
+} from './definitions.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
-} from './definition-lookup';
-import { isScopedCSSRequest } from './scoped-css';
-import type { FileMetaResource } from './resource-types';
-import type { VirtualNetwork } from './virtual-network';
-import type { RequestTimings } from './request-timings';
+} from './definition-lookup.ts';
+import { isScopedCSSRequest } from './scoped-css.ts';
+import type { FileMetaResource } from './resource-types.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RequestTimings } from './request-timings.ts';
 
 export interface IndexedFile {
   type: 'file';
@@ -151,6 +151,18 @@ interface PrerenderedCardOptions {
   includeErrors?: true;
   cardUrls?: string[];
 }
+
+// Selects which columns the unified `search()` projects. `dataOnly` projects
+// the live serialization only (pristine_doc / error_doc); `render` projects the
+// format-specific HTML column plus the live serialization carried only on
+// no-HTML fallback rows.
+export type SearchProjection =
+  | { kind: 'dataOnly' }
+  | {
+      kind: 'render';
+      htmlFormat: PrerenderedHtmlFormat;
+      renderType?: ResolvedCodeRef;
+    };
 
 export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
@@ -576,6 +588,12 @@ export class IndexQueryEngine {
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' = 'instance',
+    // When set, the grouped projection is wrapped in an outer select so a
+    // conditional live `pristine_doc` can reference the computed `html` column
+    // once (see `search()`'s render branch). The inner projection must alias
+    // its raw live serialization as `pristine_doc_fallback` and its HTML as
+    // `html`.
+    conditionalLiveDoc = false,
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
@@ -615,17 +633,43 @@ export class IndexQueryEngine {
       }
 
       let everyCondition = every(conditions);
-      let query = [
-        ...selectClauseExpression,
-        `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
-        'WHERE',
-        ...everyCondition,
-        'GROUP BY url',
-        ...this.orderExpression(sort),
-        ...(page
-          ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
-          : []),
-      ];
+      let limitClause = page
+        ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
+        : [];
+      let query: CardExpression;
+      if (conditionalLiveDoc) {
+        // Outer-wrap the grouped projection so the conditional `pristine_doc`
+        // references the already-computed `html` column rather than recomputing
+        // the HTML expression. Sort keys are exposed by the inner query and the
+        // outer ORDER BY applies them (plus the `url` tiebreaker), so ordering
+        // and paging match the unwrapped path.
+        let { innerSortColumns, outerOrderBy } =
+          this.#wrappedOrderExpression(sort);
+        query = [
+          'SELECT sub.*,',
+          'CASE WHEN sub.html IS NULL THEN sub.pristine_doc_fallback END as pristine_doc',
+          'FROM (',
+          ...selectClauseExpression,
+          ...innerSortColumns,
+          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY url',
+          ') AS sub',
+          ...outerOrderBy,
+          ...limitClause,
+        ];
+      } else {
+        query = [
+          ...selectClauseExpression,
+          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY url',
+          ...this.orderExpression(sort),
+          ...limitClause,
+        ];
+      }
       let queryCount = [
         'SELECT COUNT(DISTINCT url) AS total',
         `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
@@ -657,6 +701,76 @@ export class IndexQueryEngine {
     }
   }
 
+  // Projection-parametrized instance search. `_search` builds the shared query
+  // core (WHERE / GROUP BY url / ORDER / LIMIT); this method varies only the
+  // SELECT list by projection. `searchCards` and `searchPrerendered` are thin
+  // wrappers, each fixing one projection.
+  async search(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    opts: QueryOptions,
+    projection: SearchProjection,
+  ): Promise<{
+    meta: QueryResultsMeta;
+    results: (Partial<BoxelIndexTable> & {
+      html?: string | null;
+      used_render_type?: string | null;
+    })[];
+  }> {
+    let selectClauseExpression: CardExpression;
+    if (projection.kind === 'dataOnly') {
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
+      ];
+    } else {
+      let htmlColumnExpression = this.buildHtmlColumnExpression({
+        htmlFormat: projection.htmlFormat,
+        renderType: projection.renderType,
+      });
+      let usedRenderTypeColumnExpression =
+        this.buildUsedRenderTypeColumnExpression({
+          htmlFormat: projection.htmlFormat,
+          renderType: projection.renderType,
+        });
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
+        ...htmlColumnExpression,
+        ' as html,',
+        ...usedRenderTypeColumnExpression,
+        ' as used_render_type,',
+        // The adoption chain (most-derived first). An HTML-backed row ships an
+        // identity-only `card` with no live serialization, so its actual type
+        // — distinct from the ancestor it was rendered as — comes from here.
+        'ANY_VALUE(types) as types,',
+        'ANY_VALUE(deps) as deps,',
+        'ANY_VALUE(display_names) as display_names,',
+        'ANY_VALUE(icon_html) as icon_html,',
+        'ANY_VALUE(error_doc) as error_doc,',
+        // Carry the live serialization as a raw column. `_search` wraps this
+        // projection so the final `pristine_doc` keeps it only on rows whose
+        // `html` is NULL — the HTML expression is evaluated once (as `html`)
+        // and the NULL test references that computed column rather than
+        // recomputing the COALESCE/JSONB expression.
+        'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
+      ];
+    }
+
+    return (await this._search(
+      realmURL,
+      { filter, sort, page },
+      opts,
+      selectClauseExpression,
+      'instance',
+      projection.kind === 'render',
+    )) as {
+      meta: QueryResultsMeta;
+      results: (Partial<BoxelIndexTable> & {
+        html?: string | null;
+        used_render_type?: string | null;
+      })[];
+    };
+  }
+
   async searchCards(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -664,14 +778,11 @@ export class IndexQueryEngine {
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
-    let { results, meta } = await this._search(
+    let { results, meta } = await this.search(
       realmURL,
       { filter, sort, page },
       opts,
-      [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
-      ],
-      'instance',
+      { kind: 'dataOnly' },
     );
 
     let cards = results
@@ -775,6 +886,42 @@ export class IndexQueryEngine {
     ];
   }
 
+  // The order expression split for the outer-wrapped projection: the inner
+  // grouped query exposes each sort value as an aliased column, and the outer
+  // query applies the ORDER BY against those aliases (plus the `url`
+  // tiebreaker). This yields the same ordering as `orderExpression` while the
+  // sort values are computed once in the inner aggregation.
+  #wrappedOrderExpression(sort: Sort | undefined): {
+    innerSortColumns: CardExpression;
+    outerOrderBy: CardExpression;
+  } {
+    if (!sort) {
+      return {
+        innerSortColumns: [],
+        outerOrderBy: ['ORDER BY url COLLATE "POSIX"'],
+      };
+    }
+    let innerSortColumns: CardExpression = [];
+    let outerKeys: CardExpression[] = [];
+    sort.forEach((s, i) => {
+      let alias = `_sort_${i}`;
+      innerSortColumns.push(
+        ', ANY_VALUE(',
+        'on' in s
+          ? fieldQuery(s.by, s.on, false, 'sort')
+          : this.generalFieldSortColumn(s.by),
+        `) AS ${alias}`,
+      );
+      outerKeys.push([alias, s.direction ?? 'asc', 'NULLS LAST']);
+    });
+    // the `url` tiebreaker matches `orderExpression` for deterministic results
+    outerKeys.push(['url COLLATE "POSIX"']);
+    return {
+      innerSortColumns,
+      outerOrderBy: ['ORDER BY', ...separatedByCommas(outerKeys)],
+    };
+  }
+
   async searchPrerendered(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -790,38 +937,16 @@ export class IndexQueryEngine {
       );
     }
 
-    let htmlColumnExpression = this.buildHtmlColumnExpression({
-      htmlFormat: opts.htmlFormat,
-      renderType: opts.renderType,
-    });
-    let usedRenderTypeColumnExpression =
-      this.buildUsedRenderTypeColumnExpression({
-        htmlFormat: opts.htmlFormat,
-        renderType: opts.renderType,
-      });
-
-    let { results, meta } = (await this._search(
+    let { results, meta } = await this.search(
       realmURL,
       { filter, sort, page },
       opts,
-      [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
-        ...htmlColumnExpression,
-        ' as html,',
-        ...usedRenderTypeColumnExpression,
-        ' as used_render_type,',
-        'ANY_VALUE(deps) as deps,',
-        'ANY_VALUE(display_names) as display_names,',
-        'ANY_VALUE(icon_html) as icon_html',
-      ],
-      'instance',
-    )) as {
-      meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & {
-        html: string | null;
-        used_render_type: string | null;
-      })[];
-    };
+      {
+        kind: 'render',
+        htmlFormat: opts.htmlFormat,
+        renderType: opts.renderType,
+      },
+    );
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
     // It would be more efficient to return scoped css urls found only in deps of the module we are filtering on (i.e. `ref`),
@@ -854,7 +979,7 @@ export class IndexQueryEngine {
       let displayNames = card.display_names as string[] | null;
       return {
         url: card.url!,
-        html: card.html,
+        html: card.html ?? null,
         cardType: displayNames?.[0] ?? undefined,
         iconHtml: (card.icon_html as string | null) ?? undefined,
         ...(usedRenderType ? { usedRenderType } : {}),

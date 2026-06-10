@@ -2,13 +2,13 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { asExpressions, insert, query } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   deleteRegistryRowByUrl,
   deletePublishedRowsBySourceUrl,
   upsertPublishedRealmInRegistry,
   insertSourceRealmInRegistry,
-} from '../lib/realm-registry-writes';
+} from '../lib/realm-registry-writes.ts';
 
 interface RegistryRow {
   url: string;

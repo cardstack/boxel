@@ -43,7 +43,7 @@ import type {
   ClaudeCodeAgentConfig,
   LoopAgent,
   ResolvedSkill,
-} from './types';
+} from './types.ts';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
@@ -51,16 +51,16 @@ import {
   FilePromptLoader,
   requireDarkfactoryModuleUrl,
   type PromptLoader,
-} from '../factory-prompt-loader';
+} from '../factory-prompt-loader.ts';
 import {
   CLARIFICATION_SIGNAL,
   DONE_SIGNAL,
   type FactoryTool,
   type ToolCallEntry,
-} from '../factory-tool-builder';
-import { deriveCatalogRealmUrl } from '../factory-catalog-realm';
-import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter';
-import { logger } from '../logger';
+} from '../factory-tool-builder.ts';
+import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
+import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter.ts';
+import { logger } from '../logger.ts';
 
 const MCP_SERVER_NAME = 'factory';
 const MAX_TOOL_USE_TURNS = 100;

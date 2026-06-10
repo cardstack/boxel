@@ -22,10 +22,10 @@ import {
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
-import { readCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
+import { readCard } from './workspace-fs.ts';
 
 let log = logger('instantiate-execution');
 

@@ -11,10 +11,10 @@ import {
   setupPermissionedRealmCached,
   realmSecretSeed,
   testRealmHref,
-} from './helpers';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
-import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes';
-import type { RealmServer } from '../server';
+} from './helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import type { RealmServer } from '../server.ts';
 
 module(basename(__filename), function () {
   module('realm auth handler', function (hooks) {

@@ -9,14 +9,14 @@ import type { Utils } from '@cardstack/runtime-common/matrix-backend-authenticat
 import { MatrixBackendAuthentication } from '@cardstack/runtime-common/matrix-backend-authentication';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
 import type Koa from 'koa';
-import { createJWT } from '../utils/jwt';
+import { createJWT } from '../utils/jwt.ts';
 import {
   fetchRequestFromContext,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import { getLowCreditThreshold } from '../lib/daily-credit-grant-config';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { getLowCreditThreshold } from '../lib/daily-credit-grant-config.ts';
 
 const log = logger('realm-server');
 

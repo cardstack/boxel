@@ -12,8 +12,8 @@
  * instantiate based on the `--agent` flag.
  */
 
-export * from './types';
-export { OpencodeFactoryAgent } from './opencode';
-export type { OpencodeAgentConfig } from './opencode';
-export { ClaudeCodeFactoryAgent } from './claude-code';
-export { MockLoopAgent } from './mocks';
+export * from './types.ts';
+export { OpencodeFactoryAgent } from './opencode.ts';
+export type { OpencodeAgentConfig } from './opencode.ts';
+export { ClaudeCodeFactoryAgent } from './claude-code.ts';
+export { MockLoopAgent } from './mocks.ts';

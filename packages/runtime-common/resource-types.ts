@@ -1,12 +1,12 @@
 import { md5 } from 'super-fast-md5';
-import type { RealmInfo } from './realm';
-import { type CodeRef, moduleFrom } from './code-ref';
+import type { RealmInfo } from './realm.ts';
+import { type CodeRef, moduleFrom } from './code-ref.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
-import type { Query } from './query';
+} from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { Query } from './query.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -88,6 +88,12 @@ export type CardResourceMeta = Meta & {
   // on demand). The authoritative wire signal that a consumer must not treat
   // this resource as a complete instance — see `isIdentityOnlyCardResource`.
   identityOnly?: boolean;
+  // The ancestor type this result's HTML was rendered as, echoed on an
+  // identity-only `card` so a consumer renders the hydrated/fallback card as
+  // the same type as its HTML sibling. A full live `card` never carries this
+  // (it ships the standard live wireformat); it rides only on identity-only
+  // results.
+  renderType?: CodeRef;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -225,7 +231,8 @@ export {
   isRenderedHtmlResource,
   isCssResource,
   isIdentityOnlyCardResource,
-} from './card-document-shape';
+  isIdentityOnlyFileMetaResource,
+} from './card-document-shape.ts';
 
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
 // URL. Server and host compute it through this one helper so identical

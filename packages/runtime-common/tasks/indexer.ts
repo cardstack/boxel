@@ -1,20 +1,20 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task, WorkerArgs } from './index';
+import type { Task, WorkerArgs } from './index.ts';
 import {
   jobIdentity,
   notifyAllFileChanges,
   userIdFromUsername,
   fetchUserPermissions,
   type RealmPermissions,
-} from '../index';
+} from '../index.ts';
 import {
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
-} from '../queue';
-import { IndexRunner } from '../index-runner';
-import type { Stats } from '../worker';
+} from '../queue.ts';
+import { IndexRunner } from '../index-runner.ts';
+import type { Stats } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;

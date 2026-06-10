@@ -1,5 +1,5 @@
 // This should be first
-import '../setup-logger';
+import '../setup-logger.ts';
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
@@ -9,7 +9,7 @@ import {
   isFactorySupportContext,
   readSupportContext,
 } from '@cardstack/realm-test-harness';
-import { logger } from '../logger';
+import { logger } from '../logger.ts';
 
 let log = logger('cache-realm');
 

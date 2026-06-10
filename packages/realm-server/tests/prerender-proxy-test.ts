@@ -6,12 +6,12 @@ import { basename } from 'path';
 import type { DBAdapter, Prerenderer } from '@cardstack/runtime-common';
 import type { RenderRouteOptions } from '@cardstack/runtime-common';
 
-import handlePrerenderProxy from '../handlers/handle-prerender-proxy';
-import { jwtMiddleware } from '../middleware';
-import { createJWT } from '../utils/jwt';
-import { realmSecretSeed } from './helpers';
-import { buildCreatePrerenderAuth } from '../prerender/auth';
-import { verifyJWT } from '../jwt';
+import handlePrerenderProxy from '../handlers/handle-prerender-proxy.ts';
+import { jwtMiddleware } from '../middleware/index.ts';
+import { createJWT } from '../utils/jwt.ts';
+import { realmSecretSeed } from './helpers/index.ts';
+import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
+import { verifyJWT } from '../jwt.ts';
 
 module(basename(__filename), function () {
   module('prerender proxy', function () {

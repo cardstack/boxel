@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { resolveRealmAuthenticator } from '../../src/lib/auth-resolver';
-import { SeedAuthenticator } from '../../src/lib/seed-auth';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { resolveRealmAuthenticator } from '../../src/lib/auth-resolver.ts';
+import { SeedAuthenticator } from '../../src/lib/seed-auth.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';

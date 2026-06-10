@@ -1,8 +1,8 @@
 import { getReasonPhrase } from 'http-status-codes';
 import status from 'statuses';
-import { createResponse } from './create-response';
-import type { RequestContext } from './realm';
-import type { SearchResultError } from './realm-index-query-engine';
+import { createResponse } from './create-response.ts';
+import type { RequestContext } from './realm.ts';
+import type { SearchResultError } from './realm-index-query-engine.ts';
 
 export interface ErrorDetails {
   status?: number;

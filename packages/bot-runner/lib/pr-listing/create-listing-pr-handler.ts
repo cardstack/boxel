@@ -5,7 +5,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { BotTriggerContent } from 'https://cardstack.com/base/matrix-event';
 import { createHash } from 'node:crypto';
-import type { GitHubClient, OpenPullRequestResult } from '../github';
+import type { GitHubClient, OpenPullRequestResult } from '../github.ts';
 
 const log = logger('bot-runner:create-listing-pr');
 

@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { RealmAuth } from './realm-auth';
-import type { LocalFileSystem } from './local-file-system';
+import type { RealmAuth } from './realm-auth.ts';
+import type { LocalFileSystem } from './local-file-system.ts';
 
 export class RealmItem extends vscode.TreeItem {
   public readonly realmName: string;

@@ -7,7 +7,7 @@ export {
   startFactoryRealmServer,
   startFactorySupportServices,
   type CombinedRealmTemplateResult,
-} from './api';
+} from './api.ts';
 
 export type {
   FactoryRealmOptions,
@@ -15,7 +15,7 @@ export type {
   FactoryTestContext,
   RealmConfig,
   StartedFactoryRealm,
-} from './shared';
+} from './shared.ts';
 
 export {
   buildRealmToken,
@@ -25,21 +25,21 @@ export {
   holdSpecificPort,
   isFactorySupportContext,
   type PortReservation,
-} from './shared';
+} from './shared.ts';
 
-export { startHarnessPrerenderServer } from './support-services';
+export { startHarnessPrerenderServer } from './support-services.ts';
 
-export { startCompatRealmProxy } from './isolated-realm-stack';
+export { startCompatRealmProxy } from './isolated-realm-stack.ts';
 
-export type { StartedCompatRealmProxy } from './shared';
+export type { StartedCompatRealmProxy } from './shared.ts';
 
-export * from './runtime-metadata';
+export * from './runtime-metadata.ts';
 
 export {
   fileExists,
   findRootRepoCheckoutDir,
   findHostDistPackageDir,
-} from './host-dist';
+} from './host-dist.ts';
 
-export { configureLogger, logger } from './logger';
-export type { Logger, LogLevel } from './logger';
+export { configureLogger, logger } from './logger.ts';
+export type { Logger, LogLevel } from './logger.ts';

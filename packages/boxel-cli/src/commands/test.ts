@@ -10,11 +10,11 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../lib/profile-manager';
-import { FG_RED, FG_GREEN, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
-import { findBoxelCliRoot } from '../lib/find-package-root';
-import { listFiles } from './file/list';
+} from '../lib/profile-manager.ts';
+import { FG_RED, FG_GREEN, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
+import { findBoxelCliRoot } from '../lib/find-package-root.ts';
+import { listFiles } from './file/list.ts';
 import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';

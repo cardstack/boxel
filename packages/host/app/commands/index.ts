@@ -11,6 +11,7 @@ import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigg
 import * as CanReadRealmCommandModule from './can-read-realm';
 import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
+import * as CheckDomainAvailabilityCommandModule from './check-domain-availability';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardAsMarkdownCommandModule from './copy-card-as-markdown';
@@ -36,6 +37,7 @@ import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
 import * as GetCatalogRealmIdentifiersCommandModule from './get-catalog-realm-identifiers';
 import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as GetPublishedRealmsCommandModule from './get-published-realms';
 import * as GetRealmOfResourceIdentifierCommandModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InstantiateCardCommandModule from './instantiate-card';
@@ -55,6 +57,7 @@ import * as PatchThemeCommandModule from './patch-theme';
 import * as PersistModuleInspectorViewCommandModule from './persist-module-inspector-view';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
+import * as PublishRealmCommandModule from './publish-realm';
 import * as ReadBinaryFileCommandModule from './read-binary-file';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
@@ -81,6 +84,7 @@ import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as SyncOpenRouterModelsCommandModule from './sync-openrouter-models';
 import * as TransformCardsCommandModule from './transform-cards';
+import * as UnpublishRealmCommandModule from './unpublish-realm';
 import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
@@ -150,6 +154,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CheckCorrectnessCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/check-domain-availability',
+    CheckDomainAvailabilityCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/evaluate-module',
     EvaluateModuleCommandModule,
   );
@@ -180,6 +188,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
     GetEventsFromRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-published-realms',
+    GetPublishedRealmsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/invite-user-to-room',
@@ -228,6 +240,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
     PreviewFormatCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/publish-realm',
+    PublishRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-binary-file',
@@ -324,6 +340,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/transform-cards',
     TransformCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/unpublish-realm',
+    UnpublishRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/unregister-bot',
@@ -487,6 +507,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
+  GetPublishedRealmsCommandModule.default,
   InviteUserToRoomCommandModule.default,
   InvalidateRealmIdentifiersCommandModule.default,
   LintAndFixCommandModule.default,
@@ -507,6 +528,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   PersistModuleInspectorViewCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
   PreviewFormatCommandModule.default,
+  PublishRealmCommandModule.default,
   ReadBinaryFileCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
@@ -533,9 +555,11 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SwitchSubmodeCommandModule.default,
   SyncOpenRouterModelsCommandModule.default,
   TransformCardsCommandModule.default,
+  UnpublishRealmCommandModule.default,
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
+  CheckDomainAvailabilityCommandModule.default,
   EvaluateModuleCommandModule.default,
   InstantiateCardCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,

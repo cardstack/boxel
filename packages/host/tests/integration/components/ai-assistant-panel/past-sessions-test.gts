@@ -1,4 +1,4 @@
-import { waitFor, click } from '@ember/test-helpers';
+import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -252,7 +252,7 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
       name: 'Another Room',
     });
 
-    simulateRemoteMessage(
+    let backgroundMessageEventId = simulateRemoteMessage(
       anotherRoomId,
       '@aibot:localhost',
       {
@@ -298,6 +298,27 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
       .doesNotHaveAttribute('data-is-current-room');
 
     await click(`[data-test-enter-room='${anotherRoomId}']`);
+
+    // Entering the room marks its background message read, but the receipt path
+    // is IntersectionObserver → afterRender schedule → matrix client → Receipt
+    // event → addEventReadReceipt, none of which settles on the runloop or a DOM
+    // mutation. Wait for the receipt to land before asserting the unseen-message
+    // state has cleared. ([read-receipt-trace] logs in room.gts surface which
+    // step stalled if this ever times out.)
+    let matrixService = getService('matrix-service');
+    await waitUntil(
+      () =>
+        matrixService.currentUserEventReadReceipts.has(
+          backgroundMessageEventId,
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage:
+          `read receipt for ${anotherRoomId}'s background message ` +
+          `(event ${backgroundMessageEventId}) never landed after entering the room`,
+      },
+    );
+
     assert
       .dom(
         `[data-test-joined-room='${anotherRoomId}'] [data-test-is-unseen-message]`,

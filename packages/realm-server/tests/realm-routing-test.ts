@@ -3,12 +3,12 @@ import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { setupDB, setupPermissionedRealmCached } from './helpers';
+import { setupDB, setupPermissionedRealmCached } from './helpers/index.ts';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
-} from '../lib/realm-registry-reconciler';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
+} from '../lib/realm-registry-reconciler.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 
 // CS-10054: fixture for Realm.getHostRoutingMap coverage. One rule uses
 // a relative reference (the recommended form, portable across realm URL

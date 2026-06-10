@@ -19,15 +19,15 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
-import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 const log = logger('realm-server');
 

@@ -1,5 +1,5 @@
-import { expect, test } from './fixtures';
-import { appURL } from '../support/isolated-realm-server';
+import { expect, test } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   login,
   logout,
@@ -19,7 +19,7 @@ import {
   setRealmRedirects,
   waitUntil,
   createSubscribedUser,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Room creation', () => {
   let firstUser: { username: string; password: string; credentials: any };

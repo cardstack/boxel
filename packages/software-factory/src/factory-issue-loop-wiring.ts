@@ -17,7 +17,7 @@ import { resolve } from 'node:path';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 import {
   ClaudeCodeFactoryAgent,
@@ -25,26 +25,26 @@ import {
   FACTORY_DEFAULT_OPENROUTER_MODEL,
   type FactoryAgentProvider,
   type LoopAgent,
-} from './factory-agent';
-import { ContextBuilder } from './factory-context-builder';
-import { inferDarkfactoryModuleUrl } from './factory-seed';
-import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader';
+} from './factory-agent/index.ts';
+import { ContextBuilder } from './factory-context-builder.ts';
+import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
+import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader.ts';
 import {
   buildFactoryTools,
   type FactoryTool,
   type ToolBuilderConfig,
-} from './factory-tool-builder';
-import { ToolExecutor } from './factory-tool-executor';
-import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry';
+} from './factory-tool-builder.ts';
+import { ToolExecutor } from './factory-tool-executor.ts';
+import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry.ts';
 import {
   runIssueLoop,
   createDefaultPipeline,
   type IssueLoopConfig,
   type IssueLoopResult,
-} from './issue-loop';
-import { RealmIssueStore, type IssueStore } from './issue-scheduler';
-import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
-import { withStdoutRedirected } from './redirect-stdout';
+} from './issue-loop.ts';
+import { RealmIssueStore, type IssueStore } from './issue-scheduler.ts';
+import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader.ts';
+import { withStdoutRedirected } from './redirect-stdout.ts';
 
 let log = logger('factory-issue-loop-wiring');
 
