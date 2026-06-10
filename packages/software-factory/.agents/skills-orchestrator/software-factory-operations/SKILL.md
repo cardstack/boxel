@@ -343,9 +343,15 @@ How adjustment work differs from a greenfield `feature` issue:
   but the **existing tests must still pass** — `run_tests` covers both.
   A delta that breaks a baseline test is not done; fix it or
   `request_clarification`.
-- **Keep instances and Spec coherent.** If the delta adds/renames a
-  field, update the sample instances and the Catalog Spec's
-  `linkedExamples` so `run_instantiate` and `run_parse` stay green.
+- **Operate on the seeded artifacts — never create parallel ones.** The
+  delta is applied by editing the existing seeded files: the card module,
+  its tests, its sample instances, and its Spec. If the delta adds or
+  renames a field, update the **existing** sample instances to reflect it
+  (so they demonstrate the new behavior) and keep the Spec's
+  `linkedExamples` pointing at them — `run_instantiate` and `run_parse`
+  must stay green. Do **not** add a new instance, module, or Spec to
+  showcase a change; a new card (or instance) is created only when the
+  issue explicitly calls for one.
 - **Then the standard loop applies unchanged** — self-validate with the
   `run_*` tools, `signal_done`, fix on feedback, record progress in
   `comments`. Same validators, same invariants.

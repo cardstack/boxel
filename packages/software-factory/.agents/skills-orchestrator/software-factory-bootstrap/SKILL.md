@@ -80,6 +80,11 @@ Issues per entry-point card.
      the standing requirement that the **pre-existing baseline tests keep
      passing** (the delta must not regress the green baseline).
 
+   Adjustment Issues direct edits at the **seeded artifacts** — module,
+   tests, sample instances, Spec. Don't write an Issue that asks for a new
+   module, instance, or Spec alongside the seeded ones unless the brief
+   explicitly asks for a new card.
+
    Wire `project` / `relatedKnowledge` (include the provenance article) /
    `blockedBy` exactly as for `feature` Issues.
 
