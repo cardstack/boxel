@@ -327,21 +327,6 @@ export async function buildModuleModel(
             undefined,
             context.network.virtualNetwork,
           );
-          if (
-            id.includes('system-card') ||
-            id.includes('card-api') ||
-            id.includes('person') ||
-            id.includes('linked-card') ||
-            id.includes('test-realm') ||
-            name === 'SystemCard' ||
-            name === 'GtsFileDef' ||
-            name === 'LinkedCard' ||
-            name === 'FileLinkCard'
-          ) {
-            console.log(
-              `[CS-10753-DEBUG][module.ts WRITE] id=${id} name=${name} writeKey=${codeRef}`,
-            );
-          }
           definitions[codeRef] = definition;
         }
       }

@@ -1182,30 +1182,7 @@ export function internalKeyFor(
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
     module = virtualNetwork.unresolveURL(module);
-    let key = `${module}/${ref.name}`;
-    if (
-      typeof console !== 'undefined' &&
-      (ref.module.includes('system-card') ||
-        ref.module.includes('card-api') ||
-        ref.module.includes('person') ||
-        ref.module.includes('linked-card') ||
-        ref.module.includes('test-realm') ||
-        ref.name === 'SystemCard' ||
-        ref.name === 'GtsFileDef' ||
-        ref.name === 'LinkedCard' ||
-        ref.name === 'FileLinkCard')
-    ) {
-      console.log(
-        `[CS-10753-DEBUG][internalKeyFor] input=${JSON.stringify(ref)} relativeTo=${
-          relativeTo
-            ? relativeTo instanceof URL
-              ? relativeTo.href
-              : relativeTo
-            : 'undefined'
-        } resolved=${resolved} postUnresolve=${module} key=${key}`,
-      );
-    }
-    return key;
+    return `${module}/${ref.name}`;
   }
   switch (ref.type) {
     case 'ancestorOf':

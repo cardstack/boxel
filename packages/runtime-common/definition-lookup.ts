@@ -454,18 +454,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           this.#virtualNetwork,
         );
         let entry = cached.definitions[moduleId];
-        if (
-          typeof console !== 'undefined' &&
-          (codeRef.module.includes('system-card') ||
-            codeRef.module.includes('card-api') ||
-            codeRef.module.includes('person') ||
-            codeRef.name === 'SystemCard' ||
-            codeRef.name === 'GtsFileDef')
-        ) {
-          console.log(
-            `[CS-10753-DEBUG][definition-lookup GET-CACHED] codeRef=${JSON.stringify(codeRef)} canonicalModule=${canonicalModuleURL} readKey=${moduleId} foundEntry=${!!entry} availableKeys=${JSON.stringify(Object.keys(cached.definitions))}`,
-          );
-        }
         if (entry && 'definition' in entry) {
           return entry.definition;
         }
@@ -926,22 +914,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       this.#virtualNetwork,
     );
     let defOrError = moduleEntry.definitions[moduleId];
-    if (
-      typeof console !== 'undefined' &&
-      (codeRef.module.includes('system-card') ||
-        codeRef.module.includes('card-api') ||
-        codeRef.module.includes('person') ||
-        codeRef.module.includes('linked-card') ||
-        codeRef.module.includes('test-realm') ||
-        codeRef.name === 'SystemCard' ||
-        codeRef.name === 'GtsFileDef' ||
-        codeRef.name === 'LinkedCard' ||
-        codeRef.name === 'FileLinkCard')
-    ) {
-      console.log(
-        `[CS-10753-DEBUG][definition-lookup READ] codeRef=${JSON.stringify(codeRef)} canonicalModule=${canonicalModuleURL} readKey=${moduleId} foundEntry=${!!defOrError} availableKeys=${JSON.stringify(Object.keys(moduleEntry.definitions))}`,
-      );
-    }
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
