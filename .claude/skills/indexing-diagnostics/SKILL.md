@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -861,6 +861,71 @@ The boxel logger does **not** print the namespace, so the on-disk line is the ba
 - It only fires for **prerender / indexer** traffic — the correlation id is prerender-gated. A slow `_search` from a live SPA or external API caller emits nothing, by design, to keep normal traffic silent.
 - The correlation id isn't in `boxel_index.diagnostics`, so there's no SQL join from a stuck card row to its server line; bridge by job + time + query as above.
 - `realm:health` is sampled and emitted only during saturation windows (lag over threshold OR a search in flight). A quiet period legitimately produces no line — silence means "not saturated," not "no data."
+
+## Mode H — capturing full CPU profiles / traces / heap snapshots
+
+When the summary signals (Mode A's `cpuTopFrames`, Mode D) name a hot or looping function but you need the full picture — the complete call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — capture the heavyweight artifacts. They're far too big for a log line, so they stream to a dedicated S3 bucket instead.
+
+### Two tiers — pick by what you need
+
+| Tier | What | Where it lands | Captures the hard wedge? |
+|------|------|----------------|--------------------------|
+| 1 (always on for targeted realms) | Top-N self-time **summary** | `prerenderer` log: `affinity CPU profile …` | No — `Profiler.stop` needs the renderer thread |
+| 2 — `.cpuprofile` | Full V8 CPU profile (whole call tree) | S3 `…/<ts>.cpuprofile` | No — same `Profiler.stop` limit |
+| 2 — trace (`.trace.json`) | CDP/Perfetto trace, **streamed** — separates JS / GC / compile / layout / paint | S3 `…/<ts>.trace.json` | **Yes** — buffered on browser threads, drained out-of-band; the one capture that survives a fully-pegged renderer |
+| 2 — heap (`.heapprofile`) | Cumulative allocation-sampling profile, flushed per render | S3 `…/<ts>.heapprofile` | No — `getSamplingProfile` needs the renderer thread |
+
+Rule of thumb: a render that **completes but is heavy** → `.cpuprofile` (+ heap for allocation growth). A render that **fully wedges** (no `cpuTopFrames`, `scriptBusy=<unknown>`) → the **trace**, which is the only thing that comes back. If the trace returns idle (no hot frame), the wedge isn't CPU-spinning — pivot to "what is it blocked on" (Mode A's `pendingFetches`).
+
+### The knobs (SSM parameters)
+
+All live at `/<env>/boxel/<NAME>` (Systems Manager → Parameter Store). The bucket itself (`PRERENDER_ARTIFACTS_BUCKET`) and the key prefix (`PRERENDER_ARTIFACTS_ENV`) are wired by Terraform — don't set them by hand.
+
+| Parameter | Values | Effect |
+|-----------|--------|--------|
+| `PRERENDER_PROFILE_AFFINITY` | comma-separated affinity keys, e.g. `realm:https://realms.cardstack.com/team/foo/` | **Required to target.** Only renders whose affinity key exactly matches are profiled at all (Tier 1 + Tier 2). Empty / `off` → everything inert. |
+| `PRERENDER_PROFILE_CPUPROFILE` | `true` / `false` | Persist the full `.cpuprofile` for targeted renders. |
+| `PRERENDER_PROFILE_TRACE` | `true` / `false` | Capture the streaming trace for targeted renders. |
+| `PRERENDER_PROFILE_HEAP` | `true` / `false` | Capture the heap allocation-sampling profile for targeted renders. |
+| `PRERENDER_PROFILE_MAX_SESSION_BYTES` | positive integer, or `0` for the default | Soft per-process byte budget across all artifacts. `0`/unset → 5 GiB. Once spent, the task declines further uploads (in-flight ones finish, so blobs are never truncated). |
+
+The mode flags are Terraform-seeded sentinels (default `false` / `0`); `PRERENDER_PROFILE_AFFINITY` is operator-managed and must already exist. The affinity key is `realm:` + the realm's canonical URL **with trailing slash** — the same value Mode A/B logs print as `affinity=…`.
+
+> **The container reads these at task start.** ECS injects SSM values when a task launches, so a change only takes effect on a fresh task. After editing the parameters, force a new deployment of the prerender service so tasks restart with the new env:
+> ```
+> aws ecs update-service --cluster <env> --service boxel-prerender-server-<env> --force-new-deployment
+> ```
+
+### Running a capture session
+
+1. **Target the realm.** Set `PRERENDER_PROFILE_AFFINITY` to its affinity key and turn on the mode flag(s) you need (start with `PRERENDER_PROFILE_TRACE` for a wedge, `PRERENDER_PROFILE_CPUPROFILE` for a heavy-but-completing render).
+2. **Restart the service** (`--force-new-deployment` above) so the tasks pick up the values.
+3. **Generate renders.** Trigger a reindex of the targeted realm (see *Triggering a reindex* below) — the indexer's per-card visits are what produce artifacts. Confirm captures are happening in the `prerenderer` log: `artifact-sink uploaded <kind> key=… bytes=… sessionBytes=…/…`.
+4. **Pull the artifacts** (below).
+5. **Turn it off.** Set the mode flags back to `false` (and clear `PRERENDER_PROFILE_AFFINITY` if done), then force one more deployment. Leftover artifacts auto-expire after 14 days regardless.
+
+### Pulling the artifacts
+
+The `boxel-claude-readonly` role has `s3:GetObject` + `s3:ListBucket` on `boxel-prerender-artifacts-*`, so use the `aws-access` skill's session (`mise run claude-aws`) and plain S3:
+
+```
+aws s3 ls --recursive s3://boxel-prerender-artifacts-<env>/<env>/<realm-segment>/
+aws s3 cp s3://boxel-prerender-artifacts-<env>/<key> ./local-name
+```
+
+The key schema is `env/realm/jobId/card/step/<timestamp>-<seq>.<suffix>` — every segment sanitized (protocol/host stripped, unsafe characters collapsed to `-`). So one job's artifacts share a `…/<realm>/<jobId>/` prefix, and one render's three artifacts share everything up to the suffix. `jobId` is `no-job` for on-demand (non-indexer) renders.
+
+### Reading each artifact
+
+- **`.cpuprofile`** — Chrome DevTools (Performance panel → *Load profile…*) or [speedscope](https://www.speedscope.app/). Self-time flame graph of the whole render; the summary's top frames are just the peak of this.
+- **`.trace.json`** — [Perfetto UI](https://ui.perfetto.dev/) or Chrome DevTools Performance → *Load profile…*. Separate tracks for JS execution, V8 GC, compile, and layout/paint — this is how you tell a JS spin (`v8.execute` saturated) from GC thrash (`v8.gc` saturated) when the summary couldn't say.
+- **`.heapprofile`** — Chrome DevTools Memory → *Allocation sampling* → *Load profile…*. Each upload is the cumulative profile **at that render**, so download two from different points in the session and compare to see which call sites kept allocating.
+
+### What Mode H can't tell you
+
+- The `.cpuprofile` and `.heapprofile` need the renderer thread to serialize, so a **fully-wedged** render produces neither — only the streaming trace comes back. That's by design (Tier 1's summary has the same limit); the trace is the wedge tool.
+- Browser-wide tracing is **single-flight** — only one trace runs at a time across the whole pool. Concurrent targeted renders skip their trace (logged at `debug`), so don't expect a trace for *every* render under load; constrain concurrency or accept the gaps. The summary and the cpuprofile/heap captures are per-render and unaffected.
+- Captured artifacts are anonymized only at the key level (host stripped). The blobs themselves contain card URLs and code paths — treat them as you would any prerender diagnostic.
 
 ## Field-by-field reading
 

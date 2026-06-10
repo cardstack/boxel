@@ -15,6 +15,20 @@ import {
   getAffinityProfileTargets,
   shouldProfileAffinity,
 } from './cpu-profiler.ts';
+import { fromAffinityKey } from './affinity.ts';
+import { captureTraceStream } from './trace-capture.ts';
+import {
+  ensureHeapSampling,
+  captureHeapSamplingProfile,
+} from './heap-sampler.ts';
+import {
+  artifactSinkEnabled,
+  shouldCaptureCpuProfile,
+  shouldCaptureTrace,
+  shouldCaptureHeap,
+  uploadArtifact,
+  type ArtifactKeyParts,
+} from './artifact-sink.ts';
 
 import type { CDPSession, Page } from 'puppeteer';
 
@@ -1413,20 +1427,57 @@ export interface RenderProfileContext {
   // e.g. `<card-url> isolated/0` — identifies which render produced the
   // profile in the per-render affinity-trigger log line.
   label?: string;
+  // Structured identifiers for keying the heavyweight artifacts in the S3
+  // sink (`env/realm/jobId/card/step/...`). `card` and `step` mirror what
+  // `label` concatenates; `jobId` is the indexing job and is set only for
+  // visits. The realm is recovered from `affinityKey`, so it isn't carried
+  // here. All optional — the sink falls back to `no-<field>` segments.
+  card?: string;
+  step?: string;
+  jobId?: string;
 }
 
-// Runs `fn` under a CDP CPU profile and logs the top self-time frames,
-// keyed by the render's label and wall-duration. Used only by the
-// affinity-scoped trigger, for renders whose affinity exactly matches
-// the configured target.
+// Derives the S3 artifact-key fields from a render's profile context. The
+// realm is recovered from the affinity key (which encodes it); card / step
+// / jobId pass through. Used only for keying the heavyweight artifacts.
+function artifactKeyPartsFor(
+  profileContext: RenderProfileContext | undefined,
+): Omit<ArtifactKeyParts, 'kind'> {
+  let realm: string | undefined;
+  if (profileContext?.affinityKey) {
+    realm = fromAffinityKey(profileContext.affinityKey)?.affinityValue;
+  }
+  return {
+    realm,
+    jobId: profileContext?.jobId,
+    card: profileContext?.card,
+    step: profileContext?.step,
+  };
+}
+
+// Runs `fn` under the affinity-scoped CPU profile (always: logs the top
+// self-time frames, keyed by the render's label and wall-duration) and,
+// when the artifact sink is configured and the matching per-mode flag is
+// on, also persists the heavyweight blobs that don't fit a log line:
 //
-// The render promise drives the return value directly — this resolves
-// or rejects exactly as `fn` does, so the caller's error/timeout
-// handling is unchanged and a render that hangs leaves this awaiting (the
-// outer `withTimeout` race owns the timeout). The profile runs alongside
-// as a detached best-effort task, bounded by `timeoutMs`: if the render
-// hangs past its own timeout, the profiler still stops and detaches at
-// the bound rather than holding a CDP session open on the wedged page.
+//   * full `.cpuprofile` — the raw of the same profile the summary comes
+//     from, so it adds a flush, not a second CPU profiler;
+//   * a streaming CDP trace — the one capture that survives a fully-wedged
+//     renderer (browser-process drain, no main-thread `stop`);
+//   * the cumulative heap allocation-sampling profile, read after the
+//     render window so its per-render series shows what kept allocating.
+//
+// Used only by the affinity-scoped trigger, for renders whose affinity
+// exactly matches the configured target.
+//
+// The render promise drives the return value directly — this resolves or
+// rejects exactly as `fn` does, so the caller's error/timeout handling is
+// unchanged and a render that hangs leaves this awaiting (the outer
+// `withTimeout` race owns the timeout). Every capture runs alongside as a
+// detached best-effort task bounded by `timeoutMs`: a render that hangs
+// past its own timeout still stops the profiler / ends the trace at the
+// bound rather than holding a CDP session open on the wedged page, and any
+// capture or upload failure is swallowed so it never perturbs the render.
 function runWithAffinityProfile<T>(
   page: Page,
   fn: () => Promise<T>,
@@ -1434,20 +1485,64 @@ function runWithAffinityProfile<T>(
   profileContext: RenderProfileContext | undefined,
 ): Promise<T> {
   let render = fn();
+  let observe = () =>
+    render.then(
+      () => undefined,
+      () => undefined,
+    );
+
+  // The heavyweight captures only matter when the sink is configured AND
+  // the operator has flipped the matching flag — every gate short-circuits
+  // on a cheap env read otherwise, so the default affinity behaviour
+  // (summary log only) issues no extra CDP calls and pays nothing.
+  let sinkOn = artifactSinkEnabled();
+  let wantCpuProfile = sinkOn && shouldCaptureCpuProfile();
+  let wantTrace = sinkOn && shouldCaptureTrace();
+  let wantHeap = sinkOn && shouldCaptureHeap();
+  let keyParts = artifactKeyPartsFor(profileContext);
+
+  // Heap sampling is cumulative across the tab, so start it before the
+  // render so this render's allocations are sampled; the cumulative read
+  // happens after the window closes (below).
+  if (wantHeap) {
+    void ensureHeapSampling(page);
+  }
+
+  // The streaming trace starts as early as possible and ends at
+  // render-settle / `timeoutMs`. Drained straight into the sink's managed
+  // upload so memory stays bounded even for a large trace.
+  if (wantTrace) {
+    void captureTraceStream(page, { run: observe, maxRunMs: timeoutMs })
+      .then((stream) => {
+        if (stream) {
+          return uploadArtifact({ ...keyParts, kind: 'trace', body: stream });
+        }
+        return undefined;
+      })
+      .catch(() => {
+        // Best-effort: a missing trace is a missing diagnostic.
+      });
+  }
+
   // Detached: the profile's log line is diagnostic and must not gate the
   // render's return. `profileWindow` observes `render` only for timing
   // (it never consumes the result/rejection) and stops on whichever of
-  // render-settles / `timeoutMs` comes first.
+  // render-settles / `timeoutMs` comes first. When the cpuprofile flag is
+  // on, the same run's raw profile is flushed to the sink.
   void profileWindow(page, {
     samplingIntervalUs: AFFINITY_PROFILE_SAMPLING_INTERVAL_US,
     maxRunMs: timeoutMs,
-    run: () =>
-      render.then(
-        () => undefined,
-        () => undefined,
-      ),
+    run: observe,
+    onRawProfile: wantCpuProfile
+      ? (rawProfile) =>
+          uploadArtifact({
+            ...keyParts,
+            kind: 'cpuprofile',
+            body: Buffer.from(JSON.stringify(rawProfile), 'utf8'),
+          })
+      : undefined,
   })
-    .then((summary) => {
+    .then(async (summary) => {
       let top = formatTopFrames(summary);
       if (top && summary) {
         log.warn(
@@ -1456,6 +1551,19 @@ function runWithAffinityProfile<T>(
             ` samples=${summary.totalSamples}` +
             ` topFrames: ${top}`,
         );
+      }
+      // The profiler window has closed (render settled or bound elapsed),
+      // so the cumulative heap profile now reflects this render. Read and
+      // flush it — each upload is a point in the per-render growth series.
+      if (wantHeap) {
+        let heapProfile = await captureHeapSamplingProfile(page);
+        if (heapProfile) {
+          await uploadArtifact({
+            ...keyParts,
+            kind: 'heap',
+            body: heapProfile,
+          });
+        }
       }
     })
     .catch(() => {
