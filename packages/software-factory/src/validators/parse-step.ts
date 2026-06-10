@@ -39,6 +39,7 @@ export {
   parseJsonFile,
   validateCardDocumentStructure,
 } from '../parse-execution';
+import type { ValidationRunCache } from '../validation-run-cache';
 export type { SpecExampleInfo } from '../parse-execution';
 export type { ParseErrorData };
 
@@ -50,7 +51,7 @@ export interface ParseValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
-  cache?: import('../validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   parseResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Source files are

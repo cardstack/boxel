@@ -35,6 +35,7 @@ import {
 } from './parse-execution';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
+import type { ValidationRunCache } from './validation-run-cache';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,7 +91,7 @@ export interface ToolBuilderConfig {
    * realm state isn't validated twice (once by the agent's run_* tools,
    * once by the pipeline).
    */
-  validationCache?: import('./validation-run-cache').ValidationRunCache;
+  validationCache?: ValidationRunCache;
   /** Injected for testing — defaults to runLintInMemory. */
   runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
   /** Injected for testing — defaults to runTestsInMemory. */

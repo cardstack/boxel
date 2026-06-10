@@ -30,6 +30,7 @@ import type { InstantiateValidationStepConfig } from './instantiate-step';
 import type { ParseValidationStepConfig } from './parse-step';
 
 import { logger } from '../logger';
+import type { ValidationRunCache } from '../validation-run-cache';
 
 let log = logger('validation-pipeline');
 
@@ -171,7 +172,7 @@ export interface ValidationPipelineConfig {
    * run already executed against the same workspace state instead of
    * re-running it. Artifact cards are still written per step.
    */
-  cache?: import('../validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   /** Injected for testing — passed through to TestValidationStep, LintValidationStep, EvalValidationStep, and ParseValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
   /** Injected for testing — passed through to InstantiateValidationStep and ParseValidationStep. */

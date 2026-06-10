@@ -30,6 +30,7 @@ import {
 import { logger } from '../logger';
 
 import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationRunCache } from '../validation-run-cache';
 
 let log = logger('eval-validation-step');
 
@@ -44,7 +45,7 @@ export interface EvalValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
-  cache?: import('../validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   evalResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. EvalResult

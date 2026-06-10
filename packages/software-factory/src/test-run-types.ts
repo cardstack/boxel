@@ -1,5 +1,6 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { ValidationRunCache } from './validation-run-cache';
 
 // ---------------------------------------------------------------------------
 // TestRun Card Types
@@ -111,7 +112,7 @@ export interface RunTestsInMemoryOptions {
   /** Log browser console output for debugging. */
   debug?: boolean;
   /** Memoizes the QUnit browser run per workspace fingerprint. */
-  cache?: import('./validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
 }
 
 export interface RunTestsFailure {
@@ -155,7 +156,7 @@ export interface ExecuteTestRunOptions {
   /** Log browser console output for debugging. */
   debug?: boolean;
   /** Memoizes the QUnit browser run per workspace fingerprint. */
-  cache?: import('./validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   /**
    * Floor for the next sequence number. When the realm search index is stale
    * (hasn't indexed the most recent TestRun yet), getNextSequenceNumber may

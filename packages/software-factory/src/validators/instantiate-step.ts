@@ -44,12 +44,13 @@ export type {
   InstantiateModuleResult,
   SpecInfo,
 } from '../instantiate-execution';
+import type { ValidationRunCache } from '../validation-run-cache';
 
 export interface InstantiateValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
-  cache?: import('../validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   instantiateResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Example instance

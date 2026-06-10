@@ -22,6 +22,7 @@ import { createLintResult, completeLintResult } from '../lint-result-cards';
 import { logger } from '../logger';
 
 import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationRunCache } from '../validation-run-cache';
 
 let log = logger('lint-validation-step');
 
@@ -33,7 +34,7 @@ export interface LintValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
-  cache?: import('../validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   lintResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Source files are

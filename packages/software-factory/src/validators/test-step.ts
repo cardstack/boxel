@@ -21,6 +21,7 @@ import { logger } from '../logger';
 import { readCard } from '../workspace-fs';
 
 import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationRunCache } from '../validation-run-cache';
 
 let log = logger('test-validation-step');
 
@@ -32,7 +33,7 @@ export interface TestValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
   /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
-  cache?: import('../validation-run-cache').ValidationRunCache;
+  cache?: ValidationRunCache;
   hostAppUrl: string;
   testResultsModuleUrl: string;
   /**
