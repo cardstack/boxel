@@ -24,9 +24,15 @@ export interface RenderableSearchItem {
   // hydratable card's `@type` so the consumer resolves a file row to a live
   // `FileDef` rather than a `CardDef`.
   type: StoreReadType;
-  // The collection's resolved render type, so a live/fallback card row renders
-  // as the same ancestor type as its HTML siblings. A `file-meta` row carries
-  // none — files render natively, with no ancestor render type.
+  // An explicit ancestor render-type override carried from the collection's
+  // `meta.renderType`, so a live/fallback row renders as the same ancestor type
+  // as its HTML siblings. Absent on the default (native) path: there is no
+  // collection-level override, so the consumer renders each row in its own
+  // type — `CardRenderer` with no `@codeRef` does exactly this — rather than a
+  // forced ancestor. (It does not happen automatically here; this field only
+  // carries the override, leaving the per-row native fallback to the consumer.)
+  // A `file-meta` row never carries one regardless: files render natively, with
+  // no ancestor type.
   renderType: CodeRef | undefined;
   // The inert prerendered component, present only for HTML-backed rows.
   component: HTMLComponent | undefined;
@@ -70,8 +76,8 @@ export async function buildRenderableSearchItems(
 
     // The row's JSON:API type, threaded onto the item so the consumer hydrates
     // it as the right kind. Files render natively (their own FileRender), so a
-    // `file-meta` row carries no ancestor `renderType`; a card echoes the
-    // collection's resolved render type.
+    // `file-meta` row carries no ancestor `renderType`; a card carries the
+    // collection's render-type override, if any (absent on the native default).
     let type: StoreReadType = resource.type;
     let itemRenderType = type === 'file-meta' ? undefined : renderType;
 

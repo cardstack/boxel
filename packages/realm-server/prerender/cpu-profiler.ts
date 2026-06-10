@@ -119,6 +119,15 @@ export interface ProfileWindowOptions {
   // accrued, and `run` is left to settle on its own. Omitted (the
   // timeout trigger's short fixed window) means "wait for `run`".
   maxRunMs?: number;
+  // Optional sink for the complete `Profiler.stop` profile. The raw CDP
+  // profile object IS the `.cpuprofile` format Chrome DevTools / speedscope
+  // load, so a caller that wants the full artifact (not just the logged
+  // summary) passes a hook here to persist it. Invoked at most once, only
+  // when a profile was actually recovered — a fully-wedged renderer defeats
+  // `Profiler.stop`, so this never fires for the hard wedge (that case is
+  // the streaming trace capture's job). Best-effort: awaited but its errors
+  // are swallowed, so it never perturbs the summary or the render.
+  onRawProfile?: (rawProfile: unknown) => void | Promise<void>;
 }
 
 // Runs a CDP CPU profile across the window defined by `run` (or by
@@ -177,6 +186,16 @@ export async function profileWindow(
 
   if (!profile) {
     return null;
+  }
+  // Hand the full profile to the optional sink before summarizing. Awaited
+  // so a per-render caller can flush it durably, but best-effort: a failed
+  // persist must not cost the caller its summary.
+  if (options.onRawProfile) {
+    try {
+      await options.onRawProfile(profile);
+    } catch (e) {
+      log.debug('CPU profiler onRawProfile hook failed:', e);
+    }
   }
   return summarizeProfile(profile, durationMs, topFrames);
 }

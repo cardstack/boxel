@@ -240,12 +240,18 @@ module(basename(__filename), function () {
       assert.deepEqual(render?.renderType, authorRef);
     });
 
-    test('parse: render.renderType accepts the "native" escape valve', function (assert) {
-      let { render } = parseUnifiedSearchRequestFromPayload({
-        realms: [realmURL],
-        render: { renderType: 'native' },
-      });
-      assert.strictEqual(render?.renderType, 'native');
+    test('parse: render.renderType no longer accepts the removed "native" literal', function (assert) {
+      // Native is now the default (omitted renderType), so the "native" escape
+      // valve is gone — a bare string is rejected like any non-CodeRef.
+      assert.throws(
+        () =>
+          parseUnifiedSearchRequestFromPayload({
+            realms: [realmURL],
+            render: { renderType: 'native' },
+          }),
+        /render.renderType must be a CodeRef/,
+        'the "native" literal is rejected',
+      );
     });
 
     test('parse: render.renderType omitted leaves renderType unset', function (assert) {
