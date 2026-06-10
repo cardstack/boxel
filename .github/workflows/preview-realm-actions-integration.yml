@@ -41,6 +41,12 @@ concurrency:
   group: preview-realm-integration-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+# id-token: write lets the warm-test-images step assume the ECR pull-through
+# cache role via OIDC.
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   test-web-assets:
     name: Build test web assets
@@ -67,6 +73,16 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
+      # Warm the test images through the ECR pull-through cache so the steps
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images via ECR pull-through cache
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/github
+          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start PostgreSQL
         # register-all (below) writes EXTRA_USERS to the boxel users
         # table, so postgres must be up before the matrix-side

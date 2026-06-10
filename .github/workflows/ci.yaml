@@ -267,6 +267,16 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/init
 
+      # Warm the test images through the ECR pull-through cache so the steps
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images via ECR pull-through cache
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/github
+          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start Postgres
         run: pnpm start:pg
         working-directory: packages/postgres
@@ -382,6 +392,17 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/matrix
+      # Warm the test images through the ECR pull-through cache so the services
+      # below (and the Playwright synapse/smtp fixtures) start from a local
+      # image instead of an unauthenticated Docker Hub pull (the cause of the
+      # recurring registry-1.docker.io timeouts). Best-effort: a miss falls
+      # back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images via ECR pull-through cache
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/github
+          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
@@ -577,6 +598,16 @@ jobs:
         id: shard_modules
         run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
+      # Warm the test images through the ECR pull-through cache so the services
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images via ECR pull-through cache
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/github
+          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
@@ -924,6 +955,16 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
         working-directory: packages/boxel-cli
+      # Warm the test images through the ECR pull-through cache so the steps
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images via ECR pull-through cache
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/github
+          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start Matrix
         run: pnpm start:matrix
         working-directory: packages/realm-server
