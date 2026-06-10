@@ -281,6 +281,10 @@ module(
           realmConfig as InstanceType<typeof cardApi.CardDef>,
           'edit',
         );
+        // Wait for the routing-rule editor to render its inner
+        // LinksToEditor, which only happens once the card's containsMany
+        // iteration mounts each rule.
+        await waitFor('[data-test-add-new="instance"]');
         await click('[data-test-add-new="instance"]');
 
         assert.ok(capturedOpts, 'chooseCard was invoked');
