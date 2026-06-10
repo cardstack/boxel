@@ -11,14 +11,14 @@ import {
   ClaudeCodeFactoryAgent,
   buildSdkToolsFromFactoryTools,
   buildWorkspaceScopedCanUseTool,
-} from '../src/factory-agent/claude-code';
-import type { AgentContext } from '../src/factory-agent';
+} from '../src/factory-agent/claude-code.ts';
+import type { AgentContext } from '../src/factory-agent/index.ts';
 import {
   CLARIFICATION_SIGNAL,
   DONE_SIGNAL,
   type FactoryTool,
-} from '../src/factory-tool-builder';
-import type { PromptLoader } from '../src/factory-prompt-loader';
+} from '../src/factory-tool-builder.ts';
+import type { PromptLoader } from '../src/factory-prompt-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

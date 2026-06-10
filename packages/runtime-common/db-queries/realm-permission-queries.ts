@@ -1,6 +1,6 @@
-import type { DBAdapter } from '../db';
-import type { RealmAction } from '../index';
-import type { RealmPermissions } from '../index';
+import type { DBAdapter } from '../db.ts';
+import type { RealmAction } from '../index.ts';
+import type { RealmPermissions } from '../index.ts';
 import {
   asExpressions,
   dbAdapterQuerier,
@@ -8,8 +8,8 @@ import {
   query,
   type Querier,
   upsert,
-} from '../expression';
-import { getMatrixUsername } from '../matrix-client';
+} from '../expression.ts';
+import { getMatrixUsername } from '../matrix-client.ts';
 
 async function insertPermission(
   dbAdapter: DBAdapter,

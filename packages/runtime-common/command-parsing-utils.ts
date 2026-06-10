@@ -1,6 +1,6 @@
-import type { ResolvedCodeRef } from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
-import { ensureTrailingSlash } from './paths';
+import type { ResolvedCodeRef } from './code-ref.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import { ensureTrailingSlash } from './paths.ts';
 
 export function parseBoxelHostCommandSpecifier(
   commandRef: string,

@@ -7,9 +7,11 @@ import {
   parseSearchQueryFromPayload,
   parseSearchRequestPayload,
   SearchRequestError,
+  sanitizeLoggingCorrelationId,
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
   type Query,
 } from '@cardstack/runtime-common';
@@ -18,6 +20,7 @@ import {
   makeCardTypeSummaryDoc,
   type LinkableCollectionDocument,
   type PrerenderedCardCollectionDocument,
+  type UnifiedSearchCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
@@ -52,7 +55,10 @@ export function resetCatalogRealmURL() {
 
 type SearchableRealm = {
   url?: string;
-  search: (query: Query) => Promise<LinkableCollectionDocument>;
+  // Returns the unified document: a `Realm.search` resolves here, and the
+  // live-realm passthrough below returns a `LinkableCollectionDocument`,
+  // which is a unified document with only `card`/`file-meta` `included`.
+  search: (query: Query) => Promise<UnifiedSearchCollectionDocument>;
   searchPrerendered: (
     query: Query,
     opts: Pick<
@@ -74,7 +80,7 @@ function normalizeRoutePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
-function registerRealmServerRoute(route: RealmServerMockRoute) {
+export function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
 }
 
@@ -118,9 +124,17 @@ function registerSearchRoutes() {
         throw e;
       }
 
+      // Mirror the realm-server's `handle-search`: read the client's
+      // correlation id off the request and thread it into searchRealms, so
+      // the real `realm:search-timing` line is emitted (and observable by
+      // host integration tests) keyed by the id the client minted.
+      let loggingCorrelationId = sanitizeLoggingCorrelationId(
+        req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+      );
       let combined = await searchRealms(
         realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
         cardsQuery,
+        loggingCorrelationId ? { loggingCorrelationId } : undefined,
       );
 
       return new Response(JSON.stringify(combined), {

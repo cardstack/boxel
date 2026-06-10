@@ -1,4 +1,4 @@
-import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
 
 export const defaultPrerenderManagerURL = isEnvironmentMode()
   ? serviceURL('prerender-mgr')

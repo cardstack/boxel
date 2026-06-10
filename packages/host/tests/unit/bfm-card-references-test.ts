@@ -9,18 +9,29 @@ import {
   parseBfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
+
+const virtualNetwork = new VirtualNetwork();
 
 module('Unit | bfm-card-references', function () {
   module('extractCardReferenceUrls', function () {
     test('extracts inline card references', function (assert) {
       let markdown = 'See :card[https://example.com/cards/1] for details.';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
     test('extracts block card references', function (assert) {
       let markdown = '::card[https://example.com/cards/1]\n';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
@@ -30,7 +41,11 @@ module('Unit | bfm-card-references', function () {
         '',
         'Text with :card[https://example.com/cards/2] inline.',
       ].join('\n');
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, [
         'https://example.com/cards/1',
         'https://example.com/cards/2',
@@ -42,6 +57,7 @@ module('Unit | bfm-card-references', function () {
       let urls = extractCardReferenceUrls(
         markdown,
         'https://realm.example/docs/file.md',
+        virtualNetwork,
       );
       assert.deepEqual(urls, ['https://realm.example/docs/my-card']);
     });
@@ -52,7 +68,11 @@ module('Unit | bfm-card-references', function () {
         '',
         '::card[https://example.com/cards/2.json]',
       ].join('\n');
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, [
         'https://example.com/cards/1',
         'https://example.com/cards/2',
@@ -64,7 +84,11 @@ module('Unit | bfm-card-references', function () {
         ':card[https://example.com/cards/1]',
         ':card[https://example.com/cards/1.json]',
       ].join('\n');
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
@@ -73,7 +97,11 @@ module('Unit | bfm-card-references', function () {
         ':card[https://example.com/cards/1]',
         ':card[https://example.com/cards/1]',
       ].join('\n');
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
@@ -81,36 +109,56 @@ module('Unit | bfm-card-references', function () {
       let markdown = ['```', ':card[https://example.com/cards/1]', '```'].join(
         '\n',
       );
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, []);
     });
 
     test('ignores references inside inline code', function (assert) {
       let markdown = 'Use `:card[url]` syntax.';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, []);
     });
 
     test('ignores references inside multi-backtick inline code', function (assert) {
       let markdown = 'Use ``:card[https://example.com/cards/1]`` syntax.';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, []);
     });
 
     test('skips malformed URLs with empty base', function (assert) {
       let markdown = ':card[not a valid url at all]';
-      let urls = extractCardReferenceUrls(markdown, '');
+      let urls = extractCardReferenceUrls(markdown, '', virtualNetwork);
       assert.deepEqual(urls, []);
     });
 
     test('returns empty array for markdown without references', function (assert) {
       let markdown = '# Hello World\n\nNo card references here.';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, []);
     });
 
     test('returns empty array for empty markdown', function (assert) {
-      let urls = extractCardReferenceUrls('', 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        '',
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, []);
     });
   });
@@ -121,10 +169,12 @@ module('Unit | bfm-card-references', function () {
         ':card[https://example.com/cards/1]',
         ':file[https://example.com/files/1]',
       ].join('\n');
-      let refs = extractBfmReferences(markdown, 'https://base.com/', [
-        'card',
-        'file',
-      ]);
+      let refs = extractBfmReferences(
+        markdown,
+        'https://base.com/',
+        ['card', 'file'],
+        virtualNetwork,
+      );
       assert.deepEqual(refs, [
         { url: 'https://example.com/cards/1', keyword: 'card' },
         { url: 'https://example.com/files/1', keyword: 'file' },
@@ -136,10 +186,12 @@ module('Unit | bfm-card-references', function () {
         ':card[https://example.com/thing]',
         ':file[https://example.com/thing]',
       ].join('\n');
-      let refs = extractBfmReferences(markdown, 'https://base.com/', [
-        'card',
-        'file',
-      ]);
+      let refs = extractBfmReferences(
+        markdown,
+        'https://base.com/',
+        ['card', 'file'],
+        virtualNetwork,
+      );
       assert.strictEqual(refs.length, 1);
       assert.strictEqual(refs[0].url, 'https://example.com/thing');
     });
@@ -666,19 +718,31 @@ module('Unit | bfm-card-references', function () {
   module('extractCardReferenceUrls with pipe syntax', function () {
     test('extracts URL from block ref with size specifier', function (assert) {
       let markdown = '::card[https://example.com/cards/1 | strip]\n';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
     test('extracts URL from block ref with custom dimensions', function (assert) {
       let markdown = '::card[https://example.com/cards/1 | 400x200]\n';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
     test('extracts URL from block ref with isolated', function (assert) {
       let markdown = '::card[https://example.com/cards/1 | isolated]\n';
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
 
@@ -687,6 +751,7 @@ module('Unit | bfm-card-references', function () {
       let urls = extractCardReferenceUrls(
         markdown,
         'https://realm.example/docs/file.md',
+        virtualNetwork,
       );
       assert.deepEqual(urls, ['https://realm.example/docs/my-card']);
     });
@@ -696,7 +761,11 @@ module('Unit | bfm-card-references', function () {
         '::card[https://example.com/cards/1 | strip]',
         '::card[https://example.com/cards/1 | tile]',
       ].join('\n');
-      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
       assert.deepEqual(urls, ['https://example.com/cards/1']);
     });
   });

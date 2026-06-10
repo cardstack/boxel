@@ -2,8 +2,8 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
   DEFAULT_FALLBACK_MODELS,
   type FallbackModelConfig,
-} from '../matrix-constants';
-import type { SharedTests } from '../helpers';
+} from '../matrix-constants.ts';
+import type { SharedTests } from '../helpers/index.ts';
 
 const tests: SharedTests<unknown> = Object.freeze({
   'ships at least one curated model': async (assert) => {

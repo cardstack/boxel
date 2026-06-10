@@ -1,5 +1,5 @@
-import type { CreditStrategy } from './credit-strategies';
-import { CreditStrategyFactory } from './credit-strategies';
+import type { CreditStrategy } from './credit-strategies.ts';
+import { CreditStrategyFactory } from './credit-strategies.ts';
 
 export interface ExternalEndpointConfig {
   url: string;

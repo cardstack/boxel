@@ -1,5 +1,5 @@
-import { expect, test } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { expect, test } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   login,
   logout,
@@ -19,7 +19,7 @@ import {
   setRealmRedirects,
   waitUntil,
   createSubscribedUser,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Room creation', () => {
   let firstUser: { username: string; password: string; credentials: any };
@@ -379,7 +379,12 @@ test.describe('Room creation', () => {
         let roomEl = page.locator('[data-test-room]');
         if ((await roomEl.count()) === 0) return false;
         let roomId = await roomEl.getAttribute('data-test-room');
-        if (roomId && roomId !== room1 && roomId !== room2 && roomId !== room3) {
+        if (
+          roomId &&
+          roomId !== room1 &&
+          roomId !== room2 &&
+          roomId !== room3
+        ) {
           newRoom = roomId;
           return true;
         }
@@ -509,9 +514,33 @@ test.describe('Room creation', () => {
     await reloadAndOpenAiAssistant(page);
     await isInRoom(page, room2);
     await page.locator(`[data-test-past-sessions-button]`).click();
-    await expect(
-      page.locator(`[data-test-joined-room]:nth-of-type(1) .name`),
-      'updated order is preserved on reload',
-    ).toHaveText('test room 3');
+    try {
+      await expect(
+        page.locator(`[data-test-joined-room]:nth-of-type(1) .name`),
+        'updated order is preserved on reload',
+      ).toHaveText('test room 3');
+    } catch (e) {
+      // The list is ordered by last-active timestamp. If the renamed room
+      // (room3) is not on top, dump every room's id/name/last-active so the
+      // failure shows which room jumped ahead and by what margin — the rename's
+      // `m.room.name` timestamp can be dropped after a reload (see
+      // matrix-service `getLastActiveTimestamp`).
+      let rooms = await page
+        .locator('[data-test-joined-room]')
+        .evaluateAll((els) =>
+          els.map((el) => ({
+            roomId: el.getAttribute('data-test-joined-room'),
+            name: el.querySelector('.name')?.textContent?.trim(),
+            lastActive: el
+              .querySelector('[data-test-last-active]')
+              ?.getAttribute('data-test-last-active'),
+          })),
+        );
+      throw new Error(
+        `${(e as Error).message}\n` +
+          `expected renamed room ${room3} ("test room 3") on top; ` +
+          `actual order: ${JSON.stringify(rooms, null, 2)}`,
+      );
+    }
   });
 });

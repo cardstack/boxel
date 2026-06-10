@@ -1,22 +1,28 @@
-import type { RealmResourceIdentifier } from './card-reference-resolver';
-import { ensureTrailingSlash } from './paths';
-import { assertQuery, InvalidQueryError, type Query } from './query';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import { logger } from './log.ts';
+import { ensureTrailingSlash } from './paths.ts';
+import { assertQuery, InvalidQueryError, type Query } from './query.ts';
+import { RequestTimings } from './request-timings.ts';
 import {
   isValidPrerenderedHtmlFormat,
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
-} from './prerendered-html-format';
+} from './prerendered-html-format.ts';
+import { type Format, formats, isValidFormat } from './formats.ts';
+import type { CodeRef } from './code-ref.ts';
+import { isCodeRef } from './card-document-shape.ts';
 import type {
-  LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
-} from './document-types';
-import { SupportedMimeType } from './router';
+  UnifiedSearchCollectionDocument,
+} from './document-types.ts';
+import { SupportedMimeType } from './router.ts';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
   | 'invalid-json'
   | 'unsupported-method'
   | 'invalid-query'
+  | 'invalid-render'
   | 'invalid-prerendered-html-format';
 
 type PrerenderedRenderType = {
@@ -253,26 +259,227 @@ export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Unified search request (the /_search + /_federated-search request body).
+//
+// On top of the query (filter / sort / page / realms), the body grows two
+// optional members — `render` (how to render the preferred HTML) and
+// `dataOnly` (opt-in live-cards-only) — plus `cardUrls` (promoted from the
+// prerendered opts). Prefer-HTML is the DEFAULT: a missing `render` is NOT
+// read as data-only; `dataOnly: true` is the only way to get live-only.
+// ---------------------------------------------------------------------------
+
+// `render.renderType`: an explicit CodeRef to render every result as, or the
+// literal "native" escape valve (each result in its own most-derived type).
+// Omitted → the searched `filter.on` common-ancestor type (resolved by the
+// server).
+export type SearchRenderType = CodeRef | 'native';
+
+export interface SearchRenderSpec {
+  // The format to render; defaults to "fitted" when the caller omits it.
+  format: Format;
+  renderType?: SearchRenderType;
+}
+
+export interface UnifiedSearchOpts {
+  // The prefer-HTML rendering spec. Present unless `dataOnly` is set.
+  render?: SearchRenderSpec;
+  // Opt-in live-cards-only (e.g. boxel-cli): full cards, never HTML.
+  dataOnly?: boolean;
+  cardUrls?: string[];
+}
+
+export interface UnifiedSearchRequest extends UnifiedSearchOpts {
+  cardsQuery: Query;
+}
+
+export const DEFAULT_RENDER_FORMAT: Format = 'fitted';
+
+function normalizeRenderSpec(value: unknown): SearchRenderSpec {
+  let spec: SearchRenderSpec = { format: DEFAULT_RENDER_FORMAT };
+  if (value === undefined) {
+    return spec;
+  }
+  if (typeof value !== 'object' || value === null) {
+    throw new SearchRequestError('invalid-render', 'render must be an object');
+  }
+  let { format, renderType } = value as {
+    format?: unknown;
+    renderType?: unknown;
+  };
+  if (format !== undefined) {
+    if (typeof format !== 'string' || !isValidFormat(format)) {
+      throw new SearchRequestError(
+        'invalid-render',
+        `render.format must be one of ${formats.join(', ')}`,
+      );
+    }
+    spec.format = format;
+  }
+  if (renderType !== undefined) {
+    if (renderType === 'native') {
+      spec.renderType = 'native';
+    } else if (isCodeRef(renderType)) {
+      spec.renderType = renderType;
+    } else {
+      throw new SearchRequestError(
+        'invalid-render',
+        'render.renderType must be a CodeRef or "native"',
+      );
+    }
+  }
+  return spec;
+}
+
+export async function parseUnifiedSearchRequestFromRequest(
+  request: Request,
+): Promise<UnifiedSearchRequest> {
+  let payload = await parseSearchRequestPayload(request);
+  return parseUnifiedSearchRequestFromPayload(payload);
+}
+
+export function parseUnifiedSearchRequestFromPayload(
+  payload: unknown,
+): UnifiedSearchRequest {
+  // Reject a non-object body (null / string / number / boolean) rather than
+  // coercing it to `{}` and treating it as an empty broad search — matching
+  // the live parser, which passes such payloads straight to `assertQuery`.
+  if (payload == null || typeof payload !== 'object') {
+    throw new SearchRequestError(
+      'invalid-query',
+      'Invalid query: request body must be a JSON object',
+    );
+  }
+  let payloadRecord = payload as Record<string, any>;
+
+  // `dataOnly: true` is the only way to get live-only results; anything else
+  // (including a missing `render`) keeps the prefer-HTML default.
+  let dataOnly = payloadRecord.dataOnly === true;
+
+  // `dataOnly` (live-only) and `render` (prefer-HTML) are mutually exclusive
+  // modes — a payload carrying both is contradictory, so reject it rather than
+  // silently dropping the `render` (which would also swallow a malformed one).
+  if (dataOnly && 'render' in payloadRecord) {
+    throw new SearchRequestError(
+      'invalid-render',
+      'render must not be combined with dataOnly — they are mutually exclusive',
+    );
+  }
+
+  let hasCardUrls = 'cardUrls' in payloadRecord;
+  let cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
+  if (hasCardUrls && !cardUrls) {
+    throw new SearchRequestError(
+      'invalid-query',
+      'cardUrls must be a string or array of strings',
+    );
+  }
+
+  // Materialize the prefer-HTML spec (format defaulting to "fitted") whenever
+  // the caller hasn't opted into data-only — so a request with no `render` is
+  // prefer-HTML/fitted, not live-only.
+  let render = dataOnly ? undefined : normalizeRenderSpec(payloadRecord.render);
+
+  let {
+    render: _remove1,
+    dataOnly: _remove2,
+    cardUrls: _remove3,
+    ...rest
+  } = payloadRecord;
+  let cardsQuery: unknown = rest;
+
+  try {
+    assertQuery(cardsQuery);
+  } catch (e) {
+    if (e instanceof InvalidQueryError) {
+      throw new SearchRequestError(
+        'invalid-query',
+        `Invalid query: ${e.message}`,
+      );
+    }
+    throw e;
+  }
+
+  return {
+    cardsQuery: cardsQuery as Query,
+    render,
+    dataOnly,
+    cardUrls,
+  };
+}
+
+// The single render-type resolution rule, shared by the server (selects the
+// HTML column, echoes `meta.renderType`) and the host (drives the live
+// `CardRenderer @codeRef`) so both pick the same type. Governs only the
+// prefer-HTML path; `dataOnly` results are the actual types (nothing renders),
+// so the caller does not invoke this for them.
+//
+//   - an explicit `renderType` CodeRef  → use it
+//   - the `"native"` escape valve       → the result's own most-derived type (types[0])
+//   - omitted                           → the query's `filter.on` (the common
+//                                          ancestor searched on); when the
+//                                          query has no `filter.on`, fall back
+//                                          to the most-derived type
+export function resolveRenderType(input: {
+  renderType?: SearchRenderType;
+  filterOn?: CodeRef;
+  // The result's adoption chain, most-derived first (types[0] is the actual type).
+  types?: CodeRef[];
+}): CodeRef | undefined {
+  let { renderType, filterOn, types } = input;
+  if (renderType && renderType !== 'native') {
+    return renderType;
+  }
+  if (renderType === 'native') {
+    return types?.[0];
+  }
+  return filterOn ?? types?.[0];
+}
+
+// The unified federated merge: concatenate `data` in realm order, sum
+// `meta.page.total`, and dedupe `included` by the JSON:API identity pair
+// `(type, id)`.
+//
+// Deduping on `(type, id)` rather than `id` alone is what the JSON:API
+// identity model requires: a `card` and its `rendered-html` share the same
+// `id` (the bare card URL — `type` is the only discriminator), so an id-only
+// key would wrongly collapse the two. The pair also dedupes first-class `css`
+// resources (whose `id` is a content hash) and the transitively-linked
+// `card`/`file-meta` resources, so a stylesheet or a linked card referenced by
+// results from more than one realm travels exactly once. For `included` made
+// up solely of `card`/`file-meta` with URL ids, `(type, id)` and `id` select
+// the same entries.
 export function combineSearchResults(
-  docs: LinkableCollectionDocument[],
-): LinkableCollectionDocument {
-  let combined: LinkableCollectionDocument = {
+  docs: UnifiedSearchCollectionDocument[],
+): UnifiedSearchCollectionDocument {
+  let combined: UnifiedSearchCollectionDocument = {
     data: [],
     meta: { page: { total: 0 } },
   };
-  let included: NonNullable<LinkableCollectionDocument['included']> = [];
-  let includedById = new Set<string>();
+  let included: NonNullable<UnifiedSearchCollectionDocument['included']> = [];
+  let includedByIdentity = new Set<string>();
 
   for (let doc of docs) {
     combined.data.push(...doc.data);
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    // Carry the collection-level render type the per-realm docs echo. The
+    // resolved render type is consistent across one search (every realm
+    // resolves the same one), so the first non-null value is authoritative;
+    // a host consumer renders live/fallback card rows under it. Absent for
+    // "native"/per-row searches, where each resource echoes its own type.
+    if (combined.meta.renderType == null && doc.meta?.renderType != null) {
+      combined.meta.renderType = doc.meta.renderType;
+    }
     if (doc.included) {
       for (let resource of doc.included) {
         if (resource.id) {
-          if (includedById.has(resource.id)) {
+          // NUL-separated so a `(type, id)` pair can't alias another by
+          // concatenation (no resource type or id contains a NUL byte).
+          let identity = `${resource.type}\u0000${resource.id}`;
+          if (includedByIdentity.has(identity)) {
             continue;
           }
-          includedById.add(resource.id);
+          includedByIdentity.add(identity);
         }
         included.push(resource);
       }
@@ -286,6 +493,11 @@ export function combineSearchResults(
   return combined;
 }
 
+// Merges results into the prerendered-card document shape: CSS folds into a
+// flat `meta.scopedCssUrls` Set and "is this a file?" rides in
+// `meta.isFileMeta`. This contrasts with `combineSearchResults`, where CSS is a
+// first-class `css` resource deduped inside `included` and the resource `type`
+// distinguishes a card from a file.
 export function combinePrerenderedSearchResults(
   docs: PrerenderedCardCollectionDocument[],
 ): PrerenderedCardCollectionDocument {
@@ -318,37 +530,96 @@ export function combinePrerenderedSearchResults(
 
 // Shared opts contract for the federated-search path, kept in one place so
 // SearchableRealm.search, searchRealms, and Realm.search can't drift —
-// dropping a field here (e.g. priority / jobIdentity) silently breaks the
-// threading from the realm-server handler down to searchCards.
+// dropping a field here (e.g. priority) silently breaks the threading from
+// the realm-server handler down to searchCards.
 export type SearchOpts = {
   cacheOnlyDefinitions?: boolean;
-  skipQueryBackedExpansion?: boolean;
+  // Prerender searches set this so `searchCardsUncoalesced` skips the
+  // `loadLinks` relationship-assembly pass entirely (the host re-resolves
+  // every result from card+source and reads only `data[].id`). Live /
+  // external callers leave it unset and receive fully-assembled documents.
   omitIncluded?: boolean;
   priority?: number;
-  jobIdentity?: string;
+  // Correlation id minted by the client (the prerendered host stamps
+  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch) and read back
+  // out by the request handler into opts. When present, `searchRealms`
+  // instruments the server-side search pipeline and emits one
+  // `realm:search-timing` line keyed by this id, so a client-observed
+  // slow search can be joined to where the realm-server spent the time.
+  loggingCorrelationId?: string;
+  // Per-request wall-clock collector. `searchRealms` creates it when a
+  // `loggingCorrelationId` is present and threads it down through `Realm.search` →
+  // `searchCards` → `loadLinks` so each post-SQL stage stamps its
+  // elapsed time. Callers never supply this directly.
+  timings?: RequestTimings;
+  // The prefer-HTML rendering spec, resolved by the handler: `format` is the
+  // HTML column to select and `renderType` is the already-resolved ancestor
+  // type (the `"native"` / `filter.on` defaulting has been applied upstream, so
+  // this is a concrete `CodeRef` or absent). When present, `Realm.search`
+  // resolves each result to prerendered HTML where indexed and falls back to
+  // the full live card otherwise. Absent → the live-card document.
+  render?: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
+  // Opt-in live-cards-only mode. Mutually exclusive with `render`; both absent
+  // is also live-only. Carried so the federated path is explicit about the
+  // mode even though its effect (no `render`) is the live path.
+  dataOnly?: boolean;
+  // Restrict the result set to this subset of card URLs. The query engine
+  // applies it as a SQL `i.url IN (...)` filter, so it must reach the engine
+  // opts — not only the cache key — for the subset to actually narrow results.
+  cardUrls?: string[];
 };
 
 type SearchableRealm = {
   search: (
     query: Query,
     opts?: SearchOpts,
-  ) => Promise<LinkableCollectionDocument>;
+  ) => Promise<UnifiedSearchCollectionDocument>;
   url?: string;
 };
 
-export async function searchRealms(
-  realms: Array<SearchableRealm | null | undefined>,
+// Indirection so a host integration test can deterministically capture
+// the emitted timing line: loglevel rebinds a logger's methods on every
+// `setLevel`, so a test that monkeypatches a direct logger handle would
+// race the next `logger('realm:search-timing')` call. A settable sink
+// sidesteps that. Defaults to the `realm:search-timing` logger.
+let searchTimingSink: ((line: string) => void) | undefined;
+let searchTimingLog: ReturnType<typeof logger> | undefined;
+export function setSearchTimingSinkForTests(
+  sink: ((line: string) => void) | undefined,
+): void {
+  searchTimingSink = sink;
+}
+export function emitSearchTiming(line: string): void {
+  if (searchTimingSink) {
+    searchTimingSink(line);
+    return;
+  }
+  // Lazy: a module-load `logger()` call races the circular import that
+  // installs the logger factory. First emission happens well after boot.
+  (searchTimingLog ??= logger('realm:search-timing')).info(line);
+}
+
+// Shared fan-out for the federated search runners. Filters out dead realms,
+// runs each surviving realm's search concurrently, logs (never throws on) a
+// per-realm failure so one realm can't sink the whole federation, and returns
+// the fulfilled docs in input order for the caller to merge. The two public
+// runners differ only in which per-realm method they call, how they label a
+// failure, and which merge they apply — the settle semantics, input ordering,
+// and per-realm error isolation are identical and live here.
+async function fanOutRealmSearch<R extends { url?: string }, Doc>(
+  realms: Array<R | null | undefined>,
   query: Query,
-  opts?: SearchOpts,
-): Promise<LinkableCollectionDocument> {
+  call: (realm: R) => Promise<Doc>,
+  describeFailure: (label: string, queryLabel: string) => string,
+): Promise<Doc[]> {
   let realmEntries = realms
-    .filter((realm): realm is SearchableRealm => Boolean(realm))
+    .filter((realm): realm is R => Boolean(realm))
     .map((realm) => ({
       realm,
       label: realm.url ? String(realm.url) : undefined,
     }));
   let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.search(query, opts)),
+    Promise.resolve().then(() => call(realm)),
   );
   let results = await Promise.allSettled(searchPromises);
   let queryLabel = '[unserializable query]';
@@ -360,16 +631,56 @@ export async function searchRealms(
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
       let label = realmEntries[index]?.label ?? `index ${index}`;
-      console.error(
-        `searchRealms realm search failed: ${label} query=${queryLabel}`,
-        result.reason,
-      );
+      console.error(describeFailure(label, queryLabel), result.reason);
     }
   });
-  let docs = results.flatMap((result) =>
+  return results.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   );
-  return combineSearchResults(docs);
+}
+
+export async function searchRealms(
+  realms: Array<SearchableRealm | null | undefined>,
+  query: Query,
+  opts?: SearchOpts,
+): Promise<UnifiedSearchCollectionDocument> {
+  // Instrument only when the caller threaded a correlation id. The
+  // prerendered host stamps one; live SPA / API traffic does not — so
+  // normal traffic allocates no collector and emits no line.
+  //
+  // Two callers: the realm-server's `handle-search` threads a collector it
+  // owns (so it can emit one complete request→response line itself —
+  // `opts.timings` is set, `ownsTimings` is false, we don't emit), and the
+  // host-test realm-server mock calls us with just a `loggingCorrelationId` (we create
+  // the collector and emit the line ourselves, which the host test observes).
+  let ownsTimings = Boolean(opts?.loggingCorrelationId) && !opts?.timings;
+  let timings =
+    opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
+  let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
+  let startedAt = ownsTimings ? Date.now() : 0;
+  let docs = await fanOutRealmSearch(
+    realms,
+    query,
+    (realm) => realm.search(query, perRealmOpts),
+    (label, queryLabel) =>
+      `searchRealms realm search failed: ${label} query=${queryLabel}`,
+  );
+  // `realm.search` returns a unified document — full live cards for the
+  // data-only/no-render path, or identity-only cards + `rendered-html`/`css`
+  // `included` under `render`. The merge dedupes `included` by `(type, id)`.
+  let combined = combineSearchResults(docs);
+  if (timings) {
+    timings.incr('results', combined.data?.length ?? 0);
+  }
+  if (ownsTimings && timings) {
+    emitSearchTiming(
+      `corr=${opts!.loggingCorrelationId}` +
+        ` realms=${realms.filter((realm) => Boolean(realm)).length}` +
+        ` total=${Date.now() - startedAt}ms ` +
+        timings.toLogFragment(),
+    );
+  }
+  return combined;
 }
 
 type PrerenderedSearchableRealm = {
@@ -393,33 +704,12 @@ export async function searchPrerenderedRealms(
     renderType?: PrerenderedRenderType;
   },
 ): Promise<PrerenderedCardCollectionDocument> {
-  let realmEntries = realms
-    .filter((realm): realm is PrerenderedSearchableRealm => Boolean(realm))
-    .map((realm) => ({
-      realm,
-      label: realm.url ? String(realm.url) : undefined,
-    }));
-  let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.searchPrerendered(query, opts)),
-  );
-  let results = await Promise.allSettled(searchPromises);
-  let queryLabel = '[unserializable query]';
-  try {
-    queryLabel = JSON.stringify(query);
-  } catch {
-    // ignore stringify errors, fallback label already set
-  }
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      let label = realmEntries[index]?.label ?? `index ${index}`;
-      console.error(
-        `searchPrerenderedRealms realm search failed: ${label} query=${queryLabel} htmlFormat=${opts.htmlFormat}`,
-        result.reason,
-      );
-    }
-  });
-  let docs = results.flatMap((result) =>
-    result.status === 'fulfilled' ? [result.value] : [],
+  let docs = await fanOutRealmSearch(
+    realms,
+    query,
+    (realm) => realm.searchPrerendered(query, opts),
+    (label, queryLabel) =>
+      `searchPrerenderedRealms realm search failed: ${label} query=${queryLabel} htmlFormat=${opts.htmlFormat}`,
   );
   return combinePrerenderedSearchResults(docs);
 }

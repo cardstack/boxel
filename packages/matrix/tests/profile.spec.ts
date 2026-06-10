@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import {
   login,
@@ -8,8 +8,8 @@ import {
   createSubscribedUser,
   createUser,
   updateSynapseUser,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 test.describe('Profile', () => {
   let user: {

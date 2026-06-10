@@ -25,6 +25,7 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type CardService from './card-service';
+import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
@@ -45,6 +46,7 @@ export default class PlaygroundPanelService extends Service {
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
   declare playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
   private cachedAPI?: typeof CardAPI;
   private pendingCardIdSubscriptions = new Map<string, CardDef>();
@@ -91,7 +93,7 @@ export default class PlaygroundPanelService extends Service {
       fieldIndex,
       url,
     };
-    if (isLocalId(cardId)) {
+    if (isLocalId(cardId, this.network.virtualNetwork)) {
       this.storeWhenIdAssignedTask.perform(
         moduleId,
         cardId,
@@ -106,7 +108,7 @@ export default class PlaygroundPanelService extends Service {
   private get resolvedSelections(): Record<string, PlaygroundSelection> {
     return Object.fromEntries(
       Object.entries(this.playgroundSelections).flatMap(([id, selections]) => {
-        if (!isLocalId(id)) {
+        if (!isLocalId(id, this.network.virtualNetwork)) {
           return [[id, selections]];
         }
         let instance = this.store.peek(id);

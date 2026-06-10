@@ -7,7 +7,7 @@ import type {
   FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Loader } from './loader';
+import { Loader } from './loader.ts';
 import {
   isField,
   isSpec,
@@ -17,15 +17,13 @@ import {
   isBaseInstance,
   meta,
   relativeTo,
-} from './constants';
-import { CardError } from './error';
-import { cardIdToURL } from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
-import type { LooseCardResource, FileMetaResource } from './index';
-import { isUrlLike, trimExecutableExtension } from './index';
-import { resolveCardReference } from './card-reference-resolver';
-import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
+} from './constants.ts';
+import { CardError } from './error.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { LooseCardResource, FileMetaResource } from './index.ts';
+import { isUrlLike, trimExecutableExtension } from './index.ts';
+import type { RuntimeDependencyTrackingContext } from './dependency-tracker.ts';
 
 export type ResolvedCodeRef = {
   module: RealmResourceIdentifier;
@@ -55,7 +53,7 @@ let localIdentities = new WeakMap<
 // only need to recognize a CodeRef don't pull the transitive runtime
 // chain rooted in this file. Re-exported here for backward compat; the
 // local imports let the remainder of this file call them directly.
-import { isResolvedCodeRef, isCodeRef } from './card-document-shape';
+import { isResolvedCodeRef, isCodeRef } from './card-document-shape.ts';
 export { isResolvedCodeRef, isCodeRef };
 
 export function assertIsResolvedCodeRef(
@@ -134,36 +132,30 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
-// The deprecated `resolveCardReference` throws on bare specifiers (e.g.
-// `@cardstack/boxel-host/commands/foo`) that aren't registered as a
-// realm prefix — callers above rely on that throw, via a surrounding
-// try/catch or a not-found surface, to leave the original ref alone so
-// the loader's importMap shim can resolve it. `VirtualNetwork.resolveURL`
-// is by design more permissive (it allows bare names like `card` against
-// a scoped base) and would URL-join a bare specifier to `relativeTo`,
-// producing a nonexistent realm path. Match the deprecated throw exactly
-// for that case before delegating to `resolveURL`.
+// Loader-only bare specifiers (e.g. `@cardstack/boxel-host/commands/foo`)
+// have no registered realm-prefix mapping — `VirtualNetwork.resolveURL`
+// would URL-join them to `relativeTo` and produce a nonexistent realm
+// path. Throw on that exact case so callers' surrounding try/catch
+// leaves the original ref alone for the loader's importMap shim to
+// resolve. (URL-like refs and registered prefixes resolve normally.)
 export function resolveModuleHref(
   module: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork | undefined,
+  virtualNetwork: VirtualNetwork,
 ): string {
-  if (virtualNetwork) {
-    if (!isUrlLike(module) && !virtualNetwork.isRegisteredPrefix(module)) {
-      throw new Error(
-        `Cannot resolve bare package specifier "${module}" — no matching prefix mapping registered`,
-      );
-    }
-    return virtualNetwork.resolveURL(module, relativeTo).href;
+  if (!isUrlLike(module) && !virtualNetwork.isRegisteredPrefix(module)) {
+    throw new Error(
+      `Cannot resolve bare package specifier "${module}" — no matching prefix mapping registered`,
+    );
   }
-  return resolveCardReference(module, relativeTo);
+  return virtualNetwork.resolveURL(module, relativeTo).href;
 }
 
 export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
-  relativeTo?: RealmResourceIdentifier | URL | undefined,
-  opts?: { trimExecutableExtension?: true },
-  virtualNetwork?: VirtualNetwork,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  opts: { trimExecutableExtension?: true } | undefined,
+  virtualNetwork: VirtualNetwork,
 ): CodeRef {
   if (!('type' in ref)) {
     try {
@@ -207,6 +199,11 @@ export async function loadCardDef(
   let maybeCard: unknown;
   let loader = opts.loader;
   let virtualNetwork = loader.getVirtualNetwork();
+  if (!virtualNetwork) {
+    throw new Error(
+      `loadCardDef requires a Loader configured with a VirtualNetwork`,
+    );
+  }
   if (!('type' in ref)) {
     let resolvedModuleURL = resolveModuleHref(
       ref.module,
@@ -436,17 +433,13 @@ export async function getNarrowestType(
 
 export function resolveAdoptedCodeRef(
   instance: CardDef,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   let adoptsFrom = instance[meta]?.adoptsFrom as CodeRef;
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let base =
-    instance[relativeTo] ||
-    (virtualNetwork
-      ? virtualNetwork.toURL(instance.id)
-      : cardIdToURL(instance.id));
+  let base = instance[relativeTo] || virtualNetwork.toURL(instance.id);
   let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
     base,
@@ -461,7 +454,7 @@ export function resolveAdoptedCodeRef(
 
 export function resolveAdoptsFrom(
   card: CardDef,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef | undefined {
   let metadata = (card as any)[meta];
   let adoptsFrom = metadata?.adoptsFrom as CodeRef | undefined;
@@ -471,7 +464,7 @@ export function resolveAdoptsFrom(
       return undefined;
     }
     try {
-      return virtualNetwork ? virtualNetwork.toURL(id) : cardIdToURL(id);
+      return virtualNetwork.toURL(id);
     } catch {
       return undefined;
     }

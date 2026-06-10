@@ -3,7 +3,7 @@ import { query } from '@cardstack/runtime-common';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
-} from './index-url-utils';
+} from './index-url-utils.ts';
 
 export async function retrieveHeadHTML({
   cardURL,

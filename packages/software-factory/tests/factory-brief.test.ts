@@ -9,7 +9,7 @@ import {
   FactoryBriefError,
   loadFactoryBrief,
   normalizeFactoryBrief,
-} from '../src/factory-brief';
+} from '../src/factory-brief.ts';
 
 const stickyNoteFixture = JSON.parse(
   readFileSync(resolve(__dirname, '../realm/Wiki/sticky-note.json'), 'utf8'),

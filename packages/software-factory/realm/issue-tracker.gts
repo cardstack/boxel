@@ -255,6 +255,7 @@ class IssueIsolated extends Component<typeof Issue> {
       .issue-isolated {
         height: 100%;
         overflow-y: auto;
+        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         background: var(--background, var(--boxel-light));
@@ -380,6 +381,7 @@ class IssueIsolated extends Component<typeof Issue> {
         gap: var(--boxel-sp-lg);
         align-content: start;
         overflow-y: auto;
+        overflow-x: hidden;
         height: 100%;
         box-sizing: border-box;
       }
@@ -1561,11 +1563,11 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         --boxel-kanban-border: var(--board-border);
 
         height: 100%;
-        overflow-y: auto;
         display: flex;
         flex-direction: column;
         background-color: var(--board-bg);
         color: var(--board-fg);
+        overflow: hidden;
       }
       .kanban-toolbar {
         display: flex;
@@ -1657,6 +1659,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         min-height: 0;
         display: flex;
         overflow: hidden;
+        position: relative;
       }
       .kanban-area {
         flex: 1;
@@ -1674,9 +1677,13 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         width: 0;
         overflow: hidden;
         transition: width var(--boxel-transition);
+        z-index: 1;
       }
       .kanban-config-sidebar-wrap.is-open {
         width: 19rem;
+      }
+      .kanban-config-sidebar-wrap > :deep(aside) {
+        border-top: none;
       }
     </style>
   </template>
@@ -1685,7 +1692,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 // ── IssueTracker ──────────────────────────────────────────────────────
 
 export class IssueTracker extends KanbanBoard {
-  static displayName = 'Issue Tracker Board';
+  static displayName = 'Issue Tracker';
 
   @field project = linksTo(() => Project);
   @field groupBy = contains(GroupByField);

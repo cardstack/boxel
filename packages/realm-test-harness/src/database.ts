@@ -14,13 +14,14 @@ import {
   templateLog,
   waitUntil,
   type FactorySupportContext,
+  type PortReservation,
   type RealmConfig,
   type RealmPermissions,
-} from './shared';
+} from './shared.ts';
 import {
   startIsolatedRealmStack,
   stopIsolatedRealmStack,
-} from './isolated-realm-stack';
+} from './isolated-realm-stack.ts';
 
 export async function canConnectToPg(): Promise<boolean> {
   let client = new PgClient({
@@ -707,12 +708,20 @@ export async function buildCombinedTemplateDatabase({
   context,
   cacheKey,
   templateDatabaseName,
+  publicPortReservation,
 }: {
   realms: RealmConfig[];
   realmServerURL: URL;
   context: FactorySupportContext;
   cacheKey: string;
   templateDatabaseName: string;
+  /** Holder for the public realm-server port, allocated and held upstream
+   *  in `resolveFactoryRealmServerURL`. Threaded straight into
+   *  `startIsolatedRealmStack`, which releases it right before the compat
+   *  proxy binds. Keeping it held across this build keeps the
+   *  worker-manager hold below (and the support-service ports allocated
+   *  before this call) from being handed the public port number. */
+  publicPortReservation?: PortReservation;
 }): Promise<void> {
   if (realms.length === 0) {
     throw new Error(
@@ -787,6 +796,7 @@ export async function buildCombinedTemplateDatabase({
           migrateDB: !hasMigratedTemplate,
           fullIndexOnStartup: true,
           workerManagerPort: wmReservation,
+          publicPortReservation,
         });
       } catch (error) {
         progress.stop();

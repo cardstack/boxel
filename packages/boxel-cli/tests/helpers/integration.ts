@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   prepareTestDB,
   createTestPgAdapter,

@@ -2,13 +2,14 @@ import {
   type ResolvedCodeRef,
   isCardDef,
   codeRefWithAbsoluteIdentifier,
-} from './code-ref';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+} from './code-ref.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
-import type { AttributesSchema, CardSchema } from './helpers/ai';
-import { generateJsonSchemaForCardType } from './helpers/ai';
-import { simpleHash } from './utils';
+import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
+import { generateJsonSchemaForCardType } from './helpers/ai.ts';
+import { simpleHash } from './utils.ts';
 import type { EncodedCommandRequest } from '../base/matrix-event';
 
 export interface CommandRequest {
@@ -49,7 +50,11 @@ export abstract class Command<
   name: string = this.constructor.name;
   description = '';
 
-  constructor(protected readonly commandContext: CommandContext) {}
+  protected readonly commandContext: CommandContext;
+
+  constructor(commandContext: CommandContext) {
+    this.commandContext = commandContext;
+  }
 
   async execute(): Promise<CardInstance<CardResultType>>;
   async execute(
@@ -117,7 +122,8 @@ function friendlyModuleName(fullModuleUrl: string) {
 
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
-  relativeTo?: RealmResourceIdentifier | URL,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
@@ -125,6 +131,8 @@ export function buildCommandFunctionName(
   let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
     commandCodeRef,
     relativeTo,
+    undefined,
+    virtualNetwork,
   ) as ResolvedCodeRef;
 
   const hashed = simpleHash(

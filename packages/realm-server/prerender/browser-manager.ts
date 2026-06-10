@@ -6,7 +6,7 @@ import puppeteer, { type Browser } from 'puppeteer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-import { isHttpsLoopback } from '../lib/is-https-loopback';
+import { isHttpsLoopback } from '../lib/is-https-loopback.ts';
 
 const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';

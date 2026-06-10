@@ -19,10 +19,14 @@ const PRETTIER_IGNORE = join(
 );
 
 // eslint also applies prettier formatting for these via eslint-plugin-prettier,
-// so they must go to eslint ONLY (never also to prettier — that would double-
-// process and could fight over formatting). Matches what CI's `eslint .` lints.
+// so they must NOT also go to prettier (that would double-process and fight
+// over formatting). Matches what CI's `eslint .` lints.
 const ESLINT_EXTENSIONS = new Set(['.js', '.ts', '.gjs', '.gts']);
-const TEMPLATE_EXTENSIONS = new Set(['.hbs']);
+// .gjs / .gts are routed to ember-template-lint in addition to eslint:
+// eslint sees the surrounding JS/TS but can't lint the inline <template>
+// blocks, so template-lint rules (e.g. no-unnecessary-curly-parens) would
+// otherwise only fire in CI's `lint:hbs` (`ember-template-lint .`).
+const TEMPLATE_EXTENSIONS = new Set(['.hbs', '.gjs', '.gts']);
 
 const AUTOFIX = 'node scripts/lint-autofix.mjs';
 
@@ -37,11 +41,16 @@ export default async (stagedFiles) => {
 
   for (const file of stagedFiles) {
     const ext = extname(file);
+    let routed = false;
     if (ESLINT_EXTENSIONS.has(ext)) {
       eslintFiles.push(file);
-    } else if (TEMPLATE_EXTENSIONS.has(ext)) {
+      routed = true;
+    }
+    if (TEMPLATE_EXTENSIONS.has(ext)) {
       templateFiles.push(file);
-    } else {
+      routed = true;
+    }
+    if (!routed) {
       // Ask prettier whether it can format this file. resolveConfig picks up
       // the repo's .prettierrc (and its plugins) and ignorePath consults
       // .prettierignore, so the decision matches what `prettier --write` would

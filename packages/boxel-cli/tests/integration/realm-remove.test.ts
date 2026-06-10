@@ -1,11 +1,11 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createRealm } from '../../src/commands/realm/create';
-import { removeRealm } from '../../src/commands/realm/remove';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { createRealm } from '../../src/commands/realm/create.ts';
+import { removeRealm } from '../../src/commands/realm/remove.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -16,7 +16,7 @@ import {
   matrixURL,
   matrixRegistrationSecret,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;

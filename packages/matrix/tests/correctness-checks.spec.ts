@@ -1,5 +1,5 @@
-import { expect, test } from './fixtures';
-import { putEvent } from '../docker/synapse';
+import { expect, test } from './fixtures.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   getRoomId,
   createSubscribedUserAndLogin,
@@ -8,17 +8,17 @@ import {
   createRealm,
   postNewCard,
   postCardSource,
-} from '../helpers';
-import { getMatrixTestContext } from '../helpers';
-import { registerUser, loginUser } from '../docker/synapse';
+} from '../helpers/index.ts';
+import { getMatrixTestContext } from '../helpers/index.ts';
+import { registerUser, loginUser } from '../support/synapse/index.ts';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-} from '../helpers/matrix-constants';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/matrix-constants.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 

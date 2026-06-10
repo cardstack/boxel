@@ -46,3 +46,7 @@ export function not<T>(val: T): boolean {
 export function bool<T>(val: T): boolean {
   return Boolean(val);
 }
+
+export function coalesce<T>(arg1: T | undefined | null, arg2: T): T {
+  return arg1 ?? arg2;
+}

@@ -1,13 +1,13 @@
-import { test, expect } from './fixtures';
+import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
   postCardSource,
   postNewCard,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 let serverIndexUrl = new URL(appURL).origin;
 

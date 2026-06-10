@@ -1,0 +1,705 @@
+import * as path from 'path';
+import * as os from 'os';
+import * as crypto from 'crypto';
+import * as net from 'net';
+import * as fse from 'fs-extra';
+import { request } from '@playwright/test';
+import {
+  dockerCreateNetwork,
+  dockerExec,
+  dockerLogs,
+  dockerRun,
+  dockerStop,
+} from '../docker.ts';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../matrix-constants.ts';
+import { appURL } from '../isolated-realm-server.ts';
+import {
+  isEnvironmentMode,
+  getSynapseContainerName,
+  getSynapseURL,
+  registerSynapseWithTraefik,
+} from '../environment-config.ts';
+
+export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
+export const SYNAPSE_PORT = 8008;
+
+const registrationSecretFile = path.resolve(
+  path.join(__dirname, '..', '..', 'registration_secret.txt'),
+);
+
+interface SynapseConfig {
+  configDir: string;
+  registrationSecret: string;
+  // Synapse must be configured with its public_baseurl so we have to allocate a port & url at this stage
+  baseUrl: string;
+  port: number;
+  host: string;
+}
+
+export interface SynapseInstance extends SynapseConfig {
+  synapseId: string;
+}
+
+const synapses = new Map<string, SynapseInstance>();
+const dynamicHostPortStartAttempts = 5;
+
+function findAvailablePort(preferred?: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let server = net.createServer();
+
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      server.close();
+      if (preferred != null && error.code === 'EADDRINUSE') {
+        findAvailablePort(undefined).then(resolve, reject);
+        return;
+      }
+      reject(error);
+    });
+
+    server.listen(preferred ?? 0, '127.0.0.1', () => {
+      let address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close(() =>
+          reject(new Error('Could not determine available port')),
+        );
+        return;
+      }
+      let { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
+function randB64Bytes(numBytes: number): string {
+  return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
+}
+
+function isPortBindError(error: unknown): boolean {
+  let message = error instanceof Error ? error.message : String(error);
+  return /address already in use|port is already allocated/i.test(message);
+}
+
+export async function cfgDirFromTemplate(
+  template: string,
+  dataDir?: string,
+  options?: {
+    publicBaseUrl?: string;
+    host?: string;
+    port?: number;
+  },
+): Promise<SynapseConfig> {
+  const templateDir = path.join(__dirname, template);
+
+  const stats = await fse.stat(templateDir);
+  if (!stats?.isDirectory) {
+    throw new Error(`No such template: ${template}`);
+  }
+  const configDir = dataDir
+    ? dataDir
+    : await fse.mkdtemp(path.join(os.tmpdir(), 'sf-test-synapse-'));
+
+  // copy the contents of the template dir, omitting homeserver.yaml as we'll template that
+  console.log(`Copy ${templateDir} -> ${configDir}`);
+  await fse.copy(templateDir, configDir, {
+    filter: (f) => path.basename(f) !== 'homeserver.yaml',
+  });
+
+  const registrationSecret = randB64Bytes(16);
+  const macaroonSecret = randB64Bytes(16);
+  const formSecret = randB64Bytes(16);
+
+  const host = options?.host ?? SYNAPSE_IP_ADDRESS;
+  const port = options?.port ?? SYNAPSE_PORT;
+  const baseUrl = options?.publicBaseUrl ?? `http://${host}:${port}`;
+
+  // now copy homeserver.yaml, applying substitutions
+  console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
+  let hsYaml = await fse.readFile(
+    path.join(templateDir, 'homeserver.yaml'),
+    'utf8',
+  );
+  hsYaml = hsYaml.replace(/{{REGISTRATION_SECRET}}/g, registrationSecret);
+  hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
+  hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
+  hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
+
+  await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
+
+  // now generate a signing key (we could use synapse's config generation for
+  // this, or we could just do this...)
+  // This assumes the homeserver.yaml specifies the key in this location
+  const signingKey = randB64Bytes(32);
+  console.log(`Gen ${path.join(templateDir, 'localhost.signing.key')}`);
+  await fse.writeFile(
+    path.join(configDir, 'localhost.signing.key'),
+    `ed25519 x ${signingKey}`,
+  );
+
+  return {
+    port,
+    host,
+    baseUrl,
+    configDir,
+    registrationSecret,
+  };
+}
+
+// Start a synapse instance: the template must be the name of one of the
+// templates in the docker/synapse directory
+interface StartOptions {
+  template?: string;
+  dataDir?: string;
+  containerName?: string;
+  suppressRegistrationSecretFile?: true;
+  dynamicHostPort?: true;
+}
+
+async function resolveHostPort(synapseId: string): Promise<number> {
+  let { execSync } = await import('child_process');
+  let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
+    encoding: 'utf-8',
+  }).trim();
+  let firstLine = portOutput.split('\n')[0];
+  return parseInt(firstLine.split(':').pop()!, 10);
+}
+
+export async function synapseStart(
+  opts?: StartOptions,
+  stopExisting = true,
+): Promise<SynapseInstance> {
+  if (stopExisting) {
+    // Stop the main server if it's running
+    let defaultContainerName = getSynapseContainerName();
+    let stopPromises = [dockerStop({ containerId: defaultContainerName })];
+    for (const [id, _synapse] of synapses) {
+      // Stop any other synapses that are running
+      stopPromises.push(synapseStop(id));
+    }
+    await Promise.allSettled(stopPromises);
+  }
+  let useDynamicHostPort = Boolean(
+    isEnvironmentMode() || opts?.dynamicHostPort,
+  );
+  await dockerCreateNetwork({ networkName: 'boxel' });
+
+  let hostPort = SYNAPSE_PORT;
+  let synCfg!: SynapseConfig;
+  let containerName!: string;
+  let synapseId!: string;
+  let attempts = useDynamicHostPort ? dynamicHostPortStartAttempts : 1;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    hostPort = useDynamicHostPort ? await findAvailablePort() : SYNAPSE_PORT;
+    synCfg = await cfgDirFromTemplate(opts?.template ?? 'test', opts?.dataDir, {
+      host: useDynamicHostPort ? '127.0.0.1' : SYNAPSE_IP_ADDRESS,
+      port: hostPort,
+      publicBaseUrl: `http://localhost:${hostPort}`,
+    });
+    containerName =
+      opts?.containerName ||
+      (isEnvironmentMode()
+        ? getSynapseContainerName()
+        : path.basename(synCfg.configDir));
+    console.log(
+      `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
+    );
+
+    let dockerParams: string[] = [
+      '--rm',
+      '-v',
+      `${synCfg.configDir}:/data`,
+      '-v',
+      `${path.join(__dirname, 'templates')}:/custom/templates/`,
+    ];
+    if (useDynamicHostPort) {
+      // In dynamic-host-port mode multiple harnesses may run concurrently, so
+      // we must not claim the shared fixed Synapse container IP.
+      dockerParams.push('-p', `${hostPort}:8008/tcp`, '--network=boxel');
+    } else {
+      dockerParams.push(
+        `--ip=${synCfg.host}`,
+        '-p',
+        `${synCfg.port}:8008/tcp`,
+        '--network=boxel',
+      );
+    }
+
+    try {
+      synapseId = await dockerRun({
+        image: 'matrixdotorg/synapse:v1.126.0',
+        containerName,
+        dockerParams,
+        applicationParams: ['run'],
+        runAsUser: true,
+      });
+      break;
+    } catch (error) {
+      if (
+        !useDynamicHostPort ||
+        !isPortBindError(error) ||
+        attempt === attempts
+      ) {
+        throw error;
+      }
+      console.warn(
+        `Synapse host port ${hostPort} was claimed before Docker bound it; retrying (${attempt}/${attempts})...`,
+      );
+      if (!opts?.dataDir) {
+        await fse.remove(synCfg.configDir);
+      }
+    }
+  }
+
+  console.log(`Started synapse with id ${synapseId} on port ${hostPort}`);
+
+  // Await Synapse healthcheck
+  await dockerExec({
+    containerId: synapseId,
+    params: [
+      'curl',
+      '--connect-timeout',
+      '30',
+      '--retry',
+      '30',
+      '--retry-delay',
+      '1',
+      '--retry-all-errors',
+      '--silent',
+      `http://localhost:8008/health`,
+    ],
+  });
+
+  if (useDynamicHostPort) {
+    let resolvedPort = await resolveHostPort(synapseId);
+    if (resolvedPort !== hostPort) {
+      throw new Error(
+        `Synapse started on unexpected host port ${resolvedPort}; expected ${hostPort}`,
+      );
+    }
+    console.log(`Synapse dynamic host port: ${hostPort}`);
+  }
+
+  if (isEnvironmentMode()) {
+    registerSynapseWithTraefik(hostPort);
+  }
+
+  const synapse: SynapseInstance = {
+    synapseId,
+    ...synCfg,
+    host: '127.0.0.1',
+    port: hostPort,
+    baseUrl: `http://localhost:${hostPort}`,
+  };
+  synapses.set(synapseId, synapse);
+
+  function cleanupRegistrationSecret() {
+    fse.removeSync(registrationSecretFile);
+  }
+
+  cleanupRegistrationSecret();
+  if (!opts?.suppressRegistrationSecretFile) {
+    fse.writeFileSync(registrationSecretFile, synapse.registrationSecret);
+    process.on('exit', cleanupRegistrationSecret);
+    process.on('SIGINT', cleanupRegistrationSecret);
+  }
+  return synapse;
+}
+
+export async function synapseStop(id: string): Promise<void> {
+  const synCfg = synapses.get(id);
+
+  if (!synCfg) throw new Error('Unknown synapse ID');
+
+  const synapseLogsPath = path.join('playwright', 'synapselogs', id);
+  await fse.ensureDir(synapseLogsPath);
+
+  await dockerLogs({
+    containerId: id,
+    stdoutFile: path.join(synapseLogsPath, 'stdout.log'),
+    stderrFile: path.join(synapseLogsPath, 'stderr.log'),
+  });
+
+  await dockerStop({
+    containerId: id,
+  });
+
+  await fse.remove(synCfg.configDir);
+  synapses.delete(id);
+  console.log(`Stopped synapse id ${id}.`);
+}
+
+export interface Credentials {
+  accessToken: string;
+  userId: string;
+  deviceId: string;
+  homeServer: string;
+}
+
+export async function registerUser(
+  synapse: SynapseInstance,
+  username: string,
+  password: string,
+  admin = false,
+  displayName?: string,
+): Promise<Credentials> {
+  const url = `${getSynapseURL(synapse)}/_synapse/admin/v1/register`;
+  const context = await request.newContext({ baseURL: url });
+  const { nonce } = await (await context.get(url)).json();
+  const mac = admin
+    ? crypto
+        .createHmac('sha1', synapse.registrationSecret)
+        .update(`${nonce}\0${username}\0${password}\0admin`)
+        .digest('hex')
+    : crypto
+        .createHmac('sha1', synapse.registrationSecret)
+        .update(`${nonce}\0${username}\0${password}\0notadmin`)
+        .digest('hex');
+  const response = await (
+    await context.post(url, {
+      data: {
+        nonce,
+        username,
+        password,
+        mac,
+        admin,
+        displayname: displayName,
+      },
+    })
+  ).json();
+
+  // Set the test realm in the user's account data
+  // so it appears in the list of available realms
+  if (username.startsWith('user')) {
+    await updateAccountData(
+      response.user_id,
+      response.access_token,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+      JSON.stringify({
+        realms: [`${appURL}/`],
+      }),
+    );
+  }
+
+  return {
+    homeServer: response.home_server,
+    accessToken: response.access_token,
+    userId: response.user_id,
+    deviceId: response.device_id,
+  };
+}
+
+export async function loginUser(
+  username: string,
+  password: string,
+  matrixURL?: string,
+): Promise<Credentials> {
+  let url = matrixURL
+    ? `${matrixURL}/_matrix/client/r0/login`
+    : `${getSynapseURL()}/_matrix/client/r0/login`;
+  let response = await (
+    await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'm.login.password',
+        user: username,
+        password,
+      }),
+    })
+  ).json();
+  return {
+    homeServer: response.home_server,
+    accessToken: response.access_token,
+    userId: response.user_id,
+    deviceId: response.device_id,
+  };
+}
+
+export async function updateDisplayName(
+  userId: string,
+  accessToken: string,
+  newDisplayName: string,
+): Promise<void> {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v3/profile/${userId}/displayname`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ displayname: newDisplayName }),
+    },
+  );
+
+  console.log(
+    `Received: ${response.status}, ${response.statusText}, ${JSON.stringify(
+      await response.json(),
+    )}`,
+  );
+
+  return;
+}
+
+export async function createRegistrationToken(
+  adminAccessToken: string,
+  registrationToken: string,
+  usesAllowed = 1000,
+) {
+  let res = await fetch(
+    `${getSynapseURL()}/_synapse/admin/v1/registration_tokens/new`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminAccessToken}`,
+      },
+      body: JSON.stringify({
+        token: registrationToken,
+        uses_allowed: usesAllowed,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(
+      `could not create registration token: ${
+        res.status
+      } - ${await res.text()}`,
+    );
+  }
+}
+
+export interface UpdateUserOptions {
+  password?: string;
+  displayname?: string;
+  avatar_url?: string;
+  emailAddresses?: string[];
+  matrixURL?: string;
+}
+
+export async function updateUser(
+  adminAccessToken: string,
+  userId: string,
+  {
+    password,
+    displayname,
+    avatar_url,
+    emailAddresses,
+    matrixURL,
+  }: UpdateUserOptions,
+) {
+  let url = matrixURL
+    ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
+    : `${getSynapseURL()}/_synapse/admin/v2/users/${userId}`;
+  let res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${adminAccessToken}`,
+    },
+    body: JSON.stringify({
+      ...(password ? { password } : {}),
+      ...(displayname ? { displayname } : {}),
+      ...(avatar_url ? { avatar_url } : {}),
+      ...(emailAddresses
+        ? {
+            threepids: emailAddresses.map((address) => ({
+              medium: 'email',
+              address,
+            })),
+          }
+        : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `could not update user: ${res.status} - ${await res.text()}`,
+    );
+  }
+}
+
+export async function updateAccountData(
+  userId: string,
+  accessToken: string,
+  type: string,
+  data: string,
+): Promise<void> {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: data,
+    },
+  );
+
+  console.log(
+    `updateAccountData result for ${type}: ${response.status}, ${
+      response.statusText
+    }, ${JSON.stringify(await response.json())}`,
+  );
+}
+
+export async function getAccountData<T>(
+  userId: string,
+  accessToken: string,
+  type: string,
+): Promise<T> {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  let json = await response.json();
+  return json as T;
+}
+
+export async function getJoinedRooms(accessToken: string) {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v3/joined_rooms`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  let { joined_rooms } = (await response.json()) as { joined_rooms: string[] };
+  return joined_rooms;
+}
+
+export async function getRoomStateEventType(
+  accessToken: string,
+  roomId: string,
+  eventType: string,
+) {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/state/${eventType}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  return await response.json();
+}
+
+export async function getRoomName(accessToken: string, roomId: string) {
+  return await getRoomStateEventType(accessToken, roomId, 'm.room.name');
+}
+
+export async function getRoomRetentionPolicy(
+  accessToken: string,
+  roomId: string,
+) {
+  return await getRoomStateEventType(accessToken, roomId, 'm.room.retention');
+}
+
+export async function getRoomMembers(roomId: string, accessToken: string) {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/joined_members`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  return await response.json();
+}
+
+export async function sync(accessToken: string) {
+  let response = await fetch(`${getSynapseURL()}/_matrix/client/v3/sync`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  return await response.json();
+}
+
+interface MessageOptions {
+  direction?: 'forward' | 'backward';
+  pageSize: number;
+}
+const DEFAULT_PAGE_SIZE = 50;
+
+export async function getAllRoomEvents(
+  roomId: string,
+  accessToken: string,
+  opts?: MessageOptions,
+) {
+  let messages: MessageEvent[] = [];
+  let from: string | undefined;
+
+  do {
+    let response = await fetch(
+      `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+        opts?.direction ? opts.direction.slice(0, 1) : 'f'
+      }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
+        from ? '&from=' + from : ''
+      }`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+    let { chunk, end } = await response.json();
+    from = end;
+    let events: MessageEvent[] = chunk;
+    messages.push(...events);
+  } while (from);
+  return messages;
+}
+
+interface MessageEvent {
+  type: 'm.room.message';
+  content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: string;
+    format: string;
+    body: string;
+    formatted_body?: string;
+    data?: any;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+  sender: string;
+  origin_server_ts: number;
+  event_id: string;
+  room_id: string;
+}
+
+export async function putEvent(
+  accessToken: string,
+  roomId: string,
+  eventType: string,
+  txnId: string,
+  body: any,
+) {
+  let url = `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/send/${eventType}/${txnId}`;
+  let res = await await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) {
+    let r = await res.json();
+    return r;
+  }
+  return;
+}

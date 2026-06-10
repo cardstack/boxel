@@ -10,7 +10,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
@@ -147,7 +147,11 @@ interface Signature {
   Blocks: {};
 }
 
-const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+// The owner-destroyed error message, matched as a substring so a card-context
+// read during teardown (realm refresh / unmount) is swallowed rather than
+// surfaced.
+const OWNER_DESTROYED_ERROR =
+  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
 export default class SearchContent extends Component<Signature> {
   @service declare network: NetworkService;
@@ -509,7 +513,7 @@ export default class SearchContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
-      class='search-sheet-content {{if @isCompact "compact"}}'
+      class={{cn 'search-sheet-content' compact=@isCompact}}
       ...attributes
     >
       {{! AdornContext aligns with this search-sheet-content div as
@@ -617,6 +621,12 @@ export default class SearchContent extends Component<Signature> {
       .search-sheet-content.compact {
         flex-direction: row;
         flex-wrap: nowrap;
+        /* Top-align the result cards so each keeps its natural height
+           (title + realm caption) instead of stretching to the row and
+           clipping the caption. The slack then falls below the cards,
+           where it leaves room for the horizontal scrollbar — so the
+           bottom caption clears it instead of being cropped behind it. */
+        align-items: flex-start;
         padding-inline: var(--boxel-sp-xs);
         /* `overflow-y: hidden` (needed so only the row scrolls
            horizontally) would clip the Adorn outline stroke and the

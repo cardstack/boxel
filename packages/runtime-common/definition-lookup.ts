@@ -1,4 +1,4 @@
-import type { DBAdapter, TypeCoercion } from './db';
+import type { DBAdapter, TypeCoercion } from './db.ts';
 import {
   addExplicitParens,
   any,
@@ -9,9 +9,9 @@ import {
   separatedByCommas,
   type Expression,
   type Querier,
-} from './expression';
-import { clampSerializedError, type SerializedError } from './error';
-import { logger } from './log';
+} from './expression.ts';
+import { clampSerializedError, type SerializedError } from './error.ts';
+import { logger } from './log.ts';
 
 // Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
 // mismatches: every cache read logs its exact key + HIT/MISS, every write
@@ -43,15 +43,9 @@ import {
   executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
-} from './index';
-import {
-  isRegisteredPrefix,
-  cardIdToURL,
-  resolveCardReference,
-  rri,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
+} from './index.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
@@ -105,20 +99,14 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
 
 function canonicalURL(
   url: string,
-  relativeTo?: string,
-  virtualNetwork?: VirtualNetwork,
+  relativeTo: string | undefined,
+  virtualNetwork: VirtualNetwork,
 ): string {
   // Resolve registered prefix identifiers (e.g. @cardstack/catalog/foo)
   // to real URLs so that realm-membership checks and DB lookups work.
-  if (
-    virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(url)
-      : isRegisteredPrefix(url)
-  ) {
+  if (virtualNetwork.isRegisteredPrefix(url)) {
     try {
-      return virtualNetwork
-        ? virtualNetwork.toURL(url).href
-        : resolveCardReference(url, undefined);
+      return virtualNetwork.toURL(url).href;
     } catch (_e) {
       // fall through to normal URL handling
     }
@@ -1672,9 +1660,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = this.#virtualNetwork
-              ? this.#virtualNetwork.toURL(error.id)
-              : cardIdToURL(error.id);
+            base = this.#virtualNetwork.toURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }

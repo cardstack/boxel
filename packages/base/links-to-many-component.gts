@@ -17,10 +17,14 @@ import {
   brokenLinkFormat,
 } from './card-api';
 import BrokenLinkTemplate from './default-templates/broken-link-template';
-import { getRelationship, type RelationshipState } from './field-support';
+import {
+  getRelationshipMembershipState,
+  type RelationshipState,
+} from './field-support';
 import { rawArrayValues } from './watched-array';
 import {
   BoxComponentSignature,
+  CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
   getBoxComponent,
@@ -49,7 +53,7 @@ import {
   FourLines,
   IconPlus,
 } from '@cardstack/boxel-ui/icons';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce, eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
 import {
   SortableGroupModifier as sortableGroup,
@@ -228,7 +232,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     // read directly from @model (instead of <@fields>) in sync.
     //
     // `broken` carries the per-slot terminal failure state (read once here via a
-    // pure `getRelationship`) so a broken element shows the placeholder + remove
+    // pure `getRelationshipMembershipState`) so a broken element shows the placeholder + remove
     // affordance instead of trying to render a sentinel as a card. The `{{#each}}`
     // still keys on the stable index `key`, so adding this never changes block
     // identity and an input elsewhere in the edit form keeps focus.
@@ -293,13 +297,16 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 />
               {{/if}}
               {{#if entry.broken}}
-                <BrokenLinkTemplate
-                  @brokenUrl={{entry.broken.reference}}
-                  @errorDoc={{entry.broken.errorDoc}}
-                  @state={{entry.broken.kind}}
-                  @format='fitted'
-                  data-test-plural-view-item={{entry.index}}
-                />
+                <CardCrudFunctionsConsumer as |crud|>
+                  <BrokenLinkTemplate
+                    @brokenUrl={{entry.broken.reference}}
+                    @errorDoc={{entry.broken.errorDoc}}
+                    @state={{entry.broken.kind}}
+                    @format='fitted'
+                    @viewCard={{crud.viewCard}}
+                    data-test-plural-view-item={{entry.index}}
+                  />
+                </CardCrudFunctionsConsumer>
               {{else}}
                 {{#let
                   (getBoxComponent
@@ -432,7 +439,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
   @consume(CardContextName) declare cardContext: CardContext;
 
   // Per-slot broken-link state, read once per render via a pure
-  // `getRelationship`. The `{{#each}}` keeps keying on the stable child box, so
+  // `getRelationshipMembershipState`. The `{{#each}}` keeps keying on the stable child box, so
   // this only drives the inner branch that swaps a broken card for the
   // placeholder and never destabilizes a sibling pill mid-edit.
   get brokenSlots() {
@@ -446,13 +453,16 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           {{#let (get brokenSlots i) as |broken|}}
             {{#if broken}}
               <Pill class='item-pill' data-test-pill-item={{i}}>
-                <BrokenLinkTemplate
-                  @brokenUrl={{broken.reference}}
-                  @errorDoc={{broken.errorDoc}}
-                  @state={{broken.kind}}
-                  @format='atom'
-                  data-test-plural-view-item={{i}}
-                />
+                <CardCrudFunctionsConsumer as |crud|>
+                  <BrokenLinkTemplate
+                    @brokenUrl={{broken.reference}}
+                    @errorDoc={{broken.errorDoc}}
+                    @state={{broken.kind}}
+                    @format='atom'
+                    @viewCard={{crud.viewCard}}
+                    data-test-plural-view-item={{i}}
+                  />
+                </CardCrudFunctionsConsumer>
                 <IconButton
                   @icon={{IconX}}
                   @width='10px'
@@ -573,10 +583,6 @@ function getPluralChildFormat(
   return effectiveFormat;
 }
 
-function coalesce<T>(arg1: T | undefined, arg2: T): T {
-  return arg1 ?? arg2;
-}
-
 function shouldRenderEditor(
   format: Format | undefined,
   defaultFormat: Format,
@@ -592,7 +598,7 @@ type BrokenSlot = Extract<RelationshipState, { kind: 'error' | 'not-found' }>;
 // surfaces here; every other kind — `present`, `not-loaded`, `not-set` — is
 // `undefined`, so the caller falls through to its normal per-item render.
 //
-// `getRelationship` is a pure read (it never retriggers `lazilyLoadLink`) and
+// `getRelationshipMembershipState` is a pure read (it never retriggers `lazilyLoadLink`) and
 // returns a FRESH array on every call, so callers MUST NOT key a `{{#each}}` on
 // these entries; read it once per render and index into the result by the slot
 // position the surrounding loop already keys on. A computed whole-field sentinel
@@ -607,9 +613,8 @@ function brokenSlotsFor(
   if (owner == null) {
     return [];
   }
-  let state = getRelationship(owner, fieldName);
-  let states = Array.isArray(state) ? state : [state];
-  return states.map((rel) =>
+  let { membership } = getRelationshipMembershipState(owner, fieldName);
+  return (membership ?? []).map((rel) =>
     rel.kind === 'error' || rel.kind === 'not-found' ? rel : undefined,
   );
 }
@@ -686,16 +691,19 @@ export function getLinksToManyComponent({
                   <div class='linksToMany-itemContainer'>
                     {{#let (get brokenSlots i) as |broken|}}
                       {{#if broken}}
-                        <BrokenLinkTemplate
-                          @brokenUrl={{broken.reference}}
-                          @errorDoc={{broken.errorDoc}}
-                          @state={{broken.kind}}
-                          @format={{brokenLinkFormat
-                            effectiveFormat
-                            effectiveFormat
-                          }}
-                          data-test-plural-view-item={{i}}
-                        />
+                        <CardCrudFunctionsConsumer as |crud|>
+                          <BrokenLinkTemplate
+                            @brokenUrl={{broken.reference}}
+                            @errorDoc={{broken.errorDoc}}
+                            @state={{broken.kind}}
+                            @format={{brokenLinkFormat
+                              effectiveFormat
+                              effectiveFormat
+                            }}
+                            @viewCard={{crud.viewCard}}
+                            data-test-plural-view-item={{i}}
+                          />
+                        </CardCrudFunctionsConsumer>
                       {{else}}
                         <Item
                           @format={{getPluralChildFormat

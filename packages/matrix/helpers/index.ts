@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { Credentials } from '../docker/synapse';
+import type { Credentials } from '../support/synapse/index.ts';
 import {
   loginUser,
   getAllRoomEvents,
@@ -9,11 +9,11 @@ import {
   sync,
   updateUser,
   type UpdateUserOptions,
-} from '../docker/synapse';
-import { realmPassword } from './realm-credentials';
-import type { SQLExecutor } from './isolated-realm-server';
-import { appURL, BasicSQLExecutor } from './isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+} from '../support/synapse/index.ts';
+import { realmPassword } from './realm-credentials.ts';
+import type { SQLExecutor } from '../support/isolated-realm-server.ts';
+import { appURL, BasicSQLExecutor } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 import { randomUUID } from 'crypto';
 
 export const testHost = 'https://localhost:4205/test';
@@ -948,6 +948,65 @@ export async function waitUntil<T>(
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
+}
+
+// Poll the server-rendered HTML at `url` until it contains `marker`. The
+// `_publish-realm` POST returns before the published realm has finished
+// re-indexing/prerendering, so navigating "cold" races that work and is the
+// source of the flaky `page.goto` timeouts the host-mode suites hit. Gate any
+// navigation to a freshly published realm on this so the document render is
+// warm before the browser asks for it.
+//
+// Budget generously (not waitUntil's 10s default): this is the readiness gate
+// for a realm that may still be indexing under CI load, so a tight poll would
+// fail a slow-but-eventually-ready realm earlier than a bare navigation (which
+// is bounded by the 60s test timeout). 45s stays under that test timeout while
+// leaving headroom for the navigation/assertions that follow.
+//
+// On timeout, throw with the last observed HTTP status and whether a body
+// arrived without the marker. A bare `page.goto` failure only reports "timeout
+// exceeded"; this distinguishes "still erroring" (publish/index not done) from
+// "served but missing the marker" (indexed, wrong/stale content) from "request
+// kept failing" — so the next CI failure is diagnosable without a re-run.
+export async function waitForPublishedMarker(
+  page: Page,
+  url: string,
+  marker: string,
+  timeout = 45_000,
+) {
+  let lastStatus: number | undefined;
+  let lastBodyMissingMarker = false;
+  let lastError: string | undefined;
+  try {
+    await waitUntil(async () => {
+      try {
+        let response = await page.request.get(url, {
+          headers: { Accept: 'text/html' },
+        });
+        lastStatus = response.status();
+        lastError = undefined;
+        if (!response.ok()) {
+          lastBodyMissingMarker = false;
+          return false;
+        }
+        let text = await response.text();
+        lastBodyMissingMarker = !text.includes(marker);
+        return !lastBodyMissingMarker;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
+        return false;
+      }
+    }, timeout);
+  } catch {
+    let detail = lastError
+      ? `last request error: ${lastError}`
+      : lastBodyMissingMarker
+        ? `last response HTTP ${lastStatus} served without marker "${marker}" (realm reachable but still indexing or rendering other content)`
+        : `last response HTTP ${lastStatus ?? 'none'} not OK (publish/index not ready)`;
+    throw new Error(
+      `waitForPublishedMarker timed out after ${timeout}ms for ${url}; ${detail}`,
+    );
+  }
 }
 
 async function waitForRealmToken(page: Page, realmURL: string): Promise<void> {

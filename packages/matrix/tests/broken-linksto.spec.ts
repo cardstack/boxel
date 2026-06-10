@@ -1,11 +1,11 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   createRealm,
   createSubscribedUserAndLogin,
   postCardSource,
   postNewCard,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 
@@ -308,9 +308,7 @@ test.describe('Broken linksTo tolerance', () => {
       page.locator('[data-test-pets-slot] [data-test-broken-link-state]'),
     ).toHaveAttribute('data-test-broken-link-state', 'not-found');
     await expect(
-      page
-        .locator('[data-test-pets-slot] [data-test-broken-link-url]')
-        .first(),
+      page.locator('[data-test-pets-slot] [data-test-broken-link-url]').first(),
     ).toContainText(ringoId);
     // Sibling slot continues to render Mango as a normal embedded pet.
     await expect(
@@ -336,9 +334,7 @@ test.describe('Broken linksTo tolerance', () => {
       page.locator('[data-test-pets-slot] [data-test-broken-link-state]'),
     ).toHaveAttribute('data-test-broken-link-state', 'not-found');
     await expect(
-      page
-        .locator('[data-test-pets-slot] [data-test-broken-link-url]')
-        .first(),
+      page.locator('[data-test-pets-slot] [data-test-broken-link-url]').first(),
     ).toContainText(ringoId);
     await expect(
       page.locator('[data-test-pets-slot] [data-test-pet-name]'),

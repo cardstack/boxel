@@ -8,9 +8,9 @@ import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 /**
  * Handler for `POST /_screenshot-card`.

@@ -1,12 +1,12 @@
-import type { Task, WorkerArgs } from './index';
+import type { Task, WorkerArgs } from './index.ts';
 
-import { jobIdentity } from '../index';
+import { jobIdentity } from '../index.ts';
 import {
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
-} from '../queue';
+} from '../queue.ts';
 
 export { copy };
 
@@ -66,14 +66,22 @@ registerQueueJobDefinition({
   coalesce: chooseCopyCoalesceDecision,
 });
 
-const copy: Task<CopyArgs, CopyResult> = ({ reportStatus, log, indexWriter }) =>
+const copy: Task<CopyArgs, CopyResult> = ({
+  reportStatus,
+  log,
+  indexWriter,
+  virtualNetwork,
+}) =>
   async function (args) {
     let { jobInfo, realmURL, sourceRealmURL } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
-    let batch = await indexWriter.createBatch(new URL(realmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(realmURL),
+      virtualNetwork,
+    );
     await batch.copyFrom(new URL(sourceRealmURL));
     let result = await batch.done();
     let invalidations = batch.invalidations;

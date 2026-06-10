@@ -18,9 +18,9 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
-import type { ConsoleErrorEntry, PagePool } from './page-pool';
-import { toAffinityKey } from './affinity';
-import { throwIfAborted } from './prerender-cancel';
+import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
+import { toAffinityKey } from './affinity.ts';
+import { throwIfAborted } from './prerender-cancel.ts';
 import {
   captureResult,
   captureModule,
@@ -43,7 +43,8 @@ import {
   buildCommandRunnerURL,
   buildInvalidModuleResponseError,
   buildInvalidFileExtractResponseError,
-} from './utils';
+  type RenderProfileContext,
+} from './utils.ts';
 import { randomUUID } from 'crypto';
 
 const log = logger('prerenderer');
@@ -169,6 +170,19 @@ export class RenderRunner {
 
   clearAuthCache(affinityKey: string) {
     this.#lastAuthByAffinity.delete(affinityKey);
+  }
+
+  // Builds the per-render profile context threaded into `withTimeout`.
+  // The affinity key drives the airtight affinity-scoped CPU-profiler
+  // gate (only the render whose affinity exactly matches
+  // `PRERENDER_PROFILE_AFFINITY` is ever profiled); the label keys the
+  // profiler's per-render log line by card url + render step.
+  #profileContext(
+    affinityKey: string,
+    url: string,
+    step: string,
+  ): RenderProfileContext {
+    return { affinityKey, label: `${url} ${step}` };
   }
 
   #authKeys(auth: string): string[] | null {
@@ -328,6 +342,7 @@ export class RenderRunner {
           }
         },
         opts?.timeoutMs,
+        this.#profileContext(affinityKey, command, 'command-runner'),
       );
 
       if (isRenderError(waitResult)) {
@@ -479,6 +494,7 @@ export class RenderRunner {
           return await captureScreenshot(page, format, 0, captureOptions);
         },
         opts?.timeoutMs,
+        this.#profileContext(affinityKey, url, `screenshot ${format}`),
       );
 
       let response: ScreenshotPrerenderResponse;
@@ -654,6 +670,7 @@ export class RenderRunner {
           return await captureModule(page, captureOptions);
         },
         opts?.timeoutMs,
+        this.#profileContext(affinityKey, url, 'module'),
       );
 
       let response: ModuleRenderResponse;
@@ -915,6 +932,7 @@ export class RenderRunner {
             return await captureFileExtract(page, captureOptions);
           },
           opts?.timeoutMs,
+          this.#profileContext(affinityKey, url, 'file-extract'),
         );
         let extractResponse: FileExtractResponse;
         if (isRenderError(capture)) {
@@ -1079,7 +1097,12 @@ export class RenderRunner {
             return;
           }
           let stepResult = await this.#step(affinityKey, step, () =>
-            withTimeout(page, fn, opts?.timeoutMs),
+            withTimeout(
+              page,
+              fn,
+              opts?.timeoutMs,
+              this.#profileContext(affinityKey, url, step),
+            ),
           );
           if (stepResult.ok) {
             return stepResult.value as T;
@@ -1103,6 +1126,7 @@ export class RenderRunner {
             return await renderHTML(page, 'isolated', 0, captureOptions);
           },
           opts?.timeoutMs,
+          this.#profileContext(affinityKey, url, 'card isolated/0'),
         );
         if (isRenderError(isolatedResult)) {
           cardShortCircuit = true;
@@ -1365,6 +1389,7 @@ export class RenderRunner {
               return await captureResult(page, 'innerHTML', captureOptions);
             },
             opts?.timeoutMs,
+            this.#profileContext(affinityKey, url, 'file isolated/0'),
           );
           if (isRenderError(isolatedResult)) {
             let renderError = isolatedResult as RenderError;
@@ -1400,6 +1425,7 @@ export class RenderRunner {
                   page,
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
+                  this.#profileContext(affinityKey, url, 'file head/0'),
                 ),
             );
             if (headHTMLResult.ok) {
@@ -1474,7 +1500,12 @@ export class RenderRunner {
             for (let step of steps) {
               if (fileShortCircuit) break;
               let res = await this.#step(affinityKey, step.name, () =>
-                withTimeout(page, step.cb, opts?.timeoutMs),
+                withTimeout(
+                  page,
+                  step.cb,
+                  opts?.timeoutMs,
+                  this.#profileContext(affinityKey, url, step.name),
+                ),
               );
               if (res.ok) {
                 step.assign(res.value);

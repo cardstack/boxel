@@ -1,13 +1,18 @@
 import { module, test } from 'qunit';
 
 import type { LooseCardResource } from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteIdentifier, rri } from '@cardstack/runtime-common';
+import {
+  codeRefWithAbsoluteIdentifier,
+  rri,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import {
   getValueForResourcePath,
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common/query-field-utils';
 
 module('normalizeQueryDefinition', function () {
+  let virtualNetwork = new VirtualNetwork();
   let fieldDefinition = {
     type: 'containsMany',
     isPrimitive: false,
@@ -44,12 +49,15 @@ module('normalizeQueryDefinition', function () {
       fieldPath: 'profile',
       resource,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       new URL(resource.id!),
+      undefined,
+      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       eq: { city: 'NYC' },
@@ -64,6 +72,8 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -75,6 +85,7 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -89,6 +100,8 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -102,6 +115,7 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -119,6 +133,8 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -132,6 +148,7 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -149,6 +166,8 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -167,6 +186,7 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -189,6 +209,8 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
     let typeRef = {
       module: rri('https://example.com/other'),
@@ -206,6 +228,7 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -236,12 +259,15 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
+      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       any: [
@@ -265,11 +291,14 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'matchingItems',
       resolvePathValue: (path) => resolvePath(instance, path),
       relativeTo,
+      virtualNetwork,
     });
 
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       in: { color: ['red', 'blue', 'green'] },
@@ -291,6 +320,7 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'matchingItems',
       resolvePathValue: (path) => resolvePath(instance, path),
       relativeTo,
+      virtualNetwork,
     });
 
     assert.strictEqual(
@@ -314,11 +344,14 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'favoriteCity',
       resolvePathValue: (path) => resolvePath(instance, path),
       relativeTo,
+      virtualNetwork,
     });
 
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
+      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       eq: { city: 'Paris' },

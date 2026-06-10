@@ -196,7 +196,7 @@ Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected
 
 ## `.gts` file gotcha: regex literals can break content-tag
 
-The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
+The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Three known triggers:
 
 **1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
 
@@ -219,6 +219,18 @@ lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
 const HEADING_RE = /^\s*#{1,6}\s+/;
 lines.some((line) => !HEADING_RE.test(line));
 ```
+
+**3. Backtick-wrapped bracket token inside the `<template>` body** — a comment _inside_ the template (e.g. a `<style scoped>` CSS comment) that contains a backtick-wrapped selector like `` `[data-foo]` `` drops the template. The same text in a `//` comment _outside_ `<template>…</template>` is harmless; content-tag only runs its template-mode lexer between the tags.
+
+```hbs
+<template>
+  <style scoped>
+    {{! BROKEN: backtick-wrapped `[data-foo]` in a template-region comment }}{{! FIX: drop the backticks or the brackets, or move the note to a JS comment above the component }}
+  </style>
+</template>
+```
+
+Symptom differs from triggers 1–2: the template body is silently dropped, so type-check can still pass while ESLint reports phantom `no-unused-vars` on imports/consts the template references (e.g. `hash`, yielded consts). ESLint is the canary.
 
 ## Base realm imports
 

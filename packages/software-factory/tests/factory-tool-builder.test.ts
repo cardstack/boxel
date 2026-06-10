@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import type { ToolResult } from '../src/factory-agent';
+import type { ToolResult } from '../src/factory-agent/index.ts';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
@@ -9,14 +9,14 @@ import {
   type ToolBuilderConfig,
   type DoneResult,
   type ClarificationResult,
-} from '../src/factory-tool-builder';
-import type { ToolExecutor } from '../src/factory-tool-executor';
-import { ToolRegistry } from '../src/factory-tool-registry';
-import { createMockClient } from './helpers/mock-client';
+} from '../src/factory-tool-builder.ts';
+import type { ToolExecutor } from '../src/factory-tool-executor.ts';
+import { ToolRegistry } from '../src/factory-tool-registry.ts';
+import { createMockClient } from './helpers/mock-client.ts';
 import {
   createTestWorkspace,
   type TestWorkspace,
-} from './helpers/workspace-fixture';
+} from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

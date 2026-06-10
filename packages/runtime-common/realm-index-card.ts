@@ -1,14 +1,13 @@
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { realmURL } from './constants';
-import { cardIdToURL } from './card-reference-resolver';
-import { RealmPaths } from './paths';
-import type { VirtualNetwork } from './virtual-network';
+import { realmURL } from './constants.ts';
+import { RealmPaths } from './paths.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 export function isRealmIndexCardId(
   cardId: string | undefined,
   realm: string | URL | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): boolean {
   if (!cardId || !realm) {
     return false;
@@ -18,9 +17,7 @@ export function isRealmIndexCardId(
       typeof realm === 'string' ? new URL(realm) : realm,
       virtualNetwork,
     );
-    let cardURL = virtualNetwork
-      ? virtualNetwork.toURL(cardId)
-      : cardIdToURL(cardId);
+    let cardURL = virtualNetwork.toURL(cardId);
     return realmPaths.inRealm(cardURL) && realmPaths.local(cardURL) === 'index';
   } catch {
     return false;
@@ -29,7 +26,7 @@ export function isRealmIndexCardId(
 
 export function isRealmIndexCard(
   card: CardDef | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): boolean {
   let cardId = typeof card?.id === 'string' ? card.id : undefined;
   return isRealmIndexCardId(cardId, card?.[realmURL], virtualNetwork);

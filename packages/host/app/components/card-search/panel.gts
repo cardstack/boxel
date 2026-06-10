@@ -23,6 +23,11 @@ interface Signature {
     baseFilter?: Filter;
     initialSelectedTypes?: ResolvedCodeRef[];
     initialSelectedRealms?: URL[];
+    /**
+     * Hard-scope: when true, selectedRealms is fixed to initialSelectedRealms
+     * and the realm picker is disabled.
+     */
+    lockSelectedRealms?: boolean;
     onRealmChange?: (selectedRealms: URL[]) => void;
     onTypeChange?: (selectedTypes: ResolvedCodeRef[]) => void;
   };
@@ -78,6 +83,7 @@ export default class SearchPanel extends Component<Signature> {
       selected: this.selectedRealms,
       onChange: this.onRealmChange,
       selectedURLs: this.selectedRealmURLs,
+      locked: this.args.lockSelectedRealms,
     };
   }
 
@@ -102,6 +108,9 @@ export default class SearchPanel extends Component<Signature> {
 
   @action
   private onRealmChange(selected: URL[]) {
+    if (this.args.lockSelectedRealms) {
+      return;
+    }
     this.selectedRealms = selected;
     this.args.onRealmChange?.(selected);
   }

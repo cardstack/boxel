@@ -1,5 +1,4 @@
-import { Memoize } from 'typescript-memoize';
-import { isScopedCSSRequest } from './scoped-css';
+import { isScopedCSSRequest } from './scoped-css.ts';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
@@ -9,9 +8,6 @@ import {
   unixTime,
   maxLinkDepth,
   maybeURL,
-  resolveCardReference,
-  isRegisteredPrefix,
-  cardIdToURL,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -28,95 +24,68 @@ import {
   visitInstanceURLs,
   maybeRelativeReference,
   codeRefFromInternalKey,
-  query,
-  param,
-  type Expression,
 } from '.';
-import type { Realm } from './realm';
-import type { VirtualNetwork } from './virtual-network';
-import { FILE_META_RESERVED_KEYS } from './realm';
-import { RealmPaths } from './paths';
+import type { Realm } from './realm.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { FILE_META_RESERVED_KEYS } from './realm.ts';
+import { RealmPaths } from './paths.ts';
+import type { RequestTimings } from './request-timings.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './card-reference-resolver';
-import { rri } from './card-reference-resolver';
+} from './realm-identifiers.ts';
+import { rri } from './realm-identifiers.ts';
 import {
   normalizeQueryForSignature,
   sortKeysDeep,
   type Filter,
   type Query,
-} from './query';
-import { CardError, type SerializedError } from './error';
+} from './query.ts';
+import { CardError, type SerializedError } from './error.ts';
 import {
   isCodeRef,
   isResolvedCodeRef,
   visitModuleDeps,
   type CodeRef,
-} from './code-ref';
+} from './code-ref.ts';
 import {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
+  type UnifiedSearchCollectionDocument,
+  type UnifiedSearchIncludedResource,
   isLinkableCollectionDocument,
-} from './document-types';
-import { relationshipEntries } from './relationship-utils';
+} from './document-types.ts';
+import { relationshipEntries } from './relationship-utils.ts';
 import type {
   CardResource,
+  CssResource,
   FileMetaResource,
   QueryFieldMeta,
   Saved,
-} from './resource-types';
-import { getImmediateFieldDef, type FieldDefinition } from './definitions';
+} from './resource-types.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import {
+  buildCssResource,
+  buildIdentityOnlyCard,
+  buildIdentityOnlyFileMeta,
+  buildRenderedHtmlResource,
+  parseUsedRenderType,
+  scopedCssHrefsFromDeps,
+} from './unified-search.ts';
+import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
   getValueForResourcePath,
-} from './query-field-utils';
+} from './query-field-utils.ts';
 
 // We allow up to this many traversals into the same card type per
 // `populateQueryFields` walk, matching the field-set the host emits at
 // indexing time (`getFieldDefinitions` in `runtime-common/definitions.ts`
 // uses the same depth for repeated card types).
 const RECURSING_DEPTH = 3;
-
-const INSTANCE_CACHE_TABLE = 'job_scoped_instance_cache';
-
-// Hit/miss observability for the per-instance cache. Counters are kept per job
-// identity and a running summary is emitted as cache traffic accumulates — a
-// low-volume aggregate (not one line per event) so an indexing run reports its
-// cache hit rate in the ordinary logs. The map is diagnostics-only and bounded.
-// Lazily created (not at module load): a top-level `logger()` call here races
-// the circular import that populates it, whereas first use happens well after.
-let instanceCacheLog: ReturnType<typeof logger> | undefined;
-const instanceCacheStats = new Map<string, { hits: number; misses: number }>();
-const INSTANCE_CACHE_LOG_EVERY = 200;
-
-function recordInstanceCacheEvent(jobId: string, hit: boolean): void {
-  let stat = instanceCacheStats.get(jobId);
-  if (!stat) {
-    // Bound memory without tracking job lifecycle here: drop the whole map if
-    // it grows past a sane number of concurrent jobs.
-    if (instanceCacheStats.size > 256) {
-      instanceCacheStats.clear();
-    }
-    stat = { hits: 0, misses: 0 };
-    instanceCacheStats.set(jobId, stat);
-  }
-  if (hit) {
-    stat.hits++;
-  } else {
-    stat.misses++;
-  }
-  let total = stat.hits + stat.misses;
-  if (total === 1 || total % INSTANCE_CACHE_LOG_EVERY === 0) {
-    (instanceCacheLog ??= logger('instance-cache')).info(
-      `job=${jobId} hits=${stat.hits} misses=${stat.misses} ` +
-        `hitRate=${Math.round((100 * stat.hits) / total)}%`,
-    );
-  }
-}
 
 type Options = {
   loadLinks?: true;
@@ -136,40 +105,35 @@ type Options = {
   // When true, `loadLinks` populates `relationships.{field}.data` for
   // query-backed `linksTo` / `linksToMany` fields but does NOT push
   // the linked resources into `included[]`. Static linksTo / linksToMany
-  // still expand transitively. Set by the realm-server handlers when
-  // the request originates inside a prerender — the caller can resolve
-  // the listed IDs via per-URL fetches, and the eager closure is a
-  // wasted round-trip in that context. The umbrella relationship
-  // carries `links.search` only when written by `applyQueryResults`,
-  // so that key is the per-field "is this query-backed?" signal at
-  // follow time.
+  // still expand transitively. Set by the realm-server card-document
+  // handlers (GET / POST / PATCH) when the request originates inside a
+  // prerender — the caller can resolve the listed IDs via per-URL fetches,
+  // and the eager closure is a wasted round-trip in that context. The
+  // umbrella relationship carries `links.search` only when written by
+  // `applyQueryResults`, so that key is the per-field "is this
+  // query-backed?" signal at follow time. (The search path does not use
+  // this flag — see `omitIncluded`.)
   skipQueryBackedExpansion?: boolean;
-  // When true, `loadLinks` seeds the top-level result cards
-  // (`populateQueryFields` on the roots) and then returns an empty array —
-  // the transitive static-link BFS, the deeper-layer
-  // `populateQueryFields`, and the clone-into-`included` step are all
-  // skipped. (The search assembler only sets `doc.included` when the array
-  // is non-empty, so the response document omits the `included` member
-  // entirely.) Set by the realm-server search handlers when the request
-  // originates inside a prerender: the host resolves every linked card
-  // by URL via card+source (query fields from the seed umbrella, static
-  // links via a `not-loaded` sentinel that lazy-loads), so the response's
-  // `included[]` is dead weight. Strictly prerender-scoped — live /
-  // external `_federated-search` callers still receive compound documents.
-  // Implies the query-backed `${field}.N` sub-entry stripping
-  // (see `skipQueryBackedExpansion`) so the seeded roots stay orphan-free.
+  // When true, `searchCardsUncoalesced` skips the `loadLinks` /
+  // `populateQueryFields` pass entirely. Each result still carries its
+  // pristine index row (id + attributes + any static-link relationships)
+  // plus page meta, but the pass that would add query-field
+  // `relationships.{field}.data` umbrellas and expand linked resources into
+  // `included[]` does not run — so neither is present. Set by the
+  // realm-server search handlers when the request originates inside a
+  // prerender: the host re-resolves every result card from its raw
+  // card+source file and reads only `data[].id`, so that assembly is
+  // throwaway work in that context. Strictly prerender-scoped — live /
+  // external `_federated-search` callers still receive fully-assembled
+  // compound documents.
   omitIncluded?: boolean;
-  // The `<jobId>.<reservationId>` job identity (from the `x-boxel-job-id`
-  // header), threaded by the realm-server search / card-GET handlers when a
-  // request originates inside an indexing prerender. Enables the per-instance
-  // wire-format cache (`job_scoped_instance_cache`): within one job
-  // `boxel_index` is frozen, so an instance's assembled query-field
-  // relationships are stable and can be reused across every search / GET that
-  // touches it. The reservation is part of the key because a job can re-run
-  // under a new reservation, between which committed state may move. Absent
-  // for live / external callers, which therefore never read or write the
-  // cache.
-  jobIdentity?: string;
+  // Per-request wall-clock collector, threaded from `searchRealms` when a
+  // request carries a correlation id. The post-SQL stages here — the SQL
+  // query and the `loadLinks` relationship assembly — stamp their elapsed
+  // time on it so the handler can attribute the request's server-side time
+  // across stages. Absent (and so a no-op) for everything except
+  // instrumented `_federated-search` calls.
+  timings?: RequestTimings;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -221,10 +185,19 @@ export function searchInFlightKey(
   // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
   // collide with the delimiter and cause unrelated searches to coalesce.
   try {
+    // `timings` is a per-request diagnostic collector, not part of the
+    // result-shaping opts. Exclude it from the key so it can't perturb the
+    // in-flight coalescing — two otherwise-identical searches must still
+    // dedupe even though each carries its own collector.
+    let keyOpts = opts;
+    if (opts && 'timings' in opts) {
+      let { timings: _omitTimings, ...rest } = opts;
+      keyOpts = rest;
+    }
     return JSON.stringify([
       realmURL,
       normalizeQueryForSignature(query),
-      opts ? sortKeysDeep(opts) : null,
+      keyOpts ? sortKeysDeep(keyOpts) : null,
     ]);
   } catch {
     return undefined;
@@ -235,34 +208,26 @@ function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   // Registered prefix references (e.g. @cardstack/catalog/foo) are already
   // in their canonical portable form — don't resolve them.
-  if (
-    virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(url)
-      : isRegisteredPrefix(url)
-  ) {
+  if (virtualNetwork.isRegisteredPrefix(url)) {
     return;
   }
   if (!resourceId) {
     setURL(url);
     return;
   }
-  setURL(
-    virtualNetwork
-      ? virtualNetwork.resolveURL(url, resourceId).href
-      : resolveCardReference(url, resourceId),
-  );
+  setURL(virtualNetwork.resolveURL(url, resourceId).href);
 }
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
+  #realmURL: URL | undefined;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
-  #dbAdapter: DBAdapter;
   #log = logger('realm:index-query-engine');
   // In-flight dedup for searchCards: concurrent callers asking for the same
   // (realm, query, opts) share one in-flight promise instead of each running
@@ -315,16 +280,18 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
+    this.#indexQueryEngine = new IndexQueryEngine(
+      dbAdapter,
+      definitionLookup,
+      realm.virtualNetwork,
+    );
     this.#definitionLookup = definitionLookup;
-    this.#dbAdapter = dbAdapter;
     this.#realm = realm;
     this.#fetch = fetch;
   }
 
-  @Memoize()
   private get realmURL() {
-    return new URL(this.#realm.url);
+    return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
   async searchCards(
@@ -335,7 +302,15 @@ export class RealmIndexQueryEngine {
     if (key !== undefined) {
       let existing = this.#inFlightSearch.get(key);
       if (existing) {
-        return await existing;
+        // A concurrent identical search is already running; this follower
+        // awaits its result instead of re-running the work. Record that wait
+        // as `coalescedWait` on the follower's own collector so its
+        // `realm:search-timing` line reflects the time spent — otherwise the
+        // follower would show no `sql`/`loadLinks` and look misleadingly
+        // instant exactly under the concurrent search load we're diagnosing.
+        return opts?.timings
+          ? await opts.timings.time('coalescedWait', () => existing)
+          : await existing;
       }
       let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
         // Identity-check before deletion: a concurrent invalidation path
@@ -378,11 +353,15 @@ export class RealmIndexQueryEngine {
         meta,
       };
     } else {
-      let { cards, meta } = await this.#indexQueryEngine.searchCards(
-        new URL(this.#realm.url),
-        query,
-        opts,
-      );
+      let runCardSql = () =>
+        this.#indexQueryEngine.searchCards(
+          new URL(this.#realm.url),
+          query,
+          opts,
+        );
+      let { cards, meta } = opts?.timings
+        ? await opts.timings.time('sql', runCardSql)
+        : await runCardSql();
       let cardResources = cards.map((resource) => ({
         ...resource,
         ...{ links: { self: resource.id } },
@@ -401,7 +380,16 @@ export class RealmIndexQueryEngine {
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
-    if (opts?.loadLinks) {
+    //
+    // Prerender searches (`omitIncluded`) skip the relationship-assembly pass
+    // entirely: the host re-resolves every result card from its raw
+    // card+source file and consumes only `data[].id`, so `loadLinks` /
+    // `populateQueryFields` — the query-field umbrellas and the transitive
+    // `included[]` expansion — is provably throwaway work here. The response
+    // carries the pristine result rows (ids + attributes + static-link
+    // relationships) and page meta only. Live / external callers still run
+    // the full pass below.
+    if (opts?.loadLinks && !opts?.omitIncluded) {
       let linkFields = isFileMetaQuery
         ? query.fields?.['file-meta']
         : query.fields?.['card'];
@@ -410,17 +398,305 @@ export class RealmIndexQueryEngine {
       // Process all root resources together so a single batched DB query
       // resolves their first-level links (1+1 instead of N+M sequential
       // round-trips). See CS-11038.
-      let included = await this.loadLinks(
-        {
-          realmURL: this.realmURL,
-          rootResources: doc.data,
-          omit,
-        },
-        linkOpts,
-      );
+      let runLoadLinks = () =>
+        this.loadLinks(
+          {
+            realmURL: this.realmURL,
+            rootResources: doc.data,
+            omit,
+          },
+          linkOpts,
+        );
+      let included = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
       if (included.length > 0) {
         doc.included = included;
       }
+    }
+    await this.attachRealmInfo(doc);
+    return doc;
+  }
+
+  // Prefer-HTML unified search. Runs the single `render` projection and applies
+  // the per-row resolution policy:
+  //   - a row WITH html → an identity-only `card` (no live serialization) plus
+  //     a `rendered-html` (+ its `css`) in `included`;
+  //   - a row WITHOUT html → the full live `card` from its pristine row,
+  //     exactly as the data-only path returns it.
+  // Only the no-HTML fallback cards go through `loadLinks` — an identity-only
+  // card has no relationships to expand. `css` resources dedupe by their
+  // content-hash id across rows. A query that targets file-meta resolves
+  // through `searchFiles` (the `render` projection is instance-only) and gets
+  // the same prefer-HTML treatment per file — see `searchUnifiedFileMeta`.
+  async searchUnified(
+    query: Query,
+    opts: Options & {
+      render: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
+    },
+  ): Promise<UnifiedSearchCollectionDocument> {
+    if (await this.queryTargetsFileMeta(query.filter, opts)) {
+      return await this.searchUnifiedFileMeta(query, opts);
+    }
+
+    // `includeErrors` so error rows reach the mapper as `rendered-html` with
+    // `isError` (the data-only path excludes them, matching the live `/_search`).
+    let runSql = () =>
+      this.#indexQueryEngine.search(
+        new URL(this.#realm.url),
+        query,
+        { ...opts, includeErrors: true },
+        {
+          kind: 'render',
+          htmlFormat: opts.render.format,
+          // `internalKeyFor` (used by the HTML-column expression) resolves a
+          // relative module, so a plain `CodeRef` is accepted here; a render type
+          // is always a concrete `{module,name}`, never an ancestorOf/fieldOf ref.
+          renderType: opts.render.renderType as ResolvedCodeRef | undefined,
+        },
+      );
+    let { results, meta } = opts?.timings
+      ? await opts.timings.time('sql', runSql)
+      : await runSql();
+
+    let data: (CardResource<Saved> | FileMetaResource)[] = [];
+    let renderedResources: UnifiedSearchIncludedResource[] = [];
+    let cssById = new Map<string, CssResource>();
+    let fallbackRoots: (CardResource<Saved> | FileMetaResource)[] = [];
+
+    for (let row of results) {
+      let fileUrl = row.url;
+      if (!fileUrl) {
+        continue;
+      }
+      // The index `url` column is the instance's file URL; a card's identity
+      // (the live card's `id`, shared with its `rendered-html`) drops the
+      // `.json` extension. Fallback rows take their id from `pristine_doc`,
+      // which already carries the identity form.
+      let cardUrl = fileUrl.endsWith('.json') ? fileUrl.slice(0, -5) : fileUrl;
+      let hasError = Boolean(row.has_error);
+      let html = (row.html as string | null) ?? null;
+
+      if (html != null || hasError) {
+        // HTML-backed (or error) row: rendered-html + identity-only card.
+        let cssIds: string[] = [];
+        for (let href of scopedCssHrefsFromDeps(row.deps as string[] | null)) {
+          let css = buildCssResource(href);
+          if (!cssById.has(css.id)) {
+            cssById.set(css.id, css);
+          }
+          cssIds.push(css.id);
+        }
+        let renderType = parseUsedRenderType(
+          row.used_render_type as string | null,
+        );
+        // The actual (most-derived) type rides in `types[0]`; the type the HTML
+        // was rendered as is `renderType` — they differ when an ancestor type
+        // was requested. The identity-only card's `adoptsFrom` is the actual
+        // type.
+        let adoptsFrom =
+          parseUsedRenderType((row.types as string[] | null)?.[0]) ??
+          renderType;
+        let cardType = (row.display_names as string[] | null)?.[0] ?? '';
+        renderedResources.push(
+          buildRenderedHtmlResource({
+            url: cardUrl,
+            html: html ?? '',
+            cardType,
+            iconHtml: (row.icon_html as string | null) ?? undefined,
+            isError: hasError || undefined,
+            renderType,
+            cssIds,
+          }),
+        );
+        if (adoptsFrom) {
+          data.push(
+            buildIdentityOnlyCard({ url: cardUrl, adoptsFrom, renderType }),
+          );
+        }
+      } else {
+        // No HTML: fall back to the full live card, exactly as `/_search` —
+        // honoring any sparse fieldset the query requested, so a fallback row
+        // carries the same attributes/relationships the data-only path would.
+        let pristine = row.pristine_doc as CardResource<Saved> | null;
+        if (pristine) {
+          let card: CardResource<Saved> = {
+            ...pristine,
+            links: { self: pristine.id },
+          };
+          if (query.fields?.['card'] !== undefined) {
+            card = applySparseFieldset(card, query.fields['card']);
+          }
+          data.push(card);
+          fallbackRoots.push(card);
+        }
+      }
+    }
+
+    // first-seen render-html order, then deduped css.
+    let included: UnifiedSearchIncludedResource[] = [
+      ...renderedResources,
+      ...cssById.values(),
+    ];
+
+    // Assemble the transitive `included` for the live fallback cards only.
+    // Same gating as the data-only path: skipped inside a prerender, where the
+    // host re-resolves each result from its card+source file. The query's
+    // `fields.card` (when present) scopes the link expansion, matching
+    // `/_search`.
+    if (fallbackRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+      let linkFields = query.fields?.['card'];
+      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
+      let omit = data.map((r) => r.id).filter(Boolean) as string[];
+      let runLoadLinks = () =>
+        this.loadLinks(
+          { realmURL: this.realmURL, rootResources: fallbackRoots, omit },
+          linkOpts,
+        );
+      let fallbackIncluded = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
+      included.push(...fallbackIncluded);
+    }
+
+    let doc: UnifiedSearchCollectionDocument = { data, meta };
+    if (included.length > 0) {
+      doc.included = included;
+    }
+    // Echo the collection-level render type when it's a single resolved type
+    // (an explicit `renderType`); the `"native"` / per-row cases vary by row
+    // and are echoed on each `rendered-html` instead.
+    if (opts.render.renderType) {
+      doc.meta.renderType = opts.render.renderType;
+    }
+    await this.attachRealmInfo(doc);
+    return doc;
+  }
+
+  // The file-meta counterpart of `searchUnified`. Files are indexed as
+  // `type: 'file'` rows, which the instance-only `render` projection skips, so
+  // they resolve through `searchFiles` (per-type HTML + the full `file-meta`
+  // resource). Same prefer-HTML policy per file: HTML present → identity-only
+  // `file-meta` + `rendered-html` (+ deduped `css`); no HTML → the full live
+  // `file-meta`. A file renders natively, so its `rendered-html` carries no
+  // `renderType` and the identity-only `file-meta`'s `adoptsFrom` is its own
+  // resolved type.
+  private async searchUnifiedFileMeta(
+    query: Query,
+    opts: Options & {
+      render: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
+    },
+  ): Promise<UnifiedSearchCollectionDocument> {
+    // File-meta search returns non-error rows (matching the prerendered file
+    // path); the per-file HTML is selected in `fileEntryToPrerenderedCard`.
+    //
+    // A file renders natively: its prerendered HTML is keyed by the file's own
+    // most-derived type, never by an ancestor a caller asked *cards* to render
+    // as. So the card-side render type — which `resolveRenderType` may default
+    // to `filter.on` — is deliberately dropped here rather than threaded into
+    // the file lookup. `fileEntryToPrerenderedCard` then selects each file's
+    // own `types[0]`, and that is the type `buildIdentityOnlyFileMeta` stamps
+    // as `adoptsFrom`; letting an ancestor type leak in would mismatch a
+    // FileDef subclass's HTML against its identity.
+    let {
+      includeErrors: _includeErrors,
+      renderType: _renderType,
+      ...rest
+    } = opts;
+    let fileOpts = {
+      ...rest,
+      htmlFormat: opts.render.format,
+    };
+    let runSql = () =>
+      this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        fileOpts,
+      );
+    let { files, meta } = opts?.timings
+      ? await opts.timings.time('sql', runSql)
+      : await runSql();
+
+    let data: (CardResource<Saved> | FileMetaResource)[] = [];
+    let renderedResources: UnifiedSearchIncludedResource[] = [];
+    let cssById = new Map<string, CssResource>();
+    let fallbackRoots: (CardResource<Saved> | FileMetaResource)[] = [];
+
+    for (let file of files) {
+      let { url, html, cardType, iconHtml, usedRenderType } =
+        this.fileEntryToPrerenderedCard(file, fileOpts);
+      if (!url) {
+        continue;
+      }
+      if (html != null) {
+        // HTML-backed file → rendered-html + identity-only file-meta.
+        let cssIds: string[] = [];
+        for (let href of scopedCssHrefsFromDeps(file.deps)) {
+          let css = buildCssResource(href);
+          if (!cssById.has(css.id)) {
+            cssById.set(css.id, css);
+          }
+          cssIds.push(css.id);
+        }
+        renderedResources.push(
+          buildRenderedHtmlResource({
+            url,
+            html,
+            cardType: cardType ?? '',
+            iconHtml,
+            cssIds,
+          }),
+        );
+        if (usedRenderType) {
+          data.push(
+            buildIdentityOnlyFileMeta({ url, adoptsFrom: usedRenderType }),
+          );
+        }
+      } else {
+        // No HTML → the full live file-meta, exactly as the data-only path.
+        let pristine = file.resource;
+        if (pristine && pristine.id) {
+          let fileMeta: FileMetaResource = {
+            ...pristine,
+            links: { self: pristine.id },
+          };
+          if (query.fields?.['file-meta'] !== undefined) {
+            fileMeta = applySparseFieldset(
+              fileMeta,
+              query.fields['file-meta'],
+            ) as FileMetaResource;
+          }
+          data.push(fileMeta);
+          fallbackRoots.push(fileMeta);
+        }
+      }
+    }
+
+    let included: UnifiedSearchIncludedResource[] = [
+      ...renderedResources,
+      ...cssById.values(),
+    ];
+
+    // Only the no-HTML fallback rows expand links (an identity-only file-meta
+    // has none); same gating as the card path.
+    if (fallbackRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+      let linkFields = query.fields?.['file-meta'];
+      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
+      let omit = data.map((r) => r.id).filter(Boolean) as string[];
+      let runLoadLinks = () =>
+        this.loadLinks(
+          { realmURL: this.realmURL, rootResources: fallbackRoots, omit },
+          linkOpts,
+        );
+      let fallbackIncluded = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
+      included.push(...fallbackIncluded);
+    }
+
+    let doc: UnifiedSearchCollectionDocument = { data, meta };
+    if (included.length > 0) {
+      doc.included = included;
     }
     await this.attachRealmInfo(doc);
     return doc;
@@ -475,7 +751,7 @@ export class RealmIndexQueryEngine {
       return false;
     }
     try {
-      let definition: import('./definitions').Definition | undefined;
+      let definition: import('./definitions.ts').Definition | undefined;
       if (opts?.cacheOnlyDefinitions) {
         definition =
           await this.#definitionLookup.lookupCachedDefinition(codeRef);
@@ -690,20 +966,6 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getFile(url, opts);
   }
 
-  async loadLinksForResource(
-    resource: LooseCardResource | FileMetaResource,
-    opts?: Options,
-  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
-    return await this.loadLinks(
-      {
-        realmURL: this.realmURL,
-        rootResources: [resource],
-        omit: [...(resource.id ? [resource.id] : [])],
-      },
-      opts,
-    );
-  }
-
   private async populateQueryFields(
     resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
@@ -755,7 +1017,7 @@ export class RealmIndexQueryEngine {
   // emitted.
   private async walkAndPopulateQueryFields(
     resource: LooseCardResource | FileMetaResource,
-    definition: import('./definitions').Definition,
+    definition: import('./definitions.ts').Definition,
     prefix: string,
     realmURL: URL,
     opts: Options | undefined,
@@ -833,9 +1095,9 @@ export class RealmIndexQueryEngine {
   }
 
   private async lookupDefinitionForOpts(
-    codeRef: import('./code-ref').ResolvedCodeRef,
+    codeRef: import('./code-ref.ts').ResolvedCodeRef,
     opts: Options | undefined,
-  ): Promise<import('./definitions').Definition | undefined> {
+  ): Promise<import('./definitions.ts').Definition | undefined> {
     if (opts?.cacheOnlyDefinitions) {
       return await this.#definitionLookup.lookupCachedDefinition(codeRef);
     }
@@ -1165,11 +1427,23 @@ export class RealmIndexQueryEngine {
   }
 
   private async attachRealmInfo(
-    doc: SingleCardDocument | LinkableCollectionDocument,
+    doc:
+      | SingleCardDocument
+      | LinkableCollectionDocument
+      | UnifiedSearchCollectionDocument,
   ): Promise<void> {
     let realmInfo = await this.#realm.getRealmInfo();
     let resources = Array.isArray(doc.data) ? doc.data : [doc.data];
     for (let resource of [...resources, ...(doc.included ?? [])]) {
+      // Only `card` / `file-meta` resources carry realm metadata. A unified
+      // `included` also holds `rendered-html` / `css` resources, which have no
+      // `realmURL`; they fall through this discriminant untouched.
+      if (
+        resource.type !== CardResourceType &&
+        resource.type !== FileMetaResourceType
+      ) {
+        continue;
+      }
       if (resource.meta?.realmURL === this.realmURL.href) {
         resource.meta.realmInfo = realmInfo;
       }
@@ -1250,82 +1524,6 @@ export class RealmIndexQueryEngine {
   // in-realm cards and one for in-realm file-meta resources, alongside
   // Promise.all-fanout cross-realm fetches, all running concurrently
   // regardless of how many siblings reference links at that depth.
-  // ── Job-scoped per-instance wire-format cache (job_scoped_instance_cache) ──
-  // Within one indexing job `boxel_index` is frozen, so an instance's assembled
-  // query-field relationships are stable. Caching them per (jobIdentity, url)
-  // lets every later occurrence of the instance in the job — another search
-  // result, a per-URL card GET, a linked target — skip the definition lookup +
-  // field-tree walk that `populateQueryFields` would otherwise repeat.
-
-  // Cache coordinates for a resource, or undefined when caching doesn't apply:
-  // no job identity, no id, or a sparse-fieldset (partial) population that
-  // mustn't masquerade as a full assembly. `jobIdentity` is derived from the
-  // sanitized `x-boxel-job-id` header, which by design only indexer-driven
-  // prerender requests carry — so in normal operation this scopes the cache to
-  // indexing and live / external traffic skips it (it is an expectation about
-  // callers, not a property this layer enforces).
-  #instanceCacheKey(
-    resource: LooseCardResource | FileMetaResource,
-    opts: Options | undefined,
-  ): { jobId: string; url: string } | undefined {
-    if (!opts?.jobIdentity || !resource.id || opts.linkFields) {
-      return undefined;
-    }
-    return { jobId: opts.jobIdentity, url: resource.id };
-  }
-
-  // `undefined` = cache miss (no row); `null` = cached "no relationships";
-  // object = cached relationships map. Best-effort: a read failure degrades to
-  // a recompute, never an error.
-  async #readCachedRelationships(
-    jobId: string,
-    url: string,
-  ): Promise<Record<string, unknown> | null | undefined> {
-    try {
-      let rows = (await query(this.#dbAdapter, [
-        `SELECT result FROM ${INSTANCE_CACHE_TABLE} WHERE job_id =`,
-        param(jobId),
-        ` AND url =`,
-        param(url),
-      ] as Expression)) as { result: string }[];
-      if (!rows.length) {
-        return undefined;
-      }
-      return JSON.parse(rows[0].result) as Record<string, unknown> | null;
-    } catch (err: unknown) {
-      this.#log.warn(
-        `per-instance cache read failed for ${url} (job ${jobId}): ${String(err)}`,
-      );
-      return undefined;
-    }
-  }
-
-  // First write wins (ON CONFLICT DO NOTHING) — concurrent populates of the
-  // same instance in one job produce equivalent results against the frozen
-  // index, so either is valid. Best-effort: a write failure is logged, never
-  // thrown.
-  async #writeCachedRelationships(
-    jobId: string,
-    url: string,
-    relationships: unknown,
-  ): Promise<void> {
-    try {
-      await query(this.#dbAdapter, [
-        `INSERT INTO ${INSTANCE_CACHE_TABLE} (job_id, url, result) VALUES (`,
-        param(jobId),
-        `,`,
-        param(url),
-        `,`,
-        param(JSON.stringify(relationships ?? null)),
-        `) ON CONFLICT (job_id, url) DO NOTHING`,
-      ] as Expression);
-    } catch (err: unknown) {
-      this.#log.warn(
-        `per-instance cache write failed for ${url} (job ${jobId}): ${String(err)}`,
-      );
-    }
-  }
-
   private async loadLinks(
     {
       realmURL,
@@ -1386,7 +1584,7 @@ export class RealmIndexQueryEngine {
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its
       // computed query-fields; collapsing those across the layer is a
-      // separate optimization (out of scope for CS-11038).
+      // separate optimization.
       try {
         await Promise.all(
           layer.map(async ({ resource, applyLinkFields }) => {
@@ -1395,51 +1593,30 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
-            let cacheKey = this.#instanceCacheKey(resource, popOpts);
-            if (cacheKey) {
-              let cached = await this.#readCachedRelationships(
-                cacheKey.jobId,
-                cacheKey.url,
-              );
-              if (cached !== undefined) {
-                recordInstanceCacheEvent(cacheKey.jobId, true);
-                // Hit: reuse this instance's assembled query-field
-                // relationships from an earlier occurrence in the same job,
-                // skipping the definition lookup + field-tree walk. The
-                // cached value is pre-strip; the `${field}.N` /
-                // included-omission steps below run uniformly on hit and miss.
-                if (cached === null) {
-                  delete (resource as { relationships?: unknown })
-                    .relationships;
-                } else {
-                  (resource as { relationships?: unknown }).relationships =
-                    cached;
-                }
-                return;
-              }
-              recordInstanceCacheEvent(cacheKey.jobId, false);
-            }
+            let timings = popOpts?.timings;
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
               }
             )?.queryFieldDefs;
-            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
-              await this.populateQueryFieldsFromMeta(
-                resource,
-                realmURL,
-                storedDefs,
-                popOpts,
-              );
+            // The relationship/query-field assembly — the definition lookup +
+            // field-tree walk — is the post-SQL "wire-format prep" the timeline
+            // attributes under `populate`. Recorded as busy-time (this runs
+            // concurrently across the layer); the wall-clock of the whole pass
+            // is the outer `loadLinks` stage.
+            let runPopulate = () =>
+              popOpts?.cacheOnlyDefinitions && storedDefs
+                ? this.populateQueryFieldsFromMeta(
+                    resource,
+                    realmURL,
+                    storedDefs,
+                    popOpts,
+                  )
+                : this.populateQueryFields(resource, realmURL, popOpts);
+            if (timings) {
+              await timings.busyTime('populate', runPopulate);
             } else {
-              await this.populateQueryFields(resource, realmURL, popOpts);
-            }
-            if (cacheKey) {
-              await this.#writeCachedRelationships(
-                cacheKey.jobId,
-                cacheKey.url,
-                (resource as { relationships?: unknown }).relationships,
-              );
+              await runPopulate();
             }
           }),
         );
@@ -1458,13 +1635,13 @@ export class RealmIndexQueryEngine {
       // Step 1b: strip `fieldName.N` sub-entries from query-backed fields.
       // The host deserializer treats every per-item entry as a
       // follow-able relationship and expects its target in `included[]`,
-      // so leaving them on the wire alongside an omitted / query-backed
-      // `included[]` produces orphan-link errors. The umbrella entry
-      // (`fieldName`) stays — it carries `links.search` and
-      // `data: [array of IDs]` for the host's per-URL hydration path.
-      // Runs for both the query-backed-only prerender skip and the
-      // broader `omitIncluded` short-circuit below.
-      if (opts?.skipQueryBackedExpansion || opts?.omitIncluded) {
+      // so leaving them on the wire alongside a query-backed field whose
+      // targets are not expanded into `included[]` produces orphan-link
+      // errors. The umbrella entry (`fieldName`) stays — it carries
+      // `links.search` and `data: [array of IDs]` for the host's per-URL
+      // hydration path. Set by the card-document prerender path
+      // (`skipQueryBackedExpansion`).
+      if (opts?.skipQueryBackedExpansion) {
         for (let { resource } of layer) {
           if (!resource.relationships) {
             continue;
@@ -1487,25 +1664,11 @@ export class RealmIndexQueryEngine {
         }
       }
 
-      // Prerender included-omission: the host never reads the search
-      // response's `included[]` — it resolves every linked card by URL
-      // via card+source (query fields from the seed umbrella written by
-      // `populateQueryFields` above; static links via a `not-loaded`
-      // sentinel that lazy-loads). Once the root result cards are seeded,
-      // the transitive static-link BFS (Steps 2-5) and the deeper-layer
-      // `populateQueryFields` are pure waste, so stop after the root
-      // layer and return an empty array (the caller then omits the
-      // `included` member from the response document). Strictly
-      // prerender-scoped.
-      if (opts?.omitIncluded) {
-        break;
-      }
-
       // Step 2: walk every resource's relationships, classify each link,
       // and accumulate URL sets for the batched DB queries.
       type Entry = {
         item: LayerItem;
-        relationship: import('./resource-types').Relationship;
+        relationship: import('./resource-types.ts').Relationship;
         linkURL: URL;
         relationshipId: URL;
         relationshipIdStr: string;
@@ -1884,7 +2047,7 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
 export function relativizeDocument(
   doc: SingleCardDocument,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
@@ -1913,43 +2076,29 @@ function relativizeResource(
   resource: LooseCardResource,
   primaryURL: URL,
   realmURL: URL,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ) {
   // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
   // which is not a valid URL base. Resolve it to a URL for relative resolution.
   let resourceURL = resource.id
-    ? virtualNetwork
-      ? virtualNetwork.toURL(resource.id)
-      : cardIdToURL(resource.id)
+    ? virtualNetwork.toURL(resource.id)
     : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (
-      virtualNetwork
-        ? virtualNetwork.isRegisteredPrefix(url)
-        : isRegisteredPrefix(url)
-    ) {
+    if (virtualNetwork.isRegisteredPrefix(url)) {
       return;
     }
-    let urlObj = virtualNetwork
-      ? virtualNetwork.resolveURL(url, resourceURL)
-      : new URL(resolveCardReference(url, resourceURL));
+    let urlObj = virtualNetwork.resolveURL(url, resourceURL);
     setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (
-      virtualNetwork
-        ? virtualNetwork.isRegisteredPrefix(moduleURL)
-        : isRegisteredPrefix(moduleURL)
-    ) {
+    if (virtualNetwork.isRegisteredPrefix(moduleURL)) {
       return;
     }
-    let absoluteModuleURL = virtualNetwork
-      ? virtualNetwork.resolveURL(moduleURL, resourceURL)
-      : new URL(resolveCardReference(moduleURL, resourceURL));
+    let absoluteModuleURL = virtualNetwork.resolveURL(moduleURL, resourceURL);
     setModuleURL(
       maybeRelativeReference(
         absoluteModuleURL,

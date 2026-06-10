@@ -20,11 +20,11 @@ import {
   markStripeEventAsProcessed,
   sumUpCreditsLedger,
   updateSubscription as updateSubscriptionQuery,
-} from '../billing-queries';
+} from '../billing-queries.ts';
 import type { StripeInvoicePaymentSucceededWebhookEvent } from '.';
 import type { PgAdapter } from '@cardstack/postgres';
 import { TransactionManager } from '@cardstack/postgres';
-import { ProrationCalculator } from '../proration-calculator';
+import { ProrationCalculator } from '../proration-calculator.ts';
 
 function getInvoiceSubscriptionPeriod(
   event: StripeInvoicePaymentSucceededWebhookEvent,

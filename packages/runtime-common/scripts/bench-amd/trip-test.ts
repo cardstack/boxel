@@ -22,7 +22,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { fixturesDir } from './paths';
+import { fixturesDir } from './paths.ts';
 
 const STINGY_MEDIAN_MS = 0.001;
 // Matches the FAIL message produced by `check.ts`. The optional noise-

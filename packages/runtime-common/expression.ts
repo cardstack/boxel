@@ -3,13 +3,14 @@ import isPlainObject from 'lodash/isPlainObject';
 import stringify from 'safe-stable-stringify';
 import flattenDeep from 'lodash/flattenDeep';
 
-import type { CodeRef, DBAdapter, TypeCoercion } from './index';
+import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 
 export type Expression = (
   | string
   | Param
   | TableValuedEach
   | TableValuedTree
+  | JsonContains
   | DBSpecificExpression
 )[];
 
@@ -70,6 +71,29 @@ export interface TableValuedTree {
   treeColumn: string;
 }
 
+// Deferred (pass-1 input) node for a non-null `eq` predicate. The first pass
+// resolves it against the field schema and decides — based on the leaf field's
+// serializer — whether it can become a GIN-servable `JsonContains`. It is the
+// `eq` analogue of FieldQuery.
+export interface JsonContainsQuery {
+  kind: 'json-contains-query';
+  path: string;
+  type: CodeRef;
+  value: CardExpression;
+}
+
+// Resolved (pass-2 input) node describing JSON containment of `column` by the
+// object formed from `segments` with `value` at the leaf — e.g. segments
+// ['customer','id'] => {"customer":{"id": <value>}}. Like TableValuedTree it
+// carries no SQL text and no schema dependence; expressionToSql renders it per
+// adapter (Postgres `@>`, SQLite `-> / ->>` extraction).
+export interface JsonContains {
+  kind: 'json-contains';
+  column: string;
+  segments: string[];
+  value: Param;
+}
+
 export interface FieldArity {
   type: CodeRef;
   path: string;
@@ -86,6 +110,8 @@ export type CardExpression = (
   | DBSpecificExpression
   | TableValuedEach
   | TableValuedTree
+  | JsonContains
+  | JsonContainsQuery
   | FieldQuery
   | FieldValue
   | FieldArity
@@ -179,6 +205,19 @@ export function tableValuedTree(
     rootPath,
     fieldPath,
     treeColumn,
+  };
+}
+
+export function jsonContainsQuery(
+  path: string,
+  type: CodeRef,
+  value: CardExpression,
+): JsonContainsQuery {
+  return {
+    kind: 'json-contains-query',
+    path,
+    type,
+    value,
   };
 }
 
@@ -479,6 +518,29 @@ export function expressionToSql(
         });
       }
       return name;
+    } else if (element.kind === 'json-contains') {
+      // Render the containment of `column` by {segments: value}. Both branches
+      // re-use renderElement so binds are pushed in left-to-right order.
+      let { column, segments, value } = element;
+      if (dbAdapterKind === 'sqlite') {
+        // SQLite has no `@>`; navigate the singular object path: interior
+        // segments with `->`, the leaf with `->>`, then compare. (Only string
+        // leaves reach here, so `->>` text-equality matches the value.)
+        let frag: Expression = [column];
+        segments.forEach((segment, i) => {
+          frag.push(i === segments.length - 1 ? '->>' : '->', param(segment));
+        });
+        frag.push('=', value);
+        return frag.map(renderElement).join(' ');
+      }
+      // Postgres: GIN-servable containment, full nested object from the root.
+      let nested = segments.reduceRight<JSONTypes.Value>(
+        (acc, segment) => ({ [segment]: acc }),
+        (value[dbAdapterKind] ?? value.param ?? null) as JSONTypes.Value,
+      );
+      return [column, '@>', param(nested as JSONTypes.Object), '::jsonb']
+        .map(renderElement)
+        .join(' ');
     } else {
       throw assertNever(element);
     }

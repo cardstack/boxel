@@ -1,6 +1,6 @@
-import type { RealmResourceIdentifier } from '../card-reference-resolver';
-import type { SharedTests } from '../helpers';
-import type { Filter } from '../query';
+import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
+import type { SharedTests } from '../helpers/index.ts';
+import type { Filter } from '../query.ts';
 import {
   InvalidQueryError,
   assertQuery,
@@ -11,7 +11,7 @@ import {
   isMatchesFilter,
   isNotFilter,
   isRangeFilter,
-} from '../query';
+} from '../query.ts';
 
 const sampleRef = {
   module: 'http://localhost:4201/test/person' as RealmResourceIdentifier,

@@ -4,7 +4,7 @@ import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, VirtualNetwork } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -44,6 +44,7 @@ import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
 
 class DeferredLinkStore implements CardStore {
+  virtualNetwork: VirtualNetwork = new VirtualNetwork();
   private cardInstances = new Map<string, CardDefType>();
   private fileMetaInstances = new Map<string, FileDef>();
   private readyCardDocs = new Map<string, SingleCardDocument>();

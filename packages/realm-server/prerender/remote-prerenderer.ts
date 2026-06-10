@@ -18,7 +18,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
   sanitizePrerenderJobId,
-} from './prerender-constants';
+} from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
 const log = logger('remote-prerenderer');

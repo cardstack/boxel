@@ -20,6 +20,19 @@ const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
     message:
       '`export =` syntax requires TypeScript compilation. Use a standard ES module `export default` (or named exports) instead.',
   },
+  {
+    selector: 'Decorator',
+    message:
+      "Decorators are not erasable and require compilation, so they break under Node's native `--experimental-strip-types`. Avoid decorators here (e.g. replace `@Memoize()` with a manual cache).",
+  },
+  {
+    // Non-ambient `namespace`/`module` blocks emit runtime code. Ambient
+    // declarations (`declare module`, `declare global`, `declare namespace`)
+    // are type-only and erasable, so they are exempt via `:not([declare=true])`.
+    selector: 'TSModuleDeclaration:not([declare=true])',
+    message:
+      'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable. Use standard ES modules instead.',
+  },
 ];
 
 const DATA_TEST_SELECTORS = [
@@ -90,62 +103,6 @@ module.exports = {
           'error',
           ...NO_COMPILATION_REQUIRED_TS_SELECTORS,
           ...DATA_TEST_SELECTORS,
-        ],
-      },
-    },
-    {
-      // Files exempted from the erasable-TypeScript rules because they use
-      // TypeScript constructor parameter properties, which are not erasable.
-      // Do not add new files here; refactor a file to declare its fields
-      // explicitly to remove its entry.
-      files: [
-        'packages/bot-runner/lib/command-runner.ts',
-        'packages/bot-runner/lib/github.ts',
-        'packages/bot-runner/lib/pr-listing/create-listing-pr-handler.ts',
-        'packages/bot-runner/lib/pr-listing/pr-listing-workflow-handler.ts',
-        'packages/boxel-cli/src/commands/realm/pull.ts',
-        'packages/boxel-cli/src/commands/realm/push.ts',
-        'packages/boxel-cli/src/commands/realm/status.ts',
-        'packages/boxel-cli/src/commands/realm/sync.ts',
-        'packages/boxel-cli/src/lib/realm-sync-base.ts',
-        'packages/matrix/helpers/isolated-realm-server.ts',
-        'packages/postgres/pg-queue.ts',
-        'packages/postgres/pg-transaction-manager.ts',
-        'packages/realm-server/node-realm.ts',
-        'packages/realm-test-harness/src/support-services.ts',
-        'packages/runtime-common/amd-transpile/identifier-rewriter.ts',
-        'packages/runtime-common/commands.ts',
-        'packages/runtime-common/index-writer.ts',
-        'packages/runtime-common/matrix-backend-authentication.ts',
-        'packages/runtime-common/queue.ts',
-        'packages/runtime-common/realm-auth-client.ts',
-        'packages/vscode-boxel-tools/src/local-file-system.ts',
-        'packages/vscode-boxel-tools/src/realms.ts',
-        'packages/vscode-boxel-tools/src/skills.ts',
-        'packages/vscode-boxel-tools/src/synapse-auth-provider.ts',
-        'packages/workspace-sync-cli/src/pull.ts',
-        'packages/workspace-sync-cli/src/push.ts',
-        'packages/workspace-sync-cli/src/realm-sync-base.ts',
-      ],
-      rules: {
-        '@typescript-eslint/parameter-properties': 'off',
-      },
-    },
-    {
-      // Files exempted only for TypeScript `enum`, which is not erasable.
-      // The remaining erasable-syntax guards (`import =`, `export =`) still
-      // apply here — only the `enum` selector is lifted. Do not add new
-      // files here; replace the enum with a `const` object to remove the entry.
-      files: [
-        'packages/runtime-common/router.ts',
-        'packages/runtime-common/supported-mime-type.ts',
-      ],
-      rules: {
-        'no-restricted-syntax': [
-          'error',
-          ...NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
-            (s) => s.selector !== 'TSEnumDeclaration',
-          ),
         ],
       },
     },

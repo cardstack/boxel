@@ -2,11 +2,11 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { notifyAllFileChanges, type Realm } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   RealmFileChangesListener,
   parsePayload,
-} from '../lib/realm-file-changes-listener';
+} from '../lib/realm-file-changes-listener.ts';
 
 // Minimal fake `Realm` — the listener calls `.url` (via lookup),
 // `.invalidateCache(path)` for per-path payloads, and `.clearLocalSourceCaches()`

@@ -14,7 +14,7 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import {
   isResolvedCodeRef,
   isSingleCardDocument,
@@ -22,10 +22,10 @@ import {
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
-import { readCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
+import { readCard } from './workspace-fs.ts';
 
 let log = logger('instantiate-execution');
 
@@ -485,11 +485,11 @@ async function prepareExampleInstance(
   // `CodeRef`. Running it first means the nested accesses below cannot
   // throw.
   //
-  // NB: we import from the decorator-free `/card-document-shape` subpath
-  // (not the `/document-types` barrel entry that re-exports it) because
-  // this module is exercised by the software-factory Playwright harness,
-  // which can't compile the `@Memoize()` decorators reachable through
-  // the heavier runtime-common entry points.
+  // NB: we import from the lightweight `/card-document-shape` subpath
+  // (not the `/document-types` barrel entry that re-exports it) so the
+  // software-factory Playwright harness that exercises this module does
+  // not have to pull in the heavier, Node-oriented runtime-common entry
+  // points.
   if (!isSingleCardDocument(parsedDoc)) {
     return {
       error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,

@@ -144,7 +144,8 @@ export default class RenderMetaRoute extends Route<Model> {
     // metadata on the success entry. We awaited `readyPromise` above, so
     // the store has settled: every lazy link the render pulled on has
     // resolved and any failure has planted its sentinel. `getBrokenLinks`
-    // reads that terminal state through `getRelationship` without
+    // reads that terminal state through
+    // `getRelationshipMembershipState` without
     // retriggering a load. The card still indexes as `type='instance'`
     // (the broken slot renders a placeholder); this block is the only
     // direct, indexed signal of which slots are broken, persisted to

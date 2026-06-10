@@ -5,19 +5,13 @@ import type {
   LooseLinkableResource,
   Meta,
   Saved,
-} from './resource-types';
-import type { CodeRef, ResolvedCodeRef } from './code-ref';
-import type { VirtualNetwork } from './virtual-network';
-import type { RenderRouteOptions } from './render-route-options';
-import type { Definition } from './definitions';
-import type { SerializedError } from './error';
-import {
-  resolveCardReference,
-  unresolveCardReference,
-  isRegisteredPrefix,
-  rri,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
+} from './resource-types.ts';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RenderRouteOptions } from './render-route-options.ts';
+import type { Definition } from './definitions.ts';
+import type { SerializedError } from './error.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -54,7 +48,7 @@ export type PatchData = {
 // without parsing the rendered HTML or re-running `getBrokenLinks` at
 // read time. `errorDoc` is intentionally omitted: it's large, and the
 // error detail is still available at runtime via
-// `getRelationship(card, fieldName)` and inline in the rendered placeholder.
+// `getRelationshipMembershipState(card, fieldName)` and inline in the rendered placeholder.
 export interface BrokenLinkSummary {
   // The declared `linksTo` / `linksToMany` field holding the broken reference.
   fieldName: string;
@@ -277,6 +271,48 @@ export interface RenderTimeoutDiagnostics {
   computedCacheHits?: number;
   serializeMs?: number;
   searchDocMs?: number;
+  // The following four are captured server-side on the timeout path
+  // only (the in-page hooks above can come back empty when the render's
+  // JS thread is wedged). Together they discriminate the render-hang
+  // failure mode: an unresponsive main thread with `scriptBusyFraction`
+  // near 1 is a CPU-spinning render (runaway loop / never-settling
+  // Glimmer, possibly starved by co-tenant renders — see
+  // `concurrentRenders`); a responsive main thread with a low script
+  // fraction is a render *waiting* on something, in which case
+  // `pendingNetworkRequests` names the fetch it never got back.
+  //
+  // Whether a probe `page.evaluate` could even round-trip within a
+  // short budget. `false` means the page's JS thread is wedged (it
+  // couldn't run a trivial expression), which is the signature of a
+  // CPU-bound stall as opposed to a waiting one.
+  mainThreadResponsive?: boolean;
+  // Fraction of wall-clock the renderer's main thread spent running JS
+  // (CDP `Performance` ScriptDuration delta / wall delta) over a short
+  // sampling window at timeout. ~1.0 means the thread is pegged
+  // executing JavaScript — a runaway sync loop or a render that never
+  // settles. Near 0 means the thread is idle-waiting.
+  scriptBusyFraction?: number;
+  // Fraction of wall-clock spent in any main-thread task (CDP
+  // `Performance` TaskDuration delta / wall delta) — a superset of
+  // `scriptBusyFraction` that also counts layout / style / GC. High
+  // task but low script points at non-JS main-thread work.
+  taskBusyFraction?: number;
+  // Renderer JS heap in use at timeout (CDP `Performance`
+  // JSHeapUsedSize, bytes → MB). A climbing heap alongside a pegged
+  // thread suggests an allocation-heavy runaway rather than a tight
+  // CPU loop.
+  jsHeapUsedMB?: number;
+  // Requests the browser process still had outstanding at timeout,
+  // observed out-of-band via CDP `Network` so they survive a wedged
+  // JS thread. Oldest first; capped. The longest-lived entry is the
+  // resource a *waiting* render is hung on.
+  pendingNetworkRequests?: Array<{ url: string; ageMs: number }>;
+  // How many renders this prerender process was running concurrently
+  // when the timeout fired (every render passes through the same
+  // server-side timeout wrapper, which keeps the count). A high value
+  // alongside an unresponsive thread points at CPU starvation by
+  // co-tenant renders rather than a single render's own runaway.
+  concurrentRenders?: number;
 }
 
 export interface RenderError extends ErrorEntry {
@@ -602,7 +638,7 @@ export interface RealmPermissions {
   [username: string]: RealmAction[];
 }
 
-export { Deferred } from './deferred';
+export { Deferred } from './deferred.ts';
 export {
   CardError,
   isCardError,
@@ -616,17 +652,8 @@ export {
   sanitizeForJsonb,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
-} from './error';
-export { validateWriteSize } from './write-size-validation';
-export {
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-  resolveCardReference,
-  unresolveCardReference,
-  isRegisteredPrefix,
-  registeredCardReferencePrefixes,
-  cardIdToURL,
-} from './card-reference-resolver';
+} from './error.ts';
+export { validateWriteSize } from './write-size-validation.ts';
 
 export interface ResourceObject {
   type: string;
@@ -670,80 +697,83 @@ export interface RealmPrerenderedCards {
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
-import type { LocalPath } from './paths';
-import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
-import { Loader } from './loader';
-export * from './paths';
-export * from './realm-index-card';
-export * from './cached-fetch';
-export * from './definition-lookup';
-export * from './definitions';
-export * from './catalog';
-export * from './commands';
-export * from './card-reference-resolver';
-export * from './bfm-card-references';
-export * from './bfm-math-render';
-export * from './bfm-mermaid-render';
-export * from './constants';
-export * from './helpers/const';
-export * from './document';
-export * from './matrix-constants';
-export * from './matrix-client';
-export * from './queue';
-export * from './job-utils';
-export * from './expression';
-export * from './infer-content-type';
-export * from './index-query-engine';
-export * from './index-writer';
-export * from './definitions';
-export * from './index-structure';
-export * from './db';
-export * from './tasks';
-export * from './worker';
-export * from './stream';
-export * from './realm';
-export * from './realm-index-updater';
-export * from './fetcher';
-export * from './test-waiters';
-export * from './scoped-css';
-export * from './html-utils';
-export * from './utils';
-export * from './authorization-middleware';
-export * from './resource-types';
-export * from './prerender-headers';
-export * from './query';
-export * from './search-utils';
-export * from './prerendered-html-format';
-export * from './query-field-utils';
-export * from './relationship-utils';
-export * from './formats';
-export * from './dependency-tracker';
-export * from './github-submissions';
-export { getCreatedTime } from './file-meta';
-export { mergeRelationships } from './merge-relationships';
-export { makeLogDefinitions, logger, reapplyLogLevels } from './log';
+import type { LocalPath } from './paths.ts';
+import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query.ts';
+import { Loader } from './loader.ts';
+export * from './paths.ts';
+export * from './realm-index-card.ts';
+export * from './cached-fetch.ts';
+export * from './definition-lookup.ts';
+export * from './definitions.ts';
+export * from './catalog.ts';
+export * from './commands.ts';
+export * from './realm-identifiers.ts';
+export * from './bfm-card-references.ts';
+export * from './bfm-math-render.ts';
+export * from './bfm-mermaid-render.ts';
+export * from './constants.ts';
+export * from './helpers/const.ts';
+export * from './document.ts';
+export * from './matrix-constants.ts';
+export * from './matrix-client.ts';
+export * from './queue.ts';
+export * from './job-utils.ts';
+export * from './expression.ts';
+export * from './infer-content-type.ts';
+export * from './index-query-engine.ts';
+export * from './index-writer.ts';
+export * from './definitions.ts';
+export * from './index-structure.ts';
+export * from './db.ts';
+export * from './tasks/index.ts';
+export * from './worker.ts';
+export * from './stream.ts';
+export * from './realm.ts';
+export * from './realm-index-updater.ts';
+export * from './fetcher.ts';
+export * from './test-waiters.ts';
+export * from './scoped-css.ts';
+export * from './html-utils.ts';
+export * from './utils.ts';
+export * from './authorization-middleware.ts';
+export * from './resource-types.ts';
+export * from './prerender-headers.ts';
+export * from './query.ts';
+export * from './instance-filter-matcher.ts';
+export * from './search-utils.ts';
+export * from './unified-search.ts';
+export * from './request-timings.ts';
+export * from './prerendered-html-format.ts';
+export * from './query-field-utils.ts';
+export * from './relationship-utils.ts';
+export * from './formats.ts';
+export * from './dependency-tracker.ts';
+export * from './github-submissions.ts';
+export { getCreatedTime } from './file-meta.ts';
+export { mergeRelationships } from './merge-relationships.ts';
+export { makeLogDefinitions, logger, reapplyLogLevels } from './log.ts';
 export { Loader };
 export {
   fetchWithTransientRetry,
   isRetryableStatus,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
-} from './loader';
+} from './loader.ts';
 export {
   cardTypeDisplayName,
   cardTypeIcon,
   getFieldIcon,
-} from './helpers/card-type-display-name';
-export * from './helpers/ensure-extension';
+} from './helpers/card-type-display-name.ts';
+export * from './helpers/ensure-extension.ts';
 export {
   sanitizeHeadHTML,
   sanitizeHeadHTMLToString,
   findDisallowedHeadTags,
-} from './helpers/sanitize-head-html';
-export * from './url';
-export * from './render-route-options';
-export * from './publishability';
-export * from './pr-manifest';
-export * from './file-def-code-ref';
+} from './helpers/sanitize-head-html.ts';
+export * from './url.ts';
+export * from './render-route-options.ts';
+export * from './publishability.ts';
+export * from './pr-manifest.ts';
+export * from './file-def-code-ref.ts';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 // Extensions covered by the realm-wide pre-warm sweep that primes the
@@ -759,25 +789,25 @@ export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 // prerender cost on every index for a file type that rarely contains
 // card definitions.
 export const cardExtensions = ['.gts', '.gjs'];
-export { createResponse } from './create-response';
+export { createResponse } from './create-response.ts';
 
-export * from './db-queries/db-types';
-export * from './db-queries/realm-permission-queries';
-export * from './db-queries/session-room-queries';
-export * from './db-queries/user-queries';
+export * from './db-queries/db-types.ts';
+export * from './db-queries/realm-permission-queries.ts';
+export * from './db-queries/session-room-queries.ts';
+export * from './db-queries/user-queries.ts';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType, isJsonContentType } from './supported-mime-type';
+export { SupportedMimeType, isJsonContentType } from './supported-mime-type.ts';
 export {
   isUrlLike,
   VirtualNetwork,
   type ResponseWithNodeStream,
-} from './virtual-network';
-export { RealmAuthDataSource } from './realm-auth-data-source';
+} from './virtual-network.ts';
+export { RealmAuthDataSource } from './realm-auth-data-source.ts';
 
 export type {
   Kind,
@@ -786,11 +816,12 @@ export type {
   RealmInfo,
   TokenClaims,
   RealmSession,
-} from './realm';
+} from './realm.ts';
 
-export * from './code-ref';
-export * from './command-parsing-utils';
-export * from './serializers';
+export * from './code-ref.ts';
+export * from './command-parsing-utils.ts';
+export * from './serializers/index.ts';
+export * from './host-routing-validation.ts';
 
 export type {
   CardDocument,
@@ -799,7 +830,9 @@ export type {
   CardCollectionDocument,
   FileMetaCollectionDocument,
   LinkableCollectionDocument,
-} from './document-types';
+  UnifiedSearchCollectionDocument,
+  UnifiedSearchIncludedResource,
+} from './document-types.ts';
 export type {
   CardResource,
   FileMetaResource,
@@ -811,7 +844,7 @@ export type {
   Relationship,
   CardFields,
   LooseLinkableResource,
-} from './resource-types';
+} from './resource-types.ts';
 export {
   isCardDocument,
   isCardCollectionDocument,
@@ -820,18 +853,18 @@ export {
   isFileMetaCollectionDocument,
   isLinkableCollectionDocument,
   isCardDocumentString,
-} from './document-types';
+} from './document-types.ts';
 export {
   isMeta,
   isCardResource,
   isModuleResource,
   isRelationship,
-} from './resource-types';
+} from './resource-types.ts';
 
-export type { JWTPayload } from './realm-auth-client';
-export { sanitizeHtml } from './dompurify-runtime';
+export type { JWTPayload } from './realm-auth-client.ts';
+export { sanitizeHtml } from './dompurify-runtime.ts';
 
-export { getPlural } from './pluralize-runtime';
+export { getPlural } from './pluralize-runtime.ts';
 
 import type {
   CardDef,
@@ -839,8 +872,11 @@ import type {
   BaseDef,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { RealmInfo } from './realm';
-import type { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
+import type { RealmInfo } from './realm.ts';
+import type {
+  PrerenderedCard,
+  QueryResultsMeta,
+} from './index-query-engine.ts';
 
 export interface MatrixCardError {
   id?: string;
@@ -876,6 +912,12 @@ interface CardChooserOpts {
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
+  /**
+   * When true, the realm scope is fixed to consumingRealm and the user
+   * cannot broaden it via the realm picker. Use for fields that must
+   * reference cards within the consuming realm (e.g. RoutingRuleField).
+   */
+  lockConsumingRealm?: boolean;
   preselectedCardUrls?: string[];
 }
 
@@ -940,8 +982,8 @@ export async function chooseFile<T extends FileDef>(opts?: {
   return await chooser.chooseFile<T>(opts);
 }
 
-import type { CardErrorJSONAPI } from './error';
-import type { SingleCardDocument } from './document-types';
+import type { CardErrorJSONAPI } from './error.ts';
+import type { SingleCardDocument } from './document-types.ts';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
@@ -1147,18 +1189,14 @@ export function trimExecutableExtension(
 export function internalKeyFor(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string {
   if (!('type' in ref)) {
-    let resolved = virtualNetwork
-      ? virtualNetwork.resolveURL(ref.module, relativeTo).href
-      : resolveCardReference(ref.module, relativeTo);
+    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
     let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
-    module = virtualNetwork
-      ? virtualNetwork.unresolveURL(module)
-      : unresolveCardReference(module);
+    module = virtualNetwork.unresolveURL(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
@@ -1260,24 +1298,19 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork?: VirtualNetwork) {
-  return (
-    !id.startsWith('http') &&
-    !(virtualNetwork
-      ? virtualNetwork.isRegisteredPrefix(id)
-      : isRegisteredPrefix(id))
-  );
+export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
+  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {
   return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
 }
 
-export * from './prerendered-card-search';
-export { isBotTriggerEvent } from './bot-trigger';
+export * from './prerendered-card-search.ts';
+export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,
   isBotCommandFilter,
   type BotCommandFilter,
   type BotCommandMatrixFilter,
-} from './bot-command';
+} from './bot-command.ts';

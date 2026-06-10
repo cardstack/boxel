@@ -5,8 +5,8 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
-} from './runtime-metadata';
-import { configureLogger } from './logger';
+} from './runtime-metadata.ts';
+import { configureLogger } from './logger.ts';
 
 /**
  * Suppress console.log/warn during a callback. Used during template DB builds
@@ -49,10 +49,11 @@ import {
   type FactoryRealmTemplate,
   type FactorySupportContext,
   type FactoryTestContext,
+  type PortReservation,
   type RealmAction,
   type RealmConfig,
   type StartedFactoryRealm,
-} from './shared';
+} from './shared.ts';
 import {
   buildCombinedTemplateDatabase,
   clearRealmPermissions,
@@ -63,12 +64,12 @@ import {
   resetQueueState,
   rewriteClonedRealmServerUrls,
   seedRealmPermissions,
-} from './database';
-import { startFactorySupportServices } from './support-services';
+} from './database.ts';
+import { startFactorySupportServices } from './support-services.ts';
 import {
   startIsolatedRealmStack,
   stopIsolatedRealmStack,
-} from './isolated-realm-stack';
+} from './isolated-realm-stack.ts';
 
 export function getFactoryTestContext(): FactoryTestContext {
   let context = parseFactoryContext();
@@ -82,22 +83,33 @@ export { startFactorySupportServices };
 
 export async function startFactoryGlobalContext(
   options: FactoryRealmOptions,
+  internal: { publicPortReservation?: PortReservation } = {},
 ): Promise<FactoryGlobalContextHandle> {
   return await logTimed(harnessLog, 'startFactoryGlobalContext', async () => {
     let realms = resolveRealms(options.realms);
-    let realmServerURL = await resolveFactoryRealmServerURL(
-      options.realmServerURL,
-      options.compatRealmServerPort,
-    );
+    let { url: realmServerURL, portReservation } =
+      await resolveFactoryRealmServerURL(
+        options.realmServerURL,
+        options.compatRealmServerPort,
+      );
+    // Prefer a holder the caller already owns (startFactoryRealmServer
+    // resolved + held the port before delegating here). Our own
+    // portReservation is undefined in that case, since options.realmServerURL
+    // is set.
+    let publicPortReservation =
+      internal.publicPortReservation ?? portReservation;
     let primaryRealmURL = realmURLWithinServer(realmServerURL, realms[0].path);
     let support = await startFactorySupportServices();
     try {
-      let template = await ensureFactoryRealmTemplate({
-        ...options,
-        realms,
-        realmServerURL,
-        context: support.context,
-      });
+      let template = await ensureFactoryRealmTemplate(
+        {
+          ...options,
+          realms,
+          realmServerURL,
+          context: support.context,
+        },
+        { publicPortReservation },
+      );
 
       let context: FactoryTestContext = {
         ...support.context,
@@ -116,6 +128,12 @@ export async function startFactoryGlobalContext(
     } catch (error) {
       await support.stop();
       throw error;
+    } finally {
+      // The public port is only bound transiently, by the template build's
+      // compat proxy. The global context never holds it once built, so
+      // release the holder (idempotent: the build already released it just
+      // before binding; on a cache hit it was never consumed).
+      await publicPortReservation?.release().catch(() => undefined);
     }
   });
 }
@@ -132,6 +150,7 @@ function resolveRealms(realms: RealmConfig[]): RealmConfig[] {
 
 export async function ensureFactoryRealmTemplate(
   options: FactoryRealmOptions & { forceRebuild?: boolean },
+  internal: { publicPortReservation?: PortReservation } = {},
 ): Promise<FactoryRealmTemplate> {
   return await logTimed(harnessLog, 'ensureFactoryRealmTemplate', async () => {
     let realms = resolveRealms(options.realms);
@@ -139,10 +158,21 @@ export async function ensureFactoryRealmTemplate(
       options.context && hasTemplateDatabaseName(options.context)
         ? new URL(options.context.realmServerURL)
         : undefined;
-    let realmServerURL = await resolveFactoryRealmServerURL(
-      options.realmServerURL ?? contextRealmServerURL,
-      options.compatRealmServerPort,
-    );
+    let { url: realmServerURL, portReservation } =
+      await resolveFactoryRealmServerURL(
+        options.realmServerURL ?? contextRealmServerURL,
+        options.compatRealmServerPort,
+      );
+    // The effective public-port holder: the caller's delegated reservation
+    // when present, otherwise the one we freshly allocated above (e.g. the
+    // cache:prepare path). On the build path startIsolatedRealmStack
+    // releases it right before the compat proxy binds; we release it again
+    // at the early (cache-hit) and finally exits as an idempotent backstop.
+    // Releasing the *effective* holder (not just our own) matters when a
+    // caller delegates it but the build throws before startIsolatedRealmStack
+    // takes ownership — otherwise the delegated holder socket leaks.
+    let publicPortReservation =
+      internal.publicPortReservation ?? portReservation;
     let primaryRealmURL = realmURLWithinServer(realmServerURL, realms[0].path);
     let realmsHash = hashRealms(realms);
     let cacheKey = hashString(
@@ -163,6 +193,9 @@ export async function ensureFactoryRealmTemplate(
       hasTemplateDatabase &&
       cachedTemplateMetadata
     ) {
+      // No build, so nothing downstream will consume the holder — release
+      // the effective one (our own or a caller's delegated reservation).
+      await publicPortReservation?.release().catch(() => undefined);
       return {
         cacheKey,
         templateDatabaseName,
@@ -211,6 +244,7 @@ export async function ensureFactoryRealmTemplate(
         context,
         cacheKey,
         templateDatabaseName,
+        publicPortReservation,
       });
       writePreparedTemplateMetadata({
         realmDir: realms[0].dir,
@@ -231,6 +265,11 @@ export async function ensureFactoryRealmTemplate(
     } finally {
       configureLogger(originalLogLevels);
       await withSilentConsole(async () => ownedSupport?.stop());
+      // Backstop for the effective holder (our own or a caller's delegated
+      // reservation): a no-op once startIsolatedRealmStack has released it
+      // before the compat-proxy bind, but covers a throw before the build
+      // reached that point (e.g. a Postgres drop/clone failure).
+      await publicPortReservation?.release().catch(() => undefined);
     }
   });
 }
@@ -297,10 +336,11 @@ export async function startFactoryRealmServer(
       existingContext && hasTemplateDatabaseName(existingContext)
         ? new URL(existingContext.realmServerURL)
         : undefined;
-    let realmServerURL = await resolveFactoryRealmServerURL(
-      options.realmServerURL ?? contextRealmServerURL,
-      options.compatRealmServerPort,
-    );
+    let { url: realmServerURL, portReservation: publicPortReservation } =
+      await resolveFactoryRealmServerURL(
+        options.realmServerURL ?? contextRealmServerURL,
+        options.compatRealmServerPort,
+      );
     let primaryRealmURL = realmURLWithinServer(
       realmServerURL,
       primaryRealm.path,
@@ -311,11 +351,17 @@ export async function startFactoryRealmServer(
     let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
     let context = existingContext;
     if (!context) {
-      ownedGlobalContext = await startFactoryGlobalContext({
-        ...options,
-        realms,
-        realmServerURL,
-      });
+      // Hand the public-port holder to the template build so it's held
+      // across that build's port allocations and released right before its
+      // compat-proxy binds.
+      ownedGlobalContext = await startFactoryGlobalContext(
+        {
+          ...options,
+          realms,
+          realmServerURL,
+        },
+        { publicPortReservation },
+      );
       context = ownedGlobalContext.context;
     }
 
@@ -323,12 +369,15 @@ export async function startFactoryRealmServer(
       templateDatabaseName = hasTemplateDatabaseName(context)
         ? context.templateDatabaseName
         : (
-            await ensureFactoryRealmTemplate({
-              ...options,
-              realms,
-              realmServerURL,
-              context,
-            })
+            await ensureFactoryRealmTemplate(
+              {
+                ...options,
+                realms,
+                realmServerURL,
+                context,
+              },
+              { publicPortReservation },
+            )
           ).templateDatabaseName;
     }
 
@@ -380,6 +429,11 @@ export async function startFactoryRealmServer(
         }
       }
 
+      // The template build (above) already released this holder before its
+      // own compat-proxy bind; release again (idempotent) so the runtime
+      // stack's compat proxy can re-acquire the same public port via its
+      // own short-lived hold.
+      await publicPortReservation?.release().catch(() => undefined);
       stack = await startIsolatedRealmStack({
         realms,
         realmServerURL,
@@ -393,6 +447,10 @@ export async function startFactoryRealmServer(
       });
     } catch (error) {
       let cleanupError: unknown;
+
+      // Backstop: release the public-port holder if an error fired before it
+      // was handed off (idempotent — a no-op once already released).
+      await publicPortReservation?.release().catch(() => undefined);
 
       try {
         await dropDatabase(databaseName);

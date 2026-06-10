@@ -2,9 +2,9 @@ import type {
   QueuePublisher,
   QueueRunner,
   QueueCoalesceContext,
-} from '../queue';
-import { registerQueueJobDefinition } from '../queue';
-import type { SharedTests } from '../helpers';
+} from '../queue.ts';
+import { registerQueueJobDefinition } from '../queue.ts';
+import type { SharedTests } from '../helpers/index.ts';
 
 const tests = Object.freeze({
   'it can run a job': async (assert, { publisher, runner }) => {

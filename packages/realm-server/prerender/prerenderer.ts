@@ -9,27 +9,27 @@ import {
   type RunCommandResponse,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
-import { BrowserManager } from './browser-manager';
+import { BrowserManager } from './browser-manager.ts';
 import {
   PagePool,
   StandbyTargetNotReadyError,
   type ConsoleErrorEntry,
-} from './page-pool';
-import { RenderRunner, type Timings } from './render-runner';
-import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
-import { toAffinityKey } from './affinity';
-import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
-import { AffinityActivityTracker } from './affinity-activity';
-import { AsyncSemaphore } from './async-semaphore';
+} from './page-pool.ts';
+import { RenderRunner, type Timings } from './render-runner.ts';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
+import { toAffinityKey } from './affinity.ts';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import { AffinityActivityTracker } from './affinity-activity.ts';
+import { AsyncSemaphore } from './async-semaphore.ts';
 import {
   type BatchOwner,
   computeBatchClearCacheGate,
-} from './batch-ownership-gate';
+} from './batch-ownership-gate.ts';
 import {
   AffinitySnapshotSampler,
   type PeakRegistration,
   decorateRenderErrorsWithTimings,
-} from './render-settlement';
+} from './render-settlement.ts';
 
 const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()

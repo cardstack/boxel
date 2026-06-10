@@ -1,4 +1,3 @@
-import { Memoize } from 'typescript-memoize';
 import flatten from 'lodash/flatten';
 import flattenDeep from 'lodash/flattenDeep';
 import {
@@ -10,20 +9,18 @@ import {
   RealmPaths,
   unixTime,
   logger,
-} from './index';
+} from './index.ts';
 import {
-  isRegisteredPrefix as globalIsRegisteredPrefix,
   rri,
-  unresolveCardReference as globalUnresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
+} from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import {
   getCreatedTime,
   ensureFileCreatedAt,
   getContentMeta,
-} from './file-meta';
+} from './file-meta.ts';
 import {
   type Expression,
   param,
@@ -36,22 +33,22 @@ import {
   upsert,
   dbExpression,
   upsertMultipleRows,
-} from './expression';
+} from './expression.ts';
 import {
   clampSerializedError,
   sanitizeForJsonb,
   type SerializedError,
-} from './error';
-import type { DBAdapter } from './db';
-import type { RealmMetaTable } from './index-structure';
-import type { FileMetaResource } from './resource-types';
-import type { Diagnostics } from './index';
+} from './error.ts';
+import type { DBAdapter } from './db.ts';
+import type { RealmMetaTable } from './index-structure.ts';
+import type { FileMetaResource } from './resource-types.ts';
+import type { Diagnostics } from './index.ts';
 import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
   type RealmVersionsTable,
-} from './index-structure';
+} from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 export class IndexWriter {
@@ -62,10 +59,10 @@ export class IndexWriter {
 
   async createBatch(
     realmURL: URL,
+    virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
-    virtualNetwork?: VirtualNetwork,
   ) {
-    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo, virtualNetwork);
+    let batch = new Batch(this.#dbAdapter, realmURL, virtualNetwork, jobInfo);
     await batch.ready;
     return batch;
   }
@@ -174,6 +171,7 @@ export interface FileEntry {
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  #nodeResolvedInvalidations: string[] | undefined;
   // URLs already written to boxel_index_working by an earlier attempt
   // of *this same job*, with the last_modified value the previous
   // attempt observed. Populated during `ready`. The visit loop in
@@ -196,31 +194,30 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   declare private realmVersion: number;
+  private realmURL: URL; // this assumes that we only index cards in our own realm...
+  private virtualNetwork: VirtualNetwork;
+  private jobInfo?: JobInfo;
 
   constructor(
     dbAdapter: DBAdapter,
-    private realmURL: URL, // this assumes that we only index cards in our own realm...
-    private jobInfo?: JobInfo,
-    private virtualNetwork?: VirtualNetwork,
+    realmURL: URL,
+    virtualNetwork: VirtualNetwork,
+    jobInfo?: JobInfo,
   ) {
+    this.realmURL = realmURL;
+    this.virtualNetwork = virtualNetwork;
+    this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
   }
 
-  // Prefix checks and unresolution prefer the threaded VirtualNetwork, and
-  // fall back to the deprecated module-level resolver when a Batch is
-  // constructed without one (e.g. the worker-manager and copy-task paths).
   private isRegisteredPrefix(reference: string): boolean {
-    return this.virtualNetwork
-      ? this.virtualNetwork.isRegisteredPrefix(reference)
-      : globalIsRegisteredPrefix(reference);
+    return this.virtualNetwork.isRegisteredPrefix(reference);
   }
 
   private unresolveURL(url: string): string {
-    return this.virtualNetwork
-      ? this.virtualNetwork.unresolveURL(url)
-      : globalUnresolveCardReference(url);
+    return this.virtualNetwork.unresolveURL(url);
   }
 
   private async setupBatch(): Promise<void> {
@@ -322,11 +319,10 @@ export class Batch {
     return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
-  @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map((href) =>
-      trimExecutableExtension(rri(href)),
-    );
+    return (this.#nodeResolvedInvalidations ??= [...this.invalidations].map(
+      (href) => trimExecutableExtension(rri(href)),
+    ));
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {

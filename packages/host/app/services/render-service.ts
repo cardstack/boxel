@@ -68,6 +68,10 @@ export class CardStoreWithErrors implements CardStore {
     this.#virtualNetwork = virtualNetwork;
   }
 
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
+  }
+
   getCard(id: string): CardDef | undefined {
     id = this.normalizeKey(id);
     return this.#cards.get(id);
@@ -139,11 +143,10 @@ export class CardStoreWithErrors implements CardStore {
   private normalizeURL(id: string): string {
     let key = id.replace(/\.json$/, '');
     // Local IDs pass through; remote IDs canonicalize to URL form via the
-    // VN so prefix-form and URL-form lookups share a cache key. `vn.toURL`
-    // also consults the deprecated global registry, so prefixes registered
-    // via `registerCardReferencePrefix` (without a VN) resolve to the same
-    // canonical URL.
-    return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
+    // VN so prefix-form and URL-form lookups share a cache key.
+    return isLocalId(key, this.#virtualNetwork)
+      ? id
+      : this.#virtualNetwork.toURL(id).href;
   }
 
   trackLoad(load: Promise<unknown>) {

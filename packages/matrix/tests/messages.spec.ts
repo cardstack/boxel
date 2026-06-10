@@ -1,7 +1,8 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 
-import { Credentials, putEvent } from '../docker/synapse';
+import type { Credentials } from '../support/synapse/index.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   login,
   logout,
@@ -19,9 +20,9 @@ import {
   setupTwoStackItems,
   showAllCards,
   waitUntil,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 
 test.describe('Room messages', () => {
   test(`it can send a message in a room`, async ({ page }) => {
@@ -291,9 +292,7 @@ test.describe('Room messages', () => {
     await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
-    await page
-      .locator(`[data-test-submode-switcher-button]`)
-      .click();
+    await page.locator(`[data-test-submode-switcher-button]`).click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
     await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(2);
@@ -352,9 +351,7 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
-    await page
-      .locator(`[data-test-submode-switcher-button]`)
-      .click();
+    await page.locator(`[data-test-submode-switcher-button]`).click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
     await expect(
@@ -441,9 +438,7 @@ test.describe('Room messages', () => {
     );
     expect(petFile).toBeDefined();
     expect(petFile?.name).toStrictEqual('pet.gts');
-    expect(petFile?.contentType).toStrictEqual(
-      'text/typescript+glimmer',
-    );
+    expect(petFile?.contentType).toStrictEqual('text/typescript+glimmer');
     expect(petFile?.sourceUrl).toStrictEqual(`${appURL}/pet.gts`);
     expect(petFile?.url).toMatch(
       /^http:\/\/localhost:8008\/_matrix\/client\/v1\/media\/download\/localhost\/[A-Za-z0-9]+\?allow_redirect=true$/,

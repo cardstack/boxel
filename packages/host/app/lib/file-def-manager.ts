@@ -315,7 +315,7 @@ export default class FileDefManagerImpl
       serialization: LooseSingleCardDocument;
     }[] = await Promise.all(
       cards.map(async (card) => {
-        let opts: CardAPI.SerializeOpts = {
+        let opts: Omit<CardAPI.SerializeOpts, 'virtualNetwork'> = {
           useAbsoluteURL: true,
           includeComputeds: true,
         };
@@ -368,6 +368,8 @@ export default class FileDefManagerImpl
       let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
         commandDef.codeRef,
         commandDef[relativeTo],
+        undefined,
+        this.network.virtualNetwork,
       ) as ResolvedCodeRef;
       const Command = await getClass(
         absoluteCodeRef,

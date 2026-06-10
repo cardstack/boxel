@@ -2,31 +2,34 @@ import { parseArgs as parseNodeArgs } from 'node:util';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { inferDarkfactoryModuleUrl } from './factory-seed';
-import { parseAgentFlag, type FactoryAgentProvider } from './factory-agent';
-import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
-import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
+import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
+import {
+  parseAgentFlag,
+  type FactoryAgentProvider,
+} from './factory-agent/index.ts';
+import { loadFactoryBrief, type FactoryBrief } from './factory-brief.ts';
+import { FactoryEntrypointUsageError } from './factory-entrypoint-errors.ts';
 import {
   assertAgentProviderImplemented,
   runFactoryIssueLoop,
   type IssueLoopWiringConfig,
-} from './factory-issue-loop-wiring';
-import { createSeedIssue, type SeedIssueResult } from './factory-seed';
+} from './factory-issue-loop-wiring.ts';
+import { createSeedIssue, type SeedIssueResult } from './factory-seed.ts';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
   type FactoryTargetRealmBootstrapResult,
   type FactoryTargetRealmResolution,
   type ResolveFactoryTargetRealmOptions,
-} from './factory-target-realm';
-import type { IssueLoopResult } from './issue-loop';
-import { logger } from './logger';
-import { withStdoutRedirected } from './redirect-stdout';
+} from './factory-target-realm.ts';
+import type { IssueLoopResult } from './issue-loop.ts';
+import { logger } from './logger.ts';
+import { withStdoutRedirected } from './redirect-stdout.ts';
 import {
   ensureWorkspaceDir,
   resetWorkspaceDir,
   resolveWorkspaceDir,
-} from './workspace-fs';
+} from './workspace-fs.ts';
 
 let log = logger('factory-entrypoint');
 
@@ -139,7 +142,7 @@ export interface RunFactoryEntrypointDependencies {
     workspaceDir: string,
   ) => Promise<void>;
 }
-export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
+export { FactoryEntrypointUsageError } from './factory-entrypoint-errors.ts';
 
 export function getFactoryEntrypointUsage(): string {
   return [

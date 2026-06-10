@@ -1,42 +1,38 @@
-import { Deferred } from './deferred';
-import {
-  X_BOXEL_JOB_ID_HEADER,
-  sanitizePrerenderJobId,
-} from './prerender-headers';
-import type { SearchOpts } from './search-utils';
+import { Deferred } from './deferred.ts';
+import type { SearchOpts } from './search-utils.ts';
 import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
-} from './card-reference-resolver';
+} from './realm-identifiers.ts';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
   moduleDependencyKey,
-} from './cache/module-cache-invalidation';
+} from './cache/module-cache-invalidation.ts';
 import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type LinkableCollectionDocument,
+  type UnifiedSearchCollectionDocument,
   type PrerenderedCardCollectionDocument,
-} from './document-types';
-import type { CardResource, Relationship } from './resource-types';
-import { normalizeRelationships } from './relationship-utils';
-import type { LocalPath } from './paths';
-import { RealmPaths, ensureTrailingSlash, join } from './paths';
+} from './document-types.ts';
+import type { CardResource, Relationship } from './resource-types.ts';
+import { normalizeRelationships } from './relationship-utils.ts';
+import type { LocalPath } from './paths.ts';
+import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
 import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
-} from './constants';
+} from './constants.ts';
 import {
   persistFileMeta,
   removeFileMeta,
   getCreatedTime,
   getContentMeta,
-} from './file-meta';
+} from './file-meta.ts';
 import {
   systemError,
   notFound,
@@ -48,7 +44,7 @@ import {
   formattedError,
   unsupportedMediaType,
   type SerializedError,
-} from './error';
+} from './error.ts';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import {
@@ -98,25 +94,25 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
-} from './index';
-import type { FromScratchResult } from './tasks/indexer';
-import { isCodeRef, visitModuleDeps } from './code-ref';
+} from './index.ts';
+import type { FromScratchResult } from './tasks/indexer.ts';
+import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
-import { inferContentType } from './infer-content-type';
+import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
   fileContentToBytes,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
-} from './stream';
-import { transpileJS } from './transpile';
-import type { Method, RouteTable } from './router';
+} from './stream.ts';
+import { transpileJS } from './transpile.ts';
+import type { Method, RouteTable } from './router.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -124,34 +120,37 @@ import {
   Router,
   SupportedMimeType,
   lookupRouteTable,
-} from './router';
-import { InvalidQueryError, assertQuery, parseQuery } from './query';
+} from './router.ts';
+import { InvalidQueryError, assertQuery, parseQuery } from './query.ts';
 import type { Readable } from 'stream';
-import { createResponse } from './create-response';
-import { mergeRelationships } from './merge-relationships';
-import { getCardDirectoryName } from './helpers/card-directory-name';
+import { createResponse } from './create-response.ts';
+import { mergeRelationships } from './merge-relationships.ts';
+import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
   type MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
-} from './matrix-client';
-import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
+} from './matrix-client.ts';
+import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
-import RealmPermissionChecker from './realm-permission-checker';
-import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
+import RealmPermissionChecker from './realm-permission-checker.ts';
+import type {
+  ResponseWithNodeStream,
+  VirtualNetwork,
+} from './virtual-network.ts';
 
-import { RealmAuthDataSource } from './realm-auth-data-source';
-import { AliasCache } from './cache/alias-cache';
-import { fetcher } from './fetcher';
-import { RealmIndexQueryEngine } from './realm-index-query-engine';
-import { RealmIndexUpdater } from './realm-index-updater';
-import serialize from './file-serializer';
-import { validateWriteSize } from './write-size-validation';
+import { RealmAuthDataSource } from './realm-auth-data-source.ts';
+import { AliasCache } from './cache/alias-cache.ts';
+import { fetcher } from './fetcher.ts';
+import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
+import { RealmIndexUpdater } from './realm-index-updater.ts';
+import serialize from './file-serializer.ts';
+import { validateWriteSize } from './write-size-validation.ts';
 import { md5 } from 'super-fast-md5';
-import { resolveFileDefCodeRef } from './file-def-code-ref';
+import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
-import type { Utils } from './matrix-backend-authentication';
-import { MatrixBackendAuthentication } from './matrix-backend-authentication';
+import type { Utils } from './matrix-backend-authentication.ts';
+import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
 
 import type {
   FileWatcherEventContent,
@@ -162,28 +161,28 @@ import type {
   AtomicOperation,
   AtomicOperationResult,
   AtomicPayloadValidationError,
-} from './atomic-document';
-import { filterAtomicOperations } from './atomic-document';
+} from './atomic-document.ts';
+import { filterAtomicOperations } from './atomic-document.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
   type PopulateCoordinator,
-} from './definition-lookup';
+} from './definition-lookup.ts';
 import {
   fetchSessionRoom,
   upsertSessionRoom,
-} from './db-queries/session-room-queries';
-import { userExists } from './db-queries/user-queries';
+} from './db-queries/session-room-queries.ts';
+import { userExists } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
   type PublishabilityWarningType,
   type ResourceIndexEntry,
-} from './publishability';
+} from './publishability.ts';
 import {
   cancelAllJobsInConcurrencyGroup,
   cancelRunningJobsInConcurrencyGroup,
-} from './job-utils';
+} from './job-utils.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -235,17 +234,6 @@ const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
-}
-
-// The `<jobId>.<reservationId>` job identity carried on inbound prerender
-// requests (`x-boxel-job-id`), normalized. Threaded into card-document opts so
-// the per-instance wire-format cache scopes its entries to one indexing job.
-// Undefined for live / external traffic, which never carries the header.
-function prerenderJobIdentity(request: Request): string | undefined {
-  return (
-    sanitizePrerenderJobId(request.headers.get(X_BOXEL_JOB_ID_HEADER)) ??
-    undefined
-  );
 }
 
 // Fields owned by the RealmConfig card instance at /realm.json. A PATCH
@@ -730,6 +718,20 @@ export class Realm {
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
+  // Per-path generation counters for #sourceCache — the source-read analogue
+  // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
+  // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
+  // and only then calls #sourceCache.set. An invalidateCache(path) that fires
+  // inside that window — e.g. a concurrent DELETE removing the file while a
+  // worker's indexing fetch of the same source is still in flight — clears the
+  // slot synchronously, but the in-flight read's set would otherwise re-fill it
+  // with the now-deleted bytes, leaving a GET serving a file that is gone from
+  // disk. The reader snapshots the generation before its first await and drops
+  // its set when the generation moved. #sourceCacheGlobalGeneration covers the
+  // bulk clears (__testOnlyClearCaches / clearLocalSourceCaches), which reset
+  // the per-path map alongside any in-flight snapshot's `path` component.
+  #sourceCacheGenerations: Map<LocalPath, number> = new Map();
+  #sourceCacheGlobalGeneration = 0;
   #transpiledModuleCache = new AliasCache<TranspiledModuleEntry>();
   // CS-11028: per-path generation counters for #transpiledModuleCache. Bumped
   // synchronously by invalidateCache(path) before any await. fallbackHandle
@@ -1492,7 +1494,7 @@ export class Realm {
   }
 
   __testOnlyClearCaches() {
-    this.#sourceCache.clear();
+    this.#dropAllSourceCacheEntries();
     this.#dropAllTranspiledModuleCacheEntries();
     // Reset the transpile counter so each test reasons about its own
     // delta. Production never reads this counter — only the CS-11029
@@ -1519,7 +1521,7 @@ export class Realm {
   // `clearLocalSourceCachesAndBroadcast` (local clear + peer broadcast);
   // the listener invokes it directly (no broadcast — would NOTIFY-loop).
   clearLocalSourceCaches(): void {
-    this.#sourceCache.clear();
+    this.#dropAllSourceCacheEntries();
     this.#dropAllTranspiledModuleCacheEntries();
   }
 
@@ -1553,6 +1555,17 @@ export class Realm {
     this.#testOnlyTranspileDelay = fn;
   }
   #testOnlyTranspileDelay?: () => Promise<void>;
+
+  // Test-only gate for the source-cache set-after-invalidate race: when set,
+  // getSourceOrRedirect awaits the returned promise AFTER it has read the file
+  // bytes from disk but BEFORE it writes #sourceCache. Lets the race test park
+  // a source read mid-flight, fire invalidateCache concurrently, then release
+  // — deterministically reproducing the window the generation guard closes,
+  // without depending on real worker/indexer timing.
+  __testOnlyDelaySourceCacheSet(fn: (() => Promise<void>) | undefined): void {
+    this.#testOnlySourceCacheDelay = fn;
+  }
+  #testOnlySourceCacheDelay?: () => Promise<void>;
 
   // CS-11119: Drop every read-side cache whose content derives from
   // server-side state — currently `#inFlightSearch` (the searchCards
@@ -1592,7 +1605,7 @@ export class Realm {
   // extensions. Public so the realm-server process can wire a NOTIFY listener
   // without reaching into private state.
   invalidateCache(path: LocalPath): void {
-    this.#sourceCache.invalidate(path);
+    this.#dropSourceCacheEntry(path);
     if (hasExecutableExtension(path)) {
       this.#dropTranspiledModuleEntry(path);
     }
@@ -1695,6 +1708,68 @@ export class Realm {
     }
     let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
     let curGen = this.#transpiledModuleCacheGenerations.get(canonicalPath) ?? 0;
+    return curGen !== snapGen;
+  }
+
+  // Source-cache analogue of #dropTranspiledModuleEntry: bump the path's
+  // generation BEFORE clearing the slot so a concurrent in-flight source read
+  // — already past its generation snapshot in getSourceOrRedirect — observes
+  // the new value at persist time and drops its #sourceCache.set instead of
+  // re-filling the slot we're about to empty.
+  #dropSourceCacheEntry(canonicalPath: LocalPath): void {
+    this.#sourceCacheGenerations.set(
+      canonicalPath,
+      (this.#sourceCacheGenerations.get(canonicalPath) ?? 0) + 1,
+    );
+    this.#sourceCache.invalidate(canonicalPath);
+  }
+
+  // Source-cache analogue of #dropAllTranspiledModuleCacheEntries: wipe every
+  // entry and bump the global generation so an in-flight read whose snapshot
+  // predates the wipe discards its post-read set rather than re-populating the
+  // just-cleared map. The per-path map is cleared because the generations it
+  // held are no longer reachable — the global counter is what catches
+  // in-flight snapshots after a wipe.
+  #dropAllSourceCacheEntries(): void {
+    this.#sourceCache.clear();
+    this.#sourceCacheGenerations.clear();
+    this.#sourceCacheGlobalGeneration += 1;
+  }
+
+  // Snapshot generations for every path getSourceOrRedirect's
+  // getFileWithFallbacks could resolve to: the request's localPath plus each
+  // executable extension and ".json" when the request is extensionless (the
+  // exact fallback set getSourceOrRedirect passes). The post-read check keys
+  // on the resolved canonicalPath, so snapshotting all candidates catches the
+  // race whether the request was extensionless or carried its extension —
+  // same reasoning as #snapshotModuleCacheGeneration.
+  #snapshotSourceCacheGeneration(localPath: LocalPath): {
+    pathGens: Map<LocalPath, number>;
+    global: number;
+  } {
+    let pathGens = new Map<LocalPath, number>();
+    pathGens.set(localPath, this.#sourceCacheGenerations.get(localPath) ?? 0);
+    if (!hasExecutableExtension(localPath)) {
+      for (let ext of [...executableExtensions, '.json']) {
+        let candidate = localPath + ext;
+        pathGens.set(
+          candidate,
+          this.#sourceCacheGenerations.get(candidate) ?? 0,
+        );
+      }
+    }
+    return { pathGens, global: this.#sourceCacheGlobalGeneration };
+  }
+
+  #sourceCacheGenerationChanged(
+    canonicalPath: LocalPath,
+    snapshot: { pathGens: Map<LocalPath, number>; global: number },
+  ): boolean {
+    if (this.#sourceCacheGlobalGeneration !== snapshot.global) {
+      return true;
+    }
+    let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
+    let curGen = this.#sourceCacheGenerations.get(canonicalPath) ?? 0;
     return curGen !== snapGen;
   }
 
@@ -3743,7 +3818,7 @@ export class Realm {
     if (bypassCache) {
       let cachedEntry = this.#sourceCache.get(localName);
       if (cachedEntry) {
-        this.#sourceCache.invalidate(cachedEntry.canonicalPath);
+        this.#dropSourceCacheEntry(cachedEntry.canonicalPath);
       }
     } else {
       let cached = this.#sourceCache.get(localName);
@@ -3791,6 +3866,19 @@ export class Realm {
       let fallbackExtensions = alreadyHasExecutableExt
         ? []
         : [...executableExtensions, '.json'];
+      // Snapshot the source-cache generation BEFORE the first await for every
+      // candidate getFileWithFallbacks could resolve to. invalidateCache(path)
+      // bumps the counter synchronously, so if it fires while we're reading
+      // bytes from disk (getFileWithFallbacks + materializeFileRef + the
+      // getCreatedTime query below) the post-read comparison against
+      // handle.path's snapshotted gen catches the race and we skip the cache
+      // write — otherwise the pre-invalidation bytes we just read would
+      // re-fill the slot invalidate just cleared, serving a file that is
+      // already gone from disk. bypassCache requests never set the cache, so
+      // they need no snapshot.
+      let sourceCacheGenSnapshot = bypassCache
+        ? undefined
+        : this.#snapshotSourceCacheGeneration(localName);
       let handle = await this.getFileWithFallbacks(
         localName,
         fallbackExtensions,
@@ -3815,13 +3903,24 @@ export class Realm {
           },
           requestContext,
         });
-        if (!bypassCache) {
-          this.#sourceCache.set(localName, {
-            type: 'redirect',
-            status: 302,
-            headers,
-            canonicalPath: handle.path,
-          });
+        if (sourceCacheGenSnapshot) {
+          if (
+            !this.#sourceCacheGenerationChanged(
+              handle.path,
+              sourceCacheGenSnapshot,
+            )
+          ) {
+            this.#sourceCache.set(localName, {
+              type: 'redirect',
+              status: 302,
+              headers,
+              canonicalPath: handle.path,
+            });
+          } else {
+            this.#log.info(
+              `Dropped stale #sourceCache redirect set for ${handle.path} (requested ${localName}) — invalidated during in-flight source read`,
+            );
+          }
         }
         return response;
       }
@@ -3841,17 +3940,34 @@ export class Realm {
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
+        // Test-only gate: park here (bytes read, cache not yet written) so the
+        // source-cache race test can fire invalidateCache before the set.
+        if (this.#testOnlySourceCacheDelay) {
+          await this.#testOnlySourceCacheDelay();
+        }
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
         // post-materialization, so this is a single md5 with no extra I/O.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
-        this.#sourceCache.set(localName, {
-          type: 'file',
-          ref: cachedRef,
-          defaultHeaders,
-          canonicalPath: handle.path,
-          contentHash,
-        });
+        if (
+          sourceCacheGenSnapshot &&
+          !this.#sourceCacheGenerationChanged(
+            handle.path,
+            sourceCacheGenSnapshot,
+          )
+        ) {
+          this.#sourceCache.set(localName, {
+            type: 'file',
+            ref: cachedRef,
+            defaultHeaders,
+            canonicalPath: handle.path,
+            contentHash,
+          });
+        } else if (sourceCacheGenSnapshot) {
+          this.#log.info(
+            `Dropped stale #sourceCache set for ${handle.path} — invalidated during in-flight source read`,
+          );
+        }
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
@@ -4304,7 +4420,6 @@ export class Realm {
       {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-        jobIdentity: prerenderJobIdentity(request),
       },
     );
     if (!entry || entry?.type === 'error') {
@@ -4471,7 +4586,6 @@ export class Realm {
           {
             loadLinks: true,
             skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-            jobIdentity: prerenderJobIdentity(request),
           },
         );
         if (entry && entry.type !== 'error') {
@@ -4582,7 +4696,6 @@ export class Realm {
         {
           loadLinks: true,
           skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-          jobIdentity: prerenderJobIdentity(request),
         },
       );
       let doc: SingleCardDocument;
@@ -4837,7 +4950,6 @@ export class Realm {
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
         loadLinks: true,
         skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-        jobIdentity: prerenderJobIdentity(request),
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
@@ -5163,19 +5275,29 @@ export class Realm {
   public async search(
     query: Query,
     opts?: SearchOpts,
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<UnifiedSearchCollectionDocument> {
     assertQuery(query);
-    return await this.#realmIndexQueryEngine.searchCards(query, {
-      loadLinks: true,
+    let engineOpts = {
+      loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
-      ...(opts?.skipQueryBackedExpansion
-        ? { skipQueryBackedExpansion: true }
-        : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-      ...(opts?.jobIdentity ? { jobIdentity: opts.jobIdentity } : {}),
-    });
+      ...(opts?.timings ? { timings: opts.timings } : {}),
+      // The SQL-side `i.url IN (...)` subset filter reads `cardUrls` from the
+      // engine opts, so forward it (non-empty only — an empty array is a no-op).
+      ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
+    };
+    // Prefer-HTML: resolve each result to prerendered HTML where indexed and
+    // fall back to the full live card otherwise. Absent `render` (data-only or
+    // unspecified) keeps the full live-card document.
+    if (opts?.render) {
+      return await this.#realmIndexQueryEngine.searchUnified(query, {
+        ...engineOpts,
+        render: opts.render,
+      });
+    }
+    return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
   }
 
   private async searchResponse(
@@ -5228,18 +5350,11 @@ export class Realm {
       let duringPrerender = isDuringPrerenderRequest(request);
       let doc = await this.search(cardsQuery, {
         cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender, leave `relationships.{field}.data`
-        // populated for query-backed `linksTo` / `linksToMany` but
-        // skip transitive expansion into `included[]`. The host
-        // resolves the listed IDs via per-URL fetches against the
-        // store (which has the same prerender skip applied on
-        // instance-GET); the eager closure is a wasted round-trip in
-        // the prerender path.
-        skipQueryBackedExpansion: duringPrerender,
-        // Inside a prerender the host discards the response's
-        // `included[]` entirely (it resolves every linked card by URL
-        // via card+source), so omit it: seed the root result cards and
-        // skip the static-link BFS that would otherwise build it.
+        // Inside a prerender the search skips the `loadLinks`
+        // relationship-assembly pass entirely: the host re-resolves
+        // every result card from its raw card+source file and consumes
+        // only `data[].id`, so the query-field umbrellas and the
+        // transitive `included[]` are throwaway work in this path.
         omitIncluded: duringPrerender,
       });
       return createResponse({
@@ -6794,6 +6909,8 @@ export class Realm {
     let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#virtualNetwork,
     ) as ResolvedCodeRef;
     let definition =
       await this.#definitionLookup.lookupDefinition(absoluteCodeRef);

@@ -21,6 +21,7 @@ import {
   baseCardRef,
   realmURL,
   Deferred,
+  SupportedMimeType,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -66,6 +67,10 @@ import {
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  registerDefaultRoutes,
+  registerRealmServerRoute,
+} from '../helpers/realm-server-mock/routes';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -359,7 +364,7 @@ module('Integration | Store', function (hooks) {
     await settled();
 
     assert.strictEqual(
-      (api.getRelationship(hassan, 'bestFriend') as CardAPI.RelationshipState)
+      api.getRelationshipMembershipState(hassan, 'bestFriend').membership![0]
         .kind,
       'present',
       'the consumer link resolves to the target before the delete',
@@ -367,10 +372,8 @@ module('Integration | Store', function (hooks) {
 
     await storeService.delete(`${testRealmURL}Person/boris`);
 
-    let after = api.getRelationship(
-      hassan,
-      'bestFriend',
-    ) as CardAPI.RelationshipState;
+    let after = api.getRelationshipMembershipState(hassan, 'bestFriend')
+      .membership![0];
     assert.strictEqual(
       after.kind,
       'not-found',
@@ -396,10 +399,10 @@ module('Integration | Store', function (hooks) {
     (hassan as any).friends = [jade, boris];
     await settled();
 
-    let before = api.getRelationship(
+    let before = api.getRelationshipMembershipState(
       hassan,
       'friends',
-    ) as CardAPI.RelationshipState[];
+    ).membership!;
     assert.deepEqual(
       before.map((s) => s.kind),
       ['present', 'present'],
@@ -408,10 +411,10 @@ module('Integration | Store', function (hooks) {
 
     await storeService.delete(`${testRealmURL}Person/boris`);
 
-    let after = api.getRelationship(
+    let after = api.getRelationshipMembershipState(
       hassan,
       'friends',
-    ) as CardAPI.RelationshipState[];
+    ).membership!;
     let borisEntry = after.find(
       (s) => s.reference === `${testRealmURL}Person/boris`,
     );
@@ -1707,6 +1710,160 @@ module('Integration | Store', function (hooks) {
       `${testRealmURL}Person/hassan`,
       'the result is correct',
     );
+  });
+
+  // A prefer-HTML search resolves some rows to an identity-only `card` (no
+  // attributes, HTML-backed). Those must never enter the Store — an
+  // attribute-less stub would misrepresent the instance and could clobber a
+  // correctly-loaded full one. The route is overridden to return such a doc.
+  function overrideSearchWith(doc: unknown) {
+    registerRealmServerRoute({
+      path: '/_federated-search',
+      handler: async () =>
+        new Response(JSON.stringify(doc), {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        }),
+    });
+  }
+
+  function identityOnlyDoc(id: string) {
+    return {
+      data: [
+        {
+          type: 'card',
+          id,
+          relationships: {
+            'rendered-html': { data: { type: 'rendered-html', id } },
+          },
+          meta: {
+            adoptsFrom: { module: `${testRealmURL}person`, name: 'Person' },
+            identityOnly: true,
+          },
+          links: { self: id },
+        },
+      ],
+      meta: { page: { total: 1 } },
+    };
+  }
+
+  function identityOnlyFileMetaDoc(id: string) {
+    return {
+      data: [
+        {
+          type: 'file-meta',
+          id,
+          relationships: {
+            'rendered-html': { data: { type: 'rendered-html', id } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'FileDef',
+            },
+            identityOnly: true,
+          },
+          links: { self: id },
+        },
+      ],
+      meta: { page: { total: 1 } },
+    };
+  }
+
+  let personQuery = {
+    filter: {
+      on: { module: testRRI('person'), name: 'Person' },
+      eq: { name: 'Hassan' },
+    },
+  };
+
+  test('a prefer-HTML search does not deposit identity-only rows into the Store', async function (assert) {
+    let id = `${testRealmURL}Person/identity-only`;
+    overrideSearchWith(identityOnlyDoc(id));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        0,
+        'the identity-only row is not returned as a hydrated instance',
+      );
+      assert.notOk(
+        isCardInstance(storeService.peek(id)),
+        'the identity-only row is not deposited in the Store',
+      );
+    } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('an identity-only row for an already-resident card returns the resident instance without clobbering it', async function (assert) {
+    let id = `${testRealmURL}Person/hassan`;
+    // Seed the full instance into the Store first.
+    storeService.addReference(id);
+    await storeService.flush();
+    let before = storeService.peek(id);
+    assert.true(
+      isCardInstance(before),
+      'the full instance is resident before the search',
+    );
+
+    overrideSearchWith(identityOnlyDoc(id));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        1,
+        'the resident instance is still returned (not dropped from results)',
+      );
+      assert.strictEqual(
+        results[0],
+        before,
+        'the returned instance is the resident full one',
+      );
+      let after = storeService.peek(id);
+      assert.strictEqual(
+        after,
+        before,
+        'the identity-only row left the resident full instance untouched',
+      );
+      assert.true(isCardInstance(after), 'still a full card instance');
+    } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('an identity-only file-meta row for an already-resident FileDef returns the live FileDef', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    // Seed the live FileDef into the Store and retain it across the search.
+    let before = await storeService.get(fileUrl, { type: 'file-meta' });
+    storeService.addReference(fileUrl, { type: 'file-meta' });
+    assert.true(
+      (before as any)?.constructor?.isFileDef,
+      'the live FileDef is resident before the search',
+    );
+
+    overrideSearchWith(identityOnlyFileMetaDoc(fileUrl));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        1,
+        'the resident FileDef is returned (a file row is not dropped to HTML)',
+      );
+      assert.ok(
+        Object.is(results[0], before),
+        'the returned instance is the resident live FileDef (type-aware peek)',
+      );
+      assert.true(
+        (storeService.peek(fileUrl, { type: 'file-meta' }) as any)?.constructor
+          ?.isFileDef,
+        'still a live FileDef',
+      );
+    } finally {
+      storeService.dropReference(fileUrl);
+      registerDefaultRoutes();
+    }
   });
 
   test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
