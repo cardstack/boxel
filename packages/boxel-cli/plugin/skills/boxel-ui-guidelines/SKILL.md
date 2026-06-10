@@ -348,6 +348,145 @@ Fitted cards are rendered at many different container sizes — from small badge
 - Use `text-overflow: ellipsis` with `white-space: nowrap` for single-line labels, or clamp multi-line text with `-webkit-line-clamp`
 - Override inherited font sizes to fit the smaller space — but keep text legible. Depending on the font, you can go as small as 0.5rem, but ideally no smaller
 
+Optionally, you can use the `FittedCard` component from `@cardstack/boxel-ui/components` for fitted card layouts. It handles all responsive container-query breakpoints, image column sizing, text clamping, and overflow — you only supply named content blocks.
+
+```gts
+import { FittedCard, Pill } from '@cardstack/boxel-ui/components';
+import BookOpen from '@cardstack/boxel-icons/book-open';
+import Calendar from '@cardstack/boxel-icons/calendar';
+
+static fitted = class Fitted extends Component<typeof this> {
+  <template>
+    <FittedCard
+      @imageUrl={{@model.cardThumbnailURL}}
+      @imageAlt={{@model.cardTitle}}
+      class='my-fitted'
+    >
+      <:placeholder><BookOpen width='24' height='24' /></:placeholder>
+      <:badgeLeft><Pill>New</Pill></:badgeLeft>
+      <:badgeRight><Pill>4.8 ★</Pill></:badgeRight>
+      <:eyebrow>{{@model.category}}</:eyebrow>
+      <:title><@fields.cardTitle /></:title>
+      <:subtitle><@fields.cardDescription /></:subtitle>
+      <:meta><Calendar width='14' height='14' /><@fields.date /></:meta>
+      <:footer><strong>{{@model.author.name}}</strong></:footer>
+    </FittedCard>
+    <style scoped>
+      .my-fitted {
+        --fc-content-gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+};
+```
+
+#### Named blocks
+
+| Block         | Description                                                                                                                              | Required |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `title`       | Primary heading                                                                                                                          | Yes      |
+| `placeholder` | Icon/content in the image column when `@imageUrl` is absent. Yielding empty content removes the column entirely.                         | No       |
+| `image`       | Custom image block (alternative to `@imageUrl`)                                                                                          | No       |
+| `background`  | Absolutely-positioned background graphics layer                                                                                          | No       |
+| `badgeLeft`   | Absolutely-positioned group at top-left (over the image when present)                                                                    | No       |
+| `badgeRight`  | Absolutely-positioned group at top-right                                                                                                 | No       |
+| `badgeRow`    | Inline flex row of badges/pills above the header inside the text column; controlled by `--fc-badge-row-justify` and `--fc-badge-row-gap` | No       |
+| `badge`       | Alias for `badgeLeft` (legacy — prefer `badgeLeft`)                                                                                      | No       |
+| `eyebrow`     | Tiny uppercase overline above the title                                                                                                  | No       |
+| `subtitle`    | Secondary line below the title                                                                                                           | No       |
+| `meta`        | Additional content between header and footer                                                                                             | No       |
+| `footer`      | Bottom row: date, location, price, stats, etc.                                                                                           | No       |
+
+#### Args
+
+| Arg             | Type     | Description                                                                                                                                                                    |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@imageUrl`     | `string` | Cover image URL; triggers the image column layout                                                                                                                              |
+| `@imageAlt`     | `string` | Alt text for the cover image (defaults to `""`)                                                                                                                                |
+| `@imageLoading` | `string` | `'lazy'` or `'eager'`; omit to use the browser default                                                                                                                         |
+| `@titleTag`     | `string` | HTML heading element for the title: `'h1'` (default), `'h2'`, `'h3'`, etc. Pass `'h2'` or `'h3'` when cards appear in a list to preserve heading hierarchy for screen readers. |
+
+#### CSS custom properties
+
+Override these on the FittedCard root element. Breakpoints adjust many automatically; only set them when you need to deviate.
+
+```css
+.my-fitted {
+  /* ── Layout ── */
+  --fc-content-padding: var(--boxel-sp-xs); /* padding inside text column */
+  --fc-content-gap: var(
+    --boxel-sp-3xs
+  ); /* gap between header / meta / footer */
+  --fc-content-gap-no-image: var(
+    --boxel-sp-xs
+  ); /* gap when there is no image column */
+  --fc-header-gap: var(
+    --boxel-sp-6xs
+  ); /* gap within header (eyebrow / title / subtitle) */
+
+  /* ── Image column ── */
+  --fc-image-width: 40cqh; /* horizontal layouts */
+  --fc-image-min-width: 3.75rem;
+  --fc-image-max-width: 12.5rem;
+  --fc-image-height: auto; /* vertical tiles override with a cqmin value */
+  --fc-image-object-fit: cover; /* object-fit for the cover image */
+  --fc-image-background: linear-gradient(
+    180deg,
+    var(--muted) 0%,
+    var(--accent) 100%
+  ); /* column bg when no image fills it */
+  --fc-image-fade-color: var(
+    --card
+  ); /* base color for expanded-card image fade; match your card background */
+
+  /* ── Typography ── */
+  --fc-eyebrow-font-size: 0.625rem;
+  --fc-eyebrow-line-height: 1.1;
+  --fc-title-font-size: var(--boxel-font-size-sm);
+  --fc-title-line-height: 1.2;
+  --fc-title-line-clamp: 2;
+  --fc-subtitle-font-size: var(--boxel-font-size-xs);
+  --fc-subtitle-line-height: 1.1;
+  --fc-subtitle-line-clamp: 2;
+  --fc-meta-font-size: var(--boxel-caption-font-size);
+  --fc-meta-line-height: 1.1;
+  --fc-footer-font-size: var(--boxel-caption-font-size);
+
+  /* ── Badges ── */
+  --fc-badge-offset: var(
+    --boxel-sp-2xs
+  ); /* inset from card edges for badgeLeft / badgeRight */
+
+  /* ── Badge row ── */
+  --fc-badge-row-justify: space-between;
+  --fc-badge-row-gap: var(--boxel-sp-2xs);
+
+  /* ── Meta & footer flex row ── */
+  --fc-meta-justify: flex-start; /* justify-content */
+  --fc-meta-gap: var(--boxel-sp-2xs);
+  --fc-meta-align-items: center; /* align-items */
+  --fc-meta-flex-wrap: wrap;
+  --fc-footer-justify: flex-start; /* justify-content */
+  --fc-footer-align-items: center; /* align-items */
+  --fc-footer-flex-wrap: nowrap; /* flex-wrap */
+  --fc-footer-gap: var(--boxel-sp-2xs);
+}
+```
+
+#### Customising caller-owned content per breakpoint
+
+`FittedCard` handles its own layout at every size. For caller-owned content that needs show/hide per breakpoint, add `@container fitted-card` rules in your own `<style scoped>`:
+
+```css
+@container fitted-card (width < 250px) {
+  .my-detail-row {
+    display: none;
+  }
+}
+```
+
+Use `:deep(.fc-eyebrow)` etc. to reach into `FittedCard` internals only for layout overrides (e.g. making the eyebrow a flex row for an icon + label).
+
 ### All 16 fitted formats (from `fitted-formats.ts`)
 
 The runtime defines 16 named formats. Sizes are exact spec values (width × height in px):
@@ -371,48 +510,35 @@ The runtime defines 16 named formats. Sizes are exact spec values (width × heig
 | full-card         | 400   | 275    |
 | expanded-card     | 400   | 445    |
 
-```gts
-static fitted = class Fitted extends Component<typeof this> {
-  <template>
-    <article class='my-fitted'>
-      <header class='content-header'>
-        <h1 class='title boxel-ellipsize'><@fields.cardTitle /></h1>
-        <p class='subtitle'><@fields.cardDescription /></p>
-      </header>
-     <div class='body-content'>
-        <p>Content here...</p>
-     </div>
-    <footer>
-       <p>Footer content here...</p>
-    </footer>
-    </article>
-    <style scoped>
-      .my-fitted {
-        display: grid;
-        grid-template-rows: auto 1fr auto;
-        padding: var(--boxel-sp-xs);
-        background-color: var(--card);
-        color: var(--card-foreground);
-      }
-      .content {
-        display: grid;
-        gap: var(--boxel-sp-xs);
-      }
-      .title {
-        font-weight: 500;
-      }
-      .subtitle {
-        font-size: var(--boxel-font-size-xs);
-        color: var(--muted-foreground);
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-      }
-    </style>
-  </template>
-};
-```
+#### What `FittedCard` does at each breakpoint
+
+**Badges** (`aspect-ratio > 1.0`, `width < 250px`) — 1-col, no image column:
+
+- Small Badge (150×40): 1-line title only; hides image, both badges, subtitle, meta, footer
+- Medium Badge (150×65): 1-line title + subtitle; hides image, both badges, meta, footer
+- Large Badge (150×105): hides image, both badges, meta
+
+**Strips** (`aspect-ratio > 1.0`, `width ≥ 250px`, `height < 170px`):
+
+- Single Strip (250×40): compact padding, 1-line title; hides both badges, subtitle, meta, footer
+- Double Strip (250×65): 1-line title + subtitle; hides both badges, meta, footer
+- Triple Strip (250×105): hides both badges, meta
+- Double Wide Strip (400×65): image `width: 40cqw`; 1-line title + subtitle; hides both badges and badge-row, meta, footer — restores `badgeLeft` when image is present
+- Triple Wide Strip (400×105): image `width: 40cqw`; hides both badges and badge-row, meta — restores `badgeLeft` when image is present
+
+**Vertical / Square tiles** (`aspect-ratio ≤ 1.0`) — 1-col, image stacks above content:
+
+- All: image `height: 45cqmin`; taller than 250px → `55cqmin`
+- Small Tile (150×170): smaller title font; hides badge-row, meta; hides both badges when no image
+- Shorter than 150px height: hides meta + footer; 1-line subtitle
+- Narrower than 140px: hides both badges
+- Regular Tile (250×170), CardsGrid Tile, Tall Tile, Large Tile: hides both badges when no image
+
+**Horizontal cards** (`aspect-ratio > 1.0`, `width ≥ 400px`, `height ≥ 170px`) — image `width: 40cqw`:
+
+- Compact Card (400×170): increased padding + gap; hides both badges when no image
+- Full Card (400×275): larger font sizes; `line-clamp: 3`; hides both badges when no image
+- Expanded Card (400×445): full padding, image `height: 50cqh` with bottom scrim fade; hides both badges when no image
 
 ### Form fields
 
