@@ -59,6 +59,9 @@ export default class CheckDomainAvailabilityCommand extends HostBaseCommand<
     return new CheckDomainAvailabilityResult({
       available: result.available,
       publishedRealmURL,
+      // The server only returns an error for a rejected (e.g. invalid) name;
+      // pass it through as the reason, omitting it otherwise.
+      ...(result.error ? { reason: result.error } : {}),
     });
   }
 }

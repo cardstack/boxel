@@ -30,7 +30,11 @@ class StubRealmService extends RealmService {
 }
 
 // Matches the realm-server /_check-boxel-domain-availability response shape.
-let availabilityResponse: { available: boolean; hostname: string };
+let availabilityResponse: {
+  available: boolean;
+  hostname: string;
+  error?: string;
+};
 let checkedSubdomains: string[];
 
 module('Integration | commands | check-domain-availability', function (hooks) {
@@ -102,6 +106,25 @@ module('Integration | commands | check-domain-availability', function (hooks) {
     let result = await makeCommand().execute({ type: 'custom', name: 'taken' });
 
     assert.false(result.available);
+  });
+
+  test('passes through the server validation error as the reason', async function (assert) {
+    availabilityResponse = {
+      available: false,
+      hostname: 'xn--bad.boxel.test',
+      error: 'Punycode domains are not allowed for security reasons',
+    };
+
+    let result = await makeCommand().execute({
+      type: 'custom',
+      name: 'xn--bad',
+    });
+
+    assert.false(result.available);
+    assert.strictEqual(
+      result.reason,
+      'Punycode domains are not allowed for security reasons',
+    );
   });
 
   test('rejects a non-custom target type', async function (assert) {
