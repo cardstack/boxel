@@ -464,6 +464,123 @@ module(basename(__filename), function () {
       );
     });
 
+    // Affinity/tab exhaustion is a saturation signal the acquire-time
+    // `#maybeExpandUnderSaturation` hook is blind to: it only fires when
+    // the render semaphore is full, but a workload that contends on many
+    // distinct realm affinities saturates on per-affinity tab ownership,
+    // not concurrent render count. With more affinities than `#maxPages`
+    // tabs, an arriving affinity finds no tab of its own and no ready
+    // standby, and the tabs it could steal are idle (the render
+    // semaphore reads un-saturated). These tests pin down that
+    // `#selectEntryForAffinity` treats that state as a trigger to expand
+    // the live cap rather than silently cross-affinity-stealing at a
+    // pinned MIN.
+    //
+    // `disableStandbyRefill: true` is load-bearing here: it keeps the
+    // render semaphore idle (no held slots) while still exhausting tabs,
+    // which isolates the affinity-exhaustion trigger from the render-
+    // semaphore-fullness one. The production path (refill enabled) spawns
+    // a fresh tab after expanding; the full no-steal flow runs under the
+    // real-Chrome integration tests in `prerendering-test.ts`.
+    test('tab/affinity exhaustion expands the cap even when the render semaphore is idle', async function (assert) {
+      await withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '4',
+          // Long cooldown so contraction can't shrink mid-test.
+          PRERENDER_POOL_IDLE_CONTRACTION_MS: '60000',
+        },
+        async () => {
+          let semaphore = new AsyncSemaphore(2); // tracks MIN
+          let { pool } = track(
+            makeStubPool({ maxPages: 4, renderSemaphore: semaphore }),
+          );
+          assert.strictEqual(pool.currentMaxPages, 2, 'starts at MIN');
+
+          // Warm two distinct affinities up to the live cap, releasing
+          // each so its tab stays resident but holds no render-semaphore
+          // slot. Tabs are now exhausted (one per affinity, count ===
+          // #maxPages) while the semaphore is idle.
+          let a = await pool.getPage('realm-a');
+          a.release();
+          let b = await pool.getPage('realm-b');
+          b.release();
+
+          assert.strictEqual(
+            semaphore.inUseCount,
+            0,
+            'render semaphore is idle — any expansion is NOT the saturation hook',
+          );
+          assert.strictEqual(
+            pool.currentMaxPages,
+            2,
+            'still pinned at MIN before the new affinity arrives',
+          );
+
+          // A third, brand-new affinity arrives with no warm tab, no
+          // orphan, and no ready standby. The acquire-time hook sees an
+          // idle semaphore and does nothing; the old behaviour would
+          // cross-affinity-steal with the cap pinned at MIN. The fix
+          // lifts the cap instead.
+          let c = await pool.getPage('realm-c');
+          assert.strictEqual(
+            pool.currentMaxPages,
+            3,
+            'pool expanded on tab/affinity exhaustion (2 → 3)',
+          );
+          assert.strictEqual(
+            semaphore.capacity,
+            3,
+            'render semaphore tracks the new cap',
+          );
+          c.release();
+        },
+      );
+    });
+
+    test('many-affinity load walks the cap up to maxBurstPages, then stops', async function (assert) {
+      await withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '2',
+          PRERENDER_PAGE_POOL_MAX: '4',
+          PRERENDER_POOL_IDLE_CONTRACTION_MS: '60000',
+        },
+        async () => {
+          let semaphore = new AsyncSemaphore(2);
+          let { pool } = track(
+            makeStubPool({ maxPages: 4, renderSemaphore: semaphore }),
+          );
+
+          // Warm the cap with two affinities (released → semaphore idle).
+          for (let key of ['realm-a', 'realm-b']) {
+            let held = await pool.getPage(key);
+            held.release();
+          }
+          assert.strictEqual(pool.currentMaxPages, 2, 'starts pinned at MIN');
+
+          // Each subsequent brand-new affinity lifts the cap by one
+          // until it reaches maxBurstPages; past that, expansion is a
+          // no-op and the steal path takes over without further growth.
+          let trajectory: number[] = [];
+          for (let key of ['realm-c', 'realm-d', 'realm-e']) {
+            let held = await pool.getPage(key);
+            trajectory.push(pool.currentMaxPages);
+            held.release();
+          }
+          assert.deepEqual(
+            trajectory,
+            [3, 4, 4],
+            `cap climbs to MAX and holds (observed ${trajectory.join(',')})`,
+          );
+          assert.strictEqual(
+            semaphore.capacity,
+            4,
+            'render semaphore tracks the final cap',
+          );
+        },
+      );
+    });
+
     test('contraction respects cooldown: no shrink within idle window', async function (assert) {
       await withEnv(
         {
