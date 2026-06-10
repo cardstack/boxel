@@ -1,11 +1,10 @@
-import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import GetPublishedRealmsCommand from '@cardstack/host/commands/get-published-realms';
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
   setupIntegrationTestRealm,
@@ -20,29 +19,11 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-// The command reads RealmService.info(realmURL).lastPublishedAt; the stub lets
-// each test control that value. (The real value is sourced from realm_registry
-// via the realm's _info, which is empty in the integration harness.)
+// The command reads RealmService.info(realmURL).lastPublishedAt; each test
+// controls that value via lastPublishedAtFixture. The real value comes from
+// realm_registry via the realm's _info (empty in this harness), so beforeEach
+// patches the resolved service's info to serve the fixture directly.
 let lastPublishedAtFixture: string | Record<string, string> | null;
-
-class StubRealmService extends RealmService {
-  get defaultReadableRealm() {
-    return {
-      path: testRealmURL,
-      info: testRealmInfo,
-    };
-  }
-
-  async ensureRealmMeta() {}
-
-  info = (_url: string) =>
-    ({
-      ...testRealmInfo,
-      isIndexing: false,
-      isPublic: false,
-      lastPublishedAt: lastPublishedAtFixture,
-    }) as ReturnType<RealmService['info']>;
-}
 
 module('Integration | commands | get-published-realms', function (hooks) {
   setupRenderingTest(hooks);
@@ -59,7 +40,6 @@ module('Integration | commands | get-published-realms', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
     lastPublishedAtFixture = null;
 
     await withCachedRealmSetup(async () =>
@@ -69,6 +49,17 @@ module('Integration | commands | get-published-realms', function (hooks) {
         contents: {},
       }),
     );
+
+    // Patch the resolved singleton the command uses: skip the _info fetch and
+    // serve the per-test lastPublishedAt fixture.
+    let realm = getService('realm') as RealmService;
+    realm.ensureRealmMeta = (async () => {}) as RealmService['ensureRealmMeta'];
+    realm.info = ((_url: string) => ({
+      ...testRealmInfo,
+      isIndexing: false,
+      isPublic: false,
+      lastPublishedAt: lastPublishedAtFixture,
+    })) as RealmService['info'];
   });
 
   function makeCommand() {
