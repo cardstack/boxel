@@ -813,6 +813,7 @@ export type {
 export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
+export * from './host-routing-validation.ts';
 
 export type {
   CardDocument,
@@ -903,6 +904,12 @@ interface CardChooserOpts {
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
+  /**
+   * When true, the realm scope is fixed to consumingRealm and the user
+   * cannot broaden it via the realm picker. Use for fields that must
+   * reference cards within the consuming realm (e.g. RoutingRuleField).
+   */
+  lockConsumingRealm?: boolean;
   preselectedCardUrls?: string[];
 }
 

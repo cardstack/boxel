@@ -284,6 +284,7 @@ const ALL_TEST_FILES: string[] = [
   './render-type-resolution-test',
   './coerce-error-message-test',
   './fallback-models-test',
+  './host-routing-validation-test',
   './normalize-realm-meta-value-test',
   './job-scoped-search-cache-test',
   './consuming-realm-header-test',
