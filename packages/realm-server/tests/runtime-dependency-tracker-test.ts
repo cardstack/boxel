@@ -362,6 +362,62 @@ module(basename(__filename), function (hooks) {
     assert.strictEqual(fetchCount, 1, 'cache-hit import does not refetch');
   });
 
+  test('captures and dedups repeated tracking with no active context', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'no-context-dedup',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // Outside any withContext scope — the relationship walk a template render
+    // drives — the same dependency is tracked once per linked element. The dep
+    // must still be captured, and repeats must not drop it.
+    for (let i = 0; i < 5; i++) {
+      trackRuntimeInstanceDependency('https://example.com/repeated-dep');
+      trackRuntimeModuleDependency('https://example.com/cards/repeated.gts');
+    }
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.deepEqual(
+      snapshot.deps.filter((d) => d.includes('repeated')),
+      [
+        'https://example.com/cards/repeated',
+        'https://example.com/repeated-dep.json',
+      ],
+      'each repeated dependency is captured exactly once with no active context',
+    );
+  });
+
+  test('captures dep under a real context even after no-context tracking', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'no-context-then-context',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // First tracked with no active context (unscoped, non-query), then under an
+    // explicit context with a consumer. Dedup is per-context, so the second
+    // recording must still land rather than being skipped as a repeat.
+    trackRuntimeInstanceDependency('https://example.com/shared');
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:no-context-then-context',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/shared');
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/shared.json'),
+      'dependency is captured across the no-context and explicit-context reads',
+    );
+  });
+
   test('getter-level attribution tracks only accessed relationship targets', async function (assert) {
     beginRuntimeDependencyTrackingSession({
       sessionKey: 'getter-level-attribution',

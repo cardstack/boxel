@@ -124,6 +124,18 @@ function isPromiseLike<T = unknown>(value: unknown): value is Promise<T> {
   );
 }
 
+// Shared identity for "no active context" so a context-keyed cache can dedup
+// tracking that happens outside any withContext scope (the relationship walk a
+// template render drives). A fresh object literal each call would defeat that.
+const EMPTY_CONTEXT: RuntimeDependencyTrackingContext = Object.freeze({});
+
+function normalizeCacheKey(
+  kind: RuntimeDependencyNodeKind,
+  rawURL: string,
+): string {
+  return `${kind}\0${rawURL}`;
+}
+
 export class RuntimeDependencyTracker {
   #sessionKey: string | undefined;
   #isActive = false;
@@ -131,12 +143,24 @@ export class RuntimeDependencyTracker {
   #nodes = new Map<string, NodeRecord>();
   #rootCandidates = new Set<string>();
 
-  // Short-circuit cache: repeated field reads under the same context call
-  // #track with the same (kind, rawURL, context) triple. Skipping those is
-  // safe because all downstream work (normalization, Set.add) is idempotent.
-  #lastTrackKind: RuntimeDependencyNodeKind | undefined;
-  #lastTrackRawURL: string | undefined;
-  #lastTrackContext: RuntimeDependencyTrackingContext | undefined;
+  // Normalization is a pure function of (kind, rawURL), and a render walks the
+  // same module/instance URLs across a large linked-card graph, so the
+  // string-canonicalization work dominates without a cache. Memoize it keyed by
+  // a string (never a URL object) so repeats collapse to a single Map lookup.
+  #normalizeCache = new Map<string, string | undefined>();
+
+  // Recording a dependency is idempotent, so once a (kind, rawURL) has been
+  // tracked under a given context it never needs to run again. A linksToMany of
+  // N same-typed cards otherwise re-tracks that type's entire module graph once
+  // per element — O(N) redundant canonicalization. Context objects are built
+  // per render / field-read and never mutated afterward, so their identity is a
+  // sound dedup key; a WeakMap lets entries fall away with the contexts. Reset
+  // alongside #nodes so a cleared node map never leaves a stale "already
+  // tracked" marker that would drop a real dependency.
+  #trackedByContext = new WeakMap<
+    RuntimeDependencyTrackingContext,
+    Set<string>
+  >();
 
   startSession({
     sessionKey,
@@ -157,14 +181,14 @@ export class RuntimeDependencyTracker {
     }
     this.#isActive = false;
     this.#contextStack = [];
-    this.#clearTrackCache();
   }
 
   reset(): void {
     this.#nodes.clear();
     this.#rootCandidates.clear();
     this.#contextStack = [];
-    this.#clearTrackCache();
+    this.#normalizeCache.clear();
+    this.#trackedByContext = new WeakMap();
   }
 
   withContext<T>(context: RuntimeDependencyTrackingContext, cb: () => T): T {
@@ -261,7 +285,7 @@ export class RuntimeDependencyTracker {
     if (!rootURL) {
       return;
     }
-    let normalized = normalizeByKind(rootKind, rootURL);
+    let normalized = this.#normalize(rootKind, rootURL);
     if (!normalized) {
       return;
     }
@@ -283,35 +307,50 @@ export class RuntimeDependencyTracker {
     }
 
     let context = explicitContext ?? this.#currentContext();
+    let key = normalizeCacheKey(kind, rawURL);
 
-    // The short-circuit cache only applies to stack-top contexts. Those frames
-    // are constructed inside withContext() and never mutated afterward, so
-    // reference equality is sound. Caller-supplied explicit contexts are
-    // structurally mutable, so identity equality does not imply field equality.
-    if (
-      !explicitContext &&
-      rawURL === this.#lastTrackRawURL &&
-      kind === this.#lastTrackKind &&
-      context === this.#lastTrackContext
-    ) {
+    // Already recorded this (kind, rawURL) under this context — nothing more to
+    // do (see #trackedByContext). A repeat would re-derive the identical node
+    // record, so skipping it is a pure no-op.
+    let seen = this.#trackedByContext.get(context);
+    if (seen?.has(key)) {
       return;
     }
 
-    let dep = normalizeByKind(kind, rawURL);
+    let dep = this.#normalize(kind, rawURL, key);
     if (!dep) {
       return;
     }
 
-    if (!explicitContext) {
-      this.#lastTrackKind = kind;
-      this.#lastTrackRawURL = rawURL;
-      this.#lastTrackContext = context;
+    if (!seen) {
+      seen = new Set();
+      this.#trackedByContext.set(context, seen);
     }
+    seen.add(key);
 
     let label = contextLabel(context);
     let consumer = this.#normalizeConsumer(context, label);
 
     this.#recordNode(dep, kind, context.mode, label, !consumer);
+  }
+
+  #normalize(
+    kind: RuntimeDependencyNodeKind,
+    rawURL: string,
+    key: string = normalizeCacheKey(kind, rawURL),
+  ): string | undefined {
+    let cached = this.#normalizeCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (this.#normalizeCache.has(key)) {
+      // A URL with no canonical form (e.g. a non-http reference) memoizes as
+      // undefined; the `has` check keeps us from recomputing it.
+      return undefined;
+    }
+    let result = normalizeByKind(kind, rawURL);
+    this.#normalizeCache.set(key, result);
+    return result;
   }
 
   #normalizeConsumer(
@@ -325,13 +364,13 @@ export class RuntimeDependencyTracker {
       return null;
     }
     let preferredKind = context.consumerKind ?? 'instance';
-    let preferredURL = normalizeByKind(preferredKind, context.consumer);
+    let preferredURL = this.#normalize(preferredKind, context.consumer);
     if (preferredURL) {
       this.#recordNode(preferredURL, preferredKind, context.mode, label, false);
       return { url: preferredURL, kind: preferredKind };
     }
 
-    let fallbackFile = normalizeFileURL(context.consumer);
+    let fallbackFile = this.#normalize('file', context.consumer);
     if (fallbackFile) {
       this.#recordNode(fallbackFile, 'file', context.mode, label, false);
       return { url: fallbackFile, kind: 'file' };
@@ -369,13 +408,10 @@ export class RuntimeDependencyTracker {
   }
 
   #currentContext(): RuntimeDependencyTrackingContext {
-    return this.#contextStack[this.#contextStack.length - 1]?.context ?? {};
-  }
-
-  #clearTrackCache(): void {
-    this.#lastTrackKind = undefined;
-    this.#lastTrackRawURL = undefined;
-    this.#lastTrackContext = undefined;
+    return (
+      this.#contextStack[this.#contextStack.length - 1]?.context ??
+      EMPTY_CONTEXT
+    );
   }
 }
 
