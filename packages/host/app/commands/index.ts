@@ -36,6 +36,7 @@ import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
 import * as GetCatalogRealmIdentifiersCommandModule from './get-catalog-realm-identifiers';
 import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as GetPublishedRealmsCommandModule from './get-published-realms';
 import * as GetRealmOfResourceIdentifierCommandModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InstantiateCardCommandModule from './instantiate-card';
@@ -182,6 +183,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
     GetEventsFromRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-published-realms',
+    GetPublishedRealmsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/invite-user-to-room',
@@ -497,6 +502,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
+  GetPublishedRealmsCommandModule.default,
   InviteUserToRoomCommandModule.default,
   InvalidateRealmIdentifiersCommandModule.default,
   LintAndFixCommandModule.default,

@@ -671,7 +671,6 @@ export class GetPublishedRealmsInput extends CardDef {
 export class PublishedRealmInfo extends FieldDef {
   @field publishedRealmURL = contains(StringField);
   @field lastPublishedAt = contains(StringField);
-  @field isPublishing = contains(BooleanField);
 }
 
 export class GetPublishedRealmsResult extends CardDef {
