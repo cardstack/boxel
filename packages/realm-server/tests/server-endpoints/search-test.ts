@@ -81,6 +81,48 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
         },
       },
+      // A two-link adoption chain (SubThing → BaseThing → CardDef) with a
+      // distinct fitted template per type, so a render against the SubThing
+      // instance is identifiable as native (SubThing) vs the BaseThing ancestor
+      // override. Each `.gts` exercises the per-ancestor HTML the indexer keys
+      // by type, which the render-type default/override paths select between.
+      'base-thing.gts': `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class BaseThing extends CardDef {
+          static displayName = 'BaseThing';
+          @field label = contains(StringField);
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>BaseThing fitted: <@fields.label/></template>
+          }
+        }
+      `,
+      'sub-thing.gts': `
+        import { Component } from "https://cardstack.com/base/card-api";
+        import { BaseThing } from './base-thing';
+
+        export class SubThing extends BaseThing {
+          static displayName = 'SubThing';
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>SubThing fitted: <@fields.label/></template>
+          }
+        }
+      `,
+      'sub-instance.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            label: 'render-type probe',
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('./sub-thing'),
+              name: 'SubThing',
+            },
+          },
+        },
+      },
     };
 
     async function startSearchRealmServer({
@@ -598,6 +640,151 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.notOk(
         included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
         'no rendered-html is emitted for the live fallback row',
+      );
+    });
+
+    // Native-default render type: with no `render.renderType`, each result
+    // renders in its OWN actual (most-derived) type — even when the query is
+    // `on:` a common ancestor. A SubThing instance matched by an `on: BaseThing`
+    // query renders/echoes SubThing, never the BaseThing ancestor, and the
+    // response carries no collection-level render type (each row echoes its own).
+    test('QUERY /_federated-search default render type is native — a SubThing matched by on: BaseThing renders/echoes SubThing, not the ancestor', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let subId = `${testRealm.url}sub-instance`;
+      let baseThingRef = {
+        module: rri(`${testRealm.url}base-thing`),
+        name: 'BaseThing',
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // `on: BaseThing` matches the SubThing instance (it adopts BaseThing);
+        // no `render.renderType` → the native default.
+        .send({
+          // An `on: BaseThing` query (the ancestor) with a predicate — the
+          // case the old default rendered as the `filter.on` ancestor.
+          filter: { on: baseThingRef, eq: { label: 'render-type probe' } },
+          realms: [testRealm.url],
+          render: { format: 'fitted' },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+
+      // The native default carries NO collection-level render type — each row
+      // varies by its own type and echoes it on its rendered-html.
+      assert.notOk(
+        response.body.meta?.renderType,
+        'no collection-level renderType on the native default path',
+      );
+
+      let card = data.find((r) => r.id === subId);
+      assert.ok(card, 'the SubThing instance is in data');
+      assert.strictEqual(
+        card.meta?.adoptsFrom?.name,
+        'SubThing',
+        'adoptsFrom is the actual (SubThing) type',
+      );
+      assert.strictEqual(
+        card.meta?.renderType?.name,
+        'SubThing',
+        'the identity-only card echoes its own (native) render type',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === subId,
+      );
+      assert.ok(rendered, 'a rendered-html for the SubThing rides in included');
+      assert.strictEqual(
+        rendered.meta?.renderType?.name,
+        'SubThing',
+        'rendered-html echoes the SubThing (native) render type, not the BaseThing ancestor',
+      );
+      assert.true(
+        rendered.attributes.html
+          .replace(/\s+/g, ' ')
+          .includes('SubThing fitted'),
+        'the SubThing fitted template rendered (native), not the BaseThing template',
+      );
+    });
+
+    // The explicit ancestor override — the only remaining non-default. An
+    // explicit `render.renderType` CodeRef renders/echoes that ancestor: the
+    // SubThing instance is rendered AS BaseThing (collection-level echo + the
+    // BaseThing template), while its actual type still rides in `adoptsFrom`.
+    test('QUERY /_federated-search explicit render.renderType renders/echoes the ancestor (override still works)', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let subId = `${testRealm.url}sub-instance`;
+      let baseThingRef = {
+        module: rri(`${testRealm.url}base-thing`),
+        name: 'BaseThing',
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({
+          filter: { on: baseThingRef, eq: { label: 'render-type probe' } },
+          realms: [testRealm.url],
+          // Explicit ancestor override → render every match AS BaseThing.
+          render: { format: 'fitted', renderType: baseThingRef },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+
+      // An explicit override is one resolved type for the whole search, so it's
+      // echoed collection-level.
+      assert.strictEqual(
+        response.body.meta?.renderType?.name,
+        'BaseThing',
+        'the explicit ancestor override is echoed collection-level',
+      );
+
+      let card = data.find((r) => r.id === subId);
+      assert.ok(card, 'the SubThing instance is in data');
+      assert.strictEqual(
+        card.meta?.adoptsFrom?.name,
+        'SubThing',
+        'adoptsFrom is still the actual (SubThing) type, even under an override',
+      );
+      assert.strictEqual(
+        card.meta?.renderType?.name,
+        'BaseThing',
+        'the card echoes the requested ancestor render type',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === subId,
+      );
+      assert.ok(rendered, 'a rendered-html for the SubThing rides in included');
+      assert.strictEqual(
+        rendered.meta?.renderType?.name,
+        'BaseThing',
+        'rendered-html echoes the requested ancestor',
+      );
+      assert.true(
+        rendered.attributes.html
+          .replace(/\s+/g, ' ')
+          .includes('BaseThing fitted'),
+        'the BaseThing (ancestor) fitted template rendered',
       );
     });
 
