@@ -77,6 +77,40 @@ module('validation-run-cache', function (hooks) {
       assert.strictEqual(runs, 2, 'edit invalidates the entry');
     });
 
+    test('artifact-card writes under Validations/ do not invalidate (sync gate still sees them)', async function (assert) {
+      // The pipeline steps write a "running" artifact card before executing
+      // their engine; that write must not evict the result the agent's
+      // mid-turn tool run recorded for the same source state.
+      let cache = new ValidationRunCache(workspaceDir);
+      let runs = 0;
+      await cache.getOrRun('k', async () => ++runs);
+
+      mkdirSync(join(workspaceDir, 'Validations'));
+      touch(
+        join(workspaceDir, 'Validations'),
+        'eval_issue-1.json',
+        '{"status":"running"}',
+      );
+      await cache.getOrRun('k', async () => ++runs);
+      assert.strictEqual(runs, 1, 'cache survives the artifact write');
+
+      // The sync gate uses the full fingerprint, so the artifact card still
+      // triggers a real sync (it must reach the realm).
+      let syncs = 0;
+      let gate = new WorkspaceSyncGate(workspaceDir, async () => {
+        syncs++;
+        return { ok: true };
+      });
+      await gate.sync();
+      touch(
+        join(workspaceDir, 'Validations'),
+        'eval_issue-2.json',
+        '{"status":"passed"}',
+      );
+      await gate.sync();
+      assert.strictEqual(syncs, 2, 'artifact write forces a sync');
+    });
+
     test('keys are independent', async function (assert) {
       let cache = new ValidationRunCache(workspaceDir);
       let aRuns = 0;

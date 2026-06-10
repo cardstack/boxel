@@ -38,10 +38,16 @@ const FINGERPRINT_IGNORED = new Set(['.boxel-history', '.boxel-sync.json']);
  * Cheap content fingerprint of a workspace directory: a hash over every
  * file's relative path, size, and mtime. Editing, adding, or deleting any
  * file changes it; re-syncing or checkpointing does not.
+ *
+ * `extraIgnoredTopLevel` names additional top-level directories to leave
+ * out of the fingerprint (e.g. `Validations` for the validation cache —
+ * see {@link ValidationRunCache}).
  */
 export async function computeWorkspaceFingerprint(
   workspaceDir: string,
+  extraIgnoredTopLevel: readonly string[] = [],
 ): Promise<string> {
+  let ignored = new Set([...FINGERPRINT_IGNORED, ...extraIgnoredTopLevel]);
   let entries: string[] = [];
 
   async function walk(dir: string, prefix: string): Promise<void> {
@@ -52,7 +58,7 @@ export async function computeWorkspaceFingerprint(
       return;
     }
     for (let name of names) {
-      if (prefix === '' && FINGERPRINT_IGNORED.has(name)) continue;
+      if (prefix === '' && ignored.has(name)) continue;
       let full = join(dir, name);
       let rel = prefix === '' ? name : `${prefix}/${name}`;
       let info;
@@ -85,6 +91,14 @@ export function cacheKeyForInputs(inputs: readonly string[]): string {
  * Memoizes validation-engine runs per workspace fingerprint. One entry per
  * key — a new run for the same key replaces the old entry, so the cache
  * never grows past the number of distinct engine/input combinations.
+ *
+ * The cache's fingerprint ignores `Validations/`: each pipeline step writes
+ * a "running" artifact card there *before* executing its engine, and those
+ * writes would otherwise invalidate the cache mid-pipeline — defeating the
+ * whole point of reusing the agent's mid-turn runs. That is sound because
+ * artifact cards are validation *outputs*; none of the five engines reads
+ * them (eval/lint/test discover code files, parse validates only
+ * Spec-linked JSON examples, instantiate reads only Spec cards).
  */
 export class ValidationRunCache {
   private entries = new Map<string, { fingerprint: string; value: unknown }>();
@@ -100,7 +114,9 @@ export class ValidationRunCache {
    * it.
    */
   async getOrRun<T>(key: string, run: () => Promise<T>): Promise<T> {
-    let fingerprint = await computeWorkspaceFingerprint(this.workspaceDir);
+    let fingerprint = await computeWorkspaceFingerprint(this.workspaceDir, [
+      'Validations',
+    ]);
     let hit = this.entries.get(key);
     if (hit && hit.fingerprint === fingerprint) {
       log.info(`Reusing ${key} result — workspace unchanged since last run`);
