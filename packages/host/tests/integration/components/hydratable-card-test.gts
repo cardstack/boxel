@@ -16,6 +16,8 @@ import {
   CardContextName,
   GetCardContextName,
   isCardInstance,
+  isFileDefInstance,
+  type Realm,
 } from '@cardstack/runtime-common';
 
 import HydratableCard from '@cardstack/host/components/card-search/hydratable-card';
@@ -71,6 +73,7 @@ const INERT_HTML = `<div class='inert' data-test-inert-card>Inert</div>`;
 
 module('Integration | Component | hydratable-card', function (hooks) {
   let storeService: StoreService;
+  let testRealm: Realm;
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -99,13 +102,13 @@ module('Integration | Component | hydratable-card', function (hooks) {
 
     storeService = getService('store');
 
-    await setupIntegrationTestRealm({
+    ({ realm: testRealm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'Person/hassan.json': new Person({ name: 'Hassan' }),
       },
-    });
+    }));
     await getService('realm').login(testRealmURL);
   });
 
@@ -287,6 +290,44 @@ module('Integration | Component | hydratable-card', function (hooks) {
     assert.notOk(
       isCardInstance(storeService.peek(HASSAN)),
       'no fetch for an error row',
+    );
+  });
+
+  // A file-meta row hydrates like a card row, but resolves a FileDef. `@type`
+  // carries the resource kind through to the Store read.
+  test('file-meta — hover hydrates the inert row into a live FileDef', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    let inert = htmlComponent(
+      `<div class='inert' data-test-inert-file>hero.png</div>`,
+    );
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{fileUrl}}
+            @component={{inert}}
+            @type='file-meta'
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert.dom('[data-test-inert-file]').exists('starts inert');
+    assert.notOk(
+      storeService.peek(fileUrl, { type: 'file-meta' }),
+      'the file is not in the Store before the gesture',
+    );
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert
+      .dom('[data-test-inert-file]')
+      .doesNotExist('inert file HTML is gone');
+    assert.ok(
+      isFileDefInstance(storeService.peek(fileUrl, { type: 'file-meta' })),
+      'the live FileDef entered the Store',
     );
   });
 
