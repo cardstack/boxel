@@ -2,37 +2,56 @@ import * as os from 'os';
 import * as childProcess from 'child_process';
 import * as fse from 'fs-extra';
 
-function dockerPull(image: string, retries = 3, delayMs = 5000): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let attempt = 0;
-    function tryPull() {
-      attempt++;
+function imageExistsLocally(image: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    childProcess.execFile(
+      'docker',
+      ['image', 'inspect', image],
+      { encoding: 'utf8' },
+      (err) => resolve(!err),
+    );
+  });
+}
+
+async function dockerPull(
+  image: string,
+  retries = 5,
+  baseDelayMs = 5000,
+): Promise<void> {
+  // Skip the registry round-trip when the image is already present. CI warms
+  // these pinned images through an ECR pull-through cache and retags them to
+  // their canonical Docker Hub names (see .github/actions/warm-test-images),
+  // so the pull would otherwise hit Docker Hub anyway — the source of the
+  // recurring "Failed to reach Synapse" host-test flake. The tags we pull are
+  // version-pinned, so a stale local copy is not a concern.
+  if (await imageExistsLocally(image)) {
+    return;
+  }
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const stderr = await new Promise<string | null>((resolve) => {
       childProcess.execFile(
         'docker',
         ['pull', image],
         { encoding: 'utf8' },
-        (err, _stdout, stderr) => {
-          if (!err) {
-            resolve();
-            return;
-          }
-          if (attempt < retries) {
-            console.log(
-              `docker pull ${image} failed (attempt ${attempt}/${retries}): ${stderr.trim()}. Retrying in ${delayMs / 1000}s...`,
-            );
-            setTimeout(tryPull, delayMs);
-          } else {
-            reject(
-              new Error(
-                `docker pull ${image} failed after ${retries} attempts: ${err.message}`,
-              ),
-            );
-          }
-        },
+        (err, _stdout, stderr) => resolve(err ? stderr.trim() : null),
+      );
+    });
+    if (stderr === null) {
+      return;
+    }
+    if (attempt === retries) {
+      throw new Error(
+        `docker pull ${image} failed after ${retries} attempts: ${stderr}`,
       );
     }
-    tryPull();
-  });
+    // Exponential backoff, capped, so a transient Docker Hub outage has time
+    // to recover instead of burning all attempts inside a few seconds.
+    const delayMs = Math.min(baseDelayMs * 2 ** (attempt - 1), 40000);
+    console.log(
+      `docker pull ${image} failed (attempt ${attempt}/${retries}): ${stderr}. Retrying in ${delayMs / 1000}s...`,
+    );
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
 }
 
 export async function dockerRun(args: {
