@@ -718,7 +718,7 @@ ${brokenModuleContent}
       failingResult.data.attributes.errors.some(
         (err: string) =>
           err.includes(moduleUrl.replace('.gts', '')) &&
-          err.includes('https://cardstack.com/base/card-api-broken not found'),
+          err.includes('@cardstack/base/card-api-broken not found'),
       ),
     ).toBe(true);
 

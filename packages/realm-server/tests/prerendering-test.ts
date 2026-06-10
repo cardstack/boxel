@@ -2812,7 +2812,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: rri('https://cardstack.com/base/card-api'),
+                          module: rri('@cardstack/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -4060,7 +4060,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('https://cardstack.com/base/brand-guide'),
+                      module: rri('@cardstack/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -4329,9 +4329,7 @@ module(basename(__filename), function () {
         test('parent embedded HTML', function (assert) {
           assert.ok(
             /data-test-card-thumbnail-placeholder/.test(
-              result.embeddedHTML![
-                'https://cardstack.com/base/card-api/CardDef'
-              ],
+              result.embeddedHTML!['@cardstack/base/card-api/CardDef'],
             ),
             `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
           );
@@ -4417,7 +4415,7 @@ module(basename(__filename), function () {
         test('types', function (assert) {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
-            'https://cardstack.com/base/card-api/CardDef',
+            '@cardstack/base/card-api/CardDef',
           ]);
         });
 

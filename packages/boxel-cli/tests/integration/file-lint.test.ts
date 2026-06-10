@@ -88,7 +88,7 @@ export class MyCard extends CardDef {
     expect(result.fixed).toBe(true);
     expect(result.output).toBeDefined();
     // Prettier should convert double quotes to single quotes
-    expect(result.output).toContain("'https://cardstack.com/base/card-api'");
+    expect(result.output).toContain("'@cardstack/base/card-api'");
   });
 
   it('reports lint messages for unfixable issues', async () => {

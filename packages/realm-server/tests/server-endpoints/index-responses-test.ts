@@ -351,7 +351,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'Theme',
                 },
               },
@@ -368,7 +368,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/brand-guide'),
+                  module: rri('@cardstack/base/brand-guide'),
                   name: 'default',
                 },
               },

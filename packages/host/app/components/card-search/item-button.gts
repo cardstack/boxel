@@ -123,7 +123,7 @@ interface Signature {
 // Render CardDef default fitted template for visual consistency of cards in search results
 let resultsCardRef = {
   name: 'CardDef',
-  module: rri('https://cardstack.com/base/card-api'),
+  module: rri('@cardstack/base/card-api'),
 };
 
 function isNewCardArgs(item: ItemType): item is NewCardArgs {

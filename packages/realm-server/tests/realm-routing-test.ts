@@ -64,7 +64,7 @@ function makeRoutingFixture(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/realm-config'),
+            module: rri('@cardstack/base/realm-config'),
             name: 'RealmConfig',
           },
         },

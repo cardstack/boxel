@@ -119,7 +119,7 @@ module(basename(__filename), function () {
           relationships: {
             theme: {
               links: {
-                self: 'https://cardstack.com/base/Theme/brand-guide',
+                self: '@cardstack/base/Theme/brand-guide',
               },
             },
           },
@@ -140,7 +140,7 @@ module(basename(__filename), function () {
       assert.ok(rel, 'relationship exists after relativization');
       assert.strictEqual(
         rel.links.self,
-        'https://cardstack.com/base/Theme/brand-guide',
+        '@cardstack/base/Theme/brand-guide',
         'absolute URL to another realm is preserved as-is',
       );
     });
@@ -423,12 +423,12 @@ module(basename(__filename), function () {
       test('chases through addURLMapping when the input is a virtual URL whose resolved form matches a registered prefix', function (assert) {
         let vn = new VirtualNetwork();
         vn.addURLMapping(
-          new URL('https://cardstack.com/base/'),
+          new URL('@cardstack/base/'),
           new URL('http://localhost:4201/base/'),
         );
         vn.addRealmMapping('@cardstack/base/', 'http://localhost:4201/base/');
         assert.strictEqual(
-          vn.unresolveURL('https://cardstack.com/base/card-api'),
+          vn.unresolveURL('@cardstack/base/card-api'),
           '@cardstack/base/card-api',
           'virtual URL resolves through addURLMapping then matches @cardstack/base/',
         );

@@ -42,7 +42,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            AddressField: ['AddressField', 'https://cardstack.com/base/card-api'],
+            AddressField: ['AddressField', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -82,7 +82,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            FieldDef: ['FieldDef', 'https://cardstack.com/base/card-api'],
+            FieldDef: ['FieldDef', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -126,7 +126,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            contains: ['contains', 'https://cardstack.com/base/card-api'],
+            contains: ['contains', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -163,7 +163,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            field: ['field', 'https://cardstack.com/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -202,7 +202,7 @@ import {
       options: [
         {
           importMappings: {
-            StringField: ['default', 'https://cardstack.com/base/string'],
+            StringField: ['default', '@cardstack/base/string'],
           },
         },
       ],
@@ -241,9 +241,9 @@ export class CurrencyField extends FieldDef {
       options: [
         {
           importMappings: {
-            field: ['field', 'https://cardstack.com/base/card-api'],
-            contains: ['contains', 'https://cardstack.com/base/card-api'],
-            Component: ['Component', 'https://cardstack.com/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
+            contains: ['contains', '@cardstack/base/card-api'],
+            Component: ['Component', '@cardstack/base/card-api'],
           },
         },
       ],

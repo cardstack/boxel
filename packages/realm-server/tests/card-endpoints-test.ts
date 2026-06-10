@@ -1281,7 +1281,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -1346,7 +1346,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -2331,7 +2331,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -4336,7 +4336,7 @@ module(basename(__filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'CardDef',
                 },
               },
