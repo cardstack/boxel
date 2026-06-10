@@ -46,15 +46,20 @@ const hydrationTrigger = modifier(
     if (mode === 'none') {
       return;
     }
-    let event =
+    // Hover mode treats pointer-hover and keyboard-focus synonymously, so a
+    // card hydrates the same way for both. `focusin` (which bubbles, unlike
+    // `focus`) also fires when focus lands on a descendant during keyboard
+    // navigation into the card.
+    let events =
       mode === 'hover'
-        ? 'mouseenter'
+        ? ['mouseenter', 'focusin']
         : mode === 'touch'
-          ? 'touchstart'
-          : 'click';
+          ? ['touchstart']
+          : ['click'];
     let handler = () => onTrigger();
-    element.addEventListener(event, handler);
-    return () => element.removeEventListener(event, handler);
+    events.forEach((event) => element.addEventListener(event, handler));
+    return () =>
+      events.forEach((event) => element.removeEventListener(event, handler));
   },
 );
 

@@ -154,6 +154,41 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
   });
 
+  // Hover mode treats keyboard focus the same as pointer hover: a `focusin`
+  // hydrates exactly like `mouseenter`, so keyboard users reach the live card
+  // too. (`focusin` bubbles, so focus landing inside the card subtree counts.)
+  test('host mode — keyboard focus hydrates the inert HTML, same as hover', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert.dom('[data-test-inert-card]').exists('starts inert');
+    assert.dom('[data-test-live-card]').doesNotExist('no live card yet');
+
+    await triggerEvent('[data-test-hydratable-card]', 'focusin');
+
+    assert
+      .dom('[data-test-live-card]')
+      .hasText('Live: Hassan', 'focus hydrates the same as hover');
+    assert.dom('[data-test-inert-card]').doesNotExist('inert HTML is gone');
+    assert
+      .dom('[data-hydration="hydrated"]')
+      .exists('the diagnostic flips to hydrated on focus');
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'the card entered the Store',
+    );
+  });
+
   // (b) Published view (no overlay): the click gesture hydrates the same way,
   // with no operator-mode machinery present.
   test('published view — click hydrates the inert HTML into a live card', async function (assert) {
