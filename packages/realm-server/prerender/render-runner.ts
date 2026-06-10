@@ -179,8 +179,12 @@ export class RenderRunner {
     affinityKey: string,
     url: string,
     step: string,
+    jobId?: string,
   ): RenderProfileContext {
-    return { affinityKey, label: `${url} ${step}` };
+    // `card`/`step` mirror what `label` concatenates but stay structured so
+    // the artifact sink can key on them; `jobId` is threaded only by the
+    // visit path (on-demand screenshot/module/command renders carry none).
+    return { affinityKey, label: `${url} ${step}`, card: url, step, jobId };
   }
 
   #authKeys(auth: string): string[] | null {
@@ -891,7 +895,7 @@ export class RenderRunner {
             return await captureFileExtract(page, captureOptions);
           },
           opts?.timeoutMs,
-          this.#profileContext(affinityKey, url, 'file-extract'),
+          this.#profileContext(affinityKey, url, 'file-extract', jobId),
         );
         let extractResponse: FileExtractResponse;
         if (isRenderError(capture)) {
@@ -1060,7 +1064,7 @@ export class RenderRunner {
               page,
               fn,
               opts?.timeoutMs,
-              this.#profileContext(affinityKey, url, step),
+              this.#profileContext(affinityKey, url, step, jobId),
             ),
           );
           if (stepResult.ok) {
@@ -1085,7 +1089,7 @@ export class RenderRunner {
             return await renderHTML(page, 'isolated', 0, captureOptions);
           },
           opts?.timeoutMs,
-          this.#profileContext(affinityKey, url, 'card isolated/0'),
+          this.#profileContext(affinityKey, url, 'card isolated/0', jobId),
         );
         if (isRenderError(isolatedResult)) {
           cardShortCircuit = true;
@@ -1348,7 +1352,7 @@ export class RenderRunner {
               return await captureResult(page, 'innerHTML', captureOptions);
             },
             opts?.timeoutMs,
-            this.#profileContext(affinityKey, url, 'file isolated/0'),
+            this.#profileContext(affinityKey, url, 'file isolated/0', jobId),
           );
           if (isRenderError(isolatedResult)) {
             let renderError = isolatedResult as RenderError;
@@ -1384,7 +1388,7 @@ export class RenderRunner {
                   page,
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
-                  this.#profileContext(affinityKey, url, 'file head/0'),
+                  this.#profileContext(affinityKey, url, 'file head/0', jobId),
                 ),
             );
             if (headHTMLResult.ok) {
@@ -1463,7 +1467,7 @@ export class RenderRunner {
                   page,
                   step.cb,
                   opts?.timeoutMs,
-                  this.#profileContext(affinityKey, url, step.name),
+                  this.#profileContext(affinityKey, url, step.name, jobId),
                 ),
               );
               if (res.ok) {

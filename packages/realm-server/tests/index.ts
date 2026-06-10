@@ -190,6 +190,7 @@ const ALL_TEST_FILES: string[] = [
   './prerendering-test',
   './prerender-server-test',
   './prerender-manager-test',
+  './prerender-artifact-sink-test',
   './prerender-affinity-activity-test',
   './prerender-batch-ownership-test',
   './prerender-cancellation-test',
