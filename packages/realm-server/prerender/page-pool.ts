@@ -2118,10 +2118,50 @@ export class PagePool {
           tabStartupMs,
         };
       }
+      // Tab/affinity exhaustion is itself a saturation signal — one the
+      // render-semaphore-fullness heuristic in
+      // `#maybeExpandUnderSaturation` (the acquire-time expansion hook)
+      // cannot see. A distinct affinity has arrived with no warm tab of
+      // its own, no orphan context, and no commandeer-able standby, and
+      // the refill above couldn't conjure one because the live cap
+      // (`#maxPages`) is the binding limit here — not concurrent render
+      // count. The tabs we'd otherwise steal below are idle, not
+      // rendering, so the render semaphore reads as un-saturated and the
+      // acquire-time hook never fires. Under a workload that contends on
+      // many distinct affinities (N affinities, only `#maxPages` tabs)
+      // this is the steady state: without expanding here the pool stays
+      // pinned at its idle floor no matter how high `#maxBurstPages` is.
+      // If the pool can still grow, lift the cap and spawn a fresh tab
+      // for this affinity rather than stealing a warm tab from another
+      // realm. (`#tryExpand` is a no-op at the tier ceiling or under a
+      // fixed-size pool, so this degrades cleanly back to the steal.)
+      if (this.#tryExpand(priority)) {
+        if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
+          let startedAt = Date.now();
+          await this.#ensureStandbyPool();
+          tabStartupMs += Date.now() - startedAt;
+        }
+        let expandedCommandeered = this.#commandeerDormantTab(affinityKey, {
+          standbyOnly: true,
+        });
+        if (expandedCommandeered) {
+          let releaseTab = await expandedCommandeered.queue.acquire(
+            signal,
+            priority,
+          );
+          return {
+            entry: expandedCommandeered,
+            reused: false,
+            releaseTab,
+            tabStartupMs,
+          };
+        }
+      }
       // Refill couldn't produce a tab (e.g. `createBrowserContext`
-      // exhausted retries). Fall back to cross-affinity steal so the
-      // caller has *some* path to a tab — better than throwing while
-      // there are idle tabs on other affinities.
+      // exhausted retries) and the pool is at its ceiling (or fixed
+      // size). Fall back to cross-affinity steal so the caller has
+      // *some* path to a tab — better than throwing while there are
+      // idle tabs on other affinities.
       let crossAffinityEntries: PoolEntry[] = [];
       for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
         if (assignedAffinity === affinityKey) continue;
