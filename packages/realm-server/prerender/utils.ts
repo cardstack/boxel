@@ -1478,19 +1478,12 @@ function artifactKeyPartsFor(
 // past its own timeout still stops the profiler / ends the trace at the
 // bound rather than holding a CDP session open on the wedged page, and any
 // capture or upload failure is swallowed so it never perturbs the render.
-function runWithAffinityProfile<T>(
+async function runWithAffinityProfile<T>(
   page: Page,
   fn: () => Promise<T>,
   timeoutMs: number,
   profileContext: RenderProfileContext | undefined,
 ): Promise<T> {
-  let render = fn();
-  let observe = () =>
-    render.then(
-      () => undefined,
-      () => undefined,
-    );
-
   // The heavyweight captures only matter when the sink is configured AND
   // the operator has flipped the matching flag — every gate short-circuits
   // on a cheap env read otherwise, so the default affinity behaviour
@@ -1501,12 +1494,23 @@ function runWithAffinityProfile<T>(
   let wantHeap = sinkOn && shouldCaptureHeap();
   let keyParts = artifactKeyPartsFor(profileContext);
 
-  // Heap sampling is cumulative across the tab, so start it before the
-  // render so this render's allocations are sampled; the cumulative read
-  // happens after the window closes (below).
+  // Heap sampling is cumulative across the tab and must be running BEFORE
+  // the render starts: otherwise the first targeted render's early (route
+  // transition / module load) allocations land before the sampler attaches,
+  // and that early growth is exactly what this mode is meant to diagnose.
+  // `ensureHeapSampling` is idempotent per tab and never throws, so this
+  // awaits a one-time setup on the first profiled render and is a no-op
+  // thereafter.
   if (wantHeap) {
-    void ensureHeapSampling(page);
+    await ensureHeapSampling(page);
   }
+
+  let render = fn();
+  let observe = () =>
+    render.then(
+      () => undefined,
+      () => undefined,
+    );
 
   // The streaming trace starts as early as possible and ends at
   // render-settle / `timeoutMs`. Drained straight into the sink's managed
