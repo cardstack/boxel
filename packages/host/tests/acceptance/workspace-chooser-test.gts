@@ -1,5 +1,6 @@
 import {
   click,
+  focus,
   settled,
   triggerKeyEvent,
   waitFor,
@@ -400,7 +401,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       'Workspace B': realmBURL,
     };
 
-    // Workspace names rendered as selectable items, in DOM (selection) order.
+    // Workspace names rendered as cards, in DOM (selection) order.
     function orderedWorkspaceNames(): string[] {
       return [
         ...document.querySelectorAll(
@@ -417,7 +418,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       );
     }
 
-    test('the first workspace is selected when the chooser opens', async function (assert) {
+    test('the first workspace is selected and focused when the chooser opens', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       await waitFor('[data-test-workspace-selected]');
 
@@ -433,53 +434,103 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .isFocused('the selected workspace button receives focus');
     });
 
-    test('arrow keys move the selection and clamp at the ends', async function (assert) {
+    test('left/right arrows step through the sequence, including the New Workspace tile', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       await waitFor('[data-test-workspace-selected]');
 
       let [first, second] = orderedWorkspaceNames();
 
-      await arrow('ArrowDown');
-      assert
-        .dom(`[data-test-workspace-selected="${second}"]`)
-        .exists('ArrowDown selects the next workspace');
-      assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
-
-      await arrow('ArrowDown');
-      assert
-        .dom(`[data-test-workspace-selected="${second}"]`)
-        .exists('ArrowDown at the end keeps the last workspace selected');
-
-      await arrow('ArrowUp');
-      assert
-        .dom(`[data-test-workspace-selected="${first}"]`)
-        .exists('ArrowUp selects the previous workspace');
-
-      await arrow('ArrowUp');
-      assert
-        .dom(`[data-test-workspace-selected="${first}"]`)
-        .exists('ArrowUp at the start keeps the first workspace selected');
-
-      // Left/Right behave the same as Up/Down.
       await arrow('ArrowRight');
       assert
         .dom(`[data-test-workspace-selected="${second}"]`)
         .exists('ArrowRight selects the next workspace');
+      assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
+
+      await arrow('ArrowRight');
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .exists('ArrowRight reaches the New Workspace tile');
+      assert
+        .dom('[data-test-workspace-selected]')
+        .doesNotExist('no workspace card is selected while New Workspace is');
+
+      await arrow('ArrowRight');
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .exists('ArrowRight at the end stays on the New Workspace tile');
+
+      await arrow('ArrowLeft');
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .exists('ArrowLeft leaves the New Workspace tile');
+
       await arrow('ArrowLeft');
       assert
         .dom(`[data-test-workspace-selected="${first}"]`)
-        .exists('ArrowLeft selects the previous workspace');
+        .exists('ArrowLeft returns to the first workspace');
+
+      await arrow('ArrowLeft');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('ArrowLeft at the start stays on the first workspace');
+    });
+
+    test('up/down arrows move vertically between rows', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      // Favoriting a workspace puts a Favorites row directly above the
+      // Your Workspaces row, so up/down can cross between them.
+      let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.workspaceFavorites = [realmAURL];
+      await settled();
+      await waitFor(
+        '[data-test-favorites-list] [data-test-workspace-selected]',
+      );
+
+      assert
+        .dom(
+          '[data-test-favorites-list] [data-test-workspace-selected="Workspace A"]',
+        )
+        .exists('the favorited workspace (top row) starts selected');
+
+      await arrow('ArrowDown');
+      assert
+        .dom(
+          '[data-test-workspace-list] [data-test-workspace-selected="Workspace A"]',
+        )
+        .exists('ArrowDown moves down into the Your Workspaces row');
+      assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
+
+      await arrow('ArrowUp');
+      assert
+        .dom(
+          '[data-test-favorites-list] [data-test-workspace-selected="Workspace A"]',
+        )
+        .exists('ArrowUp moves back up into the Favorites row');
+    });
+
+    test('focusing a workspace selects it', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [first, second] = orderedWorkspaceNames();
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('first workspace selected initially');
+
+      await focus(`[data-test-workspace-button="${second}"]`);
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .exists('focusing the second workspace selects it');
+      assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
     });
 
     test('Enter opens the selected workspace', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       await waitFor('[data-test-workspace-selected]');
 
-      let [, second] = orderedWorkspaceNames();
-      let secondURL = urlByName[second];
-
-      await arrow('ArrowDown');
-      assert.dom(`[data-test-workspace-selected="${second}"]`).exists();
+      let [first] = orderedWorkspaceNames();
+      let firstURL = urlByName[first];
 
       await triggerKeyEvent(
         '[data-test-workspace-chooser]',
@@ -487,13 +538,36 @@ module('Acceptance | workspace-chooser', function (hooks) {
         'Enter',
       );
 
-      await waitFor(`[data-test-stack-card="${secondURL}index"]`);
+      await waitFor(`[data-test-stack-card="${firstURL}index"]`);
       assert
         .dom('[data-test-workspace-chooser]')
         .doesNotExist('chooser is dismissed after opening a workspace');
       assert
-        .dom(`[data-test-stack-card="${secondURL}index"]`)
+        .dom(`[data-test-stack-card="${firstURL}index"]`)
         .exists('the selected workspace is opened on the stack');
+    });
+
+    test('Enter on the New Workspace tile opens the create-workspace modal', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      // Step right past the two user workspaces to the New Workspace tile.
+      await arrow('ArrowRight');
+      await arrow('ArrowRight');
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .exists('the New Workspace tile is selected');
+
+      await triggerKeyEvent(
+        '[data-test-workspace-chooser]',
+        'keydown',
+        'Enter',
+      );
+
+      await waitFor('[data-test-create-workspace-modal]');
+      assert
+        .dom('[data-test-create-workspace-modal]')
+        .exists('Enter opens the create-workspace modal');
     });
   });
 

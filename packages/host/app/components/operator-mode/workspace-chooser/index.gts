@@ -16,7 +16,6 @@ import { ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -41,7 +40,6 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
 
   private sortOptions: SortOption[] = [
     { label: 'View All', icon: Shapes, value: 'default' },
@@ -139,62 +137,145 @@ export default class WorkspaceChooser extends Component<Signature> {
     return null;
   }
 
-  // Tracks the keyboard-selected workspace as an index into the flat,
-  // DOM-ordered list of all workspace items across the three sections.
+  // The keyboard-selected tile, identified by its position in the flat,
+  // DOM-ordered sequence of selectable tiles. The sequence spans, in render
+  // order: Favorites, Your Workspaces, the "New Workspace" tile, then Catalogs.
   @tracked private selectedIndex = 0;
 
-  // Flat list of every selectable workspace, in the same order they render:
-  // Favorites, then Your Workspaces, then Catalogs. The "New Workspace" tile
-  // and the loading placeholder are intentionally excluded.
-  private get orderedRealmIdentifiers() {
-    return [
-      ...this.favoriteRealmIdentifiers,
-      ...this.filteredUserRealmIdentifiers,
-      ...this.filteredCatalogRealmIdentifiers,
-    ];
-  }
-
-  // Section offsets used to map a per-section loop index onto its position in
-  // orderedRealmIdentifiers, so each Workspace can tell if it's selected.
-  private get userWorkspacesOffset() {
+  private get favoritesCount() {
     return this.favoriteRealmIdentifiers.length;
   }
 
-  private get catalogOffset() {
-    return (
-      this.favoriteRealmIdentifiers.length +
-      this.filteredUserRealmIdentifiers.length
-    );
+  private get userWorkspacesCount() {
+    return this.filteredUserRealmIdentifiers.length;
+  }
+
+  // The "New Workspace" tile is hidden only when the hosted-only filter empties
+  // the Your Workspaces section.
+  private get isAddWorkspaceShown() {
+    return !this.userWorkspacesEmptyMessage;
+  }
+
+  private get renderedCatalogCount() {
+    if (!this.displayCatalogWorkspaces || this.catalogEmptyMessage) {
+      return 0;
+    }
+    return this.filteredCatalogRealmIdentifiers.length;
+  }
+
+  // navIndex of the first tile in each section. The "New Workspace" tile sits
+  // between Your Workspaces and Catalogs.
+  private get userWorkspacesNavBase() {
+    return this.favoritesCount;
+  }
+
+  private get addWorkspaceNavIndex() {
+    return this.favoritesCount + this.userWorkspacesCount;
+  }
+
+  private get catalogNavBase() {
+    return this.addWorkspaceNavIndex + (this.isAddWorkspaceShown ? 1 : 0);
+  }
+
+  private get selectableCount() {
+    return this.catalogNavBase + this.renderedCatalogCount;
+  }
+
+  // Keep the selection in sync with focus, so tabbing onto a tile selects it.
+  @action private onFocusIn(event: Event) {
+    let tile = (event.target as HTMLElement).closest('[data-nav-index]');
+    if (!tile) {
+      return;
+    }
+    let index = Number((tile as HTMLElement).dataset.navIndex);
+    if (!Number.isNaN(index) && index !== this.selectedIndex) {
+      this.selectedIndex = index;
+    }
   }
 
   @action private onKeydown(event: Event) {
     let kbEvent = event as KeyboardEvent;
-    let count = this.orderedRealmIdentifiers.length;
+    let container = kbEvent.currentTarget as HTMLElement;
+    let count = this.selectableCount;
     if (count === 0) {
       return;
     }
     switch (kbEvent.key) {
-      case 'ArrowDown':
+      // Left/Right step linearly through the sequence.
       case 'ArrowRight':
         event.preventDefault();
         this.selectedIndex = Math.min(this.selectedIndex + 1, count - 1);
         break;
-      case 'ArrowUp':
       case 'ArrowLeft':
         event.preventDefault();
         this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
         break;
+      // Up/Down move by visual row in the wrapped flex layout.
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveVertically(container, 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveVertically(container, -1);
+        break;
       case 'Enter': {
-        let selected = this.orderedRealmIdentifiers[this.selectedIndex];
-        if (selected) {
-          // preventDefault suppresses the focused workspace button's native
-          // Enter-to-click so the workspace only opens once.
-          event.preventDefault();
-          this.operatorModeStateService.openWorkspace(selected);
+        event.preventDefault();
+        let selected = container.querySelector(
+          `[data-nav-index='${this.selectedIndex}']`,
+        );
+        if (selected instanceof HTMLElement) {
+          // Activates the focused tile — opening the workspace, or the
+          // "New Workspace" modal. preventDefault above suppresses the focused
+          // button's native Enter-to-click so it fires only once.
+          selected.click();
         }
         break;
       }
     }
+  }
+
+  // From the selected tile, find the nearest row in the given direction and
+  // pick the tile whose horizontal center is closest to the current one.
+  private moveVertically(container: HTMLElement, direction: 1 | -1) {
+    let tiles = [...container.querySelectorAll('[data-nav-index]')].map(
+      (element) => ({
+        index: Number((element as HTMLElement).dataset.navIndex),
+        rect: element.getBoundingClientRect(),
+      }),
+    );
+    let current = tiles.find((tile) => tile.index === this.selectedIndex);
+    if (!current) {
+      return;
+    }
+    let currentCenterX = current.rect.left + current.rect.width / 2;
+    let candidates = tiles.filter((tile) =>
+      direction === 1
+        ? tile.rect.top > current.rect.top + 1
+        : tile.rect.top < current.rect.top - 1,
+    );
+    if (candidates.length === 0) {
+      return;
+    }
+    // The nearest row is the one whose top is closest to the current tile in
+    // the travel direction; tiles in that row share (near-)identical tops.
+    let targetRowTop =
+      direction === 1
+        ? Math.min(...candidates.map((tile) => tile.rect.top))
+        : Math.max(...candidates.map((tile) => tile.rect.top));
+    let rowTiles = candidates.filter(
+      (tile) => Math.abs(tile.rect.top - targetRowTop) <= 1,
+    );
+    let nearest = rowTiles.reduce((closest, tile) => {
+      let closestDx = Math.abs(
+        closest.rect.left + closest.rect.width / 2 - currentCenterX,
+      );
+      let tileDx = Math.abs(
+        tile.rect.left + tile.rect.width / 2 - currentCenterX,
+      );
+      return tileDx < closestDx ? tile : closest;
+    });
+    this.selectedIndex = nearest.index;
   }
 
   <template>
@@ -203,6 +284,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       class='workspace-chooser'
       data-test-workspace-chooser
       {{on 'keydown' this.onKeydown}}
+      {{on 'focusin' this.onFocusIn}}
     >
       {{#if @topBarCenterElement}}
         {{#in-element @topBarCenterElement}}
@@ -240,6 +322,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
                   <Workspace
                     @realmIdentifier={{realmIdentifier}}
+                    @navIndex={{i}}
                     @isSelected={{eq this.selectedIndex i}}
                   />
                 {{/each}}
@@ -262,19 +345,25 @@ export default class WorkspaceChooser extends Component<Signature> {
                   this.filteredUserRealmIdentifiers
                   as |realmIdentifier i|
                 }}
-                  <Workspace
-                    @realmIdentifier={{realmIdentifier}}
-                    @showMenu={{true}}
-                    @isSelected={{eq
-                      this.selectedIndex
-                      (add this.userWorkspacesOffset i)
-                    }}
-                  />
+                  {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
+                    <Workspace
+                      @realmIdentifier={{realmIdentifier}}
+                      @showMenu={{true}}
+                      @navIndex={{navIndex}}
+                      @isSelected={{eq this.selectedIndex navIndex}}
+                    />
+                  {{/let}}
                 {{/each}}
                 {{#if this.matrixService.isInitializingNewUser}}
                   <WorkspaceLoadingIndicator />
                 {{/if}}
-                <AddWorkspace />
+                <AddWorkspace
+                  @navIndex={{this.addWorkspaceNavIndex}}
+                  @isSelected={{eq
+                    this.selectedIndex
+                    this.addWorkspaceNavIndex
+                  }}
+                />
               </div>
             {{/if}}
           </div>
@@ -295,13 +384,13 @@ export default class WorkspaceChooser extends Component<Signature> {
                     this.filteredCatalogRealmIdentifiers
                     as |realmIdentifier i|
                   }}
-                    <Workspace
-                      @realmIdentifier={{realmIdentifier}}
-                      @isSelected={{eq
-                        this.selectedIndex
-                        (add this.catalogOffset i)
-                      }}
-                    />
+                    {{#let (add this.catalogNavBase i) as |navIndex|}}
+                      <Workspace
+                        @realmIdentifier={{realmIdentifier}}
+                        @navIndex={{navIndex}}
+                        @isSelected={{eq this.selectedIndex navIndex}}
+                      />
+                    {{/let}}
                   {{/each}}
                 </div>
               {{/if}}

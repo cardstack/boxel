@@ -10,7 +10,6 @@ import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { modifier } from 'ember-modifier';
 import pluralize from 'pluralize';
 
 import {
@@ -47,6 +46,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -56,20 +56,9 @@ interface Signature {
     realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
     isSelected?: boolean;
+    navIndex?: number;
   };
 }
-
-// When the workspace becomes the keyboard-selected item, move DOM focus to its
-// button and scroll it into view, so the selection is visible and reachable as
-// arrow-key navigation walks through the list.
-const focusWhenSelected = modifier(
-  (element: HTMLElement, [isSelected]: [boolean | undefined]) => {
-    if (isSelected && document.activeElement !== element) {
-      element.focus();
-      element.scrollIntoView({ block: 'nearest' });
-    }
-  },
-);
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -87,6 +76,7 @@ export default class Workspace extends Component<Signature> {
       >
         <ItemContainer
           data-test-workspace-button={{this.name}}
+          data-nav-index={{@navIndex}}
           {{on 'click' this.openWorkspace}}
           {{focusWhenSelected @isSelected}}
         >
