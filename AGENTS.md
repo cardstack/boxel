@@ -52,13 +52,12 @@
 
 - No tests
 
-### packages/boxel-ui/addon, packages/boxel-ui/test-app
+### packages/boxel-ui
 
-- Addon functionality is tested via sibling test-app directory
-- `cd packages/boxel-ui/addon && pnpm start` to start a process that will watch files and automatically rebuild the addon
-- `cd packages/boxel-ui/test-app && pnpm start` to start a process that will watch files and automatically rebuild the test-app
+- Addon functionality with in-package test suite
+- `cd packages/boxel-ui && pnpm start` to start development server
 - Run all tests
-  `cd packages/boxel-ui/test-app && ember test --path dist`
+  `cd packages/boxel-ui && ember test --path dist`
 - To run a subset of the tests:
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
@@ -92,7 +91,7 @@
 #### CSS Guidance
 
 - Use scalable units such as rem
-- Use CSS variables from packages/boxel-ui/addon/src/styles/variables.css
+- Use CSS variables from packages/boxel-ui/src/styles/variables.css
 
 #### Iterating on host tests with the Chrome MCP server
 

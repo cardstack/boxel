@@ -1,0 +1,46 @@
+import {
+  extractCssVariables,
+  sanitizeHtmlSafe,
+} from '@cardstack/boxel-ui/helpers';
+import { type SafeString, htmlSafe } from '@ember/template';
+
+import { Boxel } from './boxel.ts';
+import { Bubblegum } from './bubblegum.ts';
+import { Candyland } from './candyland.ts';
+import { DarkStudio } from './dark-studio.ts';
+import { Doom64 } from './doom64.ts';
+import { NeoBrutalism } from './neo-brutalism.ts';
+import { SoftPop } from './soft-pop.ts';
+import { StarryNight } from './starry-night.ts';
+
+export interface Theme {
+  name: string;
+  styles?: SafeString;
+}
+
+export const THEMES = {
+  Bubblegum,
+  Doom64,
+  SoftPop,
+  NeoBrutalism,
+  StarryNight,
+  Candyland,
+  DarkStudio,
+  Boxel,
+};
+
+function getThemeStyles(cssString: string) {
+  if (!extractCssVariables) {
+    return htmlSafe('');
+  }
+  // adjust for freestyle doc styles overriding theme variables
+  let css = cssString + `\n\n :root{\n  --theme-radius: var(--radius); \n}`;
+  return sanitizeHtmlSafe(extractCssVariables(css));
+}
+
+const Themes: Theme[] = Object.entries(THEMES).map(([name, vars]) => ({
+  name,
+  styles: getThemeStyles(vars),
+}));
+
+export default Themes;

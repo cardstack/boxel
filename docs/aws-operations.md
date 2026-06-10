@@ -2,7 +2,7 @@
 
 Operational runbooks for boxel services on AWS. Each section is a self-contained procedure: pre-requisites, the steps to run, what to verify after, and how to roll back.
 
-These procedures assume you already have AWS access set up — the `aws-access` claude skill walks new teammates through the one-time setup. Most procedures here need an AWS profile with `ssm:PutParameter` / `ecs:UpdateService` etc. on the target prefix; the read-only `claude-staging` / `claude-prod` profiles from that skill are *not* sufficient.
+These procedures assume you already have AWS access set up — the `aws-access` claude skill walks new teammates through the one-time setup. Most procedures here need an AWS profile with `ssm:PutParameter` / `ecs:UpdateService` etc. on the target prefix; the read-only `claude-staging` / `claude-prod` profiles from that skill are _not_ sufficient.
 
 Conventions used throughout:
 
@@ -68,17 +68,20 @@ This rolls the running tasks one at a time; expect a 1–2 minute window where s
 ### Validation gate
 
 Before promoting to prod, run a synthetic saturating workload on staging:
+
 - Concurrent catalog full reindex (priority 0)
 - Simulated user-driven incremental reindex on a different realm (priority 10)
 - Both for ~5 minutes
 
 **Pass criteria:**
+
 - High-priority p95 `tabQueueMs` < 1 s during the burst.
 - Memory peak < 80 % of allocated.
 - CPU peak < 80 % of allocated, sustained over a 1-minute window (brief overshoots OK).
 - Zero 145-second render-timeouts (`SELECT count(*) FROM boxel_index WHERE (diagnostics->>'totalElapsedMs')::int >= 145000`).
 
 **Adjustment paths:**
+
 - CPU peak > 80 % sustained → drop `MAX` by 1, retest.
 - Memory peak > 80 % → drop `HIGH_PRIORITY_MAX` by 1, retest.
 - Tab-queue wait spike at high priority → investigate manager-side routing; the priority-aware `scoreCandidate` should be picking the right server.
@@ -87,14 +90,14 @@ Before promoting to prod, run a synthetic saturating workload on staging:
 
 If the ECS task is still 4 vCPU / 8 GB, the recommended values would OOM at `HP_MAX = 8` (memory model: 8 × 836 MB + 2 GB ≈ 8.7 GB → 109 % of 8 GB). Use these instead — modest improvement over today's behaviour, no infra change required:
 
-| Knob | 16 GB task (recommended) | 8 GB task (fallback) |
-|---|---:|---:|
-| `PRERENDER_PAGE_POOL_MIN` | 2 | 2 |
-| `PRERENDER_PAGE_POOL_MAX` | 6 | 4 |
-| `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX` | 8 | 5 |
-| `PRERENDER_HIGH_PRIORITY_THRESHOLD` | 5 | 5 |
-| `PRERENDER_POOL_IDLE_CONTRACTION_MS` | 60000 | 60000 |
-| `PRERENDER_SHARED_CONTEXT_CAP` | 12 | 8 |
+| Knob                                    | 16 GB task (recommended) | 8 GB task (fallback) |
+| --------------------------------------- | -----------------------: | -------------------: |
+| `PRERENDER_PAGE_POOL_MIN`               |                        2 |                    2 |
+| `PRERENDER_PAGE_POOL_MAX`               |                        6 |                    4 |
+| `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX` |                        8 |                    5 |
+| `PRERENDER_HIGH_PRIORITY_THRESHOLD`     |                        5 |                    5 |
+| `PRERENDER_POOL_IDLE_CONTRACTION_MS`    |                    60000 |                60000 |
+| `PRERENDER_SHARED_CONTEXT_CAP`          |                       12 |                    8 |
 
 ### Rollback
 

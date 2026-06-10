@@ -311,13 +311,13 @@ jobs:
       - name: Restore boxel-icons build cache
         id: icons-cache
         uses: ./.github/actions/restore-icons-cache
-      - name: Build boxel-icons and boxel-ui
+      - name: Build boxel-icons
         run: mise run build:ui
         env:
           SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
       - name: Run test suite
         run: pnpm test
-        working-directory: packages/boxel-ui/test-app
+        working-directory: packages/boxel-ui
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
@@ -332,7 +332,7 @@ jobs:
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
@@ -804,9 +804,6 @@ jobs:
       - name: Build Boxel Icons
         run: pnpm run build
         working-directory: packages/boxel-icons
-      - name: Build Boxel UI
-        run: pnpm run build
-        working-directory: packages/boxel-ui/addon
       - name: Build host dist
         run: pnpm build
         working-directory: packages/host

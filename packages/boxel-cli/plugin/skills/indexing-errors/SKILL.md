@@ -13,12 +13,12 @@ Use this skill to triage realm health in one call, without reading the database 
 
 ## When the user asks to...
 
-| Ask | Run |
-|---|---|
-| "what's failing to index in <realm>?" | `boxel realm indexing-errors --realm <realm-url>` |
-| "which cards have broken links in <realm>?" | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "broken-link")'` |
-| "give me the full payload as JSON" | `boxel realm indexing-errors --realm <realm-url> --json` |
-| "is anything broken in this realm right now?" | `boxel realm indexing-errors --realm <realm-url>` — exit 0 with "No indexing errors." is the all-clear |
+| Ask                                           | Run                                                                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| "what's failing to index in <realm>?"         | `boxel realm indexing-errors --realm <realm-url>`                                                          |
+| "which cards have broken links in <realm>?"   | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "broken-link")'` |
+| "give me the full payload as JSON"            | `boxel realm indexing-errors --realm <realm-url> --json`                                                   |
+| "is anything broken in this realm right now?" | `boxel realm indexing-errors --realm <realm-url>` — exit 0 with "No indexing errors." is the all-clear     |
 
 ## Typical sequencing
 
@@ -88,11 +88,19 @@ Each line is `[<entryType>] <url>  <short summary>`. For `indexing-error` rows t
         "entryType": "instance",
         "diagnostics": {
           "brokenLinks": [
-            { "fieldName": "author", "reference": "https://...", "kind": "not-found" }
+            {
+              "fieldName": "author",
+              "reference": "https://...",
+              "kind": "not-found"
+            }
           ]
         },
         "brokenLinks": [
-          { "fieldName": "author", "reference": "https://...", "kind": "not-found" }
+          {
+            "fieldName": "author",
+            "reference": "https://...",
+            "kind": "not-found"
+          }
         ]
       }
     }
