@@ -23,7 +23,10 @@ import type {
 import { findHostDistPackageDir } from '@cardstack/realm-test-harness';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import type { ValidationRunCache } from './validation-run-cache';
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache';
 
 let log = logger('test-run-execution');
 
@@ -451,7 +454,14 @@ async function runQunitInBrowser(
   options: QunitRunnerOptions,
 ): Promise<QunitRunnerOutput> {
   if (options.cache) {
-    return options.cache.getOrRun('qunit', () =>
+    // Key by the run inputs so a cache instance shared across realms or
+    // runner configurations can never serve another run's results.
+    let key = `qunit:${cacheKeyForInputs([
+      options.targetRealm,
+      options.hostAppUrl,
+      options.hostDistDir ?? '',
+    ])}`;
+    return options.cache.getOrRun(key, () =>
       runQunitInBrowserUncached(options),
     );
   }

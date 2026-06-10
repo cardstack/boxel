@@ -70,7 +70,10 @@ export async function computeWorkspaceFingerprint(
       if (info.isDirectory()) {
         await walk(full, rel);
       } else {
-        entries.push(`${rel}|${info.size}|${info.mtimeMs}`);
+        // ctimeMs joins size + mtimeMs to reduce the odds of a same-size
+        // edit landing within one coarse mtime tick fingerprinting as
+        // unchanged.
+        entries.push(`${rel}|${info.size}|${info.mtimeMs}|${info.ctimeMs}`);
       }
     }
   }
