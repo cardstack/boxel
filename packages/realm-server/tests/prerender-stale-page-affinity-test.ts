@@ -183,6 +183,22 @@ module(basename(__filename), function () {
         poisonedPageId,
         'the revalidation was served on a fresh page, not the pinned stale one',
       );
+
+      // The stale page must be retired, not left idle in the pool: a later
+      // render WITHOUT the hint must not be routed back to it (otherwise it
+      // would poison another module's cache entry). `#selectLRUTab` prefers
+      // the oldest tab, so before the fix this reused the stale page.
+      let next = await renderModule();
+      assert.notStrictEqual(
+        next.pool.pageId,
+        poisonedPageId,
+        'a later un-hinted render does not reuse the retired stale page',
+      );
+      assert.strictEqual(
+        next.response.status,
+        'ready',
+        'the later render does not reproduce the stale-page error',
+      );
     });
   });
 });

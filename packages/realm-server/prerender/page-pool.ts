@@ -1928,14 +1928,20 @@ export class PagePool {
     let entryList = entries
       ? [...entries].filter((entry) => !entry.closing)
       : [];
-    // Error-cache revalidation: the affinity's warm tab may be on a stale
-    // host bundle and would otherwise reproduce the cached module error on
-    // every retry. Prefer a fresh standby (a different page that reloads
-    // the bundle) over reusing the warm tab. Falls through to the normal
-    // selection below when no standby is free, so a render is never
-    // starved — and unlike disposing the affinity, this leaves the warm
-    // tab and any in-flight renders on it untouched.
+    // Error-cache revalidation: the affinity's idle warm tabs may be on a
+    // stale host bundle. Retire them so `#selectLRUTab` can't keep handing
+    // a stale tab to later renders (which would poison other modules in
+    // the realm), then serve this render on a fresh standby. Only idle
+    // tabs are retired — in-flight renders on busy tabs are left to
+    // finish, so unlike disposing the whole affinity this never tears down
+    // active work. Falls through to the normal selection below when no
+    // standby is free, so a render is never starved.
     if (freshPage) {
+      this.#retireIdleAffinityTabs(affinityKey);
+      // Recompute: the tabs just marked `closing` must not be eligible for
+      // the fall-through selection below.
+      entries = this.#affinityPages.get(affinityKey);
+      entryList = entries ? [...entries].filter((entry) => !entry.closing) : [];
       let standby = this.#commandeerDormantTab(affinityKey, {
         standbyOnly: true,
       });
@@ -2320,6 +2326,41 @@ export class PagePool {
     }
     let chosen = this.#selectLRUTab(idleCandidates);
     return this.#reassignAffinityTab(chosen, affinityKey);
+  }
+
+  // Close an affinity's IDLE tabs (pendingCount 0, not closing /
+  // transitioning) and drop them from `#affinityPages`, leaving any
+  // in-flight tabs to finish. Used by the `freshPage` error-cache-
+  // revalidation path to retire a possibly-stale warm tab so
+  // `#selectLRUTab` can't re-hand it to a later render. Mirrors the
+  // per-entry, non-awaited close in `disposeAffinity`; `#closeEntry`
+  // retains the shared BrowserContext as an orphan (same as a normal tab
+  // close), so a subsequent spawn can still reuse the warm loader.
+  #retireIdleAffinityTabs(affinityKey: string): void {
+    let entries = this.#affinityPages.get(affinityKey);
+    if (!entries) {
+      return;
+    }
+    for (let entry of [...entries]) {
+      if (entry.closing || entry.transitioning) {
+        continue;
+      }
+      if (entry.queue.pendingCount !== 0) {
+        continue;
+      }
+      entry.closing = true;
+      let p = this.#closeEntry(entry).finally(() => {
+        let current = this.#affinityPages.get(affinityKey);
+        if (!current) {
+          return;
+        }
+        current.delete(entry);
+        if (current.size === 0) {
+          this.#affinityPages.delete(affinityKey);
+        }
+      });
+      void p;
+    }
   }
 
   #assignStandbyToAffinity(
