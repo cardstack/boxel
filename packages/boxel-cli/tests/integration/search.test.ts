@@ -3,7 +3,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getTestPrerenderer } from '#realm-server/tests/helpers/index';
+import {
+  getTestPrerenderer,
+  stopTestPrerenderServer,
+} from '#realm-server/tests/helpers/index';
 import { baseCardRef } from '@cardstack/runtime-common';
 import { search } from '../../src/commands/search';
 import { ProfileManager } from '../../src/lib/profile-manager';
@@ -76,6 +79,10 @@ beforeAll(async () => {
 afterAll(async () => {
   cleanupProfile?.();
   await stopTestRealmServer();
+  // The prerender server is memoized per module registry, but vitest gives
+  // each test file a fresh registry — stop the OS-level server so the next
+  // suite's getTestPrerenderer() doesn't hit EADDRINUSE.
+  await stopTestPrerenderServer();
 });
 
 describe('federated search (integration)', () => {
