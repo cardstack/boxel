@@ -184,8 +184,10 @@ export async function captureTraceStream(
   }
 }
 
-// Resolves with the `tracingComplete` event (carrying the `IO` stream
-// handle), or rejects if the session errors first. Bounded by the caller.
+// Resolves with the `tracingComplete` event, which carries the `IO`
+// stream handle. Never rejects: if the session dies before the event
+// fires it simply never resolves, and the caller's `withTimeout` supplies
+// the fallback at the bound.
 function waitForTracingComplete(
   client: CDPSession,
 ): Promise<TracingCompleteEvent> {
