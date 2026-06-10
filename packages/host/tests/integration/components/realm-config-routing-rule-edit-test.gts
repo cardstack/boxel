@@ -123,6 +123,24 @@ module(
       assert
         .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
         .hasAttribute('aria-disabled', 'true', 'the realm picker is locked');
+      // The picker's selected pill must show the consuming realm, not
+      // the "All" select-all option. If `consumingRealm` doesn't reach
+      // the chooser, `initialSelectedRealmsForPanel` returns undefined,
+      // `selectedRealms` stays empty, and `pickerSelected` falls back to
+      // the `Select All (...)` option labeled "All" — which means the
+      // search is unscoped (the original code-submode bug).
+      assert
+        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
+        .containsText(
+          realmName,
+          'the realm picker is scoped to the consuming realm',
+        );
+      assert
+        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
+        .doesNotIncludeText(
+          'Select All',
+          'the picker is not showing the unscoped "Select All" pill',
+        );
       assert
         .dom(
           '[data-test-card-catalog-modal] [data-test-realm-picker] [data-test-boxel-picker-remove-button]',

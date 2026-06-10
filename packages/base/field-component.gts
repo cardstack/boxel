@@ -57,6 +57,15 @@ export interface BoxComponentSignature {
        * a card from another realm. UI hint only; no runtime validation.
        */
       lockConsumingRealm?: boolean;
+      /**
+       * Explicit consuming-realm URL passed through to the linksTo /
+       * linksToMany editor. The editor normally derives this from a
+       * `RealmURLContext` provided by the surrounding stack item; this
+       * lets callers in contexts without a stack item (e.g. code
+       * submode's spec preview) thread the owning card's realm in
+       * directly.
+       */
+      consumingRealm?: URL;
     };
   };
   Blocks: {};

@@ -57,6 +57,16 @@ interface Signature {
      * is locked. UI hint only; no runtime validation.
      */
     lockConsumingRealm?: boolean;
+    /**
+     * Explicit consuming-realm override. Without this, the editor
+     * derives the consuming realm from the `RealmURLContext` provided
+     * by the surrounding stack item — but in code submode the rule
+     * editor renders outside any stack item, so context is absent.
+     * Callers that know the owning card's realm (e.g. by reading
+     * `model[realmURL]`) can pass it directly here so the chooser
+     * filters correctly in both interact and code submodes.
+     */
+    consumingRealm?: URL;
     createCard?: CreateCardFn;
   };
 }
@@ -231,16 +241,22 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
+    // Prefer the explicit `@consumingRealm` arg over the
+    // `RealmURLContext` consumption, so callers in contexts that don't
+    // provide the context (e.g. code submode's playground / spec
+    // preview, where there is no stack item) can still scope the
+    // chooser to the owning card's realm.
+    let consumingRealm = this.args.consumingRealm ?? this.realmURL;
     let cardId = await chooseCard(
       { filter: { type } },
       {
         offerToCreate: {
           ref: type,
           relativeTo: undefined,
-          realmURL: this.realmURL,
+          realmURL: consumingRealm,
         },
         createNewCard: this.args.createCard,
-        consumingRealm: this.realmURL,
+        consumingRealm,
         lockConsumingRealm: this.args.lockConsumingRealm,
       },
     );
