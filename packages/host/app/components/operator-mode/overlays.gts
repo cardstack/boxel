@@ -126,12 +126,12 @@ export default class Overlays extends Component<OverlaySignature> {
   protected offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
-      let { elements, rects } = state;
+      let { elements } = state;
       let { floating, reference } = elements;
-      let { width, height } = reference.getBoundingClientRect();
+      let refRect = reference.getBoundingClientRect();
 
-      floating.style.width = width + 'px';
-      floating.style.height = height + 'px';
+      floating.style.width = refRect.width + 'px';
+      floating.style.height = refRect.height + 'px';
       floating.style.position = 'absolute';
       // Mirror the underlying card's corner radius so any decorative
       // outline / box-shadow on the overlay follows the same curve.
@@ -139,9 +139,40 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
+
+      // Position the overlay from the live reference rect relative to the
+      // floating element's own offset parent, rather than floating-ui's
+      // `rects.reference`. floating-ui's first one-or-two computePosition calls
+      // omit the offset parent's offset (they return the reference in viewport
+      // coordinates and only subtract the offset parent a frame later), so
+      // trusting `rects.reference` makes the overlay — and everything riding it
+      // (the type-label tab, the select chip, the menu, the outline) — paint
+      // one frame off and visibly jump into place on first appearance.
+      // Computing it ourselves from the current rects is correct on the very
+      // first frame. We recover the offset parent's scale the same way the
+      // Adorn label positioner does (the test runner scales `#ember-testing`),
+      // and convert the viewport anchor into the offset parent's local space.
+      let offsetParent = floating.offsetParent as HTMLElement | null;
+      let parentRect = offsetParent
+        ? offsetParent.getBoundingClientRect()
+        : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+      let scaleX =
+        offsetParent && offsetParent.offsetWidth > 0
+          ? parentRect.width / offsetParent.offsetWidth
+          : 1;
+      let scaleY =
+        offsetParent && offsetParent.offsetHeight > 0
+          ? parentRect.height / offsetParent.offsetHeight
+          : 1;
+      if (!Number.isFinite(scaleX) || scaleX === 0) {
+        scaleX = 1;
+      }
+      if (!Number.isFinite(scaleY) || scaleY === 0) {
+        scaleY = 1;
+      }
       return {
-        x: rects.reference.x,
-        y: rects.reference.y,
+        x: (refRect.left - parentRect.left) / scaleX,
+        y: (refRect.top - parentRect.top) / scaleY,
       };
     },
   };

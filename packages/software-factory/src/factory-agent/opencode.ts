@@ -51,9 +51,9 @@ import {
   DONE_SIGNAL,
   type FactoryTool,
   type ToolCallEntry,
-} from '../factory-tool-builder';
-import { deriveCatalogRealmUrl } from '../factory-catalog-realm';
-import { logger } from '../logger';
+} from '../factory-tool-builder.ts';
+import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
+import { logger } from '../logger.ts';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
@@ -61,13 +61,13 @@ import {
   FilePromptLoader,
   requireDarkfactoryModuleUrl,
   type PromptLoader,
-} from '../factory-prompt-loader';
+} from '../factory-prompt-loader.ts';
 import type {
   AgentContext,
   AgentRunResult,
   LoopAgent,
   ResolvedSkill,
-} from './types';
+} from './types.ts';
 
 let log = logger('factory-agent-opencode');
 

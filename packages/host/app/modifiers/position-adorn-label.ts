@@ -116,12 +116,12 @@ export function makePositionAdornLabel(
         anchorLeftX = cardRect.left - 4;
         label.style.maxWidth = 'max-content';
       }
-      // When flipped below, overlap the card by 2px so the flag's wide
-      // top edge tucks under the bottom outline stroke and reads as
-      // attached. (Anchoring it 2px below the card instead left a
-      // visible gap under the stroke.)
+      // When flipped below, sit the flag's top edge flush with the card's
+      // bottom edge — no overlap into the card (any overlap reads as the tag
+      // riding too high over the edge), and no gap (its z-index keeps it
+      // above the selection outline stroke, so it still reads as attached).
       let anchorTopY =
-        side === 'top' ? cardRect.top - labelHeight - 2 : cardRect.bottom - 2;
+        side === 'top' ? cardRect.top - labelHeight - 2 : cardRect.bottom;
 
       // The label's anchor positions (anchorLeftX, anchorTopY) are in
       // viewport coordinates. With `position: absolute`, the inline

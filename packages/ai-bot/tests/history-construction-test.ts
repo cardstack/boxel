@@ -15,7 +15,7 @@ import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 
 module('constructHistory', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;

@@ -1,11 +1,11 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   createRealm,
   createSubscribedUserAndLogin,
   postCardSource,
   postNewCard,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 

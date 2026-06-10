@@ -2,10 +2,10 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { param, query } from '@cardstack/runtime-common';
-import { realmSecretSeed, testRealmInfo } from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+import { realmSecretSeed, testRealmInfo } from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {

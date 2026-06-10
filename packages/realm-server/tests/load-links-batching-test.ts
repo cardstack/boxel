@@ -6,7 +6,7 @@ import type {
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached } from './helpers';
+import { setupPermissionedRealmCached } from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4451/test/');
 const NUM_SOURCES = 50;

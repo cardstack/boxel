@@ -1,6 +1,6 @@
-import type { CardResource } from './resource-types';
-import type { SerializedError } from './error';
-import type { PgPrimitive } from './expression';
+import type { CardResource } from './resource-types.ts';
+import type { SerializedError } from './error.ts';
+import type { PgPrimitive } from './expression.ts';
 
 export interface BoxelIndexTable {
   url: string;

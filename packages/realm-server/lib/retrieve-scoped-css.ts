@@ -6,7 +6,7 @@ import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
-} from './index-url-utils';
+} from './index-url-utils.ts';
 
 export async function retrieveScopedCSS({
   cardURL,

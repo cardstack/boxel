@@ -481,8 +481,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   delete(id: string): void {
     id = id.replace(/\.json$/, '');
-    let localId = isLocalId(id) ? id : undefined;
-    let remoteId = !isLocalId(id) ? id : undefined;
+    let localId = isLocalId(id, this.#virtualNetwork) ? id : undefined;
+    let remoteId = !isLocalId(id, this.#virtualNetwork) ? id : undefined;
 
     if (localId) {
       let remoteIds = this.#idResolver.getRemoteIds(localId);
@@ -732,7 +732,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id = id.replace(/\.json$/, '');
     let { item, localId } = this.tryFindingCardItem(type, id);
 
-    if (!item && isLocalId(id)) {
+    if (!item && isLocalId(id, this.#virtualNetwork)) {
       let maybeRemoteId = this.#idResolver.findRemoteId(id);
       if (maybeRemoteId) {
         ({ item, localId } = this.tryFindingCardItem(type, maybeRemoteId));
@@ -783,8 +783,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       type === 'instance'
         ? this.#nonTrackedCardInstances
         : this.#nonTrackedCardInstanceErrors;
-    let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
-    let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
+    let localId = isLocalId(localOrRemoteId, this.#virtualNetwork)
+      ? localOrRemoteId
+      : undefined;
+    let remoteId = !isLocalId(localOrRemoteId, this.#virtualNetwork)
+      ? localOrRemoteId
+      : undefined;
     let item: CardDef | CardErrorJSONAPI | undefined;
     if (remoteId) {
       if (localId) {
@@ -830,7 +834,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let errorBucket = notTracked
       ? this.#nonTrackedCardInstanceErrors
       : this.#cardInstanceErrors;
-    let isRemoteId = !isLocalId(id);
+    let isRemoteId = !isLocalId(id, this.#virtualNetwork);
     if (isRemoteId) {
       if (isCardInstance(item)) {
         this.#idResolver.addIdPair(item[localIdSymbol], id);
@@ -846,10 +850,15 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
-    if (error && isRemoteId && error.id && isLocalId(error.id)) {
+    if (
+      error &&
+      isRemoteId &&
+      error.id &&
+      isLocalId(error.id, this.#virtualNetwork)
+    ) {
       this.#idResolver.addIdPair(error.id, id);
     }
-    let localId = isLocalId(id) ? id : undefined;
+    let localId = isLocalId(id, this.#virtualNetwork) ? id : undefined;
     let remoteIds = isRemoteId ? [id] : [];
     if (localId) {
       remoteIds = this.#idResolver.getRemoteIds(localId);
@@ -923,7 +932,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private hasReferences(id: string): boolean {
     let idsToCheck = new Set<string>([id]);
-    let localId = isLocalId(id) ? id : this.#idResolver.getLocalId(id);
+    let localId = isLocalId(id, this.#virtualNetwork)
+      ? id
+      : this.#idResolver.getLocalId(id);
     if (localId) {
       idsToCheck.add(localId);
       for (let remoteId of this.#idResolver.getRemoteIds(localId)) {

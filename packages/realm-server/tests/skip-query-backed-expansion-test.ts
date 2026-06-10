@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached } from './helpers';
+import { setupPermissionedRealmCached } from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4452/test/');
 
@@ -179,21 +179,25 @@ module(basename(__filename), function () {
       },
     });
 
-    test('searchCards with omitIncluded: no included[], but roots keep their query-backed seed', async function (assert) {
+    test('searchCards with omitIncluded skips loadLinks: pristine rows, no query-field umbrella, no included[]', async function (assert) {
       let doc = await realm.realmIndexQueryEngine.searchCards(
         {
           filter: {
             type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
           },
         },
-        { loadLinks: true, skipQueryBackedExpansion: true, omitIncluded: true },
+        { loadLinks: true, omitIncluded: true },
       );
 
       assert.strictEqual(doc.data.length, 1, 'one consumer matched');
+      assert.ok(
+        doc.data[0].id?.endsWith('/consumer-1'),
+        'the matching result identifier is returned',
+      );
       assert.strictEqual(
         (doc.included ?? []).length,
         0,
-        'included[] is omitted entirely — neither static nor query-backed targets are expanded',
+        'included[] is omitted entirely',
       );
 
       let relationships = doc.data[0].relationships as
@@ -206,48 +210,25 @@ module(basename(__filename), function () {
           >
         | undefined;
 
-      // The query-backed seed survives so the host can hydrate the listed
-      // IDs by URL via card+source without firing a fresh live search.
+      // loadLinks / populateQueryFields never ran, so the query-backed field
+      // carries no assembled umbrella: no `links.search`, and it does not name
+      // any matched targets. The host re-resolves the field from card+source.
       let queryLinks = relationships?.queryLinks;
-      assert.strictEqual(
-        Array.isArray(queryLinks?.data) ? queryLinks?.data.length : -1,
-        3,
-        'relationships.queryLinks.data still names the three matched IDs',
-      );
-      assert.ok(
+      assert.notOk(
         queryLinks?.links?.search,
-        'relationships.queryLinks keeps its links.search seed',
+        'query-backed field has no links.search (umbrella never assembled)',
+      );
+      assert.strictEqual(
+        Array.isArray(queryLinks?.data) ? queryLinks!.data.length : 0,
+        0,
+        'query-backed field does not name any matched targets',
       );
 
-      // The per-item `queryLinks.N` sub-entries are stripped so they do not
-      // deserialize to orphan links against the empty included[].
+      // No per-item `queryLinks.N` sub-entries leaked onto the wire.
       let perItemKeys = Object.keys(relationships ?? {}).filter((k) =>
         /^queryLinks\.\d+$/.test(k),
       );
-      assert.deepEqual(
-        perItemKeys,
-        [],
-        'query-backed per-item sub-entries are stripped',
-      );
-
-      // The static linksTo keeps a resolvable reference (the host turns an
-      // absent target into a not-loaded sentinel and lazy-loads it via
-      // card+source) but its target is NOT in included[].
-      let directLink = relationships?.directLink;
-      let directRef =
-        directLink?.links?.self ??
-        (directLink?.data && !Array.isArray(directLink.data)
-          ? directLink.data.id
-          : undefined);
-      assert.ok(
-        directRef ? directRef.includes('direct-target') : false,
-        'static linksTo keeps a reference to its target for lazy loading',
-      );
-      let includedIds = (doc.included ?? []).map((r) => r.id);
-      assert.notOk(
-        includedIds.some((id) => id?.endsWith('/direct-target')),
-        'static linksTo target is NOT expanded into included',
-      );
+      assert.deepEqual(perItemKeys, [], 'no query-backed per-item sub-entries');
     });
 
     test('omitIncluded is prerender-scoped: default search still ships a compound included[]', async function (assert) {

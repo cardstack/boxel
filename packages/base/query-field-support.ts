@@ -16,7 +16,6 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
   getField,
   getSingularRelationship,
   identifyCard,
@@ -34,6 +33,7 @@ import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
 import {
+  bumpFieldLoadingSignal,
   getDataBucket,
   type LinkErrorValue,
   type LinkNotFoundValue,
@@ -146,13 +146,15 @@ export function ensureQueryFieldSearchResource(
 
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
-  let args = () =>
-    resolveQueryAndRealm(
-      instance,
-      field,
-      fieldDefinition,
-      store.virtualNetwork,
-    );
+  let args = () => {
+    let vn = store.virtualNetwork;
+    if (!vn) {
+      throw new Error(
+        `query-field-support requires the CardStore to have a VirtualNetwork`,
+      );
+    }
+    return resolveQueryAndRealm(instance, field, fieldDefinition, vn);
+  };
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
   // the authoritative cardinality for this field — the indexer just
@@ -196,6 +198,10 @@ export function ensureQueryFieldSearchResource(
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+  // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
+  // a `peek` before it existed entangled nothing, so nudge observers to
+  // re-read now that the resource (and its tracked running flag) is available.
+  bumpFieldLoadingSignal(instance, field.name);
 
   return searchResource;
 }
@@ -213,7 +219,7 @@ export function peekQueryFieldSearchResource(
 }
 
 // Mirror the SearchResource's resource-level error state onto the data bucket
-// so the field getter and `getRelationship` recognize the same sentinels they
+// so the field getter and `getRelationshipMembershipState` recognize the same sentinels they
 // already handle for direct `linksTo`. Reading `searchResource.errors` here
 // also entangles the calling field-getter render with the resource's tracked
 // failure channel — a later transition into or out of an errored state
@@ -307,7 +313,7 @@ function queryFieldErrorReference(instance: BaseDef, field: Field): string {
   // (qualified with the field name) when available so the reference is
   // diagnosable in logs and persisted error docs. Unsaved owners fall back to
   // a synthetic identifier; the reference is read by humans / by
-  // `getRelationship` consumers but never resolved as a URL.
+  // `getRelationshipMembershipState` consumers but never resolved as a URL.
   let owner = (instance as CardDef).id;
   if (typeof owner === 'string' && owner.length > 0) {
     return `${owner}#${field.name}`;
@@ -568,7 +574,7 @@ function resolveQueryAndRealm(
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
-  virtualNetwork: VirtualNetwork | undefined,
+  virtualNetwork: VirtualNetwork,
 ): { realmHref: string; searchURL: string; query: Query } | undefined {
   let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
   if (!realmURL) {
@@ -587,9 +593,7 @@ function resolveQueryAndRealm(
     fieldPath,
     resolvePathValue: (path) => resolveInstancePathValue(instance, path),
     relativeTo: (instance as CardDef).id
-      ? virtualNetwork
-        ? virtualNetwork.toURL((instance as CardDef).id)
-        : cardIdToURL((instance as CardDef).id)
+      ? virtualNetwork.toURL((instance as CardDef).id)
       : realmURL,
     virtualNetwork,
   });

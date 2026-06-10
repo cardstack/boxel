@@ -1,11 +1,12 @@
-import type { RealmInfo } from './realm';
-import { type CodeRef, moduleFrom } from './code-ref';
+import { md5 } from 'super-fast-md5';
+import type { RealmInfo } from './realm.ts';
+import { type CodeRef, moduleFrom } from './code-ref.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
-} from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
-import type { Query } from './query';
+} from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { Query } from './query.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -19,8 +20,15 @@ export interface QueryFieldMeta {
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
+export const RenderedHtmlResourceType = 'rendered-html';
+export const CssResourceType = 'css';
 // resource
-export type Resource = ModuleResource | CardResource | PrerenderedCardResource;
+export type Resource =
+  | ModuleResource
+  | CardResource
+  | PrerenderedCardResource
+  | RenderedHtmlResource
+  | CssResource;
 export type ResourceMeta = ModuleMeta | Meta;
 export type LinkableResource = CardResource | FileMetaResource;
 
@@ -74,12 +82,27 @@ export type CardResourceMeta = Meta & {
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
+  // Set by the server on an HTML-backed result to mark this `card` as
+  // identity-only: identity + a `rendered-html` relationship, with the live
+  // serialization deliberately withheld (no `attributes`; hydration fetches it
+  // on demand). The authoritative wire signal that a consumer must not treat
+  // this resource as a complete instance — see `isIdentityOnlyCardResource`.
+  identityOnly?: boolean;
+  // The ancestor type this result's HTML was rendered as, echoed on an
+  // identity-only `card` so a consumer renders the hydrated/fallback card as
+  // the same type as its HTML sibling. A full live `card` never carries this
+  // (it ships the standard live wireformat); it rides only on identity-only
+  // results.
+  renderType?: CodeRef;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
   queryFieldDefs?: Record<string, QueryFieldMeta>;
+  // See CardResourceMeta.identityOnly — a file-meta result can likewise be
+  // HTML-backed and identity-only.
+  identityOnly?: boolean;
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
@@ -89,6 +112,11 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
+  } & {
+    // The card's rendering, when the server resolves this row to prerendered
+    // HTML. A reserved platform key (see RenderedHtmlResourceType) that can
+    // never collide with a userland @field name.
+    'rendered-html'?: Relationship;
   };
   meta: CardResourceMeta;
   links?: {
@@ -102,10 +130,51 @@ export interface FileMetaResource {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
+  } & {
+    'rendered-html'?: Relationship;
   };
   meta: FileMetaResourceResourceMeta;
   links?: {
     self?: string;
+  };
+}
+
+// One prerendered presentation of a card/file (a single format per response).
+// Its `id` is the bare card/file URL — the same id as the `card`/`file-meta`
+// resource it renders; `type` is what distinguishes them. The scoped CSS the
+// rendering needs travels as first-class `css` resources linked through
+// `styles` (deduped in `included` by identity).
+export interface RenderedHtmlResource {
+  id: string;
+  type: typeof RenderedHtmlResourceType;
+  attributes: {
+    html: string;
+    cardType: string;
+    iconHtml?: string;
+    isError?: boolean;
+  };
+  relationships: {
+    styles: {
+      data: { type: typeof CssResourceType; id: string }[];
+    };
+  };
+  // The ancestor type the HTML was rendered as (echoed from the request's
+  // resolved render type).
+  meta?: {
+    renderType?: CodeRef;
+  };
+}
+
+// A scoped stylesheet referenced by a `rendered-html` resource. The scoped-CSS
+// URL base64-embeds the whole stylesheet, so it travels exactly once here in
+// `attributes.href` (the host loads it via `loader.import`); the `id` is a
+// stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
+// references stay short and `included` dedupes identical stylesheets for free.
+export interface CssResource {
+  id: string;
+  type: typeof CssResourceType;
+  attributes: {
+    href: string;
   };
 }
 
@@ -151,7 +220,7 @@ export function isModuleResource(resource: any): resource is ModuleResource {
 
 // Pure shape predicates live in `card-document-shape.ts` so callers that
 // only need to recognize a JSON:API resource don't pull the transitive
-// runtime chain rooted in this file (`card-reference-resolver.ts` →
+// runtime chain rooted in this file (`realm-identifiers.ts` →
 // `loader.ts` → `realm.ts` → ...). Re-exported here for backward compat.
 export {
   isCardResource,
@@ -159,7 +228,18 @@ export {
   isCardFields,
   isMeta,
   isRelationship,
-} from './card-document-shape';
+  isRenderedHtmlResource,
+  isCssResource,
+  isIdentityOnlyCardResource,
+} from './card-document-shape.ts';
+
+// The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
+// URL. Server and host compute it through this one helper so identical
+// stylesheets dedupe to the same `(type, id)` in `included`. md5 is our
+// standing convention for non-security fingerprints (see `transpile.ts`).
+export function cssResourceId(href: string): string {
+  return md5(href);
+}
 
 export function extractRelationshipIds(
   relationship: Relationship,

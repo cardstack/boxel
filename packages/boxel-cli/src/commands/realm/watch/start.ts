@@ -1,31 +1,34 @@
 import { InvalidArgumentError, type Command } from 'commander';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { RealmSyncBase, isProtectedFile } from '../../../lib/realm-sync-base';
+import {
+  RealmSyncBase,
+  isProtectedFile,
+} from '../../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type Checkpoint,
   type CheckpointChange,
-} from '../../../lib/checkpoint-manager';
+} from '../../../lib/checkpoint-manager.ts';
 import {
   type SyncManifest,
   computeFileHash,
   loadManifest,
   saveManifest,
-} from '../../../lib/sync-manifest';
-import type { ProfileManager } from '../../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../../lib/prompt';
+} from '../../../lib/sync-manifest.ts';
+import type { ProfileManager } from '../../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../../lib/prompt.ts';
 import {
   acquireWatchLock,
   releaseWatchLock,
   type WatchLockInfo,
-} from '../../../lib/watch-lock';
+} from '../../../lib/watch-lock.ts';
 import {
   registerProcess,
   unregisterCurrentProcess,
-} from '../../../lib/watch-process-registry';
+} from '../../../lib/watch-process-registry.ts';
 import {
   FG_CYAN,
   FG_GREEN,
@@ -33,7 +36,7 @@ import {
   FG_YELLOW,
   DIM,
   RESET,
-} from '../../../lib/colors';
+} from '../../../lib/colors.ts';
 
 export interface WatchRealmSpec {
   realmUrl: string;

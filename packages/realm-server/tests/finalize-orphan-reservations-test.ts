@@ -6,8 +6,8 @@ import type {
   JobsTable,
   PgAdapter,
 } from '@cardstack/postgres';
-import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations';
-import { createTestPgAdapter, prepareTestDB } from './helpers';
+import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations.ts';
+import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
 
 async function insertJob(
   adapter: PgAdapter,

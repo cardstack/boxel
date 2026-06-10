@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import puppeteer, { type Browser } from 'puppeteer';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 import {
   boxelIconsDir,
@@ -30,8 +30,8 @@ import {
   workspaceRoot,
   type FactorySupportContext,
   type SynapseInstance,
-} from './shared';
-import { canConnectToPg } from './database';
+} from './shared.ts';
+import { canConnectToPg } from './database.ts';
 
 let log = logger('support-services');
 let preparePgPromise: Promise<void> | undefined;
@@ -181,7 +181,7 @@ function assertUsableHostDist(hostPackageDir: string): void {
 }
 
 async function loadSynapseModule() {
-  let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
+  let moduleSpecifier = '../../matrix/support/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     registerUser: (
       synapse: SynapseInstance,
@@ -202,7 +202,7 @@ async function loadSynapseModule() {
 }
 
 async function loadMatrixEnvironmentConfigModule() {
-  let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
+  let moduleSpecifier = '../../matrix/support/environment-config.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     getSynapseURL: (synapse?: { baseUrl?: string; port?: number }) => string;
   };
@@ -576,11 +576,11 @@ async function stopChildProcess(
 }
 
 class PrerenderPortContentionError extends Error {
-  constructor(
-    public readonly port: number,
-    message: string,
-  ) {
+  public readonly port: number;
+
+  constructor(port: number, message: string) {
     super(message);
+    this.port = port;
     this.name = 'PrerenderPortContentionError';
   }
 }

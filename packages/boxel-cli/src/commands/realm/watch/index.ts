@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
-import { registerStartCommand } from './start';
-import { registerStopCommand } from './stop';
+import { registerStartCommand } from './start.ts';
+import { registerStopCommand } from './stop.ts';
 
 export function registerWatchCommand(realm: Command): void {
   const watch = realm

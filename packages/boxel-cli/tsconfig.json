@@ -3,6 +3,7 @@
     "target": "es2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true,
     "noImplicitAny": true,
@@ -23,5 +24,14 @@
     "types": ["@cardstack/local-types", "node"]
   },
   "include": ["./**/*"],
-  "exclude": ["node_modules", "dist", "bundled-types", "bundled-test-harness", "bundled-realms", "tests/helpers/integration.ts", "tests/helpers/setup-realm-server.ts", "tests/integration"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "bundled-types",
+    "bundled-test-harness",
+    "bundled-realms",
+    "tests/helpers/integration.ts",
+    "tests/helpers/setup-realm-server.ts",
+    "tests/integration"
+  ]
 }

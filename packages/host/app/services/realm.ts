@@ -693,8 +693,10 @@ class RealmResource {
         };
       }
     } catch (error) {
+      // Log for observability, then propagate so callers (e.g.
+      // UnpublishRealmCommand) can report the failure.
       console.error(`Error unpublishing from URL ${url}:`, error);
-      return;
+      throw error;
     } finally {
       this._unPublishingRealms.splice(this._unPublishingRealms.indexOf(url), 1);
     }

@@ -10,7 +10,7 @@ import {
   type ModuleRenderResponse,
   type Prerenderer,
   rri,
-  type VirtualNetwork,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmsCached,
@@ -18,7 +18,7 @@ import {
   createTestPgAdapter,
   prepareTestDB,
   testCreatePrerenderAuth,
-} from './helpers';
+} from './helpers/index.ts';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 function buildDefinition(
@@ -68,9 +68,12 @@ function buildModuleResponse(
   deps: string[],
   error?: ErrorEntry,
 ): ModuleRenderResponse {
+  // Internal keys produced here are URL-form; they don't depend on any
+  // realm-mapping context, so an empty VirtualNetwork suffices.
   let definitionId = internalKeyFor(
     { module: rri(moduleURL), name },
     undefined,
+    new VirtualNetwork(),
   );
   let definitions = error
     ? {}
@@ -458,6 +461,7 @@ module(basename(__filename), function () {
           let definitionId = internalKeyFor(
             { module: rri(args.url), name: 'Person' },
             undefined,
+            virtualNetwork,
           );
           return {
             id: args.url,
@@ -1662,6 +1666,7 @@ module(basename(__filename), function () {
           let definitionId = internalKeyFor(
             { module: rri(args.url), name: 'CoalesceInvalidate' },
             undefined,
+            virtualNetwork,
           );
           let moduleAlias = trimExecutableExtension(rri(args.url));
           return {

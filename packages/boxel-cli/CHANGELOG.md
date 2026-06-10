@@ -6,6 +6,23 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-06-06 — npm v0.3.1
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.3.1
+
+## @cardstack/boxel-cli v0.3.1 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.3.1
+
+## Changes
+
+- fix(boxel-cli): serve a stub icon module so self-contained boxel test loads cards by @jurgenwerk in https://github.com/cardstack/boxel/pull/5130
+- fix: update boxel-cli profile localhost realmServerUrl to https by @burieberry in https://github.com/cardstack/boxel/pull/5091
+- feat: promote AudioDef into @cardstack/base with full format support by @lucaslyl in https://github.com/cardstack/boxel/pull/5055
+- feat(realm): add boxel realm indexing-errors command and /\_indexing-errors endpoint by @FadhlanR in https://github.com/cardstack/boxel/pull/5013
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.3.0...boxel-cli-v0.3.1
+
 ## 2026-05-28 — npm v0.3.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.3.0

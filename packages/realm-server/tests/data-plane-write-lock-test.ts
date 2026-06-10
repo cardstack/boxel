@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import type { Realm } from '@cardstack/runtime-common';
 import {
@@ -13,7 +13,7 @@ import {
   createJWT,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
+} from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 // CS-11125 regression coverage: per-realm advisory lock on the data-plane

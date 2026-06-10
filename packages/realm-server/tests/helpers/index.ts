@@ -6,7 +6,7 @@ import {
   ensureDirSync,
   copySync,
 } from 'fs-extra';
-import { NodeAdapter } from '../../node-realm';
+import { NodeAdapter } from '../../node-realm.ts';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
 import type {
@@ -42,29 +42,29 @@ import {
   type PopulateCoordinator,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { getLocalConfig as getSynapseConfig } from '../../synapse';
-import { RealmServer } from '../../server';
+import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
+import { RealmServer } from '../../server.ts';
 import { sign as jwtSign } from 'jsonwebtoken';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
-} from '../../lib/realm-registry-reconciler';
-import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes';
+} from '../../lib/realm-registry-reconciler.ts';
+import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import { Socket as NetSocket } from 'net';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   Prerenderer as LocalPrerenderer,
   type Prerenderer as TestPrerenderer,
-} from '../../prerender';
+} from '../../prerender/index.ts';
 
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
@@ -75,15 +75,15 @@ import type {
   RealmEvent,
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
-import { createPrerenderHttpServer } from '../../prerender/prerender-app';
-import { buildCreatePrerenderAuth } from '../../prerender/auth';
+import { createRemotePrerenderer } from '../../prerender/remote-prerenderer.ts';
+import { createPrerenderHttpServer } from '../../prerender/prerender-app.ts';
+import { buildCreatePrerenderAuth } from '../../prerender/auth.ts';
 import { Client as PgClient } from 'pg';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
   serviceURL,
-} from '../../lib/dev-service-registry';
+} from '../../lib/dev-service-registry.ts';
 
 /**
  * In environment mode we shift test ports by a deterministic offset derived

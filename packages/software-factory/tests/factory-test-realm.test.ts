@@ -1,9 +1,9 @@
 import { module, test } from 'qunit';
 
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import type { TestResult } from '../src/factory-agent';
+import type { TestResult } from '../src/factory-agent/index.ts';
 import {
   buildTestRunCardDocument,
   completeTestRun,
@@ -12,9 +12,9 @@ import {
   parseQunitResults,
   resolveTestRun,
   type TestRunAttributes,
-} from '../src/factory-test-realm';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from '../src/factory-test-realm.ts';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Shared helpers

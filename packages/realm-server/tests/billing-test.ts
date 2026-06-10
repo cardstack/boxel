@@ -13,7 +13,7 @@ import {
   insertPlan,
   insertUser,
   prepareTestDB,
-} from './helpers';
+} from './helpers/index.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';

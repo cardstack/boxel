@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { Prerenderer } from '../prerender/prerenderer';
-import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app';
+import { Prerenderer } from '../prerender/prerenderer.ts';
+import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app.ts';
 
 // Locks down the consolidated diagnostic channel: every payload the
 // Prerenderer or HTTP layer knows about (server timings, host-side

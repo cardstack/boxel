@@ -35,6 +35,7 @@ import GenerateReadmeSpecCommand from './generate-readme-spec';
 
 import type CardService from '../services/card-service';
 import type ModuleContentsService from '../services/module-contents-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -136,6 +137,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
   @service declare private cardService: CardService;
   @service declare private moduleContentsService: ModuleContentsService;
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
 
   static actionVerb = 'Create';
   requireInputFields = ['targetRealm'];
@@ -261,7 +263,12 @@ export default class CreateSpecCommand extends HostBaseCommand<
     let url: string;
     if (codeRef) {
       let relativeTo = new URL(targetRealm);
-      let maybeAbsoluteRef = codeRefWithAbsoluteIdentifier(codeRef, relativeTo);
+      let maybeAbsoluteRef = codeRefWithAbsoluteIdentifier(
+        codeRef,
+        relativeTo,
+        undefined,
+        this.network.virtualNetwork,
+      );
       if (isResolvedCodeRef(maybeAbsoluteRef)) {
         codeRef = maybeAbsoluteRef;
       }

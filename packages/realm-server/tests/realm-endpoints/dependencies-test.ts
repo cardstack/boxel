@@ -3,8 +3,8 @@ import type { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import type { RealmHttpServer as Server } from '../../server';
-import { closeServer, setupPermissionedRealmCached } from '../helpers';
+import type { RealmHttpServer as Server } from '../../server.ts';
+import { closeServer, setupPermissionedRealmCached } from '../helpers/index.ts';
 
 module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let testRealm: Realm;

@@ -1,12 +1,12 @@
 // This should be first
-import '../setup-logger';
+import '../setup-logger.ts';
 
 import {
   readSupportContext,
   startFactoryRealmServer,
   type RealmConfig,
 } from '@cardstack/realm-test-harness';
-import { logger } from '../logger';
+import { logger } from '../logger.ts';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 

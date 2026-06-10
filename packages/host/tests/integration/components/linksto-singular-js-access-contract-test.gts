@@ -37,7 +37,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 // The contract under test is the *userland* JS shape of `card.linkField`:
 // strict-equality, optional-chain, and raw-access semantics across all five
-// relationship states the singular `linksTo` getter can be in. `getRelationship`
+// relationship states the singular `linksTo` getter can be in. `getRelationshipMembershipState`
 // is the diagnostic surface — covered by get-relationship-test — and is
 // deliberately not exercised here. Sentinels are inspected via the data bucket
 // (where they live) rather than the getter, since the getter never returns one.

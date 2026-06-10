@@ -2,7 +2,7 @@ import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import '../setup-logger';
+import '../setup-logger.ts';
 
 module(basename(__filename), function () {
   module('virtual-network', function () {
@@ -84,6 +84,27 @@ module(basename(__filename), function () {
           'real-to-virtual',
         )?.href,
         'http://localhost:4205/test/hassan/personal/_readiness-check',
+      );
+    });
+
+    test('resolveURL: root-relative ref joins against the mapped URL of a prefix-form base', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      // URL-form base: plain URL-join.
+      assert.strictEqual(
+        virtualNetwork.resolveURL(
+          '/bar',
+          'https://localhost:4201/skills/Skill/foo',
+        ).href,
+        'https://localhost:4201/bar',
+      );
+      // Prefix-form base: resolve to the mapped URL first, then join.
+      assert.strictEqual(
+        virtualNetwork.resolveURL('/bar', '@cardstack/skills/Skill/foo').href,
+        'https://localhost:4201/bar',
       );
     });
   });

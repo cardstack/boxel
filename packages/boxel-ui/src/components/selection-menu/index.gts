@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
-import { DropdownArrowDown } from '../../icons.ts';
+import CaretDown from '../../icons/caret-down.gts';
 import BoxelButton from '../button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
@@ -66,7 +66,7 @@ export default class SelectionMenu extends Component<Signature> {
           >
             <SelectionCheckmark class='selection-menu-icon' />
             <span class='selection-menu-count'>{{@selectedCount}}</span>
-            <DropdownArrowDown
+            <CaretDown
               class='selection-menu-caret'
               width='13px'
               height='13px'
@@ -102,14 +102,19 @@ export default class SelectionMenu extends Component<Signature> {
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-width: 0;
       }
-      /* Keyboard focus ring just outside the button. (Set explicitly so it
-         renders regardless of the global button outline setup.) */
+      /* Keyboard focus ring: a lighter tint of the current fill, so it stays
+         visible against the highlight button (a highlight-colored ring would
+         blend into it) while tracking the fill as it darkens. Sits snug
+         against the button (1px) rather than floating off it. Defined here
+         rather than on BoxelButton because boxel-ui's unlayered global
+         `button:focus` rule overrides the button's own layered focus styles. */
       .selection-menu-trigger:focus-visible {
         outline: var(--boxel-outline-width) var(--boxel-outline-style)
-          var(--boxel-highlight);
-        outline-offset: 2px;
+          color-mix(in oklab, var(--boxel-button-color) 70%, white);
+        outline-offset: 1px;
       }
-      /* Deepen the fill while the menu is open, matching Button's hover. */
+      /* Deepen the fill while the menu is open, matching Button's hover; the
+         focus ring's color-mix tracks the fill, so it darkens to match. */
       .selection-menu-trigger[aria-expanded='true'] {
         --boxel-button-color: var(--boxel-highlight-hover);
       }
@@ -121,6 +126,12 @@ export default class SelectionMenu extends Component<Signature> {
       .selection-menu-count {
         line-height: 1;
         white-space: nowrap;
+        /* Reserve a stable width (and equal-width digits) so the trigger
+           doesn't shift when the count crosses 1↔2 digits, e.g. during a
+           Select All that jumps 9→10. */
+        min-width: 2ch;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
       }
       .selection-menu-caret {
         flex-shrink: 0;

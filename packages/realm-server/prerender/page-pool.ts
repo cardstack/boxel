@@ -6,11 +6,12 @@ import {
 } from '@cardstack/runtime-common';
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
-import { resolvePrerenderManagerURL } from './config';
-import type { BrowserManager } from './browser-manager';
-import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
-import { AsyncSemaphore } from './async-semaphore';
-import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
+import { resolvePrerenderManagerURL } from './config.ts';
+import type { BrowserManager } from './browser-manager.ts';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import { AsyncSemaphore } from './async-semaphore.ts';
+import { attachRuntimeExceptionCapture } from './runtime-exception-capture.ts';
+import { attachNetworkInflightTracker } from './network-inflight-tracker.ts';
 
 type RenderSemaphore = {
   acquire(signal?: AbortSignal, priority?: number): Promise<() => void>;
@@ -2679,6 +2680,11 @@ export class PagePool {
     // immediately if an exception lands during attach.
     this.#affinityKeyByPageId.set(pageId, affinityKey);
     this.#attachPageConsole(page, affinityKey, pageId);
+    // Passive out-of-process CDP Network tracker. Runs for every page so
+    // the timeout path can name the fetch a wedged render is waiting on
+    // even when the page's JS thread is too pegged to answer an
+    // in-page diagnostic. Best-effort: attach failures resolve cleanly.
+    await attachNetworkInflightTracker(page);
     await attachRuntimeExceptionCapture({
       page,
       // Resolved at log-emit time so adoption / re-tagging that

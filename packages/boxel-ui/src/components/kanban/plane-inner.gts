@@ -338,6 +338,7 @@ export class KanbanPlaneInner extends Component<{
         height: 100%;
         padding: 0.75rem;
         overflow-x: auto;
+        overflow-y: hidden;
         outline: none;
         background-color: var(--_kanban-bg);
         color: var(--_kanban-fg);
@@ -370,6 +371,7 @@ export class KanbanPlaneInner extends Component<{
       .col-body {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         gap: var(--_kanban-col-gap);
@@ -441,6 +443,7 @@ export class KanbanPlaneInner extends Component<{
       .hidden-tray-body {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         gap: 0.25rem;

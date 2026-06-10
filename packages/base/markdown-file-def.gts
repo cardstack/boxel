@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import {
@@ -454,7 +455,7 @@ export class MarkdownDef extends FileDef {
       return extractCardReferenceUrls(
         this.content,
         this.id ?? '',
-        virtualNetworkFor(this),
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },
   });
@@ -520,7 +521,11 @@ export class MarkdownDef extends FileDef {
       title: extractTitle(markdown, fallbackTitle),
       excerpt: extractExcerpt(markdown),
       content: markdown,
-      cardReferenceUrls: extractCardReferenceUrls(markdown, url),
+      cardReferenceUrls: extractCardReferenceUrls(
+        markdown,
+        url,
+        new VirtualNetwork(),
+      ),
     };
   }
 }

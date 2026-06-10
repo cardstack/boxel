@@ -1,7 +1,7 @@
 import { module, test, assert } from 'qunit';
 
-import { publishCodePatchCorrectnessMessage } from '../lib/code-patch-correctness';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { publishCodePatchCorrectnessMessage } from '../lib/code-patch-correctness.ts';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,

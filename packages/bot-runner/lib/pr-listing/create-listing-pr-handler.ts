@@ -5,7 +5,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { BotTriggerContent } from 'https://cardstack.com/base/matrix-event';
 import { createHash } from 'node:crypto';
-import type { GitHubClient, OpenPullRequestResult } from '../github';
+import type { GitHubClient, OpenPullRequestResult } from '../github.ts';
 
 const log = logger('bot-runner:create-listing-pr');
 
@@ -60,8 +60,7 @@ function getCreateListingPRContext(
     typeof input.branchName === 'string' && input.branchName.trim()
       ? input.branchName.trim()
       : '';
-  let headBranch =
-    explicitBranchName || toBranchName(listingDisplayName);
+  let headBranch = explicitBranchName || toBranchName(listingDisplayName);
 
   if (!headBranch) {
     throw new Error('pr-listing-create trigger must include a valid branch');
@@ -90,7 +89,11 @@ function getCreateListingPRContext(
 }
 
 export class CreateListingPRHandler {
-  constructor(private githubClient: GitHubClient) {}
+  private githubClient: GitHubClient;
+
+  constructor(githubClient: GitHubClient) {
+    this.githubClient = githubClient;
+  }
 
   async ensureCreateListingBranch(
     eventContent: BotTriggerEventContent,
@@ -241,9 +244,7 @@ export class CreateListingPRHandler {
 
     return [
       '## Summary',
-       ...(listingSummary
-        ? [listingSummary, '', '---']
-        : []),
+      ...(listingSummary ? [listingSummary, '', '---'] : []),
       `- Listing Name: ${context.listingDisplayName}`,
       `- Room ID: \`${context.roomId}\``,
       `- User ID: \`${runAs}\``,

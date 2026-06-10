@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
-import { isPrerenderCancellation } from '../prerender/prerender-cancel';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
+import { isPrerenderCancellation } from '../prerender/prerender-cancel.ts';
 
 // Tests for AsyncSemaphore's resize-aware behaviour. The cancellation
 // tests live in prerender-cancellation-test.ts; this file owns the

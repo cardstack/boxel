@@ -19,15 +19,15 @@ import {
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   collectAllFilePaths,
   removeRealmFiles,
-} from './realm-destruction-utils';
-import { deleteRegistryRowByUrl } from '../lib/realm-registry-writes';
+} from './realm-destruction-utils.ts';
+import { deleteRegistryRowByUrl } from '../lib/realm-registry-writes.ts';
 
 const log = logger('handle-unpublish');
 

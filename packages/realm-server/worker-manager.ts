@@ -1,6 +1,6 @@
-import './instrument';
-import './setup-logger'; // This should be first
-import './lib/wtfnode-on-signal';
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
+import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 
 // During `mise dev-all` Ctrl-C, the bash trap walks the process tree
@@ -48,6 +48,7 @@ import {
   separatedByCommas,
   IndexWriter,
   isUrlLike,
+  VirtualNetwork,
   type Expression,
   type StatusArgs,
   type IndexingProgressEvent,
@@ -59,22 +60,26 @@ import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
-import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
+import {
+  ecsMetadata,
+  fullRequestURL,
+  livenessCheck,
+} from './middleware/index.ts';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
-import { startCronJobs, stopCronJobs } from './lib/cron-scheduler';
+import { startCronJobs, stopCronJobs } from './lib/cron-scheduler.ts';
 import {
   isEnvironmentMode,
   registerService,
   deregisterService,
-} from './lib/dev-service-registry';
-import { IndexingEventSink } from './indexing-event-sink';
+} from './lib/dev-service-registry.ts';
+import { IndexingEventSink } from './indexing-event-sink.ts';
 import {
   renderIndexingDashboard,
   type PendingJob,
-} from './handlers/handle-indexing-dashboard';
-import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
-import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations';
+} from './handlers/handle-indexing-dashboard.ts';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
+import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
 
 /* About the Worker Manager
  *
@@ -726,7 +731,15 @@ async function markFailedIndexEntry({
 }) {
   log.info(`marking index entry ${url} with an error doc`);
   let indexWriter = new IndexWriter(adapter);
-  let batch = await indexWriter.createBatch(new URL(realm));
+  // The worker-manager doesn't run inside any particular realm context, so
+  // it can't see the per-realm prefix mappings. An empty VirtualNetwork is
+  // sufficient here because `invalidate` consumes already-URL-form inputs
+  // and unresolveURL falls through to the original URL when no realm
+  // mapping matches.
+  let batch = await indexWriter.createBatch(
+    new URL(realm),
+    new VirtualNetwork(),
+  );
   await batch.invalidate([new URL(url)]);
   let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {

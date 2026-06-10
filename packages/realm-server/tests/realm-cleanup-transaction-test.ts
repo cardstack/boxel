@@ -8,11 +8,11 @@ import {
   query,
   removeRealmPermissions,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   deleteRegistryRowByUrl,
   insertSourceRealmInRegistry,
-} from '../lib/realm-registry-writes';
+} from '../lib/realm-registry-writes.ts';
 
 // CS-10898 regression test: an injected error after a registry-row delete
 // (but before the lock-holder transaction commits) must roll back BOTH the

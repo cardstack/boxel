@@ -29,6 +29,7 @@ import {
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import {
+  coalesce,
   extractCssVariables,
   sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
@@ -49,6 +50,13 @@ export interface BoxComponentSignature {
       format?: Format;
       displayContainer?: boolean;
       typeConstraint?: ResolvedCodeRef;
+      /**
+       * When true (only meaningful on linksTo / linksToMany editors),
+       * hard-scope the card chooser to the consuming realm — the realm
+       * picker in the catalog modal is locked and the user cannot pick
+       * a card from another realm. UI hint only; no runtime validation.
+       */
+      lockConsumingRealm?: boolean;
     };
   };
   Blocks: {};
@@ -371,7 +379,12 @@ export function getBoxComponent(
                         </CardContainer>
                       </DefaultFormatsProvider>
                     {{/let}}
-                  {{else if (isCompoundField model.value)}}
+                  {{else if
+                    (and
+                      (isCompoundField model.value)
+                      (coalesce @displayContainer true)
+                    )
+                  }}
                     <DefaultFormatsProvider
                       @value={{defaultFieldFormats effectiveFormats.fieldDef}}
                     >

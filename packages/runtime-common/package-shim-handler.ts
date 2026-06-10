@@ -1,5 +1,5 @@
-import { rri } from './card-reference-resolver';
-import { logger, trimExecutableExtension } from './index';
+import { rri } from './realm-identifiers.ts';
+import { logger, trimExecutableExtension } from './index.ts';
 
 export type ModuleLike = Record<string, any>;
 export type ModuleDescriptor =

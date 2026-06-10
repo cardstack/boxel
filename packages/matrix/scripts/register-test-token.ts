@@ -1,5 +1,8 @@
-import { createRegistrationToken, loginUser } from '../docker/synapse';
-import { adminUsername, adminPassword } from './register-test-user';
+import {
+  createRegistrationToken,
+  loginUser,
+} from '../support/synapse/index.ts';
+import { adminUsername, adminPassword } from './register-test-user.ts';
 
 (async () => {
   let cred = await loginUser(adminUsername, adminPassword);

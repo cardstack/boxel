@@ -1,8 +1,8 @@
 import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
-import type { ResolvedCodeRef } from './index';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { ResolvedCodeRef } from './index.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import {
   type CardResource,
   type CodeRef,
@@ -11,18 +11,19 @@ import {
   isResolvedCodeRef,
   baseRealm,
   getSerializer,
-} from './index';
+} from './index.ts';
 import {
   isValidPrerenderedHtmlFormat,
   type PrerenderedHtmlFormat,
-} from './prerendered-html-format';
-import type { DBSpecificExpression, Param } from './expression';
+} from './prerendered-html-format.ts';
+import type { DBSpecificExpression, Param } from './expression.ts';
 import {
   type Expression,
   type CardExpression,
   type FieldQuery,
   type FieldValue,
   type FieldArity,
+  type JsonContainsQuery,
   param,
   isParam,
   tableValuedEach,
@@ -34,12 +35,13 @@ import {
   fieldQuery,
   fieldValue,
   fieldArity,
+  jsonContainsQuery,
   tableValuedFunctionsPlaceholder,
   query,
   dbExpression,
   isDbExpression,
-} from './expression';
-import type { RangeOperator, RangeFilterValue } from './query';
+} from './expression.ts';
+import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
   type Query,
   type Filter,
@@ -52,26 +54,28 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   isCardTypeFilter,
-} from './query';
-import type { SerializedError } from './error';
-import type { DBAdapter } from './db';
+} from './query.ts';
+import type { SerializedError } from './error.ts';
+import type { DBAdapter } from './db.ts';
 import {
   coerceTypes,
   normalizeRealmMetaValue,
   type BoxelIndexTable,
   type RealmMetaValue,
-} from './index-structure';
+} from './index-structure.ts';
 import {
   getFieldDef,
   type Definition,
   type FieldDefinition,
-} from './definitions';
+} from './definitions.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
-} from './definition-lookup';
-import { isScopedCSSRequest } from './scoped-css';
-import type { FileMetaResource } from './resource-types';
+} from './definition-lookup.ts';
+import { isScopedCSSRequest } from './scoped-css.ts';
+import type { FileMetaResource } from './resource-types.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RequestTimings } from './request-timings.ts';
 
 export interface IndexedFile {
   type: 'file';
@@ -138,7 +142,8 @@ interface InstanceError extends Partial<
 export type InstanceOrError = IndexedInstance | InstanceError;
 
 type GetEntryOptions = WIPOptions;
-export type QueryOptions = WIPOptions & PrerenderedCardOptions;
+export type QueryOptions = WIPOptions &
+  PrerenderedCardOptions & { timings?: RequestTimings };
 
 interface PrerenderedCardOptions {
   htmlFormat?: PrerenderedHtmlFormat;
@@ -146,6 +151,18 @@ interface PrerenderedCardOptions {
   includeErrors?: true;
   cardUrls?: string[];
 }
+
+// Selects which columns the unified `search()` projects. `dataOnly` projects
+// the live serialization only (pristine_doc / error_doc); `render` projects the
+// format-specific HTML column plus the live serialization carried only on
+// no-HTML fallback rows.
+export type SearchProjection =
+  | { kind: 'dataOnly' }
+  | {
+      kind: 'render';
+      htmlFormat: PrerenderedHtmlFormat;
+      renderType?: ResolvedCodeRef;
+    };
 
 export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
@@ -177,21 +194,49 @@ export const generalSortFields: Record<string, string> = {
 
 export { isValidPrerenderedHtmlFormat };
 
+// Whether a predicate sits under an even (`positive`) or odd (`negated`) number
+// of enclosing `not` filters. The `@>` containment rewrite is only equivalent
+// to `->>` extraction at positive polarity: on an absent path `->>` yields SQL
+// NULL while `@>` yields FALSE, and `NOT NULL` vs `NOT FALSE` diverge.
+type FilterPolarity = 'positive' | 'negated';
+
+function flipPolarity(polarity: FilterPolarity): FilterPolarity {
+  return polarity === 'positive' ? 'negated' : 'positive';
+}
+
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
+  #virtualNetwork: VirtualNetwork;
 
-  constructor(dbAdapter: DBAdapter, definitionLookup: DefinitionLookup) {
+  constructor(
+    dbAdapter: DBAdapter,
+    definitionLookup: DefinitionLookup,
+    virtualNetwork: VirtualNetwork,
+  ) {
     this.#dbAdapter = dbAdapter;
     this.#definitionLookup = definitionLookup;
+    this.#virtualNetwork = virtualNetwork;
   }
 
   async #query(expression: Expression) {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  async #queryCards(query: CardExpression) {
-    return this.#query(await this.makeExpression(query));
+  // Split the two phases so the search-timing line can attribute the SQL
+  // stage. `makeExpression` resolves the filter tree to SQL — that resolution
+  // runs a `getDefinition` card-definition lookup per type/field (a cache
+  // read, or a module prerender on a miss), so it can dominate a search whose
+  // actual row fetch is tiny. `#query` is the DB round-trip itself. The data
+  // and count queries run concurrently, so these accumulate into the
+  // parallel-sum `busy` bucket rather than the wall-clock stages.
+  async #queryCards(query: CardExpression, timings?: RequestTimings) {
+    let expression = timings
+      ? await timings.busyTime('compile', () => this.makeExpression(query))
+      : await this.makeExpression(query);
+    return timings
+      ? await timings.busyTime('sqlExec', () => this.#query(expression))
+      : this.#query(expression);
   }
 
   async getInstance(
@@ -486,7 +531,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined);
+    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -509,7 +554,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined);
+    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -543,6 +588,12 @@ export class IndexQueryEngine {
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' = 'instance',
+    // When set, the grouped projection is wrapped in an outer select so a
+    // conditional live `pristine_doc` can reference the computed `html` column
+    // once (see `search()`'s render branch). The inner projection must alias
+    // its raw live serialization as `pristine_doc_fallback` and its HTML as
+    // `html`.
+    conditionalLiveDoc = false,
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
@@ -578,21 +629,47 @@ export class IndexQueryEngine {
       }
 
       if (filter) {
-        conditions.push(this.filterCondition(filter, baseCardRef));
+        conditions.push(this.filterCondition(filter, baseCardRef, 'positive'));
       }
 
       let everyCondition = every(conditions);
-      let query = [
-        ...selectClauseExpression,
-        `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
-        'WHERE',
-        ...everyCondition,
-        'GROUP BY url',
-        ...this.orderExpression(sort),
-        ...(page
-          ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
-          : []),
-      ];
+      let limitClause = page
+        ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
+        : [];
+      let query: CardExpression;
+      if (conditionalLiveDoc) {
+        // Outer-wrap the grouped projection so the conditional `pristine_doc`
+        // references the already-computed `html` column rather than recomputing
+        // the HTML expression. Sort keys are exposed by the inner query and the
+        // outer ORDER BY applies them (plus the `url` tiebreaker), so ordering
+        // and paging match the unwrapped path.
+        let { innerSortColumns, outerOrderBy } =
+          this.#wrappedOrderExpression(sort);
+        query = [
+          'SELECT sub.*,',
+          'CASE WHEN sub.html IS NULL THEN sub.pristine_doc_fallback END as pristine_doc',
+          'FROM (',
+          ...selectClauseExpression,
+          ...innerSortColumns,
+          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY url',
+          ') AS sub',
+          ...outerOrderBy,
+          ...limitClause,
+        ];
+      } else {
+        query = [
+          ...selectClauseExpression,
+          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY url',
+          ...this.orderExpression(sort),
+          ...limitClause,
+        ];
+      }
       let queryCount = [
         'SELECT COUNT(DISTINCT url) AS total',
         `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
@@ -601,8 +678,8 @@ export class IndexQueryEngine {
       ];
 
       let [results, totalResults] = await Promise.all([
-        this.#queryCards(query),
-        this.#queryCards(queryCount),
+        this.#queryCards(query, opts.timings),
+        this.#queryCards(queryCount, opts.timings),
       ]);
 
       return {
@@ -624,6 +701,76 @@ export class IndexQueryEngine {
     }
   }
 
+  // Projection-parametrized instance search. `_search` builds the shared query
+  // core (WHERE / GROUP BY url / ORDER / LIMIT); this method varies only the
+  // SELECT list by projection. `searchCards` and `searchPrerendered` are thin
+  // wrappers, each fixing one projection.
+  async search(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    opts: QueryOptions,
+    projection: SearchProjection,
+  ): Promise<{
+    meta: QueryResultsMeta;
+    results: (Partial<BoxelIndexTable> & {
+      html?: string | null;
+      used_render_type?: string | null;
+    })[];
+  }> {
+    let selectClauseExpression: CardExpression;
+    if (projection.kind === 'dataOnly') {
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
+      ];
+    } else {
+      let htmlColumnExpression = this.buildHtmlColumnExpression({
+        htmlFormat: projection.htmlFormat,
+        renderType: projection.renderType,
+      });
+      let usedRenderTypeColumnExpression =
+        this.buildUsedRenderTypeColumnExpression({
+          htmlFormat: projection.htmlFormat,
+          renderType: projection.renderType,
+        });
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
+        ...htmlColumnExpression,
+        ' as html,',
+        ...usedRenderTypeColumnExpression,
+        ' as used_render_type,',
+        // The adoption chain (most-derived first). An HTML-backed row ships an
+        // identity-only `card` with no live serialization, so its actual type
+        // — distinct from the ancestor it was rendered as — comes from here.
+        'ANY_VALUE(types) as types,',
+        'ANY_VALUE(deps) as deps,',
+        'ANY_VALUE(display_names) as display_names,',
+        'ANY_VALUE(icon_html) as icon_html,',
+        'ANY_VALUE(error_doc) as error_doc,',
+        // Carry the live serialization as a raw column. `_search` wraps this
+        // projection so the final `pristine_doc` keeps it only on rows whose
+        // `html` is NULL — the HTML expression is evaluated once (as `html`)
+        // and the NULL test references that computed column rather than
+        // recomputing the COALESCE/JSONB expression.
+        'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
+      ];
+    }
+
+    return (await this._search(
+      realmURL,
+      { filter, sort, page },
+      opts,
+      selectClauseExpression,
+      'instance',
+      projection.kind === 'render',
+    )) as {
+      meta: QueryResultsMeta;
+      results: (Partial<BoxelIndexTable> & {
+        html?: string | null;
+        used_render_type?: string | null;
+      })[];
+    };
+  }
+
   async searchCards(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -631,14 +778,11 @@ export class IndexQueryEngine {
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
-    let { results, meta } = await this._search(
+    let { results, meta } = await this.search(
       realmURL,
       { filter, sort, page },
       opts,
-      [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
-      ],
-      'instance',
+      { kind: 'dataOnly' },
     );
 
     let cards = results
@@ -742,6 +886,42 @@ export class IndexQueryEngine {
     ];
   }
 
+  // The order expression split for the outer-wrapped projection: the inner
+  // grouped query exposes each sort value as an aliased column, and the outer
+  // query applies the ORDER BY against those aliases (plus the `url`
+  // tiebreaker). This yields the same ordering as `orderExpression` while the
+  // sort values are computed once in the inner aggregation.
+  #wrappedOrderExpression(sort: Sort | undefined): {
+    innerSortColumns: CardExpression;
+    outerOrderBy: CardExpression;
+  } {
+    if (!sort) {
+      return {
+        innerSortColumns: [],
+        outerOrderBy: ['ORDER BY url COLLATE "POSIX"'],
+      };
+    }
+    let innerSortColumns: CardExpression = [];
+    let outerKeys: CardExpression[] = [];
+    sort.forEach((s, i) => {
+      let alias = `_sort_${i}`;
+      innerSortColumns.push(
+        ', ANY_VALUE(',
+        'on' in s
+          ? fieldQuery(s.by, s.on, false, 'sort')
+          : this.generalFieldSortColumn(s.by),
+        `) AS ${alias}`,
+      );
+      outerKeys.push([alias, s.direction ?? 'asc', 'NULLS LAST']);
+    });
+    // the `url` tiebreaker matches `orderExpression` for deterministic results
+    outerKeys.push(['url COLLATE "POSIX"']);
+    return {
+      innerSortColumns,
+      outerOrderBy: ['ORDER BY', ...separatedByCommas(outerKeys)],
+    };
+  }
+
   async searchPrerendered(
     realmURL: URL,
     { filter, sort, page }: Query,
@@ -757,38 +937,16 @@ export class IndexQueryEngine {
       );
     }
 
-    let htmlColumnExpression = this.buildHtmlColumnExpression({
-      htmlFormat: opts.htmlFormat,
-      renderType: opts.renderType,
-    });
-    let usedRenderTypeColumnExpression =
-      this.buildUsedRenderTypeColumnExpression({
-        htmlFormat: opts.htmlFormat,
-        renderType: opts.renderType,
-      });
-
-    let { results, meta } = (await this._search(
+    let { results, meta } = await this.search(
       realmURL,
       { filter, sort, page },
       opts,
-      [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
-        ...htmlColumnExpression,
-        ' as html,',
-        ...usedRenderTypeColumnExpression,
-        ' as used_render_type,',
-        'ANY_VALUE(deps) as deps,',
-        'ANY_VALUE(display_names) as display_names,',
-        'ANY_VALUE(icon_html) as icon_html',
-      ],
-      'instance',
-    )) as {
-      meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & {
-        html: string | null;
-        used_render_type: string | null;
-      })[];
-    };
+      {
+        kind: 'render',
+        htmlFormat: opts.htmlFormat,
+        renderType: opts.renderType,
+      },
+    );
 
     // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
     // It would be more efficient to return scoped css urls found only in deps of the module we are filtering on (i.e. `ref`),
@@ -821,7 +979,7 @@ export class IndexQueryEngine {
       let displayNames = card.display_names as string[] | null;
       return {
         url: card.url!,
-        html: card.html,
+        html: card.html ?? null,
         cardType: displayNames?.[0] ?? undefined,
         iconHtml: (card.icon_html as string | null) ?? undefined,
         ...(usedRenderType ? { usedRenderType } : {}),
@@ -848,7 +1006,9 @@ export class IndexQueryEngine {
     htmlColumnExpression.push('COALESCE(');
     if (renderType) {
       htmlColumnExpression.push(`ANY_VALUE(${fieldName}) ->> `);
-      htmlColumnExpression.push(param(internalKeyFor(renderType, undefined)));
+      htmlColumnExpression.push(
+        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
+      );
       htmlColumnExpression.push(',');
     }
 
@@ -896,10 +1056,10 @@ export class IndexQueryEngine {
         `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
       );
       usedRenderTypeColumnExpression.push(
-        param(internalKeyFor(renderType, undefined)),
+        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
       );
       usedRenderTypeColumnExpression.push(
-        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`,
+        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined, this.#virtualNetwork)}'`,
       );
       usedRenderTypeColumnExpression.push(
         ...[
@@ -952,7 +1112,11 @@ export class IndexQueryEngine {
     return normalizeRealmMetaValue(results[0]?.value);
   }
 
-  private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
+  private filterCondition(
+    filter: Filter,
+    onRef: CodeRef,
+    polarity: FilterPolarity,
+  ): CardExpression {
     let typeRef = (filter as { type?: CodeRef }).type;
     let onProp = 'on' in filter ? filter.on : undefined;
     let on = onProp ?? typeRef ?? onRef;
@@ -963,13 +1127,13 @@ export class IndexQueryEngine {
     }
 
     if ('eq' in filter) {
-      return this.eqCondition(filter, on, typeConditionRef);
+      return this.eqCondition(filter, on, typeConditionRef, polarity);
     } else if ('in' in filter) {
       return this.inCondition(filter, on, typeConditionRef);
     } else if ('contains' in filter) {
       return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
-      return this.notCondition(filter, on, typeConditionRef);
+      return this.notCondition(filter, on, typeConditionRef, polarity);
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('matches' in filter) {
@@ -977,12 +1141,12 @@ export class IndexQueryEngine {
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        ...filter.every.map((i) => this.filterCondition(i, on)),
+        ...filter.every.map((i) => this.filterCondition(i, on, polarity)),
       ]);
     } else if ('any' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        any([...filter.any.map((i) => this.filterCondition(i, on))]),
+        any([...filter.any.map((i) => this.filterCondition(i, on, polarity))]),
       ]);
     } else {
       if (isCardTypeFilter(filter)) {
@@ -998,7 +1162,7 @@ export class IndexQueryEngine {
     return [
       tableValuedEach('types'),
       '=',
-      param(internalKeyFor(ref, undefined)),
+      param(internalKeyFor(ref, undefined, this.#virtualNetwork)),
     ];
   }
 
@@ -1006,12 +1170,13 @@ export class IndexQueryEngine {
     filter: EqFilter,
     on: CodeRef,
     typeConditionRef?: CodeRef,
+    polarity: FilterPolarity = 'positive',
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
-        return this.fieldEqFilter(key, value, on);
+        return this.fieldEqFilter(key, value, on, polarity);
       }),
     ]);
   }
@@ -1048,11 +1213,17 @@ export class IndexQueryEngine {
     filter: NotFilter,
     on: CodeRef,
     typeConditionRef?: CodeRef,
+    polarity: FilterPolarity = 'positive',
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
-      ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
+      [
+        'NOT',
+        ...addExplicitParens(
+          this.filterCondition(filter.not, on, flipPolarity(polarity)),
+        ),
+      ],
     ]);
   }
 
@@ -1111,6 +1282,7 @@ export class IndexQueryEngine {
     key: string,
     value: JSONTypes.Value,
     onRef: CodeRef,
+    polarity: FilterPolarity = 'positive',
   ): CardExpression {
     if (value === null) {
       let query = fieldQuery(key, onRef, true, 'filter');
@@ -1127,6 +1299,24 @@ export class IndexQueryEngine {
     }
     let query = fieldQuery(key, onRef, false, 'filter');
     let v = fieldValue(key, [param(value)], onRef, 'filter');
+    // At positive polarity a singular-path string `eq` can be served by the GIN
+    // `search_doc` index via a `@>` containment predicate. fieldArity routes on
+    // cardinality only: the singular branch resolves the containment-capable
+    // node (which itself falls back to `->>` extraction for numeric/non-string
+    // leaves), while a plural path anywhere uses the json_tree machinery. At
+    // negated polarity we keep plain extraction, whose NULL-on-absent-path
+    // semantics `@>` cannot reproduce under `NOT`.
+    if (polarity === 'positive') {
+      return [
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [jsonContainsQuery(key, onRef, [param(value)])],
+          pluralValue: [query, '=', v],
+          errorHint: 'filter',
+        }),
+      ];
+    }
     return [
       fieldArity({
         type: onRef,
@@ -1254,7 +1444,8 @@ export class IndexQueryEngine {
             isDbExpression(element) ||
             typeof element === 'string' ||
             element.kind === 'table-valued-each' ||
-            element.kind === 'table-valued-tree'
+            element.kind === 'table-valued-tree' ||
+            element.kind === 'json-contains'
           ) {
             return Promise.resolve([element]);
           } else if (element.kind === 'field-query') {
@@ -1263,6 +1454,8 @@ export class IndexQueryEngine {
             return this.handleFieldValue(element);
           } else if (element.kind === 'field-arity') {
             return this.handleFieldArity(element);
+          } else if (element.kind === 'json-contains-query') {
+            return this.handleJsonContainsQuery(element);
           } else {
             throw assertNever(element);
           }
@@ -1466,6 +1659,42 @@ export class IndexQueryEngine {
         return [param(queryValue)];
       },
     );
+  }
+
+  // Resolves a non-null `eq` predicate that fieldArity routed to a singular
+  // path (no plural segment was crossed). When the leaf is a string-valued,
+  // non-numeric field the predicate becomes a GIN-servable `JsonContains`
+  // node; otherwise it degrades to the same `->>` extraction equality the
+  // engine has always emitted — numeric leaves keep their `::numeric` cast
+  // semantics, non-string values keep text equality.
+  private async handleJsonContainsQuery(
+    node: JsonContainsQuery,
+  ): Promise<Expression> {
+    let { path, type, value } = node;
+    let resolvedValue = await this.makeExpression([
+      fieldValue(path, value, type, 'filter'),
+    ]);
+    let [leaf] = resolvedValue;
+    let definition = await this.getDefinition(type);
+    let leafField = await getField(definition, path, this.#definitionLookup);
+    let isNumericLeaf =
+      leafField.serializerName === 'number' ||
+      leafField.serializerName === 'big-integer';
+    if (isParam(leaf) && typeof leaf.param === 'string' && !isNumericLeaf) {
+      return [
+        {
+          kind: 'json-contains',
+          column: 'search_doc',
+          segments: path.split('.'),
+          value: leaf,
+        },
+      ];
+    }
+    return await this.makeExpression([
+      fieldQuery(path, type, false, 'filter'),
+      '=',
+      ...resolvedValue,
+    ]);
   }
 
   private async walkFilterFieldPath(

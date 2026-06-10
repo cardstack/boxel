@@ -1,5 +1,5 @@
-import './instrument';
-import './setup-logger'; // This should be first
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
@@ -25,18 +25,18 @@ import {
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
-  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { handleDebugCommands } from './lib/debug';
-import { Responder } from './lib/responder';
+import { handleDebugCommands } from './lib/debug.ts';
+import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
   setTitle,
   roomTitleAlreadySet,
-} from './lib/set-title';
+} from './lib/set-title.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -49,15 +49,15 @@ import type { ChatCompletionMessageParam } from 'openai/resources';
 import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
-import { acquireRoomLock, releaseRoomLock } from './lib/queries';
+import { acquireRoomLock, releaseRoomLock } from './lib/queries.ts';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger';
-import { setupSignalHandlers } from './lib/signal-handlers';
-import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
+import { setupSignalHandlers } from './lib/signal-handlers.ts';
+import { isShuttingDown, setActiveGenerations } from './lib/shutdown.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
-import { profEnabled, profTime, profNote } from './lib/profiler';
-import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
-import { waitForPendingCreditTracking } from './lib/credit-tracking';
+import { profEnabled, profTime, profNote } from './lib/profiler.ts';
+import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness.ts';
+import { waitForPendingCreditTracking } from './lib/credit-tracking.ts';
 
 let log = logger('ai-bot');
 
@@ -693,13 +693,13 @@ Common issues are:
     filters: {
       is_dm: false,
     },
-    timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+    timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
     required_state: [['*', '*']],
   });
   let slidingSync = new SlidingSync(
     client.baseUrl,
     lists,
-    { timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT },
+    { timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT },
     client,
     SLIDING_SYNC_TIMEOUT,
   );

@@ -1,11 +1,11 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   loginUser,
   registerUser,
   getAccountData,
   type SynapseInstance,
-} from '../docker/synapse';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/synapse/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   validateEmail,
   gotoRegistration,
@@ -20,8 +20,8 @@ import {
   getUniquePassword,
   REGISTRATION_TOKEN,
   getMatrixTestContext,
-} from '../helpers';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
+} from '../helpers/index.ts';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../support/matrix-constants.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 
@@ -45,8 +45,7 @@ function makeRegistrationUser(
 }
 
 test.describe('User Registration w/ Token', () => {
-  test.beforeEach(async () => {
-  });
+  test.beforeEach(async () => {});
 
   test('it can register a user with a registration token', async ({ page }) => {
     let secondUser = await createSubscribedUser('token-registration-2');

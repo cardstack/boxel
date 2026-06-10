@@ -4,8 +4,8 @@ import type {
   IncrementalChange,
   IncrementalDoneResult,
   IncrementalResult,
-} from '../tasks/indexer';
-import type { PgPrimitive } from '../expression';
+} from '../tasks/indexer.ts';
+import type { PgPrimitive } from '../expression.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import isObjectLike from 'lodash/isObjectLike';
 

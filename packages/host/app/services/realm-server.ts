@@ -46,7 +46,9 @@ export interface RealmServerTokenClaims {
 
 export interface SubdomainAvailabilityResult {
   available: boolean;
-  domain: string;
+  hostname: string;
+  // Validation message when the subdomain is rejected (e.g. punycode); absent
+  // when the name is simply already taken.
   error?: string;
 }
 

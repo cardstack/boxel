@@ -1,10 +1,10 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   getJoinedRooms,
   getAccountData,
   type Credentials,
-} from '../docker/synapse';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/synapse/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -13,7 +13,7 @@ import {
   openRoot,
   createSubscribedUser,
   setupPermissions,
-} from '../helpers';
+} from '../helpers/index.ts';
 import jwt from 'jsonwebtoken';
 
 const REALM_SECRET_SEED = "shhh! it's a secret";
@@ -23,9 +23,9 @@ test.describe('Login', () => {
   let username: string;
   let password: string;
 
-test.beforeEach(async () => {
-  ({ username, password, credentials } =
-    await createSubscribedUser('login-tests'));
+  test.beforeEach(async () => {
+    ({ username, password, credentials } =
+      await createSubscribedUser('login-tests'));
     await setupPermissions(credentials.userId, `${appURL}/`);
   });
 

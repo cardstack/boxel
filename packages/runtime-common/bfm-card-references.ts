@@ -1,8 +1,7 @@
-import { escapeHtml } from './helpers/html';
-import { resolveCardReference } from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
-import { trimJsonExtension } from './url';
-import { FITTED_FORMATS } from './formats';
+import { escapeHtml } from './helpers/html.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { trimJsonExtension } from './url.ts';
+import { FITTED_FORMATS } from './formats.ts';
 import type { TokenizerAndRendererExtension } from './marked.mts';
 
 // Regex patterns for stripping code before extraction.
@@ -15,12 +14,10 @@ const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 function resolveUrl(
   ref: string,
   baseUrl: string | undefined,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string | null {
   try {
-    return virtualNetwork
-      ? virtualNetwork.resolveURL(ref, baseUrl || undefined).href
-      : resolveCardReference(ref, baseUrl || undefined);
+    return virtualNetwork.resolveURL(ref, baseUrl || undefined).href;
   } catch {
     return null;
   }
@@ -178,7 +175,7 @@ export function extractBfmReferences(
   markdown: string,
   baseUrl: string,
   keywords: string[],
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): BfmReference[] {
   // Strip code blocks so references inside them are not extracted
   let stripped = markdown
@@ -238,7 +235,7 @@ export function extractBfmReferences(
 export function extractCardReferenceUrls(
   markdown: string,
   baseUrl: string,
-  virtualNetwork?: VirtualNetwork,
+  virtualNetwork: VirtualNetwork,
 ): string[] {
   return extractBfmReferences(markdown, baseUrl, ['card'], virtualNetwork).map(
     (r) => r.url,

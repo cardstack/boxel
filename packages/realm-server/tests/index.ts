@@ -166,7 +166,7 @@ QUnit.done(() => {
 });
 
 import 'decorator-transforms/globals';
-import '../setup-logger'; // This should be first
+import '../setup-logger.ts'; // This should be first
 
 const ALL_TEST_FILES: string[] = [
   './atomic-endpoints-test',
@@ -175,6 +175,7 @@ const ALL_TEST_FILES: string[] = [
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
   './card-source-endpoints-test',
+  './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
   './file-watcher-events-test',
   './full-index-on-startup-test',
@@ -184,6 +185,7 @@ const ALL_TEST_FILES: string[] = [
   './listener-dispatcher-test',
   './module-cache-race-test',
   './module-syntax-test',
+  './network-inflight-tracker-test',
   './permissions/permission-checker-test',
   './prerendering-test',
   './prerender-server-test',
@@ -270,15 +272,19 @@ const ALL_TEST_FILES: string[] = [
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',
   './claim-boxel-domain-test',
-  './card-reference-resolver-test',
+  './realm-identifiers-test',
   './bfm-card-references-test',
   './package-shim-handler-test',
   './command-parsing-utils-test',
   './query-matches-filter-test',
   './matches-filter-integration-test',
+  './eq-containment-integration-test',
   './search-in-flight-key-test',
+  './unified-search-contracts-test',
+  './render-type-resolution-test',
   './coerce-error-message-test',
   './fallback-models-test',
+  './host-routing-validation-test',
   './normalize-realm-meta-value-test',
   './job-scoped-search-cache-test',
   './consuming-realm-header-test',
@@ -293,8 +299,6 @@ const ALL_TEST_FILES: string[] = [
   './session-room-queries-test',
   './indexing-event-sink-test',
   './skip-query-backed-expansion-test',
-  './job-scoped-instance-cache-test',
-  './per-instance-cache-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

@@ -3,9 +3,9 @@ import {
   SupportedMimeType,
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
-import { setContextResponse } from '../middleware';
-import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls';
-import type { CreateRoutesArgs } from '../routes';
+import { setContextResponse } from '../middleware/index.ts';
+import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleFullReindex({
   dbAdapter,

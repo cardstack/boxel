@@ -1,6 +1,6 @@
-import './instrument';
-import './setup-logger'; // This should be first
-import './lib/wtfnode-on-signal';
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
+import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import {
   Realm,
@@ -12,39 +12,38 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
-import { NodeAdapter } from './node-realm';
+import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
-import { RealmServer } from './server';
+import { RealmServer } from './server.ts';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
-import { createRemotePrerenderer } from './prerender/remote-prerenderer';
-import { buildCreatePrerenderAuth } from './prerender/auth';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
+import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
   serviceURL,
   registerService,
   deregisterEnvironment,
-} from './lib/dev-service-registry';
-import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
-import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
+} from './lib/dev-service-registry.ts';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
+import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill.ts';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
-} from './lib/realm-registry-reconciler';
-import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
-import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener';
-import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
-import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
-import { JobsFinishedListener } from './lib/jobs-finished-listener';
-import { JobScopedSearchCache } from './job-scoped-search-cache';
-import { JobScopedInstanceCache } from './job-scoped-instance-cache';
-import { startHealthSampler } from './health-sampler';
-import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
+} from './lib/realm-registry-reconciler.ts';
+import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
+import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
+import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
+import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
+import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
+import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import { startHealthSampler } from './health-sampler.ts';
+import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -385,13 +384,6 @@ const smokeTestHostApp = async () => {
   // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
-  // Per-instance wire-format cache (job_scoped_instance_cache). Reads/writes
-  // happen in runtime-common's loadLinks for requests carrying a job identity
-  // (the `x-boxel-job-id` header) — which in normal operation only indexer-
-  // driven prerender stamps; this process owns its eviction (via the
-  // JobsFinishedListener below) and the age-based janitor backstop.
-  let instanceCache = new JobScopedInstanceCache(dbAdapter);
-  instanceCache.startJanitor();
   // Periodic event-loop-lag + in-flight-search sampler. Emits a
   // `realm:health` line only during saturation windows, so a stalled
   // `_search` can be checked against whether the process's event loop was
@@ -613,7 +605,12 @@ const smokeTestHostApp = async () => {
       port: actualPort,
     });
     if (isEnvironmentMode()) {
-      registerService(httpServer, serviceName, { wildcardSubdomains: true });
+      // The realm-server serves HTTP/2 over TLS in env mode (see
+      // createListener); Traefik must negotiate h2 to this backend.
+      registerService(httpServer, serviceName, {
+        wildcardSubdomains: true,
+        http2: true,
+      });
     }
   });
   let stopping = false;
@@ -638,16 +635,16 @@ const smokeTestHostApp = async () => {
         console.error(`error unsubscribing realm ${r.url}:`, err);
       }
     }
-    // Both the plain `http.Server` and the TLS-mode `net.Server`
-    // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
-    // dispatcher's mirror force-closes in-flight TLS / HTTP/2 /
-    // keep-alive sessions instead of waiting for peers to release them
-    // — without it `close()` can hang for a tab-keep-alive lifetime.
+    // The plain `http.Server`, the standard-mode `net.Server` dispatcher,
+    // and the env-mode `Http2SecureServer` (see `server.ts`) all expose
+    // `closeAllConnections()`. It force-closes in-flight TLS / HTTP/2 /
+    // keep-alive sessions instead of waiting for peers to release them —
+    // without it `close()` can hang for a tab-keep-alive (or Traefik
+    // backend session) lifetime.
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }
     searchCache.stopJanitor();
-    instanceCache.stopJanitor();
     stopHealthSampler();
     httpServer.close(() => {
       (async () => {
@@ -774,7 +771,6 @@ const smokeTestHostApp = async () => {
   jobsFinishedListener = new JobsFinishedListener({
     dbAdapter,
     searchCache,
-    instanceCache,
   });
   await jobsFinishedListener.start();
 

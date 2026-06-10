@@ -49,6 +49,7 @@
     "typescript": "catalog:"
   },
   "engines": {
+    "node": ">=24",
     "pnpm": "^11"
   },
   "dependencies": {

@@ -113,8 +113,8 @@ export function testModuleRRI(path: string): RealmResourceIdentifier {
 }
 
 export {
-  catalogRealm,
-  skillsRealm,
+  catalogRealmURL,
+  skillsRealmURL,
   skillCardURL,
   devSkillId,
   envSkillId,
@@ -1354,7 +1354,9 @@ async function setupTestRealm({
 
   // we use this to run cards that were added to the test filesystem
   adapter.setLoader(
-    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport, {
+      virtualNetwork,
+    }),
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
@@ -1466,7 +1468,13 @@ export async function saveCard(
   realmURL?: RealmIdentifier,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  let doc = api.serializeCard(instance);
+  let vn = loader.getVirtualNetwork();
+  if (!vn) {
+    throw new Error(
+      `setCardAsSavedWithId test helper needs the loader to have a VirtualNetwork`,
+    );
+  }
+  let doc = api.serializeCard(instance, { virtualNetwork: vn });
   doc.data.id = id;
   if (realmURL) {
     doc.data.meta = {

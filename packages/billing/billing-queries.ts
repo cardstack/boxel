@@ -13,7 +13,7 @@ import {
   separatedByCommas,
   update,
 } from '@cardstack/runtime-common';
-import type { StripeEvent } from './stripe-webhook-handlers';
+import type { StripeEvent } from './stripe-webhook-handlers/index.ts';
 import type {
   Plan,
   Subscription,

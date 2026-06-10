@@ -12,9 +12,9 @@ import {
   type ClassDeclaration,
   type Reexport,
   isInternalReference,
-} from './schema-analysis-plugin';
-import type { Options as RemoveOptions } from './remove-field-plugin';
-import { removeFieldPlugin } from './remove-field-plugin';
+} from './schema-analysis-plugin.ts';
+import type { Options as RemoveOptions } from './remove-field-plugin.ts';
+import { removeFieldPlugin } from './remove-field-plugin.ts';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import isEqual from 'lodash/isEqual';
@@ -30,13 +30,9 @@ import {
   type CodeRef,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
-} from './index';
-import {
-  cardIdToURL,
-  resolveCardReference,
-  rri,
-} from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
+} from './index.ts';
+import { rri } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -44,7 +40,7 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
-import { getBabelOptions } from './babel-options';
+import { getBabelOptions } from './babel-options.ts';
 
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
@@ -65,20 +61,15 @@ export class ModuleSyntax {
   declare declarations: Declaration[];
   declare private ast: t.File;
   private url: URL;
-  private virtualNetwork: VirtualNetwork | undefined;
+  private virtualNetwork: VirtualNetwork;
 
   constructor(
     src: string,
     url: RealmResourceIdentifier | URL,
-    virtualNetwork?: VirtualNetwork,
+    virtualNetwork: VirtualNetwork,
   ) {
     this.virtualNetwork = virtualNetwork;
-    let normalized =
-      url instanceof URL
-        ? url
-        : virtualNetwork
-          ? virtualNetwork.toURL(url)
-          : cardIdToURL(url);
+    let normalized = url instanceof URL ? url : virtualNetwork.toURL(url);
     this.url = new URL(trimExecutableExtension(rri(normalized.href)));
     this.analyze(src);
   }
@@ -334,9 +325,10 @@ export class ModuleSyntax {
     classRef: ClassReference,
   ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
-      let resolvedModule = this.virtualNetwork
-        ? this.virtualNetwork.resolveURL(classRef.module, this.url).href
-        : resolveCardReference(classRef.module, this.url);
+      let resolvedModule = this.virtualNetwork.resolveURL(
+        classRef.module,
+        this.url,
+      ).href;
       if (trimExecutableExtension(rri(resolvedModule)) === this.url.href) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
@@ -417,7 +409,7 @@ function makeNewField({
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
   computedFieldFunctionSourceCode?: string;
-  virtualNetwork?: VirtualNetwork;
+  virtualNetwork: VirtualNetwork;
 }): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -461,9 +453,7 @@ function makeNewField({
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
     relativeFieldModuleRef = maybeRelativeReference(
-      virtualNetwork
-        ? virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo)
-        : new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
+      virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo),
       outgoingRelativeTo,
       outgoingRealmURL,
     );

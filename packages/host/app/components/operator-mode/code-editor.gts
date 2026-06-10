@@ -51,6 +51,7 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -83,6 +84,7 @@ export default class CodeEditor extends Component<Signature> {
   @service declare private recentFilesService: RecentFilesService;
   @service declare private store: StoreService;
   @service declare private commandService: CommandService;
+  @service declare private network: NetworkService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private isFormatting = false;
@@ -380,6 +382,8 @@ export default class CodeEditor extends Component<Signature> {
     adoptsFrom = codeRefWithAbsoluteIdentifier(
       adoptsFrom,
       new URL(this.args.file.url),
+      undefined,
+      this.network.virtualNetwork,
     );
     if (
       !isEqual(
@@ -387,6 +391,8 @@ export default class CodeEditor extends Component<Signature> {
         codeRefWithAbsoluteIdentifier(
           json.data.meta.adoptsFrom,
           new URL(this.args.file.url),
+          undefined,
+          this.network.virtualNetwork,
         ),
       )
     ) {

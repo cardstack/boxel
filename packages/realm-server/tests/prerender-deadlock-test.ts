@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
+import { PagePool } from '../prerender/page-pool.ts';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
 
 // CS-10976 PR 2: regression test for the self-referential prerender
 // deadlock that the `affinityTabMax − 1` file-admission ceiling (CS-10946)

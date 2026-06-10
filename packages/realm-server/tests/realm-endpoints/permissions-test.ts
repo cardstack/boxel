@@ -13,7 +13,7 @@ import {
   testRealmURL,
   createJWT,
   waitUntil,
-} from '../helpers';
+} from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
 

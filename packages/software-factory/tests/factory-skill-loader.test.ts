@@ -8,7 +8,7 @@ import type {
   ProjectData,
   ResolvedSkill,
   IssueData,
-} from '../src/factory-agent';
+} from '../src/factory-agent/index.ts';
 import {
   DefaultSkillResolver,
   SkillLoader,
@@ -16,7 +16,7 @@ import {
   enforceSkillBudget,
   estimateTokens,
   extractIssueText,
-} from '../src/factory-skill-loader';
+} from '../src/factory-skill-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

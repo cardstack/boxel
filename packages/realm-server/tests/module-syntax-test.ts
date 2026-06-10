@@ -15,14 +15,21 @@ import {
   RealmPaths,
   rri,
 } from '@cardstack/runtime-common';
-import { testRealm } from './helpers';
+import { testRealm } from './helpers/index.ts';
+import { VirtualNetwork } from '@cardstack/runtime-common';
+
+const virtualNetwork = new VirtualNetwork();
 import { basename } from 'path';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
   module('module-syntax', function () {
     function addField(src: string, addFieldAtIndex?: number) {
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person.gts`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person.gts`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person.gts`),
@@ -56,7 +63,7 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(testRealm));
+      let mod = new ModuleSyntax(src, new URL(testRealm), virtualNetwork);
       assert.codeEqual(mod.code(), src);
     });
 
@@ -345,7 +352,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/pet.gts`),
+        virtualNetwork,
+      );
 
       mod.addField({
         cardBeingModified: {
@@ -383,7 +394,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/pet.gts`),
+        virtualNetwork,
+      );
 
       mod.addField({
         cardBeingModified: {
@@ -421,7 +436,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/pet.gts`),
+        virtualNetwork,
+      );
 
       mod.addField({
         cardBeingModified: {
@@ -463,7 +482,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/pet.gts`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/pet.gts`),
+        virtualNetwork,
+      );
 
       mod.addField({
         cardBeingModified: {
@@ -503,7 +526,11 @@ module(basename(__filename), function () {
         export class Person extends CardDef { }
       `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person`),
@@ -552,7 +579,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           type: 'fieldOf',
@@ -614,7 +645,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           type: 'ancestorOf',
@@ -677,7 +712,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           type: 'fieldOf',
@@ -737,7 +776,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person`),
@@ -794,7 +837,11 @@ module(basename(__filename), function () {
         @field firstName = contains(StringField);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person`),
@@ -849,7 +896,11 @@ module(basename(__filename), function () {
         @field firstName = contains(StringField);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person`),
@@ -906,7 +957,11 @@ module(basename(__filename), function () {
       }
       `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person`),
@@ -959,7 +1014,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.addField({
         cardBeingModified: {
           module: rri(`${testRealm}dir/person`),
@@ -1006,7 +1065,11 @@ module(basename(__filename), function () {
         @field firstName = contains(StringField);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       try {
         mod.addField({
           cardBeingModified: {
@@ -1043,7 +1106,11 @@ module(basename(__filename), function () {
         @field lastName = contains(StringField);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.removeField(
         {
           module: rri(`${testRealm}dir/person`),
@@ -1096,7 +1163,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       let addFieldAtIndex = mod.removeField(
         {
           module: rri(`${testRealm}dir/person`),
@@ -1152,7 +1223,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       let addFieldAtIndex = mod.removeField(
         {
           module: rri(`${testRealm}dir/person`),
@@ -1208,7 +1283,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       let addFieldAtIndex = mod.removeField(
         {
           module: rri(`${testRealm}dir/person`),
@@ -1261,7 +1340,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.removeField(
         {
           module: rri(`${testRealm}dir/person`),
@@ -1289,7 +1372,11 @@ module(basename(__filename), function () {
         @field friend = linksTo(() => Friend);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.removeField(
         {
           module: rri(`${testRealm}dir/person`),
@@ -1331,7 +1418,11 @@ module(basename(__filename), function () {
         @field favoriteColor = contains(StringField);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.removeField(
         {
           type: 'ancestorOf',
@@ -1376,7 +1467,11 @@ module(basename(__filename), function () {
         @field details = contains(Details);
       }
     `;
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       mod.removeField(
         {
           type: 'fieldOf',
@@ -1418,7 +1513,11 @@ module(basename(__filename), function () {
       }
     `;
 
-      let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
       try {
         mod.removeField(
           {

@@ -124,6 +124,22 @@ Claude operates against staging and prod **only as the `boxel-claude-readonly` I
 
 The role is provisioned by infra-side configuration tracked under CS-10962. Anything that would require a permission outside the role's policy is out of scope for Claude — the user should run that operation themselves through whatever channel the team uses for it. This is by design: the role is the AWS-side complement to the claude-readonly-only DB rule below, and together they make accidental writes structurally hard to issue.
 
+### Global read-only control-plane APIs (CloudFront, etc.)
+
+Some services Claude reads are **global control-plane APIs that need none of the SSM-tunnel / ECS machinery** below — just call them directly with the session profile, no region tunnel, no DB/EFS hop:
+
+```sh
+aws --profile claude-staging cloudfront list-distributions
+aws --profile claude-prod    cloudfront get-distribution-config --id <id>
+```
+
+For **CloudFront** specifically, the role grants read across the relevant surface in both accounts: `list-distributions`, `get-distribution-config`, `list-invalidations`, `get-invalidation`, `list-tags-for-resource`, and the policy lookups (`get-cache-policy` / `get-origin-request-policy` / `get-response-headers-policy`). **Writes are denied** — `create-invalidation`, `update-distribution`, `tag-resource`, etc. all `AccessDenied`, consistent with the read-only boundary. So a full CloudFront audit (distributions, origins/behaviors, TLS, custom errors, invalidation history, tags) is doable end-to-end as the role; cache-busting and config changes are not.
+
+Two operational notes when fanning these out:
+
+- CloudFront throttles aggressively — firing ~60 calls at once gets `Throttling: Rate exceeded` on some. Cap concurrency or fall back to sequential with a small `sleep`.
+- AWS CLI v2 auto-pagination quirk: for _paginated_ list operations (e.g. `list-invalidations`, `list-distributions`), the CLI prints **nothing** (empty stdout, exit 0) when there are zero items — including under the default/JSON output. This is the pagination layer, not the output format: `--no-paginate` returns the normal `{"InvalidationList": { … "Quantity": 0 }}` payload, and non-paginated calls like `list-tags-for-resource` print `{"Items": []}` for an empty result. So empty stdout _from a paginated list_ means "zero items," not an error — but don't generalize that to other commands, which return a normal JSON payload for empty results.
+
 ## Connecting to the boxel RDS database
 
 The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `claude_readonly_user` DB user.

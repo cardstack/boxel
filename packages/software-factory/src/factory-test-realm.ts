@@ -23,21 +23,24 @@ export type {
   TestRunAttributes,
   TestRunHandle,
   TestRunRealmOptions,
-} from './test-run-types';
+} from './test-run-types.ts';
 
 // Parsing
-export { formatTestResultSummary, parseQunitResults } from './test-run-parsing';
+export {
+  formatTestResultSummary,
+  parseQunitResults,
+} from './test-run-parsing.ts';
 
 // Card lifecycle
 export {
   buildTestRunCardDocument,
   completeTestRun,
   createTestRun,
-} from './test-run-cards';
+} from './test-run-cards.ts';
 
 // Execution & resume
 export {
   executeTestRunFromRealm,
   resolveTestRun,
   runTestsInMemory,
-} from './test-run-execution';
+} from './test-run-execution.ts';

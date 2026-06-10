@@ -17,11 +17,11 @@ export {
   type WaitForFileOptions,
   type AtomicResult,
   type CancelIndexingResult,
-} from './src/lib/boxel-cli-client';
+} from './src/lib/boxel-cli-client.ts';
 
 export {
   resetProfileManager,
   setProfileManager,
-} from './src/lib/profile-manager';
+} from './src/lib/profile-manager.ts';
 
-export { setQuiet, isQuiet } from './src/lib/cli-log';
+export { setQuiet, isQuiet } from './src/lib/cli-log.ts';

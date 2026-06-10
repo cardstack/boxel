@@ -1,8 +1,8 @@
 import { module, test, assert } from 'qunit';
-import { Responder } from '../lib/responder';
-import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher';
+import { Responder } from '../lib/responder.ts';
+import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
-import { thinkingMessage } from '../constants';
+import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -12,7 +12,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { OpenAIError } from 'openai';
 import * as Sentry from '@sentry/node';
 

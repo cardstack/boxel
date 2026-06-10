@@ -9,6 +9,7 @@ import {
   meta,
   InstallPlan,
   rri,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -18,6 +19,8 @@ const sourceRealmURL = new URL('https://localhost:4201/catalog/');
 const targetRealmURL = new URL('https://localhost:4201/experiments/');
 const baseRealmURL = new URL('https://cardstack.com/base/');
 const foreignRealmURL = new URL('https://localhost:4201/user1/personal-realm/');
+
+const virtualNetwork = new VirtualNetwork();
 
 module('Unit | Catalog | Install Plan Builder', function () {
   test('when listing name is not provided, just provides uuid (in this case uuid="xyz")', function (assert) {
@@ -38,7 +41,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
     } as any;
     const { modulesCopy, modulesToInstall } = planModuleInstall(
       specs,
-      new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
+      new ListingPathResolver(
+        targetRealmURL.href,
+        listing,
+        'xyz',
+        virtualNetwork,
+      ),
+      virtualNetwork,
     );
 
     assert.deepEqual(modulesCopy, [
@@ -84,7 +93,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
       } as any;
       let { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
-        new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
+        new ListingPathResolver(
+          targetRealmURL.href,
+          listing,
+          'xyz',
+          virtualNetwork,
+        ),
+        virtualNetwork,
       );
       assert.deepEqual(modulesCopy, [
         {
@@ -142,7 +157,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
       } as any;
       const { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
-        new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
+        new ListingPathResolver(
+          targetRealmURL.href,
+          listing,
+          'xyz',
+          virtualNetwork,
+        ),
+        virtualNetwork,
       );
 
       assert.deepEqual(modulesCopy, [
@@ -204,7 +225,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
       let { modulesCopy, instancesCopy, modulesToInstall } =
         planInstanceInstall(
           instances,
-          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(
+            targetRealmURL.href,
+            listing,
+            'xyz',
+            virtualNetwork,
+          ),
+          virtualNetwork,
         );
       assert.deepEqual(modulesCopy, [
         {
@@ -257,7 +284,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
       let { modulesCopy, instancesCopy, modulesToInstall } =
         planInstanceInstall(
           instances,
-          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(
+            targetRealmURL.href,
+            listing,
+            'xyz',
+            virtualNetwork,
+          ),
+          virtualNetwork,
         );
       assert.deepEqual(modulesCopy, []);
       assert.deepEqual(modulesToInstall, []);
@@ -286,6 +319,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         targetRealmURL.href,
         listing,
         'xyz',
+        virtualNetwork,
       );
       resolver.addKnownRealmURL(foreignRealmURL);
 
@@ -314,6 +348,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         targetRealmURL.href,
         listing,
         'xyz',
+        virtualNetwork,
       );
 
       let crossRealmLocal = resolver.local(
@@ -337,6 +372,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         targetRealmURL.href,
         listing,
         'xyz',
+        virtualNetwork,
       );
       resolver.addKnownRealmURL(foreignRealmURL);
 
@@ -373,11 +409,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
         targetRealmURL.href,
         listing,
         'xyz',
+        virtualNetwork,
       );
       resolver.addKnownRealmURL(foreignRealmURL);
       let { instancesCopy, modulesCopy } = planInstanceInstall(
         instances,
         resolver,
+        virtualNetwork,
       );
 
       assert.strictEqual(instancesCopy.length, 1);
@@ -411,11 +449,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
         targetRealmURL.href,
         listing,
         'xyz',
+        virtualNetwork,
       );
       resolver.addKnownRealmURL(foreignRealmURL);
       let { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
         resolver,
+        virtualNetwork,
       );
 
       assert.strictEqual(modulesCopy.length, 1);
@@ -438,7 +478,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
       [realmURL]: sourceRealmURL,
     } as any;
     hooks.beforeEach(function () {
-      builder = new PlanBuilder(targetRealmURL.href, listing);
+      builder = new PlanBuilder(targetRealmURL.href, listing, virtualNetwork);
     });
 
     module('build()', function () {
