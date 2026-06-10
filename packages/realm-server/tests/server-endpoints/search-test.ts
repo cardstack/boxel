@@ -44,7 +44,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
     let ownerUserId = '@mango:localhost';
 
-    let realmFileSystem: Record<string, LooseSingleCardDocument> = {
+    let realmFileSystem: Record<string, LooseSingleCardDocument | string> = {
+      // Two markdown files (FileDef rows that get prerendered HTML) for the
+      // file-meta prefer-HTML test. They don't appear in card queries.
+      'hello.md': '# Hello from a FileDef',
+      'world.md': '# World from a FileDef',
       'test-card.json': {
         data: {
           type: 'card',
@@ -73,6 +77,48 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
             adoptsFrom: {
               module: rri('https://cardstack.com/base/card-api'),
               name: 'CardDef',
+            },
+          },
+        },
+      },
+      // A two-link adoption chain (SubThing → BaseThing → CardDef) with a
+      // distinct fitted template per type, so a render against the SubThing
+      // instance is identifiable as native (SubThing) vs the BaseThing ancestor
+      // override. Each `.gts` exercises the per-ancestor HTML the indexer keys
+      // by type, which the render-type default/override paths select between.
+      'base-thing.gts': `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class BaseThing extends CardDef {
+          static displayName = 'BaseThing';
+          @field label = contains(StringField);
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>BaseThing fitted: <@fields.label/></template>
+          }
+        }
+      `,
+      'sub-thing.gts': `
+        import { Component } from "https://cardstack.com/base/card-api";
+        import { BaseThing } from './base-thing';
+
+        export class SubThing extends BaseThing {
+          static displayName = 'SubThing';
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>SubThing fitted: <@fields.label/></template>
+          }
+        }
+      `,
+      'sub-instance.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            label: 'render-type probe',
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('./sub-thing'),
+              name: 'SubThing',
             },
           },
         },
@@ -594,6 +640,319 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.notOk(
         included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
         'no rendered-html is emitted for the live fallback row',
+      );
+    });
+
+    // Native-default render type: with no `render.renderType`, each result
+    // renders in its OWN actual (most-derived) type — even when the query is
+    // `on:` a common ancestor. A SubThing instance matched by an `on: BaseThing`
+    // query renders/echoes SubThing, never the BaseThing ancestor, and the
+    // response carries no collection-level render type (each row echoes its own).
+    test('QUERY /_federated-search default render type is native — a SubThing matched by on: BaseThing renders/echoes SubThing, not the ancestor', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let subId = `${testRealm.url}sub-instance`;
+      let baseThingRef = {
+        module: rri(`${testRealm.url}base-thing`),
+        name: 'BaseThing',
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // `on: BaseThing` matches the SubThing instance (it adopts BaseThing);
+        // no `render.renderType` → the native default.
+        .send({
+          // An `on: BaseThing` query (the ancestor) with a predicate — the
+          // case the old default rendered as the `filter.on` ancestor.
+          filter: { on: baseThingRef, eq: { label: 'render-type probe' } },
+          realms: [testRealm.url],
+          render: { format: 'fitted' },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+
+      // The native default carries NO collection-level render type — each row
+      // varies by its own type and echoes it on its rendered-html.
+      assert.notOk(
+        response.body.meta?.renderType,
+        'no collection-level renderType on the native default path',
+      );
+
+      let card = data.find((r) => r.id === subId);
+      assert.ok(card, 'the SubThing instance is in data');
+      assert.strictEqual(
+        card.meta?.adoptsFrom?.name,
+        'SubThing',
+        'adoptsFrom is the actual (SubThing) type',
+      );
+      assert.strictEqual(
+        card.meta?.renderType?.name,
+        'SubThing',
+        'the identity-only card echoes its own (native) render type',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === subId,
+      );
+      assert.ok(rendered, 'a rendered-html for the SubThing rides in included');
+      assert.strictEqual(
+        rendered.meta?.renderType?.name,
+        'SubThing',
+        'rendered-html echoes the SubThing (native) render type, not the BaseThing ancestor',
+      );
+      assert.true(
+        rendered.attributes.html
+          .replace(/\s+/g, ' ')
+          .includes('SubThing fitted'),
+        'the SubThing fitted template rendered (native), not the BaseThing template',
+      );
+    });
+
+    // The explicit ancestor override — the only remaining non-default. An
+    // explicit `render.renderType` CodeRef renders/echoes that ancestor: the
+    // SubThing instance is rendered AS BaseThing (collection-level echo + the
+    // BaseThing template), while its actual type still rides in `adoptsFrom`.
+    test('QUERY /_federated-search explicit render.renderType renders/echoes the ancestor (override still works)', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let subId = `${testRealm.url}sub-instance`;
+      let baseThingRef = {
+        module: rri(`${testRealm.url}base-thing`),
+        name: 'BaseThing',
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({
+          filter: { on: baseThingRef, eq: { label: 'render-type probe' } },
+          realms: [testRealm.url],
+          // Explicit ancestor override → render every match AS BaseThing.
+          render: { format: 'fitted', renderType: baseThingRef },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+
+      // An explicit override is one resolved type for the whole search, so it's
+      // echoed collection-level.
+      assert.strictEqual(
+        response.body.meta?.renderType?.name,
+        'BaseThing',
+        'the explicit ancestor override is echoed collection-level',
+      );
+
+      let card = data.find((r) => r.id === subId);
+      assert.ok(card, 'the SubThing instance is in data');
+      assert.strictEqual(
+        card.meta?.adoptsFrom?.name,
+        'SubThing',
+        'adoptsFrom is still the actual (SubThing) type, even under an override',
+      );
+      assert.strictEqual(
+        card.meta?.renderType?.name,
+        'BaseThing',
+        'the card echoes the requested ancestor render type',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === subId,
+      );
+      assert.ok(rendered, 'a rendered-html for the SubThing rides in included');
+      assert.strictEqual(
+        rendered.meta?.renderType?.name,
+        'BaseThing',
+        'rendered-html echoes the requested ancestor',
+      );
+      assert.true(
+        rendered.attributes.html
+          .replace(/\s+/g, ' ')
+          .includes('BaseThing fitted'),
+        'the BaseThing (ancestor) fitted template rendered',
+      );
+    });
+
+    // File-meta parity: the same mixed-index manufacture for FileDef rows. A
+    // prefer-HTML search over file-meta emits an identity-only `file-meta` +
+    // `rendered-html` for the HTML-backed file and a full live `file-meta` for
+    // the HTML-nulled file. A file renders natively, so it carries no renderType.
+    test('QUERY /_federated-search prefer-HTML emits identity-only file-meta + rendered-html for HTML files and a full live file-meta for HTML-absent files', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let htmlUrl = `${testRealm.url}hello.md`; // keeps its rendered HTML
+      let liveUrl = `${testRealm.url}world.md`; // HTML nulled → live fallback
+
+      // Null the fitted HTML for one file row. The file index `url` is the bare
+      // file URL (no `.json`).
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url =`,
+        param(liveUrl),
+        `AND realm_url =`,
+        param(testRealm.url),
+      ] as Expression);
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // A pure `type: FileDef` filter → a file-meta query spanning the
+        // realm's .md files (FileDef rows). No `filter.on`, so the render type
+        // resolves to native — a file renders as itself and carries no
+        // renderType.
+        .send({
+          realms: [testRealm.url],
+          filter: {
+            type: {
+              module: rri('https://cardstack.com/base/card-api'),
+              name: 'FileDef',
+            },
+          },
+          render: { format: 'fitted' },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+      let byId = new Map<string, any>(data.map((r) => [r.id, r]));
+
+      assert.ok(byId.has(htmlUrl), 'the HTML-backed file is in data');
+      assert.ok(byId.has(liveUrl), 'the HTML-absent file is in data');
+
+      // HTML-backed file → identity-only file-meta + rendered-html.
+      let htmlFile = byId.get(htmlUrl);
+      assert.strictEqual(htmlFile.type, 'file-meta', 'HTML row is a file-meta');
+      assert.notOk(
+        htmlFile.attributes,
+        'the HTML-backed file-meta is identity-only (no attributes)',
+      );
+      assert.true(htmlFile.meta?.identityOnly, 'marked meta.identityOnly');
+      assert.notOk(
+        htmlFile.meta?.renderType,
+        'a file carries no renderType (renders natively)',
+      );
+      // A `.md` file's most-derived type is the FileDef subclass `MarkdownDef`.
+      // `adoptsFrom` must be that subclass — not the `FileDef` ancestor — even
+      // though the file-meta query targets `FileDef`: files render natively, so
+      // the card-side render type is never coerced onto a file.
+      assert.strictEqual(
+        htmlFile.meta?.adoptsFrom?.name,
+        'MarkdownDef',
+        'adoptsFrom is the file’s own most-derived type, never a coerced ancestor',
+      );
+      assert.deepEqual(
+        htmlFile.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: htmlUrl },
+        'the file-meta links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        htmlFile.links?.self,
+        htmlUrl,
+        'links.self is the hydration target',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === htmlUrl,
+      );
+      assert.ok(
+        rendered,
+        'a rendered-html for the HTML file rides in included',
+      );
+      assert.ok(
+        rendered.attributes.html?.length > 0,
+        'the prerendered html is non-empty',
+      );
+      assert.notOk(
+        rendered.meta?.renderType,
+        'the file rendered-html carries no renderType',
+      );
+
+      // HTML-absent file → full live file-meta, nothing in included for it.
+      let liveFile = byId.get(liveUrl);
+      assert.strictEqual(liveFile.type, 'file-meta', 'live row is a file-meta');
+      assert.ok(
+        liveFile.attributes,
+        'the HTML-absent file is a full live file-meta (attributes present)',
+      );
+      assert.notOk(
+        liveFile.meta?.identityOnly,
+        'the live fallback file-meta is not identity-only',
+      );
+      assert.notOk(
+        included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
+        'no rendered-html is emitted for the live fallback file',
+      );
+    });
+
+    // File-meta parity for the live (no-render) path: a `dataOnly` file query
+    // returns the full live file-meta document, byte-identical to a plain
+    // (no-render) file query — the prefer-HTML emission never touches it.
+    test('QUERY /_federated-search dataOnly over a file query is byte-identical to the live file-meta document', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let fileFilter = {
+        type: {
+          module: rri('https://cardstack.com/base/card-api'),
+          name: 'FileDef',
+        },
+      };
+      let post = (body: Record<string, unknown>) =>
+        request
+          .post(`${searchURL.pathname}${searchURL.search}`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Authorization', `Bearer ${realmServerToken}`)
+          .send({ realms: [testRealm.url], filter: fileFilter, ...body });
+
+      let plain = await post({});
+      let dataOnly = await post({ dataOnly: true });
+      assert.strictEqual(plain.status, 200, 'plain: HTTP 200');
+      assert.strictEqual(dataOnly.status, 200, 'dataOnly: HTTP 200');
+      assert.ok(
+        (dataOnly.body.data as any[]).length > 0,
+        'the realm returns file rows (the parity check is not vacuous)',
+      );
+      assert.deepEqual(
+        dataOnly.body,
+        plain.body,
+        'dataOnly is byte-identical to a plain (no-render) live file query',
+      );
+      assert.notOk(
+        (dataOnly.body.included ?? []).some(
+          (r: any) => r.type === 'rendered-html' || r.type === 'css',
+        ),
+        'dataOnly emits no rendered-html / css',
+      );
+      assert.ok(
+        (dataOnly.body.data as any[]).every(
+          (r) =>
+            r.type === 'file-meta' && r.attributes && !r.meta?.identityOnly,
+        ),
+        'every dataOnly row is a full live file-meta (attributes present, not identity-only)',
       );
     });
 

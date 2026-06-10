@@ -231,6 +231,7 @@ export {
   isRenderedHtmlResource,
   isCssResource,
   isIdentityOnlyCardResource,
+  isIdentityOnlyFileMetaResource,
 } from './card-document-shape.ts';
 
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS

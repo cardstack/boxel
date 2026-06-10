@@ -3,6 +3,7 @@ import {
   cssResourceId,
   type CardResource,
   type CssResource,
+  type FileMetaResource,
   type RenderedHtmlResource,
   type Saved,
 } from './resource-types';
@@ -102,6 +103,30 @@ export function buildIdentityOnlyCard(args: {
       adoptsFrom,
       identityOnly: true,
       ...(renderType ? { renderType } : {}),
+    },
+    links: { self: url },
+  };
+}
+
+// The identity-only `file-meta` paired with a `rendered-html` row — the file
+// counterpart of `buildIdentityOnlyCard`. A file renders natively (its own
+// FileDef component, no ancestor coercion), so unlike a card it carries no
+// `renderType`; `adoptsFrom` is the file's own type and hydration renders the
+// live `FileDef` with no `@codeRef`.
+export function buildIdentityOnlyFileMeta(args: {
+  url: string;
+  adoptsFrom: CodeRef;
+}): FileMetaResource {
+  let { url, adoptsFrom } = args;
+  return {
+    type: 'file-meta',
+    id: url as Saved,
+    relationships: {
+      'rendered-html': { data: { type: 'rendered-html', id: url } },
+    },
+    meta: {
+      adoptsFrom,
+      identityOnly: true,
     },
     links: { self: url },
   };

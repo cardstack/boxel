@@ -69,6 +69,7 @@ import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import {
   buildCssResource,
   buildIdentityOnlyCard,
+  buildIdentityOnlyFileMeta,
   buildRenderedHtmlResource,
   parseUsedRenderType,
   scopedCssHrefsFromDeps,
@@ -425,8 +426,9 @@ export class RealmIndexQueryEngine {
   //     exactly as the data-only path returns it.
   // Only the no-HTML fallback cards go through `loadLinks` — an identity-only
   // card has no relationships to expand. `css` resources dedupe by their
-  // content-hash id across rows. A query that targets file-meta has no HTML
-  // projection, so it resolves to the full live file-meta document.
+  // content-hash id across rows. A query that targets file-meta resolves
+  // through `searchFiles` (the `render` projection is instance-only) and gets
+  // the same prefer-HTML treatment per file — see `searchUnifiedFileMeta`.
   async searchUnified(
     query: Query,
     opts: Options & {
@@ -434,7 +436,7 @@ export class RealmIndexQueryEngine {
     },
   ): Promise<UnifiedSearchCollectionDocument> {
     if (await this.queryTargetsFileMeta(query.filter, opts)) {
-      return await this.searchCardsUncoalesced(query, opts);
+      return await this.searchUnifiedFileMeta(query, opts);
     }
 
     // `includeErrors` so error rows reach the mapper as `rendered-html` with
@@ -561,11 +563,140 @@ export class RealmIndexQueryEngine {
     if (included.length > 0) {
       doc.included = included;
     }
-    // Echo the collection-level render type when it's a single resolved type
-    // (an explicit `renderType`); the `"native"` / per-row cases vary by row
-    // and are echoed on each `rendered-html` instead.
+    // Echo the collection-level render type only for an explicit `renderType`
+    // override; on the default (native) path each row varies by its own type
+    // and is echoed on each `rendered-html` instead.
     if (opts.render.renderType) {
       doc.meta.renderType = opts.render.renderType;
+    }
+    await this.attachRealmInfo(doc);
+    return doc;
+  }
+
+  // The file-meta counterpart of `searchUnified`. Files are indexed as
+  // `type: 'file'` rows, which the instance-only `render` projection skips, so
+  // they resolve through `searchFiles` (per-type HTML + the full `file-meta`
+  // resource). Same prefer-HTML policy per file: HTML present → identity-only
+  // `file-meta` + `rendered-html` (+ deduped `css`); no HTML → the full live
+  // `file-meta`. A file renders natively, so its `rendered-html` carries no
+  // `renderType` and the identity-only `file-meta`'s `adoptsFrom` is its own
+  // resolved type.
+  private async searchUnifiedFileMeta(
+    query: Query,
+    opts: Options & {
+      render: { format: PrerenderedHtmlFormat; renderType?: CodeRef };
+    },
+  ): Promise<UnifiedSearchCollectionDocument> {
+    // File-meta search returns non-error rows (matching the prerendered file
+    // path); the per-file HTML is selected in `fileEntryToPrerenderedCard`.
+    //
+    // A file renders natively: its prerendered HTML is keyed by the file's own
+    // most-derived type, never by an ancestor a caller asked *cards* to render
+    // as. So an explicit card-side `renderType` ancestor override is
+    // deliberately dropped here rather than threaded into the file lookup.
+    // `fileEntryToPrerenderedCard` then selects each file's own `types[0]`, and
+    // that is the type `buildIdentityOnlyFileMeta` stamps as `adoptsFrom`;
+    // letting an ancestor type leak in would mismatch a FileDef subclass's HTML
+    // against its identity.
+    let {
+      includeErrors: _includeErrors,
+      renderType: _renderType,
+      ...rest
+    } = opts;
+    let fileOpts = {
+      ...rest,
+      htmlFormat: opts.render.format,
+    };
+    let runSql = () =>
+      this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        fileOpts,
+      );
+    let { files, meta } = opts?.timings
+      ? await opts.timings.time('sql', runSql)
+      : await runSql();
+
+    let data: (CardResource<Saved> | FileMetaResource)[] = [];
+    let renderedResources: UnifiedSearchIncludedResource[] = [];
+    let cssById = new Map<string, CssResource>();
+    let fallbackRoots: (CardResource<Saved> | FileMetaResource)[] = [];
+
+    for (let file of files) {
+      let { url, html, cardType, iconHtml, usedRenderType } =
+        this.fileEntryToPrerenderedCard(file, fileOpts);
+      if (!url) {
+        continue;
+      }
+      if (html != null) {
+        // HTML-backed file → rendered-html + identity-only file-meta.
+        let cssIds: string[] = [];
+        for (let href of scopedCssHrefsFromDeps(file.deps)) {
+          let css = buildCssResource(href);
+          if (!cssById.has(css.id)) {
+            cssById.set(css.id, css);
+          }
+          cssIds.push(css.id);
+        }
+        renderedResources.push(
+          buildRenderedHtmlResource({
+            url,
+            html,
+            cardType: cardType ?? '',
+            iconHtml,
+            cssIds,
+          }),
+        );
+        if (usedRenderType) {
+          data.push(
+            buildIdentityOnlyFileMeta({ url, adoptsFrom: usedRenderType }),
+          );
+        }
+      } else {
+        // No HTML → the full live file-meta, exactly as the data-only path.
+        let pristine = file.resource;
+        if (pristine && pristine.id) {
+          let fileMeta: FileMetaResource = {
+            ...pristine,
+            links: { self: pristine.id },
+          };
+          if (query.fields?.['file-meta'] !== undefined) {
+            fileMeta = applySparseFieldset(
+              fileMeta,
+              query.fields['file-meta'],
+            ) as FileMetaResource;
+          }
+          data.push(fileMeta);
+          fallbackRoots.push(fileMeta);
+        }
+      }
+    }
+
+    let included: UnifiedSearchIncludedResource[] = [
+      ...renderedResources,
+      ...cssById.values(),
+    ];
+
+    // Only the no-HTML fallback rows expand links (an identity-only file-meta
+    // has none); same gating as the card path.
+    if (fallbackRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+      let linkFields = query.fields?.['file-meta'];
+      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
+      let omit = data.map((r) => r.id).filter(Boolean) as string[];
+      let runLoadLinks = () =>
+        this.loadLinks(
+          { realmURL: this.realmURL, rootResources: fallbackRoots, omit },
+          linkOpts,
+        );
+      let fallbackIncluded = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
+      included.push(...fallbackIncluded);
+    }
+
+    let doc: UnifiedSearchCollectionDocument = { data, meta };
+    if (included.length > 0) {
+      doc.included = included;
     }
     await this.attachRealmInfo(doc);
     return doc;
