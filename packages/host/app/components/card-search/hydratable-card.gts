@@ -29,8 +29,11 @@ export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
 
 // The card context can be torn down out from under a consumer mid-render (realm
-// refresh / unmount); reading it then throws an owner-destroyed error.
-const OWNER_DESTROYED_ERROR = 'destroyed';
+// refresh / unmount); reading it then throws this owner-destroyed error. Match
+// the full message (not a loose substring) so an unrelated error mentioning
+// "destroyed" isn't silently swallowed.
+const OWNER_DESTROYED_ERROR =
+  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
 // A function-based no-op stands in for the operator-mode tracking modifier so
 // applying it is always type-safe even when no context provides a real one.
@@ -90,9 +93,11 @@ export default class HydratableCard extends Component<Signature> {
     | CardContext
     | undefined;
 
-  // Set to the id once a hydration gesture fires; `getCard` then fetches
-  // `links.self`, deposits the instance in the Store, and tracks it live.
-  @tracked private hydrationId: string | undefined;
+  // Flips true once a hydration gesture fires; `getCard` then fetches
+  // `links.self`, deposits the instance in the Store, and tracks it live. A
+  // boolean — not the id captured at gesture time — so a recycled component
+  // whose `@cardId` changes resolves the new card, never a stale captured one.
+  @tracked private hydrated = false;
 
   // One `getCard` resource per component instance — `@cached` so reading it
   // from several getters doesn't spin up a resource each time, and a getter
@@ -113,10 +118,13 @@ export default class HydratableCard extends Component<Signature> {
     if (this.args.isError) {
       return undefined;
     }
+    // No inert HTML → nothing to gate on; a full live row always resolves
+    // immediately and ungated (there is no gesture to wait for).
     if (this.args.component == null) {
       return this.args.cardId;
     }
-    return this.hydrationId;
+    // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired.
+    return this.hydrated ? this.args.cardId : undefined;
   }
 
   private get mode(): HydrationMode {
@@ -168,10 +176,10 @@ export default class HydratableCard extends Component<Signature> {
   }
 
   @action private hydrate() {
-    if (this.args.isError || this.hydrationId != null) {
+    if (this.args.isError) {
       return;
     }
-    this.hydrationId = this.args.cardId;
+    this.hydrated = true;
   }
 
   <template>
