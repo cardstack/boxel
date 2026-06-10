@@ -22,6 +22,27 @@ function identityOnlyCard(id = cardUrl) {
   };
 }
 
+const fileUrl = rri(`${realmURL}hero.png`);
+// A file adopts from FileDef and has no userland ancestor type — it renders
+// natively, so its row carries no `renderType`.
+const fileDefRef = {
+  module: rri('https://cardstack.com/base/card-api'),
+  name: 'FileDef',
+};
+const fileCssHref = `${realmURL}hero.png.RkRF.glimmer-scoped.css`;
+
+function identityOnlyFileMeta(id = fileUrl) {
+  return {
+    type: 'file-meta' as const,
+    id,
+    relationships: {
+      'rendered-html': { data: { type: 'rendered-html' as const, id } },
+    },
+    meta: { adoptsFrom: fileDefRef, identityOnly: true },
+    links: { self: id },
+  };
+}
+
 function recordImports() {
   let imported: string[] = [];
   let importCss = async (href: string) => {
@@ -58,6 +79,7 @@ module('Unit | lib | unified-search-results', function () {
       items[0].component,
       'the identity-only row carries an inert component',
     );
+    assert.strictEqual(items[0].type, 'card', 'the row is typed as a card');
     assert.deepEqual(
       items[0].renderType,
       authorRef,
@@ -172,5 +194,88 @@ module('Unit | lib | unified-search-results', function () {
     let items = await buildRenderableSearchItems(doc, importCss);
 
     assert.true(items[0].isError, 'isError surfaced from the rendered-html');
+  });
+
+  test('an identity-only file-meta row yields an inert component typed file-meta, with no render type', async function (assert) {
+    let doc: UnifiedSearchCollectionDocument = {
+      data: [identityOnlyFileMeta()],
+      included: [
+        {
+          type: 'rendered-html',
+          id: fileUrl,
+          attributes: {
+            html: '<div data-test-file>hero.png</div>',
+            cardType: 'hero.png',
+          },
+          relationships: {
+            styles: { data: [{ type: 'css', id: 'file-css-1' }] },
+          },
+        },
+        { type: 'css', id: 'file-css-1', attributes: { href: fileCssHref } },
+      ],
+      // The collection carries a card render type; a file row must NOT inherit
+      // it — files render natively, with no ancestor render type.
+      meta: { page: { total: 1 }, renderType: authorRef },
+    };
+
+    let { imported, importCss } = recordImports();
+    let items = await buildRenderableSearchItems(doc, importCss);
+
+    assert.strictEqual(items.length, 1, 'one item');
+    assert.ok(
+      items[0].component,
+      'the identity-only file-meta row carries an inert component',
+    );
+    assert.strictEqual(
+      items[0].type,
+      'file-meta',
+      'the row is typed file-meta so it hydrates to a live FileDef',
+    );
+    assert.strictEqual(
+      items[0].renderType,
+      undefined,
+      'a file row carries no render type even when the collection has one',
+    );
+    assert.false(items[0].isError, 'not an error row');
+    assert.deepEqual(
+      imported,
+      [fileCssHref],
+      "the file row's css was imported via the loader",
+    );
+  });
+
+  test('a full live file-meta row yields no component, is typed file-meta, and carries no render type', async function (assert) {
+    let doc: UnifiedSearchCollectionDocument = {
+      data: [
+        {
+          type: 'file-meta',
+          id: fileUrl,
+          attributes: { name: 'hero.png' },
+          meta: { adoptsFrom: fileDefRef },
+          links: { self: fileUrl },
+        },
+      ],
+      meta: { page: { total: 1 }, renderType: authorRef },
+    };
+
+    let { imported, importCss } = recordImports();
+    let items = await buildRenderableSearchItems(doc, importCss);
+
+    assert.strictEqual(items.length, 1, 'one item');
+    assert.notOk(
+      items[0].component,
+      'a full live file-meta row carries no inert component (rendered live from the Store)',
+    );
+    assert.strictEqual(
+      items[0].type,
+      'file-meta',
+      'the row is typed file-meta',
+    );
+    assert.strictEqual(
+      items[0].renderType,
+      undefined,
+      'a file row carries no render type',
+    );
+    assert.deepEqual(imported, [], 'no css imported for a live row');
   });
 });
