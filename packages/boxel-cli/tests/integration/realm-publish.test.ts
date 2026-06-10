@@ -29,7 +29,12 @@ afterAll(async () => {
   await stopTestRealmServer();
 });
 
-async function createPublishableSource(): Promise<string> {
+// Creates a fresh source realm to publish from. This harness uses a noop
+// prerenderer (see `integration.ts`), so every indexed instance becomes an
+// error document and the realm is never publishable — tests exercising the
+// publish/unpublish flow itself pass `force: true` to bypass the publishability
+// gate, which is covered directly by the gate test below.
+async function createSourceRealm(): Promise<string> {
   let name = uniqueRealmName();
   let result = await createRealm(name, `Source ${name}`, { profileManager });
   return result.realmUrl;
@@ -47,12 +52,13 @@ function uniquePublishedUrl(): string {
 
 describe('realm publish (integration)', () => {
   it('accepts the 202 + status:pending response and polls readiness', async () => {
-    let sourceUrl = await createPublishableSource();
+    let sourceUrl = await createSourceRealm();
     let publishedUrl = uniquePublishedUrl();
 
     let result = await publishRealm(sourceUrl, publishedUrl, {
       profileManager,
       timeoutMs: 60_000,
+      force: true,
     });
 
     expect(result.publishedRealmURL).toBe(publishedUrl);
@@ -67,12 +73,13 @@ describe('realm publish (integration)', () => {
   }, 90_000);
 
   it('returns without waiting when waitForReady is false', async () => {
-    let sourceUrl = await createPublishableSource();
+    let sourceUrl = await createSourceRealm();
     let publishedUrl = uniquePublishedUrl();
 
     let result = await publishRealm(sourceUrl, publishedUrl, {
       profileManager,
       waitForReady: false,
+      force: true,
     });
 
     expect(result.publishedRealmURL).toBe(publishedUrl);
@@ -80,12 +87,13 @@ describe('realm publish (integration)', () => {
   }, 60_000);
 
   it('republishes by unpublishing first when the target URL already exists', async () => {
-    let sourceUrl = await createPublishableSource();
+    let sourceUrl = await createSourceRealm();
     let publishedUrl = uniquePublishedUrl();
 
     await publishRealm(sourceUrl, publishedUrl, {
       profileManager,
       waitForReady: false,
+      force: true,
     });
 
     // Republishing the same URL must succeed via the action's auto-recovery
@@ -94,6 +102,7 @@ describe('realm publish (integration)', () => {
     let republished = await publishRealm(sourceUrl, publishedUrl, {
       profileManager,
       waitForReady: false,
+      force: true,
     });
 
     expect(republished.publishedRealmURL).toBe(publishedUrl);
@@ -116,28 +125,38 @@ describe('realm publish (integration)', () => {
     ).rejects.toThrow(/Publish failed: HTTP/);
   }, 30_000);
 
-  it('blocks publishing only when forced past an unpublishable realm', async () => {
-    // A freshly created realm has no private-dependency or error-document
-    // violations, so the gate (on by default) lets it through.
-    let sourceUrl = await createPublishableSource();
+  it('blocks publishing an unpublishable realm unless forced', async () => {
+    // The noop prerenderer makes every indexed instance an error document, so
+    // a freshly created realm trips the publishability gate. The gate (on by
+    // default) refuses to publish; `force` bypasses it.
+    let sourceUrl = await createSourceRealm();
     let publishedUrl = uniquePublishedUrl();
+
+    await expect(
+      publishRealm(sourceUrl, publishedUrl, {
+        profileManager,
+        waitForReady: false,
+      }),
+    ).rejects.toThrow(/not publishable/);
 
     let result = await publishRealm(sourceUrl, publishedUrl, {
       profileManager,
       waitForReady: false,
+      force: true,
     });
     expect(result.publishedRealmURL).toBe(publishedUrl);
-  }, 60_000);
+  }, 90_000);
 });
 
 describe('realm unpublish (integration)', () => {
   it('unpublishes a previously published realm', async () => {
-    let sourceUrl = await createPublishableSource();
+    let sourceUrl = await createSourceRealm();
     let publishedUrl = uniquePublishedUrl();
 
     await publishRealm(sourceUrl, publishedUrl, {
       profileManager,
       waitForReady: false,
+      force: true,
     });
 
     let result = await unpublishRealm(publishedUrl, { profileManager });
