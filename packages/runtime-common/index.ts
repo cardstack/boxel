@@ -734,6 +734,7 @@ export * from './prerender-headers.ts';
 export * from './query.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './unified-search.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';

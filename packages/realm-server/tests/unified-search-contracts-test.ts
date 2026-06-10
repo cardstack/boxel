@@ -1,16 +1,25 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
+  buildCssResource,
+  buildIdentityOnlyCard,
+  buildIdentityOnlyFileMeta,
+  buildRenderedHtmlResource,
   combineSearchResults,
   cssResourceId,
   isCardResource,
   isCssResource,
+  isFileMetaResource,
   isIdentityOnlyCardResource,
+  isIdentityOnlyFileMetaResource,
   isRenderedHtmlResource,
   parseUnifiedSearchRequestFromPayload,
+  parseUsedRenderType,
   rri,
+  scopedCssHrefsFromDeps,
   type CardResource,
   type CssResource,
+  type FileMetaResource,
   type RenderedHtmlResource,
   type UnifiedSearchCollectionDocument,
 } from '@cardstack/runtime-common';
@@ -44,6 +53,36 @@ function identityOnlyCard(): CardResource {
     },
     meta: { adoptsFrom: authorRef, identityOnly: true },
     links: { self: cardUrl },
+  };
+}
+
+const fileUrl = rri(`${realmURL}hero.png`);
+const fileDefRef = {
+  module: rri('https://cardstack.com/base/card-api'),
+  name: 'FileDef',
+};
+
+function fullFileMeta(): FileMetaResource {
+  return {
+    type: 'file-meta',
+    id: fileUrl,
+    attributes: { name: 'hero.png' },
+    meta: { adoptsFrom: fileDefRef },
+    links: { self: fileUrl },
+  };
+}
+
+function identityOnlyFileMeta(): FileMetaResource {
+  return {
+    type: 'file-meta',
+    id: fileUrl,
+    relationships: {
+      'rendered-html': {
+        data: { type: 'rendered-html', id: fileUrl },
+      },
+    },
+    meta: { adoptsFrom: fileDefRef, identityOnly: true },
+    links: { self: fileUrl },
   };
 }
 
@@ -101,6 +140,30 @@ module(basename(__filename), function () {
       assert.false(
         isIdentityOnlyCardResource(noAttributesNoFlag),
         'a full card that merely lacks attributes is not identity-only',
+      );
+    });
+
+    test('isIdentityOnlyFileMetaResource keys on meta.identityOnly', function (assert) {
+      assert.true(
+        isFileMetaResource(fullFileMeta()),
+        'full file-meta is a file-meta resource',
+      );
+      assert.false(
+        isIdentityOnlyFileMetaResource(fullFileMeta()),
+        'a full file-meta (no flag) is not identity-only',
+      );
+      assert.true(
+        isIdentityOnlyFileMetaResource(identityOnlyFileMeta()),
+        'a flagged identity-only file-meta is identity-only',
+      );
+      // The card and file-meta predicates don't cross over.
+      assert.false(
+        isIdentityOnlyFileMetaResource(identityOnlyCard()),
+        'an identity-only card is not an identity-only file-meta',
+      );
+      assert.false(
+        isIdentityOnlyCardResource(identityOnlyFileMeta()),
+        'an identity-only file-meta is not an identity-only card',
       );
     });
 
@@ -177,12 +240,18 @@ module(basename(__filename), function () {
       assert.deepEqual(render?.renderType, authorRef);
     });
 
-    test('parse: render.renderType accepts the "native" escape valve', function (assert) {
-      let { render } = parseUnifiedSearchRequestFromPayload({
-        realms: [realmURL],
-        render: { renderType: 'native' },
-      });
-      assert.strictEqual(render?.renderType, 'native');
+    test('parse: render.renderType no longer accepts the removed "native" literal', function (assert) {
+      // Native is now the default (omitted renderType), so the "native" escape
+      // valve is gone — a bare string is rejected like any non-CodeRef.
+      assert.throws(
+        () =>
+          parseUnifiedSearchRequestFromPayload({
+            realms: [realmURL],
+            render: { renderType: 'native' },
+          }),
+        /render.renderType must be a CodeRef/,
+        'the "native" literal is rejected',
+      );
     });
 
     test('parse: render.renderType omitted leaves renderType unset', function (assert) {
@@ -443,6 +512,197 @@ module(basename(__filename), function () {
       assert.notOk(
         'included' in merged,
         'no included key when nothing to include',
+      );
+    });
+
+    test('carries the collection-level meta.renderType from the per-realm docs', function (assert) {
+      let mk = (
+        id: ReturnType<typeof rri>,
+        renderType?: typeof authorRef,
+      ): UnifiedSearchCollectionDocument => ({
+        data: [
+          {
+            type: 'card',
+            id,
+            attributes: {},
+            meta: { adoptsFrom: authorRef },
+            links: { self: id },
+          },
+        ],
+        meta: { page: { total: 1 }, ...(renderType ? { renderType } : {}) },
+      });
+
+      // An explicit-render search: every per-realm doc echoes the same resolved
+      // render type. The merge must preserve it so a host consumer renders
+      // live/fallback card rows under the requested ancestor type.
+      let withType = combineSearchResults([
+        mk(rri(`${realmURL}A`), authorRef),
+        mk(rri(`${realmURL}B`), authorRef),
+      ]);
+      assert.deepEqual(
+        withType.meta.renderType,
+        authorRef,
+        'the resolved render type survives the federated merge',
+      );
+
+      // A native/per-row (or no-render) search omits the collection-level type;
+      // the merge leaves it unset rather than inventing one.
+      let withoutType = combineSearchResults([
+        mk(rri(`${realmURL}A`)),
+        mk(rri(`${realmURL}B`)),
+      ]);
+      assert.strictEqual(
+        withoutType.meta.renderType,
+        undefined,
+        'no render type is fabricated when the per-realm docs carry none',
+      );
+    });
+  });
+
+  // The per-row resource builders the prefer-HTML result mapper runs. Each
+  // builds a shape the matching predicate recognizes.
+  module('unified-search resource builders', function () {
+    test('parseUsedRenderType splits "<module>/<name>" into a CodeRef', function (assert) {
+      assert.deepEqual(parseUsedRenderType(`${realmURL}author/Author`), {
+        module: rri(`${realmURL}author`),
+        name: 'Author',
+      });
+      assert.strictEqual(
+        parseUsedRenderType(undefined),
+        undefined,
+        'undefined → undefined',
+      );
+      assert.strictEqual(
+        parseUsedRenderType('no-separator'),
+        undefined,
+        'a value with no separator → undefined',
+      );
+    });
+
+    test('scopedCssHrefsFromDeps keeps only scoped-CSS deps, in order', function (assert) {
+      let cssA = `${realmURL}Author.gts.QUJD.glimmer-scoped.css`;
+      let cssB = `${realmURL}Pet.gts.WHp1.glimmer-scoped.css`;
+      assert.deepEqual(
+        scopedCssHrefsFromDeps([
+          `${realmURL}author`,
+          cssA,
+          `${realmURL}pet`,
+          cssB,
+        ]),
+        [cssA, cssB],
+      );
+      assert.deepEqual(scopedCssHrefsFromDeps(null), [], 'null deps → []');
+    });
+
+    test('buildCssResource hashes the href and is a css resource', function (assert) {
+      let href = `${realmURL}Author.gts.QUJD.glimmer-scoped.css`;
+      let resource = buildCssResource(href);
+      assert.true(isCssResource(resource), 'is a css resource');
+      assert.strictEqual(
+        resource.id,
+        cssResourceId(href),
+        'id is the href hash',
+      );
+      assert.strictEqual(resource.attributes.href, href, 'href rides verbatim');
+    });
+
+    test('buildRenderedHtmlResource builds a styles-linked rendered-html', function (assert) {
+      let resource = buildRenderedHtmlResource({
+        url: cardUrl,
+        html: '<div>Mango</div>',
+        cardType: 'Author',
+        iconHtml: '<svg></svg>',
+        renderType: authorRef,
+        cssIds: ['abc123', 'def456'],
+      });
+      assert.true(
+        isRenderedHtmlResource(resource),
+        'is a rendered-html resource',
+      );
+      assert.strictEqual(resource.id, cardUrl, 'id is the card URL');
+      assert.deepEqual(
+        resource.relationships.styles.data,
+        [
+          { type: 'css', id: 'abc123' },
+          { type: 'css', id: 'def456' },
+        ],
+        'styles reference the css ids',
+      );
+      assert.deepEqual(
+        resource.meta?.renderType,
+        authorRef,
+        'echoes renderType',
+      );
+    });
+
+    test('buildRenderedHtmlResource carries isError when flagged', function (assert) {
+      let resource = buildRenderedHtmlResource({
+        url: cardUrl,
+        html: '',
+        cardType: 'Author',
+        isError: true,
+        cssIds: [],
+      });
+      assert.true(resource.attributes.isError, 'isError is set');
+    });
+
+    test('buildIdentityOnlyCard builds an attribute-less identity-only card', function (assert) {
+      let card = buildIdentityOnlyCard({
+        url: cardUrl,
+        adoptsFrom: authorRef,
+        renderType: authorRef,
+      });
+      assert.true(
+        isIdentityOnlyCardResource(card),
+        'is an identity-only card resource',
+      );
+      assert.notOk(card.attributes, 'no attributes are shipped');
+      assert.deepEqual(
+        card.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: cardUrl },
+        'links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        card.links?.self,
+        cardUrl,
+        'links.self is the hydration target',
+      );
+      assert.deepEqual(
+        card.meta.adoptsFrom,
+        authorRef,
+        'carries the actual type',
+      );
+      assert.deepEqual(
+        card.meta.renderType,
+        authorRef,
+        'carries the render type',
+      );
+    });
+
+    test('buildIdentityOnlyFileMeta builds an attribute-less identity-only file-meta (no renderType — renders natively)', function (assert) {
+      let fileMeta = buildIdentityOnlyFileMeta({
+        url: fileUrl,
+        adoptsFrom: fileDefRef,
+      });
+      assert.true(
+        isIdentityOnlyFileMetaResource(fileMeta),
+        'is an identity-only file-meta resource',
+      );
+      assert.notOk(fileMeta.attributes, 'no attributes are shipped');
+      assert.deepEqual(
+        fileMeta.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: fileUrl },
+        'links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        fileMeta.links?.self,
+        fileUrl,
+        'links.self is the hydration target',
+      );
+      assert.deepEqual(
+        fileMeta.meta.adoptsFrom,
+        fileDefRef,
+        'carries the file type',
       );
     });
   });
