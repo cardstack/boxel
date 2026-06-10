@@ -14,8 +14,10 @@ import {
   baseCardRef,
   insert,
   insertPermissions,
+  param,
   query,
   rri,
+  type Expression,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -42,7 +44,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
     let ownerUserId = '@mango:localhost';
 
-    let realmFileSystem: Record<string, LooseSingleCardDocument> = {
+    let realmFileSystem: Record<string, LooseSingleCardDocument | string> = {
+      // Two markdown files (FileDef rows that get prerendered HTML) for the
+      // file-meta prefer-HTML test. They don't appear in card queries.
+      'hello.md': '# Hello from a FileDef',
+      'world.md': '# World from a FileDef',
       'test-card.json': {
         data: {
           type: 'card',
@@ -215,6 +221,39 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.strictEqual(response.body.data.length, 1, 'found one card');
     });
 
+    // `cardUrls` scopes the result set to a subset of cards. The SQL-side
+    // `IN (...)` filter reads it from the run-time search opts, so a
+    // `cardUrls`-scoped request must actually narrow the results — not merely
+    // key the cache while returning the full set.
+    test('QUERY /_federated-search narrows results to the requested cardUrls', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      // `cardUrls` are the index `url` form — the instance's file URL (`.json`);
+      // the result's `id` is its identity URL (the `.json` dropped).
+      let scopedFileUrl = `${testRealm.url}test-card.json`;
+      let scopedId = `${testRealm.url}test-card`;
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // No filter — both realm cards would match — but scoped to one card URL.
+        .send({ realms: [testRealm.url], cardUrls: [scopedFileUrl] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let ids = (response.body.data as { id: string }[]).map((r) => r.id);
+      assert.deepEqual(
+        ids,
+        [scopedId],
+        'only the requested card is returned (the subset filter is applied at runtime)',
+      );
+    });
+
     // Verifies the per-batch search cache (CS-11115 Phase 2 + CS-11133
     // cross-realm expansion) hits at the HTTP handler boundary.
     // Counts populates by spying on each realm's `search` method —
@@ -326,12 +365,12 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       }
     });
 
-    // The unified request members fold into the job-scoped cache key, so two
-    // requests that differ only on `render` (format / renderType), `dataOnly`,
-    // or `cardUrls` segregate into distinct entries + ETags — even though this
-    // endpoint emits the live document for all of them — while an identical
-    // repeat hits the cache. This is what lets the live and prerendered
-    // endpoints share one job-scoped cache without colliding.
+    // The request members that change the response body fold into the
+    // job-scoped cache key: the resolved prefer-HTML spec (only when the caller
+    // explicitly asks to render), `dataOnly`, and a non-empty `cardUrls`. A
+    // request differing on any of them gets a distinct entry + ETag; one that
+    // matches an existing key hits the cache. A plain query (no `render`) and an
+    // empty `cardUrls` are the same live request and share an entry.
     test('QUERY /_federated-search cache key segregates entries by render / dataOnly / cardUrls', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
@@ -367,7 +406,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
         let etags = new Set<string>();
 
-        // 1. Plain query — prefer-HTML default (render.format defaults to fitted).
+        // 1. Plain query (no render) → the live document.
         let first = await post({});
         assert.strictEqual(first.status, 200, 'plain query: HTTP 200');
         assert.strictEqual(primaryCalls, 1, 'plain query populated');
@@ -386,17 +425,8 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           'identical request → identical ETag',
         );
 
-        // 3. Explicit `{ render: { format: 'fitted' } }` is the prefer-HTML
-        // default, so it canonicalizes to the plain-query key → cache hit.
-        await post({ render: { format: 'fitted' } });
-        assert.strictEqual(
-          primaryCalls,
-          1,
-          'explicit default render matched the plain-query key (cache hit)',
-        );
-
-        // 3b. An empty `cardUrls` is a no-op filter, so it shares the
-        // plain-query entry rather than fragmenting the cache.
+        // 3. An empty `cardUrls` is a no-op filter and carries no render, so it
+        // is the same live request as the plain query → cache hit, same ETag.
         let emptyCardUrls = await post({ cardUrls: [] });
         assert.strictEqual(
           primaryCalls,
@@ -409,21 +439,26 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           'empty cardUrls → same ETag as the plain query',
         );
 
-        // 4. A different render.format → miss.
-        let embedded = await post({ render: { format: 'embedded' } });
+        // 4. An explicit `render` is prefer-HTML — a different response body
+        // from the live plain query — so it gets a distinct entry.
+        let fitted = await post({ render: { format: 'fitted' } });
         assert.strictEqual(
           primaryCalls,
           2,
+          'explicit render fired a fresh populate (distinct from the live entry)',
+        );
+        etags.add(fitted.headers['etag']);
+
+        // 5. A different render.format → distinct entry.
+        let embedded = await post({ render: { format: 'embedded' } });
+        assert.strictEqual(
+          primaryCalls,
+          3,
           'different render.format fired a fresh populate',
         );
         etags.add(embedded.headers['etag']);
-        assert.deepEqual(
-          embedded.body,
-          first.body,
-          'the render member segregates the cache key but not the response body (the live document)',
-        );
 
-        // 5. A render.renderType → miss.
+        // 6. A render.renderType → distinct entry.
         let withRenderType = await post({
           render: {
             format: 'fitted',
@@ -432,35 +467,418 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         });
         assert.strictEqual(
           primaryCalls,
-          3,
+          4,
           'different render.renderType fired a fresh populate',
         );
         etags.add(withRenderType.headers['etag']);
 
-        // 6. `dataOnly` → miss (live-only mode; mutually exclusive with render).
+        // 7. `dataOnly` → distinct entry (live-only mode).
         let dataOnly = await post({ dataOnly: true });
-        assert.strictEqual(primaryCalls, 4, 'dataOnly fired a fresh populate');
+        assert.strictEqual(primaryCalls, 5, 'dataOnly fired a fresh populate');
         etags.add(dataOnly.headers['etag']);
 
-        // 7. `cardUrls` → miss.
+        // 8. A non-empty `cardUrls` → distinct entry.
         let withCardUrls = await post({
           cardUrls: [`${testRealm.url}test-card`],
         });
         assert.strictEqual(
           primaryCalls,
-          5,
+          6,
           'different cardUrls fired a fresh populate',
         );
         etags.add(withCardUrls.headers['etag']);
 
         assert.strictEqual(
           etags.size,
-          5,
+          6,
           'each distinct request shape produced a distinct ETag',
         );
       } finally {
         delete (testRealm as unknown as { search?: unknown }).search;
       }
+    });
+
+    // The centerpiece mixed-index test: index normally, then null the HTML for
+    // one row so the index holds "some rows have HTML, some don't yet" — the
+    // steady-state HTML-channel lag. A prefer-HTML search must emit a
+    // `rendered-html` + identity-only `card` for the HTML row and a full live
+    // `card` for the nulled row, all in one `data` array.
+    test('QUERY /_federated-search prefer-HTML emits rendered-html + identity-only card for HTML rows and a full live card for HTML-absent rows', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let htmlUrl = `${testRealm.url}other-card`; // keeps its prerendered HTML
+      let liveUrl = `${testRealm.url}test-card`; // HTML nulled → live fallback
+
+      // Manufacture the mixed index by nulling the fitted HTML for one row. The
+      // index `url` column is the instance's file URL (`.json`), so the WHERE
+      // targets that even though results address the card by its identity URL.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url =`,
+        param(`${liveUrl}.json`),
+        `AND realm_url =`,
+        param(testRealm.url),
+      ] as Expression);
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // No filter → every card in the realm (both fixtures), so the response
+        // spans an HTML-backed row and the HTML-nulled fallback row.
+        .send({
+          realms: [testRealm.url],
+          render: { format: 'fitted' },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+      let byId = new Map<string, any>(data.map((r) => [r.id, r]));
+
+      assert.ok(byId.has(htmlUrl), 'the HTML-backed card is in data');
+      assert.ok(byId.has(liveUrl), 'the HTML-absent card is in data');
+
+      // HTML-backed row → identity-only card + rendered-html (+ its css).
+      let htmlCard = byId.get(htmlUrl);
+      assert.strictEqual(
+        htmlCard.type,
+        'card',
+        'HTML row data entry is a card',
+      );
+      assert.notOk(
+        htmlCard.attributes,
+        'the HTML-backed card is identity-only (no attributes)',
+      );
+      assert.true(htmlCard.meta?.identityOnly, 'marked meta.identityOnly');
+      assert.deepEqual(
+        htmlCard.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: htmlUrl },
+        'the card links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        htmlCard.links?.self,
+        htmlUrl,
+        'links.self is the hydration target',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === htmlUrl,
+      );
+      assert.ok(rendered, 'a rendered-html for the HTML row rides in included');
+      assert.strictEqual(
+        typeof rendered.attributes.html,
+        'string',
+        'rendered-html carries an html string',
+      );
+      assert.ok(
+        rendered.attributes.html.length > 0,
+        'the prerendered html is non-empty',
+      );
+
+      // HTML-absent row → full live card, nothing in included for it.
+      let liveCard = byId.get(liveUrl);
+      assert.strictEqual(
+        liveCard.type,
+        'card',
+        'live row data entry is a card',
+      );
+      assert.ok(
+        liveCard.attributes,
+        'the HTML-absent card is a full live card (attributes present)',
+      );
+      assert.notOk(
+        liveCard.meta?.identityOnly,
+        'the live fallback card is not identity-only',
+      );
+      assert.notOk(
+        included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
+        'no rendered-html is emitted for the live fallback row',
+      );
+    });
+
+    // File-meta parity: the same mixed-index manufacture for FileDef rows. A
+    // prefer-HTML search over file-meta emits an identity-only `file-meta` +
+    // `rendered-html` for the HTML-backed file and a full live `file-meta` for
+    // the HTML-nulled file. A file renders natively, so it carries no renderType.
+    test('QUERY /_federated-search prefer-HTML emits identity-only file-meta + rendered-html for HTML files and a full live file-meta for HTML-absent files', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let htmlUrl = `${testRealm.url}hello.md`; // keeps its rendered HTML
+      let liveUrl = `${testRealm.url}world.md`; // HTML nulled → live fallback
+
+      // Null the fitted HTML for one file row. The file index `url` is the bare
+      // file URL (no `.json`).
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url =`,
+        param(liveUrl),
+        `AND realm_url =`,
+        param(testRealm.url),
+      ] as Expression);
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // A pure `type: FileDef` filter → a file-meta query spanning the
+        // realm's .md files (FileDef rows). No `filter.on`, so the render type
+        // resolves to native — a file renders as itself and carries no
+        // renderType.
+        .send({
+          realms: [testRealm.url],
+          filter: {
+            type: {
+              module: rri('https://cardstack.com/base/card-api'),
+              name: 'FileDef',
+            },
+          },
+          render: { format: 'fitted' },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let data = response.body.data as any[];
+      let included = (response.body.included ?? []) as any[];
+      let byId = new Map<string, any>(data.map((r) => [r.id, r]));
+
+      assert.ok(byId.has(htmlUrl), 'the HTML-backed file is in data');
+      assert.ok(byId.has(liveUrl), 'the HTML-absent file is in data');
+
+      // HTML-backed file → identity-only file-meta + rendered-html.
+      let htmlFile = byId.get(htmlUrl);
+      assert.strictEqual(htmlFile.type, 'file-meta', 'HTML row is a file-meta');
+      assert.notOk(
+        htmlFile.attributes,
+        'the HTML-backed file-meta is identity-only (no attributes)',
+      );
+      assert.true(htmlFile.meta?.identityOnly, 'marked meta.identityOnly');
+      assert.notOk(
+        htmlFile.meta?.renderType,
+        'a file carries no renderType (renders natively)',
+      );
+      // A `.md` file's most-derived type is the FileDef subclass `MarkdownDef`.
+      // `adoptsFrom` must be that subclass — not the `FileDef` ancestor — even
+      // though the file-meta query targets `FileDef`: files render natively, so
+      // the card-side render type is never coerced onto a file.
+      assert.strictEqual(
+        htmlFile.meta?.adoptsFrom?.name,
+        'MarkdownDef',
+        'adoptsFrom is the file’s own most-derived type, never a coerced ancestor',
+      );
+      assert.deepEqual(
+        htmlFile.relationships?.['rendered-html']?.data,
+        { type: 'rendered-html', id: htmlUrl },
+        'the file-meta links to its rendered-html by the shared id',
+      );
+      assert.strictEqual(
+        htmlFile.links?.self,
+        htmlUrl,
+        'links.self is the hydration target',
+      );
+
+      let rendered = included.find(
+        (r) => r.type === 'rendered-html' && r.id === htmlUrl,
+      );
+      assert.ok(
+        rendered,
+        'a rendered-html for the HTML file rides in included',
+      );
+      assert.ok(
+        rendered.attributes.html?.length > 0,
+        'the prerendered html is non-empty',
+      );
+      assert.notOk(
+        rendered.meta?.renderType,
+        'the file rendered-html carries no renderType',
+      );
+
+      // HTML-absent file → full live file-meta, nothing in included for it.
+      let liveFile = byId.get(liveUrl);
+      assert.strictEqual(liveFile.type, 'file-meta', 'live row is a file-meta');
+      assert.ok(
+        liveFile.attributes,
+        'the HTML-absent file is a full live file-meta (attributes present)',
+      );
+      assert.notOk(
+        liveFile.meta?.identityOnly,
+        'the live fallback file-meta is not identity-only',
+      );
+      assert.notOk(
+        included.find((r) => r.type === 'rendered-html' && r.id === liveUrl),
+        'no rendered-html is emitted for the live fallback file',
+      );
+    });
+
+    // File-meta parity for the live (no-render) path: a `dataOnly` file query
+    // returns the full live file-meta document, byte-identical to a plain
+    // (no-render) file query — the prefer-HTML emission never touches it.
+    test('QUERY /_federated-search dataOnly over a file query is byte-identical to the live file-meta document', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let fileFilter = {
+        type: {
+          module: rri('https://cardstack.com/base/card-api'),
+          name: 'FileDef',
+        },
+      };
+      let post = (body: Record<string, unknown>) =>
+        request
+          .post(`${searchURL.pathname}${searchURL.search}`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Authorization', `Bearer ${realmServerToken}`)
+          .send({ realms: [testRealm.url], filter: fileFilter, ...body });
+
+      let plain = await post({});
+      let dataOnly = await post({ dataOnly: true });
+      assert.strictEqual(plain.status, 200, 'plain: HTTP 200');
+      assert.strictEqual(dataOnly.status, 200, 'dataOnly: HTTP 200');
+      assert.ok(
+        (dataOnly.body.data as any[]).length > 0,
+        'the realm returns file rows (the parity check is not vacuous)',
+      );
+      assert.deepEqual(
+        dataOnly.body,
+        plain.body,
+        'dataOnly is byte-identical to a plain (no-render) live file query',
+      );
+      assert.notOk(
+        (dataOnly.body.included ?? []).some(
+          (r: any) => r.type === 'rendered-html' || r.type === 'css',
+        ),
+        'dataOnly emits no rendered-html / css',
+      );
+      assert.ok(
+        (dataOnly.body.data as any[]).every(
+          (r) =>
+            r.type === 'file-meta' && r.attributes && !r.meta?.identityOnly,
+        ),
+        'every dataOnly row is a full live file-meta (attributes present, not identity-only)',
+      );
+    });
+
+    test('QUERY /_federated-search dataOnly returns the live document, identical to a plain query', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let post = (body: Record<string, unknown>) =>
+        request
+          .post(`${searchURL.pathname}${searchURL.search}`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Authorization', `Bearer ${realmServerToken}`)
+          .send({ realms: [testRealm.url], ...body });
+
+      let plain = await post({});
+      let dataOnly = await post({ dataOnly: true });
+      assert.strictEqual(plain.status, 200, 'plain: HTTP 200');
+      assert.strictEqual(dataOnly.status, 200, 'dataOnly: HTTP 200');
+      assert.ok(
+        (dataOnly.body.data as any[]).length > 0,
+        'the realm returns results (the parity check is not vacuous)',
+      );
+      assert.deepEqual(
+        dataOnly.body,
+        plain.body,
+        'dataOnly is byte-identical to a plain (no-render) live query',
+      );
+      assert.notOk(
+        (dataOnly.body.included ?? []).some(
+          (r: any) => r.type === 'rendered-html' || r.type === 'css',
+        ),
+        'dataOnly emits no rendered-html / css',
+      );
+      assert.ok(
+        (dataOnly.body.data as any[]).every(
+          (r) => r.type !== 'card' || r.attributes,
+        ),
+        'every dataOnly card is a full live card',
+      );
+    });
+
+    test('QUERY /_federated-search prefer-HTML honors a sparse fieldset on live fallback rows', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let liveUrl = `${testRealm.url}test-card`;
+      // Null the HTML so this row falls back to a full live card.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url =`,
+        param(`${liveUrl}.json`),
+        `AND realm_url =`,
+        param(testRealm.url),
+      ] as Expression);
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        // An empty sparse fieldset → a live fallback row carries no attributes,
+        // exactly as the same `/_search` query would return it. `fields`
+        // requires `asData: true` at the query level.
+        .send({
+          realms: [testRealm.url],
+          render: { format: 'fitted' },
+          asData: true,
+          fields: { card: [] },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let liveCard = (response.body.data as any[]).find(
+        (r) => r.id === liveUrl,
+      );
+      assert.ok(liveCard, 'the live fallback card is present');
+      assert.deepEqual(
+        liveCard.attributes,
+        {},
+        'the fallback row honors the empty sparse fieldset (no attributes)',
+      );
+    });
+
+    test('QUERY /_federated-search rejects an explicit render.format not backed by prerendered HTML', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      // `isolated` is a valid Format but not a prerendered HTML format, so it
+      // must be rejected rather than silently rendered as another format.
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ realms: [testRealm.url], render: { format: 'isolated' } });
+
+      assert.strictEqual(
+        response.status,
+        400,
+        'an unsupported render.format is a 400',
+      );
+      assert.ok(
+        JSON.stringify(response.body).includes('render.format'),
+        'the error names render.format',
+      );
     });
 
     test('QUERY /_federated-search emits an ETag on cacheable responses', async function (assert) {
