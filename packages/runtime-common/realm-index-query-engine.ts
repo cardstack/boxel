@@ -589,11 +589,23 @@ export class RealmIndexQueryEngine {
   ): Promise<UnifiedSearchCollectionDocument> {
     // File-meta search returns non-error rows (matching the prerendered file
     // path); the per-file HTML is selected in `fileEntryToPrerenderedCard`.
-    let { includeErrors: _includeErrors, ...rest } = opts;
+    //
+    // A file renders natively: its prerendered HTML is keyed by the file's own
+    // most-derived type, never by an ancestor a caller asked *cards* to render
+    // as. So the card-side render type — which `resolveRenderType` may default
+    // to `filter.on` — is deliberately dropped here rather than threaded into
+    // the file lookup. `fileEntryToPrerenderedCard` then selects each file's
+    // own `types[0]`, and that is the type `buildIdentityOnlyFileMeta` stamps
+    // as `adoptsFrom`; letting an ancestor type leak in would mismatch a
+    // FileDef subclass's HTML against its identity.
+    let {
+      includeErrors: _includeErrors,
+      renderType: _renderType,
+      ...rest
+    } = opts;
     let fileOpts = {
       ...rest,
       htmlFormat: opts.render.format,
-      renderType: opts.render.renderType as ResolvedCodeRef | undefined,
     };
     let runSql = () =>
       this.#indexQueryEngine.searchFiles(

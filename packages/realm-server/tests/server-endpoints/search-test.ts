@@ -631,6 +631,15 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         htmlFile.meta?.renderType,
         'a file carries no renderType (renders natively)',
       );
+      // A `.md` file's most-derived type is the FileDef subclass `MarkdownDef`.
+      // `adoptsFrom` must be that subclass — not the `FileDef` ancestor — even
+      // though the file-meta query targets `FileDef`: files render natively, so
+      // the card-side render type is never coerced onto a file.
+      assert.strictEqual(
+        htmlFile.meta?.adoptsFrom?.name,
+        'MarkdownDef',
+        'adoptsFrom is the file’s own most-derived type, never a coerced ancestor',
+      );
       assert.deepEqual(
         htmlFile.relationships?.['rendered-html']?.data,
         { type: 'rendered-html', id: htmlUrl },
