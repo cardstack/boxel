@@ -281,6 +281,30 @@ module(
           realmConfig as InstanceType<typeof cardApi.CardDef>,
           'edit',
         );
+        // [diagnostic] surface what actually rendered
+        console.log(
+          '[lock-diag] renderCard state',
+          JSON.stringify({
+            realmConfigExists: !!realmConfig,
+            realmConfigConstructor:
+              (realmConfig as any)?.constructor?.name ?? null,
+            hostRoutingRulesLength:
+              (realmConfig as any)?.hostRoutingRules?.length ?? null,
+            hasRealmConfigEdit: !!document.querySelector(
+              '[data-test-realm-config-edit]',
+            ),
+            hasRoutingRuleEdit: !!document.querySelector(
+              '[data-test-routing-rule-edit]',
+            ),
+            hasLinksToEditor: !!document.querySelector(
+              '[data-test-links-to-editor]',
+            ),
+            hasAddNew: !!document.querySelector(
+              '[data-test-add-new="instance"]',
+            ),
+            bodyTextSample: document.body?.innerText?.slice(0, 200) ?? null,
+          }),
+        );
         // Wait for the routing-rule editor to render its inner
         // LinksToEditor, which only happens once the card's containsMany
         // iteration mounts each rule.
