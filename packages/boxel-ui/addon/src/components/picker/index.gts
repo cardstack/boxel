@@ -274,6 +274,35 @@ export default class Picker extends Component<PickerSignature> {
       return;
     }
 
+    // ember-power-select's multi-select toggle uses object identity to decide
+    // add-vs-remove. Consumers that rebuild PickerOption objects across renders
+    // (e.g. RealmPicker) never satisfy that identity check, so a click on an
+    // already-selected option arrives here as a duplicate id instead of a
+    // removal. Normalize by id: a duplicate id means "toggle off"; otherwise
+    // dedupe defensively so identity drift can't pile up extra entries.
+    const idCounts = new Map<string, number>();
+    for (const opt of selected) {
+      idCounts.set(opt.id, (idCounts.get(opt.id) ?? 0) + 1);
+    }
+    const toggleOffIds = new Set<string>();
+    for (const [id, count] of idCounts) {
+      if (count > 1) {
+        toggleOffIds.add(id);
+      }
+    }
+    if (toggleOffIds.size > 0) {
+      selected = selected.filter((opt) => !toggleOffIds.has(opt.id));
+    } else {
+      const seenIds = new Set<string>();
+      selected = selected.filter((opt) => {
+        if (seenIds.has(opt.id)) {
+          return false;
+        }
+        seenIds.add(opt.id);
+        return true;
+      });
+    }
+
     const selectAllOptions = selected.filter((option) => {
       return option.type === 'select-all';
     });
