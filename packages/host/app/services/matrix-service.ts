@@ -126,6 +126,10 @@ import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type LocalPersistenceService from './local-persistence-service';
+import type {
+  PendingSendStatus,
+  StoredPendingFile,
+} from './local-persistence-service';
 import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -208,6 +212,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   private restoredDraftRooms = new Set<string>();
+  private hydratedPendingSendRooms = new Set<string>();
   @tracked private _isLoadingMoreAIRooms = false;
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
@@ -1258,6 +1263,136 @@ export default class MatrixService extends Service {
     return response;
   }
 
+  // Synthesize a user-message event at click-time and push it into the room's
+  // events list so the pending bubble renders without waiting for the pre-send
+  // pipeline (skill / command / card / file uploads) or for matrix-js-sdk to
+  // emit its native local echo. The synthetic event's id is `local-${cgi}`;
+  // when matrix-js-sdk's real local echo eventually arrives in
+  // processDecryptedEvent, the cgi→oldEventId bridge there replaces the
+  // synthetic in-place so consumers iterating `roomData.events` never see both.
+  async addOptimisticEvent(
+    roomId: string,
+    content: {
+      body: string;
+      clientGeneratedId: string;
+      attachedCardIds: string[];
+      attachedFiles: ReturnType<FileDef['serialize']>[];
+    },
+  ): Promise<number> {
+    let userId = this.userId;
+    if (!userId) {
+      throw new Error('bug: cannot add optimistic event without a userId');
+    }
+    // Sort just after the tail of the existing timeline rather than using
+    // `Date.now()` directly. The matrix-js-sdk and its mocks may use a clock
+    // that's offset from the wall clock (mock-matrix's frozen-2024 clock is
+    // the common case), and `MessageBuilder.updateMessage` early-returns when
+    // the cached message's `created` is later than an incoming event — which
+    // would silently drop the status transition from 'sending' to 'sent'.
+    let originServerTs = this.resolveOptimisticTimestamp(roomId);
+    let event: TempEvent = {
+      event_id: `local-${content.clientGeneratedId}`,
+      room_id: roomId,
+      sender: userId,
+      type: 'm.room.message',
+      origin_server_ts: originServerTs,
+      status: 'sending' as MatrixSDK.EventStatus,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: content.body,
+        format: 'org.matrix.custom.html',
+        clientGeneratedId: content.clientGeneratedId,
+        // Deliberately omit isStreamingFinished. Setting it to `false` would
+        // make `generatingResults` (which reads `!lastMessage.isStreamingFinished`)
+        // misclassify the user's own bubble as "AI generating", flashing the
+        // status banner over the user's pending message. Omitting the key is
+        // just as effective at suppressing processDecryptedEvent's
+        // code-patch-processing branch, which gates on a truthy value.
+        data: {
+          attachedCards: content.attachedCardIds.map((id) => ({
+            sourceUrl: id,
+            // MessageBuilder.attachedCardIds only reads sourceUrl; the rest of
+            // SerializedFile is filled in below so attachedCardsAsFiles still
+            // produces a valid FileDef object.
+            name: id.split('/').pop() ?? id,
+            contentType: 'application/json',
+          })),
+          attachedFiles: content.attachedFiles,
+          context: {
+            tools: [],
+            functions: [],
+          },
+        },
+      } as unknown as CardMessageContent,
+    };
+    await this.addRoomEvent(event);
+    return originServerTs;
+  }
+
+  // Resolve a timestamp that won't trip MessageBuilder.updateMessage's
+  // `incoming.created < cached.created` early-return. Prefer the tail of the
+  // existing timeline, then the SDK Room's last-active ts (matches the
+  // SDK/mock clock), then wall-clock as a last resort.
+  private resolveOptimisticTimestamp(roomId: string): number {
+    let existingEvents = this.getRoomData(roomId)?.events ?? [];
+    let maxTs = 0;
+    for (let e of existingEvents) {
+      let ts = (e as any).origin_server_ts;
+      if (typeof ts === 'number' && ts > maxTs) {
+        maxTs = ts;
+      }
+    }
+    if (maxTs > 0) {
+      return maxTs + 1;
+    }
+    let roomLastActive = this.client
+      .getRoom?.(roomId)
+      ?.getLastActiveTimestamp?.();
+    if (typeof roomLastActive === 'number' && roomLastActive > 0) {
+      return roomLastActive + 1;
+    }
+    return Date.now();
+  }
+
+  // Patch an in-flight optimistic event's status (and optional error message)
+  // Flip an in-flight pending send between 'sending' and 'not_sent' from
+  // doSendMessage's catch / retry paths. Updates both the in-memory synthetic
+  // event (so the rendered bubble re-runs through MessageBuilder.updateMessage)
+  // and the persisted localStorage entry as one operation, so the two sources
+  // of truth can't desync.
+  patchPendingSend(
+    roomId: string,
+    clientGeneratedId: string,
+    patch: { status: PendingSendStatus; errorMessage?: string },
+  ) {
+    let syntheticEventId = `local-${clientGeneratedId}`;
+    let roomData = this.getRoomData(roomId);
+    let existing = roomData?.events.find(
+      (e) => e.event_id === syntheticEventId,
+    );
+    if (existing) {
+      let nextContent: Record<string, unknown> = {
+        ...(existing.content ?? {}),
+      };
+      if (patch.status === 'not_sent') {
+        nextContent.errorMessage = patch.errorMessage ?? 'Failed to send';
+      } else {
+        delete nextContent.errorMessage;
+      }
+      let next: TempEvent = {
+        ...existing,
+        status: patch.status as MatrixSDK.EventStatus,
+        content: nextContent as TempEvent['content'],
+      };
+      void this.addRoomEvent(next, syntheticEventId);
+    }
+    this.localPersistenceService.updatePendingSendStatus(
+      roomId,
+      clientGeneratedId,
+      patch,
+    );
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -1515,6 +1650,7 @@ export default class MatrixService extends Service {
     this.filesToSend.clear();
     this.currentUserEventReadReceipts.clear();
     this.restoredDraftRooms = new Set();
+    this.hydratedPendingSendRooms = new Set();
     this.aiRoomIds.clear();
     this.initialSyncCompleted = false;
     this.initialSyncCompletedDeferred = new Deferred<void>();
@@ -2209,7 +2345,47 @@ export default class MatrixService extends Service {
       this.processDecryptedEventFromAuthRoom(event);
       return;
     }
+
+    // cgi→oldEventId bridge: if doSendMessage previously injected a synthetic
+    // optimistic event with event_id `local-${cgi}`, hand that id to addEvent
+    // as oldEventId so Room.addEvent replaces the synthetic in-place. Without
+    // this bridge the synthetic and the real echo would both live in
+    // roomData.events and every consumer iterating `this.events` (sortedEvents,
+    // usedLLMs, llmModeEvents, command/code-patch result lookups, MessageBuilder's
+    // `events` argument) would double-count.
+    let cgi = event.content?.clientGeneratedId as string | undefined;
+    if (cgi && !oldEventId) {
+      let existing = this.getRoomData(roomId)?.events.find((e) => {
+        let eContent = (e as any).content;
+        return (
+          eContent?.clientGeneratedId === cgi &&
+          typeof (e as any).event_id === 'string' &&
+          (e as any).event_id.startsWith('local-')
+        );
+      });
+      if (existing) {
+        oldEventId = (existing as any).event_id;
+      }
+    }
+
     await this.addRoomEvent(event, oldEventId);
+
+    // Drop the persisted pending entry only once matrix-js-sdk has finalized
+    // the send. EventStatus is null/undefined for fully-delivered events (the
+    // SDK clears it after the server ack); 'sent' covers the intermediate
+    // "echo accepted, awaiting ack" state. Removing earlier (e.g. on the
+    // initial 'sending' local echo) would defeat a later patchPendingSend(
+    // 'not_sent') because the persisted entry would already be gone, so a
+    // failed send wouldn't survive a reload. 'not_sent' / 'cancelled' flow
+    // through patchPendingSend instead and keep the entry around so the
+    // failed bubble can be restored on reload.
+    let isTerminalSent =
+      event.status === null ||
+      event.status === undefined ||
+      (event.status as string) === 'sent';
+    if (cgi && isTerminalSent && event.sender === this.userId) {
+      this.localPersistenceService.removePendingSend(roomId, cgi);
+    }
 
     if (
       event.type === 'm.room.message' &&
@@ -2505,6 +2681,132 @@ export default class MatrixService extends Service {
     }
   }
 
+  // Hydrate persisted optimistic sends (from a prior tab/session) into the
+  // room's events list before matrix-js-sdk's /sync delivers any real echo.
+  // Real echoes that match by clientGeneratedId reconcile through the bridge
+  // in processDecryptedEvent; entries left in 'not_sent' surface the retry alert.
+  ensurePendingSendsHydrated(roomId: string) {
+    if (this.hydratedPendingSendRooms.has(roomId)) {
+      return;
+    }
+    let userId = this.userId;
+    if (!userId) {
+      // Don't mark the room hydrated — a later call (once login completes)
+      // must be free to try again.
+      return;
+    }
+    let entries = this.localPersistenceService.getPendingSends(roomId);
+    if (entries.length === 0) {
+      this.hydratedPendingSendRooms.add(roomId);
+      return;
+    }
+    this.hydratedPendingSendRooms.add(roomId);
+    for (let entry of entries) {
+      // Any entry persisted as 'sending' at hydration time is orphaned:
+      // matrix-js-sdk has no live pending event for it (a fresh tab/session
+      // has an empty in-memory queue), so nothing will ever reconcile it.
+      // Flip it to 'not_sent' so the retry alert surfaces and canSend can
+      // unblock once the user dismisses or retries.
+      let effectiveStatus: PendingSendStatus =
+        entry.status === 'sending' ? 'not_sent' : entry.status;
+      let effectiveErrorMessage =
+        effectiveStatus === 'not_sent'
+          ? (entry.errorMessage ?? 'Send interrupted — retry')
+          : entry.errorMessage;
+      if (effectiveStatus !== entry.status) {
+        this.localPersistenceService.updatePendingSendStatus(
+          roomId,
+          entry.clientGeneratedId,
+          { status: effectiveStatus, errorMessage: effectiveErrorMessage },
+        );
+      }
+      let event: TempEvent = {
+        event_id: `local-${entry.clientGeneratedId}`,
+        room_id: roomId,
+        sender: userId,
+        type: 'm.room.message',
+        origin_server_ts: entry.createdAt || Date.now(),
+        status: effectiveStatus as MatrixSDK.EventStatus,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: entry.body,
+          format: 'org.matrix.custom.html',
+          clientGeneratedId: entry.clientGeneratedId,
+          ...(effectiveStatus === 'not_sent' && effectiveErrorMessage
+            ? { errorMessage: effectiveErrorMessage }
+            : {}),
+          data: {
+            attachedCards: entry.attachedCardIds.map((id) => ({
+              sourceUrl: id,
+              name: id.split('/').pop() ?? id,
+              contentType: 'application/json',
+            })),
+            attachedFiles: entry.attachedFiles,
+            context: { tools: [], functions: [] },
+          },
+        } as unknown as CardMessageContent,
+      };
+      void this.addRoomEvent(event);
+    }
+  }
+
+  persistOptimisticSend(
+    roomId: string,
+    entry: {
+      clientGeneratedId: string;
+      body: string;
+      attachedCardIds: string[];
+      attachedFiles: ReturnType<FileDef['serialize']>[];
+      createdAt: number;
+    },
+  ) {
+    this.localPersistenceService.upsertPendingSend(roomId, {
+      clientGeneratedId: entry.clientGeneratedId,
+      body: entry.body,
+      attachedCardIds: entry.attachedCardIds,
+      attachedFiles: entry.attachedFiles.map(serializeFileForPersistence),
+      createdAt: entry.createdAt,
+      status: 'sending',
+    });
+  }
+
+  // Look up matrix-js-sdk's view of an outgoing send by clientGeneratedId.
+  // Used by doSendMessage's catch block to detect the inverse delivery race
+  // (sendEvent succeeded server-side but a downstream throw escaped before the
+  // local echo reconciled) — in that case the bubble must stay in 'sending'
+  // and let matrix's reconciliation finish, not flash 'not_sent'.
+  findPendingMatrixEventStatus(
+    roomId: string,
+    clientGeneratedId: string,
+  ): MatrixSDK.EventStatus | null | undefined {
+    let room = this.client.getRoom(roomId);
+    if (!room) {
+      return undefined;
+    }
+    // Optional-chained — the mock Room in tests doesn't implement
+    // getPendingEvents. The real SDK Room always does.
+    let pending = room.getPendingEvents?.() ?? [];
+    let matches = pending.filter((e) => {
+      let c = e.getContent() as { clientGeneratedId?: string };
+      return c?.clientGeneratedId === clientGeneratedId;
+    });
+    if (matches.length > 0) {
+      return matches[matches.length - 1].status ?? null;
+    }
+    // Not in the SDK's pending list — could be already-sent or never-attempted.
+    let live = room
+      .getLiveTimeline()
+      .getEvents()
+      .filter((e) => {
+        let c = e.getContent() as { clientGeneratedId?: string };
+        return c?.clientGeneratedId === clientGeneratedId;
+      });
+    if (live.length > 0) {
+      return live[live.length - 1].status ?? null;
+    }
+    return undefined;
+  }
+
   async getPromptParts(roomId: string) {
     const roomResource = this.roomResourcesCache.get(roomId);
     if (!roomResource) {
@@ -2549,6 +2851,24 @@ async function getStorage() {
   }
 
   return storage;
+}
+
+function serializeFileForPersistence(
+  f: ReturnType<FileDef['serialize']>,
+): StoredPendingFile {
+  // Conditional spreads avoid emitting `{ name: undefined }` keys, which
+  // matters under exactOptionalPropertyTypes — see sanitizePendingFile in
+  // local-persistence-service.ts for the symmetric reader.
+  return {
+    sourceUrl: f.sourceUrl,
+    ...(f.name ? { name: f.name } : {}),
+    ...(f.url ? { url: f.url } : {}),
+    ...(f.contentType ? { contentType: f.contentType } : {}),
+    ...(f.contentHash ? { contentHash: f.contentHash } : {}),
+    ...(typeof f.contentSize === 'number'
+      ? { contentSize: f.contentSize }
+      : {}),
+  } as StoredPendingFile;
 }
 
 declare module '@ember/service' {

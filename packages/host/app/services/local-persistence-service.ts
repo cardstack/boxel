@@ -7,6 +7,7 @@ import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   AiAssistantMessageDrafts,
+  AiAssistantPendingSends,
   CurrentRoomIdPersistenceKey,
 } from '../utils/local-storage-keys';
 
@@ -28,6 +29,23 @@ type DraftUpdate = {
   message?: string;
   attachedCardIds?: string[] | undefined;
   attachedFiles?: StoredFileDraft[] | undefined;
+};
+
+export type StoredPendingFile = Pick<
+  SerializedFileDef,
+  'sourceUrl' | 'name' | 'url' | 'contentType' | 'contentHash'
+> & { contentSize?: number };
+
+export type PendingSendStatus = 'sending' | 'not_sent';
+
+export type StoredPendingSend = {
+  clientGeneratedId: string;
+  body: string;
+  attachedCardIds: string[];
+  attachedFiles: StoredPendingFile[];
+  createdAt: number;
+  status: PendingSendStatus;
+  errorMessage?: string;
 };
 
 export default class LocalPersistenceService extends Service {
@@ -286,6 +304,167 @@ export default class LocalPersistenceService extends Service {
     let hasCards = draft.attachedCardIds && draft.attachedCardIds.length > 0;
     let hasFiles = draft.attachedFiles && draft.attachedFiles.length > 0;
     return !hasMessage && !hasCards && !hasFiles;
+  }
+
+  getPendingSends(roomId: string): StoredPendingSend[] {
+    return this.readPendingSends()[roomId] ?? [];
+  }
+
+  upsertPendingSend(roomId: string, entry: StoredPendingSend) {
+    let all = this.readPendingSends();
+    let list = all[roomId] ? [...all[roomId]] : [];
+    let index = list.findIndex(
+      (e) => e.clientGeneratedId === entry.clientGeneratedId,
+    );
+    if (index >= 0) {
+      list[index] = entry;
+    } else {
+      list.push(entry);
+    }
+    all[roomId] = list;
+    this.writePendingSends(all);
+  }
+
+  updatePendingSendStatus(
+    roomId: string,
+    clientGeneratedId: string,
+    update: { status: PendingSendStatus; errorMessage?: string },
+  ) {
+    let all = this.readPendingSends();
+    let list = all[roomId];
+    if (!list) {
+      return;
+    }
+    let index = list.findIndex(
+      (e) => e.clientGeneratedId === clientGeneratedId,
+    );
+    if (index < 0) {
+      return;
+    }
+    let next = [...list];
+    next[index] = {
+      ...next[index],
+      status: update.status,
+      errorMessage: update.errorMessage,
+    };
+    all[roomId] = next;
+    this.writePendingSends(all);
+  }
+
+  removePendingSend(roomId: string, clientGeneratedId: string) {
+    let all = this.readPendingSends();
+    let list = all[roomId];
+    if (!list) {
+      return;
+    }
+    let next = list.filter((e) => e.clientGeneratedId !== clientGeneratedId);
+    if (next.length === 0) {
+      delete all[roomId];
+    } else {
+      all[roomId] = next;
+    }
+    this.writePendingSends(all);
+  }
+
+  private readPendingSends(): Record<string, StoredPendingSend[]> {
+    let raw = window.localStorage.getItem(AiAssistantPendingSends);
+    if (!raw) {
+      return {};
+    }
+    try {
+      let parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') {
+        return {};
+      }
+      let sanitized: Record<string, StoredPendingSend[]> = {};
+      for (let [roomId, list] of Object.entries(
+        parsed as Record<string, unknown>,
+      )) {
+        if (!Array.isArray(list)) {
+          continue;
+        }
+        let entries = list
+          .map((entry) => this.sanitizePendingSend(entry))
+          .filter((e): e is StoredPendingSend => Boolean(e));
+        if (entries.length > 0) {
+          sanitized[roomId] = entries;
+        }
+      }
+      return sanitized;
+    } catch {
+      window.localStorage.removeItem(AiAssistantPendingSends);
+      return {};
+    }
+  }
+
+  private sanitizePendingSend(value: unknown): StoredPendingSend | undefined {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    let cgi = (value as { clientGeneratedId?: unknown }).clientGeneratedId;
+    if (typeof cgi !== 'string' || cgi.length === 0) {
+      return;
+    }
+    let body = (value as { body?: unknown }).body;
+    let attachedCardIds = (value as { attachedCardIds?: unknown })
+      .attachedCardIds;
+    let attachedFiles = (value as { attachedFiles?: unknown }).attachedFiles;
+    let createdAt = Number((value as { createdAt?: unknown }).createdAt);
+    let status = (value as { status?: unknown }).status;
+    let errorMessage = (value as { errorMessage?: unknown }).errorMessage;
+
+    return {
+      clientGeneratedId: cgi,
+      body: typeof body === 'string' ? body : '',
+      attachedCardIds: Array.isArray(attachedCardIds)
+        ? attachedCardIds.filter(
+            (id): id is string => typeof id === 'string' && id.length > 0,
+          )
+        : [],
+      attachedFiles: Array.isArray(attachedFiles)
+        ? (attachedFiles
+            .map((file) => this.sanitizePendingFile(file))
+            .filter(Boolean) as StoredPendingFile[])
+        : [],
+      createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+      status: status === 'not_sent' ? 'not_sent' : 'sending',
+      errorMessage: typeof errorMessage === 'string' ? errorMessage : undefined,
+    };
+  }
+
+  private sanitizePendingFile(file: unknown): StoredPendingFile | undefined {
+    if (!file || typeof file !== 'object') {
+      return;
+    }
+    let sourceUrl = (file as { sourceUrl?: unknown }).sourceUrl;
+    if (typeof sourceUrl !== 'string' || sourceUrl.length === 0) {
+      return;
+    }
+    let name = (file as { name?: unknown }).name;
+    let url = (file as { url?: unknown }).url;
+    let contentType = (file as { contentType?: unknown }).contentType;
+    let contentHash = (file as { contentHash?: unknown }).contentHash;
+    let contentSize = (file as { contentSize?: unknown }).contentSize;
+    return {
+      sourceUrl,
+      ...(typeof name === 'string' ? { name } : {}),
+      ...(typeof url === 'string' ? { url } : {}),
+      ...(typeof contentType === 'string' ? { contentType } : {}),
+      ...(typeof contentHash === 'string' ? { contentHash } : {}),
+      ...(typeof contentSize === 'number' ? { contentSize } : {}),
+    };
+  }
+
+  private writePendingSends(all: Record<string, StoredPendingSend[]>) {
+    let entries = Object.entries(all).filter(([, list]) => list.length > 0);
+    if (entries.length === 0) {
+      window.localStorage.removeItem(AiAssistantPendingSends);
+      return;
+    }
+    window.localStorage.setItem(
+      AiAssistantPendingSends,
+      JSON.stringify(Object.fromEntries(entries)),
+    );
   }
 }
 
