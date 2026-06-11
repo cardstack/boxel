@@ -6,6 +6,7 @@ import {
   contains,
   containsMany,
   linksTo,
+  realmURL,
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
@@ -102,6 +103,19 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     this.args.model.path = `/${trimmed}`;
   }
 
+  // The chooser is locked to the consuming realm; pass it through
+  // explicitly rather than letting LinksToEditor read it from
+  // `RealmURLContext`. The context is only provided by the operator-mode
+  // stack item, so in code submode (where the realm config renders via
+  // the playground / spec preview, outside any stack item) `this.realmURL`
+  // in LinksToEditor is undefined and the chooser falls back to
+  // unscoped search across every realm. The field's own `[realmURL]`
+  // getter is populated by `propagateRealmContext` when the owning
+  // RealmConfig card loads, so it works in either submode.
+  get consumingRealm(): URL | undefined {
+    return this.args.model[realmURL];
+  }
+
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
       <div class='row'>
@@ -118,7 +132,10 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
         </div>
         <span class='arrow' aria-hidden='true'>→</span>
         <div class='instance-cell'>
-          <@fields.instance @lockConsumingRealm={{true}} />
+          <@fields.instance
+            @lockConsumingRealm={{true}}
+            @consumingRealm={{this.consumingRealm}}
+          />
         </div>
       </div>
       {{#if this.pathWarning}}
