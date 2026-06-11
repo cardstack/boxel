@@ -149,7 +149,7 @@ jobs:
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
-    needs: [test-web-assets, check-percy]
+    needs: [check-percy]
     strategy:
       fail-fast: false
       matrix:
@@ -180,20 +180,14 @@ jobs:
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
+    env:
+      BOXEL_ENVIRONMENT: ci
+      SKIP_CATALOG: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # init provisions mise, deps, mkcert + the dev TLS cert (and points
+      # NODE_EXTRA_CA_CERTS at mkcert's root), which Traefik terminates with.
       - uses: ./.github/actions/init
-
-      - name: Download test web assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
-        shell: bash
-        run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
 
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
@@ -212,10 +206,55 @@ jobs:
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
+
+      # Trust mkcert's root in the system store too, so plain `curl` (which
+      # ignores NODE_EXTRA_CA_CERTS) can validate Traefik's leaf.
+      - name: Install mkcert root into system trust store
+        run: mkcert -install
+
+      - name: Start Traefik
+        run: mise run infra:ensure-traefik
+
+      # The riskiest unknown in CI: does *.localhost resolve to loopback on
+      # the runner? Fail loudly here with a clear message rather than deep in
+      # a service boot if it doesn't.
+      - name: Verify *.localhost resolves to loopback
+        run: |
+          set -x
+          getent hosts realm-server.ci.localhost || true
+          python3 -c "import socket; print(socket.getaddrinfo('realm-server.ci.localhost', 443))" || true
+          curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 https://realm-server.ci.localhost/ || true
+
+      - name: Build boxel-ui and boxel-icons
+        run: mise run build:ui
+
+      # Explicit boxel-skills clone before any pnpm workspace op can
+      # materialize an empty packages/skills-realm/contents directory and trip
+      # services/realm-server's `[ -d contents ]` skip in `pnpm skills:setup`.
+      # The repo is public and CI has no SSH key, so go straight to HTTPS;
+      # skip if a real working copy is already present (idempotent on reruns).
+      - name: Populate skills-realm content
+        run: |
+          set -eux
+          cd packages/skills-realm
+          if [ -d contents/Skill ]; then
+            echo "skills content already present, skipping clone"
+          else
+            rm -rf contents
+            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+          fi
+          ls contents/Skill/ | head -5
+
+      # The host test bundle bakes its realm URLs from BOXEL_ENVIRONMENT at
+      # build time, so the dist must be built with the same slug the running
+      # realm-server uses (realm-server.ci.localhost).
+      - name: Build env-mode host dist
+        run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
+        working-directory: packages/host
+
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
-          SKIP_CATALOG: true
           # Dump HTTP/2 session/stream state for any realm-server stream that
           # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
           # 60s host-test timeouts. Diagnostics-only; see server.ts.
@@ -224,13 +263,91 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
 
+      # Validate the CS-11275 fix end-to-end AND wait until the realm-server's
+      # own readiness check passes — _readiness-check covers full indexing
+      # (and the prerender standby that base indexing depends on). A
+      # subsequent settle pause lets the prerender's standby pool fully
+      # populate before the test runner spawns its own chrome instance, since
+      # concurrent chrome lifecycle events can otherwise trigger
+      # NetworkChangeNotifier and abort the prerender's still-loading standby
+      # pages.
+      - name: Wait for realms and assert public-read parity
+        run: |
+          set -u
+          accept='application/vnd.api+json'
+          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
+          info='_info'
+          base_ready="https://realm-server.ci.localhost/base/${ready}"
+          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
+          skills_info="https://realm-server.ci.localhost/skills/${info}"
+          base_info="https://realm-server.ci.localhost/base/${info}"
+
+          # base/_readiness-check returns 200 only after the from-scratch
+          # index of the base realm finishes. The per-slug Postgres is fresh
+          # every run so this always runs, ~60s. Tests that load base cards
+          # block on this being indexed.
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: base/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
+          # skills/_readiness-check is the parallel gate for the skills
+          # realm. The realm-server boots base and skills in sequence, so
+          # skills indexing only starts after base finishes; the AI-assistant
+          # skills tests fetch Skill/boxel-environment, which requires skills
+          # to be indexed before testem launches its chrome. Without this
+          # wait the test would 404 on skills cards even though base is ready.
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
+          # Public-read parity: must be 200 unauthenticated.
+          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
+          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
+          echo "skills/_info -> $skills_code"
+          echo "base/_info   -> $base_code"
+          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
+            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
+            exit 1
+          fi
+          echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
+
+      # Give the prerender's standby pool a moment to fully populate before
+      # the test runner launches its own chrome instance. Without this, the
+      # standby pages can still be loading host.ci.localhost asset chunks
+      # when the test starts, and the resulting flurry of chrome lifecycle
+      # events trips NetworkChangeNotifier, aborting the still-loading
+      # standby with ERR_NETWORK_CHANGED and leaving prerender unavailable
+      # to indexing.
+      - name: Settle prerender standby pool
+        run: sleep 60
+
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
           if [ "$PERCY_ENABLED" = "true" ]; then
-            TEST_CMD="pnpm test-with-percy"
+            TEST_CMD="percy exec --parallel -- pnpm ember-test-pre-built"
           else
             echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
-            TEST_CMD="pnpm test:wait-for-servers"
+            TEST_CMD="pnpm ember-test-pre-built"
           fi
 
           set +e
@@ -273,7 +390,6 @@ jobs:
           exit $exit_code
         env:
           PERCY_ENABLED: ${{ needs.check-percy.outputs.percy_needed }}
-          SKIP_CATALOG: true
           PERCY_GZIP: true
           PERCY_TOKEN: ${{ needs.check-percy.outputs.percy_needed == 'true' && secrets.PERCY_TOKEN_HOST || '' }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -383,257 +499,6 @@ jobs:
           name: testem-log-${{ matrix.shardIndex }}
           path: junit/host-testem.log
           retention-days: 30
-
-  # Proof-of-concept: boot the realm-server stack in *environment mode*
-  # (BOXEL_ENVIRONMENT set -> Traefik, *.localhost hostnames, per-slug DB,
-  # dynamic ports) and assert that the realms which are public in standard
-  # mode are also public here. Until this is green, the full host suite is
-  # NOT run in env mode — this job exists to de-risk the infra (Traefik in
-  # CI, *.localhost resolution, env-mode boot) and to guard the env-mode
-  # public-read parity that the host integration tests depend on. Scaling
-  # to the full sharded suite is a follow-up once the plumbing is proven.
-  #
-  # A fixed slug ("ci") is safe: every job runs on its own isolated VM, so
-  # the Traefik/DB/port footprint never collides across shards or PRs, and
-  # a fixed slug keeps the env-mode build reproducible.
-  host-test-env-mode-poc:
-    name: Host Env-Mode (shard ${{ matrix.shardIndex }}, ${{ matrix.shardTotal }})
-    runs-on: ubuntu-latest
-    concurrency:
-      group: host-env-mode-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        shardIndex:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-          ]
-        shardTotal: [20]
-    env:
-      BOXEL_ENVIRONMENT: ci
-      SKIP_CATALOG: "true"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      # init provisions mise, deps, mkcert + the dev TLS cert (and points
-      # NODE_EXTRA_CA_CERTS at mkcert's root), which Traefik terminates with.
-      - uses: ./.github/actions/init
-
-      - name: Disable TCP/UDP network offloading
-        run: sudo ethtool -K eth0 tx off rx off
-      - name: Install D-Bus helpers
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 upower
-          sudo service dbus restart
-          sudo service upower restart
-
-      # Trust mkcert's root in the system store too, so plain `curl` (which
-      # ignores NODE_EXTRA_CA_CERTS) can validate Traefik's leaf.
-      - name: Install mkcert root into system trust store
-        run: mkcert -install
-
-      - name: Start Traefik
-        run: mise run infra:ensure-traefik
-
-      # The riskiest unknown in CI: does *.localhost resolve to loopback on
-      # the runner? Fail loudly here with a clear message rather than deep in
-      # a service boot if it doesn't.
-      - name: Verify *.localhost resolves to loopback
-        run: |
-          set -x
-          getent hosts realm-server.ci.localhost || true
-          python3 -c "import socket; print(socket.getaddrinfo('realm-server.ci.localhost', 443))" || true
-          curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 https://realm-server.ci.localhost/ || true
-
-      - name: Build boxel-ui and boxel-icons
-        run: mise run build:ui
-
-      # Explicit boxel-skills clone before any pnpm workspace op can
-      # materialize an empty packages/skills-realm/contents directory and trip
-      # services/realm-server's `[ -d contents ]` skip in `pnpm skills:setup`.
-      # The repo is public and CI has no SSH key, so go straight to HTTPS;
-      # skip if a real working copy is already present (idempotent on reruns).
-      # `ls Skill/` confirms the clone actually produced content — a previous
-      # attempt that relied on `pnpm skills:setup` had a silent failure mode
-      # where the SSH step left a non-empty contents/ that the fallback
-      # https clone refused to overwrite, leaving the realm to boot empty.
-      - name: Populate skills-realm content
-        run: |
-          set -eux
-          cd packages/skills-realm
-          if [ -d contents/Skill ]; then
-            echo "skills content already present, skipping clone"
-          else
-            rm -rf contents
-            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
-          fi
-          ls contents/Skill/ | head -5
-
-      # The host test bundle bakes its realm URLs from BOXEL_ENVIRONMENT at
-      # build time, so the dist must be built with the same slug the running
-      # realm-server uses (realm-server.ci.localhost), not the standard-mode
-      # localhost:4201 artifact the other host jobs reuse.
-      - name: Build env-mode host dist
-        run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
-        working-directory: packages/host
-
-      # DIAGNOSTIC: confirm skills-realm content is still on disk right before
-      # the realm-server reads it. Previous runs showed the explicit clone
-      # populated contents/ but the skills realm still indexed zero files;
-      # this verifies whether something between the clone and realm-server
-      # start is clobbering the content.
-      - name: Verify skills-realm content on disk before services start
-        run: |
-          echo "=== packages/skills-realm/contents/ at $(date -Iseconds) ==="
-          ls -la packages/skills-realm/contents/ || echo "MISSING"
-          echo "=== Skill subdir ==="
-          ls -la packages/skills-realm/contents/Skill/ 2>/dev/null | head -10 || echo "MISSING"
-          echo "=== resolved from realm-server cwd (../skills-realm/contents) ==="
-          (cd packages/realm-server && ls -la ../skills-realm/contents/Skill/ 2>/dev/null | head -10) || echo "MISSING"
-
-      - name: Start env-mode test services
-        run: mise run test-services:host | tee -a /tmp/server.log &
-
-      # Validate the CS-11275 fix end-to-end AND wait until the realm-server's
-      # own readiness check passes — _readiness-check is what test-services:host
-      # gates its second stage on, so it covers full indexing (and the prerender
-      # standby that base indexing depends on). A subsequent settle pause lets
-      # the prerender's standby pool fully populate before the test runner
-      # spawns its own chrome instance, since concurrent chrome lifecycle
-      # events can otherwise trigger NetworkChangeNotifier and abort the
-      # prerender's still-loading standby pages.
-      - name: Wait for realms and assert public-read parity
-        run: |
-          set -u
-          accept='application/vnd.api+json'
-          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
-          info='_info'
-          base_ready="https://realm-server.ci.localhost/base/${ready}"
-          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
-          skills_info="https://realm-server.ci.localhost/skills/${info}"
-          base_info="https://realm-server.ci.localhost/base/${info}"
-
-          # base/_readiness-check returns 200 only after the from-scratch index
-          # of the base realm finishes. In env-mode CI the per-slug Postgres is
-          # fresh every run so this always runs, ~60s. Tests that load base
-          # cards block on this being indexed.
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: base/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          # skills/_readiness-check is the parallel gate for the skills realm.
-          # The realm-server boots base and skills in sequence, so skills
-          # indexing only starts after base finishes; the AI-assistant skills
-          # tests fetch Skill/boxel-environment, which requires skills to be
-          # indexed before testem launches its chrome. Without this wait the
-          # test would 404 on skills cards even though base is ready.
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          # Public-read parity: must be 200 unauthenticated.
-          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
-          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
-          echo "skills/_info -> $skills_code"
-          echo "base/_info   -> $base_code"
-          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
-            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
-            exit 1
-          fi
-          echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
-
-      # Give the prerender's standby pool a moment to fully populate before the
-      # test runner launches its own chrome instance. Without this, the
-      # standby pages can still be loading host.ci.localhost asset chunks when
-      # the test starts, and the resulting flurry of chrome lifecycle events
-      # trips NetworkChangeNotifier, aborting the still-loading standby with
-      # ERR_NETWORK_CHANGED and leaving prerender unavailable to indexing.
-      - name: Settle prerender standby pool
-        run: sleep 60
-
-      # Run this shard of the host QUnit suite against the env-mode stack
-      # above, using the same partitioning the standard host-test job uses
-      # (HOST_TEST_PARTITION/COUNT consumed by packages/host/package.json's
-      # ember-test-pre-built script: ember exam --split COUNT --partition INDEX).
-      # Kept non-blocking so the public-read parity gate above remains the
-      # required per-shard signal while any env-mode-specific test fallout
-      # is matured; promote to required once stable across all shards.
-      - name: Run host shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }} in env mode (non-blocking)
-        continue-on-error: true
-        # Mirror the chunk-fetch retry block from the standard host-test job:
-        # transient ChunkLoadError / "Failed to fetch dynamically imported
-        # module" / "NetworkError when attempting to fetch resource" can abort
-        # a whole shard before any tests run, so retry once when the pattern
-        # is detected, then report the successful run's output if recovered.
-        run: |
-          set +e
-          TEST_CMD="dbus-run-session -- pnpm ember-test-pre-built"
-          $TEST_CMD 2>&1 | tee /tmp/test-output.log
-          exit_code=${PIPESTATUS[0]}
-          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource'
-          if [ $exit_code -ne 0 ] && grep -Eq "$RETRY_PATTERN" /tmp/test-output.log; then
-            echo "::warning::Transient chunk-fetch failure detected — retrying shard ${{ matrix.shardIndex }}"
-            $TEST_CMD 2>&1 | tee /tmp/test-output-retry.log
-            retry_exit_code=${PIPESTATUS[0]}
-            if [ $retry_exit_code -eq 0 ]; then
-              echo "::notice::Shard ${{ matrix.shardIndex }} recovered on retry"
-              mv /tmp/test-output-retry.log /tmp/test-output.log
-              exit_code=0
-            else
-              echo "::error::Shard ${{ matrix.shardIndex }} failed twice after chunk-fetch retry"
-              exit_code=$retry_exit_code
-            fi
-          fi
-          exit $exit_code
-        working-directory: packages/host
-        env:
-          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
-          HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
-          HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
-
-      - name: Print server logs
-        if: ${{ !cancelled() }}
-        run: cat /tmp/server.log || true
 
   host-percy-finalize:
     name: Finalise Percy
