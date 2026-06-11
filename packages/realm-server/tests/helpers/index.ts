@@ -1216,7 +1216,16 @@ export async function createRealm({
 // own `tests/index.ts`; this call covers callers like the boxel-cli and
 // workspace-sync vitest suites that consume the helpers without that
 // bootstrap.
+//
+// Skip in env mode: createListener (server.ts) treats HTTP/2+TLS as a
+// system invariant when BOXEL_ENVIRONMENT is set and throws on a missing
+// cert with no plain-HTTP fallback. Env-mode fixture servers also bypass
+// the first-byte dispatcher (Traefik is the only client), so the
+// standard-mode rationale above doesn't apply.
 function stripTlsEnvVars() {
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return;
+  }
   delete process.env.REALM_SERVER_TLS_CERT_FILE;
   delete process.env.REALM_SERVER_TLS_KEY_FILE;
 }
