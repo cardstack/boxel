@@ -282,6 +282,8 @@ const ALL_TEST_FILES: string[] = [
   './eq-containment-integration-test',
   './search-in-flight-key-test',
   './unified-search-contracts-test',
+  './search-entry-test',
+  './search-entries-engine-test',
   './render-type-resolution-test',
   './coerce-error-message-test',
   './realm-operations-test',

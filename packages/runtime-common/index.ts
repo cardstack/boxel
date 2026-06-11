@@ -738,6 +738,7 @@ export * from './query.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
 export * from './unified-search.ts';
+export * from './search-entry.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -828,6 +829,8 @@ export type {
   LinkableCollectionDocument,
   UnifiedSearchCollectionDocument,
   UnifiedSearchIncludedResource,
+  SearchEntryCollectionDocument,
+  SearchEntryIncludedResource,
 } from './document-types.ts';
 export type {
   CardResource,
