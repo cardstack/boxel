@@ -1,11 +1,25 @@
-import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
 
-import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  rri,
+  baseRRI,
+  Deferred,
+  type Realm,
+} from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   percySnapshot,
@@ -271,6 +285,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   }
 
   let adapter: TestRealmAdapter;
+  let realm: Realm;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -301,7 +316,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         testRealmURL2,
       );
     }
-    ({ adapter } = await withCachedRealmSetup(async () => {
+    ({ adapter, realm } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
         realmURL: testRealmURL2,
@@ -1545,4 +1560,91 @@ export class TestCard extends Animal {
       });
     },
   );
+
+  // When the AI assistant (or any external writer) creates a new .gts and
+  // then updates the code-submode codePath to the just-written URL, the
+  // host's FileResource (packages/host/app/resources/file.ts) can lose the
+  // race against the realm's index pipeline. The first authedFetch returns
+  // 404 and `read` transitions into `state: 'not-found'`. The realm later
+  // broadcasts `index/incremental` for the new URL, and the FileResource
+  // must react to that event and recover — otherwise the URL bar stays
+  // stuck on "This resource does not exist" until the user re-navigates.
+  //
+  // This test simulates the external write by navigating to a non-existent
+  // URL, confirming the URL bar shows the not-found error, then performing
+  // the write via the realm directly (mirroring what the realm-server does
+  // when a card+source PUT lands). After the realm broadcasts the matching
+  // `index/incremental` event, the URL bar must recover.
+  module('when an external write creates a new file', function (hooks) {
+    hooks.beforeEach(function () {
+      setRealmPermissions({
+        [baseRealm.url]: ['read'],
+        [testRealmURL]: ['read', 'write'],
+      });
+    });
+
+    test('code submode recovers when a newly-created file arrives via a realm index/incremental event', async function (assert) {
+      let newFilePath = 'ai-created-card.gts';
+      let newFileUrl = `${testRealmURL}${newFilePath}`;
+      let newFileSource = `
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export default class AiCreatedCard extends CardDef {
+          static displayName = 'Ai Created Card';
+        }
+      `;
+
+      // Simulate the AI assistant updating the codePath to a file that does
+      // not yet exist in the realm. The host has not seen this URL before,
+      // so FileResource.read will hit 404.
+      await visitOperatorMode(newFileUrl);
+
+      await waitFor('[data-test-card-url-bar-error]');
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .containsText(
+          'This resource does not exist',
+          'URL bar surfaces the not-found error on initial 404',
+        );
+
+      // The realm broadcasts the incremental invalidation event over matrix
+      // once indexing of the newly-written file completes. Subscribe so we
+      // can await its arrival deterministically before asserting recovery.
+      let incrementalEvent = new Deferred<void>();
+      let unsubscribe = getService('message-service').subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
+          if (
+            ev.eventName === 'index' &&
+            ev.indexType === 'incremental' &&
+            Array.isArray(ev.invalidations) &&
+            (ev.invalidations as string[]).includes(newFileUrl)
+          ) {
+            unsubscribe();
+            incrementalEvent.fulfill();
+          }
+        },
+      );
+
+      // realm.write mirrors what the realm-server does when
+      // WriteTextFileCommand's PUT lands: persist source, transpile, index,
+      // and broadcast the `index/incremental` event with the new URL in
+      // `invalidations`. No clientRequestId is passed — the same shape the
+      // bot uses when it patches/creates a card module.
+      await realm.write(newFilePath, newFileSource);
+      await incrementalEvent.promise;
+      await settled();
+
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .doesNotExist(
+          'URL bar error clears after the realm broadcasts the index/incremental event for the new file',
+        );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          newFileUrl,
+          'code submode stays on the new file URL after recovery',
+        );
+    });
+  });
 });
