@@ -38,6 +38,7 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../openrouter-realm/**/*",
+    "../test-realm-cards/contents/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"
