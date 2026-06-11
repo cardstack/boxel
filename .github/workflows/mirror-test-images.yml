@@ -20,7 +20,10 @@ on:
       - packages/matrix/support/synapse/index.ts
       - packages/matrix/docker/smtp4dev.ts
       - mise-tasks/infra/ensure-pg
-      - packages/realm-server/scripts/start-pg.sh
+      # The realm-server start-pg.sh is a symlink to this real file (where the
+      # postgres pin lives); a path filter on the symlink wouldn't see edits to
+      # the pinned version.
+      - packages/postgres/scripts/start-pg.sh
 
 concurrency:
   group: mirror-test-images
