@@ -563,6 +563,16 @@ jobs:
     env:
       BOXEL_ENVIRONMENT: ci
       SKIP_CATALOG: "true"
+      # env-vars.sh sets these only if the cert files exist at sourcing
+      # time, but mise-action sources it before `actions/init` runs
+      # `mise run infra:ensure-dev-cert` (which provisions the cert), so
+      # the conditional silently skips and the env vars never propagate
+      # to the test step. Setting them explicitly at the job level matches
+      # the hardcoded path `infra:ensure-dev-cert` writes to on
+      # ubuntu-latest. Required by `createListener` in env mode — HTTP/2
+      # is a system invariant and there's no plain-HTTP fallback.
+      REALM_SERVER_TLS_CERT_FILE: /home/runner/.local/share/boxel/dev-certs/localhost.pem
+      REALM_SERVER_TLS_KEY_FILE: /home/runner/.local/share/boxel/dev-certs/localhost-key.pem
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
