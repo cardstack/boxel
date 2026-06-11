@@ -7,18 +7,29 @@ import SummaryIcon from '@cardstack/boxel-icons/notepad-text';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import ImageIcon from '@cardstack/boxel-icons/image';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
+import XIcon from '@cardstack/boxel-icons/x';
 
 import type { CardOrFieldTypeIcon, CardDef, FieldsTypeFor } from '../card-api';
+import { ImageDef } from '../card-api';
 
 import setBackgroundImage from '../helpers/set-background-image';
 
-import { FieldContainer, Button } from '@cardstack/boxel-ui/components';
+import {
+  FieldContainer,
+  Button,
+  IconButton,
+} from '@cardstack/boxel-ui/components';
 import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { ChevronRight } from '@cardstack/boxel-ui/icons';
 
 import { startCase } from 'lodash';
 
-import { getFieldIcon, cardDefComputedFields } from '@cardstack/runtime-common';
+import {
+  chooseFile,
+  identifyCard,
+  getFieldIcon,
+  cardDefComputedFields,
+} from '@cardstack/runtime-common';
 
 class CardInfoImageContainer extends GlimmerComponent<{
   Args: {
@@ -189,8 +200,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               {{on 'click' this.toggleThumbnailEditor}}
               data-test-toggle-thumbnail-editor
             >
-              Change URL
-              {{#unless @hideThemeChooser}}& Theme{{/unless}}
+              Change Thumbnail
             </Button>
           </div>
         </:label>
@@ -225,31 +235,47 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         <div class='hidden-fields'>
           <FieldContainer
             class='card-info-field'
-            @label='Thumbnail Image'
-            @icon={{ImageIcon}}
-            data-test-field='cardInfo-thumbnail'
-          >
-            <@fields.cardInfo.cardThumbnail />
-          </FieldContainer>
-          <FieldContainer
-            class='card-info-field'
             @label='Thumbnail URL'
-            @tag='label'
-            @icon={{LinkIcon}}
+            @icon={{ImageIcon}}
             data-test-field='cardInfo-thumbnailURL'
           >
-            <div class='thumbnail-input-container'>
-              {{#if this.showThumbnailPlaceholder}}
+            <div class='thumbnail-picker'>
+              <div class='thumbnail-picker-inputs'>
                 <span
-                  class='thumbnail-placeholder'
-                  data-test-thumbnail-placeholder
+                  class='thumbnail-picker-input-slot'
+                  data-test-thumbnail-input
                 >
-                  <@fields.cardThumbnailURL />
+                  <@fields.cardInfo.cardThumbnailURL />
                 </span>
-              {{/if}}
-              <span class='boxel-contents-only' data-test-thumbnail-input>
-                <@fields.cardInfo.cardThumbnailURL />
-              </span>
+                {{#if this.hasThumbnailUrl}}
+                  <IconButton
+                    class='thumbnail-picker-clear'
+                    @icon={{XIcon}}
+                    @width='16px'
+                    @height='16px'
+                    aria-label='Clear thumbnail'
+                    data-test-thumbnail-clear
+                    {{on 'click' this.clearThumbnail}}
+                  />
+                {{else if this.computedThumbnailFallback}}
+                  <span
+                    class='thumbnail-picker-placeholder'
+                    data-test-thumbnail-placeholder
+                    aria-hidden='true'
+                  >{{this.computedThumbnailFallback}}</span>
+                {{/if}}
+              </div>
+              {{#unless this.hasThumbnailUrl}}
+                <span class='thumbnail-picker-or'>or</span>
+                <Button
+                  @kind='secondary'
+                  @size='extra-small'
+                  data-test-thumbnail-select-image
+                  {{on 'click' this.selectThumbnailImage}}
+                >
+                  Select Image
+                </Button>
+              {{/unless}}
             </div>
           </FieldContainer>
           {{#unless @hideThemeChooser}}
@@ -318,29 +344,67 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .theme-field :deep(.links-to-editor .field-component-card) {
         min-height: var(--boxel-form-control-height);
       }
-      .thumbnail-input-container {
+      .thumbnail-picker {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .thumbnail-picker-inputs {
+        flex: 1;
+        min-width: 0;
         position: relative;
       }
-      .thumbnail-placeholder:not(:has(input)) {
-        position: absolute;
-        top: var(--boxel-sp-xs);
-        left: var(--boxel-sp-sm);
-        color: var(--muted-foreground, var(--boxel-450));
+      .thumbnail-picker-input-slot {
+        display: block;
       }
-      .thumbnail-placeholder :deep(input) {
-        position: absolute;
-        left: 0;
-        right: 0;
+      .thumbnail-picker-input-slot :deep(input) {
         width: 100%;
+        padding-right: 2.5rem;
+        text-overflow: ellipsis;
+      }
+      .thumbnail-picker-clear {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
         height: 100%;
-        padding-block: 0;
-        background: none;
-        border: none;
-        outline-offset: -1px;
-        outline-width: 2px;
+        opacity: 0.5;
+        z-index: 1;
+      }
+      .thumbnail-picker-clear:hover,
+      .thumbnail-picker-clear:focus {
+        opacity: 1;
+        outline: 0;
+      }
+      .thumbnail-picker-placeholder {
+        position: absolute;
+        top: 0;
+        left: var(--boxel-sp-sm);
+        right: 2.5rem;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        color: var(--muted-foreground, var(--boxel-450));
+        pointer-events: none;
+      }
+      .thumbnail-picker-or {
+        flex-shrink: 0;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground, var(--boxel-400));
       }
       .null-preview {
         color: var(--muted-foreground, var(--boxel-450));
+      }
+      .default-preview :deep([data-test-edit-preview='cardThumbnailURL']) {
+        overflow-wrap: anywhere;
+        min-width: 0;
       }
     </style>
   </template>
@@ -365,13 +429,38 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
     }));
   }
 
-  private get showThumbnailPlaceholder() {
-    return (
-      !this.args.model?.cardInfo?.cardThumbnail &&
-      !this.args.model?.cardInfo?.cardThumbnailURL &&
-      this.args.model?.cardThumbnailURL
-    );
+  private get hasThumbnailUrl() {
+    return Boolean(this.args.model?.cardInfo?.cardThumbnailURL);
   }
+
+  private get computedThumbnailFallback() {
+    let cardInfo = this.args.model?.cardInfo;
+    if (cardInfo?.cardThumbnailURL) {
+      return undefined;
+    }
+    return this.args.model?.cardThumbnailURL;
+  }
+
+  private clearThumbnail = () => {
+    let cardInfo = this.args.model?.cardInfo;
+    if (cardInfo) {
+      cardInfo.cardThumbnailURL = null as unknown as string;
+    }
+  };
+
+  private selectThumbnailImage = async () => {
+    let cardInfo = this.args.model?.cardInfo;
+    if (!cardInfo) {
+      return;
+    }
+    let imageRef = identifyCard(ImageDef);
+    let file = await chooseFile(
+      imageRef ? { fileType: imageRef, fileTypeName: 'Image' } : undefined,
+    );
+    if (file?.url) {
+      cardInfo.cardThumbnailURL = file.url;
+    }
+  };
 }
 
 const CardInfoTemplates = {
