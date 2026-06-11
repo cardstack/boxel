@@ -240,6 +240,12 @@ export default class WorkspaceChooser extends Component<Signature> {
         break;
       case 'Enter': {
         event.preventDefault();
+        // Stop this keystroke from reaching ember-keyboard's document-level
+        // listener. Activating the "New Workspace" tile mounts a modal whose
+        // Create button has a global `{{on-key 'Enter'}}`; without this, the
+        // same Enter would bubble on to that listener and submit the form the
+        // instant it opens.
+        event.stopPropagation();
         let selected = container.querySelector(
           `[data-nav-index='${this.currentIndex}']`,
         );

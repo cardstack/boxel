@@ -563,6 +563,11 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert
         .dom('[data-test-create-workspace-modal]')
         .exists('Enter opens the create-workspace modal');
+      // The same Enter must not also submit the form: the modal stays on its
+      // input fields rather than flipping to the "Creating workspace..." state.
+      assert
+        .dom('[data-test-display-name-field]')
+        .exists('the modal shows its form rather than submitting on open');
     });
 
     test('right arrow advances past the New Workspace tile into the catalog section', async function (assert) {
