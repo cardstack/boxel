@@ -319,6 +319,36 @@ function getPrimitiveType(
 }
 
 /**
+ * `enumField()` (base/enum.gts) attaches its options to the generated
+ * FieldDef subclass as `static configuration = { enum: { options } }`.
+ * Surface those as JSON-Schema `enum` values. Options are either rich
+ * `{ value, label }` objects or bare primitives; the allowed value is
+ * `option.value` for the former, the option itself for the latter.
+ *
+ * The function form of `configuration` (model-dependent options, e.g. a
+ * status list configured per project) is skipped: there is no model
+ * instance at schema-generation time to resolve it against.
+ */
+function getStaticEnumValues(
+  def: typeof CardAPI.BaseDef,
+): unknown[] | undefined {
+  let configuration = (def as { configuration?: unknown }).configuration;
+  if (!configuration || typeof configuration !== 'object') {
+    return undefined;
+  }
+  let options = (configuration as { enum?: { options?: unknown } }).enum
+    ?.options;
+  if (!Array.isArray(options) || options.length === 0) {
+    return undefined;
+  }
+  return options.map((option) =>
+    option !== null && typeof option === 'object' && 'value' in option
+      ? (option as { value: unknown }).value
+      : option,
+  );
+}
+
+/**
  *  From a card or field definition, generate a JSON Schema that can be used to
  *  define the shape of a patch call. Fields that cannot be automatically
  *  identified may be omitted from the schema.
@@ -344,7 +374,12 @@ function generateJsonSchemaForContainsFields(
   let requiredFields = options?.require || [];
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
-    return getPrimitiveType(def, mappings);
+    let schema = getPrimitiveType(def, mappings);
+    let enumValues = getStaticEnumValues(def);
+    if (schema && enumValues) {
+      return { ...schema, enum: enumValues } as AttributesSchema;
+    }
+    return schema;
   }
 
   // If it's not a primitive, it contains other fields

@@ -102,6 +102,27 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     expect(attrs.properties).toHaveProperty('summary');
     expect(attrs.properties).toHaveProperty('status');
     expect(attrs.properties).toHaveProperty('priority');
+
+    // enumField-backed fields with static options carry their allowed
+    // values; agents consume these instead of grepping field sources.
+    expect(attrs.properties.issueType.enum).toEqual([
+      'bootstrap',
+      'feature',
+      'adjustment',
+      'bug',
+      'task',
+      'research',
+      'infrastructure',
+    ]);
+    expect(attrs.properties.priority.enum).toEqual([
+      'critical',
+      'high',
+      'medium',
+      'low',
+    ]);
+    // `status` options are configured per project (function-form
+    // configuration), so it has no static enum in the schema.
+    expect(attrs.properties.status.enum).toBeUndefined();
   } finally {
     cleanup();
   }
