@@ -509,7 +509,10 @@ export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page
     .locator('[data-test-card-chooser-modal] [data-test-search-field]')
     .fill(cardId);
-  await page.locator(`[data-test-item-button="${cardId}"]`).first().click();
+  await page
+    .locator(`[data-test-card-chooser-modal] [data-test-item-button="${cardId}"]`)
+    .first()
+    .click();
   await page.locator('[data-test-card-chooser-go-button]').click();
 }
 
