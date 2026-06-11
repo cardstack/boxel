@@ -1,6 +1,10 @@
 import { service } from '@ember/service';
 
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import {
+  ensureTrailingSlash,
+  resolvePublishedRealmUrl,
+  type PublishTargetType,
+} from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
@@ -8,10 +12,6 @@ import config from '@cardstack/host/config/environment';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import {
-  resolvePublishedRealmUrl,
-  type PublishTargetType,
-} from '../lib/published-realm-url';
 
 import type RealmService from '../services/realm';
 import type { PublishabilityViolation } from '../services/realm';
