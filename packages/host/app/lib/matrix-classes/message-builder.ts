@@ -228,6 +228,19 @@ export default class MessageBuilder {
     message.errorMessage = this.errorMessage;
     message.reloadBillingData = shouldReloadBillingData(this.event.content);
 
+    // Refresh attached card/file metadata so an optimistic synthetic — which
+    // names attached cards from URL slugs alone — gets its names/types
+    // replaced by the real echo's serialized FileDef shape (title-cased,
+    // proper contentType, etc.) without re-creating the Message instance.
+    if (
+      this.event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
+      this.event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+    ) {
+      message.attachedCardIds = this.attachedCardIds;
+      message.attachedCardsAsFiles = this.attachedCardsAsFiles;
+      message.attachedFiles = this.attachedFiles;
+    }
+
     let encodedCommandRequests =
       (this.event.content as CardMessageContent)[
         APP_BOXEL_COMMAND_REQUESTS_KEY

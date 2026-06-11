@@ -224,6 +224,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
+  private cardInvalidationSubscribers: Map<string, Set<() => void>> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
@@ -323,6 +324,7 @@ export default class StoreService extends Service implements StoreInterface {
   resetState() {
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
+    this.cardInvalidationSubscribers = new Map();
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
     this.newReferencePromises = [];
@@ -394,6 +396,65 @@ export default class StoreService extends Service implements StoreInterface {
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
     this.store.reset();
     this.reestablishReferences.perform();
+  }
+
+  // Notify-on-delete for callers that hold a card by direct JS reference rather
+  // than by linksTo. `consumersOf` only walks linksTo refs, so a direct holder
+  // (e.g. MatrixService's `_systemCard`) would otherwise stay pinned to a
+  // now-evicted instance until the next reload. Subscribers fire from both
+  // delete paths — `delete()` (in-tab UI) and the `reloadTask` 404 branch
+  // (matrix-auth-room invalidation for cross-tab / cross-machine deletes).
+  subscribeToCardInvalidation(id: string, cb: () => void): () => void {
+    let normalizedId = asURL(id, this.network.virtualNetwork);
+    let subscribers = this.cardInvalidationSubscribers.get(normalizedId);
+    if (!subscribers) {
+      subscribers = new Set();
+      this.cardInvalidationSubscribers.set(normalizedId, subscribers);
+    }
+    subscribers.add(cb);
+    return () => {
+      let current = this.cardInvalidationSubscribers.get(normalizedId);
+      if (!current) {
+        return;
+      }
+      current.delete(cb);
+      if (current.size === 0) {
+        this.cardInvalidationSubscribers.delete(normalizedId);
+      }
+    };
+  }
+
+  private notifyCardInvalidationSubscribers(id: string) {
+    let normalizedId = asURL(id, this.network.virtualNetwork);
+    let subscribers = this.cardInvalidationSubscribers.get(normalizedId);
+    if (!subscribers) {
+      return;
+    }
+    // Snapshot to tolerate unsubscribe-from-callback without skipping siblings.
+    // Subscribers may be async — catch rejections that escape the synchronous
+    // try/catch so a failure in one handler does not become an unhandled
+    // promise rejection or starve sibling handlers.
+    for (let cb of [...subscribers]) {
+      try {
+        let maybePromise = cb() as unknown;
+        if (
+          maybePromise &&
+          typeof (maybePromise as PromiseLike<unknown>).then === 'function'
+        ) {
+          (maybePromise as Promise<unknown>).catch((err) =>
+            console.error(
+              `card invalidation subscriber for ${normalizedId} rejected`,
+              err,
+            ),
+          );
+        }
+      } catch (err) {
+        console.error(
+          `card invalidation subscriber for ${normalizedId} threw`,
+          err,
+        );
+      }
+    }
   }
 
   dropReference(id: string | undefined) {
@@ -809,6 +870,11 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     await this.cardService.fetchJSON(id, { method: 'DELETE' });
+    // Notify direct-reference holders (e.g. MatrixService's `_systemCard`)
+    // only AFTER the server DELETE completes — these subscribers typically
+    // re-evaluate by calling `store.get(id)`, which is cache-first and would
+    // otherwise refetch the still-extant file and miss the deletion.
+    this.notifyCardInvalidationSubscribers(id);
   }
 
   async patch<T extends CardDef = CardDef>(
@@ -1660,6 +1726,10 @@ export default class StoreService extends Service implements StoreInterface {
         for (let consumer of consumers) {
           api.notifyLinksToTargetDeleted(consumer, instance.id);
         }
+        // Notify direct-reference holders after the local eviction so their
+        // re-evaluation does not return the cached pre-delete instance.
+        // (The server is already gone — we got here from a 404 reload.)
+        this.notifyCardInvalidationSubscribers(instance.id);
       }
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);

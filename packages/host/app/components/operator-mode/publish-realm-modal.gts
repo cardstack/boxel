@@ -24,7 +24,11 @@ import {
 import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import {
+  deriveRealmName,
+  ensureTrailingSlash,
+  resolvePublishedRealmUrl,
+} from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import CheckDomainAvailabilityCommand from '@cardstack/host/commands/check-domain-availability';
@@ -33,10 +37,6 @@ import PrivateDependencyViolationComponent from '@cardstack/host/components/oper
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
-import {
-  deriveRealmName,
-  resolvePublishedRealmUrl,
-} from '@cardstack/host/lib/published-realm-url';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';

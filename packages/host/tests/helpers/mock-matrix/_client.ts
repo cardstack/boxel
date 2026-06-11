@@ -498,6 +498,9 @@ export class MockClient implements ExtendedClient {
     let localEvent = new MatrixEvent(localEventData);
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
+    if (this.sdkOpts.sendEventInterceptor) {
+      await this.sdkOpts.sendEventInterceptor();
+    }
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }

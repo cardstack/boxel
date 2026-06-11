@@ -101,10 +101,10 @@ export default function handleSearch(opts: {
     let cardsQuery = parsed.cardsQuery;
 
     // Resolve the prefer-HTML spec when the caller explicitly asked to render.
-    // `render.renderType` resolves to one ancestor type — an explicit CodeRef,
-    // `"native"` (each result's own most-derived type), or the query's
-    // `filter.on` when omitted — which selects the HTML column and is echoed in
-    // the response. `format` is the HTML column to read.
+    // `render.renderType` is an optional explicit ancestor-type override (a
+    // CodeRef) that selects the HTML column and is echoed in the response;
+    // omitted, each result renders in its own actual (native) type. `format`
+    // is the HTML column to read.
     let renderSpec:
       | { format: PrerenderedHtmlFormat; renderType?: CodeRef }
       | undefined;
@@ -123,10 +123,8 @@ export default function handleSearch(opts: {
         return;
       }
       let format = parsed.render.format;
-      let filterOn = (cardsQuery.filter as { on?: CodeRef } | undefined)?.on;
       let renderType = resolveRenderType({
         renderType: parsed.render.renderType,
-        filterOn,
       });
       renderSpec = { format, ...(renderType ? { renderType } : {}) };
     }

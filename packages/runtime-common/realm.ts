@@ -1,4 +1,5 @@
 import { Deferred } from './deferred.ts';
+import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import {
   rri,
@@ -191,7 +192,7 @@ export interface RealmSession {
   canWrite: boolean;
 }
 
-export type RealmVisibility = 'private' | 'shared' | 'public';
+export type { RealmVisibility };
 
 export type RealmInfo = {
   name: string;

@@ -131,6 +131,9 @@ export class MockUtils {
   setUploadContentInterceptor = (fn: (() => Promise<void>) | undefined) => {
     this.testState.opts!.uploadContentInterceptor = fn;
   };
+  setSendEventInterceptor = (fn: (() => Promise<void>) | undefined) => {
+    this.testState.opts!.sendEventInterceptor = fn;
+  };
 
   setRoomState = (
     roomId: string,

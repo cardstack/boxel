@@ -563,9 +563,9 @@ export class RealmIndexQueryEngine {
     if (included.length > 0) {
       doc.included = included;
     }
-    // Echo the collection-level render type when it's a single resolved type
-    // (an explicit `renderType`); the `"native"` / per-row cases vary by row
-    // and are echoed on each `rendered-html` instead.
+    // Echo the collection-level render type only for an explicit `renderType`
+    // override; on the default (native) path each row varies by its own type
+    // and is echoed on each `rendered-html` instead.
     if (opts.render.renderType) {
       doc.meta.renderType = opts.render.renderType;
     }
@@ -592,12 +592,12 @@ export class RealmIndexQueryEngine {
     //
     // A file renders natively: its prerendered HTML is keyed by the file's own
     // most-derived type, never by an ancestor a caller asked *cards* to render
-    // as. So the card-side render type — which `resolveRenderType` may default
-    // to `filter.on` — is deliberately dropped here rather than threaded into
-    // the file lookup. `fileEntryToPrerenderedCard` then selects each file's
-    // own `types[0]`, and that is the type `buildIdentityOnlyFileMeta` stamps
-    // as `adoptsFrom`; letting an ancestor type leak in would mismatch a
-    // FileDef subclass's HTML against its identity.
+    // as. So an explicit card-side `renderType` ancestor override is
+    // deliberately dropped here rather than threaded into the file lookup.
+    // `fileEntryToPrerenderedCard` then selects each file's own `types[0]`, and
+    // that is the type `buildIdentityOnlyFileMeta` stamps as `adoptsFrom`;
+    // letting an ancestor type leak in would mismatch a FileDef subclass's HTML
+    // against its identity.
     let {
       includeErrors: _includeErrors,
       renderType: _renderType,

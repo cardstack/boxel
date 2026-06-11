@@ -31,6 +31,7 @@ export interface Config {
   directRooms?: string[];
   systemCardAccountData?: { id?: string };
   uploadContentInterceptor?: () => Promise<void>;
+  sendEventInterceptor?: () => Promise<void>;
   workspaceFavorites?: string[];
 }
 
