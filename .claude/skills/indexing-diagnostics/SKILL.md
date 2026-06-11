@@ -868,12 +868,12 @@ When the summary signals (Mode A's `cpuTopFrames`, Mode D) name a hot or looping
 
 ### Two tiers — pick by what you need
 
-| Tier | What | Where it lands | Captures the hard wedge? |
-|------|------|----------------|--------------------------|
-| 1 (always on for targeted realms) | Top-N self-time **summary** | `prerenderer` log: `affinity CPU profile …` | No — `Profiler.stop` needs the renderer thread |
-| 2 — `.cpuprofile` | Full V8 CPU profile (whole call tree) | S3 `…/<ts>.cpuprofile` | No — same `Profiler.stop` limit |
-| 2 — trace (`.trace.json`) | CDP/Perfetto trace, **streamed** — separates JS / GC / compile / layout / paint | S3 `…/<ts>.trace.json` | **Yes** — buffered on browser threads, drained out-of-band; the one capture that survives a fully-pegged renderer |
-| 2 — heap (`.heapprofile`) | Cumulative allocation-sampling profile, flushed per render | S3 `…/<ts>.heapprofile` | No — `getSamplingProfile` needs the renderer thread |
+| Tier                              | What                                                                            | Where it lands                              | Captures the hard wedge?                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1 (always on for targeted realms) | Top-N self-time **summary**                                                     | `prerenderer` log: `affinity CPU profile …` | No — `Profiler.stop` needs the renderer thread                                                                    |
+| 2 — `.cpuprofile`                 | Full V8 CPU profile (whole call tree)                                           | S3 `…/<ts>.cpuprofile`                      | No — same `Profiler.stop` limit                                                                                   |
+| 2 — trace (`.trace.json`)         | CDP/Perfetto trace, **streamed** — separates JS / GC / compile / layout / paint | S3 `…/<ts>.trace.json`                      | **Yes** — buffered on browser threads, drained out-of-band; the one capture that survives a fully-pegged renderer |
+| 2 — heap (`.heapprofile`)         | Cumulative allocation-sampling profile, flushed per render                      | S3 `…/<ts>.heapprofile`                     | No — `getSamplingProfile` needs the renderer thread                                                               |
 
 Rule of thumb: a render that **completes but is heavy** → `.cpuprofile` (+ heap for allocation growth). A render that **fully wedges** (no `cpuTopFrames`, `scriptBusy=<unknown>`) → the **trace**, which is the only thing that comes back. If the trace returns idle (no hot frame), the wedge isn't CPU-spinning — pivot to "what is it blocked on" (Mode A's `pendingFetches`).
 
@@ -881,17 +881,18 @@ Rule of thumb: a render that **completes but is heavy** → `.cpuprofile` (+ hea
 
 All live at `/<env>/boxel/<NAME>` (Systems Manager → Parameter Store). The bucket itself (`PRERENDER_ARTIFACTS_BUCKET`) and the key prefix (`PRERENDER_ARTIFACTS_ENV`) are wired by Terraform — don't set them by hand.
 
-| Parameter | Values | Effect |
-|-----------|--------|--------|
-| `PRERENDER_PROFILE_AFFINITY` | comma-separated affinity keys, e.g. `realm:https://realms.cardstack.com/team/foo/` | **Required to target.** Only renders whose affinity key exactly matches are profiled at all (Tier 1 + Tier 2). Empty / `off` → everything inert. |
-| `PRERENDER_PROFILE_CPUPROFILE` | `true` / `false` | Persist the full `.cpuprofile` for targeted renders. |
-| `PRERENDER_PROFILE_TRACE` | `true` / `false` | Capture the streaming trace for targeted renders. |
-| `PRERENDER_PROFILE_HEAP` | `true` / `false` | Capture the heap allocation-sampling profile for targeted renders. |
-| `PRERENDER_PROFILE_MAX_SESSION_BYTES` | positive integer, or `0` for the default | Soft per-process byte budget across all artifacts. `0`/unset → 5 GiB. Once spent, the task declines further uploads (in-flight ones finish, so blobs are never truncated). |
+| Parameter                             | Values                                                                             | Effect                                                                                                                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRERENDER_PROFILE_AFFINITY`          | comma-separated affinity keys, e.g. `realm:https://realms.cardstack.com/team/foo/` | **Required to target.** Only renders whose affinity key exactly matches are profiled at all (Tier 1 + Tier 2). Empty / `off` → everything inert.                           |
+| `PRERENDER_PROFILE_CPUPROFILE`        | `true` / `false`                                                                   | Persist the full `.cpuprofile` for targeted renders.                                                                                                                       |
+| `PRERENDER_PROFILE_TRACE`             | `true` / `false`                                                                   | Capture the streaming trace for targeted renders.                                                                                                                          |
+| `PRERENDER_PROFILE_HEAP`              | `true` / `false`                                                                   | Capture the heap allocation-sampling profile for targeted renders.                                                                                                         |
+| `PRERENDER_PROFILE_MAX_SESSION_BYTES` | positive integer, or `0` for the default                                           | Soft per-process byte budget across all artifacts. `0`/unset → 5 GiB. Once spent, the task declines further uploads (in-flight ones finish, so blobs are never truncated). |
 
 The mode flags are Terraform-seeded sentinels (default `false` / `0`); `PRERENDER_PROFILE_AFFINITY` is operator-managed and must already exist. The affinity key is `realm:` + the realm's canonical URL **with trailing slash** — the same value Mode A/B logs print as `affinity=…`.
 
 > **The container reads these at task start.** ECS injects SSM values when a task launches, so a change only takes effect on a fresh task. After editing the parameters, force a new deployment of the prerender service so tasks restart with the new env:
+>
 > ```
 > aws ecs update-service --cluster <env> --service boxel-prerender-server-<env> --force-new-deployment
 > ```
@@ -900,7 +901,7 @@ The mode flags are Terraform-seeded sentinels (default `false` / `0`); `PRERENDE
 
 1. **Target the realm.** Set `PRERENDER_PROFILE_AFFINITY` to its affinity key and turn on the mode flag(s) you need (start with `PRERENDER_PROFILE_TRACE` for a wedge, `PRERENDER_PROFILE_CPUPROFILE` for a heavy-but-completing render).
 2. **Restart the service** (`--force-new-deployment` above) so the tasks pick up the values.
-3. **Generate renders.** Trigger a reindex of the targeted realm (see *Triggering a reindex* below) — the indexer's per-card visits are what produce artifacts. Confirm captures are happening in the `prerenderer` log: `artifact-sink uploaded <kind> key=… bytes=… sessionBytes=…/…`.
+3. **Generate renders.** Trigger a reindex of the targeted realm (see _Triggering a reindex_ below) — the indexer's per-card visits are what produce artifacts. Confirm captures are happening in the `prerenderer` log: `artifact-sink uploaded <kind> key=… bytes=… sessionBytes=…/…`.
 4. **Pull the artifacts** (below).
 5. **Turn it off.** Set the mode flags back to `false` (and clear `PRERENDER_PROFILE_AFFINITY` if done), then force one more deployment. Leftover artifacts auto-expire after 14 days regardless.
 
@@ -917,14 +918,14 @@ The key schema is `env/realm/jobId/card/step/<timestamp>-<seq>.<suffix>` — eve
 
 ### Reading each artifact
 
-- **`.cpuprofile`** — Chrome DevTools (Performance panel → *Load profile…*) or [speedscope](https://www.speedscope.app/). Self-time flame graph of the whole render; the summary's top frames are just the peak of this.
-- **`.trace.json`** — [Perfetto UI](https://ui.perfetto.dev/) or Chrome DevTools Performance → *Load profile…*. Separate tracks for JS execution, V8 GC, compile, and layout/paint — this is how you tell a JS spin (`v8.execute` saturated) from GC thrash (`v8.gc` saturated) when the summary couldn't say.
-- **`.heapprofile`** — Chrome DevTools Memory → *Allocation sampling* → *Load profile…*. Each upload is the cumulative profile **at that render**, so download two from different points in the session and compare to see which call sites kept allocating.
+- **`.cpuprofile`** — Chrome DevTools (Performance panel → _Load profile…_) or [speedscope](https://www.speedscope.app/). Self-time flame graph of the whole render; the summary's top frames are just the peak of this.
+- **`.trace.json`** — [Perfetto UI](https://ui.perfetto.dev/) or Chrome DevTools Performance → _Load profile…_. Separate tracks for JS execution, V8 GC, compile, and layout/paint — this is how you tell a JS spin (`v8.execute` saturated) from GC thrash (`v8.gc` saturated) when the summary couldn't say.
+- **`.heapprofile`** — Chrome DevTools Memory → _Allocation sampling_ → _Load profile…_. Each upload is the cumulative profile **at that render**, so download two from different points in the session and compare to see which call sites kept allocating.
 
 ### What Mode H can't tell you
 
 - The `.cpuprofile` and `.heapprofile` need the renderer thread to serialize, so a **fully-wedged** render produces neither — only the streaming trace comes back. That's by design (Tier 1's summary has the same limit); the trace is the wedge tool.
-- Browser-wide tracing is **single-flight** — only one trace runs at a time across the whole pool. Concurrent targeted renders skip their trace (logged at `debug`), so don't expect a trace for *every* render under load; constrain concurrency or accept the gaps. The summary and the cpuprofile/heap captures are per-render and unaffected.
+- Browser-wide tracing is **single-flight** — only one trace runs at a time across the whole pool. Concurrent targeted renders skip their trace (logged at `debug`), so don't expect a trace for _every_ render under load; constrain concurrency or accept the gaps. The summary and the cpuprofile/heap captures are per-render and unaffected.
 - Captured artifacts are anonymized only at the key level (host stripped). The blobs themselves contain card URLs and code paths — treat them as you would any prerender diagnostic.
 
 ## Field-by-field reading

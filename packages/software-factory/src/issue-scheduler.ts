@@ -200,21 +200,45 @@ export interface RealmIssueStoreConfig {
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
   private darkfactoryModuleUrl: string;
+  private issueTrackerModuleUrl: string;
   private client: BoxelCLIClient;
   private workspaceDir: string;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
     this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
+    // The Issue class lives in `issue-tracker` and is re-exported by
+    // `darkfactory`. Factory-written issues adopt the darkfactory re-export;
+    // issues a human adds through the IssueTracker board adopt the canonical
+    // `issue-tracker` module instead. A type filter is module-URL-specific,
+    // so the scheduler must match either — otherwise UI-added issues are
+    // silently invisible to the loop.
+    // Swap the final path segment (`darkfactory` → `issue-tracker`),
+    // tolerating a trailing slash or other equivalent canonicalization.
+    this.issueTrackerModuleUrl = config.darkfactoryModuleUrl
+      .replace(/\/+$/, '')
+      .replace(/[^/]+$/, 'issue-tracker');
     this.client = config.client;
     this.workspaceDir = config.workspaceDir;
   }
 
+  /**
+   * Match `Issue` cards regardless of which module they adopt — the
+   * `darkfactory` re-export (factory-written) or the canonical
+   * `issue-tracker` module (added via the board UI).
+   */
+  private issueTypeFilter() {
+    return {
+      any: [
+        { type: { module: this.darkfactoryModuleUrl, name: 'Issue' } },
+        { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
+      ],
+    };
+  }
+
   async listIssues(): Promise<SchedulableIssue[]> {
     let result = await this.client.search(this.realmUrl, {
-      filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-      },
+      filter: this.issueTypeFilter(),
     });
 
     if (!result.ok) {
@@ -230,8 +254,7 @@ export class RealmIssueStore implements IssueStore {
   async refreshIssue(issueId: string): Promise<SchedulableIssue> {
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-        eq: { id: issueId },
+        every: [this.issueTypeFilter(), { eq: { id: issueId } }],
       },
     });
 

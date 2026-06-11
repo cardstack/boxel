@@ -1,4 +1,5 @@
 import './factory-brief.test.ts';
+import './validation-run-cache.test.ts';
 import './factory-prompt-loader.test.ts';
 import './factory-entrypoint.test.ts';
 import './factory-entrypoint.integration.test.ts';

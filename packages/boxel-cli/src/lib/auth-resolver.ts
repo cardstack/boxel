@@ -16,15 +16,25 @@ export interface AuthResolverOptions {
   realmSecretSeed?: string;
   /** Override the ProfileManager (tests). When seed mode is active we won't touch it. */
   profileManager?: ProfileManager;
+  /**
+   * Already-constructed authenticator (the commands' `@internal` test hook).
+   * Takes precedence over both seed and profile resolution.
+   */
+  authenticator?: RealmAuthenticator;
 }
 
 export type AuthResolution =
-  | { ok: true; authenticator: RealmAuthenticator; mode: 'seed' | 'profile' }
+  | {
+      ok: true;
+      authenticator: RealmAuthenticator;
+      mode: 'injected' | 'seed' | 'profile';
+    }
   | { ok: false; error: string };
 
 /**
- * Pick between seed-based auth and profile-based auth.
+ * Pick the authenticator for a realm command.
  *
+ *  - If `authenticator` is supplied (test hook), use it as-is.
  *  - If `realmSecretSeed` is present, use `SeedAuthenticator`. We do NOT
  *    require a profile in this mode — operators using the seed typically
  *    don't have a Matrix account configured.
@@ -33,6 +43,9 @@ export type AuthResolution =
 export function resolveRealmAuthenticator(
   options: AuthResolverOptions,
 ): AuthResolution {
+  if (options.authenticator) {
+    return { ok: true, authenticator: options.authenticator, mode: 'injected' };
+  }
   if (options.realmSecretSeed) {
     // registerRealmUrl throws on a malformed realm URL; surface that as a
     // resolver error so pull/push/sync keep their friendly CLI error path.
