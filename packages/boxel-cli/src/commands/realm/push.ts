@@ -394,21 +394,17 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
-      realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      console.error(`Error: ${resolution.error}`);
-      process.exit(1);
-    }
-    authenticator = resolution.authenticator;
+  const resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    console.error(`Error: ${resolution.error}`);
+    process.exit(1);
   }
+  const authenticator = resolution.authenticator;
 
   if (!(await pathExists(localDir))) {
     console.error(`Local directory does not exist: ${localDir}`);

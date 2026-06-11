@@ -620,20 +620,16 @@ export async function sync(
   realmUrl: string,
   options: SyncCommandOptions,
 ): Promise<SyncResult> {
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
-      realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      return emptyResult({ error: resolution.error });
-    }
-    authenticator = resolution.authenticator;
+  const resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    return emptyResult({ error: resolution.error });
   }
+  const authenticator = resolution.authenticator;
 
   const strategies = [
     options.preferLocal,

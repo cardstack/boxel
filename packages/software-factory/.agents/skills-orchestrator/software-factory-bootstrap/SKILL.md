@@ -33,21 +33,19 @@ Do this **in addition to** the standard Project / IssueTracker / Knowledge
 Article artifacts (steps still apply), and **instead of** creating `feature`
 Issues per entry-point card.
 
-1. **Seed the source card + its same-realm dependency graph.** Read-only from
-   the source realm — never write to it; the "never write to the source realm"
-   rule still holds. Mechanics:
-   - Determine the source card's realm from its URL (fetch the card and read
-     `data.meta.realmURL`, or strip the card path back to the realm root).
-   - `boxel realm pull <source-realm-url> <scratch-dir>` into a fresh
-     `mktemp -d`. This is a download into a scratch dir — it does not mutate
-     the source realm, so it doesn't violate the no-write rule.
-   - Copy into the workspace, preserving relative paths: the source card's
-     module (`.gts`), its co-located test (`.test.gts`) **if one exists**,
-     **every same-realm module it imports** (follow the imports transitively
-     — read the `.gts` and resolve relative/same-origin imports), its sample
-     instances (`<CardType>/*.json`), and its Catalog Spec (`Spec/*.json`).
-     Leave cross-realm imports (`https://cardstack.com/base/...`, other
-     realms) as-is — they resolve at runtime.
+1. **Seed the source card + its same-realm dependency graph.** From inside the
+   workspace dir, run the dedicated ingestion command (read-only from the
+   source realm — it doesn't write to it):
+   ```bash
+   boxel realm ingest-card "<source-card-url>" .
+   ```
+   It copies, preserving realm-relative paths: the source card's module, every
+   same-realm module it imports transitively (**including type-only imports**,
+   which a runtime dep graph would miss but `boxel parse` needs), its sample
+   instances, and its **card-level** Catalog Spec. Cross-realm imports
+   (`https://cardstack.com/base/...`) and component/function Specs are left out
+   on purpose. Pass `--realm <url>` only if the source realm can't be
+   auto-detected.
    - **If the source card has no co-located test** — common for catalog
      cards, which rarely ship `.test.gts` — write **characterization tests**
      that capture its current behavior: field defaults, computed-field

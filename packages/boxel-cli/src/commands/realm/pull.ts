@@ -233,20 +233,16 @@ export async function pull(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
-      realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      return { files: [], error: resolution.error };
-    }
-    authenticator = resolution.authenticator;
+  const resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    return { files: [], error: resolution.error };
   }
+  const authenticator = resolution.authenticator;
 
   try {
     const puller = new RealmPuller(
