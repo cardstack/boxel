@@ -230,7 +230,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
   }
 
   get appVersion() {
-    return `Version ${config.APP.version}`;
+    return `xVersion ${config.APP.version}`;
   }
 
   get buildMenuItems(): MenuItem[] {
