@@ -232,6 +232,10 @@ export async function synapseStart(
 
     try {
       synapseId = await dockerRun({
+        // If you bump this version, also update the GHCR mirror so CI keeps
+        // caching it (it must match the version pinned there):
+        // .github/workflows/mirror-test-images.yml and
+        // .github/actions/warm-test-images/action.yml.
         image: 'matrixdotorg/synapse:v1.126.0',
         containerName,
         dockerParams,

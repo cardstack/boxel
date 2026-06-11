@@ -29,8 +29,11 @@ runs:
         # on a fork PR the token can't read them, so the warm misses and the
         # services fall back to Docker Hub (handled by dockerPull's retry).
         echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
-        # warm <canonical-docker-hub-ref> <ghcr-package-suffix:tag>. Keep this
-        # list in sync with the mirror-test-images workflow.
+        # warm <canonical-docker-hub-ref> <ghcr-package-suffix:tag>. These
+        # versions must match what runs at test time and what the mirror
+        # publishes: packages/matrix/support/synapse/index.ts, packages/matrix/
+        # docker/smtp4dev.ts, mise-tasks/infra/ensure-pg, packages/postgres/
+        # scripts/start-pg.sh, and .github/workflows/mirror-test-images.yml.
         warm() {
           canonical="$1"
           mirror="$GHCR_PREFIX/$2"
