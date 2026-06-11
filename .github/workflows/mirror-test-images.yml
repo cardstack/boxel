@@ -54,14 +54,15 @@ jobs:
             dest="${GHCR_PREFIX,,}/${entry%%=*}"
             src="${entry#*=}"
             echo "Mirroring $src -> $dest"
+            # Copy the full manifest list registry-to-registry so every platform
+            # is mirrored (a plain pull/push would capture only the runner's
+            # arch and leave CI's linux/amd64 missing).
             for attempt in 1 2 3 4 5; do
-              docker pull "$src" && break
+              docker buildx imagetools create --tag "$dest" "$src" && break
               if [ "$attempt" = 5 ]; then
-                echo "::error::failed to pull $src from Docker Hub after 5 attempts"
+                echo "::error::failed to mirror $src after 5 attempts"
                 exit 1
               fi
               sleep $((attempt * 10))
             done
-            docker tag "$src" "$dest"
-            docker push "$dest"
           done
