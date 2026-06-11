@@ -5,19 +5,19 @@ import {
   RealmSyncBase,
   SupportedMimeType,
   type SyncOptions,
-} from '../../lib/realm-sync-base';
+} from '../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   getProfileManager,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { search } from '../search';
+} from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { search } from '../search.ts';
 
 const CARD_JSON = 'application/vnd.card+json';
 const MODULE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];

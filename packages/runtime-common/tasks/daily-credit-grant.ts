@@ -1,5 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task } from './index';
+import type { Task } from './index.ts';
 import {
   addExplicitParens,
   asExpressions,
@@ -7,7 +7,7 @@ import {
   query,
   separatedByCommas,
   type Expression,
-} from '../index';
+} from '../index.ts';
 
 export interface DailyCreditGrantArgs extends JSONTypes.Object {
   lowCreditThreshold: number;

@@ -1,4 +1,4 @@
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import { smtpStart, smtpStop } from '../docker/smtp4dev.ts';
 
 const [command] = process.argv.slice(2);
 (async () => {

@@ -18,7 +18,7 @@ import {
   createTestPgAdapter,
   prepareTestDB,
   testCreatePrerenderAuth,
-} from './helpers';
+} from './helpers/index.ts';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 function buildDefinition(

@@ -20,6 +20,7 @@ import {
   makeCardTypeSummaryDoc,
   type LinkableCollectionDocument,
   type PrerenderedCardCollectionDocument,
+  type UnifiedSearchCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
@@ -54,7 +55,10 @@ export function resetCatalogRealmURL() {
 
 type SearchableRealm = {
   url?: string;
-  search: (query: Query) => Promise<LinkableCollectionDocument>;
+  // Returns the unified document: a `Realm.search` resolves here, and the
+  // live-realm passthrough below returns a `LinkableCollectionDocument`,
+  // which is a unified document with only `card`/`file-meta` `included`.
+  search: (query: Query) => Promise<UnifiedSearchCollectionDocument>;
   searchPrerendered: (
     query: Query,
     opts: Pick<
@@ -76,7 +80,7 @@ function normalizeRoutePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
-function registerRealmServerRoute(route: RealmServerMockRoute) {
+export function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
 }
 

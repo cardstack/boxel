@@ -6,12 +6,12 @@ import { module, test } from 'qunit';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { evaluateRealmModules } from '../src/eval-execution';
+import { evaluateRealmModules } from '../src/eval-execution.ts';
 import {
   ValidationRunCache,
   WorkspaceSyncGate,
   computeWorkspaceFingerprint,
-} from '../src/validation-run-cache';
+} from '../src/validation-run-cache.ts';
 
 function makeWorkspace(): string {
   let dir = mkdtempSync(join(tmpdir(), 'validation-cache-test-'));

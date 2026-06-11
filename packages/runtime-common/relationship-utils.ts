@@ -1,4 +1,4 @@
-import type { LooseCardResource, Relationship } from './resource-types';
+import type { LooseCardResource, Relationship } from './resource-types.ts';
 
 export type RelationshipEntry = {
   key: string;

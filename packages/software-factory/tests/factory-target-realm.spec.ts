@@ -12,13 +12,13 @@ import type { AddressInfo } from 'node:net';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   getRealmToken,
   readSupportMetadata,
   registerMatrixUser,
-} from './helpers/matrix-auth';
-import { runCommand } from './helpers/run-command';
+} from './helpers/matrix-auth.ts';
+import { runCommand } from './helpers/run-command.ts';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),

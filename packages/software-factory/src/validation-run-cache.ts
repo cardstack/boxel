@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto';
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 let log = logger('validation-run-cache');
 

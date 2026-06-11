@@ -15,13 +15,13 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
 import {
   cacheKeyForInputs,
   type ValidationRunCache,
-} from './validation-run-cache';
+} from './validation-run-cache.ts';
 
 let log = logger('eval-execution');
 

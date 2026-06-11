@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import FakeTimers from '@sinonjs/fake-timers';
-import { waitForPendingCreditTracking } from '../lib/credit-tracking';
+import { waitForPendingCreditTracking } from '../lib/credit-tracking.ts';
 
 module('Credit Tracking', () => {
   test('waitForPendingCreditTracking does not block indefinitely on slow credit tracking', async (assert) => {

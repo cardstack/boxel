@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 
-import { createServeIndex } from '../handlers/serve-index';
+import { createServeIndex } from '../handlers/serve-index.ts';
 
 module(basename(__filename), function () {
   test('prefers MATRIX_SERVER_NAME over matrix URL hostname in host config', async function (assert) {

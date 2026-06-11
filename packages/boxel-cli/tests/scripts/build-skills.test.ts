@@ -6,7 +6,7 @@ import {
   isExcluded,
   type Manifest,
   type SkillCard,
-} from '../../scripts/build-skills';
+} from '../../scripts/build-skills.ts';
 
 function makeSkillSet(
   id: string,

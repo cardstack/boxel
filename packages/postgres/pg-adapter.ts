@@ -13,7 +13,7 @@ import migrate from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
-import { postgresConfig } from './pg-config';
+import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.js';
 
 // Hash a realm URL to a stable signed int64 (as a string, because JS numbers

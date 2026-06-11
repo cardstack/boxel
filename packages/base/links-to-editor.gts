@@ -36,7 +36,7 @@ import BrokenLinkTemplate from './default-templates/broken-link-template';
 import { type RelationshipState } from './field-support';
 
 // A broken singular link surfaces as a terminal failure state from
-// `getRelationship`. The owning `linksTo` component reads it (it has the
+// `getRelationshipMembershipState`. The owning `linksTo` component reads it (it has the
 // containing instance in scope) and hands it down so the editor can show the
 // placeholder alongside a remove control, rather than the bare "Link" button it
 // shows for a never-set field. To swap in a working link, the user removes the
@@ -51,6 +51,12 @@ interface Signature {
     field: Field<LinkableDefConstructor>;
     brokenLink?: BrokenLink;
     typeConstraint?: ResolvedCodeRef;
+    /**
+     * When true, hard-scope the card chooser to the consuming realm
+     * (the realm of the parent card). The catalog modal's realm picker
+     * is locked. UI hint only; no runtime validation.
+     */
+    lockConsumingRealm?: boolean;
     createCard?: CreateCardFn;
   };
 }
@@ -235,6 +241,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         },
         createNewCard: this.args.createCard,
         consumingRealm: this.realmURL,
+        lockConsumingRealm: this.args.lockConsumingRealm,
       },
     );
     if (cardId) {

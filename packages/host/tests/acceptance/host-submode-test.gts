@@ -581,21 +581,21 @@ module('Acceptance | host submode', function (hooks) {
         ) => {
           await publishDeferred.promise;
           return {
-            data: {
-              type: 'published_realm',
-              id: '1',
-              attributes: {
-                sourceRealmURL,
-                publishedRealmURL,
-                lastPublishedAt: new Date().getTime(),
-              },
-            },
+            sourceRealmURL,
+            publishedRealmURL,
+            publishedRealmId: '1',
+            lastPublishedAt: String(new Date().getTime()),
+            status: 'published',
           };
         };
 
-        let unpublishRealm = async (_publishedRealmURL: string) => {
+        let unpublishRealm = async (publishedRealmURL: string) => {
           await unpublishDeferred.promise;
-          return { success: true };
+          return {
+            sourceRealmURL: null,
+            publishedRealmURL,
+            lastPublishedAt: null,
+          };
         };
 
         getService('realm-server').publishRealm = publishRealm;
@@ -1212,15 +1212,11 @@ module('Acceptance | host submode', function (hooks) {
             throw new Error('Custom domain validation failed');
           }
           return {
-            data: {
-              type: 'published_realm',
-              id: '1',
-              attributes: {
-                sourceRealmURL: _sourceURL,
-                publishedRealmURL: publishedURL,
-                lastPublishedAt: new Date().getTime(),
-              },
-            },
+            sourceRealmURL: _sourceURL,
+            publishedRealmURL: publishedURL,
+            publishedRealmId: '1',
+            lastPublishedAt: String(new Date().getTime()),
+            status: 'published',
           };
         };
 

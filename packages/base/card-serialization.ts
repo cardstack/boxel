@@ -73,10 +73,8 @@ export interface SerializeOpts {
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
   // The VirtualNetwork to consult for prefix/RRI resolution during
-  // serialization. Optional: when absent, the `maybeRelativeReference`
-  // closures degrade — prefix-form refs pass through unchanged and only
-  // URL-form bases support URL math.
-  virtualNetwork?: VirtualNetwork;
+  // serialization. Required — every caller must thread a VN.
+  virtualNetwork: VirtualNetwork;
 }
 
 export interface DeserializeOpts {
@@ -212,7 +210,7 @@ export function resourceFrom(
 
 export function serializeCard(
   model: CardDef,
-  opts?: SerializeOpts,
+  opts: SerializeOpts,
 ): LooseSingleCardDocument {
   let doc = {
     data: {
@@ -222,40 +220,22 @@ export function serializeCard(
   };
   let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
     model.id ?? model[relativeTo];
+  let vn = opts.virtualNetwork;
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{
       maybeRelativeReference(possibleReference: string) {
-        let vn = opts?.virtualNetwork;
         // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
-        // in their canonical portable form — return as-is. Without a VN
-        // we can't know which prefixes are registered, so the most we can
-        // do for prefix-form refs is pass them through unchanged.
-        if (vn ? vn.isRegisteredPrefix(possibleReference) : false) {
+        // in their canonical portable form — return as-is.
+        if (vn.isRegisteredPrefix(possibleReference)) {
           return possibleReference;
         }
-        let modelRelativeToForURL: URL | undefined;
-        if (typeof modelRelativeTo === 'string') {
-          if (vn) {
-            modelRelativeToForURL = vn.toURL(modelRelativeTo);
-          } else if (
-            modelRelativeTo.startsWith('http://') ||
-            modelRelativeTo.startsWith('https://')
-          ) {
-            modelRelativeToForURL = new URL(modelRelativeTo);
-          }
-        } else {
-          modelRelativeToForURL = modelRelativeTo;
-        }
+        let modelRelativeToForURL: URL | undefined =
+          typeof modelRelativeTo === 'string'
+            ? vn.toURL(modelRelativeTo)
+            : modelRelativeTo;
         let url = maybeURL(possibleReference, modelRelativeToForURL);
         if (!url) {
-          if (!vn) {
-            // Without a VN we can't resolve a prefix-form reference. Pass
-            // through unchanged so callers that don't need relativization
-            // (e.g. test adapters serializing same-realm cards by URL)
-            // don't blow up on portable refs.
-            return possibleReference;
-          }
           throw new Error(
             `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
           );
@@ -302,7 +282,12 @@ export function serializeCardResource(
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let overrides = getFieldOverrides(model);
-  opts = { ...(opts ?? {}), overrides };
+  // `serializeCardResource` is reachable from the recursive field-serialize
+  // symbol path without opts (e.g. callSerializeHook with no opts arg).
+  // That path doesn't read `opts.virtualNetwork`, so the synthesized
+  // working opts can lack it; cast through SerializeOpts | undefined to
+  // satisfy the required-VN type while preserving runtime behavior.
+  opts = { ...(opts ?? {}), overrides } as SerializeOpts | undefined;
   let fieldResources = Object.entries(fields)
     .filter(
       ([_fieldName, field]) =>
@@ -330,7 +315,7 @@ export function serializeCardResource(
 
 export function serializeFileDef(
   model: FileDef,
-  opts?: SerializeOpts,
+  opts: SerializeOpts,
 ): LooseSingleFileMetaDocument {
   let doc = {
     data: {
@@ -340,6 +325,7 @@ export function serializeFileDef(
   };
   let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
     model.id ?? model[relativeTo];
+  let vn = opts.virtualNetwork;
   let data = serializeCardResource(
     model,
     doc,
@@ -347,33 +333,17 @@ export function serializeFileDef(
       ...opts,
       ...{
         maybeRelativeReference(possibleReference: string) {
-          let vn = opts?.virtualNetwork;
           // Registered prefix refs (e.g. @cardstack/catalog/foo) are
           // already in their canonical portable form — return as-is.
-          // Without a VN we can't know which prefixes are registered,
-          // so the most we can do for prefix-form refs is pass them
-          // through unchanged.
-          if (vn ? vn.isRegisteredPrefix(possibleReference) : false) {
+          if (vn.isRegisteredPrefix(possibleReference)) {
             return possibleReference;
           }
-          let modelRelativeToForURL: URL | undefined;
-          if (typeof modelRelativeTo === 'string') {
-            if (vn) {
-              modelRelativeToForURL = vn.toURL(modelRelativeTo);
-            } else if (
-              modelRelativeTo.startsWith('http://') ||
-              modelRelativeTo.startsWith('https://')
-            ) {
-              modelRelativeToForURL = new URL(modelRelativeTo);
-            }
-          } else {
-            modelRelativeToForURL = modelRelativeTo;
-          }
+          let modelRelativeToForURL: URL | undefined =
+            typeof modelRelativeTo === 'string'
+              ? vn.toURL(modelRelativeTo)
+              : modelRelativeTo;
           let url = maybeURL(possibleReference, modelRelativeToForURL);
           if (!url) {
-            if (!vn) {
-              return possibleReference;
-            }
             throw new Error(
               `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
             );

@@ -1,5 +1,5 @@
-import { expect, test } from './fixtures';
-import { putEvent } from '../support/synapse';
+import { expect, test } from './fixtures.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   getRoomId,
   sendMessage,
@@ -9,7 +9,7 @@ import {
   getAgentId,
   createRealm,
   postNewCard,
-} from '../helpers';
+} from '../helpers/index.ts';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -17,8 +17,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-} from '../support/matrix-constants';
-import { appURL } from '../support/isolated-realm-server';
+} from '../support/matrix-constants.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 
@@ -356,12 +356,31 @@ test.describe('Commands', () => {
       .locator('[data-test-boxel-input-id="ai-chat-input"]')
       .fill('Switch to code mode');
     await page.locator('[data-test-send-message-btn]').click();
-    await page.locator('[data-test-message-idx="0"]').waitFor();
+    // Wait for the optimistic bubble's real echo to land in synapse (pending
+    // attribute drops once matrix-js-sdk has accepted the send). Without this
+    // wait the test's putEvent below races the user message to synapse, and
+    // the bot ends up timestamped *before* the user — flipping idx 0/1.
+    await page
+      .locator(
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+      )
+      .waitFor();
 
     let roomId = await getRoomId(page);
-    let roomEvents = await getRoomEvents(username, password, roomId);
+    // The UI's pending=false guard above only proves matrix-js-sdk accepted the
+    // local echo — synapse's /messages stream can still lag a beat behind.
+    // Poll until the user message (and its data.context.agentId) is visible
+    // via /messages; without this the bot putEvent below carries
+    // `agentId: undefined`, and command-service's auto-execute gate
+    // (`message.agentId !== matrixService.agentId`) skips the command.
+    let roomEvents: any[] = [];
+    let agentId: string | undefined;
+    await expect(async () => {
+      roomEvents = await getRoomEvents(username, password, roomId);
+      agentId = getAgentId(roomEvents);
+      expect(agentId).toBeDefined();
+    }).toPass();
     let numEventsBeforeResponse = roomEvents.length;
-    let agentId = getAgentId(roomEvents);
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
     await putEvent(credentials.accessToken, roomId, 'm.room.message', '1', {

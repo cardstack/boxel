@@ -9,8 +9,8 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
-import { nodeStreamToText, nodeStreamToBuffer } from '../stream';
-import { retrieveTokenClaim } from '../utils/jwt';
+import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
+import { retrieveTokenClaim } from '../utils/jwt.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -19,11 +19,11 @@ import {
 import {
   PRERENDER_JOB_ID_HEADER,
   sanitizePrerenderJobId,
-} from '../prerender/prerender-constants';
+} from '../prerender/prerender-constants.ts';
 import {
   incrementSearchInFlight,
   decrementSearchInFlight,
-} from '../search-inflight';
+} from '../search-inflight.ts';
 
 // Matches the realm-server's search endpoints (`/_search`,
 // `/_search-prerendered`, `/_federated-search`,

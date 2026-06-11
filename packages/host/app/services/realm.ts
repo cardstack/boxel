@@ -25,6 +25,7 @@ import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 import type {
   Permissions,
   JWTPayload,
+  RealmClient,
   RealmIdentifier,
   RealmPermissions,
   RealmResourceIdentifier,
@@ -32,6 +33,7 @@ import type {
 import {
   Deferred,
   ensureTrailingSlash,
+  fetchPublishabilityReport,
   logger,
   ri,
   rri,
@@ -39,6 +41,7 @@ import {
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
+import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -220,6 +223,26 @@ class RealmResource {
       return this.auth.claims;
     }
     return undefined;
+  }
+
+  // Adapts this resource's Ember-side auth/config into the portable
+  // `RealmClient` the shared realm operations consume. The only operation that
+  // uses this client (`fetchPublishabilityReport`) hits the per-realm
+  // `_publishability` endpoint, so `authedFetch` always goes through the
+  // network's per-realm token middleware. (Realm-server endpoints — published
+  // realms live under the same origin, so a URL prefix can't distinguish them —
+  // are wrapped via `RealmServerService` instead.)
+  private get realmClient(): RealmClient {
+    let userId = this.claims?.user;
+    return {
+      realmServerURL: ensureTrailingSlash(this.realmServer.url.href),
+      config: {
+        spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
+        siteDomain: ENV.publishedRealmBoxelSiteDomain,
+      },
+      matrixUsername: userId ? getMatrixUsername(userId) : undefined,
+      authedFetch: (url, init) => this.network.authedFetch(url, init),
+    };
   }
 
   get canRead() {
@@ -495,43 +518,15 @@ class RealmResource {
   });
 
   async fetchPrivateDependencyReport(): Promise<RealmPrivateDependencyReport> {
+    // Ensure the realm token is minted before the operation's authedFetch
+    // routes the `_publishability` request through the per-realm token
+    // middleware.
     await this.loginTask.perform();
-    let headers: Record<string, string> = {
-      Accept: SupportedMimeType.JSONAPI,
-      Authorization: `Bearer ${this.token}`,
-    };
-    let response = await this.network.authedFetch(
-      `${this.realmURL}_publishability`,
-      {
-        headers,
-      },
+    return waitForPromise(
+      fetchPublishabilityReport(this.realmClient, {
+        realmURL: this.realmURL,
+      }),
     );
-
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to check private dependencies for ${this.realmURL}: ${response.status}`,
-      );
-    }
-
-    let json = (await waitForPromise(response.json())) as {
-      data: {
-        attributes: {
-          publishable: boolean;
-          realmURL: string;
-          violations: PublishabilityViolation[];
-          warningTypes?: PublishabilityWarningType[];
-        };
-      };
-    };
-
-    let attributes = json.data.attributes;
-
-    return {
-      publishable: attributes.publishable,
-      realmURL: attributes.realmURL,
-      violations: attributes.violations ?? [],
-      warningTypes: attributes.warningTypes ?? [],
-    };
   }
 
   async setRealmPermission(
@@ -619,8 +614,7 @@ class RealmResource {
         this._publishingRealms.push(url);
 
         try {
-          const result = await this.realmServer.publishRealm(this.url, url);
-          return result;
+          return await this.realmServer.publishRealm(this.url, url);
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
           throw error; // Re-throw so Promise.allSettled can capture it as rejected
@@ -634,8 +628,8 @@ class RealmResource {
         let lastPublishedAt = results.reduce(
           (acc, result) => {
             if (result.status === 'fulfilled' && result.value) {
-              acc[result.value.data.attributes.publishedRealmURL] =
-                result.value.data.attributes.lastPublishedAt;
+              acc[result.value.publishedRealmURL] =
+                result.value.lastPublishedAt;
             }
             return acc;
           },
@@ -693,8 +687,10 @@ class RealmResource {
         };
       }
     } catch (error) {
+      // Log for observability, then propagate so callers (e.g.
+      // UnpublishRealmCommand) can report the failure.
       console.error(`Error unpublishing from URL ${url}:`, error);
-      return;
+      throw error;
     } finally {
       this._unPublishingRealms.splice(this._unPublishingRealms.indexOf(url), 1);
     }

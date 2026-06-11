@@ -22,8 +22,8 @@
 //   WARMUP=10  warmup iterations (default 10)
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
-import { runBench, type Result } from './bench';
-import { baselinePath } from './paths';
+import { runBench, type Result } from './bench.ts';
+import { baselinePath } from './paths.ts';
 
 interface Baseline {
   version: number;

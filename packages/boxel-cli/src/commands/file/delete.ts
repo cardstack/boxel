@@ -3,12 +3,12 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { isProtectedFile } from '../../lib/realm-sync-base';
+} from '../../lib/profile-manager.ts';
+import { isProtectedFile } from '../../lib/realm-sync-base.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import { FG_RED, DIM, RESET } from '../../lib/colors';
-import { cliLog } from '../../lib/cli-log';
+import { FG_RED, DIM, RESET } from '../../lib/colors.ts';
+import { cliLog } from '../../lib/cli-log.ts';
 
 export interface DeleteResult {
   ok: boolean;

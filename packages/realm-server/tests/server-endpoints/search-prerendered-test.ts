@@ -16,7 +16,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -24,9 +24,9 @@ import {
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import type { RealmHttpServer as Server } from '../../server';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import type { RealmHttpServer as Server } from '../../server.ts';
 
 module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
   module(

@@ -3,10 +3,10 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
+} from '../../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 
 export interface WaitForReadyResult {
   ready: boolean;

@@ -1,15 +1,15 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import { SynapseAuthProvider } from './synapse-auth-provider';
-import type { Skill } from './skills';
-import { SkillsProvider } from './skills';
-import { RealmAuth } from './realm-auth';
-import { LocalFileSystem } from './local-file-system';
+import { SynapseAuthProvider } from './synapse-auth-provider.ts';
+import type { Skill } from './skills.ts';
+import { SkillsProvider } from './skills.ts';
+import { RealmAuth } from './realm-auth.ts';
+import { LocalFileSystem } from './local-file-system.ts';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { RealmItem } from './realms';
-import { RealmProvider } from './realms';
+import type { RealmItem } from './realms.ts';
+import { RealmProvider } from './realms.ts';
 
 export async function activate(context: vscode.ExtensionContext) {
   const realmAuth = new RealmAuth();

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import { existsSync, readFileSync } from 'fs-extra';
 import {
@@ -22,10 +22,10 @@ import {
   fixtureDir,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
+} from './helpers/index.ts';
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { expectIncrementalIndexEvent } from './helpers/indexing';
+import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';

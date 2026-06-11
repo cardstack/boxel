@@ -9,9 +9,9 @@ import {
   FilePromptLoader,
   interpolate,
   PromptTemplateNotFoundError,
-} from '../src/factory-prompt-loader';
+} from '../src/factory-prompt-loader.ts';
 
-import type { AgentAction, AgentContext } from '../src/factory-agent';
+import type { AgentAction, AgentContext } from '../src/factory-agent/index.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures

@@ -3771,7 +3771,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       );
   });
 
-  test('shows an error and persists the prompt in case the message failed to send', async function (assert) {
+  test('failed send leaves a failed bubble + retry alert; input clears at click-time', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -3814,22 +3814,18 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
       await click('[data-test-send-message-btn]');
 
+      // New design: the optimistic bubble carries the failure + the retry
+      // affordance; the input clears at click-time and stays clear.
       await waitFor('[data-test-boxel-alert="error"]');
       assert.strictEqual(sendAttempts, 1, 'sendMessage was attempted once');
-      assert
-        .dom('[data-test-boxel-alert="error"] [data-test-alert-message="0"]')
-        .hasText(
-          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.',
-        );
-
-      await waitUntil(
-        () => matrixService.getMessageToSend(roomId!) === failingMessage,
-      );
+      assert.dom('[data-test-user-message]').exists({ count: 1 });
+      assert.dom('[data-test-card-error]').containsText('Failed to send');
+      assert.dom('[data-test-alert-action-button="Retry"]').exists();
       assert
         .dom(`[data-test-message-field="${roomId}"]`)
         .hasValue(
-          failingMessage,
-          'Draft message is restored after a failed send attempt',
+          '',
+          'input clears at click-time — the message lives in the bubble now',
         );
     } finally {
       matrixService.sendMessage = originalSendMessage;

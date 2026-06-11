@@ -5,8 +5,8 @@ import {
   logger,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { setContextResponse } from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
+import { setContextResponse } from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 type CatalogRealm = {
   type: 'catalog-realm';

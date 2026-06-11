@@ -9,20 +9,20 @@
 
 import type { BoxelCLIClient, LintResult } from '@cardstack/boxel-cli/api';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
 
 import {
   discoverLintableFiles,
   lintRealmFiles,
   type LintErrorViolation,
-} from '../lint-execution';
-import { getNextValidationSequenceNumber } from '../realm-operations';
-import { createLintResult, completeLintResult } from '../lint-result-cards';
-import { logger } from '../logger';
+} from '../lint-execution.ts';
+import { getNextValidationSequenceNumber } from '../realm-operations.ts';
+import { createLintResult, completeLintResult } from '../lint-result-cards.ts';
+import { logger } from '../logger.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
-import type { ValidationRunCache } from '../validation-run-cache';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 let log = logger('lint-validation-step');
 

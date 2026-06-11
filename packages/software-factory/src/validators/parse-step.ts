@@ -12,9 +12,9 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
-import { logger } from '../logger';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
+import { logger } from '../logger.ts';
 import {
   discoverJsonExampleFiles,
   discoverParseableGtsFiles,
@@ -22,15 +22,15 @@ import {
   type ParseErrorViolation,
   type ParseRealmFilesOptions,
   type SpecExampleInfo,
-} from '../parse-execution';
+} from '../parse-execution.ts';
 import {
   createParseResult,
   completeParseResult,
   type ParseErrorData,
-} from '../parse-result-cards';
-import { getNextValidationSequenceNumber } from '../realm-operations';
+} from '../parse-result-cards.ts';
+import { getNextValidationSequenceNumber } from '../realm-operations.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
 
 let log = logger('parse-validation-step');
 
@@ -38,9 +38,9 @@ let log = logger('parse-validation-step');
 export {
   parseJsonFile,
   validateCardDocumentStructure,
-} from '../parse-execution';
-import type { ValidationRunCache } from '../validation-run-cache';
-export type { SpecExampleInfo } from '../parse-execution';
+} from '../parse-execution.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
+export type { SpecExampleInfo } from '../parse-execution.ts';
 export type { ParseErrorData };
 
 // ---------------------------------------------------------------------------

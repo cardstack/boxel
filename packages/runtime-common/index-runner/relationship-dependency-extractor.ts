@@ -3,10 +3,10 @@ import {
   type CardResource,
   type FileMetaResource,
   type SingleCardDocument,
-} from '../index';
-import type { VirtualNetwork } from '../virtual-network';
-import { canonicalURL } from './dependency-url';
-import { normalizeRelationshipDependency } from './dependency-normalization';
+} from '../index.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import { canonicalURL } from './dependency-url.ts';
+import { normalizeRelationshipDependency } from './dependency-normalization.ts';
 
 export type RelationshipSource =
   | Pick<CardResource, 'relationships'>

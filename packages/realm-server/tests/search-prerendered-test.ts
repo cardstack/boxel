@@ -3,7 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, createJWT } from './helpers';
+import { setupPermissionedRealmCached, createJWT } from './helpers/index.ts';
 import { PRERENDERED_HTML_FORMATS, baseRRI } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';

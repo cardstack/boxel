@@ -16,7 +16,7 @@ import {
   testRealmURLFor,
   type RealmRequest,
   withRealmPath,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 const ownerUserId = '@mango:localhost';
 

@@ -1,18 +1,18 @@
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { CronJob } from 'cron';
-import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant';
+import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant.ts';
 import {
   DAILY_CREDIT_GRANT_CRON_TZ,
   createDailyCreditGrantCronJob,
   parseLowCreditThreshold,
-} from './daily-credit-grant-config';
-import { enqueueSyncOpenRouterModels } from '../scripts/sync-openrouter-models';
+} from './daily-credit-grant-config.ts';
+import { enqueueSyncOpenRouterModels } from '../scripts/sync-openrouter-models.ts';
 import {
   OPENROUTER_SYNC_CRON_TZ,
   createOpenRouterSyncCronJob,
   getOpenRouterRealmURL,
-} from './openrouter-sync-config';
+} from './openrouter-sync-config.ts';
 
 let log = logger('cron-scheduler');
 

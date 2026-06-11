@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # 4.3.0
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Install vsce
         run: npm install -g @vscode/vsce
       - name: Check for version change and subsequent modifications

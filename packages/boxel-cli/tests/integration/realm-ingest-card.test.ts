@@ -1,4 +1,4 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -7,14 +7,14 @@ import {
   getTestPrerenderer,
   stopTestPrerenderServer,
 } from '#realm-server/tests/helpers/index';
-import { ingestCard } from '../../src/commands/realm/ingest-card';
-import type { ProfileManager } from '../../src/lib/profile-manager';
+import { ingestCard } from '../../src/commands/realm/ingest-card.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupJwtTestProfile,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 // Ingest against a real realm server with real card indexing: the realm is
 // seeded with an entry card whose dependency graph spans an ad hoc nested

@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import './src/setup-logger';
-import { logger } from './src/logger';
+import './src/setup-logger.ts';
+import { logger } from './src/logger.ts';
 import {
   sharedRuntimeDir,
   writeSupportMetadata,

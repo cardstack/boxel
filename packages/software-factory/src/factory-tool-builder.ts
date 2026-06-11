@@ -10,32 +10,35 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 
-import { fetchCardTypeSchema } from './darkfactory-schemas';
+import { fetchCardTypeSchema } from './darkfactory-schemas.ts';
 import {
   runEvaluateInMemory,
   type RunEvaluateInMemoryOptions,
   type RunEvaluateResult,
-} from './eval-execution';
-import type { ToolExecutor } from './factory-tool-executor';
-import type { ToolRegistry } from './factory-tool-registry';
+} from './eval-execution.ts';
+import type { ToolExecutor } from './factory-tool-executor.ts';
+import type { ToolRegistry } from './factory-tool-registry.ts';
 import {
   runInstantiateInMemory,
   type RunInstantiateInMemoryOptions,
   type RunInstantiateResult,
-} from './instantiate-execution';
+} from './instantiate-execution.ts';
 import {
   runLintInMemory,
   type RunLintInMemoryOptions,
   type RunLintResult,
-} from './lint-execution';
+} from './lint-execution.ts';
 import {
   runParseInMemory,
   type RunParseInMemoryOptions,
   type RunParseResult,
-} from './parse-execution';
-import { runTestsInMemory } from './test-run-execution';
-import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
-import type { ValidationRunCache } from './validation-run-cache';
+} from './parse-execution.ts';
+import { runTestsInMemory } from './test-run-execution.ts';
+import type {
+  RunTestsInMemoryOptions,
+  RunTestsResult,
+} from './test-run-types.ts';
+import type { ValidationRunCache } from './validation-run-cache.ts';
 
 // ---------------------------------------------------------------------------
 // Types

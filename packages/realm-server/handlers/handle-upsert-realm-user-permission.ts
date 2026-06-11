@@ -6,14 +6,17 @@ import {
   type RealmAction,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { sendResponseForBadRequest, setContextResponse } from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
+import {
+  sendResponseForBadRequest,
+  setContextResponse,
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 import {
   adminImpersonateUser,
   appendRealmToUserAccountData,
   loginAsMatrixAdmin,
   logoutMatrixAccessToken,
-} from '../synapse';
+} from '../synapse.ts';
 
 const log = logger('realm-server');
 

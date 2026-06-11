@@ -1,6 +1,6 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import type { ValidationRunCache } from './validation-run-cache';
+import type { ValidationRunCache } from './validation-run-cache.ts';
 
 // ---------------------------------------------------------------------------
 // TestRun Card Types
