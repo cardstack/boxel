@@ -707,4 +707,144 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       'optimistic event remains in sending state after addOptimisticEvent',
     );
   });
+
+  test('back-to-back sends do not block the input on the prior bubble awaiting echo', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await fillIn('[data-test-message-field]', 'first message');
+    await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-ai-assistant-message]');
+
+    // The first bubble may still be in `sending` here while the matrix echo
+    // settles. canSend must not block on healthy in-flight sends — enqueueTask
+    // already serializes concurrent doSendMessage runs.
+    await waitUntil(
+      () =>
+        !(
+          document.querySelector(
+            '[data-test-send-message-btn]',
+          ) as HTMLButtonElement
+        ).disabled,
+      { timeout: 5000 },
+    );
+
+    await fillIn('[data-test-message-field]', 'second message');
+    assert.dom('[data-test-send-message-btn]').isEnabled();
+    await click('[data-test-send-message-btn]');
+
+    assert
+      .dom('[data-test-ai-assistant-message]')
+      .exists({ count: 2 }, 'both bubbles rendered');
+  });
+
+  test('a failed bubble keeps the send button disabled until retried', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await fillIn(
+      '[data-test-message-field]',
+      'This is a magic message with a SENDING_DELAY_THEN_FAILURE!',
+    );
+    await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-boxel-alert="error"]');
+    await settled();
+
+    await fillIn('[data-test-message-field]', 'try to send a new one');
+    assert
+      .dom('[data-test-send-message-btn]')
+      .isDisabled('failed user bubble still blocks new sends');
+  });
+
+  test('orphaned sending persisted entries hydrate as not_sent', async function (assert) {
+    window.localStorage.removeItem(AiAssistantPendingSends);
+
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    let orphaned = {
+      clientGeneratedId: 'orphaned-sending-cgi',
+      body: 'Send interrupted by reload',
+      attachedCardIds: [],
+      attachedFiles: [],
+      createdAt: Date.now() - 5_000,
+      status: 'sending' as const,
+    };
+    window.localStorage.setItem(
+      AiAssistantPendingSends,
+      JSON.stringify({ [roomId]: [orphaned] }),
+    );
+
+    let matrixService = getService('matrix-service');
+    (
+      matrixService as unknown as { hydratedPendingSendRooms: Set<string> }
+    ).hydratedPendingSendRooms.delete(roomId);
+    matrixService.ensurePendingSendsHydrated(roomId);
+
+    await waitFor('[data-test-user-message]');
+    assert
+      .dom('[data-test-alert-action-button="Retry"]')
+      .exists('orphaned sending surfaces a retry alert');
+
+    let raw = window.localStorage.getItem(AiAssistantPendingSends);
+    let stored = raw ? JSON.parse(raw) : {};
+    let entry = stored?.[roomId]?.[0];
+    assert.strictEqual(
+      entry?.status,
+      'not_sent',
+      'persisted entry rewritten to not_sent on hydration',
+    );
+  });
+
+  test('persisted entry stays until matrix finalizes the send', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    let sendGate = new Deferred<void>();
+    mockMatrixUtils.setSendEventInterceptor(() => sendGate.promise);
+
+    await fillIn('[data-test-message-field]', 'persistence-lifecycle test');
+    click('[data-test-send-message-btn]');
+    await waitFor('[data-test-ai-assistant-message-pending]');
+
+    let raw = window.localStorage.getItem(AiAssistantPendingSends);
+    let inFlight = JSON.parse(raw ?? '{}')?.[roomId]?.[0];
+    assert.ok(
+      inFlight?.clientGeneratedId,
+      'pending entry is persisted while the matrix send is still in flight',
+    );
+
+    mockMatrixUtils.setSendEventInterceptor(undefined);
+    sendGate.fulfill();
+
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+    await settled();
+
+    let after = window.localStorage.getItem(AiAssistantPendingSends);
+    let parsed = after ? JSON.parse(after) : {};
+    assert.notOk(
+      parsed?.[roomId]?.length,
+      'persisted entry is removed once matrix finalizes the send',
+    );
+  });
 });

@@ -1625,19 +1625,26 @@ export default class Room extends Component<Signature> {
       let snapshotFiles = files ?? [];
 
       if (!isRetry) {
-        await this.matrixService.addOptimisticEvent(roomId, {
-          body: snapshotBody,
-          clientGeneratedId,
-          attachedCardIds: snapshotCardIds,
-          attachedFiles: snapshotFiles.map((f) => f.serialize()),
-        });
+        let originServerTs = await this.matrixService.addOptimisticEvent(
+          roomId,
+          {
+            body: snapshotBody,
+            clientGeneratedId,
+            attachedCardIds: snapshotCardIds,
+            attachedFiles: snapshotFiles.map((f) => f.serialize()),
+          },
+        );
         // Persist before clearing the draft so a tab close mid-pipeline still
-        // restores the bubble on reload.
+        // restores the bubble on reload. Share the synthetic event's ts so
+        // hydration reconstructs an identical origin_server_ts — otherwise
+        // MessageBuilder.updateMessage may early-return when the real echo
+        // arrives with an earlier ts.
         this.matrixService.persistOptimisticSend(roomId, {
           clientGeneratedId,
           body: snapshotBody,
           attachedCardIds: snapshotCardIds,
           attachedFiles: snapshotFiles.map((f) => f.serialize()),
+          createdAt: originServerTs,
         });
 
         this.matrixService.setMessageToSend(roomId, undefined);
@@ -1652,13 +1659,13 @@ export default class Room extends Component<Signature> {
         });
       }
 
-      let openCardIds = new Set([
-        ...(this.operatorModeStateService.getOpenCardIds() || []),
-        ...this.autoAttachedCardIds,
-      ]) as Set<RealmResourceIdentifier>;
-      let context =
-        await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
+        let openCardIds = new Set([
+          ...(this.operatorModeStateService.getOpenCardIds() || []),
+          ...this.autoAttachedCardIds,
+        ]) as Set<RealmResourceIdentifier>;
+        let context =
+          await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
         let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
@@ -1759,9 +1766,6 @@ export default class Room extends Component<Signature> {
   );
 
   private get isSending() {
-    // Drives the send button's `@loading` spinner. Releases as soon as the
-    // task completes; the button itself stays disabled past that point via
-    // `canSend`'s user-pending check until matrix reconciliation lands.
     return this.doSendMessage.isRunning;
   }
 
@@ -1777,10 +1781,15 @@ export default class Room extends Component<Signature> {
       ) &&
       !this.hasFileUploadIssues &&
       !!this.room &&
+      // Block input only on a *failed* prior send. `doSendMessage` is an
+      // enqueueTask, so concurrent sends are already serialized; a healthy
+      // 'sending' bubble awaiting the matrix echo doesn't need a second
+      // guard. A 'not_sent' bubble does need attention before the next send,
+      // matching the retry-alert UX.
       !this.messages.some(
         (m) =>
           m.author.userId === this.matrixService.userId &&
-          this.isPendingMessage(m),
+          m.status === 'not_sent',
       ) &&
       !this.matrixService.isLoadingTimeline &&
       !this.aiAssistantPanelService.isPreparingSession
