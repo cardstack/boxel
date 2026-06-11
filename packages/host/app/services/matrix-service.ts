@@ -216,6 +216,11 @@ export default class MatrixService extends Service {
   @tracked private _systemCardLoadFailed = false;
   private _userChoiceId: string | undefined;
   private _systemCardInvalidationUnsub: (() => void) | undefined;
+  // Sticky "the active SystemCard was deleted in-session" signal. Bridges the
+  // synchronous failure detection in `onSystemCardInvalidated` with the
+  // asynchronous re-entry into `setSystemCard(undefined)` from the matrix
+  // account-data echo. Cleared whenever `setSystemCard` resolves a card.
+  private _systemCardWasLost = false;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -1517,6 +1522,7 @@ export default class MatrixService extends Service {
     this._systemCardInvalidationUnsub?.();
     this._systemCardInvalidationUnsub = undefined;
     this._userChoiceId = undefined;
+    this._systemCardWasLost = false;
     this._systemCard = undefined;
     this._systemCardLoadFailed = false;
     this.startedAtTs = -1;
@@ -2387,8 +2393,15 @@ export default class MatrixService extends Service {
       }
     }
 
+    // Clear the post-loss signal before deriving the banner state so a
+    // successful resolution in this call does not re-trip the third clause.
+    if (loadedCard) {
+      this._systemCardWasLost = false;
+    }
     this._systemCardLoadFailed =
-      envDefaultFailed || (userChoiceFailed && !envDefaultId);
+      envDefaultFailed ||
+      (userChoiceFailed && !envDefaultId) ||
+      (this._systemCardWasLost && !loadedCard);
 
     if (loadedCard?.id !== this._systemCard?.id) {
       this._systemCardInvalidationUnsub?.();
@@ -2421,19 +2434,13 @@ export default class MatrixService extends Service {
     this._systemCardInvalidationUnsub = undefined;
     this.store.dropReference(this._systemCard?.id);
     this._systemCard = undefined;
+    // Sticky signal that survives the asynchronous matrix account-data echo
+    // below — keeps `_systemCardLoadFailed` true through any re-entry into
+    // `setSystemCard(undefined)` until a replacement card actually resolves.
+    this._systemCardWasLost = true;
     await this.setSystemCard(this._userChoiceId);
-    let chainStillBroken = this._systemCardLoadFailed;
     if (wasUserChoice) {
       await this.setUserSystemCard(undefined);
-      // Clearing the preference round-trips through the account-data event
-      // and re-enters setSystemCard(undefined). When no env default is
-      // configured that path looks identical to MVP steady state and writes
-      // `_systemCardLoadFailed = false` — but we are *not* in steady state
-      // here; the user just lost their chosen card with no fallback to take
-      // over. Re-assert the broken signal so the banner persists.
-      if (chainStillBroken) {
-        this._systemCardLoadFailed = true;
-      }
     }
   };
 

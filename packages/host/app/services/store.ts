@@ -431,9 +431,23 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     // Snapshot to tolerate unsubscribe-from-callback without skipping siblings.
+    // Subscribers may be async — catch rejections that escape the synchronous
+    // try/catch so a failure in one handler does not become an unhandled
+    // promise rejection or starve sibling handlers.
     for (let cb of [...subscribers]) {
       try {
-        cb();
+        let maybePromise = cb() as unknown;
+        if (
+          maybePromise &&
+          typeof (maybePromise as PromiseLike<unknown>).then === 'function'
+        ) {
+          (maybePromise as Promise<unknown>).catch((err) =>
+            console.error(
+              `card invalidation subscriber for ${normalizedId} rejected`,
+              err,
+            ),
+          );
+        }
       } catch (err) {
         console.error(
           `card invalidation subscriber for ${normalizedId} threw`,
