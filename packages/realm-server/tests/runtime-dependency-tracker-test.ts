@@ -523,6 +523,13 @@ module(basename(__filename), function (hooks) {
       }),
       'equivalence is by value, not object identity',
     );
+    assert.false(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
+        ...queryContext,
+        consumerKind: undefined,
+      }),
+      "an omitted consumerKind dedups against the recorded default ('instance')",
+    );
 
     assert.true(
       shouldTrackRuntimeModuleGraph('import', moduleURL, queryContext),

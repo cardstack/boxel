@@ -239,11 +239,18 @@ export class RuntimeDependencyTracker {
       return false;
     }
     let context = explicitContext ?? this.#currentContext();
+    // consumerKind only influences recording when a consumer is present, and
+    // then it defaults to 'instance' (mirroring #normalizeConsumer) — fold the
+    // same resolution into the key so an omitted consumerKind dedups against
+    // an explicit 'instance'.
+    let consumerKind = context.consumer
+      ? (context.consumerKind ?? 'instance')
+      : '';
     let key = [
       scope,
       contextLabel(context),
       context.consumer ?? '',
-      context.consumerKind ?? '',
+      consumerKind,
       rootModule,
     ].join(CACHE_KEY_SEPARATOR);
     if (this.#trackedModuleGraphs.has(key)) {
