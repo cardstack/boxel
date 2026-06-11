@@ -20,10 +20,12 @@ export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
 
 /**
  * Build a `RealmResourceIdentifier` for a module inside the base realm.
- * Equivalent to `` rri(`${baseRealm.url}${path}`) `` but shorter.
+ * Returns the prefix-form RRI (e.g. `@cardstack/base/card-api`) so the
+ * value matches what `Loader.identify` / `identifyCard` emit for
+ * base-realm classes after the runtime's `unresolveURL` chase.
  */
 export function baseRRI(path: string): RealmResourceIdentifier {
-  return rri(`${baseRealm.url}${path}`);
+  return rri(`${baseRealmRRI}${path}`);
 }
 
 export const devSkillLocalPath = 'Skill/boxel-development';
