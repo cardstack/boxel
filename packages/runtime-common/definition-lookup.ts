@@ -1155,8 +1155,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
   } | null> {
+    // `canonicalURL` of an RRI-prefix input resolves to the realm's
+    // RESOLVED real URL (via `vn.toURL`), while `#realms` is keyed by
+    // the user-facing realm URL (which may be a virtual alias like
+    // `https://cardstack.com/base/`). Compare against both forms — the
+    // realm.url as-given, and its unresolved RRI form when one exists —
+    // so the lookup matches a local realm regardless of which form
+    // the caller's codeRef was in.
+    let vn = this.#virtualNetwork;
     let localRealm = this.#realms.find((realm) => {
-      return moduleURL.startsWith(realm.url);
+      if (moduleURL.startsWith(realm.url)) {
+        return true;
+      }
+      let unresolvedRealm = vn.unresolveURL(realm.url);
+      return (
+        unresolvedRealm !== realm.url && moduleURL.startsWith(unresolvedRealm)
+      );
     });
 
     if (localRealm) {
