@@ -226,4 +226,6 @@ that to the user — don't silently proceed with partial context.
   Issues).
 - `software-factory-operations` — what to do **inside** a regular
   implementation Issue (write `.gts` / `.test.gts` / instances /
-  Spec, run validators, fix failures, sync).
+  Spec, run validators, fix failures, sync). Covers both `feature`
+  Issues (build from scratch) and `adjustment` Issues (edit the
+  seeded card — see its "Adjustment issues" section).
