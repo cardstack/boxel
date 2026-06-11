@@ -9,9 +9,11 @@ import {
   type CardResource,
   type CssResource,
   type FileMetaResource,
+  type HtmlResource,
   type PrerenderedCardResource,
   type RenderedHtmlResource,
   type Saved,
+  type SearchEntryResource,
   type Unsaved,
   isCardResource,
   isFileMetaResource,
@@ -60,6 +62,23 @@ export interface UnifiedSearchCollectionDocument<
     // siblings.
     renderType?: CodeRef;
   };
+}
+
+// The v2 search response: heterogeneous `search-entry` resources in `data`,
+// with everything they compose — `html` renderings (plus their deduped `css`
+// stylesheets) and/or `card`/`file-meta` `item` serializations — riding in
+// `included`. Which branches appear per entry is governed by the query's
+// sparse fieldset (default: prefer `html`, fall back to `item`).
+export type SearchEntryIncludedResource =
+  | HtmlResource
+  | CssResource
+  | CardResource<Saved>
+  | FileMetaResource;
+
+export interface SearchEntryCollectionDocument {
+  data: SearchEntryResource[];
+  included?: SearchEntryIncludedResource[];
+  meta: QueryResultsMeta;
 }
 
 export interface SingleFileMetaDocument {

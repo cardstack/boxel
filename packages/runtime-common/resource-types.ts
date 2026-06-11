@@ -1,6 +1,7 @@
 import { md5 } from 'super-fast-md5';
 import type { RealmInfo } from './realm.ts';
-import { type CodeRef, moduleFrom } from './code-ref.ts';
+import { type CodeRef, type ResolvedCodeRef, moduleFrom } from './code-ref.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
@@ -22,13 +23,17 @@ export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
 export const RenderedHtmlResourceType = 'rendered-html';
 export const CssResourceType = 'css';
+export const SearchEntryResourceType = 'search-entry';
+export const HtmlResourceType = 'html';
 // resource
 export type Resource =
   | ModuleResource
   | CardResource
   | PrerenderedCardResource
   | RenderedHtmlResource
-  | CssResource;
+  | CssResource
+  | SearchEntryResource
+  | HtmlResource;
 export type ResourceMeta = ModuleMeta | Meta;
 export type LinkableResource = CardResource | FileMetaResource;
 
@@ -94,6 +99,13 @@ export type CardResourceMeta = Meta & {
   // (it ships the standard live wireformat); it rides only on identity-only
   // results.
   renderType?: CodeRef;
+  // Set on a field-limited serialization: the names of the fields it carries.
+  // Presence marks the resource sparse — distinguishing "only these fields
+  // were loaded" from "a full card whose other fields happen to be empty" —
+  // and a sparse resource must never enter the Store (it would misrepresent
+  // the instance and could clobber a correctly-loaded full one). Absence
+  // marks the serialization full.
+  sparseFields?: string[];
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -103,6 +115,9 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.identityOnly — a file-meta result can likewise be
   // HTML-backed and identity-only.
   identityOnly?: boolean;
+  // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
+  // be field-limited.
+  sparseFields?: string[];
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
@@ -178,6 +193,56 @@ export interface CssResource {
   };
 }
 
+// One v2 search result. A platform resource — never a userland card — so its
+// relationships cannot collide with user `@field` names. Its `id` is the bare
+// card/file URL, shared with its `item` (`card`/`file-meta`) serialization;
+// `type` is the discriminator. The two branches are composition: `html` points
+// at the result's prerendered rendering, `item` at its live serialization.
+// Which branches appear is governed by the query's sparse fieldset (default:
+// prefer `html`, fall back to `item` when no HTML exists).
+export interface SearchEntryResource {
+  id: string;
+  type: typeof SearchEntryResourceType;
+  relationships: {
+    html?: {
+      data: { type: typeof HtmlResourceType; id: string };
+    };
+    item?: {
+      data: {
+        type: typeof CardResourceType | typeof FileMetaResourceType;
+        id: string;
+      };
+    };
+  };
+}
+
+// One prerendered rendering of a card/file: a v2 resource whose `id` is the
+// (card URL, format, renderType) composite (see `htmlResourceId`), so each
+// rendering of a card — per format × render type — is an independently
+// cacheable/dedupable resource. The scoped CSS it needs travels as
+// first-class `css` resources linked through `styles`.
+export interface HtmlResource {
+  id: string;
+  type: typeof HtmlResourceType;
+  attributes: {
+    // Absent only on an error rendering with no last-known-good HTML.
+    html?: string;
+    cardType: string;
+    iconHtml?: string;
+    isError?: boolean;
+    format: PrerenderedHtmlFormat;
+    // The type this rendering was rendered as — the result's own native type
+    // unless the query asked for an ancestor. A file rendering carries no
+    // renderType (files render natively; there is no ancestor coercion).
+    renderType?: ResolvedCodeRef;
+  };
+  relationships: {
+    styles: {
+      data: { type: typeof CssResourceType; id: string }[];
+    };
+  };
+}
+
 export type LooseLinkableResource<T extends LinkableResource> = Omit<
   T,
   'id' | 'type'
@@ -232,6 +297,9 @@ export {
   isCssResource,
   isIdentityOnlyCardResource,
   isIdentityOnlyFileMetaResource,
+  isSearchEntryResource,
+  isHtmlResource,
+  isSparseItemResource,
 } from './card-document-shape.ts';
 
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
@@ -240,6 +308,25 @@ export {
 // standing convention for non-security fingerprints (see `transpile.ts`).
 export function cssResourceId(href: string): string {
   return md5(href);
+}
+
+// The `html` resource id: the (card URL, format, renderType) composite that
+// makes each rendering an independently cacheable resource. Consumers treat
+// it as an opaque cache key — the readable format/renderType live in the
+// resource's attributes. `#` is the composite delimiter at both joints
+// (neither card URLs nor module URLs contain one); the `/` inside the
+// renderType segment is just the renderType key's own `<module>/<name>`
+// encoding (the same string the `used_render_type` SQL column carries). A
+// file rendering has no renderType, so its id is just `<fileURL>#<format>`.
+export function htmlResourceId(args: {
+  url: string;
+  format: PrerenderedHtmlFormat;
+  renderType?: ResolvedCodeRef;
+}): string {
+  let { url, format, renderType } = args;
+  return `${url}#${format}${
+    renderType ? `#${renderType.module}/${renderType.name}` : ''
+  }`;
 }
 
 export function extractRelationshipIds(

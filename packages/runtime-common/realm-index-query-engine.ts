@@ -20,6 +20,7 @@ import {
   type IndexedFile,
   type DefinitionLookup,
   type ResolvedCodeRef,
+  type SearchProjection,
   internalKeyFor,
   visitInstanceURLs,
   maybeRelativeReference,
@@ -53,6 +54,8 @@ import {
   isSingleFileMetaDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
+  type SearchEntryCollectionDocument,
+  type SearchEntryIncludedResource,
   type UnifiedSearchCollectionDocument,
   type UnifiedSearchIncludedResource,
   isLinkableCollectionDocument,
@@ -64,6 +67,7 @@ import type {
   FileMetaResource,
   QueryFieldMeta,
   Saved,
+  SearchEntryResource,
 } from './resource-types.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import {
@@ -74,6 +78,12 @@ import {
   parseUsedRenderType,
   scopedCssHrefsFromDeps,
 } from './unified-search.ts';
+import {
+  buildHtmlResource,
+  buildSearchEntryResource,
+  buildSparseItemResource,
+  type SearchEntryQuery,
+} from './search-entry.ts';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
 import {
   normalizeQueryDefinition,
@@ -699,6 +709,277 @@ export class RealmIndexQueryEngine {
       doc.included = included;
     }
     await this.attachRealmInfo(doc);
+    return doc;
+  }
+
+  // The v2 search-entry engine. Runs the parsed search-entry query (the
+  // `item.` query against the SQL core, the `html.` render spec selecting the
+  // projection) and assembles a heterogeneous `search-entry` document: one
+  // entry per result, with `html` (+ deduped `css`) and/or `item` resources in
+  // `included` per the sparse fieldset.
+  //
+  // Branch emission per entry:
+  //   - `fieldset.html` → an `html` resource when the row has a rendering (or
+  //     is an error row, flagged `isError`); its composite id keys (card URL,
+  //     format, renderType).
+  //   - a pinned `item` (`fieldset.item` full/sparse) rides on every row; the
+  //     default mode (`itemAsFallback`) emits it only where no `html` was
+  //     emitted. Sparse items carry `meta.sparseFields` and skip the link
+  //     expansion; full items go through `loadLinks` (same gating as the live
+  //     search path).
+  async searchEntries(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: Options,
+  ): Promise<SearchEntryCollectionDocument> {
+    let { itemQuery: query, render, fieldset, cardUrls } = searchEntryQuery;
+    let engineOpts: Options = {
+      ...opts,
+      ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
+    };
+    if (await this.queryTargetsFileMeta(query.filter, engineOpts)) {
+      return await this.searchEntriesFileMeta(searchEntryQuery, engineOpts);
+    }
+
+    let itemOnEveryRow = fieldset.item.kind !== 'none';
+    let projection: SearchProjection = fieldset.html
+      ? {
+          kind: itemOnEveryRow ? 'renderAndData' : 'render',
+          htmlFormat: render.format,
+          // `internalKeyFor` (used by the HTML-column expression) resolves a
+          // relative module, so a plain `CodeRef` is accepted here; a render
+          // type is always a concrete `{module,name}`, never an
+          // ancestorOf/fieldOf ref.
+          renderType: render.renderType as ResolvedCodeRef | undefined,
+        }
+      : { kind: 'dataOnly' };
+    // Error rows surface only through the `html` branch (`isError`); the
+    // item-only projection matches the live search path, which excludes them.
+    let sqlOpts: QueryOptions = fieldset.html
+      ? { ...engineOpts, includeErrors: true }
+      : engineOpts;
+    let runSql = () =>
+      this.#indexQueryEngine.search(
+        new URL(this.#realm.url),
+        query,
+        sqlOpts,
+        projection,
+      );
+    let { results, meta } = opts?.timings
+      ? await opts.timings.time('sql', runSql)
+      : await runSql();
+
+    let data: SearchEntryResource[] = [];
+    let htmlResources: SearchEntryIncludedResource[] = [];
+    let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
+    let cssById = new Map<string, CssResource>();
+    let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
+
+    for (let row of results) {
+      let fileUrl = row.url;
+      if (!fileUrl) {
+        continue;
+      }
+      // The index `url` column is the instance's file URL; a result's identity
+      // (shared by the `search-entry` and its `item`) drops the `.json`
+      // extension.
+      let cardUrl = fileUrl.endsWith('.json') ? fileUrl.slice(0, -5) : fileUrl;
+      let hasError = Boolean(row.has_error);
+      let html = (row.html as string | null) ?? null;
+
+      let htmlId: string | undefined;
+      if (fieldset.html && (html != null || hasError)) {
+        let cssIds: string[] = [];
+        for (let href of scopedCssHrefsFromDeps(row.deps as string[] | null)) {
+          let css = buildCssResource(href);
+          if (!cssById.has(css.id)) {
+            cssById.set(css.id, css);
+          }
+          cssIds.push(css.id);
+        }
+        let htmlResource = buildHtmlResource({
+          url: cardUrl,
+          format: render.format,
+          renderType: parseUsedRenderType(
+            row.used_render_type as string | null,
+          ) as ResolvedCodeRef | undefined,
+          html: html ?? undefined,
+          cardType: (row.display_names as string[] | null)?.[0] ?? '',
+          iconHtml: (row.icon_html as string | null) ?? undefined,
+          isError: hasError || undefined,
+          cssIds,
+        });
+        htmlResources.push(htmlResource);
+        htmlId = htmlResource.id;
+      }
+
+      let itemType: typeof CardResourceType | undefined;
+      let emitItem =
+        itemOnEveryRow || (fieldset.itemAsFallback && htmlId === undefined);
+      let pristine = row.pristine_doc as CardResource<Saved> | null;
+      if (emitItem && pristine) {
+        let item: CardResource<Saved> = {
+          ...pristine,
+          links: { self: pristine.id },
+        };
+        if (fieldset.item.kind === 'sparse') {
+          item = buildSparseItemResource(item, fieldset.item.fields);
+        } else {
+          fullItemRoots.push(item);
+        }
+        itemResources.push(item);
+        itemType = CardResourceType;
+      }
+
+      data.push(buildSearchEntryResource({ url: cardUrl, htmlId, itemType }));
+    }
+
+    return await this.assembleSearchEntryDoc(
+      { data, meta },
+      { htmlResources, cssById, itemResources, fullItemRoots },
+      opts,
+    );
+  }
+
+  // The file-meta counterpart of `searchEntries`. Files are indexed as
+  // `type: 'file'` rows, which the instance-only projections skip, so they
+  // resolve through `searchFiles` (per-format HTML + the full `file-meta`
+  // resource), with the same fieldset semantics. A file renders natively —
+  // there is no ancestor coercion — so an explicit `html.renderType` is
+  // deliberately dropped here, its `html` resource carries no renderType, and
+  // its composite id is just `<fileURL>#<format>`.
+  private async searchEntriesFileMeta(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: Options,
+  ): Promise<SearchEntryCollectionDocument> {
+    let { itemQuery: query, render, fieldset } = searchEntryQuery;
+    let {
+      includeErrors: _includeErrors,
+      renderType: _renderType,
+      ...rest
+    } = opts ?? {};
+    let fileOpts = {
+      ...rest,
+      htmlFormat: render.format,
+    };
+    let runSql = () =>
+      this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        fileOpts,
+      );
+    let { files, meta } = opts?.timings
+      ? await opts.timings.time('sql', runSql)
+      : await runSql();
+
+    let itemOnEveryRow = fieldset.item.kind !== 'none';
+    let data: SearchEntryResource[] = [];
+    let htmlResources: SearchEntryIncludedResource[] = [];
+    let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
+    let cssById = new Map<string, CssResource>();
+    let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
+
+    for (let file of files) {
+      let { url, html, cardType, iconHtml } = this.fileEntryToPrerenderedCard(
+        file,
+        fileOpts,
+      );
+      if (!url) {
+        continue;
+      }
+
+      let htmlId: string | undefined;
+      if (fieldset.html && html != null) {
+        let cssIds: string[] = [];
+        for (let href of scopedCssHrefsFromDeps(file.deps)) {
+          let css = buildCssResource(href);
+          if (!cssById.has(css.id)) {
+            cssById.set(css.id, css);
+          }
+          cssIds.push(css.id);
+        }
+        let htmlResource = buildHtmlResource({
+          url,
+          format: render.format,
+          html,
+          cardType: cardType ?? '',
+          iconHtml,
+          cssIds,
+        });
+        htmlResources.push(htmlResource);
+        htmlId = htmlResource.id;
+      }
+
+      let emitItem =
+        itemOnEveryRow || (fieldset.itemAsFallback && htmlId === undefined);
+      let itemEmitted = false;
+      if (emitItem && file.resource?.id) {
+        let item: FileMetaResource = {
+          ...file.resource,
+          links: { self: file.resource.id },
+        };
+        if (fieldset.item.kind === 'sparse') {
+          item = buildSparseItemResource(item, fieldset.item.fields);
+        } else {
+          fullItemRoots.push(item);
+        }
+        itemResources.push(item);
+        itemEmitted = true;
+      }
+
+      data.push(
+        buildSearchEntryResource({
+          url,
+          htmlId,
+          itemType: itemEmitted ? FileMetaResourceType : undefined,
+        }),
+      );
+    }
+
+    return await this.assembleSearchEntryDoc(
+      { data, meta },
+      { htmlResources, cssById, itemResources, fullItemRoots },
+      opts,
+    );
+  }
+
+  // Shared tail of the two searchEntries paths: stitch `included` together
+  // (html renderings first, then the deduped css, then the items), expand
+  // links for the full items only (sparse items are field-limited data reads
+  // and identity-only entries have nothing to expand), same gating as the
+  // live search path.
+  private async assembleSearchEntryDoc(
+    doc: SearchEntryCollectionDocument,
+    resources: {
+      htmlResources: SearchEntryIncludedResource[];
+      cssById: Map<string, CssResource>;
+      itemResources: (CardResource<Saved> | FileMetaResource)[];
+      fullItemRoots: (CardResource<Saved> | FileMetaResource)[];
+    },
+    opts?: Options,
+  ): Promise<SearchEntryCollectionDocument> {
+    let { htmlResources, cssById, itemResources, fullItemRoots } = resources;
+    let included: SearchEntryIncludedResource[] = [
+      ...htmlResources,
+      ...cssById.values(),
+      ...itemResources,
+    ];
+
+    if (fullItemRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+      let omit = itemResources.map((r) => r.id).filter(Boolean) as string[];
+      let runLoadLinks = () =>
+        this.loadLinks(
+          { realmURL: this.realmURL, rootResources: fullItemRoots, omit },
+          opts,
+        );
+      let linked = opts?.timings
+        ? await opts.timings.time('loadLinks', runLoadLinks)
+        : await runLoadLinks();
+      included.push(...linked);
+    }
+
+    if (included.length > 0) {
+      doc.included = included;
+    }
     return doc;
   }
 

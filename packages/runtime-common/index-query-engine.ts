@@ -155,11 +155,17 @@ interface PrerenderedCardOptions {
 // Selects which columns the unified `search()` projects. `dataOnly` projects
 // the live serialization only (pristine_doc / error_doc); `render` projects the
 // format-specific HTML column plus the live serialization carried only on
-// no-HTML fallback rows.
+// no-HTML fallback rows; `renderAndData` projects the HTML column plus the
+// live serialization on every row (for responses that pin both branches).
 export type SearchProjection =
   | { kind: 'dataOnly' }
   | {
       kind: 'render';
+      htmlFormat: PrerenderedHtmlFormat;
+      renderType?: ResolvedCodeRef;
+    }
+  | {
+      kind: 'renderAndData';
       htmlFormat: PrerenderedHtmlFormat;
       renderType?: ResolvedCodeRef;
     };
@@ -746,12 +752,18 @@ export class IndexQueryEngine {
         'ANY_VALUE(display_names) as display_names,',
         'ANY_VALUE(icon_html) as icon_html,',
         'ANY_VALUE(error_doc) as error_doc,',
-        // Carry the live serialization as a raw column. `_search` wraps this
-        // projection so the final `pristine_doc` keeps it only on rows whose
-        // `html` is NULL — the HTML expression is evaluated once (as `html`)
-        // and the NULL test references that computed column rather than
-        // recomputing the COALESCE/JSONB expression.
-        'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
+        ...(projection.kind === 'renderAndData'
+          ? // Both branches pinned: the live serialization rides on every row,
+            // alongside the HTML column.
+            ['ANY_VALUE(pristine_doc) as pristine_doc']
+          : [
+              // Carry the live serialization as a raw column. `_search` wraps
+              // this projection so the final `pristine_doc` keeps it only on
+              // rows whose `html` is NULL — the HTML expression is evaluated
+              // once (as `html`) and the NULL test references that computed
+              // column rather than recomputing the COALESCE/JSONB expression.
+              'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
+            ]),
       ];
     }
 
