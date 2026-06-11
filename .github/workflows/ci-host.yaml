@@ -30,6 +30,8 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
   pull-requests: read
 
 jobs:

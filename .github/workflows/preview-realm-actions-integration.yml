@@ -41,6 +41,11 @@ concurrency:
   group: preview-realm-integration-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
+
 jobs:
   test-web-assets:
     name: Build test web assets

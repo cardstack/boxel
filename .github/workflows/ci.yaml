@@ -17,6 +17,8 @@ permissions:
   checks: write
   contents: read
   id-token: write
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
   pull-requests: write
 
 jobs:

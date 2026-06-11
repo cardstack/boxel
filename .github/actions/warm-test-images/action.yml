@@ -11,9 +11,7 @@ description: >-
 
 inputs:
   registry-prefix:
-    description: >-
-      GHCR namespace holding the mirrored images. The mirrored packages must be
-      public so the pull needs no authentication (matching the open-source repo).
+    description: GHCR namespace holding the mirrored images.
     default: ghcr.io/cardstack/boxel
 
 runs:
@@ -23,8 +21,14 @@ runs:
       shell: bash
       env:
         GHCR_PREFIX: ${{ inputs.registry-prefix }}
+        GHCR_TOKEN: ${{ github.token }}
+        GHCR_USER: ${{ github.actor }}
       run: |
         set -uo pipefail
+        # Authenticate so the private mirror packages are pullable. Best-effort:
+        # on a fork PR the token can't read them, so the warm misses and the
+        # services fall back to Docker Hub (handled by dockerPull's retry).
+        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
         # warm <canonical-docker-hub-ref> <ghcr-package-suffix:tag>. Keep this
         # list in sync with the mirror-test-images workflow.
         warm() {
