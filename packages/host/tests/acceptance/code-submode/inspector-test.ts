@@ -20,6 +20,7 @@ import stringify from 'safe-stable-stringify';
 import {
   baseRealm,
   Deferred,
+  type Realm,
   type ResolvedCodeRef,
   rri,
   fileDefFormats,
@@ -31,6 +32,8 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   elementIsVisible,
@@ -177,6 +180,20 @@ const employeeCardSource = `
 `;
 
 const erroringModuleSource = `throw new Error('boom');`;
+
+// Initial source throws at module evaluation so the loader marks the entry
+// `state: 'broken'`. An external writer (the AI agent's card+source POST in
+// the real flow) then replaces it with a valid CardDef. A parse-level
+// failure would propagate as an uncaught error in qunit, so we use a
+// runtime throw — the loader-cache behaviour the regression guards is
+// identical for both failure modes.
+const brokenThenFixedSource = `throw new Error('initial broken module');`;
+const brokenThenFixedValidSource = `
+  import { CardDef } from 'https://cardstack.com/base/card-api';
+  export class BrokenThenFixed extends CardDef {
+    static displayName = 'Broken Then Fixed';
+  }
+`;
 
 const inThisFileSource = `
   import {
@@ -457,6 +474,7 @@ const localInheritSource = `
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let adapter: TestRealmAdapter;
+  let realm: Realm;
   let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
@@ -487,7 +505,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ adapter } = await withCachedRealmSetup(async () => {
+    ({ adapter, realm } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
@@ -516,6 +534,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'command-module.gts': commandModuleSource,
           'component-module.gts': componentModuleSource,
           'erroring-module.gts': erroringModuleSource,
+          'broken-then-fixed.gts': brokenThenFixedSource,
           'empty-file.gts': '',
           'sample-styles.css': 'body { color: red; }',
           'person-entry.json': {
@@ -2615,6 +2634,78 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-in-this-file-selector]').doesNotExist();
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-delete-module-button]').exists();
+  });
+
+  // When an external writer (e.g. the AI agent's card+source POST) replaces
+  // a previously-broken .gts with a valid one, the open code-mode view must
+  // reflect the fix without a page reload. Regression guard: the host's
+  // module loader caches compile failures under state: 'broken'; without an
+  // explicit loader reset on the FileResource invalidation path, the
+  // re-read would re-hit the cached broken entry and leave the
+  // module-inspector stuck on SyntaxErrorDisplay.
+  test('code mode recovers when a previously-broken module is fixed by an external write', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}broken-then-fixed.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    assert
+      .dom('[data-test-syntax-error]')
+      .exists('initial broken source surfaces a syntax error');
+
+    // Drop any pre-existing store subscriptions so the test exercises the
+    // path the fix protects — store.handleInvalidations only fires when the
+    // store has a subscription, and the regression originally surfaced in
+    // code mode where no card instance from the realm had been loaded.
+    let store = getService('store') as unknown as {
+      subscriptions: Map<string, { unsubscribe: () => void }>;
+    };
+    for (let [key, sub] of [...store.subscriptions]) {
+      sub.unsubscribe();
+      store.subscriptions.delete(key);
+    }
+    assert.strictEqual(
+      store.subscriptions.size,
+      0,
+      'store has no realm subscriptions before the external write',
+    );
+
+    let incrementalEvent = new Deferred<void>();
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
+          incrementalEvent.fulfill();
+        }
+      },
+    );
+
+    // realm.write mirrors a card+source POST: the realm transpiles, indexes,
+    // and broadcasts the `incremental` invalidation event over matrix. No
+    // X-Boxel-Client-Request-Id is passed, so the FileResource subscription
+    // treats this as an external (anonymous) write — the same path the agent
+    // takes when patching a card def.
+    await realm.write('broken-then-fixed.gts', brokenThenFixedValidSource);
+    await incrementalEvent.promise;
+    await settled();
+
+    assert
+      .dom('[data-test-syntax-error]')
+      .doesNotExist(
+        'syntax error is cleared after the external write replaces the broken source with a valid one',
+      );
+    assert
+      .dom('[data-test-card-module-definition]')
+      .exists('the module inspector renders the fixed card definition');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText(
+        'Broken Then Fixed',
+        'the fixed displayName is reflected in the inspector',
+      );
   });
 
   test('can delete an erroring module file', async function (assert) {
