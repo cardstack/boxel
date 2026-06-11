@@ -123,16 +123,13 @@ jobs:
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
-      # Warm the test images through the ECR pull-through cache so the services
+      # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub
       # pull (the cause of the recurring "Failed to reach Synapse" failures).
       # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
-      - name: Warm test Docker images via ECR pull-through cache
+      - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
-        with:
-          role-to-assume: arn:aws:iam::680542703984:role/github
-          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
       - name: Create realm users
@@ -222,16 +219,13 @@ jobs:
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
-      # Warm the test images through the ECR pull-through cache so the services
+      # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub
       # pull (the cause of the recurring "Failed to reach Synapse" failures).
       # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
-      - name: Warm test Docker images via ECR pull-through cache
+      - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
-        with:
-          role-to-assume: arn:aws:iam::680542703984:role/github
-          ecr-registry: 680542703984.dkr.ecr.us-east-1.amazonaws.com
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:

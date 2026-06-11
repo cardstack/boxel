@@ -1,0 +1,67 @@
+name: Mirror test Docker images to GHCR
+
+# Mirrors the test suite's pinned third-party images from Docker Hub into this
+# repo's GitHub Container Registry namespace, so CI pulls them from GHCR (free
+# egress to GitHub-hosted runners) instead of hitting Docker Hub directly — the
+# source of the recurring registry-1.docker.io pull timeouts. The
+# warm-test-images composite action consumes these. The tags are version-pinned
+# and rarely change, so a weekly refresh plus a refresh when the pins change is
+# enough. Run once manually (workflow_dispatch) to seed the packages, then make
+# them public so CI (and fork PRs) can pull them without authenticating.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mirror-test-images.yml
+      - packages/matrix/support/synapse/index.ts
+      - packages/matrix/docker/smtp4dev.ts
+      - mise-tasks/infra/ensure-pg
+      - packages/realm-server/scripts/start-pg.sh
+
+concurrency:
+  group: mirror-test-images
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    name: Mirror images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Mirror images
+        env:
+          GHCR_PREFIX: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # <ghcr-package-suffix>:<tag>=<docker-hub-ref>. Keep this list in sync
+          # with the warm-test-images action.
+          images=(
+            "synapse:v1.126.0=matrixdotorg/synapse:v1.126.0"
+            "smtp4dev:v3.1=rnwood/smtp4dev:v3.1"
+            "postgres:16.3=postgres:16.3"
+          )
+          for entry in "${images[@]}"; do
+            # GHCR paths must be lowercase; the owner/repo already is, but guard.
+            dest="${GHCR_PREFIX,,}/${entry%%=*}"
+            src="${entry#*=}"
+            echo "Mirroring $src -> $dest"
+            for attempt in 1 2 3 4 5; do
+              docker pull "$src" && break
+              if [ "$attempt" = 5 ]; then
+                echo "::error::failed to pull $src from Docker Hub after 5 attempts"
+                exit 1
+              fi
+              sleep $((attempt * 10))
+            done
+            docker tag "$src" "$dest"
+            docker push "$dest"
+          done

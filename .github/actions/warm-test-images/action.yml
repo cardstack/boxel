@@ -1,52 +1,35 @@
 name: Warm test Docker images
 description: >-
   Pull the test suite's third-party Docker images (synapse, smtp4dev, postgres)
-  through an ECR pull-through cache and retag them to their canonical Docker Hub
+  from this repo's GHCR mirror and retag them to their canonical Docker Hub
   names, so the services start from a local image instead of racing an
   unauthenticated Docker Hub pull. Docker Hub rate-limits / connection timeouts
   from the shared runner IP pool are the cause of the recurring "Failed to reach
-  Synapse" host-test failures. Best-effort: callers should set
-  continue-on-error so a miss falls back to a (hardened-retry) Docker Hub pull.
+  Synapse" host-test failures. The mirror is populated by the
+  mirror-test-images workflow. Best-effort: callers should set continue-on-error
+  so a miss falls back to a (hardened-retry) Docker Hub pull.
 
 inputs:
-  role-to-assume:
-    description: IAM role ARN with ECR pull-through cache permissions.
-    required: true
-  aws-region:
-    description: AWS region hosting the ECR pull-through cache.
-    default: us-east-1
-  ecr-registry:
-    description: ECR registry host, e.g. <account>.dkr.ecr.<region>.amazonaws.com
-    required: true
-  pull-through-prefix:
-    description: ecr_repository_prefix of the Docker Hub pull-through cache rule.
-    default: docker-hub
+  registry-prefix:
+    description: >-
+      GHCR namespace holding the mirrored images. The mirrored packages must be
+      public so the pull needs no authentication (matching the open-source repo).
+    default: ghcr.io/cardstack/boxel
 
 runs:
   using: composite
   steps:
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
-      with:
-        role-to-assume: ${{ inputs.role-to-assume }}
-        aws-region: ${{ inputs.aws-region }}
-    - name: Pull and retag images via ECR pull-through cache
+    - name: Pull and retag images from the GHCR mirror
       shell: bash
       env:
-        ECR_REGISTRY: ${{ inputs.ecr-registry }}
-        PULL_THROUGH_PREFIX: ${{ inputs.pull-through-prefix }}
-        AWS_REGION: ${{ inputs.aws-region }}
+        GHCR_PREFIX: ${{ inputs.registry-prefix }}
       run: |
-        set -euo pipefail
-        aws ecr get-login-password --region "$AWS_REGION" \
-          | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-
-        # warm <canonical-docker-hub-ref> <upstream-path-under-pull-through-prefix>
-        # Official images live under library/ on Docker Hub, so their upstream
-        # path is library/<name>; namespaced images keep their <org>/<name>.
+        set -uo pipefail
+        # warm <canonical-docker-hub-ref> <ghcr-package-suffix:tag>. Keep this
+        # list in sync with the mirror-test-images workflow.
         warm() {
           canonical="$1"
-          mirror="$ECR_REGISTRY/$PULL_THROUGH_PREFIX/$2"
+          mirror="$GHCR_PREFIX/$2"
           for attempt in 1 2 3 4 5; do
             if docker pull "$mirror"; then
               docker tag "$mirror" "$canonical"
@@ -56,9 +39,9 @@ runs:
             echo "docker pull $mirror failed (attempt $attempt/5); retrying in ${delay}s..."
             sleep "$delay"
           done
-          echo "::warning::could not warm $canonical from ECR mirror; falling back to Docker Hub"
+          echo "::warning::could not warm $canonical from GHCR mirror; falling back to Docker Hub"
         }
 
-        warm matrixdotorg/synapse:v1.126.0 matrixdotorg/synapse:v1.126.0
-        warm rnwood/smtp4dev:v3.1          rnwood/smtp4dev:v3.1
-        warm postgres:16.3                 library/postgres:16.3
+        warm matrixdotorg/synapse:v1.126.0 synapse:v1.126.0
+        warm rnwood/smtp4dev:v3.1          smtp4dev:v3.1
+        warm postgres:16.3                 postgres:16.3
