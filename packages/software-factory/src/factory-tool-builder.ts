@@ -35,6 +35,7 @@ import {
 } from './parse-execution';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
+import type { ValidationRunCache } from './validation-run-cache';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +85,13 @@ export interface ToolBuilderConfig {
    * prerenderer so the realm reflects the agent's latest source.
    */
   syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Shared with the post-signal_done validation pipeline — memoizes
+   * validation-engine runs per workspace fingerprint so the same unchanged
+   * realm state isn't validated twice (once by the agent's run_* tools,
+   * once by the pipeline).
+   */
+  validationCache?: ValidationRunCache;
   /** Injected for testing — defaults to runLintInMemory. */
   runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
   /** Injected for testing — defaults to runTestsInMemory. */
@@ -312,6 +320,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         targetRealm: config.targetRealm,
         client: config.client,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
+        cache: config.validationCache,
       });
     },
   };
@@ -352,6 +361,7 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
         targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
     },
@@ -414,6 +424,7 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
         targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
     },
@@ -462,6 +473,7 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
         targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
     },
@@ -535,6 +547,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         workspaceDir: config.workspaceDir,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
     },

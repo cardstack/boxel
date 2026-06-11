@@ -18,6 +18,7 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
+import { ValidationRunCache, WorkspaceSyncGate } from './validation-run-cache';
 
 import {
   ClaudeCodeFactoryAgent,
@@ -171,8 +172,16 @@ export async function runFactoryIssueLoop(
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
-  let syncWorkspace = () =>
-    syncWorkspaceToRealm(client, targetRealm, workspaceDir);
+  // One sync gate + one validation-run cache per loop: the gate skips
+  // workspace→realm syncs when nothing changed since the last successful
+  // sync, and the cache lets the post-signal_done validation pipeline reuse
+  // engine runs the agent's mid-turn run_* tools already executed against
+  // the same workspace state.
+  let syncGate = new WorkspaceSyncGate(workspaceDir, () =>
+    syncWorkspaceToRealm(client, targetRealm, workspaceDir),
+  );
+  let syncWorkspace = () => syncGate.sync();
+  let validationCache = new ValidationRunCache(workspaceDir, { syncGate });
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealm,
     realmServerUrl,
@@ -181,6 +190,7 @@ export async function runFactoryIssueLoop(
     testResultsModuleUrl,
     hostAppUrl,
     syncWorkspace,
+    validationCache,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -229,6 +239,7 @@ export async function runFactoryIssueLoop(
       workspaceDir,
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
+      cache: validationCache,
     });
 
   // 6. Run issue loop

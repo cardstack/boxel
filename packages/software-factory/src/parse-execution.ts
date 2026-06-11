@@ -33,6 +33,11 @@ import { validateRealmRelativePath } from './realm-relative-path';
 import { retryWithPoll } from './retry-with-poll';
 import { readCard } from './workspace-fs';
 
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache';
+
 let log = logger('parse-execution');
 
 // ---------------------------------------------------------------------------
@@ -122,6 +127,12 @@ export interface ParseRealmFilesOptions {
   runGlintCheckFn?: (
     gtsFiles: { path: string; content: string }[],
   ) => Promise<ParseErrorData[]>;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + file
+   * set, so the agent's mid-turn `run_parse` and the pipeline's parse step
+   * don't both type-check the same unchanged files.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface ParseRealmFilesOutput {
@@ -153,6 +164,8 @@ export interface RunParseInMemoryOptions {
    * the card document structure is validated.
    */
   path?: string;
+  /** See {@link ParseRealmFilesOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunParseError {
@@ -267,6 +280,20 @@ export async function discoverJsonExampleFiles(
  * `parse-error` entries.
  */
 export async function parseRealmFiles(
+  options: ParseRealmFilesOptions,
+  gtsFiles: string[],
+  jsonFiles: string[],
+): Promise<ParseRealmFilesOutput> {
+  if (options.cache) {
+    let key = `parse:${cacheKeyForInputs([...gtsFiles, ...jsonFiles])}`;
+    return options.cache.getOrRun(key, () =>
+      parseRealmFilesUncached(options, gtsFiles, jsonFiles),
+    );
+  }
+  return parseRealmFilesUncached(options, gtsFiles, jsonFiles);
+}
+
+async function parseRealmFilesUncached(
   options: ParseRealmFilesOptions,
   gtsFiles: string[],
   jsonFiles: string[],
@@ -487,6 +514,7 @@ export async function runParseInMemory(
         targetRealm: options.targetRealm,
         client: options.client,
         workspaceDir: options.workspaceDir,
+        cache: options.cache,
       },
       gtsFiles,
       jsonFiles,
