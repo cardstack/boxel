@@ -1259,8 +1259,22 @@ export default class RealmService extends Service {
       }
       return undefined;
     }
+    // `this.realms` is keyed by the user-facing realm URL (typically a
+    // virtual alias like `https://cardstack.com/base/`). Callers may
+    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
+    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
+    // match the same realm. Normalize both sides via
+    // `virtualNetwork.unresolveURL` (chases through any registered
+    // virtual → real URL mapping and unifies to the realm-prefix RRI
+    // form) so the comparison is form-agnostic.
+    let vn = this.network.virtualNetwork;
+    let normalizedUrl = vn.unresolveURL(url);
     for (let [key, value] of this.realms) {
       if (url.startsWith(key)) {
+        return value;
+      }
+      let normalizedKey = vn.unresolveURL(key);
+      if (normalizedUrl.startsWith(normalizedKey)) {
         return value;
       }
     }
