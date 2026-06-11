@@ -292,6 +292,24 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         'a different htmlQuery → a different ETag',
       );
 
+      // an inert htmlQuery (fieldset without html) does not key the cache:
+      // equivalent bodies share one entry + ETag
+      let itemFields = { 'search-entry': ['item'] };
+      let inertA = await post({ ...baseBody, fields: itemFields });
+      let inertB = await post({
+        ...baseBody,
+        filter: {
+          ...personFilter(),
+          eq: { htmlQuery: { eq: { format: 'embedded' } } },
+        },
+        fields: itemFields,
+      });
+      assert.strictEqual(
+        inertB.headers['etag'],
+        inertA.headers['etag'],
+        'an inert htmlQuery does not split equivalent responses',
+      );
+
       let uncached = await postSearch(baseBody);
       assert.strictEqual(
         uncached.headers['etag'],

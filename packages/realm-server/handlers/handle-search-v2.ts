@@ -109,15 +109,21 @@ export default function handleSearchV2(opts: {
 
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request
-    // member folds into `opts` — the applied (bound or defaulted) htmlQuery,
-    // the parsed fieldset, and any non-empty `cardUrls` subset (an empty
+    // member folds into `opts` — the parsed fieldset, the applied (bound or
+    // defaulted) htmlQuery, and any non-empty `cardUrls` subset (an empty
     // array is a no-op filter, so folding `[]` would fragment the cache
-    // against an equivalent request that omits it).
+    // against an equivalent request that omits it). The htmlQuery folds only
+    // when the fieldset puts the html branch in play: a fieldset without
+    // `html` makes it inert — the body is identical regardless — so keying
+    // on it would fragment the cache and split ETags across equivalent
+    // responses.
     let cacheKeyOpts: Record<string, unknown> = {
       ...searchOpts,
-      htmlQuery: parsed.htmlQuery,
       fieldset: parsed.fieldset,
     };
+    if (parsed.fieldset.html) {
+      cacheKeyOpts.htmlQuery = parsed.htmlQuery;
+    }
     if (parsed.cardUrls?.length) {
       cacheKeyOpts.cardUrls = parsed.cardUrls;
     }
