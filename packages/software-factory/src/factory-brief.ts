@@ -15,6 +15,14 @@ export interface FactoryBrief {
   content: string;
   contentSummary: string;
   tags: string[];
+  /**
+   * Absolute URL of an existing card the brief asks the factory to
+   * adjust. When present, the factory runs the adjust flow (seed the
+   * target realm from this card, then apply the brief's adjustments);
+   * when absent, the run is greenfield. Read from the brief card's
+   * `sourceCardUrl` attribute (see `realm/wiki.gts`).
+   */
+  sourceCardUrl?: string;
 }
 
 interface BoxelBriefCardInfo {
@@ -29,6 +37,7 @@ interface FactoryBriefCardAttributes {
   summary?: string | null;
   description?: string | null;
   tags?: Array<string | null> | null;
+  sourceCardUrl?: string | null;
   cardInfo?: BoxelBriefCardInfo | null;
 }
 
@@ -124,6 +133,7 @@ export function normalizeFactoryBrief(
     ]) ?? '';
   let tags = normalizeTags(attributes.tags);
   let contentSummary = buildContentSummary(summary, content, title);
+  let sourceCardUrl = valueAsTrimmedString(attributes.sourceCardUrl);
 
   return {
     title,
@@ -131,6 +141,7 @@ export function normalizeFactoryBrief(
     content,
     contentSummary,
     tags,
+    ...(sourceCardUrl ? { sourceCardUrl } : {}),
   };
 }
 
@@ -270,6 +281,7 @@ function parseFactoryBriefCardAttributes(
     summary: parseOptionalString(attributes.summary),
     description: parseOptionalString(attributes.description),
     tags: parseOptionalStringArray(attributes.tags),
+    sourceCardUrl: parseOptionalString(attributes.sourceCardUrl),
     cardInfo: parseBriefCardInfo(attributes.cardInfo),
   };
 }

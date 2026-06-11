@@ -1,6 +1,11 @@
 import type { Command } from 'commander';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
+  unpublishRealm as unpublishRealmOperation,
+  RealmOperationError,
+} from '@cardstack/runtime-common/realm-operations';
+import { buildCliRealmClient } from '../../lib/realm-client.ts';
+import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
@@ -49,66 +54,46 @@ export async function unpublishRealm(
     };
   }
 
-  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-
-  let response: Response;
   try {
-    response = await pm.authedRealmServerFetch(
-      `${realmServerUrl}/_unpublish-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ publishedRealmURL: normalized }),
-      },
-    );
+    await unpublishRealmOperation(buildCliRealmClient(pm), {
+      publishedRealmURL: normalized,
+    });
+    return { publishedRealmURL: normalized, unpublished: true };
   } catch (err) {
+    if (err instanceof RealmOperationError) {
+      let body = err.body ?? '';
+      let looksLikeNotFound =
+        err.status === 404 || (err.status === 422 && /not found/i.test(body));
+
+      if (looksLikeNotFound) {
+        if (options.tolerateMissing) {
+          return {
+            publishedRealmURL: normalized,
+            unpublished: false,
+            notFound: true,
+          };
+        }
+        return {
+          publishedRealmURL: normalized,
+          unpublished: false,
+          notFound: true,
+          error: `Published realm ${normalized} is not currently published`,
+        };
+      }
+
+      return {
+        publishedRealmURL: normalized,
+        unpublished: false,
+        error: `Realm server returned ${err.status}: ${body.slice(0, 500)}`,
+      };
+    }
+
+    // A non-HTTP failure (e.g. the realm server was unreachable).
     return {
       publishedRealmURL: normalized,
       unpublished: false,
       error: `Failed to reach realm server: ${describeFetchError(err)}`,
     };
-  }
-
-  if (response.ok) {
-    return { publishedRealmURL: normalized, unpublished: true };
-  }
-
-  let body = await safeReadResponseText(response);
-  let looksLikeNotFound =
-    response.status === 404 ||
-    (response.status === 422 && /not found/i.test(body));
-
-  if (looksLikeNotFound) {
-    if (options.tolerateMissing) {
-      return {
-        publishedRealmURL: normalized,
-        unpublished: false,
-        notFound: true,
-      };
-    }
-    return {
-      publishedRealmURL: normalized,
-      unpublished: false,
-      notFound: true,
-      error: `Published realm ${normalized} is not currently published`,
-    };
-  }
-
-  return {
-    publishedRealmURL: normalized,
-    unpublished: false,
-    error: `Realm server returned ${response.status}: ${body.slice(0, 500)}`,
-  };
-}
-
-async function safeReadResponseText(response: Response): Promise<string> {
-  try {
-    return await response.text();
-  } catch {
-    return '<no response body>';
   }
 }
 

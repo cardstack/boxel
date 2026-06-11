@@ -8,20 +8,13 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
-import {
-  Issue as _Issue,
-  Project as _Project,
-  IssueTracker as _Board,
-} from './issue-tracker';
+// Re-export (not subclass) so `darkfactory#Issue` stays identical to
+// `issue-tracker#Issue` — subclassing forks the type identity.
+import { Issue, Project, IssueTracker } from './issue-tracker';
+export { Issue, Project, IssueTracker };
 export { AgentProfile } from './agent-profile';
 export { Comment } from './comment';
 export { KnowledgeArticle } from './knowledge-article';
-
-export class Issue extends _Issue {}
-
-export class Project extends _Project {}
-
-export class IssueTracker extends _Board {}
 
 export class DarkFactory extends CardDef {
   static displayName = 'Dark Factory';

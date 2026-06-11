@@ -1,16 +1,20 @@
 import type { Command } from 'commander';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
+  publishRealm as publishRealmOperation,
+  type PublishRealmOutput,
+  RealmOperationError,
+  waitForReady,
+} from '@cardstack/runtime-common/realm-operations';
+import { buildCliRealmClient } from '../../lib/realm-client.ts';
+import {
   getProfileManager,
-  NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import { unpublishRealm } from './unpublish.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
-import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
-const READINESS_POLL_INTERVAL_MS = 1000;
 
 export interface PublishOptions {
   /** Wait for the published realm to pass readiness check (default: true). */
@@ -48,174 +52,63 @@ export async function publishRealm(
   options: PublishOptions = {},
 ): Promise<PublishRealmResult> {
   let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    throw new Error(NO_ACTIVE_PROFILE_ERROR);
-  }
+  let client = buildCliRealmClient(pm);
 
   let normalizedSource = ensureTrailingSlash(sourceRealmURL);
   let normalizedPublished = ensureTrailingSlash(publishedRealmURL);
-  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
 
-  let response = await postPublish(
-    pm,
-    realmServerUrl,
-    normalizedSource,
-    normalizedPublished,
-  );
-
-  if (
-    (response.status === 400 || response.status === 409) &&
-    options.republish !== false
-  ) {
-    let conflictBody = await safeReadResponseText(response);
-    console.log(
-      `Publish returned ${response.status} (${conflictBody.slice(0, 200)}). Unpublishing and retrying.`,
-    );
-    let unpublishResult = await unpublishRealm(normalizedPublished, {
-      profileManager: pm,
-      tolerateMissing: true,
+  let output: PublishRealmOutput;
+  try {
+    output = await publishRealmOperation(client, {
+      sourceRealmURL: normalizedSource,
+      publishedRealmURL: normalizedPublished,
     });
-    if (!unpublishResult.unpublished && !unpublishResult.notFound) {
-      throw new Error(
-        `Conflict on publish; unpublish-then-retry also failed: ${
-          unpublishResult.error ?? 'unknown'
-        }`,
+  } catch (err) {
+    // The server returns 400/409 when an existing publication conflicts;
+    // unpublish the target and retry once before giving up.
+    if (
+      err instanceof RealmOperationError &&
+      (err.status === 400 || err.status === 409) &&
+      options.republish !== false
+    ) {
+      console.log(
+        `Publish returned ${err.status} (${(err.body ?? '').slice(0, 200)}). Unpublishing and retrying.`,
       );
+      let unpublishResult = await unpublishRealm(normalizedPublished, {
+        profileManager: pm,
+        tolerateMissing: true,
+      });
+      if (!unpublishResult.unpublished && !unpublishResult.notFound) {
+        throw new Error(
+          `Conflict on publish; unpublish-then-retry also failed: ${
+            unpublishResult.error ?? 'unknown'
+          }`,
+        );
+      }
+      output = await publishRealmOperation(client, {
+        sourceRealmURL: normalizedSource,
+        publishedRealmURL: normalizedPublished,
+      });
+    } else {
+      throw err;
     }
-    response = await postPublish(
-      pm,
-      realmServerUrl,
-      normalizedSource,
-      normalizedPublished,
-    );
-  }
-
-  if (
-    response.status !== 200 &&
-    response.status !== 201 &&
-    response.status !== 202
-  ) {
-    let body = await safeReadResponseText(response);
-    throw new Error(
-      `Publish failed: HTTP ${response.status}: ${body.slice(0, 1000)}`,
-    );
-  }
-
-  let body = (await response.json()) as PublishResponseBody;
-  let attrs = body?.data?.attributes;
-  if (!attrs?.publishedRealmURL) {
-    throw new Error(
-      `Publish response missing data.attributes.publishedRealmURL: ${JSON.stringify(
-        body,
-      ).slice(0, 500)}`,
-    );
   }
 
   let result: PublishRealmResult = {
-    publishedRealmURL: ensureTrailingSlash(attrs.publishedRealmURL),
-    publishedRealmId: body.data.id,
-    lastPublishedAt: attrs.lastPublishedAt,
-    status: attrs.status,
+    publishedRealmURL: output.publishedRealmURL,
+    publishedRealmId: output.publishedRealmId,
+    lastPublishedAt: output.lastPublishedAt,
+    status: output.status,
   };
 
   if (options.waitForReady !== false) {
-    let timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    let realmToken: string | undefined;
-    try {
-      let serverToken = await pm.getOrRefreshServerToken();
-      realmToken = await pm.fetchAndStoreRealmToken(
-        result.publishedRealmURL,
-        serverToken,
-      );
-    } catch {
-      // The published realm is permission-public-read; fall through to
-      // poll without an Authorization header.
-    }
-    await waitForPublishedRealmReady(
-      result.publishedRealmURL,
-      realmToken,
-      timeoutMs,
-    );
+    await waitForReady(client, {
+      publishedRealmURL: result.publishedRealmURL,
+      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    });
   }
 
   return result;
-}
-
-interface PublishResponseBody {
-  data: {
-    type: 'published_realm';
-    id: string;
-    attributes: {
-      sourceRealmURL: string;
-      publishedRealmURL: string;
-      lastPublishedAt: string;
-      status: string;
-    };
-  };
-}
-
-async function postPublish(
-  pm: ProfileManager,
-  realmServerUrl: string,
-  sourceRealmURL: string,
-  publishedRealmURL: string,
-): Promise<Response> {
-  return pm.authedRealmServerFetch(`${realmServerUrl}/_publish-realm`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/vnd.api+json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ sourceRealmURL, publishedRealmURL }),
-  });
-}
-
-async function waitForPublishedRealmReady(
-  publishedRealmURL: string,
-  realmToken: string | undefined,
-  timeoutMs: number,
-): Promise<void> {
-  let readinessUrl = new URL('_readiness-check', publishedRealmURL).href;
-  let startedAt = Date.now();
-  let lastError: string | undefined;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      let headers: Record<string, string> = {
-        Accept: 'application/vnd.api+json',
-      };
-      if (realmToken) {
-        headers.Authorization = realmToken;
-      }
-      let response = await fetch(readinessUrl, { headers });
-      if (response.ok) {
-        return;
-      }
-      lastError = `HTTP ${response.status}`;
-    } catch (error) {
-      lastError = describeFetchError(error);
-    }
-    let remaining = timeoutMs - (Date.now() - startedAt);
-    if (remaining <= 0) break;
-    await new Promise((r) =>
-      setTimeout(r, Math.min(READINESS_POLL_INTERVAL_MS, remaining)),
-    );
-  }
-
-  throw new Error(
-    `Timed out after ${timeoutMs}ms waiting for ${publishedRealmURL} to pass readiness check${
-      lastError ? `: ${lastError}` : ''
-    }`,
-  );
-}
-
-async function safeReadResponseText(response: Response): Promise<string> {
-  try {
-    return await response.text();
-  } catch {
-    return '<no response body>';
-  }
 }
 
 export interface PublishCliOptions {

@@ -414,7 +414,14 @@ test.describe('Skills', () => {
       .locator('[data-test-boxel-input-id="ai-chat-input"]')
       .fill('Switch to code mode');
     await page.locator('[data-test-send-message-btn]').click();
-    await page.locator('[data-test-message-idx="0"]').waitFor();
+    // Wait for the optimistic bubble's real echo to land before editing the
+    // skill card and reloading — otherwise a reload mid-send leaves a failed
+    // pending bubble hydrated from localStorage.
+    await page
+      .locator(
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+      )
+      .waitFor();
 
     // Update the uploaded skill card
     await page.locator('[data-test-filter-list-item="Skill"]').click();
