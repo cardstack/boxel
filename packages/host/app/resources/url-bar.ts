@@ -53,14 +53,19 @@ export default class URLBarResource extends Resource<Args> {
     if (event.key !== 'Enter' || !this.lastEditedValue) {
       return;
     }
-    let submitted = await this.setURL(this.lastEditedValue);
-    // Submitting the URL commits the navigation, so the bar is done with
-    // focus; releasing it here lets the editor take focus when it places
-    // the cursor in the newly opened file (the editor declines to grab
-    // focus away from a text-entry element that still holds it).
-    if (submitted && event.target instanceof HTMLElement) {
+    if (!this.validate(this.lastEditedValue)) {
+      return;
+    }
+    // Submitting a valid URL commits the navigation, so the bar is done with
+    // focus. Release it before navigating: the editor places its cursor in
+    // the newly opened file at an unpredictable point during the load, and
+    // it declines to grab focus away from a text-entry element that still
+    // holds it. Blurring first guarantees the editor sees the bar as
+    // relinquished no matter when that cursor placement fires.
+    if (event.target instanceof HTMLElement) {
       event.target.blur();
     }
+    await this.setURL(this.lastEditedValue);
   }
 
   onInput(newURL: string) {
@@ -96,16 +101,14 @@ export default class URLBarResource extends Resource<Args> {
     }
   }
 
-  async setURL(newURL: string): Promise<boolean> {
-    if (!this.validate(this.lastEditedValue)) {
-      return false;
+  async setURL(newURL: string) {
+    if (this.validate(this.lastEditedValue)) {
+      if (this.setValue) {
+        await this.setValue(newURL);
+      }
+      this.value = newURL;
+      this.isEditing = false;
     }
-    if (this.setValue) {
-      await this.setValue(newURL);
-    }
-    this.value = newURL;
-    this.isEditing = false;
-    return true;
   }
 }
 
