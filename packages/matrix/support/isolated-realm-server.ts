@@ -22,7 +22,7 @@ setGracefulCleanup();
 // `writable` patch, and the hand-rolled `proxyAsset` forwarder).
 
 const testRealmCards = resolve(
-  join(__dirname, '..', '..', 'host', 'tests', 'cards'),
+  join(__dirname, '..', '..', 'test-realm-cards', 'contents'),
 );
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const skillsRealmDir = resolve(
