@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, baseRealmRRI, Loader } from '@cardstack/runtime-common';
+import { baseRealm, Loader } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -353,8 +353,13 @@ module('Unit | loader', function (hooks) {
       default: StringField,
     });
 
+    // This Loader is constructed without a `virtualNetwork`, so
+    // `captureIdentitiesOfModuleExports` records the raw shim module
+    // identifier without running it through `vn.unresolveURL`. The
+    // identity stays in URL form. Other test setups that build a VN
+    // alongside the Loader see the RRI canonical form here.
     assert.deepEqual(Loader.identify(StringField), {
-      module: `${baseRealmRRI}card-api`,
+      module: `${baseRealm.url}card-api`,
       name: 'StringField',
     });
   });
