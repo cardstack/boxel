@@ -181,7 +181,7 @@ export async function runFactoryIssueLoop(
     syncWorkspaceToRealm(client, targetRealm, workspaceDir),
   );
   let syncWorkspace = () => syncGate.sync();
-  let validationCache = new ValidationRunCache(workspaceDir);
+  let validationCache = new ValidationRunCache(workspaceDir, { syncGate });
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealm,
     realmServerUrl,

@@ -154,6 +154,84 @@ module('validation-run-cache', function (hooks) {
     });
   });
 
+  module('cache + sync gate coherence', function () {
+    test('a run against an unsynced realm is neither cached nor served later', async function (assert) {
+      // Codex review scenario: the pre-validation sync fails, the engines
+      // run against the stale realm, and the result must NOT be recorded
+      // under the current workspace fingerprint — otherwise, after the next
+      // successful sync, a cache hit would serve a verdict for code that
+      // was never validated.
+      let syncOk = true;
+      let gate = new WorkspaceSyncGate(workspaceDir, async () =>
+        syncOk ? { ok: true } : { ok: false, error: 'transient' },
+      );
+      let cache = new ValidationRunCache(workspaceDir, { syncGate: gate });
+      let runs = 0;
+      let run = async () => ({ run: ++runs });
+
+      await gate.sync(); // realm now mirrors the workspace
+      assert.deepEqual(await cache.getOrRun('k', run), { run: 1 });
+      assert.deepEqual(
+        await cache.getOrRun('k', run),
+        { run: 1 },
+        'in-sync state reuses normally',
+      );
+
+      // Edit + failed sync: realm is now stale relative to the workspace.
+      touch(workspaceDir, 'card.gts', 'export class Card { v2 = true }');
+      syncOk = false;
+      assert.false((await gate.sync()).ok);
+      assert.deepEqual(
+        await cache.getOrRun('k', run),
+        { run: 2 },
+        'unsynced run executes (no stale hit)',
+      );
+      assert.deepEqual(
+        await cache.getOrRun('k', run),
+        { run: 3 },
+        'and is not recorded — the next call runs again',
+      );
+
+      // Sync recovers: the first post-sync validation must execute for
+      // real, not be served from anything recorded while unsynced.
+      syncOk = true;
+      assert.true((await gate.sync()).ok);
+      assert.deepEqual(
+        await cache.getOrRun('k', run),
+        { run: 4 },
+        'first run after recovery executes against the synced realm',
+      );
+      assert.deepEqual(
+        await cache.getOrRun('k', run),
+        { run: 4 },
+        'then reuse resumes',
+      );
+    });
+
+    test('Validations/ writes do not break sync coherence for the cache', async function (assert) {
+      let gate = new WorkspaceSyncGate(workspaceDir, async () => ({
+        ok: true,
+      }));
+      let cache = new ValidationRunCache(workspaceDir, { syncGate: gate });
+      let runs = 0;
+
+      await gate.sync();
+      await cache.getOrRun('k', async () => ++runs);
+
+      // Pipeline steps write artifact cards locally before syncing; that
+      // must not flip the gate's coherence check (artifact cards are not
+      // engine inputs).
+      mkdirSync(join(workspaceDir, 'Validations'));
+      touch(
+        join(workspaceDir, 'Validations'),
+        'eval_issue-1.json',
+        '{"status":"running"}',
+      );
+      await cache.getOrRun('k', async () => ++runs);
+      assert.strictEqual(runs, 1, 'cache still reuses after artifact write');
+    });
+  });
+
   module('engine memoization (evaluateRealmModules)', function () {
     test('tool and pipeline sharing one cache evaluate each module once', async function (assert) {
       let cache = new ValidationRunCache(workspaceDir);

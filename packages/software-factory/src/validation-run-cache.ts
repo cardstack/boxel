@@ -102,21 +102,39 @@ export function cacheKeyForInputs(inputs: readonly string[]): string {
  * artifact cards are validation *outputs*; none of the five engines reads
  * them (eval/lint/test discover code files, parse validates only
  * Spec-linked JSON examples, instantiate reads only Spec cards).
+ *
+ * When constructed with a `syncGate`, the cache is bypassed entirely (no
+ * read, no write) while the realm is not known to mirror the workspace —
+ * i.e. after a failed sync, or before the first successful one. The
+ * realm-backed engines run against the realm, so a result produced while
+ * the realm lags the workspace must not be recorded under the workspace's
+ * fingerprint: a later cache hit would serve a verdict for code that was
+ * never actually validated.
  */
 export class ValidationRunCache {
   private entries = new Map<string, { fingerprint: string; value: unknown }>();
   private workspaceDir: string;
+  private syncGate: WorkspaceSyncGate | undefined;
 
-  constructor(workspaceDir: string) {
+  constructor(
+    workspaceDir: string,
+    options?: { syncGate?: WorkspaceSyncGate },
+  ) {
     this.workspaceDir = workspaceDir;
+    this.syncGate = options?.syncGate;
   }
 
   /**
    * Return the cached value for `key` when the workspace is unchanged since
    * it was recorded; otherwise execute `run`, record its result, and return
-   * it.
+   * it. When the realm is not in sync with the workspace, the cache is
+   * skipped in both directions.
    */
   async getOrRun<T>(key: string, run: () => Promise<T>): Promise<T> {
+    if (this.syncGate && !(await this.syncGate.isEngineContentSynced())) {
+      log.info(`Realm not in sync with workspace — bypassing cache for ${key}`);
+      return run();
+    }
     let fingerprint = await computeWorkspaceFingerprint(this.workspaceDir, [
       'Validations',
     ]);
@@ -144,12 +162,31 @@ export interface SyncOutcome {
  */
 export class WorkspaceSyncGate {
   private lastSyncedFingerprint: string | undefined;
+  private lastSyncedEngineFingerprint: string | undefined;
   private workspaceDir: string;
   private syncFn: () => Promise<SyncOutcome>;
 
   constructor(workspaceDir: string, syncFn: () => Promise<SyncOutcome>) {
     this.workspaceDir = workspaceDir;
     this.syncFn = syncFn;
+  }
+
+  /**
+   * True when the workspace's engine-relevant content (everything except
+   * `Validations/`) matches what was last successfully synced to the realm.
+   * False after a failed sync or before the first successful one. This is
+   * what makes a {@link ValidationRunCache} entry trustworthy: the engines
+   * run against the realm, so their results are only meaningful for the
+   * fingerprinted workspace while the two agree.
+   */
+  async isEngineContentSynced(): Promise<boolean> {
+    if (this.lastSyncedEngineFingerprint === undefined) {
+      return false;
+    }
+    let current = await computeWorkspaceFingerprint(this.workspaceDir, [
+      'Validations',
+    ]);
+    return current === this.lastSyncedEngineFingerprint;
   }
 
   async sync(): Promise<SyncOutcome> {
@@ -165,8 +202,13 @@ export class WorkspaceSyncGate {
       this.lastSyncedFingerprint = await computeWorkspaceFingerprint(
         this.workspaceDir,
       );
+      this.lastSyncedEngineFingerprint = await computeWorkspaceFingerprint(
+        this.workspaceDir,
+        ['Validations'],
+      );
     } else {
       this.lastSyncedFingerprint = undefined;
+      this.lastSyncedEngineFingerprint = undefined;
     }
     return outcome;
   }
