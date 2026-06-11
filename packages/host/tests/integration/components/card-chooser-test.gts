@@ -29,7 +29,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
 
-module('Integration | card-catalog', function (hooks) {
+module('Integration | card-chooser', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
   setupLocalIndexing(hooks);

@@ -2605,7 +2605,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .doesNotExist('card error state is not displayed');
     });
 
-    test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
+    test('card-chooser does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,

@@ -83,7 +83,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await click(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
 
     await click('[data-test-edit-button]');
@@ -160,7 +160,7 @@ module('Integration | operator-mode | links', function (hooks) {
     );
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
 
     await click('[data-test-edit-button]');
     await waitFor('.operator-mode [data-test-spec-card-linker-isolated]');
@@ -210,7 +210,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert
       .dom('[data-test-field="friends"]')
       .containsText('Jackie Woody Buzz Mango');
@@ -243,7 +243,7 @@ module('Integration | operator-mode | links', function (hooks) {
     );
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
 
     assert
       .dom('[data-test-stack-card] [data-test-field="friend"]')
@@ -279,7 +279,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
   });
 
@@ -303,7 +303,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
   });
 
@@ -329,7 +329,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 

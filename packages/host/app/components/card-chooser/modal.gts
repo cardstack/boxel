@@ -17,7 +17,7 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
-import type { Loader, CardCatalogQuery } from '@cardstack/runtime-common';
+import type { Loader, CardChooserQuery } from '@cardstack/runtime-common';
 import {
   type CodeRef,
   type CreateNewCard,
@@ -107,7 +107,7 @@ function selectionEquals(
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
-export default class CardCatalogModal extends Component<Signature> {
+export default class CardChooserModal extends Component<Signature> {
   <template>
     {{#if this.state}}
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
@@ -122,7 +122,7 @@ export default class CardCatalogModal extends Component<Signature> {
             as |Bar Content|
           >
             <ModalContainer
-              class='card-catalog-modal'
+              class='card-chooser-modal'
               @title={{state.chooseCardTitle}}
               @onClose={{this.cancelPick}}
               @layer='urgent'
@@ -138,10 +138,10 @@ export default class CardCatalogModal extends Component<Signature> {
             >
               <:header>
                 <Bar
-                  class='card-catalog-search'
+                  class='card-chooser-search'
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
-                  @pickerDestination='card-catalog-picker-wormhole'
+                  @pickerDestination='card-chooser-picker-wormhole'
                 />
               </:header>
               <:content>
@@ -184,7 +184,7 @@ export default class CardCatalogModal extends Component<Signature> {
               </:footer>
             </ModalContainer>
             <div
-              id='card-catalog-picker-wormhole'
+              id='card-chooser-picker-wormhole'
               data-test-card-catalog-picker-wormhole
             ></div>
           </SearchPanel>
@@ -192,10 +192,10 @@ export default class CardCatalogModal extends Component<Signature> {
       {{/if}}
     {{/if}}
     <style scoped>
-      .card-catalog-modal > :deep(.boxel-modal__inner) {
+      .card-chooser-modal > :deep(.boxel-modal__inner) {
         max-height: 80vh;
       }
-      .card-catalog-modal.large {
+      .card-chooser-modal.large {
         --boxel-modal-offset-top: var(--boxel-sp-xxxl);
       }
       :deep(.dialog-box__header) {
@@ -239,7 +239,7 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   get focusTrapAdditionalElements() {
-    const el = document.getElementById('card-catalog-picker-wormhole');
+    const el = document.getElementById('card-chooser-picker-wormhole');
     return el ? [el] : [];
   }
 
@@ -292,7 +292,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard(
-    query: CardCatalogQuery,
+    query: CardChooserQuery,
     opts?: {
       offerToCreate?: {
         ref: CodeRef;
@@ -334,7 +334,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private _chooseCard = task(
     async (
-      query: CardCatalogQuery,
+      query: CardChooserQuery,
       opts: {
         offerToCreate?: {
           ref: CodeRef;
@@ -400,7 +400,7 @@ export default class CardCatalogModal extends Component<Signature> {
             : []
       ).map((url) => (url.endsWith('.json') ? url : `${url}.json`));
 
-      let cardCatalogState = new TrackedObject<State>({
+      let cardChooserState = new TrackedObject<State>({
         id: this.stateId,
         request,
         chooseCardTitle: title,
@@ -415,7 +415,7 @@ export default class CardCatalogModal extends Component<Signature> {
         preselectConsumingRealm: opts.preselectConsumingRealm,
         lockConsumingRealm: opts.lockConsumingRealm,
       });
-      this.stateStack.push(cardCatalogState);
+      this.stateStack.push(cardChooserState);
       return await request.deferred.promise;
     },
   );
