@@ -21,12 +21,6 @@ on:
       - packages/matrix/docker/smtp4dev.ts
       - mise-tasks/infra/ensure-pg
       - packages/realm-server/scripts/start-pg.sh
-  # TEMPORARY: lets this run on the PR branch to seed + auto-link the GHCR
-  # packages before merge (workflow_dispatch only works once on main). Remove
-  # before merging.
-  pull_request:
-    paths:
-      - .github/workflows/mirror-test-images.yml
 
 concurrency:
   group: mirror-test-images
