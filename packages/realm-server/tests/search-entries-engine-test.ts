@@ -190,6 +190,11 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(item.links?.self, johnId);
       assert.strictEqual(
+        item.meta.realmInfo?.name,
+        'Unnamed Workspace',
+        'an item carries meta.realmInfo exactly as the live search path serializes it',
+      );
+      assert.strictEqual(
         (doc.included ?? []).filter((r) => r.type === 'html').length,
         0,
       );

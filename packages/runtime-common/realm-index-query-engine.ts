@@ -946,7 +946,8 @@ export class RealmIndexQueryEngine {
   // (html renderings first, then the deduped css, then the items), expand
   // links for the full items only (sparse items are field-limited data reads
   // and identity-only entries have nothing to expand), same gating as the
-  // live search path.
+  // live search path. Items carry `meta.realmInfo` exactly as the live
+  // search path serializes them.
   private async assembleSearchEntryDoc(
     doc: SearchEntryCollectionDocument,
     resources: {
@@ -980,6 +981,7 @@ export class RealmIndexQueryEngine {
     if (included.length > 0) {
       doc.included = included;
     }
+    await this.attachRealmInfo(doc);
     return doc;
   }
 
@@ -1711,7 +1713,8 @@ export class RealmIndexQueryEngine {
     doc:
       | SingleCardDocument
       | LinkableCollectionDocument
-      | UnifiedSearchCollectionDocument,
+      | UnifiedSearchCollectionDocument
+      | SearchEntryCollectionDocument,
   ): Promise<void> {
     let realmInfo = await this.#realm.getRealmInfo();
     let resources = Array.isArray(doc.data) ? doc.data : [doc.data];
