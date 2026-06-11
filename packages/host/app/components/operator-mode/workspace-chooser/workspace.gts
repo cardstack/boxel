@@ -341,8 +341,6 @@ export default class Workspace extends Component<Signature> {
         right: 0.5rem;
         z-index: 3;
         color: var(--boxel-light);
-        opacity: 0;
-        transition: opacity 0.15s ease;
         border-radius: var(--boxel-border-radius-sm);
         width: var(--boxel-button-xs);
         height: var(--boxel-button-xs);
@@ -353,13 +351,13 @@ export default class Workspace extends Component<Signature> {
         --boxel-icon-button-width: var(--boxel-button-xs);
         --boxel-icon-button-height: var(--boxel-button-xs);
       }
-      .workspace-card:hover .tile-menu-btn,
-      .tile-menu-btn:focus-within {
-        opacity: 1;
-      }
       .tile-menu-btn:hover {
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
+      }
+      .tile-menu-btn:focus-within {
+        background: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
       }
       .tile-icon {
         background-color: var(--boxel-500);
