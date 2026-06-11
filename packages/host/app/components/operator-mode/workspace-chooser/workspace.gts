@@ -46,6 +46,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -54,6 +55,8 @@ interface Signature {
   Args: {
     realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
+    isSelected?: boolean;
+    navIndex?: number;
   };
 }
 
@@ -63,14 +66,19 @@ export default class Workspace extends Component<Signature> {
       <WorkspaceLoadingIndicator />
     {{else}}
       <div
-        class='workspace-card {{if this.isHostDropdownOpen "is-open"}}'
+        class='workspace-card
+          {{if this.isHostDropdownOpen "is-open"}}
+          {{if @isSelected "is-selected"}}'
         data-test-workspace={{this.name}}
+        data-test-workspace-selected={{if @isSelected this.name}}
         {{on 'mouseleave' this.closeHostDropdown}}
         ...attributes
       >
         <ItemContainer
           data-test-workspace-button={{this.name}}
+          data-nav-index={{@navIndex}}
           {{on 'click' this.openWorkspace}}
+          {{focusWhenSelected @isSelected}}
         >
           <div
             class='tile-icon'
@@ -300,6 +308,10 @@ export default class Workspace extends Component<Signature> {
       .workspace-card:hover::after {
         border-color: rgba(255 255 255 / 50%);
       }
+      .workspace-card.is-selected::after {
+        border-color: var(--boxel-teal);
+        box-shadow: 0 0 0 1px var(--boxel-teal);
+      }
       .tile-favorite-btn {
         position: absolute;
         top: 0.5rem;
@@ -329,8 +341,6 @@ export default class Workspace extends Component<Signature> {
         right: 0.5rem;
         z-index: 3;
         color: var(--boxel-light);
-        opacity: 0;
-        transition: opacity 0.15s ease;
         border-radius: var(--boxel-border-radius-sm);
         width: var(--boxel-button-xs);
         height: var(--boxel-button-xs);
@@ -341,13 +351,13 @@ export default class Workspace extends Component<Signature> {
         --boxel-icon-button-width: var(--boxel-button-xs);
         --boxel-icon-button-height: var(--boxel-button-xs);
       }
-      .workspace-card:hover .tile-menu-btn,
-      .tile-menu-btn:focus-within {
-        opacity: 1;
-      }
       .tile-menu-btn:hover {
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
+      }
+      .tile-menu-btn:focus-within {
+        background: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
       }
       .tile-icon {
         background-color: var(--boxel-500);

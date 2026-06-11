@@ -44,6 +44,10 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
       .workspace:focus-visible {
         outline-offset: -1px;
       }
+      .workspace.is-selected::after {
+        border-color: var(--boxel-teal);
+        box-shadow: 0 0 0 1px var(--boxel-teal);
+      }
     </style>
   </template>;
 
