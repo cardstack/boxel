@@ -5,12 +5,17 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  PermissionsContextName,
+  type Permissions,
+} from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
   testRealmURL,
+  provideConsumeContext,
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
@@ -275,39 +280,22 @@ module(
         },
       };
 
+      // LinksToEditor only renders its add-new affordance when
+      // `permissions.canWrite` is truthy — that's normally provided by
+      // the stack item (interact) or the playground panel (code) via
+      // `PermissionsContext`. Without operator-mode mounted, the test
+      // has to provide it explicitly, otherwise LinksToEditor renders
+      // its "- Empty -" placeholder and `[data-test-add-new]` is
+      // missing.
+      let permissions: Permissions = { canRead: true, canWrite: true };
+      provideConsumeContext(PermissionsContextName, permissions);
+
       try {
         await renderCard(
           getService('loader-service').loader,
           realmConfig as InstanceType<typeof cardApi.CardDef>,
           'edit',
         );
-        // [diagnostic] surface what actually rendered
-        console.log(
-          '[lock-diag] renderCard state',
-          JSON.stringify({
-            realmConfigExists: !!realmConfig,
-            realmConfigConstructor:
-              (realmConfig as any)?.constructor?.name ?? null,
-            hostRoutingRulesLength:
-              (realmConfig as any)?.hostRoutingRules?.length ?? null,
-            hasRealmConfigEdit: !!document.querySelector(
-              '[data-test-realm-config-edit]',
-            ),
-            hasRoutingRuleEdit: !!document.querySelector(
-              '[data-test-routing-rule-edit]',
-            ),
-            hasLinksToEditor: !!document.querySelector(
-              '[data-test-links-to-editor]',
-            ),
-            hasAddNew: !!document.querySelector(
-              '[data-test-add-new="instance"]',
-            ),
-            bodyTextSample: document.body?.innerText?.slice(0, 200) ?? null,
-          }),
-        );
-        // Wait for the routing-rule editor to render its inner
-        // LinksToEditor, which only happens once the card's containsMany
-        // iteration mounts each rule.
         await waitFor('[data-test-add-new="instance"]');
         await click('[data-test-add-new="instance"]');
 
