@@ -410,9 +410,12 @@ module('Acceptance | workspace-chooser', function (hooks) {
       ].map((el) => el.getAttribute('data-test-workspace') ?? '');
     }
 
-    async function arrow(key: string) {
+    // Keyboard navigation is driven from the focused tile, and the chooser's
+    // keydown handler intentionally ignores keys that don't originate from a
+    // tile. Fire on the active element so tests exercise the real path.
+    async function pressKey(key: string) {
       await triggerKeyEvent(
-        '[data-test-workspace-chooser]',
+        document.activeElement as Element,
         'keydown',
         key as any,
       );
@@ -440,13 +443,13 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       let [first, second] = orderedWorkspaceNames();
 
-      await arrow('ArrowRight');
+      await pressKey('ArrowRight');
       assert
         .dom(`[data-test-workspace-selected="${second}"]`)
         .exists('ArrowRight selects the next workspace');
       assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
 
-      await arrow('ArrowRight');
+      await pressKey('ArrowRight');
       assert
         .dom('[data-test-add-workspace-selected]')
         .exists('ArrowRight reaches the New Workspace tile');
@@ -454,17 +457,17 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .dom('[data-test-workspace-selected]')
         .doesNotExist('no workspace card is selected while New Workspace is');
 
-      await arrow('ArrowLeft');
+      await pressKey('ArrowLeft');
       assert
         .dom(`[data-test-workspace-selected="${second}"]`)
         .exists('ArrowLeft leaves the New Workspace tile');
 
-      await arrow('ArrowLeft');
+      await pressKey('ArrowLeft');
       assert
         .dom(`[data-test-workspace-selected="${first}"]`)
         .exists('ArrowLeft returns to the first workspace');
 
-      await arrow('ArrowLeft');
+      await pressKey('ArrowLeft');
       assert
         .dom(`[data-test-workspace-selected="${first}"]`)
         .exists('ArrowLeft at the start stays on the first workspace');
@@ -491,7 +494,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       // ArrowDown leaves the Favorites row and lands somewhere in the row
       // below (Your Workspaces). The exact tile depends on column alignment,
       // so assert the row, not a specific tile.
-      await arrow('ArrowDown');
+      await pressKey('ArrowDown');
       assert
         .dom('[data-test-favorites-list] [data-test-workspace-selected]')
         .doesNotExist('ArrowDown moves the selection out of the Favorites row');
@@ -501,7 +504,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         )
         .exists('ArrowDown moves the selection into the Your Workspaces row');
 
-      await arrow('ArrowUp');
+      await pressKey('ArrowUp');
       assert
         .dom(
           '[data-test-favorites-list] [data-test-workspace-selected="Workspace A"]',
@@ -532,11 +535,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       let [first] = orderedWorkspaceNames();
       let firstURL = urlByName[first];
 
-      await triggerKeyEvent(
-        '[data-test-workspace-chooser]',
-        'keydown',
-        'Enter',
-      );
+      await pressKey('Enter');
 
       await waitFor(`[data-test-stack-card="${firstURL}index"]`);
       assert
@@ -552,22 +551,71 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await waitFor('[data-test-workspace-selected]');
 
       // Step right past the two user workspaces to the New Workspace tile.
-      await arrow('ArrowRight');
-      await arrow('ArrowRight');
+      await pressKey('ArrowRight');
+      await pressKey('ArrowRight');
       assert
         .dom('[data-test-add-workspace-selected]')
         .exists('the New Workspace tile is selected');
 
-      await triggerKeyEvent(
-        '[data-test-workspace-chooser]',
-        'keydown',
-        'Enter',
-      );
+      await pressKey('Enter');
 
       await waitFor('[data-test-create-workspace-modal]');
       assert
         .dom('[data-test-create-workspace-modal]')
         .exists('Enter opens the create-workspace modal');
+    });
+
+    test('right arrow advances past the New Workspace tile into the catalog section', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      // This configuration shows catalog workspaces, so the New Workspace tile
+      // is not the last selectable item.
+      assert
+        .dom('[data-test-catalog-list]')
+        .exists('catalogs are shown in this configuration');
+
+      await pressKey('ArrowRight'); // second user workspace
+      await pressKey('ArrowRight'); // New Workspace tile
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .exists('reached the New Workspace tile');
+
+      await pressKey('ArrowRight'); // into the catalog section
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .doesNotExist(
+          'ArrowRight advances past the New Workspace tile into the catalogs',
+        );
+    });
+
+    test('keys originating from a non-tile control are ignored', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [first] = orderedWorkspaceNames();
+      let firstURL = urlByName[first];
+
+      // Focus a control inside the chooser that isn't a navigable tile.
+      let favoriteBtn = `[data-test-workspace-favorite-btn="${firstURL}"]`;
+      await focus(favoriteBtn);
+
+      // Arrow keys here must not drive tile navigation...
+      await triggerKeyEvent(favoriteBtn, 'keydown', 'ArrowRight');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists(
+          'ArrowRight from a non-tile control does not move the selection',
+        );
+
+      // ...and Enter must not open the selected workspace.
+      await triggerKeyEvent(favoriteBtn, 'keydown', 'Enter');
+      assert
+        .dom('[data-test-workspace-chooser]')
+        .exists('Enter from a non-tile control does not open a workspace');
+      assert
+        .dom(`[data-test-stack-card="${firstURL}index"]`)
+        .doesNotExist('no workspace was opened');
     });
   });
 

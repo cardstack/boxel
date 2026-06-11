@@ -181,6 +181,19 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.catalogNavBase + this.renderedCatalogCount;
   }
 
+  // `selectedIndex` can fall out of range when the selectable set shrinks
+  // without a keypress (e.g. switching to the Hosted Only filter hides the
+  // user section and "New Workspace" tile). Clamping on read keeps a tile
+  // selected so focus/Enter/arrow navigation keep working. Used everywhere the
+  // selection is consumed — rendering, lookups, and as the base for movement.
+  private get currentIndex() {
+    let count = this.selectableCount;
+    if (count === 0) {
+      return 0;
+    }
+    return Math.min(Math.max(this.selectedIndex, 0), count - 1);
+  }
+
   // Keep the selection in sync with focus, so tabbing onto a tile selects it.
   @action private onFocusIn(event: Event) {
     let tile = (event.target as HTMLElement).closest('[data-nav-index]');
@@ -200,15 +213,21 @@ export default class WorkspaceChooser extends Component<Signature> {
     if (count === 0) {
       return;
     }
+    // Only handle keys that originate from a selectable tile. Other controls
+    // inside the chooser (a card's favorite/options/host buttons) handle their
+    // own keys, so we must not intercept (and preventDefault) their events.
+    if (!(kbEvent.target as HTMLElement).closest('[data-nav-index]')) {
+      return;
+    }
     switch (kbEvent.key) {
       // Left/Right step linearly through the sequence.
       case 'ArrowRight':
         event.preventDefault();
-        this.selectedIndex = Math.min(this.selectedIndex + 1, count - 1);
+        this.selectedIndex = Math.min(this.currentIndex + 1, count - 1);
         break;
       case 'ArrowLeft':
         event.preventDefault();
-        this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+        this.selectedIndex = Math.max(this.currentIndex - 1, 0);
         break;
       // Up/Down move by visual row in the wrapped flex layout.
       case 'ArrowDown':
@@ -222,7 +241,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       case 'Enter': {
         event.preventDefault();
         let selected = container.querySelector(
-          `[data-nav-index='${this.selectedIndex}']`,
+          `[data-nav-index='${this.currentIndex}']`,
         );
         if (selected instanceof HTMLElement) {
           // Activates the focused tile — opening the workspace, or the
@@ -244,7 +263,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         rect: element.getBoundingClientRect(),
       }),
     );
-    let current = tiles.find((tile) => tile.index === this.selectedIndex);
+    let current = tiles.find((tile) => tile.index === this.currentIndex);
     if (!current) {
       return;
     }
@@ -323,7 +342,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                   <Workspace
                     @realmIdentifier={{realmIdentifier}}
                     @navIndex={{i}}
-                    @isSelected={{eq this.selectedIndex i}}
+                    @isSelected={{eq this.currentIndex i}}
                   />
                 {{/each}}
               </div>
@@ -350,7 +369,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                       @realmIdentifier={{realmIdentifier}}
                       @showMenu={{true}}
                       @navIndex={{navIndex}}
-                      @isSelected={{eq this.selectedIndex navIndex}}
+                      @isSelected={{eq this.currentIndex navIndex}}
                     />
                   {{/let}}
                 {{/each}}
@@ -359,10 +378,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 {{/if}}
                 <AddWorkspace
                   @navIndex={{this.addWorkspaceNavIndex}}
-                  @isSelected={{eq
-                    this.selectedIndex
-                    this.addWorkspaceNavIndex
-                  }}
+                  @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
                 />
               </div>
             {{/if}}
@@ -388,7 +404,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                       <Workspace
                         @realmIdentifier={{realmIdentifier}}
                         @navIndex={{navIndex}}
-                        @isSelected={{eq this.selectedIndex navIndex}}
+                        @isSelected={{eq this.currentIndex navIndex}}
                       />
                     {{/let}}
                   {{/each}}
