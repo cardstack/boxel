@@ -10,6 +10,7 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
+import { cliLog } from '../../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 
@@ -99,6 +100,7 @@ export async function unpublishRealm(
 
 interface UnpublishCliOptions {
   tolerateMissing?: boolean;
+  json?: boolean;
 }
 
 export function registerUnpublishCommand(realm: Command): void {
@@ -110,10 +112,19 @@ export function registerUnpublishCommand(realm: Command): void {
       '--tolerate-missing',
       'Exit successfully when the realm is already unpublished',
     )
+    .option('--json', 'Output the result as JSON')
     .action(async (publishedRealmURL: string, opts: UnpublishCliOptions) => {
       let result = await unpublishRealm(publishedRealmURL, {
         tolerateMissing: opts.tolerateMissing === true,
       });
+
+      if (opts.json) {
+        cliLog.output(JSON.stringify(result, null, 2));
+        if (result.error) {
+          process.exit(1);
+        }
+        return;
+      }
 
       if (result.error) {
         console.error(`${FG_RED}Error:${RESET} ${result.error}`);
