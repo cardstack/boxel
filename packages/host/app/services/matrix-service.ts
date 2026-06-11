@@ -214,6 +214,13 @@ export default class MatrixService extends Service {
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   @tracked private _systemCard: SystemCard | undefined;
   @tracked private _systemCardLoadFailed = false;
+  private _userChoiceId: string | undefined;
+  private _systemCardInvalidationUnsub: (() => void) | undefined;
+  // Sticky "the active SystemCard was deleted in-session" signal. Bridges the
+  // synchronous failure detection in `onSystemCardInvalidated` with the
+  // asynchronous re-entry into `setSystemCard(undefined)` from the matrix
+  // account-data echo. Cleared whenever `setSystemCard` resolves a card.
+  private _systemCardWasLost = false;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -1512,6 +1519,10 @@ export default class MatrixService extends Service {
     this.initialSyncCompleted = false;
     this.initialSyncCompletedDeferred = new Deferred<void>();
     this.roomsWaitingForSync.clear();
+    this._systemCardInvalidationUnsub?.();
+    this._systemCardInvalidationUnsub = undefined;
+    this._userChoiceId = undefined;
+    this._systemCardWasLost = false;
     this._systemCard = undefined;
     this._systemCardLoadFailed = false;
     this.startedAtTs = -1;
@@ -2347,6 +2358,7 @@ export default class MatrixService extends Service {
   }
 
   private async setSystemCard(userChoiceId: string | undefined) {
+    this._userChoiceId = userChoiceId;
     let envDefaultId = ENV.defaultSystemCardId;
 
     if (userChoiceId && userChoiceId === this._systemCard?.id) {
@@ -2381,17 +2393,56 @@ export default class MatrixService extends Service {
       }
     }
 
+    // Clear the post-loss signal before deriving the banner state so a
+    // successful resolution in this call does not re-trip the third clause.
+    if (loadedCard) {
+      this._systemCardWasLost = false;
+    }
     this._systemCardLoadFailed =
-      envDefaultFailed || (userChoiceFailed && !envDefaultId);
+      envDefaultFailed ||
+      (userChoiceFailed && !envDefaultId) ||
+      (this._systemCardWasLost && !loadedCard);
 
     if (loadedCard?.id !== this._systemCard?.id) {
+      this._systemCardInvalidationUnsub?.();
+      this._systemCardInvalidationUnsub = undefined;
       this.store.dropReference(this._systemCard?.id);
       if (loadedCard) {
         this.store.addReference(loadedCard.id);
+        // Capture the id in the closure — by the time the callback fires, the
+        // store has evicted the card, so we cannot read it off `_systemCard`.
+        let subscribedId = loadedCard.id;
+        this._systemCardInvalidationUnsub =
+          this.store.subscribeToCardInvalidation(subscribedId, () =>
+            this.onSystemCardInvalidated(subscribedId),
+          );
       }
       this._systemCard = loadedCard;
     }
   }
+
+  // Fires when the active SystemCard is deleted in the same session (either
+  // via the in-tab UI or via a matrix-auth-room invalidation originating
+  // elsewhere). Re-evaluate the chain so the fallback banner surfaces or the
+  // env-default silently takes over, and clear the matrix preference when the
+  // dangling id was the user's own pick so it does not keep being rebroadcast.
+  private onSystemCardInvalidated = async (invalidatedId: string) => {
+    let wasUserChoice = this._userChoiceId === invalidatedId;
+    // Drop the doomed reference so setSystemCard does not take its id-match
+    // fast path against the now-evicted instance.
+    this._systemCardInvalidationUnsub?.();
+    this._systemCardInvalidationUnsub = undefined;
+    this.store.dropReference(this._systemCard?.id);
+    this._systemCard = undefined;
+    // Sticky signal that survives the asynchronous matrix account-data echo
+    // below — keeps `_systemCardLoadFailed` true through any re-entry into
+    // `setSystemCard(undefined)` until a replacement card actually resolves.
+    this._systemCardWasLost = true;
+    await this.setSystemCard(this._userChoiceId);
+    if (wasUserChoice) {
+      await this.setUserSystemCard(undefined);
+    }
+  };
 
   async setUserSystemCard(systemCardId: string | undefined) {
     // This sets the users account data for their preferred system card

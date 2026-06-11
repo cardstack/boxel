@@ -1273,6 +1273,140 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(file, undefined, 'file no longer exists');
   });
 
+  test('subscribeToCardInvalidation fires the callback when the card is deleted', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let fired = 0;
+    let unsubscribe = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        fired += 1;
+      },
+    );
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    assert.strictEqual(
+      fired,
+      1,
+      'the invalidation subscriber fires exactly once on delete',
+    );
+    unsubscribe();
+  });
+
+  test('subscribeToCardInvalidation unsubscribe stops firing the callback', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let fired = 0;
+    let unsubscribe = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        fired += 1;
+      },
+    );
+    unsubscribe();
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    assert.strictEqual(fired, 0, 'no callbacks fire after unsubscribe');
+  });
+
+  test('a synchronously throwing invalidation subscriber does not break siblings', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let originalError = console.error;
+    let captured: unknown[] = [];
+    console.error = (...args: unknown[]) => {
+      captured.push(args);
+    };
+
+    let secondFired = 0;
+    let unsubscribeA = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        throw new Error('intentional sync throw from invalidation subscriber');
+      },
+    );
+    let unsubscribeB = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        secondFired += 1;
+      },
+    );
+
+    try {
+      await storeService.delete(`${testRealmURL}Person/boris`);
+
+      assert.strictEqual(
+        secondFired,
+        1,
+        'the second subscriber still runs after the first one throws',
+      );
+      assert.strictEqual(
+        captured.length,
+        1,
+        'the synchronous throw is reported via console.error exactly once',
+      );
+    } finally {
+      unsubscribeA();
+      unsubscribeB();
+      console.error = originalError;
+    }
+  });
+
+  test('an async-rejecting invalidation subscriber does not break siblings and does not surface as an unhandled rejection', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let originalError = console.error;
+    let captured: unknown[] = [];
+    console.error = (...args: unknown[]) => {
+      captured.push(args);
+    };
+
+    let secondFired = 0;
+    let unsubscribeA = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      async () => {
+        await Promise.resolve();
+        throw new Error(
+          'intentional async rejection from invalidation subscriber',
+        );
+      },
+    );
+    let unsubscribeB = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        secondFired += 1;
+      },
+    );
+
+    try {
+      await storeService.delete(`${testRealmURL}Person/boris`);
+      // Drain the microtask queue so the rejected promise's catch handler runs
+      // and any unhandled-rejection event would have already fired.
+      await settled();
+
+      assert.strictEqual(
+        secondFired,
+        1,
+        'the second subscriber still runs alongside the async-rejecting one',
+      );
+      assert.strictEqual(
+        captured.length,
+        1,
+        'the async rejection is reported via console.error exactly once',
+      );
+    } finally {
+      unsubscribeA();
+      unsubscribeB();
+      console.error = originalError;
+    }
+  });
+
   test('can patch an instance', async function (assert) {
     let instance = await storeService.patch(`${testRealmURL}Person/hassan`, {
       attributes: {
