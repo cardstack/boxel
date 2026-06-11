@@ -339,18 +339,24 @@ class _FileResource extends Resource<Args> {
         }
 
         if (reloadFile) {
-          // External writes (no/foreign clientRequestId) for an executable
-          // module must clear the loader's cached state for this URL —
-          // otherwise a previously-broken module stays `state: 'broken'`
-          // in the loader and the re-read keeps surfacing SyntaxErrorDisplay
-          // even after the source is fixed. store.handleInvalidations only
-          // resets the loader for realms the store has subscribed to (i.e.
-          // realms it loaded a card instance from), which excludes code-mode
-          // browsing of a .gts whose realm has no loaded instance.
-          // cached-fetch's ETag revalidation handles the source bytes, so
-          // we don't drop the fetch cache.
-          if (hasExecutableExtension(normalizedURL)) {
+          // Mirrors the store's invalidation path: only reset the loader when
+          // the rewritten module has actually been imported (which includes
+          // entries cached as `state: 'broken'`). Resetting unconditionally
+          // would clone the whole loader on every external write — including
+          // boxel-cli writes for modules the host never loaded — and drop
+          // unrelated loaded modules. clearFetchCache is required because
+          // the module endpoint's ETag is keyed on unix-second-granularity
+          // `lastModified`; without it, a write landing in the same second
+          // as the prior fetch can be served as a 304 with the old broken
+          // body. The store only covers realms it subscribed to (i.e. ones
+          // it loaded a card instance from), so code-mode-only browsing of
+          // a .gts whose realm has no loaded instance relies on this path.
+          if (
+            hasExecutableExtension(normalizedURL) &&
+            this.loaderService.loader.isModuleLoaded(normalizedURL)
+          ) {
             this.loaderService.resetLoader({
+              clearFetchCache: true,
               reason: 'file-resource-external-invalidation',
             });
           }

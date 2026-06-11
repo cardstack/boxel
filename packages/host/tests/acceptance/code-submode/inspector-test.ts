@@ -188,7 +188,7 @@ const erroringModuleSource = `throw new Error('boom');`;
 // runtime throw — the loader-cache behaviour the regression guards is
 // identical for both failure modes.
 const brokenThenFixedSource = `throw new Error('initial broken module');`;
-const brokenThenFixedFixedSource = `
+const brokenThenFixedValidSource = `
   import { CardDef } from 'https://cardstack.com/base/card-api';
   export class BrokenThenFixed extends CardDef {
     static displayName = 'Broken Then Fixed';
@@ -2688,7 +2688,7 @@ export class ExportedCard extends ExportedCardParent {
     // X-Boxel-Client-Request-Id is passed, so the FileResource subscription
     // treats this as an external (anonymous) write — the same path the agent
     // takes when patching a card def.
-    await realm.write('broken-then-fixed.gts', brokenThenFixedFixedSource);
+    await realm.write('broken-then-fixed.gts', brokenThenFixedValidSource);
     await incrementalEvent.promise;
     await settled();
 
