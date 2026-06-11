@@ -335,6 +335,27 @@ jobs:
             exit 1
           fi
 
+  recycle-prerender:
+    name: Recycle prerender after host is live
+    # The prerender fleet deploys before the realm server (the manager,
+    # worker, and realm server all depend on it being up for boot indexing),
+    # so its tabs warm against the OLD host shell the realm server was still
+    # serving at that point. Once the realm server is up serving the new
+    # shell (this `needs`), re-deploy the prerender service so its tabs
+    # re-warm against it. The reusable deploy passes force-new-deployment, so
+    # this recycles fresh tasks even though the image is unchanged.
+    needs: [build-prerender, post-deploy-realm-server]
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-prerender-server"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-prerender-server-${{ inputs.environment }}"
+      image: ${{ needs.build-prerender.outputs.image }}
+      timeout-minutes: 10
+      wait-for-service-stability: true
+
   apply-observability:
     # Push the observability/ package's dashboards/folders/data sources/alerts
     # into the production self-host Grafana as part of the deploy. The
@@ -375,6 +396,7 @@ jobs:
         post-deploy-worker,
         deploy-realm-server,
         post-deploy-realm-server,
+        recycle-prerender,
         apply-observability,
       ]
     if: github.event_name == 'workflow_dispatch' && always()
