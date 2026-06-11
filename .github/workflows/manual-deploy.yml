@@ -341,10 +341,16 @@ jobs:
     # worker, and realm server all depend on it being up for boot indexing),
     # so its tabs warm against the OLD host shell the realm server was still
     # serving at that point. Once the realm server is up serving the new
-    # shell (this `needs`), re-deploy the prerender service so its tabs
-    # re-warm against it. The reusable deploy passes force-new-deployment, so
-    # this recycles fresh tasks even though the image is unchanged.
-    needs: [build-prerender, post-deploy-realm-server]
+    # shell, re-deploy the prerender service so its tabs re-warm against it.
+    # The reusable deploy passes force-new-deployment, so this recycles fresh
+    # tasks even though the image is unchanged.
+    #
+    # Gate on `deploy-realm-server` (wait-for-service-stability: true → the
+    # new realm server is up and serving the new shell), NOT on
+    # `post-deploy-realm-server`: that job only POSTs the realm server's
+    # `/_post-deployment` endpoint and can fail independently (e.g. an edge
+    # 403), which would otherwise skip this recycle.
+    needs: [build-prerender, deploy-realm-server]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
