@@ -1156,21 +1156,28 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     prerenderUserId: string;
   } | null> {
     // `canonicalURL` of an RRI-prefix input resolves to the realm's
-    // RESOLVED real URL (via `vn.toURL`), while `#realms` is keyed by
-    // the user-facing realm URL (which may be a virtual alias like
-    // `https://cardstack.com/base/`). Compare against both forms — the
-    // realm.url as-given, and its unresolved RRI form when one exists —
-    // so the lookup matches a local realm regardless of which form
-    // the caller's codeRef was in.
+    // RESOLVED real URL via `vn.toURL` (e.g. `@cardstack/base/foo` →
+    // `https://localhost:4201/base/foo`), while `#realms` is keyed by
+    // the user-facing realm URL — typically the virtual alias like
+    // `https://cardstack.com/base/`. The direct startsWith check
+    // therefore misses local realms whenever the input was RRI form
+    // (or whenever realm.url is the virtual alias and the input
+    // canonicalised to the resolved URL).
+    //
+    // Normalize both sides to RRI form via `unresolveURL` (which
+    // chases through any registered virtual → real URL mapping and
+    // matches against realm-prefix targets) so the comparison is
+    // form-agnostic. After normalization, `https://localhost:4201/base/foo`,
+    // `https://cardstack.com/base/foo`, and `@cardstack/base/foo` all
+    // become `@cardstack/base/foo`.
     let vn = this.#virtualNetwork;
+    let normalizedModuleURL = vn.unresolveURL(moduleURL);
     let localRealm = this.#realms.find((realm) => {
       if (moduleURL.startsWith(realm.url)) {
         return true;
       }
-      let unresolvedRealm = vn.unresolveURL(realm.url);
-      return (
-        unresolvedRealm !== realm.url && moduleURL.startsWith(unresolvedRealm)
-      );
+      let normalizedRealmURL = vn.unresolveURL(realm.url);
+      return normalizedModuleURL.startsWith(normalizedRealmURL);
     });
 
     if (localRealm) {
