@@ -62,6 +62,7 @@ module('Unit | query', function (hooks) {
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
     );
+    virtualNetwork.addRealmMapping('@cardstack/base/', resolvedBaseRealmURL);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${ENV.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
