@@ -9,6 +9,7 @@ import {
   type CardResource,
   type CssResource,
   type FileMetaResource,
+  type HtmlQuery,
   type HtmlResource,
   type PrerenderedCardResource,
   type RenderedHtmlResource,
@@ -78,7 +79,12 @@ export type SearchEntryIncludedResource =
 export interface SearchEntryCollectionDocument {
   data: SearchEntryResource[];
   included?: SearchEntryIncludedResource[];
-  meta: QueryResultsMeta;
+  meta: QueryResultsMeta & {
+    // The applied (bound or defaulted) htmlQuery, echoed once at the document
+    // level — it cannot vary across entries, so it is never repeated per
+    // entry. Present whenever the fieldset puts the html branch in play.
+    htmlQuery?: HtmlQuery;
+  };
 }
 
 export interface SingleFileMetaDocument {

@@ -6,13 +6,19 @@ import {
   buildSparseItemResource,
   htmlResourceId,
   cssResourceId,
+  htmlQueryHasRenderTypePredicate,
+  htmlQueryMatches,
   isHtmlResource,
   isSearchEntryResource,
   isSparseItemResource,
   parseSearchEntryQueryFromPayload,
+  resolveHtmlQuery,
   SearchRequestError,
+  DEFAULT_HTML_QUERY,
   rri,
   type CardResource,
+  type HtmlQuery,
+  type RenderingCandidate,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -40,16 +46,50 @@ function parseError(payload: unknown): SearchRequestError {
   throw new Error('expected parseSearchEntryQueryFromPayload to throw');
 }
 
+// Evaluate an htmlQuery against a rendering universe, returning the selected
+// candidates (in universe order).
+function select(
+  query: HtmlQuery,
+  universe: RenderingCandidate[],
+): RenderingCandidate[] {
+  let resolved = resolveHtmlQuery(
+    query,
+    (ref) =>
+      `${(ref as ResolvedCodeRef).module}/${(ref as ResolvedCodeRef).name}`,
+  );
+  return universe.filter((candidate) => htmlQueryMatches(resolved, candidate));
+}
+
+const authorKey = `${authorRef.module}/${authorRef.name}`;
+const baseKey = `${baseRef.module}/${baseRef.name}`;
+
+// A representative rendering universe: two render types across two keyed
+// formats, a scalar-format rendering, and a file-style candidate that
+// carries no renderType.
+const universe: RenderingCandidate[] = [
+  { format: 'fitted', renderTypeKey: authorKey },
+  { format: 'fitted', renderTypeKey: baseKey },
+  { format: 'embedded', renderTypeKey: authorKey },
+  { format: 'embedded', renderTypeKey: baseKey },
+  { format: 'atom', renderTypeKey: authorKey },
+  { format: 'head' },
+];
+
 module(basename(__filename), function () {
   module('search-entry query parser', function () {
     test('translates the canonical search-entry query', function (assert) {
+      let htmlQuery: HtmlQuery = {
+        every: [
+          { eq: { format: 'embedded' } },
+          { eq: { renderType: baseRef } },
+        ],
+      };
       let parsed = parseSearchEntryQueryFromPayload({
         filter: {
           'item.on': authorRef,
           eq: {
             'item.status': 'ready',
-            'html.format': 'embedded',
-            'html.renderType': baseRef,
+            htmlQuery,
           },
         },
         sort: [{ by: 'item.title', direction: 'asc' }],
@@ -63,10 +103,7 @@ module(basename(__filename), function () {
         sort: [{ by: 'title', direction: 'asc', on: authorRef }],
         page: { size: 20 },
       } as any);
-      assert.deepEqual(parsed.render, {
-        format: 'embedded',
-        renderType: baseRef,
-      });
+      assert.deepEqual(parsed.htmlQuery, htmlQuery);
       assert.deepEqual(parsed.fieldset, {
         html: true,
         item: { kind: 'none' },
@@ -75,10 +112,11 @@ module(basename(__filename), function () {
       assert.deepEqual(parsed.realms, ['http://localhost:4201/test/']);
     });
 
-    test('defaults: no filter → fitted/native; no fields → html with item fallback', function (assert) {
+    test('defaults: no htmlQuery → fitted; no fields → html with item fallback', function (assert) {
       let parsed = parseSearchEntryQueryFromPayload({});
       assert.deepEqual(parsed.itemQuery, {} as any);
-      assert.deepEqual(parsed.render, { format: 'fitted' });
+      assert.deepEqual(parsed.htmlQuery, DEFAULT_HTML_QUERY);
+      assert.deepEqual(parsed.htmlQuery, { eq: { format: 'fitted' } });
       assert.deepEqual(parsed.fieldset, {
         html: true,
         item: { kind: 'none' },
@@ -95,12 +133,12 @@ module(basename(__filename), function () {
       } as any);
     });
 
-    test('a filter that carried only rendering config dissolves', function (assert) {
+    test('an eq that carried only the htmlQuery binding dissolves', function (assert) {
       let parsed = parseSearchEntryQueryFromPayload({
-        filter: { eq: { 'html.format': 'atom' } },
+        filter: { eq: { htmlQuery: { eq: { format: 'atom' } } } },
       });
       assert.deepEqual(parsed.itemQuery, {} as any);
-      assert.strictEqual(parsed.render.format, 'atom');
+      assert.deepEqual(parsed.htmlQuery, { eq: { format: 'atom' } });
     });
 
     test('translates item. paths through nested connectives', function (assert) {
@@ -122,21 +160,80 @@ module(basename(__filename), function () {
       } as any);
     });
 
-    test('html.* under a non-eq operator (or a nested eq) is ignored', function (assert) {
-      let parsed = parseSearchEntryQueryFromPayload({
-        filter: {
-          'item.on': authorRef,
-          range: { 'item.age': { gt: 21 }, 'html.format': { gt: 'a' } },
-          every: [{ eq: { 'item.x': 1, 'html.format': 'atom' } }],
-        },
-      });
-      // the ignored html.* entries leave no residue and do not set the format
-      assert.deepEqual(parsed.itemQuery.filter, {
-        on: authorRef,
-        range: { age: { gt: 21 } },
-        every: [{ eq: { x: 1 } }],
-      } as any);
-      assert.strictEqual(parsed.render.format, 'fitted');
+    test('htmlQuery binds exactly once, in the top-level eq', function (assert) {
+      assert.strictEqual(
+        parseError({
+          filter: {
+            any: [{ eq: { htmlQuery: { eq: { format: 'atom' } } } }],
+          },
+        }).code,
+        'invalid-render',
+        'binding in a nested node is rejected',
+      );
+      assert.strictEqual(
+        parseError({
+          filter: {
+            not: { eq: { htmlQuery: { eq: { format: 'atom' } } } },
+          },
+        }).code,
+        'invalid-render',
+        'binding under not is rejected',
+      );
+      assert.strictEqual(
+        parseError({
+          filter: {
+            contains: { htmlQuery: { eq: { format: 'atom' } } },
+          },
+        }).code,
+        'invalid-render',
+        'binding through another operator is rejected',
+      );
+      assert.strictEqual(
+        parseError({
+          filter: { htmlQuery: { eq: { format: 'atom' } } },
+        }).code,
+        'invalid-render',
+        'htmlQuery is a field — it binds with eq, not as a filter member',
+      );
+    });
+
+    test('rejects malformed htmlQuery values', function (assert) {
+      assert.strictEqual(
+        parseError({ filter: { eq: { htmlQuery: {} } } }).code,
+        'invalid-render',
+        'a node must have exactly one of eq/every/any/not',
+      );
+      assert.strictEqual(
+        parseError({ filter: { eq: { htmlQuery: { eq: {} } } } }).code,
+        'invalid-render',
+        'an unconstrained leaf is unsupported',
+      );
+      assert.strictEqual(
+        parseError({ filter: { eq: { htmlQuery: { every: [] } } } }).code,
+        'invalid-render',
+        'an empty connective is unsupported',
+      );
+      assert.strictEqual(
+        parseError({
+          filter: { eq: { htmlQuery: { eq: { format: 'bogus' } } } },
+        }).code,
+        'invalid-render',
+        'invalid format value',
+      );
+      assert.strictEqual(
+        parseError({
+          filter: { eq: { htmlQuery: { eq: { renderType: 'Author' } } } },
+        }).code,
+        'invalid-render',
+        'renderType must be a CodeRef',
+      );
+      assert.strictEqual(
+        parseError({
+          filter: { eq: { htmlQuery: { eq: { color: 'red' } } } },
+        }).code,
+        'invalid-render',
+        'unknown rendering dimension',
+      );
     });
 
     test('sort entries may carry their own item.on anchor', function (assert) {
@@ -185,21 +282,6 @@ module(basename(__filename), function () {
         'bare field path',
       );
       assert.strictEqual(
-        parseError({ filter: { 'html.format': 'embedded' } }).code,
-        'invalid-query',
-        'field-keyed html.* at the filter level',
-      );
-      assert.strictEqual(
-        parseError({ filter: { eq: { 'html.format': 'bogus' } } }).code,
-        'invalid-render',
-        'invalid html.format value',
-      );
-      assert.strictEqual(
-        parseError({ filter: { eq: { 'html.renderType': 'Author' } } }).code,
-        'invalid-render',
-        'html.renderType must be a CodeRef',
-      );
-      assert.strictEqual(
         parseError({ fields: { 'search-entry': ['item', 'item.title'] } }).code,
         'invalid-query',
         'full item cannot combine with item.<field>',
@@ -237,6 +319,127 @@ module(basename(__filename), function () {
     });
   });
 
+  module('htmlQuery evaluation', function () {
+    test('eq selects by format and renderType, conjoined within a leaf', function (assert) {
+      assert.deepEqual(select({ eq: { format: 'fitted' } }, universe), [
+        { format: 'fitted', renderTypeKey: authorKey },
+        { format: 'fitted', renderTypeKey: baseKey },
+      ]);
+      assert.deepEqual(select({ eq: { renderType: baseRef } }, universe), [
+        { format: 'fitted', renderTypeKey: baseKey },
+        { format: 'embedded', renderTypeKey: baseKey },
+      ]);
+      assert.deepEqual(
+        select({ eq: { format: 'embedded', renderType: authorRef } }, universe),
+        [{ format: 'embedded', renderTypeKey: authorKey }],
+      );
+    });
+
+    test('every and any compose', function (assert) {
+      assert.deepEqual(
+        select(
+          {
+            every: [
+              { eq: { format: 'embedded' } },
+              { eq: { renderType: baseRef } },
+            ],
+          },
+          universe,
+        ),
+        [{ format: 'embedded', renderTypeKey: baseKey }],
+      );
+      assert.deepEqual(
+        select(
+          {
+            any: [{ eq: { format: 'atom' } }, { eq: { format: 'head' } }],
+          },
+          universe,
+        ),
+        [{ format: 'atom', renderTypeKey: authorKey }, { format: 'head' }],
+      );
+    });
+
+    test('a renderType predicate never matches a rendering with no renderType', function (assert) {
+      // the file-style candidate (no renderTypeKey) is unmatchable by a
+      // positive renderType predicate...
+      assert.false(
+        select({ eq: { renderType: authorRef } }, universe).some(
+          (candidate) => candidate.renderTypeKey === undefined,
+        ),
+      );
+      // ...and IS matched by its negation (the complement)
+      assert.true(
+        select({ not: { eq: { renderType: authorRef } } }, universe).some(
+          (candidate) => candidate.renderTypeKey === undefined,
+        ),
+      );
+    });
+
+    test('involution: not(not(q)) selects exactly what q selects', function (assert) {
+      let queries: HtmlQuery[] = [
+        { eq: { format: 'fitted' } },
+        { eq: { renderType: authorRef } },
+        { eq: { format: 'embedded', renderType: baseRef } },
+        {
+          any: [{ eq: { format: 'atom' } }, { eq: { renderType: baseRef } }],
+        },
+        {
+          every: [
+            { eq: { format: 'embedded' } },
+            { not: { eq: { renderType: authorRef } } },
+          ],
+        },
+      ];
+      for (let q of queries) {
+        assert.deepEqual(
+          select({ not: { not: q } }, universe),
+          select(q, universe),
+          `not(not(q)) ≡ q for ${JSON.stringify(q)}`,
+        );
+      }
+    });
+
+    test('complement: not(q) selects exactly the universe minus q', function (assert) {
+      let q: HtmlQuery = { eq: { format: 'fitted' } };
+      let selected = select(q, universe);
+      let complement = select({ not: q }, universe);
+      assert.deepEqual(
+        [...selected, ...complement].length,
+        universe.length,
+        'q and not(q) partition the universe',
+      );
+      for (let candidate of universe) {
+        assert.strictEqual(
+          complement.includes(candidate),
+          !selected.includes(candidate),
+          `candidate ${JSON.stringify(candidate)} is in exactly one side`,
+        );
+      }
+    });
+
+    test('htmlQueryHasRenderTypePredicate sees through connectives and negation', function (assert) {
+      assert.false(
+        htmlQueryHasRenderTypePredicate({ eq: { format: 'fitted' } }),
+      );
+      assert.true(
+        htmlQueryHasRenderTypePredicate({ eq: { renderType: authorRef } }),
+      );
+      assert.true(
+        htmlQueryHasRenderTypePredicate({
+          not: { eq: { renderType: authorRef } },
+        }),
+      );
+      assert.true(
+        htmlQueryHasRenderTypePredicate({
+          any: [
+            { eq: { format: 'fitted' } },
+            { every: [{ eq: { renderType: baseRef } }] },
+          ],
+        }),
+      );
+    });
+  });
+
   module('html composite id', function () {
     test('encodes (url, format, renderType) with # at both joints', function (assert) {
       assert.strictEqual(
@@ -266,22 +469,31 @@ module(basename(__filename), function () {
       });
       let both = buildSearchEntryResource({
         url: cardUrl,
-        htmlId,
+        htmlIds: [htmlId],
         itemType: 'card',
       });
       assert.deepEqual(both, {
         type: 'search-entry',
         id: cardUrl,
         relationships: {
-          html: { data: { type: 'html', id: htmlId } },
+          html: { data: [{ type: 'html', id: htmlId }] },
           item: { data: { type: 'card', id: cardUrl } },
         },
       });
       assert.true(isSearchEntryResource(both));
 
-      let htmlOnly = buildSearchEntryResource({ url: cardUrl, htmlId });
-      assert.deepEqual(Object.keys(htmlOnly.relationships), ['html']);
-      assert.true(isSearchEntryResource(htmlOnly));
+      // a pinned html branch with no matching rendering: empty array
+      let empty = buildSearchEntryResource({ url: cardUrl, htmlIds: [] });
+      assert.deepEqual(empty.relationships.html, { data: [] });
+      assert.true(isSearchEntryResource(empty));
+
+      // the default mode's fallback rows omit the relationship entirely
+      let itemOnly = buildSearchEntryResource({
+        url: cardUrl,
+        itemType: 'card',
+      });
+      assert.deepEqual(Object.keys(itemOnly.relationships), ['item']);
+      assert.true(isSearchEntryResource(itemOnly));
     });
 
     test('buildHtmlResource carries the rendering attributes and styles', function (assert) {

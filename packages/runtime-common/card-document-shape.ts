@@ -351,11 +351,13 @@ export function isSearchEntryResource(
   }
   let { html, item } = relationships;
   if (html !== undefined) {
-    if (
-      html?.data?.type !== HtmlResourceType ||
-      typeof html.data.id !== 'string'
-    ) {
+    if (!Array.isArray(html?.data)) {
       return false;
+    }
+    for (let member of html.data) {
+      if (member?.type !== HtmlResourceType || typeof member?.id !== 'string') {
+        return false;
+      }
     }
   }
   if (item !== undefined) {

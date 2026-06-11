@@ -55,6 +55,10 @@ function entryFor(
   return doc.data.find((entry) => entry.id === id);
 }
 
+function htmlIdsOf(entry: SearchEntryResource): string[] | undefined {
+  return entry.relationships.html?.data.map((member) => member.id);
+}
+
 module(basename(__filename), function () {
   module('searchEntries projection engine', function (hooks) {
     let testRealm: Realm;
@@ -133,15 +137,18 @@ module(basename(__filename), function () {
       });
     }
 
-    test('default fieldset: html-backed entries with native render type', async function (assert) {
+    test('default fieldset: html-backed entries with the default htmlQuery (fitted × native)', async function (assert) {
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
       assert.strictEqual(doc.meta.page.total, 2);
+      assert.deepEqual(
+        doc.meta.htmlQuery,
+        { eq: { format: 'fitted' } },
+        'the applied default htmlQuery is echoed once at the document level',
+      );
       let htmlId = `${johnId}#fitted#${personKey}`;
       let entry = entryFor(doc, johnId)!;
-      assert.deepEqual(entry.relationships.html, {
-        data: { type: 'html', id: htmlId },
-      });
+      assert.deepEqual(htmlIdsOf(entry), [htmlId]);
       assert.strictEqual(
         entry.relationships.item,
         undefined,
@@ -157,14 +164,15 @@ module(basename(__filename), function () {
       assert.strictEqual(html.attributes.cardType, 'Person');
     });
 
-    test('html.format selects the rendering format', async function (assert) {
+    test('an explicit htmlQuery selects the rendering format', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ filterEq: { 'html.format': 'embedded' } }),
+        personQuery({
+          filterEq: { htmlQuery: { eq: { format: 'embedded' } } },
+        }),
       );
+      assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'embedded' } });
       let htmlId = `${johnId}#embedded#${personKey}`;
-      assert.deepEqual(entryFor(doc, johnId)!.relationships.html, {
-        data: { type: 'html', id: htmlId },
-      });
+      assert.deepEqual(htmlIdsOf(entryFor(doc, johnId)!), [htmlId]);
       assert.true(
         normalizedHtml(htmlIn(doc, htmlId)!).includes(
           'Embedded Card Person: John',
@@ -172,15 +180,68 @@ module(basename(__filename), function () {
       );
     });
 
-    test('fields[search-entry]=item: full serializations, no html', async function (assert) {
+    test('a disjunctive htmlQuery selects several renderings per entry', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['item'] } }),
+        personQuery({
+          filterEq: {
+            htmlQuery: {
+              any: [
+                { eq: { format: 'fitted' } },
+                { eq: { format: 'embedded' } },
+              ],
+            },
+          },
+        }),
+      );
+      let fittedId = `${johnId}#fitted#${personKey}`;
+      let embeddedId = `${johnId}#embedded#${personKey}`;
+      let ids = htmlIdsOf(entryFor(doc, johnId)!)!;
+      assert.deepEqual([...ids].sort(), [embeddedId, fittedId].sort());
+      assert.true(
+        normalizedHtml(htmlIn(doc, fittedId)!).includes(
+          'Fitted Card Person: John',
+        ),
+      );
+      assert.true(
+        normalizedHtml(htmlIn(doc, embeddedId)!).includes(
+          'Embedded Card Person: John',
+        ),
+      );
+    });
+
+    test('involution at the engine: not(not(q)) selects the same renderings as q', async function (assert) {
+      let q = { eq: { format: 'embedded' } };
+      let direct = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({ filterEq: { htmlQuery: q } }),
+      );
+      let doubled = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({ filterEq: { htmlQuery: { not: { not: q } } } }),
+      );
+      assert.deepEqual(
+        doubled.data.map((entry) => htmlIdsOf(entry)),
+        direct.data.map((entry) => htmlIdsOf(entry)),
+      );
+    });
+
+    test('fields[search-entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({
+          // an htmlQuery alongside an item-only fieldset is inert, not an
+          // error
+          filterEq: { htmlQuery: { eq: { format: 'embedded' } } },
+          fields: { 'search-entry': ['item'] },
+        }),
       );
       let entry = entryFor(doc, johnId)!;
       assert.strictEqual(entry.relationships.html, undefined);
       assert.deepEqual(entry.relationships.item, {
         data: { type: 'card', id: johnId },
       });
+      assert.strictEqual(
+        doc.meta.htmlQuery,
+        undefined,
+        'no echo when the html branch is not in play',
+      );
       let item = itemIn(doc, johnId)!;
       assert.strictEqual(item.attributes?.firstName, 'John');
       assert.strictEqual(
@@ -215,9 +276,7 @@ module(basename(__filename), function () {
       );
       let entry = entryFor(doc, johnId)!;
       let htmlId = `${johnId}#fitted#${personKey}`;
-      assert.deepEqual(entry.relationships.html, {
-        data: { type: 'html', id: htmlId },
-      });
+      assert.deepEqual(htmlIdsOf(entry), [htmlId]);
       assert.deepEqual(entry.relationships.item, {
         data: { type: 'card', id: johnId },
       });
@@ -239,23 +298,41 @@ module(basename(__filename), function () {
       );
     });
 
-    test('mixed index: a row with no html falls back to a full item', async function (assert) {
+    test('mixed index: a row with no matching rendering falls back per the fieldset', async function (assert) {
       await dbAdapter.execute(
         `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
       );
+      // default mode: the fallback row carries item and omits the html
+      // relationship entirely
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
       let john = entryFor(doc, johnId)!;
-      assert.true(Boolean(john.relationships.html), 'john is html-backed');
+      assert.deepEqual(htmlIdsOf(john), [`${johnId}#fitted#${personKey}`]);
       assert.strictEqual(john.relationships.item, undefined);
       let jane = entryFor(doc, janeId)!;
-      assert.strictEqual(jane.relationships.html, undefined);
+      assert.strictEqual(
+        jane.relationships.html,
+        undefined,
+        'a default-mode fallback row omits the html relationship',
+      );
       assert.deepEqual(jane.relationships.item, {
         data: { type: 'card', id: janeId },
       });
       let item = itemIn(doc, janeId)!;
       assert.strictEqual(item.attributes?.firstName, 'Jane');
       assert.strictEqual(item.meta.sparseFields, undefined);
+
+      // a pinned html branch keeps membership visible with an empty array
+      let pinned = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({ fields: { 'search-entry': ['html'] } }),
+      );
+      let pinnedJane = entryFor(pinned, janeId)!;
+      assert.deepEqual(
+        pinnedJane.relationships.html,
+        { data: [] },
+        'matched, no rendering yet',
+      );
+      assert.strictEqual(pinnedJane.relationships.item, undefined);
     });
 
     test('file results flow through the same fieldset semantics', async function (assert) {
@@ -276,7 +353,7 @@ module(basename(__filename), function () {
       assert.strictEqual(item.type, 'file-meta');
       assert.strictEqual(item.attributes?.name, 'hello.md');
 
-      // default fieldset: the file's rendering is its own (no renderType in
+      // default fieldset: a file's rendering is its own (no renderType in
       // the composite id — files render natively)
       let defaultDoc = await testRealm.realmIndexQueryEngine.searchEntries(
         parseSearchEntryQueryFromPayload({
@@ -286,11 +363,14 @@ module(basename(__filename), function () {
           },
         }),
       );
+      assert.deepEqual(defaultDoc.meta.htmlQuery, {
+        eq: { format: 'fitted' },
+      });
       let defaultEntry = entryFor(defaultDoc, fileUrl)!;
-      let htmlRel = defaultEntry.relationships.html;
-      if (htmlRel) {
-        assert.strictEqual(htmlRel.data.id, `${fileUrl}#fitted`);
-        let html = htmlIn(defaultDoc, htmlRel.data.id)!;
+      let ids = htmlIdsOf(defaultEntry);
+      if (ids) {
+        assert.deepEqual(ids, [`${fileUrl}#fitted`]);
+        let html = htmlIn(defaultDoc, ids[0])!;
         assert.strictEqual(html.attributes.renderType, undefined);
         assert.strictEqual(html.attributes.format, 'fitted');
       } else {
@@ -387,12 +467,24 @@ module(basename(__filename), function () {
       onRealmSetup,
     });
 
+    function fancyQuery(htmlQuery: unknown) {
+      return parseSearchEntryQueryFromPayload({
+        filter: {
+          'item.on': {
+            module: `${realmHref}fancy-person`,
+            name: 'FancyPerson',
+          },
+          eq: { htmlQuery },
+        },
+      });
+    }
+
     test('identical css dedupes to one resource shared across renderings', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         parseSearchEntryQueryFromPayload({
           filter: {
             'item.on': { module: `${realmHref}person`, name: 'Person' },
-            eq: { 'html.format': 'embedded' },
+            eq: { htmlQuery: { eq: { format: 'embedded' } } },
           },
         }),
       );
@@ -426,29 +518,22 @@ module(basename(__filename), function () {
       }
     });
 
-    test('explicit html.renderType renders a subclass as its ancestor', async function (assert) {
+    test('a renderType predicate renders a subclass as its ancestor', async function (assert) {
       let janeId = `${realmHref}jane`;
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        parseSearchEntryQueryFromPayload({
-          filter: {
-            'item.on': {
-              module: `${realmHref}fancy-person`,
-              name: 'FancyPerson',
-            },
-            eq: {
-              'html.format': 'embedded',
-              'html.renderType': {
-                module: `${realmHref}person`,
-                name: 'Person',
+        fancyQuery({
+          every: [
+            { eq: { format: 'embedded' } },
+            {
+              eq: {
+                renderType: { module: `${realmHref}person`, name: 'Person' },
               },
             },
-          },
+          ],
         }),
       );
       let htmlId = `${janeId}#embedded#${realmHref}person/Person`;
-      assert.deepEqual(entryFor(doc, janeId)!.relationships.html, {
-        data: { type: 'html', id: htmlId },
-      });
+      assert.deepEqual(htmlIdsOf(entryFor(doc, janeId)!), [htmlId]);
       let html = htmlIn(doc, htmlId)!;
       assert.deepEqual(html.attributes.renderType, {
         module: `${realmHref}person`,
@@ -457,27 +542,50 @@ module(basename(__filename), function () {
       assert.true(normalizedHtml(html).includes('Embedded Card Person: Jane'));
     });
 
-    test('omitted html.renderType renders each result as its own native type', async function (assert) {
+    test('no renderType predicate → only the native rendering is in play', async function (assert) {
       let janeId = `${realmHref}jane`;
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        parseSearchEntryQueryFromPayload({
-          filter: {
-            'item.on': {
-              module: `${realmHref}fancy-person`,
-              name: 'FancyPerson',
-            },
-            eq: { 'html.format': 'embedded' },
-          },
-        }),
+        fancyQuery({ eq: { format: 'embedded' } }),
       );
-      let htmlId = `${janeId}#embedded#${realmHref}fancy-person/FancyPerson`;
-      let html = htmlIn(doc, htmlId)!;
+      let nativeId = `${janeId}#embedded#${realmHref}fancy-person/FancyPerson`;
+      assert.deepEqual(htmlIdsOf(entryFor(doc, janeId)!), [nativeId]);
+      let html = htmlIn(doc, nativeId)!;
       assert.deepEqual(html.attributes.renderType, {
         module: `${realmHref}fancy-person`,
         name: 'FancyPerson',
       });
       assert.true(
         normalizedHtml(html).includes('Embedded Card FancyPerson: Jane'),
+      );
+    });
+
+    test('a negated renderType predicate opens the chain and excludes the negated type', async function (assert) {
+      let janeId = `${realmHref}jane`;
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        fancyQuery({
+          every: [
+            { eq: { format: 'embedded' } },
+            {
+              not: {
+                eq: {
+                  renderType: {
+                    module: `${realmHref}person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      );
+      let ids = htmlIdsOf(entryFor(doc, janeId)!)!;
+      assert.true(
+        ids.includes(`${janeId}#embedded#${realmHref}fancy-person/FancyPerson`),
+        'the native rendering matches',
+      );
+      assert.false(
+        ids.includes(`${janeId}#embedded#${realmHref}person/Person`),
+        'the negated ancestor rendering is excluded',
       );
     });
   });

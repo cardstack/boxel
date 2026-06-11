@@ -193,19 +193,41 @@ export interface CssResource {
   };
 }
 
+// The synthesized rendering-selection query bound on a `search-entry` (the
+// "htmlQuery"): a boolean sub-query over the rendering dimensions — `eq`
+// leaves composed with `every`/`any`/`not`, with real boolean semantics
+// (`not(not(q))` selects exactly what `q` selects). It selects which of an
+// entry's indexed renderings (formats × ancestor render types) populate the
+// `html` has-many; it never affects entry membership.
+export type HtmlQuery =
+  | { eq: HtmlQueryLeaf }
+  | { every: HtmlQuery[] }
+  | { any: HtmlQuery[] }
+  | { not: HtmlQuery };
+
+// An `eq` leaf over the rendering dimensions; several keys in one leaf are
+// conjoined, and at least one must be present (an unconstrained leaf is
+// unsupported).
+export interface HtmlQueryLeaf {
+  format?: PrerenderedHtmlFormat;
+  renderType?: CodeRef;
+}
+
 // One v2 search result. A platform resource — never a userland card — so its
 // relationships cannot collide with user `@field` names. Its `id` is the bare
 // card/file URL, shared with its `item` (`card`/`file-meta`) serialization;
-// `type` is the discriminator. The two branches are composition: `html` points
-// at the result's prerendered rendering, `item` at its live serialization.
-// Which branches appear is governed by the query's sparse fieldset (default:
-// prefer `html`, fall back to `item` when no HTML exists).
+// `type` is the discriminator. The branches are composition: the `html`
+// has-many carries the renderings selected by the query's htmlQuery (an empty
+// array = the entry matched but no rendering satisfies the htmlQuery yet);
+// `item` points at the live serialization. Which branches appear is governed
+// by the query's sparse fieldset (default: the selected renderings, falling
+// back to `item` — with the `html` relationship omitted — where none match).
 export interface SearchEntryResource {
   id: string;
   type: typeof SearchEntryResourceType;
   relationships: {
     html?: {
-      data: { type: typeof HtmlResourceType; id: string };
+      data: { type: typeof HtmlResourceType; id: string }[];
     };
     item?: {
       data: {

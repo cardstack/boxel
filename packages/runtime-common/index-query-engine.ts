@@ -153,10 +153,12 @@ interface PrerenderedCardOptions {
 }
 
 // Selects which columns the unified `search()` projects. `dataOnly` projects
-// the live serialization only (pristine_doc / error_doc); `render` projects the
-// format-specific HTML column plus the live serialization carried only on
-// no-HTML fallback rows; `renderAndData` projects the HTML column plus the
-// live serialization on every row (for responses that pin both branches).
+// the live serialization only (pristine_doc / error_doc); `render` projects
+// one format-specific HTML value plus the live serialization carried only on
+// no-HTML fallback rows; `renderSet` projects each row's full rendering set
+// (every per-format HTML column, JSONB maps whole) plus the live
+// serialization on every row — the caller selects renderings from the set
+// (the v2 htmlQuery evaluation).
 export type SearchProjection =
   | { kind: 'dataOnly' }
   | {
@@ -164,11 +166,7 @@ export type SearchProjection =
       htmlFormat: PrerenderedHtmlFormat;
       renderType?: ResolvedCodeRef;
     }
-  | {
-      kind: 'renderAndData';
-      htmlFormat: PrerenderedHtmlFormat;
-      renderType?: ResolvedCodeRef;
-    };
+  | { kind: 'renderSet' };
 
 export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
@@ -728,6 +726,14 @@ export class IndexQueryEngine {
       selectClauseExpression = [
         'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
       ];
+    } else if (projection.kind === 'renderSet') {
+      // The full rendering set: every per-format HTML column whole (the
+      // fitted/embedded JSONB maps keyed by render type, the scalar
+      // atom/head columns), plus the live serialization on every row. The
+      // caller enumerates candidate renderings and selects from the set.
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(fitted_html) as fitted_html, ANY_VALUE(embedded_html) as embedded_html, ANY_VALUE(atom_html) as atom_html, ANY_VALUE(head_html) as head_html, ANY_VALUE(types) as types, ANY_VALUE(deps) as deps, ANY_VALUE(display_names) as display_names, ANY_VALUE(icon_html) as icon_html, ANY_VALUE(error_doc) as error_doc, ANY_VALUE(pristine_doc) as pristine_doc',
+      ];
     } else {
       let htmlColumnExpression = this.buildHtmlColumnExpression({
         htmlFormat: projection.htmlFormat,
@@ -752,18 +758,12 @@ export class IndexQueryEngine {
         'ANY_VALUE(display_names) as display_names,',
         'ANY_VALUE(icon_html) as icon_html,',
         'ANY_VALUE(error_doc) as error_doc,',
-        ...(projection.kind === 'renderAndData'
-          ? // Both branches pinned: the live serialization rides on every row,
-            // alongside the HTML column.
-            ['ANY_VALUE(pristine_doc) as pristine_doc']
-          : [
-              // Carry the live serialization as a raw column. `_search` wraps
-              // this projection so the final `pristine_doc` keeps it only on
-              // rows whose `html` is NULL — the HTML expression is evaluated
-              // once (as `html`) and the NULL test references that computed
-              // column rather than recomputing the COALESCE/JSONB expression.
-              'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
-            ]),
+        // Carry the live serialization as a raw column. `_search` wraps this
+        // projection so the final `pristine_doc` keeps it only on rows whose
+        // `html` is NULL — the HTML expression is evaluated once (as `html`)
+        // and the NULL test references that computed column rather than
+        // recomputing the COALESCE/JSONB expression.
+        'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
       ];
     }
 

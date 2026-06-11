@@ -1,76 +1,79 @@
 import { assertQuery, InvalidQueryError, type Query } from './query.ts';
 import { SearchRequestError } from './search-utils.ts';
-import type {
-  CardResourceType,
-  FileMetaResourceType,
-} from './resource-types.ts';
 import {
   CssResourceType,
   HtmlResourceType,
   SearchEntryResourceType,
   htmlResourceId,
   type CardResource,
+  type CardResourceType,
   type FileMetaResource,
+  type FileMetaResourceType,
+  type HtmlQuery,
   type HtmlResource,
   type Relationship,
   type Saved,
   type SearchEntryResource,
 } from './resource-types.ts';
-import type { ResolvedCodeRef } from './code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import {
   isValidPrerenderedHtmlFormat,
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format.ts';
-import type { CodeRef } from './code-ref.ts';
 import { isCodeRef } from './card-document-shape.ts';
 import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
-import { logger } from './log.ts';
 
 // ---------------------------------------------------------------------------
 // The v2 search-entry query.
 //
-// A v2 request is one query rooted on `search-entry`, addressed through two
-// branches: `item.` (the card/file serialization) and `html.` (the
-// rendering). The filter grammar is the standard operator-keyed grammar
-// (`eq` / `contains` / `in` / `range` / `any` / `every` / `not` / `matches`)
-// — only the addressing changes:
+// A v2 request is one query rooted on `search-entry`. Entry MEMBERSHIP is
+// addressed through `item.` (the card/file serialization) with the standard
+// operator-keyed filter grammar (`eq` / `contains` / `in` / `range` / `any` /
+// `every` / `not` / `matches`) — only the addressing changes:
 //
 //   - the type anchor is `item.on` (a node carrying only the anchor is the
 //     pure card-type filter),
 //   - field paths inside the operators are reached through `item.`
 //     (`eq: { "item.status": "ready" }`),
-//   - `html.renderType` / `html.format` are rendering config spelled as `eq`
-//     predicates at the top level of `filter`. The index stores a set of
-//     renderings per entry (formats × ancestor render types), so these
-//     genuinely narrow — but they narrow which rendering satisfies the `html`
-//     branch, not entry membership: a result with no matching rendering still
-//     returns, falling back to `item`. Equality is the only meaningful
-//     predicate over a rendering dimension, so an `html.*` path under any
-//     other operator (or outside the top-level `eq`) is ignored with a logged
-//     warning,
 //   - sort keys are `item.` paths, with `item.on` as a sort entry's own
 //     anchor (a card-field sort without one inherits the filter's anchor).
+//
+// RENDERING SELECTION is bound through `htmlQuery` — a synthesized,
+// single-valued field of `search-entry` (the `html` has-many is computed from
+// it). It is bound with an ordinary `eq` in the filter's top-level node, and
+// being single-valued it can be bound exactly once: binding it in a nested
+// node, under `not`, or through any other operator is an unsatisfiable
+// binding and is rejected. Its value is a boolean sub-query over the bare
+// rendering dimensions (`format` / `renderType`): `eq` leaves composed with
+// `every` / `any` / `not`, with real boolean semantics — `not(not(q))`
+// selects exactly what `q` selects. It selects which renderings populate the
+// `html` has-many; it never affects entry membership. Omitted, the default
+// `{ eq: { format: "fitted" } }` applies; an unconstrained htmlQuery ("give
+// me everything") is unsupported and rejected. When no `renderType` predicate
+// appears anywhere in the htmlQuery, only each result's own native type
+// (`types[0]`) is in play — an explicit predicate opens the full
+// adoption-chain universe.
 //
 // `fields[search-entry]` is the sparse fieldset selecting which branches the
 // response carries: `html`, `item` (the full serialization), or
 // `item.<field>` entries (a field-limited serialization that ships
 // `meta.sparseFields` and never enters the Store). No fieldset means the
-// default resolution policy: prefer `html`, fall back to `item` where a
-// result has no HTML.
+// default resolution policy: the selected renderings, falling back to `item`
+// where none match. A fieldset that excludes `html` makes the htmlQuery
+// inert.
 //
 // The parser translates the wire query into the legacy `Query` the SQL core
-// consumes (`item.` prefixes stripped) plus the lifted render spec and the
+// consumes (`item.` prefixes stripped) plus the captured htmlQuery and the
 // parsed fieldset.
 // ---------------------------------------------------------------------------
 
 const ITEM_PREFIX = 'item.';
 const ITEM_ANCHOR = 'item.on';
-const HTML_RENDER_TYPE = 'html.renderType';
-const HTML_FORMAT = 'html.format';
+const HTML_QUERY = 'htmlQuery';
 
-export const DEFAULT_SEARCH_ENTRY_FORMAT: PrerenderedHtmlFormat = 'fitted';
+export const DEFAULT_HTML_QUERY: HtmlQuery = { eq: { format: 'fitted' } };
 
 const SEARCH_ENTRY_QUERY_MEMBERS = [
   'filter',
@@ -84,14 +87,6 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
 // The operator members whose value is an object keyed by field paths.
 const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'];
 
-export interface SearchEntryRenderSpec {
-  // The format of the `html` branch; `html.format`, defaulting to fitted.
-  format: PrerenderedHtmlFormat;
-  // `html.renderType`: render every result as this ancestor type. Omitted →
-  // each result renders in its own actual (native) type.
-  renderType?: CodeRef;
-}
-
 // Which form of the `item` serialization the fieldset selects.
 export type SearchEntryItemSelection =
   | { kind: 'none' }
@@ -102,18 +97,19 @@ export interface SearchEntryFieldset {
   html: boolean;
   item: SearchEntryItemSelection;
   // True only in the default (no `fields` member) mode: the `item` branch
-  // appears per result, only where the result has no HTML. An explicit
-  // fieldset always pins the branches instead.
+  // appears per result, only where no rendering matched (and the empty `html`
+  // relationship is omitted). An explicit fieldset always pins the branches
+  // instead.
   itemAsFallback: boolean;
 }
 
 // The parsed form of a v2 request: the legacy `Query` for the SQL core (the
-// `item.` addressing stripped), the lifted `html.` render config, and the
-// parsed sparse fieldset. The compat layer constructs this directly from a
-// legacy request — it does not round-trip through the wire grammar.
+// `item.` addressing stripped), the applied (bound or defaulted) htmlQuery,
+// and the parsed sparse fieldset. The compat layer constructs this directly
+// from a legacy request — it does not round-trip through the wire grammar.
 export interface SearchEntryQuery {
   itemQuery: Query;
-  render: SearchEntryRenderSpec;
+  htmlQuery: HtmlQuery;
   fieldset: SearchEntryFieldset;
   realms?: string[];
   cardUrls?: string[];
@@ -123,18 +119,14 @@ function invalidQuery(message: string): SearchRequestError {
   return new SearchRequestError('invalid-query', `Invalid query: ${message}`);
 }
 
-// Lazy: a module-load `logger()` call races the circular import that installs
-// the logger factory. First emission happens well after boot.
-let searchEntryLog: ReturnType<typeof logger> | undefined;
-function warn(message: string): void {
-  (searchEntryLog ??= logger('search-entry-query')).warn(message);
+function invalidHtmlQuery(message: string): SearchRequestError {
+  return new SearchRequestError('invalid-render', message);
 }
 
-// The `html.*` rendering config captured out of the filter's top-level `eq`.
-// Values are validated by `parseRenderSpec` after the walk.
-interface RenderConfigCapture {
-  renderType?: unknown;
-  format?: unknown;
+// The htmlQuery binding captured out of the filter's top-level `eq`. The
+// value is validated by `assertHtmlQuery` after the walk.
+interface HtmlQueryCapture {
+  htmlQuery?: unknown;
 }
 
 function stripItemPrefix(fieldPath: string, pointer: string): string {
@@ -149,46 +141,193 @@ function stripItemPrefix(fieldPath: string, pointer: string): string {
   return fieldPath.slice(ITEM_PREFIX.length);
 }
 
-// The `html.` rendering config — top-level members of the query.
-function parseRenderSpec(
-  renderType: unknown,
-  format: unknown,
-): SearchEntryRenderSpec {
-  let render: SearchEntryRenderSpec = { format: DEFAULT_SEARCH_ENTRY_FORMAT };
-  if (format !== undefined) {
-    if (typeof format !== 'string' || !isValidPrerenderedHtmlFormat(format)) {
-      throw new SearchRequestError(
-        'invalid-render',
-        `${HTML_FORMAT} must be one of ${PRERENDERED_HTML_FORMATS.join(', ')}`,
-      );
-    }
-    render.format = format;
+// Validates a bound htmlQuery value: one connective or `eq` leaf per node,
+// leaves constrain at least one rendering dimension. An unconstrained query
+// (an empty leaf or an empty connective) is unsupported — there is no "give
+// me everything" spelling.
+export function assertHtmlQuery(
+  value: unknown,
+  pointer = HTML_QUERY,
+): asserts value is HtmlQuery {
+  if (typeof value !== 'object' || value == null || Array.isArray(value)) {
+    throw invalidHtmlQuery(`${pointer}: htmlQuery must be an object`);
   }
-  if (renderType !== undefined) {
-    if (!isCodeRef(renderType)) {
-      throw new SearchRequestError(
-        'invalid-render',
-        `${HTML_RENDER_TYPE} must be a CodeRef`,
-      );
-    }
-    render.renderType = renderType;
+  let keys = Object.keys(value);
+  if (keys.length !== 1) {
+    throw invalidHtmlQuery(
+      `${pointer}: an htmlQuery node must have exactly one of eq, every, any, not`,
+    );
   }
-  return render;
+  let [key] = keys;
+  let inner = (value as Record<string, unknown>)[key];
+  switch (key) {
+    case 'eq': {
+      if (typeof inner !== 'object' || inner == null || Array.isArray(inner)) {
+        throw invalidHtmlQuery(`${pointer}/eq: eq must be an object`);
+      }
+      let leaf = inner as Record<string, unknown>;
+      let leafKeys = Object.keys(leaf);
+      if (leafKeys.length === 0) {
+        throw invalidHtmlQuery(
+          `${pointer}/eq: an unconstrained htmlQuery is unsupported — constrain format and/or renderType`,
+        );
+      }
+      for (let leafKey of leafKeys) {
+        if (leafKey === 'format') {
+          if (
+            typeof leaf.format !== 'string' ||
+            !isValidPrerenderedHtmlFormat(leaf.format)
+          ) {
+            throw invalidHtmlQuery(
+              `${pointer}/eq/format: format must be one of ${PRERENDERED_HTML_FORMATS.join(', ')}`,
+            );
+          }
+        } else if (leafKey === 'renderType') {
+          if (!isCodeRef(leaf.renderType)) {
+            throw invalidHtmlQuery(
+              `${pointer}/eq/renderType: renderType must be a CodeRef`,
+            );
+          }
+        } else {
+          throw invalidHtmlQuery(
+            `${pointer}/eq: unknown rendering dimension "${leafKey}" — the dimensions are format and renderType`,
+          );
+        }
+      }
+      return;
+    }
+    case 'every':
+    case 'any': {
+      if (!Array.isArray(inner) || inner.length === 0) {
+        throw invalidHtmlQuery(
+          `${pointer}/${key}: ${key} must be a non-empty array`,
+        );
+      }
+      inner.forEach((entry, i) =>
+        assertHtmlQuery(entry, `${pointer}/${key}[${i}]`),
+      );
+      return;
+    }
+    case 'not': {
+      assertHtmlQuery(inner, `${pointer}/not`);
+      return;
+    }
+    default:
+      throw invalidHtmlQuery(
+        `${pointer}: unknown htmlQuery member "${key}" — an htmlQuery node has exactly one of eq, every, any, not`,
+      );
+  }
 }
+
+// Whether any renderType predicate appears in the htmlQuery (negated ones
+// count). When none does, only each result's own native type is in play; an
+// explicit predicate opens the full adoption-chain universe.
+export function htmlQueryHasRenderTypePredicate(query: HtmlQuery): boolean {
+  if ('eq' in query) {
+    return query.eq.renderType !== undefined;
+  }
+  if ('every' in query) {
+    return query.every.some(htmlQueryHasRenderTypePredicate);
+  }
+  if ('any' in query) {
+    return query.any.some(htmlQueryHasRenderTypePredicate);
+  }
+  return htmlQueryHasRenderTypePredicate(query.not);
+}
+
+// ---------------------------------------------------------------------------
+// htmlQuery evaluation. The engine enumerates each row's candidate renderings
+// and evaluates the htmlQuery per candidate — proper boolean semantics over
+// the rendering universe, so negation composes (involution holds). The
+// renderType CodeRefs in the query are resolved to their `<module>/<name>`
+// keys once (`resolveHtmlQuery`), then the pure evaluator runs per candidate.
+// ---------------------------------------------------------------------------
+
+// One candidate rendering of a row: a (format, renderType) point in the
+// row's rendering set. A file rendering carries no renderTypeKey (files
+// render natively), so a renderType predicate never matches it — positively
+// or under an even number of negations.
+export interface RenderingCandidate {
+  format: PrerenderedHtmlFormat;
+  renderTypeKey?: string;
+}
+
+export type ResolvedHtmlQuery =
+  | { eq: { format?: PrerenderedHtmlFormat; renderTypeKey?: string } }
+  | { every: ResolvedHtmlQuery[] }
+  | { any: ResolvedHtmlQuery[] }
+  | { not: ResolvedHtmlQuery };
+
+export function resolveHtmlQuery(
+  query: HtmlQuery,
+  resolveRenderTypeKey: (ref: CodeRef) => string,
+): ResolvedHtmlQuery {
+  if ('eq' in query) {
+    let { format, renderType } = query.eq;
+    return {
+      eq: {
+        ...(format !== undefined ? { format } : {}),
+        ...(renderType !== undefined
+          ? { renderTypeKey: resolveRenderTypeKey(renderType) }
+          : {}),
+      },
+    };
+  }
+  if ('every' in query) {
+    return {
+      every: query.every.map((q) => resolveHtmlQuery(q, resolveRenderTypeKey)),
+    };
+  }
+  if ('any' in query) {
+    return {
+      any: query.any.map((q) => resolveHtmlQuery(q, resolveRenderTypeKey)),
+    };
+  }
+  return { not: resolveHtmlQuery(query.not, resolveRenderTypeKey) };
+}
+
+export function htmlQueryMatches(
+  query: ResolvedHtmlQuery,
+  candidate: RenderingCandidate,
+): boolean {
+  if ('eq' in query) {
+    let { format, renderTypeKey } = query.eq;
+    if (format !== undefined && candidate.format !== format) {
+      return false;
+    }
+    if (
+      renderTypeKey !== undefined &&
+      candidate.renderTypeKey !== renderTypeKey
+    ) {
+      return false;
+    }
+    return true;
+  }
+  if ('every' in query) {
+    return query.every.every((q) => htmlQueryMatches(q, candidate));
+  }
+  if ('any' in query) {
+    return query.any.some((q) => htmlQueryMatches(q, candidate));
+  }
+  return !htmlQueryMatches(query.not, candidate);
+}
+
+// ---------------------------------------------------------------------------
+// Request parsing.
+// ---------------------------------------------------------------------------
 
 // Translate one filter node from `item.` addressing to the legacy grammar:
 // `item.on` → `on`, field paths inside the operators stripped of their
 // `item.` prefix, connectives recursed. The structure (which operators nest
 // where) is untouched — `assertQuery` validates the translated result.
 //
-// `capture` is present only on the root node: `html.*` paths in the root
-// node's `eq` are lifted into it. Anywhere else — another operator, or any
-// nested node — an `html.*` path is ignored with a logged warning (equality
-// at the top level is the only meaningful spelling for rendering config).
+// `capture` is present only on the root node: an `htmlQuery` binding in the
+// root node's `eq` is lifted into it. Anywhere else the binding is
+// unsatisfiable (a single-valued field binds once) and rejected.
 function translateFilterNode(
   node: unknown,
   pointer: string,
-  capture?: RenderConfigCapture,
+  capture?: HtmlQueryCapture,
 ): Record<string, unknown> {
   if (typeof node !== 'object' || node == null || Array.isArray(node)) {
     throw invalidQuery(`${pointer}: filter must be an object`);
@@ -212,9 +351,9 @@ function translateFilterNode(
         `${pointer}/${key}`,
         key === 'eq' ? capture : undefined,
       );
-      // An operator that carried only html.* entries (lifted or ignored)
-      // vanishes with them; a user-authored empty operator is preserved for
-      // assertQuery to reject.
+      // An eq that carried only the htmlQuery binding vanishes with the lift;
+      // a user-authored empty operator is preserved for assertQuery to
+      // reject.
       if (
         Object.keys(translated).length === 0 &&
         Object.keys(value as object).length > 0
@@ -225,9 +364,9 @@ function translateFilterNode(
     } else if (key === 'matches') {
       // Full-text match over the whole document — no field path to address.
       out.matches = value;
-    } else if (key === HTML_RENDER_TYPE || key === HTML_FORMAT) {
-      throw invalidQuery(
-        `${pointer}/${key}: ${key} is an eq predicate — spell it eq: { "${key}": … }`,
+    } else if (key === HTML_QUERY) {
+      throw invalidHtmlQuery(
+        `${pointer}/${HTML_QUERY}: ${HTML_QUERY} is a field — bind it with eq: { "${HTML_QUERY}": … }`,
       );
     } else {
       throw invalidQuery(
@@ -249,7 +388,7 @@ function translateFilterNode(
 function translateFieldKeys(
   value: unknown,
   pointer: string,
-  capture: RenderConfigCapture | undefined,
+  capture: HtmlQueryCapture | undefined,
 ): Record<string, unknown> {
   if (typeof value !== 'object' || value == null || Array.isArray(value)) {
     throw invalidQuery(
@@ -258,16 +397,12 @@ function translateFieldKeys(
   }
   let out: Record<string, unknown> = {};
   for (let [fieldPath, fieldValue] of Object.entries(value)) {
-    if (fieldPath === HTML_RENDER_TYPE || fieldPath === HTML_FORMAT) {
+    if (fieldPath === HTML_QUERY) {
       if (capture) {
-        if (fieldPath === HTML_RENDER_TYPE) {
-          capture.renderType = fieldValue;
-        } else {
-          capture.format = fieldValue;
-        }
+        capture.htmlQuery = fieldValue;
       } else {
-        warn(
-          `${pointer}/${fieldPath}: ${fieldPath} is rendering config and supports only the eq operator at the top level of filter — ignoring`,
+        throw invalidHtmlQuery(
+          `${pointer}/${HTML_QUERY}: ${HTML_QUERY} is a single-valued synthesized field — bind it once, in the filter's top-level eq`,
         );
       }
       continue;
@@ -322,8 +457,8 @@ function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
 
 function parseFieldset(fields: unknown): SearchEntryFieldset {
   if (fields === undefined) {
-    // No fieldset → the default resolution policy: prefer html, fall back to
-    // the item serialization where a result has no HTML.
+    // No fieldset → the default resolution policy: the selected renderings,
+    // falling back to the item serialization where none match.
     return { html: true, item: { kind: 'none' }, itemAsFallback: true };
   }
   if (typeof fields !== 'object' || fields == null || Array.isArray(fields)) {
@@ -423,17 +558,23 @@ export function parseSearchEntryQueryFromPayload(
     }
   }
 
-  let renderCapture: RenderConfigCapture = {};
+  let capture: HtmlQueryCapture = {};
   let filter: Record<string, unknown> | undefined;
   if (record.filter !== undefined) {
-    filter = translateFilterNode(record.filter, 'filter', renderCapture);
-    // A filter that carried only rendering config dissolves with the lift —
-    // the residual query matches everything.
+    filter = translateFilterNode(record.filter, 'filter', capture);
+    // A filter that carried only the htmlQuery binding dissolves with the
+    // lift — the residual query matches everything.
     if (Object.keys(filter).length === 0) {
       filter = undefined;
     }
   }
-  let render = parseRenderSpec(renderCapture.renderType, renderCapture.format);
+  let htmlQuery: HtmlQuery;
+  if (capture.htmlQuery !== undefined) {
+    assertHtmlQuery(capture.htmlQuery);
+    htmlQuery = capture.htmlQuery;
+  } else {
+    htmlQuery = DEFAULT_HTML_QUERY;
+  }
 
   let rootAnchor = filter?.on ?? filter?.type;
   let sort =
@@ -464,7 +605,7 @@ export function parseSearchEntryQueryFromPayload(
 
   return {
     itemQuery: itemQuery as Query,
-    render,
+    htmlQuery,
     fieldset,
     realms,
     cardUrls,
@@ -481,21 +622,24 @@ export function parseSearchEntryQueryFromPayload(
 // One `search-entry` — the top-level `data` resource for a result. Which
 // branches it carries is the resolution policy / sparse fieldset's call; this
 // just assembles the linkage. The `item` shares the entry's URL as its id;
-// the `html` branch points at a specific rendering by its composite id.
+// each `html` member points at one specific rendering by its composite id.
+// `htmlIds` undefined omits the relationship (the default mode's fallback
+// rows); an empty array emits `data: []` (a pinned html branch with no
+// matching rendering yet).
 export function buildSearchEntryResource(args: {
   url: string;
-  htmlId?: string;
+  htmlIds?: string[];
   itemType?: typeof CardResourceType | typeof FileMetaResourceType;
 }): SearchEntryResource {
-  let { url, htmlId, itemType } = args;
+  let { url, htmlIds, itemType } = args;
   let resource: SearchEntryResource = {
     type: SearchEntryResourceType,
     id: url,
     relationships: {},
   };
-  if (htmlId !== undefined) {
+  if (htmlIds !== undefined) {
     resource.relationships.html = {
-      data: { type: HtmlResourceType, id: htmlId },
+      data: htmlIds.map((id) => ({ type: HtmlResourceType, id })),
     };
   }
   if (itemType !== undefined) {
