@@ -221,10 +221,10 @@ async function syncWorkspaceForToolRun(
 function vacuousPassMessage(toolName: string, what: string): string {
   return (
     `${toolName} found nothing to check (0 ${what}) — this is NOT a ` +
-    'pass. The realm has no matching files: either your workspace ' +
-    "hasn't reached the realm yet (re-run after syncing) or the files " +
-    'you intend to validate were never written. A green result must ' +
-    'check at least one file.'
+    'pass. This tool already synced your workspace before running, ' +
+    "so either the realm index hasn't caught up yet (re-run this " +
+    `tool) or the ${what} you intend to validate were never ` +
+    'written. A green result must check at least one of them.'
   );
 }
 

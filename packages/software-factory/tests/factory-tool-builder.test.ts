@@ -1318,6 +1318,71 @@ module('buildFactoryTools — vacuous pass rejection', function () {
     assert.strictEqual(result.status, 'passed');
   });
 
+  test('single-file run_lint is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runLintInMemory: async () => ({
+        status: 'passed' as const,
+        filesChecked: 0,
+        filesWithErrors: 0,
+        errorCount: 0,
+        warningCount: 0,
+        durationMs: 0,
+        lintableFiles: [],
+        violations: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_lint').execute({
+      path: 'my-card.gts',
+    })) as { status: string };
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
+  test('single-file run_evaluate is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runEvaluateInMemory: async () => ({
+        status: 'passed' as const,
+        modulesChecked: 0,
+        modulesWithErrors: 0,
+        durationMs: 0,
+        evaluableFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_evaluate').execute({
+      path: 'my-card.gts',
+    })) as { status: string };
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
+  test('single-file run_instantiate is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runInstantiateInMemory: async () => ({
+        status: 'passed' as const,
+        instancesChecked: 0,
+        instancesWithErrors: 0,
+        durationMs: 0,
+        instanceFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_instantiate').execute({
+      path: 'MyCard/example-1.json',
+    })) as { status: string };
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
   test('whole-realm run_parse pass with real coverage is untouched', async function (assert) {
     let config = makeConfig({
       runParseInMemory: async () => ({
