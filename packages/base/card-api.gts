@@ -1568,6 +1568,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           displayContainer?: boolean;
           typeConstraint?: ResolvedCodeRef;
           lockConsumingRealm?: boolean;
+          consumingRealm?: URL;
         };
       };
       Blocks: {};
@@ -1585,6 +1586,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @brokenLink={{broken}}
                   @typeConstraint={{@typeConstraint}}
                   @lockConsumingRealm={{@lockConsumingRealm}}
+                  @consumingRealm={{@consumingRealm}}
                   @createCard={{cardCrudFunctions.createCard}}
                   ...attributes
                 />
