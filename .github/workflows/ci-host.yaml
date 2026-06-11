@@ -259,9 +259,6 @@ jobs:
           # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
           # 60s host-test timeouts. Diagnostics-only; see server.ts.
           REALM_SERVER_HTTP2_DIAGNOSTICS: "1"
-      - name: create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
 
       # Validate the CS-11275 fix end-to-end AND wait until the realm-server's
       # own readiness check passes — _readiness-check covers full indexing

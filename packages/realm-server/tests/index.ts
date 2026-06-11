@@ -8,8 +8,16 @@
 // supertest request to `https://…`, breaking every assertion that expects
 // `200`/`4xx`. In-process tests don't need TLS — they speak HTTP/1.1 to
 // supertest directly.
-delete process.env.REALM_SERVER_TLS_CERT_FILE;
-delete process.env.REALM_SERVER_TLS_KEY_FILE;
+//
+// Skip in env mode: createListener (server.ts) treats HTTP/2+TLS as a
+// system invariant when BOXEL_ENVIRONMENT is set and throws on a missing
+// cert with no plain-HTTP fallback. Env-mode fixture servers also bypass
+// the first-byte dispatcher (Traefik is the only client), so the
+// standard-mode rationale above doesn't apply.
+if (!process.env.BOXEL_ENVIRONMENT) {
+  delete process.env.REALM_SERVER_TLS_CERT_FILE;
+  delete process.env.REALM_SERVER_TLS_KEY_FILE;
+}
 
 // Ensure test timers don't hold the Node event loop open. Wrap setTimeout and
 // setInterval to unref timers so the process can exit once work is done. This
