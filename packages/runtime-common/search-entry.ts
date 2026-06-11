@@ -1,5 +1,13 @@
 import { assertQuery, InvalidQueryError, type Query } from './query.ts';
-import { SearchRequestError } from './search-utils.ts';
+import {
+  fanOutRealmSearch,
+  SearchRequestError,
+  type SearchOpts,
+} from './search-utils.ts';
+import type {
+  SearchEntryCollectionDocument,
+  SearchEntryIncludedResource,
+} from './document-types.ts';
 import {
   CssResourceType,
   HtmlResourceType,
@@ -610,6 +618,75 @@ export function parseSearchEntryQueryFromPayload(
     realms,
     cardUrls,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The federated merge + runner. Concatenate `data` in realm order, sum
+// `meta.page.total`, and dedupe `included` by the JSON:API identity pair
+// `(type, id)` — `html`/`css`/`card`/`file-meta` resources referenced by
+// results from more than one realm travel exactly once (`css` ids are
+// content hashes, so identical stylesheets across realms collapse). The
+// applied htmlQuery is identical across the per-realm documents (one binding
+// per request), so the first echo wins.
+// ---------------------------------------------------------------------------
+
+export function combineSearchEntryResults(
+  docs: SearchEntryCollectionDocument[],
+): SearchEntryCollectionDocument {
+  let combined: SearchEntryCollectionDocument = {
+    data: [],
+    meta: { page: { total: 0 } },
+  };
+  let included: SearchEntryIncludedResource[] = [];
+  let includedByIdentity = new Set<string>();
+
+  for (let doc of docs) {
+    combined.data.push(...doc.data);
+    combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
+      combined.meta.htmlQuery = doc.meta.htmlQuery;
+    }
+    for (let resource of doc.included ?? []) {
+      if (resource.id) {
+        // NUL-separated so a `(type, id)` pair can't alias another by
+        // concatenation (no resource type or id contains a NUL byte).
+        let identity = `${resource.type}\u0000${resource.id}`;
+        if (includedByIdentity.has(identity)) {
+          continue;
+        }
+        includedByIdentity.add(identity);
+      }
+      included.push(resource);
+    }
+  }
+
+  if (included.length > 0) {
+    combined.included = included;
+  }
+  return combined;
+}
+
+type SearchEntrySearchableRealm = {
+  searchEntries: (
+    searchEntryQuery: SearchEntryQuery,
+    opts?: SearchOpts,
+  ) => Promise<SearchEntryCollectionDocument>;
+  url?: string;
+};
+
+export async function searchEntryRealms(
+  realms: Array<SearchEntrySearchableRealm | null | undefined>,
+  searchEntryQuery: SearchEntryQuery,
+  opts?: SearchOpts,
+): Promise<SearchEntryCollectionDocument> {
+  let docs = await fanOutRealmSearch(
+    realms,
+    searchEntryQuery.itemQuery,
+    (realm) => realm.searchEntries(searchEntryQuery, opts),
+    (label, queryLabel) =>
+      `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
+  );
+  return combineSearchEntryResults(docs);
 }
 
 // ---------------------------------------------------------------------------
