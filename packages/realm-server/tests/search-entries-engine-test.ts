@@ -335,6 +335,23 @@ module(basename(__filename), function () {
       assert.strictEqual(pinnedJane.relationships.item, undefined);
     });
 
+    test('an error row with nothing renderable keeps membership with an empty html array', async function (assert) {
+      // a first indexing attempt that failed: error flagged, no last-known-good
+      // renderings, no serialization to fall back to
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET has_error = TRUE, pristine_doc = NULL, fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      let jane = entryFor(doc, janeId)!;
+      assert.deepEqual(
+        jane.relationships.html,
+        { data: [] },
+        'membership stays visible through the empty html array',
+      );
+      assert.strictEqual(jane.relationships.item, undefined);
+    });
+
     test('file results flow through the same fieldset semantics', async function (assert) {
       let fileUrl = `${realmHref}hello.md`;
       let query = parseSearchEntryQueryFromPayload({

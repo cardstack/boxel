@@ -848,6 +848,14 @@ export class RealmIndexQueryEngine {
       let emitItem =
         itemOnEveryRow || (fieldset.itemAsFallback && htmlIds === undefined);
       let pristine = row.pristine_doc as CardResource<Saved> | null;
+      // A row can have nothing renderable AND no serialization — an error row
+      // whose first indexing attempt failed (no last-known-good renderings,
+      // no pristine doc). Keep its membership visible through the empty html
+      // array rather than emitting an entry with neither branch.
+      if (fieldset.html && htmlIds === undefined && !pristine) {
+        htmlIds = [];
+        emitItem = false;
+      }
       if (emitItem && pristine) {
         let item: CardResource<Saved> = {
           ...pristine,
@@ -952,6 +960,13 @@ export class RealmIndexQueryEngine {
 
       let emitItem =
         itemOnEveryRow || (fieldset.itemAsFallback && htmlIds === undefined);
+      // Same neither-branch guard as the card path: keep membership visible
+      // through the empty html array when there is no serialization to fall
+      // back to.
+      if (fieldset.html && htmlIds === undefined && !file.resource?.id) {
+        htmlIds = [];
+        emitItem = false;
+      }
       let itemEmitted = false;
       if (emitItem && file.resource?.id) {
         let item: FileMetaResource = {
