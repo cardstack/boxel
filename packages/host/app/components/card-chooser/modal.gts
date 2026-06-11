@@ -134,7 +134,7 @@ export default class CardChooserModal extends Component<Signature> {
                 )
               }}
               {{on 'keydown' this.handleKeydown}}
-              data-test-card-catalog-modal
+              data-test-card-chooser-modal
             >
               <:header>
                 <Bar
@@ -165,7 +165,7 @@ export default class CardChooserModal extends Component<Signature> {
                       @size='tall'
                       class='footer-button'
                       {{on 'click' this.cancelPick}}
-                      data-test-card-catalog-cancel-button
+                      data-test-card-chooser-cancel-button
                     >
                       Cancel
                     </Button>
@@ -175,7 +175,7 @@ export default class CardChooserModal extends Component<Signature> {
                       @disabled={{eq state.selectedCards.length 0}}
                       class='footer-button'
                       {{on 'click' (fn this.pickCards state)}}
-                      data-test-card-catalog-go-button
+                      data-test-card-chooser-go-button
                     >
                       {{this.goButtonText}}
                     </Button>
@@ -185,7 +185,7 @@ export default class CardChooserModal extends Component<Signature> {
             </ModalContainer>
             <div
               id='card-chooser-picker-wormhole'
-              data-test-card-catalog-picker-wormhole
+              data-test-card-chooser-picker-wormhole
             ></div>
           </SearchPanel>
         {{/each}}

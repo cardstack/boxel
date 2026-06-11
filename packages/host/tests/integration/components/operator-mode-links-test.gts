@@ -43,24 +43,24 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-remove-card]');
     assert.dom('[data-test-add-new="authorBio"]').exists();
     await click('[data-test-add-new="authorBio"]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await waitFor(`[data-test-item-button="${testRealmURL}Author/2"]`);
+    await click(`[data-test-item-button="${testRealmURL}Author/2"]`);
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Author/2"][data-test-card-catalog-item-selected]`,
+        `[data-test-item-button="${testRealmURL}Author/2"][data-test-item-button-selected]`,
       )
       .exists();
 
     await waitUntil(
       () =>
         (
-          document.querySelector(`[data-test-card-catalog-go-button]`) as
+          document.querySelector(`[data-test-card-chooser-go-button]`) as
             | HTMLButtonElement
             | undefined
         )?.disabled === false,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
 
     await waitFor(`.operator-mode [data-test-author="R2-D2"]`);
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
@@ -79,9 +79,9 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-add-new="authorBio"]').exists();
 
     await click('[data-test-add-new="authorBio"]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Author/2"]`);
+    await click(`[data-test-item-button="${testRealmURL}Author/2"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
@@ -109,8 +109,8 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-add-new="authorBio"]').exists();
 
     await click('[data-test-add-new="authorBio"]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await click(`[data-test-item-button-create-new]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     assert
@@ -153,12 +153,12 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-add-new="spec"]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
 
@@ -206,9 +206,9 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-field="friends"] [data-test-add-new]').exists();
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert
@@ -235,13 +235,9 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-field="friend"] [data-test-add-new]');
 
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Friend/friend-a"]`,
-    );
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}Friend/friend-a"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Friend/friend-a"]`);
+    await click(`[data-test-item-button="${testRealmURL}Friend/friend-a"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
 
@@ -275,9 +271,9 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     assert.dom('[data-test-add-new="friends"]').hasText('Add Pets');
     await click('[data-test-add-new="friends"]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
@@ -299,9 +295,9 @@ module('Integration | operator-mode | links', function (hooks) {
       .dom('[data-test-field="friends"] [data-test-add-new]')
       .hasText('Add Pets');
     await click('[data-test-field="friends"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
@@ -325,9 +321,9 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-chooser-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Mango');
@@ -349,11 +345,9 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
 
-    await waitFor(`[data-test-card-catalog-modal]`);
-    assert
-      .dom('[data-test-card-catalog-create-new-button]')
-      .hasText('Create New Pet');
-    await click('[data-test-card-catalog-create-new-button]');
+    await waitFor(`[data-test-card-chooser-modal]`);
+    assert.dom('[data-test-item-button-create-new]').hasText('Create New Pet');
+    await click('[data-test-item-button-create-new]');
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -387,11 +381,9 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
 
-    await waitFor(`[data-test-card-catalog-modal]`);
-    assert
-      .dom('[data-test-card-catalog-create-new-button]')
-      .hasText('Create New Pet');
-    await click('[data-test-card-catalog-create-new-button]');
+    await waitFor(`[data-test-card-chooser-modal]`);
+    assert.dom('[data-test-item-button-create-new]').hasText('Create New Pet');
+    await click('[data-test-item-button-create-new]');
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -409,10 +401,8 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    assert
-      .dom('[data-test-card-catalog-create-new-button]')
-      .hasText('Create New Pet');
+    await waitFor(`[data-test-card-chooser-modal]`);
+    assert.dom('[data-test-item-button-create-new]').hasText('Create New Pet');
   });
 
   test('can remove all items of a linksToMany field', async function (assert) {
@@ -474,9 +464,9 @@ module('Integration | operator-mode | links', function (hooks) {
       .dom('[data-test-links-to-editor="pet"] [data-test-boxel-card-container]')
       .doesNotExist();
     await click('[data-test-add-new="pet"]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await waitFor(`[data-test-card-catalog-create-new-button]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await waitFor(`[data-test-item-button-create-new]`);
+    await click(`[data-test-item-button-create-new]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     // After clicking "Create New", both the Person card and the new Pet card should be saved
@@ -558,8 +548,8 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-edit-button]');
     assert.dom('[data-test-add-new="authorBio"]').exists();
     await click('[data-test-add-new="authorBio"]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await click(`[data-test-item-button-create-new]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
@@ -968,26 +958,26 @@ module('Integration | operator-mode | links', function (hooks) {
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
 
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
 
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"][data-test-card-catalog-item-selected]`,
+        `[data-test-item-button="${testRealmURL}Pet/jackie"][data-test-item-button-selected]`,
       )
       .exists('Jackie is selected');
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Pet/mango"][data-test-card-catalog-item-selected]`,
+        `[data-test-item-button="${testRealmURL}Pet/mango"][data-test-item-button-selected]`,
       )
       .exists('Mango is selected');
 
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await waitUntil(
-      () => !document.querySelector('[data-test-card-catalog-modal]'),
+      () => !document.querySelector('[data-test-card-chooser-modal]'),
     );
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
@@ -1012,20 +1002,20 @@ module('Integration | operator-mode | links', function (hooks) {
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
 
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/jackie"]`)
       .doesNotExist('Jackie is already linked and should be excluded');
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/woody"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/woody"]`)
       .doesNotExist('Woody is already linked and should be excluded');
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/buzz"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/buzz"]`)
       .doesNotExist('Buzz is already linked and should be excluded');
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/mango"]`)
       .exists('Mango is not linked and should appear');
   });
 
@@ -1040,32 +1030,32 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
 
-    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+    assert.dom('[data-test-item-button-selected]').doesNotExist();
 
     // Click to select
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/jackie"]`)
       .hasAttribute(
-        'data-test-card-catalog-item-selected',
+        'data-test-item-button-selected',
         'true',
         'card is selected',
       );
-    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open');
+    assert.dom('[data-test-card-chooser-modal]').exists('modal remains open');
 
     // Click again to deselect
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/jackie"]`)
       .doesNotHaveAttribute(
-        'data-test-card-catalog-item-selected',
+        'data-test-item-button-selected',
         'card is deselected after second click',
       );
     assert
-      .dom('[data-test-card-catalog-modal]')
+      .dom('[data-test-card-chooser-modal]')
       .exists('modal remains open after deselect');
   });
 
@@ -1080,20 +1070,18 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
 
     // Double-click should toggle selection but NOT submit
-    await doubleClick(
-      `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
-    );
+    await doubleClick(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
     assert
-      .dom('[data-test-card-catalog-modal]')
+      .dom('[data-test-card-chooser-modal]')
       .exists('modal remains open after double-click');
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/jackie"]`)
       .hasAttribute(
-        'data-test-card-catalog-item-selected',
+        'data-test-item-button-selected',
         'true',
         'card is selected after double-click',
       );
@@ -1110,40 +1098,40 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
 
     // Press Enter to select
     await triggerKeyEvent(
-      `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
+      `[data-test-item-button="${testRealmURL}Pet/jackie"]`,
       'keydown',
       'Enter',
     );
     assert
-      .dom('[data-test-card-catalog-modal]')
+      .dom('[data-test-card-chooser-modal]')
       .exists('modal remains open after Enter');
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/jackie"]`)
       .hasAttribute(
-        'data-test-card-catalog-item-selected',
+        'data-test-item-button-selected',
         'true',
         'card is selected after Enter',
       );
 
     // Press Enter again to deselect
     await triggerKeyEvent(
-      `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
+      `[data-test-item-button="${testRealmURL}Pet/jackie"]`,
       'keydown',
       'Enter',
     );
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Pet/jackie"]`)
       .doesNotHaveAttribute(
-        'data-test-card-catalog-item-selected',
+        'data-test-item-button-selected',
         'card is deselected after second Enter',
       );
     assert
-      .dom('[data-test-card-catalog-modal]')
+      .dom('[data-test-card-chooser-modal]')
       .exists('modal remains open after deselect');
   });
 
@@ -1158,27 +1146,27 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
 
     assert
-      .dom('[data-test-card-catalog-go-button]')
+      .dom('[data-test-card-chooser-go-button]')
       .isDisabled('Go button is disabled with no selection');
     assert
-      .dom('[data-test-card-catalog-go-button]')
+      .dom('[data-test-card-chooser-go-button]')
       .hasText('Choose 0 Cards', 'button text shows 0 cards');
 
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
     assert
-      .dom('[data-test-card-catalog-go-button]')
+      .dom('[data-test-card-chooser-go-button]')
       .isNotDisabled('Go button is enabled after selecting 1 card');
     assert
-      .dom('[data-test-card-catalog-go-button]')
+      .dom('[data-test-card-chooser-go-button]')
       .hasText('Choose 1 Card', 'button text shows singular card');
 
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
     assert
-      .dom('[data-test-card-catalog-go-button]')
+      .dom('[data-test-card-chooser-go-button]')
       .hasText('Choose 2 Cards', 'button text shows plural cards');
   });
 
@@ -1193,15 +1181,15 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
 
     assert
       .dom('[data-test-selection-dropdown-trigger]')
       .doesNotExist('selection dropdown is hidden while nothing is selected');
 
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
     assert
       .dom('[data-test-selection-dropdown-trigger]')
       .exists('selection dropdown appears once cards are selected');
@@ -1214,11 +1202,11 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor('[data-test-boxel-menu-item-text="Select All"]');
     await click('[data-test-boxel-menu-item-text="Select All"]');
     let totalItems = document.querySelectorAll(
-      '[data-test-card-catalog-item]',
+      '[data-test-item-button]',
     ).length;
     assert.true(totalItems > 0, 'there are items to select');
     assert
-      .dom('[data-test-card-catalog-item-selected]')
+      .dom('[data-test-item-button-selected]')
       .exists(
         { count: totalItems },
         'all visible cards are selected after Select All',
@@ -1229,7 +1217,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor('[data-test-boxel-menu-item-text="Deselect All"]');
     await click('[data-test-boxel-menu-item-text="Deselect All"]');
     assert
-      .dom('[data-test-card-catalog-item-selected]')
+      .dom('[data-test-item-button-selected]')
       .doesNotExist('all cards deselected after Deselect All');
     assert
       .dom('[data-test-selection-dropdown-trigger]')

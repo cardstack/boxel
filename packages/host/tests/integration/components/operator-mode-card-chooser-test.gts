@@ -141,7 +141,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
         .dom(`${recents} [data-test-search-sheet-section-header]`)
         .containsText('Recents');
       assert
-        .dom(`${recents} [data-test-card-catalog-item]`)
+        .dom(`${recents} [data-test-item-button]`)
         .exists(
           { count: 5 },
           'when expanded, recents results are capped at 5 with show more button',
@@ -314,7 +314,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await click(`[data-test-boxel-filter-list-button="All Cards"]`);
       await waitFor(`[data-test-cards-grid-item]`);
       await click(`[data-test-create-new-card-button]`); // cards-grid add button
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await settled();
 
       assert
@@ -329,7 +329,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       // Person/hassan has no pet set, so the linksTo add button is available
       await waitFor(`[data-test-add-new="pet"]`);
       await click(`[data-test-add-new="pet"]`);
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await settled();
 
       assert
@@ -346,7 +346,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
         .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
 
       await click(`[data-test-add-new="friends"]`); // linksToMany add button
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await settled();
 
       assert
@@ -379,7 +379,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       // Open linksTo card picker for Pet field
       await waitFor(`[data-test-add-new="pet"]`);
       await click(`[data-test-add-new="pet"]`);
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await settled();
 
       // Type picker should exist in the modal
@@ -432,7 +432,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       // Open linksTo card picker for Pet field
       await waitFor(`[data-test-add-new="pet"]`);
       await click(`[data-test-add-new="pet"]`);
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await settled();
 
       // Type picker should auto-select Pet instead of "Any Type"
@@ -554,13 +554,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
-    await waitFor(`[data-test-card-catalog-item]`);
+    await waitFor(`[data-test-item-button]`);
     await fillIn(
       `[data-test-search-field]`,
       `https://cardstack.com/base/types/card`,
     );
 
-    await waitFor('[data-test-card-catalog-item]', {
+    await waitFor('[data-test-item-button]', {
       count: 1,
     });
 
@@ -579,13 +579,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
       .hasText('1 result');
 
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
-    await click('[data-test-card-catalog-item]');
+    assert.dom('[data-test-item-button]').exists({ count: 1 });
+    await click('[data-test-item-button]');
 
-    await waitFor('[data-test-card-catalog-go-button][disabled]', {
+    await waitFor('[data-test-card-chooser-go-button][disabled]', {
       count: 0,
     });
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await waitFor(
       `[data-test-stack-card-index="1"] [data-test-field="cardInfo-name"]`,
     );
@@ -615,41 +615,39 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
     assert
-      .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
-      )
+      .dom(`[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`)
       .exists();
 
     await fillIn(`[data-test-search-field]`, `pet`);
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
       { count: 0 },
     );
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
+    assert.dom(`[data-test-item-button]`).exists({ count: 2 });
 
     await fillIn(`[data-test-search-field]`, `publishing packet`);
     await waitUntil(
       () =>
         !document.querySelector(
-          `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`,
+          `[data-test-item-button="${testRealmURL}Spec/pet-card"]`,
         ),
     );
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 1 });
+    assert.dom(`[data-test-item-button]`).exists({ count: 1 });
 
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
     );
     await waitUntil(
       () =>
         (
-          document.querySelector(`[data-test-card-catalog-go-button]`) as
+          document.querySelector(`[data-test-card-chooser-go-button]`) as
             | HTMLButtonElement
             | undefined
         )?.disabled === false,
     );
-    await click(`[data-test-card-catalog-go-button]`);
+    await click(`[data-test-card-chooser-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index="1"]').exists();
     assert
@@ -675,17 +673,15 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-field="authorBio"]`);
     await click('[data-test-add-new="authorBio"]');
 
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
     assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
       .hasText('Choose an Author card');
     assert.dom('[data-test-results-count]').hasText('3 results');
 
     await fillIn(`[data-test-search-field]`, `alien`);
-    await waitFor('[data-test-card-catalog-item]');
-    assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Author/1"]`)
-      .exists();
+    await waitFor('[data-test-item-button]');
+    assert.dom(`[data-test-item-button="${testRealmURL}Author/1"]`).exists();
   });
 
   test(`displays no cards available message if search result does not exist`, async function (assert) {
@@ -699,10 +695,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
 
     await fillIn(`[data-test-search-field]`, `friend`);
-    await waitFor('[data-test-card-catalog-item]', { count: 0 });
+    await waitFor('[data-test-item-button]', { count: 0 });
     assert
       .dom(`[data-test-search-content-empty]`)
       .hasText('No cards available');
@@ -719,7 +715,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
     // The section block's `data-test-realm` attribute is keyed by realm
     // name (rendered from `realm.info(url).name`). When the realm info
     // fetch hasn't resolved yet, `realm.info()` returns a "Unknown
@@ -737,19 +733,18 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     assert
       .dom(
-        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
+        `[data-test-realm="Operator Mode Workspace"] [data-test-item-button]`,
       )
       .exists({ count: 3 });
     assert
-      .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
+      .dom(`[data-test-realm="Base Workspace"] [data-test-item-button]`)
       .exists();
 
     await fillIn(`[data-test-search-field]`, `general`);
 
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`,
-      { count: 0 },
-    );
+    await waitFor(`[data-test-item-button="${testRealmURL}Spec/pet-card"]`, {
+      count: 0,
+    });
 
     // Re-anchor after the search query mutates the section list — Glimmer
     // will rebuild the realm sections, and the placeholder-name race window
@@ -765,13 +760,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert
       .dom(
-        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
+        `[data-test-realm="Operator Mode Workspace"] [data-test-item-button]`,
       )
       .exists({ count: 1 });
 
     assert
       .dom(
-        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
+        `[data-test-realm="Operator Mode Workspace"] [data-test-item-button]`,
       )
       .exists({ count: 1 });
 
@@ -787,13 +782,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert
       .dom(
-        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`,
+        `[data-test-realm="Operator Mode Workspace"] [data-test-item-button="${testRealmURL}Spec/pet-room"]`,
       )
       .exists();
 
     assert
       .dom(
-        `[data-test-realm="Base Workspace"] [data-test-card-catalog-item="${baseRealm.url}types/card"]`,
+        `[data-test-realm="Base Workspace"] [data-test-item-button="${baseRealm.url}types/card"]`,
       )
       .exists();
 
@@ -805,7 +800,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Spec/pet-room"]`)
       .exists();
 
     // Switch to All Realms by clicking All Realms option
@@ -824,7 +819,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').exists();
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Spec/pet-room"]`)
       .exists();
   });
 
@@ -839,23 +834,23 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
 
     await typeIn(`[data-test-search-field]`, `pet`);
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
       { count: 0 },
     );
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
+    assert.dom(`[data-test-item-button]`).exists({ count: 2 });
 
-    await click(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`);
+    await click(`[data-test-item-button="${testRealmURL}Spec/pet-card"]`);
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"][data-test-card-catalog-item-selected]`,
+        `[data-test-item-button="${testRealmURL}Spec/pet-card"][data-test-item-button-selected]`,
       )
       .exists({ count: 1 });
 
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
       .dom(
@@ -878,16 +873,16 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await typeIn(`[data-test-search-field]`, `pet`);
     assert.dom(`[data-test-search-field]`).hasValue('pet');
-    await waitFor('[data-test-card-catalog-item]', { count: 2 });
-    await click(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`);
+    await waitFor('[data-test-item-button]', { count: 2 });
+    await click(`[data-test-item-button="${testRealmURL}Spec/pet-room"]`);
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"][data-test-card-catalog-item-selected]`,
+        `[data-test-item-button="${testRealmURL}Spec/pet-room"][data-test-item-button-selected]`,
       )
       .exists({ count: 1 });
 
-    await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+    await click('[data-test-card-chooser-cancel-button]');
+    await waitFor('[data-test-card-chooser-modal]', { count: 0 });
 
     assert.dom('[data-test-operator-mode-stack="0"]').exists();
     assert
@@ -895,11 +890,11 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .doesNotExist('no cards are added');
 
     await click(`[data-test-create-new-card-button]`);
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
     assert
       .dom(`[data-test-search-field]`)
       .hasNoValue('Card picker state is reset');
-    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+    assert.dom('[data-test-item-button-selected]').doesNotExist();
   });
 
   test(`+ button creates a new instance directly when the filtered type has no spec`, async function (assert) {
@@ -919,7 +914,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
 
     assert
-      .dom('[data-test-card-catalog-modal]')
+      .dom('[data-test-card-chooser-modal]')
       .doesNotExist('no spec chooser appears for a type without a spec');
 
     await waitFor('[data-test-stack-card-index="1"]');
@@ -941,23 +936,23 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click('[data-test-edit-button]');
     await click(`[data-test-field="authorBio"] [data-test-add-new]`);
 
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor('[data-test-card-catalog-item]', { count: 3 });
+    await waitFor('[data-test-card-chooser-modal]');
+    await waitFor('[data-test-item-button]', { count: 3 });
 
     await typeIn(`[data-test-search-field]`, `bob`);
     assert.dom(`[data-test-search-field]`).hasValue('bob');
 
-    await waitFor('[data-test-card-catalog-item]', { count: 1 });
+    await waitFor('[data-test-item-button]', { count: 1 });
 
-    await click(`[data-test-card-catalog-item="${testRealmURL}Author/1"]`);
+    await click(`[data-test-item-button="${testRealmURL}Author/1"]`);
     assert
       .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Author/1"][data-test-card-catalog-item-selected]`,
+        `[data-test-item-button="${testRealmURL}Author/1"][data-test-item-button-selected]`,
       )
       .exists({ count: 1 });
 
-    await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+    await click('[data-test-card-chooser-cancel-button]');
+    await waitFor('[data-test-card-chooser-modal]', { count: 0 });
 
     assert
       .dom(`[data-test-field="authorBio"] [data-test-add-new]`)
@@ -967,7 +962,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert
       .dom(`[data-test-search-field]`)
       .hasNoValue('Field picker state is reset');
-    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+    assert.dom('[data-test-item-button-selected]').doesNotExist();
   });
 
   test(`can add a card to the stack by URL from search sheet`, async function (assert) {
@@ -1431,12 +1426,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
-    await waitFor(`[data-test-card-catalog-item]`);
+    await waitFor(`[data-test-item-button]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+      '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
 
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');
     await click('[data-test-close-button]');
@@ -1471,18 +1466,18 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // Open single-select linksTo chooser for 'pet' field
     await waitFor(`[data-test-add-new="pet"]`);
     await click(`[data-test-add-new="pet"]`);
-    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-chooser-modal]');
 
     assert
       .dom('[data-test-selection-dropdown-trigger]')
       .doesNotExist('selection dropdown is hidden in single-select mode');
 
     // Close and open multi-select linksToMany chooser for 'friends' field
-    await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+    await click('[data-test-card-chooser-cancel-button]');
+    await waitFor('[data-test-card-chooser-modal]', { count: 0 });
 
     await click(`[data-test-add-new="friends"]`);
-    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-chooser-modal]');
 
     assert
       .dom('[data-test-selection-dropdown-trigger]')
@@ -1491,8 +1486,8 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       );
 
     // Selecting a card reveals the dropdown
-    await waitFor('[data-test-card-catalog-item]');
-    await click('[data-test-card-catalog-item]');
+    await waitFor('[data-test-item-button]');
+    await click('[data-test-item-button]');
 
     assert
       .dom('[data-test-selection-dropdown-trigger]')

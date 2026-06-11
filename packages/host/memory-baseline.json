@@ -351,7 +351,7 @@
       "delta_mb": 29.9,
       "samples": [35.7, 22, 35.7, 27.9, 28.2]
     },
-    "Integration | card-catalog": {
+    "Integration | card-chooser": {
       "delta_mb": -23.2,
       "samples": [14, -8.4, -5.4, -56.4, -59.9]
     },

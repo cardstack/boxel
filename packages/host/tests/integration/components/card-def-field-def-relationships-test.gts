@@ -580,9 +580,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}japan"]`);
+    await click(`[data-test-item-button="${testRealmURL}japan"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitFor('[card-chooser-modal]', { count: 0 });
 
@@ -590,9 +590,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     assert.dom('[data-test-field="trips"]').containsText('Japan');
 
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}usa"]`);
+    await click(`[data-test-item-button="${testRealmURL}usa"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitFor('[card-chooser-modal]', { count: 0 });
     assert.dom('[data-test-pill-item]').exists({ count: 2 });

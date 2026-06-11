@@ -340,9 +340,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+      '[data-test-item-button="http://test-realm/test/Skill/example"]',
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await click(
       '[data-test-attached-card="http://test-realm/test/Person/fadhlan"] [data-test-remove-card-btn]',
     );
@@ -378,9 +378,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await waitFor(`[data-test-card-catalog-item="${skillId}"]`);
-    await click(`[data-test-card-catalog-item="${skillId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${skillId}"]`);
+    await click(`[data-test-item-button="${skillId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(
       () =>
@@ -419,13 +419,13 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await fillIn('[data-test-search-field]', 'Exanple');
-    await waitFor(`[data-test-card-catalog-item="${availableSkillId}"]`);
+    await waitFor(`[data-test-item-button="${availableSkillId}"]`);
 
     assert
-      .dom(`[data-test-card-catalog-item="${enabledSkillId}"]`)
+      .dom(`[data-test-item-button="${enabledSkillId}"]`)
       .doesNotExist('already-enabled skill is excluded from the picker');
     assert
-      .dom(`[data-test-card-catalog-item="${availableSkillId}"]`)
+      .dom(`[data-test-item-button="${availableSkillId}"]`)
       .exists('a different skill remains available in the picker');
   });
 

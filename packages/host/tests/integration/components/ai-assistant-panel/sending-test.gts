@@ -419,10 +419,8 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Fadhlan');
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -499,7 +497,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     // Click "Attach a Card" which opens card catalog with baseFilter: { type: CardDef }
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
-    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-chooser-modal]');
     await settled();
 
     // Type picker should be present and show types (not empty due to CardDef filter)
@@ -547,7 +545,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     // Person/fadhlan should appear in search results
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Person/fadhlan"]`)
       .exists(
         'Person/fadhlan appears in search results when Person type is selected',
       );
@@ -564,7 +562,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     // Search results should still show Person/fadhlan under "Any Type"
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Person/fadhlan"]`)
       .exists('Person/fadhlan still appears in search results under Any Type');
   });
 

@@ -952,9 +952,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-links-to-editor="pet"] [data-test-add-new]`,
       );
-      await click(
-        `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
-      );
+      await click(`[data-test-item-button-create-new="${testRealmURL}"]`);
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );

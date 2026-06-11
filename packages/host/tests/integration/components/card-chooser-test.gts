@@ -220,10 +220,10 @@ module('Integration | card-chooser', function (hooks) {
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)
         .hasText('6 results');
       assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .dom(`[data-test-realm="${realmName}"] [data-test-item-button]`)
         .exists({ count: 5 });
       assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
+        .dom('[data-test-realm="Base Workspace"] [data-test-item-button]')
         .exists();
       assert
         .dom('[data-test-realm-picker]')
@@ -231,9 +231,9 @@ module('Integration | card-chooser', function (hooks) {
 
       let localResults = [
         ...document.querySelectorAll(
-          '[data-test-realm="Local Workspace"] [data-test-card-catalog-item]',
+          '[data-test-realm="Local Workspace"] [data-test-item-button]',
         ),
-      ].map((n) => n.getAttribute('data-test-card-catalog-item'));
+      ].map((n) => n.getAttribute('data-test-item-button'));
 
       // note that Address field is not in the results
       assert.deepEqual(localResults, [
@@ -261,7 +261,7 @@ module('Integration | card-chooser', function (hooks) {
 
       // Only Base Workspace results should be shown
       assert
-        .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
+        .dom(`[data-test-realm="Base Workspace"] [data-test-item-button]`)
         .exists();
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
     });
@@ -284,13 +284,13 @@ module('Integration | card-chooser', function (hooks) {
         .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
         .doesNotExist("don't show pagination button for test realm");
       assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .dom(`[data-test-realm="${realmName}"] [data-test-item-button]`)
         .exists({ count: 6 });
       let localResults = [
         ...document.querySelectorAll(
-          '[data-test-realm="Local Workspace"] [data-test-card-catalog-item]',
+          '[data-test-realm="Local Workspace"] [data-test-item-button]',
         ),
-      ].map((n) => n.getAttribute('data-test-card-catalog-item'));
+      ].map((n) => n.getAttribute('data-test-item-button'));
       assert.deepEqual(localResults, [
         'http://test-realm/test/Spec/author',
         'http://test-realm/test/Spec/blog-post',
@@ -302,19 +302,17 @@ module('Integration | card-chooser', function (hooks) {
     });
 
     test('catalog items render with the Adorn visual treatment', async function (assert) {
-      await waitFor(
-        `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
-      );
+      await waitFor(`[data-test-realm="${realmName}"] [data-test-item-button]`);
 
       // The card chooser opts in to the Adorn treatment (teal hover tab +
       // chip + outline), so every catalog item button carries the `adorn`
       // class — matching the operator-mode cards-grid look.
       assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .dom(`[data-test-realm="${realmName}"] [data-test-item-button]`)
         .exists({ count: 5 }, 'catalog items are rendered');
       assert
         .dom(
-          `[data-test-realm="${realmName}"] [data-test-card-catalog-item]:not(.adorn)`,
+          `[data-test-realm="${realmName}"] [data-test-item-button]:not(.adorn)`,
         )
         .doesNotExist('every catalog item renders with the adorn class');
     });
@@ -330,16 +328,16 @@ module('Integration | card-chooser', function (hooks) {
         .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${card}"]`);
-      assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${card}"]`);
+      assert.dom(`[data-test-item-button-selected]`).doesNotExist();
 
       await triggerKeyEvent(
-        `[data-test-card-catalog-item="${card}"]`,
+        `[data-test-item-button="${card}"]`,
         'keydown',
         'Enter',
       );
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -357,21 +355,21 @@ module('Integration | card-chooser', function (hooks) {
         .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${card}"]`);
-      assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${card}"]`);
+      assert.dom(`[data-test-item-button-selected]`).doesNotExist();
 
-      await click(`[data-test-card-catalog-item="${card}"]`);
+      await click(`[data-test-item-button="${card}"]`);
       assert
-        .dom(`[data-test-card-catalog-item="${card}"]`)
-        .hasAttribute('data-test-card-catalog-item-selected');
+        .dom(`[data-test-item-button="${card}"]`)
+        .hasAttribute('data-test-item-button-selected');
 
       await triggerKeyEvent(
-        `[data-test-card-catalog-item="${card}"]`,
+        `[data-test-item-button="${card}"]`,
         'keydown',
         'Enter',
       );
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -390,23 +388,23 @@ module('Integration | card-chooser', function (hooks) {
         .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${card1}"]`);
-      await waitFor(`[data-test-card-catalog-item="${card2}"]`);
-      assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${card1}"]`);
+      await waitFor(`[data-test-item-button="${card2}"]`);
+      assert.dom(`[data-test-item-button-selected]`).doesNotExist();
 
-      await click(`[data-test-card-catalog-item="${card1}"]`);
+      await click(`[data-test-item-button="${card1}"]`);
       assert
-        .dom(`[data-test-card-catalog-item="${card1}"]`)
-        .hasAttribute('data-test-card-catalog-item-selected');
+        .dom(`[data-test-item-button="${card1}"]`)
+        .hasAttribute('data-test-item-button-selected');
 
-      await focus(`[data-test-card-catalog-item="${card2}"]`);
+      await focus(`[data-test-item-button="${card2}"]`);
       await triggerKeyEvent(
-        `[data-test-card-catalog-item="${card2}"]`,
+        `[data-test-item-button="${card2}"]`,
         'keydown',
         'Enter',
       );
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -424,12 +422,12 @@ module('Integration | card-chooser', function (hooks) {
         .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${card}"]`);
-      assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${card}"]`);
+      assert.dom(`[data-test-item-button-selected]`).doesNotExist();
 
-      await doubleClick(`[data-test-card-catalog-item="${card}"]`);
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await doubleClick(`[data-test-item-button="${card}"]`);
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -446,15 +444,15 @@ module('Integration | card-chooser', function (hooks) {
         .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item]`);
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button]`);
 
       await triggerKeyEvent(
-        `[data-test-card-catalog-modal]`,
+        `[data-test-card-chooser-modal]`,
         'keydown',
         'Escape',
       );
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
       assert.dom(`[data-test-stack-card-index="0"]`).exists();
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
     });
@@ -462,10 +460,8 @@ module('Integration | card-chooser', function (hooks) {
 
   module('content search', function () {
     test('finds cards by description content, not just title, and respects type scoping', async function (assert) {
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/author"]`,
-      );
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}Spec/author"]`);
 
       // 'ornithologists' appears in both Spec/author (specType: 'card') and
       // Spec/address (specType: 'field'). The chooser's baseFilter scopes to
@@ -473,18 +469,18 @@ module('Integration | card-chooser', function (hooks) {
       // matches is layered on top of type scoping, not replacing it.
       await fillIn('[data-test-search-field]', 'ornithologists');
       await waitFor(
-        `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${testRealmURL}Spec/author"]`,
+        `[data-test-realm="${realmName}"] [data-test-item-button="${testRealmURL}Spec/author"]`,
       );
 
       assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .dom(`[data-test-realm="${realmName}"] [data-test-item-button]`)
         .exists(
           { count: 1 },
           'only the card-type spec is shown; field-type spec with the same content term is filtered out',
         );
       assert
         .dom(
-          `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${testRealmURL}Spec/address"]`,
+          `[data-test-realm="${realmName}"] [data-test-item-button="${testRealmURL}Spec/address"]`,
         )
         .doesNotExist(
           'field-type spec is excluded even though its description matches',

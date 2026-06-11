@@ -102,22 +102,22 @@ module(
       await renderRealmConfigEdit([{ path: '/docs' }]);
 
       await click('[data-test-add-new="instance"]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       // Wait on `data-test-realm-url` (always present) rather than
       // `data-test-realm` (the user-visible name, which races
       // `realm.info()` and may show the "Unknown Workspace"
       // placeholder during initial render — search-result-section.gts
       // documents the race).
       await waitFor(
-        `[data-test-card-catalog-modal] [data-test-realm-url="${testRealmURL}"]`,
+        `[data-test-card-chooser-modal] [data-test-realm-url="${testRealmURL}"]`,
       );
       // The realm picker is wrapped in WithKnownRealmsLoaded, which
       // renders a `<:loading>` block until the realms list resolves;
       // the actual picker trigger is only present in the `<:default>`
-      // block. Wait for it. Scoping to `[data-test-card-catalog-modal]`
+      // block. Wait for it. Scoping to `[data-test-card-chooser-modal]`
       // dodges the operator-mode SearchSheet, which renders its own
       // (unlocked) RealmPicker alongside the modal's.
-      await waitFor('[data-test-card-catalog-modal] [data-test-realm-picker]');
+      await waitFor('[data-test-card-chooser-modal] [data-test-realm-picker]');
 
       // power-select reflects `@disabled` on the trigger as
       // `aria-disabled="true"` — this is the reliable signal for
@@ -126,7 +126,7 @@ module(
       // round-trip its reactivity through the BoxelMultiSelectBasic →
       // PowerSelect → ember-basic-dropdown chain.
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
+        .dom('[data-test-card-chooser-modal] [data-test-realm-picker]')
         .hasAttribute('aria-disabled', 'true', 'the realm picker is locked');
       // The picker's selected pill must NOT be the "All" / "Select All"
       // option. If `consumingRealm` doesn't reach the chooser,
@@ -140,26 +140,26 @@ module(
       // "Unnamed Workspace" placeholder until that async fetch resolves.
       assert
         .dom(
-          '[data-test-card-catalog-modal] [data-test-realm-picker] [data-test-boxel-picker-selected-item="All"]',
+          '[data-test-card-chooser-modal] [data-test-realm-picker] [data-test-boxel-picker-selected-item="All"]',
         )
         .doesNotExist(
           'the realm picker is scoped to a specific realm, not the unscoped "All" select-all pill',
         );
       assert
         .dom(
-          '[data-test-card-catalog-modal] [data-test-realm-picker] [data-test-boxel-picker-remove-button]',
+          '[data-test-card-chooser-modal] [data-test-realm-picker] [data-test-boxel-picker-remove-button]',
         )
         .doesNotExist(
           'the consuming-realm pill does not offer a remove affordance when the picker is locked',
         );
       assert
         .dom(
-          `[data-test-card-catalog-modal] [data-test-realm-url="${testRealmURL}"]`,
+          `[data-test-card-chooser-modal] [data-test-realm-url="${testRealmURL}"]`,
         )
         .exists('candidates from the consuming realm are shown');
       assert
         .dom(
-          `[data-test-card-catalog-modal] [data-test-realm-url="${baseRealm.url}"]`,
+          `[data-test-card-chooser-modal] [data-test-realm-url="${baseRealm.url}"]`,
         )
         .doesNotExist('cross-realm candidates are excluded by the lock');
     });
