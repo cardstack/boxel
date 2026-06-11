@@ -137,15 +137,19 @@ export default class Card extends Route {
       : undefined;
     let stacks: { id: string; format: string; type?: StackItemType }[][] = [];
     if (resolvedItem) {
-      stacks = [
-        [
-          {
-            id: resolvedItem.id,
-            format: 'isolated',
-            type: resolvedItem.type,
-          },
-        ],
-      ];
+      // Only carry `type` when the resolved instance is a file. The canonical
+      // serializer (OperatorModeStateService.rawStateWithSavedCardsOnly)
+      // omits `type` for cards, so emitting `type: 'card'` here would diverge
+      // from the canonical string and trip the equality guard on every
+      // subsequent model refresh.
+      let stackItem: { id: string; format: string; type?: StackItemType } = {
+        id: resolvedItem.id,
+        format: 'isolated',
+      };
+      if (resolvedItem.type === 'file') {
+        stackItem.type = 'file';
+      }
+      stacks = [[stackItem]];
     }
     let operatorModeStateObject = operatorModeState
       ? JSON.parse(operatorModeState)
