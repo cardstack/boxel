@@ -828,6 +828,40 @@ export async function logRealmIndexDiagnostics(
   }
 }
 
+/**
+ * Refuse to snapshot a template whose from-scratch index never completed.
+ * `waitForQueueIdle` only proves the queue drained — a failed
+ * `from-scratch-index` job (e.g. a timed-out prerender visit) leaves the
+ * realm at `current_version` 0 with no `realm_meta` row, and snapshotting
+ * that database poisons every test module that clones the template. An
+ * intentionally-empty realm still indexes to version >= 1 with a
+ * `realm_meta` row (`instances: 0`), so this check holds for blank
+ * fixtures too.
+ */
+async function assertRealmIndexBuilt(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+): Promise<void> {
+  let [versionRow] = await dbAdapter.execute(
+    `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+    { bind: [realmURL] },
+  );
+  let currentVersion = Number(versionRow?.current_version ?? 0);
+  let [metaRow] = await dbAdapter.execute(
+    `SELECT realm_version FROM realm_meta WHERE realm_url = $1 AND realm_version = $2`,
+    { bind: [realmURL, currentVersion] },
+  );
+  if (currentVersion < 1 || !metaRow) {
+    throw new Error(
+      `template build for ${realmURL} finished with an unindexed realm ` +
+        `(current_version=${currentVersion}, realm_meta ${
+          metaRow ? 'present' : 'missing'
+        }) — refusing to snapshot. The from-scratch-index job likely ` +
+        `failed; see the [realm-index-diag template-build] output above.`,
+    );
+  }
+}
+
 interface CachedPermissionedRealmTemplateEntry {
   ready: Promise<void>;
 }
@@ -2257,6 +2291,10 @@ async function buildPermissionedRealmTemplate(
       (options.realmURL ?? testRealmURL).href,
       'template-build',
     );
+    await assertRealmIndexBuilt(
+      dbAdapter,
+      (options.realmURL ?? testRealmURL).href,
+    );
     await teardownPermissionedRealmFixture(fixture.testRealmServer);
     fixture = undefined;
 
@@ -2428,6 +2466,7 @@ async function buildPermissionedRealmsTemplate(
         fixtureRealm.realm.url,
         'template-build',
       );
+      await assertRealmIndexBuilt(dbAdapter, fixtureRealm.realm.url);
     }
     await teardownPermissionedRealmsFixture(fixture.realms);
     fixture = undefined;

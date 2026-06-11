@@ -449,7 +449,18 @@ module(basename(__filename), function (hooks) {
   });
 });
 
-module(basename(__filename), function () {
+module(basename(__filename), function (hooks) {
+  // These env vars are read at createRemotePrerenderer() call time, so a
+  // leaked value poisons every prerenderer created later in this shard
+  // process — e.g. a 20ms request timeout (clamped to the 1s floor) made
+  // the next test file's cached-template index build fail intermittently.
+  hooks.afterEach(function () {
+    delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+    delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
+    delete process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS;
+    delete process.env.PRERENDER_MANAGER_MAX_DELAY_MS;
+  });
+
   module('remote prerenderer timeouts', function () {
     test('does not retry when the client aborts from request timeout', async function (assert) {
       process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';
