@@ -269,9 +269,6 @@ jobs:
 
   host-test:
     name: Host Tests
-    # TEMPORARY: disabled to speed up iteration on live-test env-mode.
-    # Flip back to `true` (or remove this `if:`) before merge.
-    if: false
     runs-on: ubuntu-latest
     needs: [test-web-assets, check-percy]
     strategy:
