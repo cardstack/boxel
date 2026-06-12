@@ -292,7 +292,7 @@ File open in code editor: http://localhost:4201/experiments/author.gts
   Inheritance chain:
     1. Address from http://localhost:4201/experiments/author
        Fields: street, city, state
-      2. CardDef from https://cardstack.com/base/card-api
+      2. CardDef from @cardstack/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview
@@ -1991,7 +1991,7 @@ Attached Files (files with newer versions don't show their content):
     assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
       systemPromptText.includes(
-        'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
+        'Skill (id: @cardstack/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
@@ -2708,7 +2708,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.equal(result[5].role, 'tool');
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
+    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
     assert.equal((result[5].content as string).trim(), expected.trim());
   });
