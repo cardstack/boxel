@@ -28,7 +28,6 @@ import {
   KanbanColumnConfigSidebar,
   KanbanPlane,
   ContextButton,
-  Pill,
   Switch,
   Tooltip,
   type KanbanColumnConfig,
@@ -455,8 +454,11 @@ class IssueIsolated extends Component<typeof Issue> {
       .issue-sidebar-inner {
         width: 18rem;
         padding: var(--boxel-sp-lg) var(--boxel-sp);
-        background: var(--sidebar, var(--boxel-50));
-        color: var(--sidebar-foreground, var(--foreground, var(--boxel-dark)));
+        background: var(--sidebar, var(--card, var(--boxel-50)));
+        color: var(
+          --sidebar-foreground,
+          var(--card-foreground, var(--boxel-dark))
+        );
         display: grid;
         gap: var(--boxel-sp-lg);
         align-content: start;
@@ -590,14 +592,10 @@ class IssueIsolated extends Component<typeof Issue> {
 }
 
 class IssueEdit extends Component<typeof Issue> {
-  @tracked basicInfoOpen = true;
   @tracked contentOpen = true;
   @tracked commentsOpen = true;
   @tracked relationsOpen = true;
 
-  toggleBasicInfo = () => {
-    this.basicInfoOpen = !this.basicInfoOpen;
-  };
   toggleContent = () => {
     this.contentOpen = !this.contentOpen;
   };
@@ -610,59 +608,42 @@ class IssueEdit extends Component<typeof Issue> {
 
   <template>
     <div class='issue-edit' data-test-issue-edit>
-      <Accordion class='edit-accordion' @displayContainer={{false}} as |A|>
-        <A.Item
-          @id='basic-info'
-          @isOpen={{this.basicInfoOpen}}
-          @onClick={{this.toggleBasicInfo}}
+      <div class='edit-section-body edit-basic-info'>
+        <FieldContainer
+          @label='Summary'
+          @tag='label'
+          @vertical={{true}}
+          data-test-summary-field
         >
-          <:title>Basic Info</:title>
-          <:content>
-            <div class='edit-section-body'>
-              <FieldContainer
-                @label='Summary'
-                @tag='label'
-                @vertical={{true}}
-                data-test-summary-field
-              >
-                <@fields.summary />
-              </FieldContainer>
-              <div class='field-row'>
-                <FieldContainer
-                  @label='Issue ID'
-                  @tag='label'
-                  @vertical={{true}}
-                >
-                  <@fields.issueId />
-                </FieldContainer>
-                <FieldContainer @label='Type' @tag='label' @vertical={{true}}>
-                  <@fields.issueType />
-                </FieldContainer>
-              </div>
-              <div class='field-row'>
-                <FieldContainer
-                  @label='Status'
-                  @tag='label'
-                  @vertical={{true}}
-                  data-test-issue-edit-status
-                >
-                  <@fields.status />
-                </FieldContainer>
-                <FieldContainer
-                  @label='Priority'
-                  @tag='label'
-                  @vertical={{true}}
-                >
-                  <@fields.priority />
-                </FieldContainer>
-              </div>
-              <FieldContainer @label='Project' @vertical={{true}}>
-                <@fields.project />
-              </FieldContainer>
-            </div>
-          </:content>
-        </A.Item>
+          <@fields.summary />
+        </FieldContainer>
+        <div class='field-row'>
+          <FieldContainer @label='Issue ID' @tag='label' @vertical={{true}}>
+            <@fields.issueId />
+          </FieldContainer>
+          <FieldContainer @label='Type' @tag='label' @vertical={{true}}>
+            <@fields.issueType />
+          </FieldContainer>
+        </div>
+        <div class='field-row'>
+          <FieldContainer
+            @label='Status'
+            @tag='label'
+            @vertical={{true}}
+            data-test-issue-edit-status
+          >
+            <@fields.status />
+          </FieldContainer>
+          <FieldContainer @label='Priority' @tag='label' @vertical={{true}}>
+            <@fields.priority />
+          </FieldContainer>
+        </div>
+        <FieldContainer @label='Project' @vertical={{true}}>
+          <@fields.project />
+        </FieldContainer>
+      </div>
 
+      <Accordion class='edit-accordion' @displayContainer={{false}} as |A|>
         <A.Item
           @id='content'
           @isOpen={{this.contentOpen}}
@@ -828,6 +809,11 @@ export class Issue extends CardDef {
 
     <template>
       <FittedCard class='issue-fitted' @titleTag='h3'>
+        <:badgeRight>
+          <StatusPill class='status-badge-right' @color={{this.statusColor}}>
+            {{this.statusLabel}}
+          </StatusPill>
+        </:badgeRight>
         <:eyebrow><div class='issue-id'><CheckboxIcon
               width='16'
               height='16'
@@ -886,6 +872,27 @@ export class Issue extends CardDef {
         .issue-fitted {
           --boxel-heading-font-weight: 500;
           --fc-subtitle-line-clamp: 1;
+          --fc-badge-right-display: none;
+        }
+        .status-badge-right {
+          font-size: 0.6875rem;
+        }
+        @container fitted-card (1.0 < aspect-ratio) and (width >= 150px) and (height <= 105px) {
+          .issue-fitted {
+            --fc-badge-right-display: block;
+            --fc-badge-offset: -1px;
+          }
+          .status-badge-right {
+            border-bottom-right-radius: 0;
+            border-top-right-radius: 0;
+            border-top-left-radius: 0;
+          }
+        }
+        /* Large badge */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height >= 105px) {
+          .issue-fitted {
+            --fc-footer-display: none;
+          }
         }
         .issue-id {
           display: flex;
@@ -1039,11 +1046,645 @@ export class Issue extends CardDef {
   static isolated = IssueIsolated;
 }
 
+// ── ProjectEdit ────────────────────────────────────────────────────────────
+
+class ProjectEdit extends Component<typeof Project> {
+  @tracked contentOpen = true;
+  @tracked configOpen = true;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    if (!this.args.model?.issueStatusOptions?.length) {
+      scheduleOnce('actions', this, this.initDefaultIssueStatusOptions);
+    }
+  }
+
+  initDefaultIssueStatusOptions() {
+    if (!this.args.model?.issueStatusOptions?.length) {
+      this.args.model.issueStatusOptions =
+        buildIssueOptionFields(issueStatusOptions);
+    }
+  }
+
+  toggleContent = () => {
+    this.contentOpen = !this.contentOpen;
+  };
+  toggleConfig = () => {
+    this.configOpen = !this.configOpen;
+  };
+  @tracked knowledgeBaseOpen = true;
+  toggleKnowledgeBase = () => {
+    this.knowledgeBaseOpen = !this.knowledgeBaseOpen;
+  };
+
+  <template>
+    <div class='project-edit'>
+      <div class='edit-section-body edit-identity'>
+        <div class='field-row'>
+          <FieldContainer @label='Project Name' @tag='label' @vertical={{true}}>
+            <@fields.projectName />
+          </FieldContainer>
+          <FieldContainer @label='Project Code' @tag='label' @vertical={{true}}>
+            <@fields.projectCode />
+          </FieldContainer>
+        </div>
+        <div class='field-row'>
+          <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
+            <@fields.projectStatus />
+          </FieldContainer>
+          <FieldContainer @label='Theme' @tag='label' @vertical={{true}}>
+            <@fields.cardInfo.theme />
+          </FieldContainer>
+        </div>
+      </div>
+
+      <Accordion class='edit-accordion' @displayContainer={{false}} as |A|>
+        <A.Item
+          @id='content'
+          @isOpen={{this.contentOpen}}
+          @onClick={{this.toggleContent}}
+        >
+          <:title>Content</:title>
+          <:content>
+            <div class='edit-section-body'>
+              <FieldContainer
+                @label='Objective'
+                @tag='label'
+                @vertical={{true}}
+              >
+                <@fields.objective />
+              </FieldContainer>
+              <FieldContainer @label='Scope' @tag='label' @vertical={{true}}>
+                <@fields.scope />
+              </FieldContainer>
+              <FieldContainer
+                @label='Technical Context'
+                @tag='label'
+                @vertical={{true}}
+              >
+                <@fields.technicalContext />
+              </FieldContainer>
+              <FieldContainer
+                @label='Success Criteria'
+                @tag='label'
+                @vertical={{true}}
+              >
+                <@fields.successCriteria />
+              </FieldContainer>
+            </div>
+          </:content>
+        </A.Item>
+
+        <A.Item
+          @id='knowledge-base'
+          @isOpen={{this.knowledgeBaseOpen}}
+          @onClick={{this.toggleKnowledgeBase}}
+        >
+          <:title>Knowledge Base</:title>
+          <:content>
+            <div class='edit-section-body'>
+              <FieldContainer @label='Knowledge Base' @vertical={{true}}>
+                <@fields.knowledgeBase />
+              </FieldContainer>
+            </div>
+          </:content>
+        </A.Item>
+
+        <A.Item
+          @id='config'
+          @isOpen={{this.configOpen}}
+          @onClick={{this.toggleConfig}}
+        >
+          <:title>Issue Configuration</:title>
+          <:content>
+            <div class='edit-section-body'>
+              <p class='section-copy'>
+                Define the status options that issues in this project can use.
+              </p>
+              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
+                <@fields.issueStatusOptions />
+              </FieldContainer>
+            </div>
+          </:content>
+        </A.Item>
+      </Accordion>
+    </div>
+    <style scoped>
+      .project-edit {
+        container-type: inline-size;
+      }
+      .edit-accordion {
+        --boxel-accordion-title-font-size: 0.8125rem;
+        --boxel-accordion-title-font-weight: 600;
+        --boxel-accordion-trigger-padding-inline: var(--boxel-sp);
+        --boxel-accordion-trigger-padding-block: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .edit-accordion :deep(.boxel-accordion-item-trigger) {
+        background: var(--muted, var(--boxel-100));
+      }
+      .edit-section-body {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp-lg);
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp);
+      }
+      .edit-identity :deep(.links-to-editor .field-component-card) {
+        min-height: 2.5rem;
+        max-height: 2.5rem;
+        height: 2.5rem;
+      }
+      .section-copy {
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        line-height: 1.5;
+        color: var(--muted-foreground, var(--boxel-600));
+      }
+      @container (width < 480px) {
+        .edit-section-body {
+          padding: var(--boxel-sp);
+        }
+        .field-row {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
+// ── ProjectIsolated ─────────────────────────────────────────────────────────
+
+class ProjectIsolated extends Component<typeof Project> {
+  @tracked showSidebar = true;
+  @tracked objectiveOpen = true;
+  @tracked scopeOpen = true;
+  @tracked technicalOpen = true;
+  @tracked criteriaOpen = true;
+  @tracked issuesOpen = true;
+
+  get statusColor(): string | undefined {
+    return findOptionColor(
+      projectStatusOptions,
+      this.args.model?.projectStatus ?? 'planning',
+    );
+  }
+
+  toggleSidebar = () => {
+    this.showSidebar = !this.showSidebar;
+  };
+  toggleObjective = () => {
+    this.objectiveOpen = !this.objectiveOpen;
+  };
+  toggleScope = () => {
+    this.scopeOpen = !this.scopeOpen;
+  };
+  toggleTechnical = () => {
+    this.technicalOpen = !this.technicalOpen;
+  };
+  toggleCriteria = () => {
+    this.criteriaOpen = !this.criteriaOpen;
+  };
+  toggleIssues = () => {
+    this.issuesOpen = !this.issuesOpen;
+  };
+
+  <template>
+    <div class='project-isolated'>
+      <header class='project-header'>
+        <div class='header-chips'>
+          <Folder class='project-icon' aria-hidden='true' />
+          <span class='project-code'>{{if
+              @model.projectCode
+              @model.projectCode
+              'PROJECT'
+            }}</span>
+          <StatusPill @color={{this.statusColor}}>
+            {{#if @model.projectStatus}}
+              <@fields.projectStatus @format='atom' />
+            {{else}}
+              Planning
+            {{/if}}
+          </StatusPill>
+          <ContextButton
+            class='sidebar-toggle'
+            @icon={{if
+              this.showSidebar
+              LayoutSidebarRightCollapse
+              LayoutSidebarRightExpand
+            }}
+            @label={{if this.showSidebar 'Collapse sidebar' 'Expand sidebar'}}
+            @variant='ghost'
+            @isToggle={{true}}
+            @isActive={{this.showSidebar}}
+            {{on 'click' this.toggleSidebar}}
+          />
+        </div>
+        <h1 class='project-title'><@fields.cardTitle /></h1>
+      </header>
+
+      <div
+        class='project-body'
+        data-sidebar={{if this.showSidebar 'open' 'closed'}}
+      >
+        <main class='project-main'>
+          <Accordion
+            class='content-accordion'
+            @displayContainer={{false}}
+            as |A|
+          >
+            <A.Item
+              @id='objective'
+              @isOpen={{this.objectiveOpen}}
+              @onClick={{this.toggleObjective}}
+            >
+              <:title>Objective</:title>
+              <:content>
+                <div class='section-body'>
+                  {{#if @model.objective}}
+                    <@fields.objective />
+                  {{else}}
+                    <p class='empty-section-text'>
+                      No objective defined yet. Add goals and context in edit
+                      mode.
+                    </p>
+                  {{/if}}
+                </div>
+              </:content>
+            </A.Item>
+            {{#if @model.scope}}
+              <A.Item
+                @id='scope'
+                @isOpen={{this.scopeOpen}}
+                @onClick={{this.toggleScope}}
+              >
+                <:title>Scope</:title>
+                <:content>
+                  <div class='section-body'><@fields.scope /></div>
+                </:content>
+              </A.Item>
+            {{/if}}
+            {{#if @model.technicalContext}}
+              <A.Item
+                @id='technical'
+                @isOpen={{this.technicalOpen}}
+                @onClick={{this.toggleTechnical}}
+              >
+                <:title>Technical Context</:title>
+                <:content>
+                  <div class='section-body'><@fields.technicalContext /></div>
+                </:content>
+              </A.Item>
+            {{/if}}
+            {{#if @model.successCriteria}}
+              <A.Item
+                @id='criteria'
+                @isOpen={{this.criteriaOpen}}
+                @onClick={{this.toggleCriteria}}
+              >
+                <:title>Success Criteria</:title>
+                <:content>
+                  <div class='section-body'><@fields.successCriteria /></div>
+                </:content>
+              </A.Item>
+            {{/if}}
+            {{#if @model.issues.length}}
+              <A.Item
+                @id='issues'
+                @isOpen={{this.issuesOpen}}
+                @onClick={{this.toggleIssues}}
+              >
+                <:title>
+                  Issues
+                  <span class='count-badge'>{{@model.issues.length}}</span>
+                </:title>
+                <:content>
+                  <div class='issues-list'>
+                    <@fields.issues />
+                  </div>
+                </:content>
+              </A.Item>
+            {{/if}}
+          </Accordion>
+        </main>
+
+        <aside class='project-sidebar'>
+          <div class='project-sidebar-inner'>
+            <dl class='meta-list'>
+              <div class='meta-item'>
+                <dt>Status</dt>
+                <dd>
+                  <StatusPill @color={{this.statusColor}}>
+                    {{#if @model.projectStatus}}
+                      <@fields.projectStatus @format='atom' />
+                    {{else}}
+                      Planning
+                    {{/if}}
+                  </StatusPill>
+                </dd>
+              </div>
+              {{#if @model.issues.length}}
+                <div class='meta-item'>
+                  <dt>Issues</dt>
+                  <dd class='stat-value'>
+                    <CheckboxIcon
+                      class='stat-icon'
+                      width='14'
+                      height='14'
+                      aria-hidden='true'
+                    />
+                    {{@model.issues.length}}
+                  </dd>
+                </div>
+              {{/if}}
+              {{#if @model.knowledgeBase.length}}
+                <div class='meta-item'>
+                  <dt>Knowledge</dt>
+                  <dd class='stat-value'>
+                    <BookOpen
+                      class='stat-icon'
+                      width='14'
+                      height='14'
+                      aria-hidden='true'
+                    />
+                    {{@model.knowledgeBase.length}}
+                  </dd>
+                </div>
+              {{/if}}
+            </dl>
+
+            {{#if @model.knowledgeBase.length}}
+              <div class='sidebar-section'>
+                <h3 class='sidebar-section-title'>Knowledge Base</h3>
+                <div class='related-list'>
+                  <@fields.knowledgeBase />
+                </div>
+              </div>
+            {{/if}}
+          </div>
+        </aside>
+      </div>
+    </div>
+    <style scoped>
+      .project-isolated {
+        container-type: inline-size;
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        background: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .project-header {
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-lg);
+        background: var(--muted, var(--boxel-100));
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+        flex-shrink: 0;
+      }
+      .header-chips {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        flex-wrap: wrap;
+      }
+      .project-icon {
+        width: 1rem;
+        height: 1rem;
+        color: var(--muted-foreground, var(--boxel-500));
+        flex-shrink: 0;
+      }
+      .project-code {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+      .sidebar-toggle {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      .project-title {
+        margin: 0;
+        font-size: 1.375rem;
+        font-weight: 600;
+        line-height: 1.3;
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .project-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+      }
+      .project-main {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+      }
+      .content-accordion {
+        --boxel-accordion-title-font-size: 0.8125rem;
+        --boxel-accordion-title-font-weight: 600;
+        --boxel-accordion-trigger-padding-inline: var(--boxel-sp);
+        --boxel-accordion-trigger-padding-block: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .content-accordion :deep(.boxel-accordion-item-trigger) {
+        background: var(--muted, var(--boxel-100));
+      }
+      .count-badge {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+        background: color-mix(
+          in oklch,
+          var(--muted-foreground, var(--boxel-500)) 15%,
+          transparent
+        );
+        padding: 0.1em 0.5em;
+        border-radius: 999px;
+      }
+      .section-body {
+        padding: var(--boxel-sp);
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--foreground, var(--boxel-dark));
+        max-width: 72ch;
+        overflow-wrap: break-word;
+        word-break: break-word;
+      }
+      .section-body :deep(img),
+      .section-body :deep(video) {
+        max-width: 100%;
+        height: auto;
+      }
+      .section-body :deep(pre) {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      .section-body :deep(table) {
+        max-width: 100%;
+        display: block;
+        overflow-x: auto;
+      }
+      .section-body :deep(p:first-child) {
+        margin-top: 0;
+      }
+      .empty-section-text {
+        margin: 0;
+        color: var(--muted-foreground, var(--boxel-500));
+        background: color-mix(
+          in oklch,
+          var(--muted, var(--boxel-100)) 70%,
+          transparent
+        );
+        border: 1px dashed var(--border, var(--boxel-border-color));
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+      }
+      .issues-list {
+        padding: var(--boxel-sp);
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .project-sidebar {
+        width: 18rem;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-left: 1px solid var(--border, var(--boxel-border-color));
+        transition: width 0.25s ease;
+      }
+      .project-sidebar-inner {
+        width: 18rem;
+        padding: var(--boxel-sp-lg) var(--boxel-sp);
+        background: var(--sidebar, var(--card, var(--boxel-50)));
+        color: var(
+          --sidebar-foreground,
+          var(--card-foreground, var(--boxel-dark))
+        );
+        display: grid;
+        gap: var(--boxel-sp-lg);
+        align-content: start;
+        overflow-y: auto;
+        overflow-x: hidden;
+        height: 100%;
+        box-sizing: border-box;
+      }
+      .project-body[data-sidebar='closed'] .project-sidebar {
+        width: 0;
+        border-left-width: 0;
+      }
+      .meta-list {
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .meta-item {
+        display: grid;
+        grid-template-columns: 5.5rem 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        min-height: 1.75rem;
+      }
+      .meta-list dt {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+      .meta-list dd {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .stat-value {
+        display: flex;
+        align-items: center;
+        gap: 0.3em;
+        font-size: 0.8125rem;
+        font-weight: 500;
+      }
+      .stat-icon {
+        color: var(--muted-foreground, var(--boxel-500));
+        flex-shrink: 0;
+      }
+      .sidebar-section {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .sidebar-section-title {
+        margin: 0;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--muted-foreground, var(--boxel-500));
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .related-list {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+
+      @container (width < 640px) {
+        .project-header {
+          padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
+        }
+        .project-title {
+          font-size: 1.125rem;
+        }
+        .sidebar-toggle {
+          display: none;
+        }
+        .project-body {
+          flex-direction: column;
+          overflow-y: auto;
+        }
+        .project-main {
+          overflow-y: visible;
+        }
+        .project-sidebar {
+          width: 100%;
+          border-left: none;
+          border-top: 1px solid var(--border, var(--boxel-border-color));
+        }
+        .project-body[data-sidebar='closed'] .project-sidebar {
+          width: 100%;
+          border-left-width: 0;
+        }
+        .project-sidebar-inner {
+          width: 100%;
+          overflow-y: visible;
+          height: auto;
+        }
+      }
+
+      @container (width < 420px) {
+        .project-header {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-xs);
+          gap: var(--boxel-sp-xs);
+        }
+        .project-title {
+          font-size: 1rem;
+        }
+        .meta-item {
+          grid-template-columns: 4.5rem 1fr;
+        }
+      }
+    </style>
+  </template>
+}
+
 // ── Project ────────────────────────────────────────────────────────────────
 
 export class Project extends CardDef {
   static displayName = 'Project';
-  static prefersWideFormat = true;
 
   @field projectCode = contains(StringField);
   @field projectName = contains(StringField);
@@ -1085,59 +1726,179 @@ export class Project extends CardDef {
       );
     }
 
+    get issueCount(): number {
+      return this.args.model?.issues?.length ?? 0;
+    }
+
+    get knowledgeCount(): number {
+      return this.args.model?.knowledgeBase?.length ?? 0;
+    }
+
     <template>
-      <div class='project-card'>
-        <div class='meta-row'>
-          <span class='project-code'>{{if
-              @model.projectCode
-              @model.projectCode
-              'PROJECT'
-            }}</span>
-          <StatusPill @color={{this.statusColor}}>
+      <FittedCard
+        class='project-fitted'
+        @titleTag='h3'
+        data-status={{@model.projectStatus}}
+      >
+        <:eyebrow>
+          <div class='project-eyebrow'>
+            <Folder width='14' height='14' aria-hidden='true' />
+            <span>{{if @model.projectCode @model.projectCode 'PROJECT'}}</span>
+          </div>
+        </:eyebrow>
+        <:title><@fields.cardTitle /></:title>
+        <:meta>
+          <div class='project-stats'>
+            {{#if this.issueCount}}
+              <span class='stat-item'>
+                <CheckboxIcon
+                  class='stat-icon'
+                  width='16'
+                  height='16'
+                  aria-hidden='true'
+                />{{this.issueCount}}
+              </span>
+            {{/if}}
+            {{#if this.knowledgeCount}}
+              <span class='stat-item'>
+                <BookOpen
+                  class='stat-icon'
+                  width='16'
+                  height='16'
+                  aria-hidden='true'
+                />{{this.knowledgeCount}}
+              </span>
+            {{/if}}
+          </div>
+        </:meta>
+        <:badgeRight>
+          <StatusPill class='status-badge-right' @color={{this.statusColor}}>
             {{#if @model.projectStatus}}
               <@fields.projectStatus @format='atom' />
             {{else}}
               Planning
             {{/if}}
           </StatusPill>
-        </div>
-        <h3 class='title'><@fields.cardTitle /></h3>
-        <p><@fields.objective /></p>
-      </div>
+        </:badgeRight>
+        <:footer>
+          <StatusPill class='status-pill' @color={{this.statusColor}}>
+            {{#if @model.projectStatus}}
+              <@fields.projectStatus @format='atom' />
+            {{else}}
+              Planning
+            {{/if}}
+          </StatusPill>
+        </:footer>
+      </FittedCard>
       <style scoped>
-        .project-card {
-          display: grid;
-          grid-template-rows: auto 1fr;
-          gap: var(--boxel-sp-2xs);
-          padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-            var(--boxel-sp);
-          height: 100%;
-          box-sizing: border-box;
+        .project-fitted {
+          --project-accent: var(--muted-foreground, var(--boxel-500));
+          --fc-meta-display: none;
+          --fc-badge-right-display: none;
+          --boxel-heading-font-weight: 600;
+          box-shadow: inset 3px 0 0 var(--project-accent);
         }
-        .meta-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-2xs);
-        }
-        .project-code {
+        .status-badge-right {
           font-size: 0.6875rem;
+        }
+        @container fitted-card (1.0 < aspect-ratio) and (width >= 150px) and (height <= 105px) {
+          .project-fitted {
+            --fc-badge-right-display: block;
+            --fc-badge-offset: -1px;
+          }
+          .status-badge-right {
+            border-bottom-right-radius: 0;
+            border-top-right-radius: 0;
+            border-top-left-radius: 0;
+          }
+        }
+        /* Large badge */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height >= 105px) {
+          .project-fitted {
+            --fc-footer-display: none;
+          }
+        }
+        .project-fitted[data-status='planning'] {
+          --project-accent: oklch(55% 0.24 264);
+        }
+        .project-fitted[data-status='active'] {
+          --project-accent: oklch(48% 0.14 145);
+        }
+        .project-fitted[data-status='on_hold'] {
+          --project-accent: oklch(72% 0.17 75);
+        }
+        .project-fitted[data-status='completed'] {
+          --project-accent: oklch(52% 0.22 298);
+        }
+        .project-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          color: var(--project-accent);
           font-weight: 700;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
+        }
+        .project-stats {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
+          padding-top: var(--boxel-sp-xs);
+          border-top: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          font-weight: 500;
+          width: 100%;
+        }
+        .stat-item {
+          display: flex;
+          align-items: center;
+          gap: 0.25em;
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground, var(--boxel-500));
+        }
+        .stat-icon {
           flex-shrink: 0;
         }
-        .title {
-          margin: 0;
-          font-size: var(--boxel-font-size);
-          font-weight: 500;
-          line-height: 1.4;
-          color: var(--card-foreground, var(--boxel-dark));
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
+        @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
+          .project-fitted {
+            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          }
+        }
+        @container fitted-card (width >= 150px) and (170px >= height >= 65px) {
+          .project-fitted {
+            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+              var(--boxel-sp-2xs) var(--boxel-sp);
+          }
+        }
+        @container fitted-card ((width >= 150px) and (height > 170px)) {
+          .project-fitted {
+            --fc-title-font-size: 1rem;
+            --fc-content-padding: var(--boxel-sp);
+          }
+        }
+        @container fitted-card ((width >= 150px) and (height >= 170px)) {
+          .project-fitted {
+            --fc-meta-display: flex;
+            --fc-title-line-clamp: 3;
+          }
+        }
+        @container fitted-card (1.0 < aspect-ratio) and (width >= 250px) and
+          (105px <= height < 170px) {
+          .project-fitted {
+            --fc-meta-display: flex;
+          }
+          .project-stats {
+            padding-top: 0;
+            border-top: none;
+          }
+        }
+        @container fitted-card ((width >= 400px) and (height >= 105px))) {
+          .project-fitted {
+            --fc-content-padding: var(--boxel-sp);
+          }
         }
       </style>
     </template>
@@ -1145,222 +1906,9 @@ export class Project extends CardDef {
 
   static embedded = this.fitted;
 
-  static edit = class Edit extends Component<typeof Project> {
-    constructor(owner: Owner, args: any) {
-      super(owner, args);
-      if (!this.args.model?.issueStatusOptions?.length) {
-        scheduleOnce('actions', this, this.initDefaultIssueStatusOptions);
-      }
-    }
+  static edit = ProjectEdit;
 
-    initDefaultIssueStatusOptions() {
-      if (!this.args.model?.issueStatusOptions?.length) {
-        this.args.model.issueStatusOptions =
-          buildIssueOptionFields(issueStatusOptions);
-      }
-    }
-
-    <template>
-      <div class='project-edit'>
-        <div class='row'>
-          <FieldContainer @label='Project Name' @vertical={{true}}>
-            <@fields.projectName />
-          </FieldContainer>
-          <FieldContainer @label='Project Code' @vertical={{true}}>
-            <@fields.projectCode />
-          </FieldContainer>
-        </div>
-        <div class='row'>
-          <FieldContainer @label='Status' @vertical={{true}}>
-            <@fields.projectStatus />
-          </FieldContainer>
-        </div>
-        {{!-- <div class='row'>
-          <FieldContainer @label='Kanban Board' @vertical={{true}}>
-            <@fields.kanbanBoards />
-          </FieldContainer>
-        </div> --}}
-        <FieldContainer @label='Description' @vertical={{true}}>
-          <@fields.objective />
-        </FieldContainer>
-        <div class='row'>
-          <FieldContainer @label='Theme' @vertical={{true}}>
-            <@fields.cardInfo.theme />
-          </FieldContainer>
-        </div>
-
-        <section class='options-section'>
-          <div class='options-section-header'>
-            <h2 class='section-title'>Issue Configuration</h2>
-            <p class='section-copy'>
-              Define the status options that issues in this project can use.
-            </p>
-          </div>
-
-          <div class='options-section-body'>
-            <div class='options-config-panel'>
-              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
-                <@fields.issueStatusOptions />
-              </FieldContainer>
-            </div>
-          </div>
-        </section>
-      </div>
-      <style scoped>
-        .project-edit {
-          display: grid;
-          gap: var(--boxel-sp-xl);
-          padding: var(--boxel-sp-xl);
-        }
-        .row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--boxel-sp);
-          min-width: 0;
-        }
-        .options-section {
-          display: grid;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp-lg);
-          background: var(--card, var(--boxel-light));
-          border: 1px solid var(--border, var(--boxel-border-color));
-          border-radius: var(--boxel-border-radius-lg);
-        }
-        .options-section-header {
-          display: grid;
-          gap: var(--boxel-sp-2xs);
-        }
-        .options-section-body {
-          display: grid;
-          gap: var(--boxel-sp);
-        }
-        .options-config-panel {
-          display: grid;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp);
-          background: var(--sidebar, var(--background));
-          color: var(--sidebar-foreground, var(--foreground));
-          border: 1px solid var(--border, var(--boxel-border-color));
-          border-radius: var(--boxel-border-radius);
-          box-shadow: inset 0 1px 0
-            color-mix(in oklch, var(--card) 35%, transparent);
-        }
-        .section-title {
-          margin: 0;
-          font-size: var(--boxel-font-size);
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
-        }
-        .section-copy {
-          margin: 0;
-          font-size: var(--boxel-font-size-xs);
-          line-height: 1.5;
-          color: var(--muted-foreground, var(--boxel-600));
-        }
-      </style>
-    </template>
-  };
-
-  static isolated = class Isolated extends Component<typeof Project> {
-    get statusColor(): string | undefined {
-      return findOptionColor(
-        projectStatusOptions,
-        this.args.model?.projectStatus ?? 'planning',
-      );
-    }
-
-    <template>
-      <div class='background-container'>
-        <article class='surface'>
-          <header class='project-header'>
-            <div class='project-meta-top'>
-              <Pill @size='extra-small'>
-                {{#if @model.projectCode}}
-                  <@fields.projectCode />
-                {{else}}
-                  PROJECT
-                {{/if}}
-              </Pill>
-              <StatusPill @color={{this.statusColor}}>
-                {{#if @model.projectStatus}}
-                  <@fields.projectStatus @format='atom' />
-                {{else}}
-                  Planning
-                {{/if}}
-              </StatusPill>
-            </div>
-            <h1><@fields.cardTitle /></h1>
-          </header>
-
-          <section class='project-section'>
-            <h2 class='section-label'>Objective</h2>
-            <@fields.objective />
-          </section>
-
-          {{#if @model.issues.length}}
-            <section class='project-section'>
-              <h2 class='section-label'>Issues</h2>
-              <@fields.issues />
-            </section>
-          {{/if}}
-        </article>
-      </div>
-      <style scoped>
-        .background-container {
-          height: 100%;
-          overflow-y: auto;
-          background-color: var(--background);
-          color: var(--foreground);
-        }
-        .surface {
-          max-width: 60rem;
-          margin: 0 auto;
-          padding: var(--boxel-sp-xl);
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xl);
-        }
-        .project-header {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-sm);
-          padding-bottom: var(--boxel-sp-lg);
-          border-bottom: 1px solid var(--border);
-        }
-        .project-meta-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--boxel-sp-xs);
-        }
-        h1 {
-          font-size: 1.5rem;
-          font-weight: 700;
-          line-height: 1.3;
-          margin: 0;
-          color: var(--foreground);
-        }
-        .project-section {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp);
-        }
-        .project-section :deep(p:first-child) {
-          margin-top: 0;
-        }
-        .section-label {
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: var(--muted-foreground);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin: 0;
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid var(--border);
-        }
-      </style>
-    </template>
-  };
+  static isolated = ProjectIsolated;
 }
 
 // ── IssueTrackerIsolated ──────────────────────────────────────────────
