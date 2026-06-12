@@ -15,10 +15,13 @@ import { TrackedArray } from 'tracked-built-ins';
 import {
   baseRealm,
   ensureTrailingSlash,
+  publishRealm as publishRealmOperation,
   SupportedMimeType,
   Deferred,
   ri,
   testRealmURL,
+  unpublishRealm as unpublishRealmOperation,
+  type RealmClient,
   type RealmIdentifier,
   type RealmInfo,
   type JWTPayload,
@@ -46,7 +49,9 @@ export interface RealmServerTokenClaims {
 
 export interface SubdomainAvailabilityResult {
   available: boolean;
-  domain: string;
+  hostname: string;
+  // Validation message when the subdomain is rejected (e.g. punycode); absent
+  // when the name is simply already taken.
   error?: string;
 }
 
@@ -911,33 +916,32 @@ export default class RealmServerService extends Service {
     return registrations;
   }
 
+  // Adapts this service's realm-server auth/config into the portable
+  // `RealmClient` the shared realm operations consume. Operations issued here
+  // only hit realm-server endpoints, so a single `authedFetch` carrying the
+  // realm-server token suffices.
+  private get realmClient(): RealmClient {
+    return {
+      realmServerURL: ensureTrailingSlash(this.url.href),
+      config: {
+        spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
+        siteDomain: ENV.publishedRealmBoxelSiteDomain,
+      },
+      authedFetch: (url, init) => this.authedFetch(url, init),
+    };
+  }
+
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
     await this.login();
+    return publishRealmOperation(this.realmClient, {
+      sourceRealmURL,
+      publishedRealmURL,
+    });
+  }
 
-    const response = await this.network.fetch(
-      `${this.url.href}_publish-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify({
-          sourceRealmURL,
-          publishedRealmURL,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Publish realm failed: ${response.status} - ${errorText}`,
-      );
-    }
-
-    return response.json();
+  async unpublishRealm(publishedRealmURL: string) {
+    await this.login();
+    return unpublishRealmOperation(this.realmClient, { publishedRealmURL });
   }
 
   async checkDomainAvailability(
@@ -1059,34 +1063,6 @@ export default class RealmServerService extends Service {
 
     if (!response.ok) {
       throw new Error(await response.text());
-    }
-
-    return response.json();
-  }
-
-  async unpublishRealm(publishedRealmURL: string) {
-    await this.login();
-
-    const response = await this.network.fetch(
-      `${this.url.href}_unpublish-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify({
-          publishedRealmURL,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Unpublish realm failed: ${response.status} - ${errorText}`,
-      );
     }
 
     return response.json();

@@ -1,6 +1,18 @@
 #!/bin/sh
-#MISE description="Start dev stack without optional realms (experiments, catalog, homepage, submission)"
+#MISE description="Start dev stack without optional realms (experiments, catalog, homepage, submission); start host separately with 'mise exec -- pnpm -C packages/host start'"
 #MISE dir="packages/realm-server"
+
+# Host is intentionally NOT started by this task — keeping host out lets a dev
+# restart realms without losing host hot-reload state. Surface the start
+# command here so the requirement to use `mise exec` (which loads the HTTPS
+# env from lib/env-vars.sh — REALM_SERVER_TLS_CERT_FILE / _KEY_FILE / HOST_URL)
+# is visible at task start, not buried in README. A bare `pnpm -C packages/host
+# start` would bring host up plain-HTTP and break the realm-server handshake.
+cat <<'BANNER'
+[dev-minimal] Host is NOT started by this task. In a second terminal run:
+[dev-minimal]   mise exec -- pnpm -C packages/host start
+[dev-minimal] (`mise exec` is required so host picks up the HTTPS dev cert env.)
+BANNER
 
 export PATH="./node_modules/.bin:$PATH"
 

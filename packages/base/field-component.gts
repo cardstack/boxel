@@ -50,6 +50,25 @@ export interface BoxComponentSignature {
       format?: Format;
       displayContainer?: boolean;
       typeConstraint?: ResolvedCodeRef;
+      /**
+       * Only honoured by the `linksTo` editor today — the
+       * `linksToMany` editor does not yet thread this arg through.
+       * When true, hard-scope the card chooser to the consuming
+       * realm: the realm picker in the catalog modal is locked and
+       * the user cannot pick a card from another realm. UI hint
+       * only; no runtime validation.
+       */
+      lockConsumingRealm?: boolean;
+      /**
+       * Only honoured by the `linksTo` editor today — the
+       * `linksToMany` editor does not yet thread this arg through.
+       * Explicit consuming-realm URL passed through to LinksToEditor.
+       * The editor normally derives this from a `RealmURLContext`
+       * provided by the surrounding stack item; this lets callers in
+       * contexts without a stack item (e.g. code submode's spec
+       * preview) thread the owning card's realm in directly.
+       */
+      consumingRealm?: URL;
     };
   };
   Blocks: {};

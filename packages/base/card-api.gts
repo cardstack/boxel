@@ -85,6 +85,7 @@ import {
   CardResource,
   LooseLinkableResource,
   LooseSingleResourceDocument,
+  shouldTrackRuntimeModuleGraph,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   trackRuntimeModuleDependency,
@@ -1567,6 +1568,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           format?: Format;
           displayContainer?: boolean;
           typeConstraint?: ResolvedCodeRef;
+          lockConsumingRealm?: boolean;
+          consumingRealm?: URL;
         };
       };
       Blocks: {};
@@ -1583,6 +1586,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @field={{linksToField}}
                   @brokenLink={{broken}}
                   @typeConstraint={{@typeConstraint}}
+                  @lockConsumingRealm={{@lockConsumingRealm}}
+                  @consumingRealm={{@consumingRealm}}
                   @createCard={{cardCrudFunctions.createCard}}
                   ...attributes
                 />
@@ -3841,6 +3846,23 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
+  // This walk repeats once per element of a linksToMany (and again on every
+  // getter re-read), but records the identical node set every time, so it only
+  // needs to run once per (context, type module) per tracking session. The
+  // probe collapses each repeat to a single Set lookup — without it, a
+  // linksToMany of N same-typed cards re-tracks the type's entire module graph
+  // N times per read, and that per-call tracking overhead dominates aggregate
+  // renders.
+  if (
+    !shouldTrackRuntimeModuleGraph(
+      'relationship',
+      identity.module,
+      dependencyTrackingContext,
+    )
+  ) {
+    return;
+  }
+
   trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
 
   let loader = Loader.getLoaderFor(ctor);
@@ -3848,10 +3870,6 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  // getKnownConsumedModules is fast now: the Loader caches the dependency
-  // graph traversal result in collectKnownModuleDependencies, and
-  // trimModuleIdentifier uses string ops + a cache instead of URL
-  // construction. No need for a caller-side skip cache here.
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
     trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }

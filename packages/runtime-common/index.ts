@@ -694,6 +694,9 @@ import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './paths.ts';
+export * from './realm-client.ts';
+export * from './realm-operations.ts';
+export * from './published-realm-url.ts';
 export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
@@ -734,6 +737,8 @@ export * from './prerender-headers.ts';
 export * from './query.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './unified-search.ts';
+export * from './search-entry.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -813,6 +818,7 @@ export type {
 export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
+export * from './host-routing-validation.ts';
 
 export type {
   CardDocument,
@@ -823,6 +829,8 @@ export type {
   LinkableCollectionDocument,
   UnifiedSearchCollectionDocument,
   UnifiedSearchIncludedResource,
+  SearchEntryCollectionDocument,
+  SearchEntryIncludedResource,
 } from './document-types.ts';
 export type {
   CardResource,
@@ -903,12 +911,18 @@ interface CardChooserOpts {
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
+  /**
+   * When true, the realm scope is fixed to consumingRealm and the user
+   * cannot broaden it via the realm picker. Use for fields that must
+   * reference cards within the consuming realm (e.g. RoutingRuleField).
+   */
+  lockConsumingRealm?: boolean;
   preselectedCardUrls?: string[];
 }
 
 export interface CardChooser {
   chooseCard(
-    query: CardCatalogQuery,
+    query: CardChooserQuery,
     opts?: CardChooserOpts & { multiSelect?: boolean },
   ): Promise<undefined | string | string[]>;
 }
@@ -921,21 +935,21 @@ export interface FileChooser {
 }
 
 export async function chooseCard(
-  query: CardCatalogQuery,
+  query: CardChooserQuery,
   opts: CardChooserOpts & {
     multiSelect: true;
     preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | string[]>;
 export async function chooseCard(
-  query: CardCatalogQuery,
+  query: CardChooserQuery,
   opts?: CardChooserOpts & {
     multiSelect?: false;
     preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | string>;
 export async function chooseCard(
-  query: CardCatalogQuery,
+  query: CardChooserQuery,
   opts?: CardChooserOpts & {
     multiSelect?: boolean;
     preselectedCardTypeQuery?: Query;
@@ -1088,7 +1102,7 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export type CardCatalogQuery = Query & {
+export type CardChooserQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
 };
 

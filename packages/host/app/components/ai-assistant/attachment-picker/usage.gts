@@ -8,7 +8,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -72,7 +72,7 @@ export default class AiAssistantCardPickerUsage extends Component {
           <AttachedItems />
           <AttachButton />
         </AiAssistantAttachmentPicker>
-        <CardCatalogModal />
+        <CardChooserModal />
       </:example>
       <:api as |Args|>
         <Args.Object

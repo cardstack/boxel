@@ -80,9 +80,13 @@ Follow docs/runbook.md end-to-end:
 2. Create the target realm at the URL above and pull it into the
    workspace.
 3. Read the brief and follow software-factory-bootstrap to write
-   the Project, IssueTracker, Knowledge Articles, one Issue per
-   entry-point card the brief describes, plus the bootstrap-seed
-   Issue. Push the workspace.
+   the Project, IssueTracker, Knowledge Articles, and the
+   implementation Issues, plus the bootstrap-seed Issue. The brief
+   selects the flow: no `sourceCardUrl` → greenfield (one `feature`
+   Issue per entry-point card); `sourceCardUrl` set → adjust (seed
+   the source card, confirm a green baseline, then one `adjustment`
+   Issue per delta — see the skill's "Adjust flow" section). Push
+   the workspace.
 4. Hand off to software-factory-scheduling: pick the next
    unblocked Issue, follow software-factory-operations to
    implement it (.gts + .test.gts + sample instances + Catalog
@@ -125,6 +129,92 @@ session.
 > because the recipe brief proved it works end-to-end without
 > intervention.
 
+## Adjusting an existing card
+
+The factory can also **adjust an existing card** instead of building
+new ones from scratch. The run contract is identical — the same two
+inputs (brief URL + target realm URL) and the same prompt above. What
+selects the adjust flow is the **brief**, not the prompt: a brief that
+carries a `sourceCardUrl` attribute runs as an adjust; one without it
+runs greenfield. (Full contract:
+[adjust-existing-card-flow.md](./adjust-existing-card-flow.md).)
+
+### Authoring an adjust brief
+
+The brief is a `Wiki` card, exactly as for greenfield, with one extra
+requirement: set the optional `sourceCardUrl` attribute to the
+absolute URL of the card to adjust.
+
+```jsonc
+// the brief's JSON:API document
+{
+  "data": {
+    "attributes": {
+      "content": "…the adjustments, phrased as deltas to the source card…",
+      "sourceCardUrl": "http://localhost:4201/catalog/mortgage-calculator",
+    },
+  },
+}
+```
+
+- **`sourceCardUrl` is required for an adjust run.** Without it the
+  factory runs greenfield and builds the brief's cards from scratch.
+- **The source card must live on the same realm server** as the
+  target realm, reachable with the active profile. A missing,
+  malformed, or cross-server URL fails loudly at seed time (the
+  ingest step can't fetch it) — it does not silently fall back to
+  greenfield.
+- **Write the brief content as deltas**, not as a full card spec:
+  what changes about the source card (add field X, change behavior
+  Y, restyle the fitted view), one coherent delta per adjustment you
+  want. Bootstrap turns each delta into one `adjustment` Issue.
+
+### What the run does differently
+
+Adjust is a superset of greenfield: one extra sub-phase inside
+bootstrap, then the standard Issue loop. During bootstrap the agent:
+
+1. **Seeds the workspace (then the target realm on push)** with a working copy of the source card
+   and its same-realm dependency graph —
+   `boxel realm ingest-card "<source-card-url>" .` copies the card's
+   module, the same-realm modules it imports (including type-only
+   imports), its sample instances, and its card/app Catalog Spec.
+   If the source card ships no co-located test (common for catalog
+   cards), the agent writes **characterization tests** capturing its
+   current behavior.
+2. **Confirms a green baseline** — the standard validators must all
+   pass on the seeded copy before any adjustment Issue is created. A
+   zero-test run does not count as green.
+3. **Writes a source-provenance Knowledge Article**
+   (`Knowledge Articles/<slug>-source-provenance.json`): the
+   `sourceCardUrl`, the files copied, and the baseline results.
+4. **Creates `adjustment` Issues** — one per coherent delta the brief
+   describes (instead of greenfield's one `feature` Issue per
+   entry-point card). Each names the seeded file(s) to edit, the
+   delta, and acceptance criteria that include "the baseline tests
+   keep passing."
+
+From there scheduling, the validator loop, the
+`Validations/` audit-trail cards, the bail-out limits, and project
+completion are identical to greenfield. The implementation agent
+**edits the seeded artifacts in place** (module, tests, instances,
+Spec) rather than creating parallel ones — see the "Adjustment
+issues" section of `software-factory-operations`.
+
+### Expected output (adjust run)
+
+Same shape as the greenfield list below, with these differences:
+
+- The card module, tests, sample instances, and `Spec/` card are the
+  **seeded copies of the source card**, with the brief's deltas
+  applied (plus characterization tests if the source had none).
+- `Knowledge Articles/<slug>-source-provenance.json` — where the
+  seed came from and the baseline validator results.
+- `Issues/<slug>-<delta>.json` — one Issue per delta, with
+  `issueType: "adjustment"`. The baseline validator results live in
+  the provenance article, not in `Validations/` (those cards are
+  per-Issue).
+
 ## What the agent calls (and from where)
 
 | Capability              | How the agent invokes it                                                                                                                                                                                         |
@@ -154,11 +244,8 @@ A few rough edges remain — not blocking, but worth tracking:
 - **`/factory-run` slash command** — wrap the single prompt above
   as a slash command (or a `boxel factory run` CLI that spawns
   `claude` with the prompt baked in) so the user doesn't paste
-  prose every time.
-- **Self-contained `boxel test`** — track [CS-11164](https://linear.app/cardstack/issue/CS-11164).
-  Today `boxel test` still needs the monorepo (host `dist/` +
-  Playwright). The plan is to bundle a QUnit harness into the CLI the
-  same way CS-11165 bundled the type-check toolchain.
+  prose every time. One wrapper covers both flows, since the brief
+  (not the prompt) selects greenfield vs adjust.
 - **Orchestrator retirement** — once this runbook has shipped and
   run in production for long enough, delete the SDK orchestrator
   code (`issue-loop.ts`, `factory-agent/`, etc.).

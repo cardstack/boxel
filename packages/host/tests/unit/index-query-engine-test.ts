@@ -356,6 +356,185 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  // The projection-parametrized `search()` underlying both `searchCards`
+  // (dataOnly) and `searchPrerendered` (render). The wrapper tests are the
+  // parity goldens; these exercise the shared method directly.
+  test('search() projects the same row set and total across dataOnly and render', async function (assert) {
+    let { mango, vangogh } = testCards;
+    let personCard = await personCardType(testCards);
+    let personKey = internalKeyFor(personCard, undefined, virtualNetwork);
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        pristine_doc: await serializeCard(vangogh),
+        embedded_html: { [personKey]: '<div>Van Gogh (embedded)</div>' },
+        search_doc: { name: 'Van Gogh' },
+      },
+      {
+        url: `${testRealmURL}mango.json`,
+        file_alias: `${testRealmURL}mango`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        pristine_doc: await serializeCard(mango),
+        // no embedded_html — this row has no HTML for the embedded format
+        search_doc: { name: 'Mango' },
+      },
+    ]);
+
+    let opts = { includeErrors: true as const };
+    let dataOnly = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      {},
+      opts,
+      { kind: 'dataOnly' },
+    );
+    let render = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      {},
+      opts,
+      {
+        kind: 'render',
+        htmlFormat: 'embedded',
+      },
+    );
+
+    assert.strictEqual(
+      dataOnly.meta.page.total,
+      render.meta.page.total,
+      'page.total matches across projections',
+    );
+    assert.deepEqual(
+      dataOnly.results.map((r) => r.url).sort(),
+      render.results.map((r) => r.url).sort(),
+      'the projection varies only the SELECT list, never the row set',
+    );
+  });
+
+  test('search() render projection carries pristine_doc only on no-HTML fallback rows', async function (assert) {
+    let { mango, vangogh } = testCards;
+    let personCard = await personCardType(testCards);
+    let personKey = internalKeyFor(personCard, undefined, virtualNetwork);
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}vangogh.json`, // HAS embedded html
+        file_alias: `${testRealmURL}vangogh`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        pristine_doc: await serializeCard(vangogh),
+        embedded_html: { [personKey]: '<div>Van Gogh (embedded)</div>' },
+        search_doc: { name: 'Van Gogh' },
+      },
+      {
+        url: `${testRealmURL}mango.json`, // NO embedded html → live fallback
+        file_alias: `${testRealmURL}mango`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        pristine_doc: await serializeCard(mango),
+        search_doc: { name: 'Mango' },
+      },
+    ]);
+
+    let { results } = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      {},
+      { includeErrors: true },
+      { kind: 'render', htmlFormat: 'embedded' },
+    );
+    let byUrl = Object.fromEntries(results.map((r) => [r.url, r]));
+
+    let vg = byUrl[`${testRealmURL}vangogh.json`];
+    assert.ok(vg.html, 'the HTML-backed row has html');
+    assert.notOk(vg.pristine_doc, 'the HTML-backed row omits pristine_doc');
+
+    let mg = byUrl[`${testRealmURL}mango.json`];
+    assert.notOk(mg.html, 'the no-HTML row has null html');
+    assert.ok(
+      mg.pristine_doc,
+      'the no-HTML fallback row carries its live pristine_doc',
+    );
+  });
+
+  test('search() render projection keeps sort order and conditional pristine_doc together', async function (assert) {
+    let { mango, vangogh, paper } = testCards;
+    let personCard = await personCardType(testCards);
+    let personKey = internalKeyFor(personCard, undefined, virtualNetwork);
+    let cardDef = 'https://cardstack.com/base/card-api/CardDef';
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}a.json`,
+        file_alias: `${testRealmURL}a`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, cardDef],
+        last_modified: '300',
+        pristine_doc: await serializeCard(mango),
+        embedded_html: { [personKey]: '<div>A</div>' }, // HTML-backed
+        search_doc: { name: 'A' },
+      },
+      {
+        url: `${testRealmURL}b.json`,
+        file_alias: `${testRealmURL}b`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, cardDef],
+        last_modified: '100',
+        pristine_doc: await serializeCard(vangogh), // no embedded_html → fallback
+        search_doc: { name: 'B' },
+      },
+      {
+        url: `${testRealmURL}c.json`,
+        file_alias: `${testRealmURL}c`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        types: [personKey, cardDef],
+        last_modified: '200',
+        pristine_doc: await serializeCard(paper),
+        embedded_html: { [personKey]: '<div>C</div>' }, // HTML-backed
+        search_doc: { name: 'C' },
+      },
+    ]);
+
+    let { results } = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      { sort: [{ by: 'lastModified', direction: 'desc' }] },
+      { includeErrors: true },
+      { kind: 'render', htmlFormat: 'embedded' },
+    );
+
+    assert.deepEqual(
+      results.map((r) => r.url),
+      [
+        `${testRealmURL}a.json`,
+        `${testRealmURL}c.json`,
+        `${testRealmURL}b.json`,
+      ],
+      'the outer-wrapped query orders by lastModified desc',
+    );
+    let byUrl = Object.fromEntries(results.map((r) => [r.url, r]));
+    assert.notOk(
+      byUrl[`${testRealmURL}a.json`].pristine_doc,
+      'HTML-backed row omits pristine_doc even under a sort',
+    );
+    assert.ok(
+      byUrl[`${testRealmURL}b.json`].pristine_doc,
+      'no-HTML fallback row keeps pristine_doc under a sort',
+    );
+  });
+
   test('can filter by type', async function (assert) {
     let { mango, vangogh, paper } = testCards;
 

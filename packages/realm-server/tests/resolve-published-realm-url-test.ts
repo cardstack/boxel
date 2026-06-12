@@ -1,40 +1,40 @@
 import { module, test } from 'qunit';
-
+import { basename } from 'path';
 import {
   deriveRealmName,
   resolvePublishedRealmUrl,
-} from '@cardstack/host/lib/published-realm-url';
+} from '@cardstack/runtime-common';
 
-module('Unit | published-realm-url', function () {
-  module('deriveRealmName', function () {
-    test('returns the last path segment, lowercased', function (assert) {
+module(basename(__filename), function () {
+  module('resolve-published-realm-url', function () {
+    // deriveRealmName
+    test('deriveRealmName returns the last path segment, lowercased', async function (assert) {
       assert.strictEqual(
         deriveRealmName('https://realms.example/mike/Game-Mechanics/'),
         'game-mechanics',
       );
     });
 
-    test('ignores a missing trailing slash', function (assert) {
+    test('deriveRealmName ignores a missing trailing slash', async function (assert) {
       assert.strictEqual(
         deriveRealmName('https://realms.example/mike/notes'),
         'notes',
       );
     });
 
-    test('throws when there is no path segment', function (assert) {
+    test('deriveRealmName throws when there is no path segment', async function (assert) {
       assert.throws(
         () => deriveRealmName('https://realms.example/'),
         /Could not extract realm name/,
       );
     });
 
-    test('throws on an unparseable URL', function (assert) {
+    test('deriveRealmName throws on an unparseable URL', async function (assert) {
       assert.throws(() => deriveRealmName('not a url'), /Failed to parse/);
     });
-  });
 
-  module('resolvePublishedRealmUrl — subdirectory', function () {
-    test('builds a Boxel Space URL from username, domain, and name', function (assert) {
+    // resolvePublishedRealmUrl — subdirectory
+    test('subdirectory builds a Boxel Space URL from username, domain, and name', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl(
           { type: 'subdirectory', name: 'game-mechanics' },
@@ -44,7 +44,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('lowercases the provided name', function (assert) {
+    test('subdirectory lowercases the provided name', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl(
           { type: 'subdirectory', name: 'Game-Mechanics' },
@@ -54,7 +54,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('derives the name from sourceRealmURL when blank', function (assert) {
+    test('subdirectory derives the name from sourceRealmURL when blank', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl(
           { type: 'subdirectory' },
@@ -68,7 +68,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('honors a custom protocol', function (assert) {
+    test('subdirectory honors a custom protocol', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl(
           { type: 'subdirectory', name: 'notes' },
@@ -82,7 +82,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('throws when name is blank and no sourceRealmURL is given', function (assert) {
+    test('subdirectory throws when name is blank and no sourceRealmURL is given', async function (assert) {
       assert.throws(
         () =>
           resolvePublishedRealmUrl(
@@ -93,7 +93,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('throws when matrixUsername is missing', function (assert) {
+    test('subdirectory throws when matrixUsername is missing', async function (assert) {
       assert.throws(
         () =>
           resolvePublishedRealmUrl(
@@ -104,7 +104,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('throws when spaceDomain is missing', function (assert) {
+    test('subdirectory throws when spaceDomain is missing', async function (assert) {
       assert.throws(
         () =>
           resolvePublishedRealmUrl(
@@ -114,17 +114,16 @@ module('Unit | published-realm-url', function () {
         /requires `spaceDomain`/,
       );
     });
-  });
 
-  module('resolvePublishedRealmUrl — custom', function () {
-    test('builds a URL from a bare hostname', function (assert) {
+    // resolvePublishedRealmUrl — custom
+    test('custom builds a URL from a bare hostname', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl({ type: 'custom', name: 'mysite.boxel.site' }),
         'https://mysite.boxel.site/',
       );
     });
 
-    test('preserves a port in the hostname', function (assert) {
+    test('custom preserves a port in the hostname', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl({
           type: 'custom',
@@ -134,7 +133,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('strips a leading protocol and trailing slash', function (assert) {
+    test('custom strips a leading protocol and trailing slash', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl({
           type: 'custom',
@@ -144,14 +143,14 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('throws when the hostname is blank', function (assert) {
+    test('custom throws when the hostname is blank', async function (assert) {
       assert.throws(
         () => resolvePublishedRealmUrl({ type: 'custom', name: '' }),
         /requires a hostname/,
       );
     });
 
-    test('rejects a hostname that includes a path', function (assert) {
+    test('custom rejects a hostname that includes a path', async function (assert) {
       assert.throws(
         () =>
           resolvePublishedRealmUrl({
@@ -162,7 +161,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('rejects a hostname that includes credentials', function (assert) {
+    test('custom rejects a hostname that includes credentials', async function (assert) {
       assert.throws(
         () =>
           resolvePublishedRealmUrl({
@@ -173,7 +172,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('rejects a hostname that includes a query or fragment', function (assert) {
+    test('custom rejects a hostname that includes a query or fragment', async function (assert) {
       assert.throws(
         () =>
           resolvePublishedRealmUrl({
@@ -192,7 +191,7 @@ module('Unit | published-realm-url', function () {
       );
     });
 
-    test('normalizes an accidental protocol passed in ctx', function (assert) {
+    test('custom normalizes an accidental protocol passed in ctx', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl(
           { type: 'custom', name: 'mysite.boxel.site' },
@@ -201,17 +200,17 @@ module('Unit | published-realm-url', function () {
         'https://mysite.boxel.site/',
       );
     });
-  });
 
-  test('throws on an unknown target type', function (assert) {
-    assert.throws(
-      () =>
-        resolvePublishedRealmUrl({
-          // @ts-expect-error intentionally invalid type
-          type: 'bogus',
-          name: 'x',
-        }),
-      /Unknown publish target type/,
-    );
+    test('throws on an unknown target type', async function (assert) {
+      assert.throws(
+        () =>
+          resolvePublishedRealmUrl({
+            // @ts-expect-error intentionally invalid type
+            type: 'bogus',
+            name: 'x',
+          }),
+        /Unknown publish target type/,
+      );
+    });
   });
 });

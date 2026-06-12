@@ -9,6 +9,26 @@ import {
 } from '@cardstack/runtime-common';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import { getPendingNetworkRequests } from './network-inflight-tracker.ts';
+import {
+  profileWindow,
+  formatTopFrames,
+  getAffinityProfileTargets,
+  shouldProfileAffinity,
+} from './cpu-profiler.ts';
+import { fromAffinityKey } from './affinity.ts';
+import { captureTraceStream } from './trace-capture.ts';
+import {
+  ensureHeapSampling,
+  captureHeapSamplingProfile,
+} from './heap-sampler.ts';
+import {
+  artifactSinkEnabled,
+  shouldCaptureCpuProfile,
+  shouldCaptureTrace,
+  shouldCaptureHeap,
+  uploadArtifact,
+  type ArtifactKeyParts,
+} from './artifact-sink.ts';
 
 import type { CDPSession, Page } from 'puppeteer';
 
@@ -31,6 +51,17 @@ const CPU_SAMPLE_WINDOW_MS = 750;
 // Budget for the main-thread responsiveness probe. If a trivial
 // `page.evaluate` can't return inside this, the JS thread is wedged.
 const RESPONSIVENESS_PROBE_MS = 2000;
+// How long the timeout-path CPU sampler runs. At the timeout cap a
+// wedged render is still spinning, so a short window of out-of-process
+// sampling catches the hot loop. Kept brief because this runs while the
+// caller is owed a RenderError — long enough for the profiler to collect
+// meaningful self-time, short enough not to materially extend teardown.
+const TIMEOUT_PATH_CPU_SAMPLE_MS = 1500;
+// Sampling interval for the affinity-scoped trigger. Finer-grained than
+// the timeout sampler's default because that trigger is opt-in on a
+// single deliberately-targeted realm, where the extra resolution is
+// worth the cost.
+const AFFINITY_PROFILE_SAMPLING_INTERVAL_US = 250;
 export const cardRenderTimeout = prerenderRenderTimeoutMs;
 export const renderTimeoutMs = cardRenderTimeout;
 
@@ -1384,10 +1415,172 @@ async function captureCpuMetrics(page: Page): Promise<{
   }
 }
 
+// Optional metadata about the render `withTimeout` is wrapping. Carries
+// the affinity key (so the affinity-scoped CPU profiler can gate on the
+// exact target realm) and a human-readable label keyed by card url +
+// format/pass, surfaced in the profiler's per-render log line. Both
+// triggers degrade gracefully when this is omitted — the timeout-path
+// sampler runs regardless, and the affinity trigger simply never fires
+// without an affinity key.
+export interface RenderProfileContext {
+  affinityKey?: string;
+  // e.g. `<card-url> isolated/0` — identifies which render produced the
+  // profile in the per-render affinity-trigger log line.
+  label?: string;
+  // Structured identifiers for keying the heavyweight artifacts in the S3
+  // sink (`env/realm/jobId/card/step/...`). `card` and `step` mirror what
+  // `label` concatenates; `jobId` is the indexing job and is set only for
+  // visits. The realm is recovered from `affinityKey`, so it isn't carried
+  // here. All optional — the sink falls back to `no-<field>` segments.
+  card?: string;
+  step?: string;
+  jobId?: string;
+}
+
+// Derives the S3 artifact-key fields from a render's profile context. The
+// realm is recovered from the affinity key (which encodes it); card / step
+// / jobId pass through. Used only for keying the heavyweight artifacts.
+function artifactKeyPartsFor(
+  profileContext: RenderProfileContext | undefined,
+): Omit<ArtifactKeyParts, 'kind'> {
+  let realm: string | undefined;
+  if (profileContext?.affinityKey) {
+    realm = fromAffinityKey(profileContext.affinityKey)?.affinityValue;
+  }
+  return {
+    realm,
+    jobId: profileContext?.jobId,
+    card: profileContext?.card,
+    step: profileContext?.step,
+  };
+}
+
+// Runs `fn` under the affinity-scoped CPU profile (always: logs the top
+// self-time frames, keyed by the render's label and wall-duration) and,
+// when the artifact sink is configured and the matching per-mode flag is
+// on, also persists the heavyweight blobs that don't fit a log line:
+//
+//   * full `.cpuprofile` — the raw of the same profile the summary comes
+//     from, so it adds a flush, not a second CPU profiler;
+//   * a streaming CDP trace — the one capture that survives a fully-wedged
+//     renderer (browser-process drain, no main-thread `stop`);
+//   * the cumulative heap allocation-sampling profile, read after the
+//     render window so its per-render series shows what kept allocating.
+//
+// Used only by the affinity-scoped trigger, for renders whose affinity
+// exactly matches the configured target.
+//
+// The render promise drives the return value directly — this resolves or
+// rejects exactly as `fn` does, so the caller's error/timeout handling is
+// unchanged and a render that hangs leaves this awaiting (the outer
+// `withTimeout` race owns the timeout). Every capture runs alongside as a
+// detached best-effort task bounded by `timeoutMs`: a render that hangs
+// past its own timeout still stops the profiler / ends the trace at the
+// bound rather than holding a CDP session open on the wedged page, and any
+// capture or upload failure is swallowed so it never perturbs the render.
+async function runWithAffinityProfile<T>(
+  page: Page,
+  fn: () => Promise<T>,
+  timeoutMs: number,
+  profileContext: RenderProfileContext | undefined,
+): Promise<T> {
+  // The heavyweight captures only matter when the sink is configured AND
+  // the operator has flipped the matching flag — every gate short-circuits
+  // on a cheap env read otherwise, so the default affinity behaviour
+  // (summary log only) issues no extra CDP calls and pays nothing.
+  let sinkOn = artifactSinkEnabled();
+  let wantCpuProfile = sinkOn && shouldCaptureCpuProfile();
+  let wantTrace = sinkOn && shouldCaptureTrace();
+  let wantHeap = sinkOn && shouldCaptureHeap();
+  let keyParts = artifactKeyPartsFor(profileContext);
+
+  // Heap sampling is cumulative across the tab and must be running BEFORE
+  // the render starts: otherwise the first targeted render's early (route
+  // transition / module load) allocations land before the sampler attaches,
+  // and that early growth is exactly what this mode is meant to diagnose.
+  // `ensureHeapSampling` is idempotent per tab and never throws, so this
+  // awaits a one-time setup on the first profiled render and is a no-op
+  // thereafter.
+  if (wantHeap) {
+    await ensureHeapSampling(page);
+  }
+
+  let render = fn();
+  let observe = () =>
+    render.then(
+      () => undefined,
+      () => undefined,
+    );
+
+  // The streaming trace starts as early as possible and ends at
+  // render-settle / `timeoutMs`. Drained straight into the sink's managed
+  // upload so memory stays bounded even for a large trace.
+  if (wantTrace) {
+    void captureTraceStream(page, { run: observe, maxRunMs: timeoutMs })
+      .then((stream) => {
+        if (stream) {
+          return uploadArtifact({ ...keyParts, kind: 'trace', body: stream });
+        }
+        return undefined;
+      })
+      .catch(() => {
+        // Best-effort: a missing trace is a missing diagnostic.
+      });
+  }
+
+  // Detached: the profile's log line is diagnostic and must not gate the
+  // render's return. `profileWindow` observes `render` only for timing
+  // (it never consumes the result/rejection) and stops on whichever of
+  // render-settles / `timeoutMs` comes first. When the cpuprofile flag is
+  // on, the same run's raw profile is flushed to the sink.
+  void profileWindow(page, {
+    samplingIntervalUs: AFFINITY_PROFILE_SAMPLING_INTERVAL_US,
+    maxRunMs: timeoutMs,
+    run: observe,
+    onRawProfile: wantCpuProfile
+      ? (rawProfile) =>
+          uploadArtifact({
+            ...keyParts,
+            kind: 'cpuprofile',
+            body: Buffer.from(JSON.stringify(rawProfile), 'utf8'),
+          })
+      : undefined,
+  })
+    .then(async (summary) => {
+      let top = formatTopFrames(summary);
+      if (top && summary) {
+        log.warn(
+          `affinity CPU profile ${profileContext?.label ?? '<render>'}` +
+            ` durationMs=${summary.durationMs}` +
+            ` samples=${summary.totalSamples}` +
+            ` topFrames: ${top}`,
+        );
+      }
+      // The profiler window has closed (render settled or bound elapsed),
+      // so the cumulative heap profile now reflects this render. Read and
+      // flush it — each upload is a point in the per-render growth series.
+      if (wantHeap) {
+        let heapProfile = await captureHeapSamplingProfile(page);
+        if (heapProfile) {
+          await uploadArtifact({
+            ...keyParts,
+            kind: 'heap',
+            body: heapProfile,
+          });
+        }
+      }
+    })
+    .catch(() => {
+      // Best-effort: profiling failures never perturb the render.
+    });
+  return render;
+}
+
 export async function withTimeout<T>(
   page: Page,
   fn: () => Promise<T>,
   timeoutMs = cardRenderTimeout,
+  profileContext?: RenderProfileContext,
 ): Promise<T | RenderError> {
   // Every render funnels through here, so this counter is the live
   // count of concurrent renders in this process. Capture it (including
@@ -1396,6 +1589,24 @@ export async function withTimeout<T>(
   // one stalled on its own.
   activeRenderCount++;
   let concurrentRenders = activeRenderCount;
+  // Affinity-scoped CPU profiling (opt-in). When
+  // `PRERENDER_PROFILE_AFFINITY` lists one or more affinity keys and
+  // this render's affinity key is one of them, wrap the render work in a
+  // CDP CPU profile and log the top self-time frames once it completes.
+  // The gate short-circuits on the env read for every other realm, so
+  // unrelated affinities issue no CDP calls and pay nothing. Profiling
+  // the targeted realms' renders (fine-grained sampling, every render)
+  // is the accepted cost of this trigger.
+  let affinityTargets = getAffinityProfileTargets();
+  let profileThisRender = shouldProfileAffinity(
+    profileContext?.affinityKey,
+    affinityTargets,
+  );
+  let renderFn = fn;
+  if (profileThisRender) {
+    renderFn = () =>
+      runWithAffinityProfile(page, fn, timeoutMs, profileContext);
+  }
   let result!: T | { timeout: true };
   // Capture the timeout timer so we can clear it once the race settles —
   // otherwise a render that finishes fast leaves a pending timer holding
@@ -1403,7 +1614,7 @@ export async function withTimeout<T>(
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     result = await Promise.race([
-      fn().catch((err) => {
+      renderFn().catch((err) => {
         // Puppeteer's own TimeoutError (from waitForFunction/waitForSelector)
         // should be treated the same as our outer timeout
         if (err instanceof Error && err.name === 'TimeoutError') {
@@ -1455,6 +1666,25 @@ export async function withTimeout<T>(
         mainThreadResponsive = null;
       }
       cpuMetrics = await captureCpuMetrics(page);
+    }
+    // Out-of-process V8 CPU sample of the still-spinning renderer. At the
+    // timeout cap a wedged render is still in its hot loop, and the CDP
+    // sampling profiler keeps collecting stack samples even when the JS
+    // thread is too pegged for `Performance.getMetrics` or
+    // `page.evaluate` to answer — so this names the hot function the
+    // other timeout-path signals can only point at. Runs for ALL realms
+    // (the cost lands only on a render that already failed) and never on
+    // the success path. Best-effort: resolves to null on any CDP error
+    // and the stop is time-boxed so a wedged renderer can't stall here.
+    let cpuProfileTopFrames: string | null = null;
+    if (!page.isClosed()) {
+      let summary = await profileWindow(page, {
+        run: () =>
+          new Promise<void>((resolve) =>
+            setTimeout(resolve, TIMEOUT_PATH_CPU_SAMPLE_MS),
+          ),
+      });
+      cpuProfileTopFrames = formatTopFrames(summary);
     }
     // Out-of-band CDP view of fetches still outstanding — survives a
     // wedged JS thread, so it's available even when the in-page hooks
@@ -1560,6 +1790,7 @@ export async function withTimeout<T>(
         ` pendingFetches=${pendingNetworkRequests?.length ?? '<unknown>'}` +
         (topPending ? `(top: ${topPending.url} ${topPending.ageMs}ms)` : '') +
         ` concurrentRenders=${concurrentRenders}` +
+        (cpuProfileTopFrames ? ` cpuTopFrames: ${cpuProfileTopFrames}` : '') +
         ` DOM:\n${dom?.trim()}`,
     );
     // Diagnostics ride on the outer `RenderError.diagnostics` as a

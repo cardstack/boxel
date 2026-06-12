@@ -32,6 +32,7 @@ export const issueStatusOptions: Option[] = [
 export const issueTypeOptions: Option[] = [
   { value: 'bootstrap', label: 'Bootstrap' },
   { value: 'feature', label: 'Feature' },
+  { value: 'adjustment', label: 'Adjustment' },
   { value: 'bug', label: 'Bug' },
   { value: 'task', label: 'Task' },
   { value: 'research', label: 'Research' },

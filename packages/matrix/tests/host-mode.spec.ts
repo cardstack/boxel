@@ -5,6 +5,7 @@ import {
   logout,
   postCardSource,
   setRealmRedirects,
+  waitForPublishedMarker,
   waitUntil,
 } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
@@ -292,34 +293,6 @@ async function createAndPublishHostModeRealm(
   };
 }
 
-// Poll the server-rendered HTML at `url` until it contains `marker`. The
-// `_publish-realm` POST returns before the published realm has finished
-// re-indexing/prerendering, so navigating "cold" races that work and is the
-// source of the flaky `page.goto` timeouts this suite previously hit.
-//
-// Budget generously (not waitUntil's 10s default): this is the readiness gate
-// for a realm that may still be indexing under CI load, so a tight poll would
-// fail a slow-but-eventually-ready realm earlier than the old bare navigation
-// (which was bounded by the 60s test timeout). 45s stays under that test
-// timeout while leaving headroom for the navigation/assertions that follow.
-async function waitForPublishedMarker(
-  page: Page,
-  url: string,
-  marker: string,
-  timeout = 45_000,
-) {
-  await waitUntil(async () => {
-    let response = await page.request.get(url, {
-      headers: { Accept: 'text/html' },
-    });
-    if (!response.ok()) {
-      return false;
-    }
-    let text = await response.text();
-    return text.includes(marker);
-  }, timeout);
-}
-
 // Read-only tests share a single published realm created once per worker.
 // Publishing fans out a full reindex + prerender; doing it once instead of in
 // a per-test `beforeEach` removes the prerender storm that drove the flake.
@@ -562,6 +535,12 @@ test.describe('Host mode routing rules', () => {
     );
 
     let noSlashURL = realm.publishedRealmURL.replace(/\/$/, '');
+    // The no-slash URL is a distinct server-render path from the
+    // trailing-slash one gated above; warm it on its own before
+    // navigating so `page.goto` doesn't race a cold render of this
+    // variant under prerender-pool load (a cold no-slash render that
+    // outruns the 60s test timeout is the flake this gate closes).
+    await waitForPublishedMarker(page, noSlashURL, 'data-test-white-paper');
     await page.goto(noSlashURL, { waitUntil: 'domcontentloaded' });
     // `[data-test-host-mode-card="<id>"]` is set by the host SPA's
     // CardRenderer — that attribute exists ONLY post-hydration (it's

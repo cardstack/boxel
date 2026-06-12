@@ -26,10 +26,12 @@ import type {
   CardResource,
   CssResource,
   FileMetaResource,
+  HtmlResource,
   Meta,
   Relationship,
   RenderedHtmlResource,
   Saved,
+  SearchEntryResource,
 } from './resource-types.ts';
 import type {
   CardCollectionDocument,
@@ -46,6 +48,8 @@ const CardResourceType: CardResource['type'] = 'card';
 const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
 const RenderedHtmlResourceType: RenderedHtmlResource['type'] = 'rendered-html';
 const CssResourceType: CssResource['type'] = 'css';
+const SearchEntryResourceType: SearchEntryResource['type'] = 'search-entry';
+const HtmlResourceType: HtmlResource['type'] = 'html';
 
 // ---------------------------------------------------------------------------
 // Code refs
@@ -329,6 +333,91 @@ export function isCssResource(resource: any): resource is CssResource {
   return typeof resource.attributes.href === 'string';
 }
 
+export function isSearchEntryResource(
+  resource: any,
+): resource is SearchEntryResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== SearchEntryResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { relationships } = resource;
+  if (typeof relationships !== 'object' || relationships == null) {
+    return false;
+  }
+  let { html, item } = relationships;
+  if (html !== undefined) {
+    if (!Array.isArray(html?.data)) {
+      return false;
+    }
+    for (let member of html.data) {
+      if (member?.type !== HtmlResourceType || typeof member?.id !== 'string') {
+        return false;
+      }
+    }
+  }
+  if (item !== undefined) {
+    if (
+      (item?.data?.type !== CardResourceType &&
+        item?.data?.type !== FileMetaResourceType) ||
+      typeof item.data.id !== 'string'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isHtmlResource(resource: any): resource is HtmlResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== HtmlResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
+    return false;
+  }
+  if (
+    typeof attributes.cardType !== 'string' ||
+    typeof attributes.format !== 'string'
+  ) {
+    return false;
+  }
+  // `html` is absent only on an error rendering with no last-known-good HTML.
+  if (attributes.html === undefined && attributes.isError !== true) {
+    return false;
+  }
+  if (attributes.html !== undefined && typeof attributes.html !== 'string') {
+    return false;
+  }
+  // The has-many `styles` relationship is part of the type, so a sound guard
+  // must confirm it before a consumer reads the stylesheet links.
+  let styles = resource.relationships?.styles;
+  return Boolean(styles && Array.isArray(styles.data));
+}
+
+// A field-limited (`meta.sparseFields`-carrying) `card`/`file-meta`
+// serialization — the `item` shape a sparse fieldset produces. Presence of
+// the marker is the authoritative sparse signal (not which fields happen to
+// be present); a sparse item must never enter the Store.
+export function isSparseItemResource(
+  resource: any,
+): resource is CardResource | FileMetaResource {
+  if (!isCardResource(resource) && !isFileMetaResource(resource)) {
+    return false;
+  }
+  return Array.isArray(resource.meta?.sparseFields);
+}
+
 // An "identity-only" card: the server's representation for an HTML-backed
 // result — identity (`id`/`meta`/`links.self`) plus a `rendered-html`
 // relationship, with the live serialization deliberately withheld (no
@@ -343,6 +432,19 @@ export function isIdentityOnlyCardResource(
   resource: any,
 ): resource is CardResource {
   if (!isCardResource(resource)) {
+    return false;
+  }
+  return resource.meta?.identityOnly === true;
+}
+
+// The `file-meta` counterpart of `isIdentityOnlyCardResource`: an HTML-backed
+// file row the server emits as identity + a `rendered-html` relationship with
+// no `attributes`, flagged `meta.identityOnly`. Hydrates to a live `FileDef`
+// via `links.self`. (A file carries no `renderType` — it renders natively.)
+export function isIdentityOnlyFileMetaResource(
+  resource: any,
+): resource is FileMetaResource {
+  if (!isFileMetaResource(resource)) {
     return false;
   }
   return resource.meta?.identityOnly === true;

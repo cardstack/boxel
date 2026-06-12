@@ -39,8 +39,8 @@ test.describe('Skills', () => {
         .click();
     }
     await page.locator('[data-test-pill-menu-add-button]').click();
-    await page.locator(`[data-test-card-catalog-item="${cardId}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${cardId}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
 
     await expect(
       page.locator(`[data-test-pill-menu-item="${cardId}"]`),
@@ -368,10 +368,10 @@ test.describe('Skills', () => {
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(
-        '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+        '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
       )
       .click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await page
       .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
@@ -402,19 +402,26 @@ test.describe('Skills', () => {
       .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
       .click();
     await page
-      .locator('[data-test-card-catalog-item]', {
+      .locator('[data-test-item-button]', {
         hasText: 'Automatic Switch Command',
       })
       .first()
       .click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
 
     // fill in message field with "Switch to code mode"
     await page
       .locator('[data-test-boxel-input-id="ai-chat-input"]')
       .fill('Switch to code mode');
     await page.locator('[data-test-send-message-btn]').click();
-    await page.locator('[data-test-message-idx="0"]').waitFor();
+    // Wait for the optimistic bubble's real echo to land before editing the
+    // skill card and reloading — otherwise a reload mid-send leaves a failed
+    // pending bubble hydrated from localStorage.
+    await page
+      .locator(
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+      )
+      .waitFor();
 
     // Update the uploaded skill card
     await page.locator('[data-test-filter-list-item="Skill"]').click();

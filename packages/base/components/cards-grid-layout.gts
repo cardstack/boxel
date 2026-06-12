@@ -243,11 +243,33 @@ export default class CardsGridLayout extends Component<Signature> {
         color: var(--foreground, var(--boxel-dark));
       }
       .scroll-container {
-        overflow: hidden;
+        /* Keep the scrollbar gutter reserved and the scrollbar a fixed width in
+           every state, so revealing it on hover never steals layout width and
+           reflows the card grid. Only the thumb color is toggled on hover/focus;
+           toggling overflow or the scrollbar width would shift the layout. */
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
       }
       .scroll-container:hover,
       .scroll-container:focus {
-        overflow-y: auto;
+        scrollbar-color: rgba(0 0 0 / 25%) transparent;
+      }
+      .scroll-container::-webkit-scrollbar {
+        width: 0.5rem;
+        height: 0.5rem;
+      }
+      .scroll-container::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scroll-container::-webkit-scrollbar-thumb {
+        background: transparent;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .scroll-container:hover::-webkit-scrollbar-thumb,
+      .scroll-container:focus::-webkit-scrollbar-thumb {
+        background: rgba(0 0 0 / 25%);
       }
       .sidebar {
         --accent: var(--sidebar-accent);

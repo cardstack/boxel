@@ -24,6 +24,7 @@ import { logger } from '../logger.ts';
 import { readCard } from '../workspace-fs.ts';
 
 import type { ValidationStepRunner } from './validation-pipeline.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 let log = logger('test-validation-step');
 
@@ -34,6 +35,8 @@ let log = logger('test-validation-step');
 export interface TestValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   hostAppUrl: string;
   testResultsModuleUrl: string;
   /**
@@ -181,6 +184,7 @@ export class TestValidationStep implements ValidationStepRunner {
         lastSequenceNumber: this.lastSequenceNumber,
         issueURL,
         iteration,
+        cache: this.config.cache,
       });
 
       if (handle.sequenceNumber != null) {

@@ -147,7 +147,11 @@ interface Signature {
   Blocks: {};
 }
 
-const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+// The owner-destroyed error message, matched as a substring so a card-context
+// read during teardown (realm refresh / unmount) is swallowed rather than
+// surfaced.
+const OWNER_DESTROYED_ERROR =
+  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
 export default class SearchContent extends Component<Signature> {
   @service declare network: NetworkService;

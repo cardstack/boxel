@@ -441,21 +441,19 @@ module('Integration | operator-mode | basics', function (hooks) {
       await click(`[data-test-boxel-filter-list-button="All Cards"]`);
       await click('[data-test-create-new-card-button]');
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
         .containsText('Choose a Spec card');
       await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+        `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
       );
       assert
-        .dom(
-          `[data-test-realm="${ctx.realmName}"] [data-test-card-catalog-item]`,
-        )
+        .dom(`[data-test-realm="${ctx.realmName}"] [data-test-item-button]`)
         .exists({ count: 3 });
 
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+        `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
       );
-      click('[data-test-card-catalog-go-button]');
+      click('[data-test-card-chooser-go-button]');
       await waitFor('[data-test-stack-card-index="1"]');
       assert
         .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
@@ -527,27 +525,27 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await click('[data-test-create-new-card-button]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
     );
     assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
       .containsText('Choose a Spec card');
     assert
-      .dom(`[data-test-realm="${ctx.realmName}"] [data-test-card-catalog-item]`)
+      .dom(`[data-test-realm="${ctx.realmName}"] [data-test-item-button]`)
       .exists({ count: 3 });
 
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
     await click('[data-test-add-new="blogPost"]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await click(`[data-test-item-button-create-new]`);
 
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
@@ -563,8 +561,8 @@ module('Integration | operator-mode | basics', function (hooks) {
     await click(
       '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-add-new]',
     );
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await click(`[data-test-item-button-create-new]`);
 
     await waitFor(`[data-test-stack-card-index="3"]`);
 
