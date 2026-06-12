@@ -62,7 +62,7 @@ const files: Record<string, any> = {
     },
   },
   'error.gts': `
-    import { CardDef } from 'https://cardstack.com/base/card-api';
+    import { CardDef } from '@cardstack/base/card-api';
 
     export default class ErrorCard extends CardDef {
       static displayName = 'error';
@@ -74,8 +74,8 @@ const files: Record<string, any> = {
     }
   `,
   'pet.gts': `
-    import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export default class Pet extends CardDef {
       static displayName = 'Pet';
@@ -89,8 +89,8 @@ const files: Record<string, any> = {
     }
   `,
   'person.gts': `
-    import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, linksTo, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
     import Pet from "./pet";
 
     export class Person extends CardDef {
@@ -229,8 +229,8 @@ const filesB: Record<string, any> = {
     },
   },
   'animal.gts': `
-    import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export class Animal extends CardDef {
       static displayName = 'Animal';
@@ -839,8 +839,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
       assert.expect(12);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TrèsTestCard extends CardDef {
   static displayName = "Très test card 😀";
 }`.trim();
@@ -919,7 +919,7 @@ export class TrèsTestCard extends CardDef {
           content,
           `
 import { Person } from './person';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Person {
   static displayName = "Test Card";
 }`.trim(),
@@ -1083,8 +1083,8 @@ export class TestCard extends Person {
         assert.strictEqual(
           content,
           `
-import BigInteger from 'https://cardstack.com/base/big-integer';
-import { Component } from 'https://cardstack.com/base/card-api';
+import BigInteger from '@cardstack/base/big-integer';
+import { Component } from '@cardstack/base/card-api';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
 }`.trim(),
@@ -1152,7 +1152,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
           content,
           `
 import Pet from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Pet {
   static displayName = "Test Card";
 }`.trim(),
@@ -1191,7 +1191,7 @@ export class TestCard extends Pet {
           content,
           `
 import PetParent from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class Pet extends PetParent {
   static displayName = "Pet";
 }`.trim(),
@@ -1229,7 +1229,7 @@ export class Pet extends PetParent {
           content,
           `
 import Pet from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class Map0 extends Pet {
   static displayName = "Map";
 }`.trim(),
@@ -1246,8 +1246,8 @@ export class Map0 extends Pet {
     test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1281,8 +1281,8 @@ export class TestCard extends CardDef {
     test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1316,8 +1316,8 @@ export class TestCard extends CardDef {
     test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1376,7 +1376,7 @@ export class TestCard extends CardDef {
           content,
           `
 import { Animal } from '${testRealmURL2}animal';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Animal {
   static displayName = "Test Card";
 }`.trim(),
