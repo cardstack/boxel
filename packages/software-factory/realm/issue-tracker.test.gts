@@ -1283,7 +1283,7 @@ export function runTests() {
           let savedDoc = savedIssueDocs[savedIssueDocs.length - 1];
           assert.strictEqual(
             savedDoc?.data?.attributes?.priority,
-            undefined,
+            null,
             'priority field is cleared when card is moved to Uncategorized',
           );
         });
@@ -1355,7 +1355,7 @@ export function runTests() {
           });
         });
 
-        test('six issue-type columns are rendered and cards appear in the correct column', async function (assert) {
+        test('seven issue-type columns are rendered and cards appear in the correct column', async function (assert) {
           await visitOperatorMode({
             stacks: [[{ id: boardId, format: 'isolated' }]],
           });
@@ -1363,9 +1363,10 @@ export function runTests() {
 
           assert
             .dom('[data-kanban-column]')
-            .exists({ count: 6 }, 'exactly 6 issue type columns rendered');
+            .exists({ count: 7 }, 'exactly 7 issue type columns rendered');
           assert.dom('[data-kanban-column="bootstrap"]').exists();
           assert.dom('[data-kanban-column="feature"]').exists();
+          assert.dom('[data-kanban-column="adjustment"]').exists();
           assert.dom('[data-kanban-column="bug"]').exists();
           assert.dom('[data-kanban-column="task"]').exists();
           assert.dom('[data-kanban-column="research"]').exists();
