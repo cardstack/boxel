@@ -43,6 +43,9 @@ module(basename(__filename), function () {
         '172.31.255.255',
         '192.168.1.1',
         '169.254.169.254', // cloud metadata endpoint
+        '100.64.0.1', // carrier-grade NAT
+        '224.0.0.1', // multicast
+        '255.255.255.255', // broadcast
         '::1',
         '::',
         '[::1]',

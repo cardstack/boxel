@@ -1,3 +1,4 @@
+import ipaddr from 'ipaddr.js';
 import type { CreditStrategy } from './credit-strategies.ts';
 import { CreditStrategyFactory } from './credit-strategies.ts';
 import { type DBAdapter, logger } from '@cardstack/runtime-common';
@@ -39,53 +40,30 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
   return requestPath.startsWith(`${destinationPath}/`);
 }
 
-// Matches IPv4/IPv6 literals (and `localhost`) that resolve to loopback,
-// link-local, or RFC 1918 private ranges. Hostnames that aren't IP literals
-// are treated as public; the origin allowlist is the primary control.
+// Rejects IP-literal hosts that aren't ordinary public unicast addresses —
+// loopback, link-local, private (RFC 1918), unique-local, unspecified,
+// multicast/broadcast, reserved, carrier-grade NAT, and the IPv6 transition
+// ranges all count as non-public. Regular hostnames aren't resolved here; the
+// origin allowlist is the primary control and this is SSRF defense-in-depth.
 export function isNonPublicHost(hostname: string): boolean {
-  let host = hostname.toLowerCase();
-  // IPv6 addresses arrive wrapped in brackets from URL.hostname.
-  host = host.replace(/^\[/, '').replace(/\]$/, '');
+  // URL.hostname wraps IPv6 literals in brackets.
+  let host = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
 
   if (host === 'localhost' || host.endsWith('.localhost')) {
     return true;
   }
 
-  // IPv6 literals contain a colon; only then do the IPv6 range checks
-  // apply, so a normal hostname like `fcm.googleapis.com` is never caught
-  // by the unique-local prefix check below.
-  if (host.includes(':')) {
-    // IPv4-mapped IPv6, e.g. ::ffff:169.254.169.254 — fall through to the
-    // IPv4 checks against the embedded address.
-    let mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
-    if (mapped) {
-      host = mapped[1];
-    } else {
-      if (host === '::1' || host === '::') {
-        return true; // loopback / unspecified
-      }
-      if (/^fe[89ab]/.test(host)) {
-        return true; // link-local fe80::/10 (fe80::–febf::)
-      }
-      if (/^f[cd]/.test(host)) {
-        return true; // unique-local fc00::/7
-      }
-      return false;
-    }
+  if (!ipaddr.isValid(host)) {
+    return false; // not an IP literal — treat as a public hostname
   }
 
-  let ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!ipv4) {
-    return false;
+  let addr = ipaddr.parse(host);
+  // Judge an IPv4-mapped IPv6 address (e.g. ::ffff:169.254.169.254) by its
+  // embedded IPv4 range rather than the generic `ipv4Mapped` bucket.
+  if (addr instanceof ipaddr.IPv6 && addr.isIPv4MappedAddress()) {
+    addr = addr.toIPv4Address();
   }
-  let [a, b] = ipv4.slice(1).map(Number);
-  if (a === 127) return true; // loopback 127.0.0.0/8
-  if (a === 10) return true; // private 10.0.0.0/8
-  if (a === 169 && b === 254) return true; // link-local 169.254.0.0/16
-  if (a === 172 && b >= 16 && b <= 31) return true; // private 172.16.0.0/12
-  if (a === 192 && b === 168) return true; // private 192.168.0.0/16
-  if (a === 0) return true; // 0.0.0.0/8
-  return false;
+  return addr.range() !== 'unicast';
 }
 
 export interface AllowedProxyDestination {
