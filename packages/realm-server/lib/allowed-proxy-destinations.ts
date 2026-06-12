@@ -1,4 +1,3 @@
-import ipaddr from 'ipaddr.js';
 import type { CreditStrategy } from './credit-strategies.ts';
 import { CreditStrategyFactory } from './credit-strategies.ts';
 import { type DBAdapter, logger } from '@cardstack/runtime-common';
@@ -38,32 +37,6 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
     return requestPath.startsWith(destinationPath);
   }
   return requestPath.startsWith(`${destinationPath}/`);
-}
-
-// Rejects IP-literal hosts that aren't ordinary public unicast addresses —
-// loopback, link-local, private (RFC 1918), unique-local, unspecified,
-// multicast/broadcast, reserved, carrier-grade NAT, and the IPv6 transition
-// ranges all count as non-public. Regular hostnames aren't resolved here; the
-// origin allowlist is the primary control and this is SSRF defense-in-depth.
-export function isNonPublicHost(hostname: string): boolean {
-  // URL.hostname wraps IPv6 literals in brackets.
-  let host = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-
-  if (host === 'localhost' || host.endsWith('.localhost')) {
-    return true;
-  }
-
-  if (!ipaddr.isValid(host)) {
-    return false; // not an IP literal — treat as a public hostname
-  }
-
-  let addr = ipaddr.parse(host);
-  // Judge an IPv4-mapped IPv6 address (e.g. ::ffff:169.254.169.254) by its
-  // embedded IPv4 range rather than the generic `ipv4Mapped` bucket.
-  if (addr instanceof ipaddr.IPv6 && addr.isIPv4MappedAddress()) {
-    addr = addr.toIPv4Address();
-  }
-  return addr.range() !== 'unicast';
 }
 
 export interface AllowedProxyDestination {
@@ -155,14 +128,6 @@ export class AllowedProxyDestinations {
       requestUrl = new URL(url);
     } catch {
       // Unparseable URL can never match an allowlisted destination.
-      return undefined;
-    }
-
-    // Never forward to a non-public host, even if a destination is somehow
-    // configured to one. This is defense-in-depth against SSRF: the
-    // origin match below already pins the request to a configured
-    // destination origin.
-    if (isNonPublicHost(requestUrl.hostname)) {
       return undefined;
     }
 

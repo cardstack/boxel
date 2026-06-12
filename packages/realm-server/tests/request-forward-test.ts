@@ -24,61 +24,9 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import {
-  AllowedProxyDestinations,
-  isNonPublicHost,
-} from '../lib/allowed-proxy-destinations.ts';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 
 module(basename(__filename), function () {
-  module('isNonPublicHost', function () {
-    test('blocks loopback, link-local, and private hosts', function (assert) {
-      const blocked = [
-        'localhost',
-        'foo.localhost',
-        '127.0.0.1',
-        '127.5.6.7',
-        '0.0.0.0',
-        '10.0.0.1',
-        '172.16.0.1',
-        '172.31.255.255',
-        '192.168.1.1',
-        '169.254.169.254', // cloud metadata endpoint
-        '100.64.0.1', // carrier-grade NAT
-        '224.0.0.1', // multicast
-        '255.255.255.255', // broadcast
-        '::1',
-        '::',
-        '[::1]',
-        'fe80::1', // link-local
-        'fe90::1', // link-local (fe80::/10) — previously slipped through
-        'feb0::1', // link-local (fe80::/10)
-        'fc00::1', // unique-local
-        'fd12:3456::1', // unique-local
-        '::ffff:169.254.169.254', // IPv4-mapped metadata endpoint
-      ];
-      for (const host of blocked) {
-        assert.true(isNonPublicHost(host), `${host} should be blocked`);
-      }
-    });
-
-    test('allows public hostnames and addresses', function (assert) {
-      const allowed = [
-        'openrouter.ai',
-        'www.googleapis.com',
-        'gateway.ai.cloudflare.com',
-        'fcm.googleapis.com', // starts with "fc" but is not an IPv6 literal
-        'fd-cdn.example.com', // starts with "fd"
-        'fe80.example.com', // starts with "fe80" but not an IPv6 literal
-        '8.8.8.8',
-        '172.15.0.1', // just below the 172.16/12 private range
-        '172.32.0.1', // just above the 172.16/12 private range
-        '2607:f8b0::1', // public IPv6
-      ];
-      for (const host of allowed) {
-        assert.false(isNonPublicHost(host), `${host} should be allowed`);
-      }
-    });
-  });
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: any;
