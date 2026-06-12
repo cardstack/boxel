@@ -191,7 +191,15 @@ class _FileResource extends Resource<Args> {
     // since delivered the file.
     let realmId = this.realm.realmOf(rri(url));
     if (realmId) {
-      this.setSubscription(String(realmId), this.onRealmInvalidation);
+      this.setSubscription(realmId, this.onRealmInvalidation);
+    } else {
+      // No early subscription possible — the realm service hasn't yet
+      // discovered the realm that owns this URL. Recovery from an initial
+      // 404 then depends on the success-branch `setSubscription` inside
+      // `read`, which only fires if the fetch eventually succeeds.
+      log.debug(
+        `FileResource: no known realm for ${url} at modify-time; deferring subscription to read-success branch`,
+      );
     }
 
     this.read.perform();
@@ -316,21 +324,26 @@ class _FileResource extends Resource<Args> {
     }
 
     let { invalidations } = event as { invalidations: string[] };
-    // Fall back to the input URL when the file has not yet successfully
-    // loaded — the `url` getter reads from `innerState` which is only set
-    // by `read`. With the subscription now wired from `modify()`, an event
-    // can land before the first read completes.
-    let resolvedURL: string =
-      this.innerState.state === 'ready' ||
-      this.innerState.state === 'not-found' ||
-      this.innerState.state === 'server-error'
-        ? this.innerState.url
-        : this._url;
-    let normalizedURL = resolvedURL.endsWith('.json')
-      ? resolvedURL.replace(/\.json$/, '')
-      : resolvedURL;
+    // Match invalidations against both the currently-requested URL
+    // (`this._url`, kept current by `modify`) and the URL the resource
+    // most recently loaded into `innerState`. Both are necessary
+    // because:
+    //   - `innerState.url` may be a realm-canonicalized form of `_url`
+    //     (e.g. `experiments/author` redirects to `experiments/author.gts`)
+    //     and the realm emits invalidations for the canonical form.
+    //   - During a transition (modify called with a new URL while
+    //     innerState still holds a prior file), `innerState.url` is
+    //     stale; only `_url` reflects what the caller is asking for —
+    //     dropping the event here would orphan the new file.
+    let normalize = (raw: string) =>
+      raw.endsWith('.json') ? raw.replace(/\.json$/, '') : raw;
+    let candidates = new Set<string>([normalize(this._url)]);
+    if (this.innerState.state !== 'loading') {
+      candidates.add(normalize(this.innerState.url));
+    }
+    let normalizedURL = invalidations.find((inv) => candidates.has(inv));
 
-    if (invalidations.includes(normalizedURL)) {
+    if (normalizedURL) {
       realmEventsLogger.trace(
         `file resource ${normalizedURL} processing invalidation`,
         event,
@@ -360,7 +373,16 @@ class _FileResource extends Resource<Args> {
             Object.keys(this.cardService.clientRequestIds),
           );
         }
-      } else if (clientRequestId.startsWith('bot-patch:')) {
+      } else if (
+        clientRequestId.startsWith('bot-patch:') ||
+        // create-file writes originate from this host (cardService.saveSource
+        // with saveType 'create-file' — the path WriteTextFileCommand uses)
+        // but the FileResource may not yet have any content because its first
+        // fetch raced indexing and 404'd. The clientRequestId being in
+        // cardService.clientRequestIds does NOT imply we already have the
+        // content (unlike the editor: case), so we still need to reload.
+        clientRequestId.startsWith('create-file:')
+      ) {
         reloadFile = true;
         realmEventsLogger.debug(
           `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
