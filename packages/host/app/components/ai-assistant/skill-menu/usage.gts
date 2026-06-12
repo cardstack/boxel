@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedObject } from 'tracked-built-ins';
 
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
@@ -41,7 +41,7 @@ export default class AiAssistantSkillMenuUsage extends Component {
           @skills={{this.skills}}
           @onChooseCard={{this.attachSkill}}
         />
-        <CardCatalogModal />
+        <CardChooserModal />
       </:example>
     </FreestyleUsage>
   </template>

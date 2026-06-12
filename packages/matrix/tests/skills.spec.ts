@@ -39,8 +39,8 @@ test.describe('Skills', () => {
         .click();
     }
     await page.locator('[data-test-pill-menu-add-button]').click();
-    await page.locator(`[data-test-card-catalog-item="${cardId}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${cardId}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
 
     await expect(
       page.locator(`[data-test-pill-menu-item="${cardId}"]`),
@@ -368,10 +368,10 @@ test.describe('Skills', () => {
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(
-        '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+        '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
       )
       .click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await page
       .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
@@ -402,12 +402,12 @@ test.describe('Skills', () => {
       .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
       .click();
     await page
-      .locator('[data-test-card-catalog-item]', {
+      .locator('[data-test-item-button]', {
         hasText: 'Automatic Switch Command',
       })
       .first()
       .click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
 
     // fill in message field with "Switch to code mode"
     await page

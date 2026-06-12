@@ -81,8 +81,8 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
   await fillIn('[data-test-search-field]', cardId);
-  await click(`[data-test-card-catalog-item="${cardId}"]`);
-  await click('[data-test-card-catalog-go-button]');
+  await click(`[data-test-item-button="${cardId}"]`);
+  await click('[data-test-card-chooser-go-button]');
 }
 
 async function waitForSessionPreparationToFinish(
@@ -1180,10 +1180,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"]`,
+      `[data-test-item-button="https://cardstack.com/base/types/card"]`,
     );
 
-    await click(`[data-test-card-catalog-go-button]`);
+    await click(`[data-test-card-chooser-go-button]`);
 
     await waitUntil(() => id);
     id = id!;
@@ -1517,8 +1517,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-chooser-go-button]');
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
     assert
       .dom(
@@ -2580,8 +2580,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       await click('[data-test-attach-button]');
       await click('[data-test-attach-card-btn]');
       await fillIn('[data-test-search-field]', 'Plant spec');
-      await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await click(`[data-test-item-button="${autoAttachedSpecId}"]`);
+      await click('[data-test-card-chooser-go-button]');
 
       // Verify the spec card appears only once (not duplicated)
       let specCards = document.querySelectorAll(
@@ -2660,8 +2660,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Plant spec');
-    await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${autoAttachedSpecId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');

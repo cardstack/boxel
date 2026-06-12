@@ -2278,12 +2278,12 @@ module('Acceptance | code submode tests', function (_hooks) {
         '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
       );
       await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+        `[data-test-item-button="${testRealmURL}Country/united-states"]`,
       );
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+        `[data-test-item-button="${testRealmURL}Country/united-states"]`,
       );
-      await click(`[data-test-card-catalog-go-button]`);
+      await click(`[data-test-card-chooser-go-button]`);
 
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
@@ -2605,7 +2605,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .doesNotExist('card error state is not displayed');
     });
 
-    test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
+    test('card-chooser does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -2623,25 +2623,25 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');
       await waitFor('[data-test-links-to-editor="pet"] [data-test-add-new]');
       await click('[data-test-links-to-editor="pet"] [data-test-add-new]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
         .containsText('Choose a Pet card');
       assert
-        .dom('[data-test-card-catalog-create-new-button]')
+        .dom('[data-test-item-button-create-new]')
         .doesNotExist('can not create new card for linksTo field in code mode');
 
       await click('[aria-label="close modal"]');
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
 
       // linksToMany field
       await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
         .containsText('Select 1 or more Friend cards');
       assert
-        .dom('[data-test-card-catalog-create-new-button]')
+        .dom('[data-test-item-button-create-new]')
         .doesNotExist(
           'can not create new card for linksToMany field in code mode',
         );
@@ -2668,14 +2668,14 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor(`[data-test-create-file-modal][data-test-ready]`);
 
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await percySnapshot(assert);
-      let cardCatalogModalOverlay = document.querySelector(
-        '[data-test-card-catalog-modal]',
+      let cardChooserModalOverlay = document.querySelector(
+        '[data-test-card-chooser-modal]',
       )?.previousElementSibling;
-      assert.dom(cardCatalogModalOverlay).exists();
-      await click(cardCatalogModalOverlay!);
-      assert.dom('[data-test-card-catalog-modal]').doesNotExist();
+      assert.dom(cardChooserModalOverlay).exists();
+      await click(cardChooserModalOverlay!);
+      assert.dom('[data-test-card-chooser-modal]').doesNotExist();
 
       let createFileModalOverlay = document.querySelector(
         '[data-test-create-file-modal]',

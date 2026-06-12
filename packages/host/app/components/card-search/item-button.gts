@@ -318,9 +318,9 @@ export default class ItemButton extends Component<Signature> {
         (and @adorn this.isComponent)
       }}
       {{this.registerCardEl}}
-      data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
-      data-test-card-catalog-item={{removeFileExtension this.resolvedItemId}}
-      data-test-card-catalog-item-selected={{if @isSelected 'true'}}
+      data-test-item-button-create-new={{this.newCardItem.realmURL}}
+      data-test-item-button={{removeFileExtension this.resolvedItemId}}
+      data-test-item-button-selected={{if @isSelected 'true'}}
       ...attributes
     >
       {{#if @adorn}}
