@@ -376,6 +376,58 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
+  test('a paginated query takes a full re-run on an incremental event, keeping the server total', async function (assert) {
+    let fetchedRealms: string[][] = [];
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async (query, realms) => {
+      fetchedRealms.push(realms ?? []);
+      return await originalSearchEntries(query, realms);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            page: { size: 2 },
+            realms: [testRealmURL, testRealm2URL],
+          },
+        },
+      }));
+      await search.loaded;
+
+      // federated pagination applies per realm: realm 1 contributes a full
+      // page (2 of its 2 books), realm 2 its single book
+      assert.strictEqual(search.entries.length, 3);
+      assert.strictEqual(
+        search.meta.page.total,
+        3,
+        'the server total spans all pages',
+      );
+
+      await realm.write('books/3.json', bookDoc('Paper'));
+      await waitUntil(() => search.meta.page.total === 4, { timeout: 10_000 });
+
+      assert.deepEqual(
+        fetchedRealms[fetchedRealms.length - 1],
+        [testRealmURL, testRealm2URL],
+        'a paginated query re-fetches all realms — no realm-scoped splice',
+      );
+      assert.strictEqual(
+        search.entries.length,
+        3,
+        "realm 1's contribution stays page-limited",
+      );
+      assert.strictEqual(
+        search.meta.page.total,
+        4,
+        'the total stays server-accurate after the live update',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
+  });
+
   test("an event in realm 2 refreshes realm 2's rows", async function (assert) {
     let search = getResourceForTest(storeService, () => ({
       named: {

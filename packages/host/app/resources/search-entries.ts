@@ -227,8 +227,13 @@ export class SearchEntriesResource extends Resource<Args> {
     }
     let token = waiter.beginAsync();
     try {
+      // A paginated query never takes the realm-scoped path: with the held
+      // rows page-limited, no whole-set total can be reconstituted from a
+      // realm-subset fetch — the full re-run keeps `meta` server-accurate.
       let isPartialRefresh =
-        this.hasCompletedFullRun && this.realmsNeedingRefresh.size > 0;
+        this.hasCompletedFullRun &&
+        this.realmsNeedingRefresh.size > 0 &&
+        query.page === undefined;
       let realmsToFetch = isPartialRefresh
         ? [...this.realmsNeedingRefresh]
         : this.realmsToSearch;
@@ -246,9 +251,9 @@ export class SearchEntriesResource extends Resource<Args> {
             (entry) => !realmsToFetch.includes(entry.realmUrl),
           );
           this._entries.splice(0, this._entries.length, ...kept, ...fresh);
-          // The fetch covered a realm subset, so the response's total only
-          // speaks for that subset; the standing entry count is the best
-          // whole-set figure available.
+          // Unpaginated (a partial refresh precondition), so the standing
+          // entry count is the exact whole-set total; the response's total
+          // only speaks for the fetched realm subset.
           this._meta = {
             ...this._meta,
             page: { total: this._entries.length },
