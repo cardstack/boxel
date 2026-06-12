@@ -26,7 +26,7 @@ import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
 
-module('Integration | operator-mode | card catalog', function (hooks) {
+module('Integration | operator-mode | card chooser', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
 
   let noop = () => {};
@@ -363,7 +363,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
         .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
     });
 
-    test('type picker works in card catalog modal with baseFilter', async function (assert) {
+    test('type picker works in card chooser modal with baseFilter', async function (assert) {
       let recentCardsService = getService('recent-cards-service');
       recentCardsService.add(`${testRealmURL}Pet/mango`);
       recentCardsService.add(`${testRealmURL}Person/fadhlan`);
@@ -385,7 +385,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       // Type picker should exist in the modal
       assert
         .dom('[data-test-type-picker]')
-        .exists('type picker is present in card catalog modal');
+        .exists('type picker is present in card chooser modal');
 
       // Open type picker
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
@@ -704,7 +704,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .hasText('No cards available');
   });
 
-  test(`can filter by realm after searching in card catalog`, async function (assert) {
+  test(`can filter by realm after searching in card chooser`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -823,7 +823,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .exists();
   });
 
-  test(`can open new card editor in the stack after searching in card catalog`, async function (assert) {
+  test(`can open new card editor in the stack after searching in card chooser`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
