@@ -102,7 +102,14 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = ri('https://localhost:4202/test/');
+// The live test realm-server's /test/ realm. Standard mode serves it at
+// `https://localhost:4202/test/`; env mode at the per-environment
+// `https://realm-test.<slug>.localhost/test/`. Sourced from the resolved
+// URL the host config exports (set from `REALM_TEST_URL` by env-vars.sh)
+// so a single test bundle works in both modes.
+export const testModuleRealm = ri(
+  ensureTrailingSlash(ENV.resolvedTestRealmURL),
+);
 
 /**
  * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
