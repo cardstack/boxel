@@ -553,12 +553,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       // card type selection
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
-      );
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
       assert.dom(`[data-test-selected-type]`).hasText('Person');
       assert
@@ -626,12 +624,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor(`[data-test-selected-type="General Card"]`);
 
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}spec/error"]`,
-      );
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/error"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/error"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/error"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Error"]`);
 
       await click('[data-test-create-card-instance]');
@@ -784,12 +780,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       // card type selection
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
-      );
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
       let deferred = new Deferred<void>();
@@ -901,12 +895,10 @@ export class TrèsTestCard extends CardDef {
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
-      );
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -941,12 +933,10 @@ export class TestCard extends Person {
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
-      );
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -969,12 +959,10 @@ export class TestCard extends Person {
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
-      );
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1065,15 +1053,15 @@ export class TestCard extends Person {
       await openNewFileModal('Field Definition');
       assert.dom('[data-test-selected-type]').hasText('General Field');
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+        `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+        `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
       );
-      await click('[data-test-card-catalog-go-button]');
+      await click('[data-test-card-chooser-go-button]');
 
       assert.dom('[data-test-create-definition]').isDisabled();
       await fillIn(
@@ -1107,15 +1095,15 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await visitOperatorMode();
       await openNewFileModal('Field Definition');
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+        `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+        `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
       );
-      await click('[data-test-card-catalog-go-button]');
+      await click('[data-test-card-chooser-go-button]');
       await fillIn(
         '[data-test-display-name-field]',
         'Field that will not save',
@@ -1141,10 +1129,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
 
       // select card type
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/pet"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/pet"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1180,10 +1168,10 @@ export class TestCard extends Pet {
 
       // select card type
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/pet"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/pet"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
       await fillIn('[data-test-display-name-field]', 'Pet');
@@ -1218,10 +1206,10 @@ export class Pet extends PetParent {
 
       // select card type
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
-      await click(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL}spec/pet"]`);
+      await click(`[data-test-item-button="${testRealmURL}spec/pet"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
       await fillIn('[data-test-display-name-field]', 'Map');
@@ -1364,14 +1352,10 @@ export class TestCard extends CardDef {
       await visitOperatorMode(`${baseRealm.url}card-api.gts`);
       await openNewFileModal('Card Definition');
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
-      );
-      await click(
-        `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
-      );
-      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-card-chooser-modal]');
+      await waitFor(`[data-test-item-button="${testRealmURL2}spec/animal"]`);
+      await click(`[data-test-item-button="${testRealmURL2}spec/animal"]`);
+      await click('[data-test-card-chooser-go-button]');
       await waitFor(`[data-test-selected-type="Animal"]`);
 
       await fillIn('[data-test-display-name-field]', 'Test Card');

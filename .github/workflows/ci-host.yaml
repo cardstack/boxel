@@ -30,6 +30,8 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
   pull-requests: read
 
 jobs:
@@ -123,6 +125,13 @@ jobs:
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
+      # Warm the test images from the GHCR mirror so the services
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring "Failed to reach Synapse" failures).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
       - name: Create realm users
@@ -262,6 +271,13 @@ jobs:
         run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
         working-directory: packages/host
 
+      # Warm the test images from the GHCR mirror so the services
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring "Failed to reach Synapse" failures).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:

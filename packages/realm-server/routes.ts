@@ -43,6 +43,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
+import handleSearchV2 from './handlers/handle-search-v2.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import handleSearchPrerendered from './handlers/handle-search-prerendered.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
@@ -194,6 +195,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_federated-search',
     multiRealmAuthorization(args),
     handleSearch({ reconciler: args.reconciler, searchCache }),
+  );
+  router.all(
+    '/_federated-search-v2',
+    multiRealmAuthorization(args),
+    handleSearchV2({ reconciler: args.reconciler, searchCache }),
   );
   router.all(
     '/_federated-info',

@@ -507,13 +507,15 @@ export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page.locator('[data-test-attach-button]').click();
   await page.locator('[data-test-attach-card-btn]').click();
   await page
-    .locator('[data-test-card-catalog-modal] [data-test-search-field]')
+    .locator('[data-test-card-chooser-modal] [data-test-search-field]')
     .fill(cardId);
   await page
-    .locator(`[data-test-card-catalog-item="${cardId}"]`)
+    .locator(
+      `[data-test-card-chooser-modal] [data-test-item-button="${cardId}"]`,
+    )
     .first()
     .click();
-  await page.locator('[data-test-card-catalog-go-button]').click();
+  await page.locator('[data-test-card-chooser-go-button]').click();
 }
 
 export async function setupTwoStackItems(

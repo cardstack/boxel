@@ -3,7 +3,11 @@
 # run-p and mise ensure-pg both try to start postgres at the same time).
 if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
   # running postgres on port 5435 so it doesn't collide with native postgres
-  # that may be running on your system
+  # that may be running on your system.
+  # If you bump postgres, also update mise-tasks/infra/ensure-pg and the GHCR
+  # mirror so CI keeps caching it (it must match the version pinned there):
+  # .github/workflows/mirror-test-images.yml and
+  # .github/actions/warm-test-images/action.yml.
   docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 >/dev/null 2>&1 || true
 fi
 docker start boxel-pg >/dev/null 2>&1 || true

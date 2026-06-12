@@ -10,6 +10,7 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import {
   SupportedMimeType,
+  hasExecutableExtension,
   logger,
   rri,
   type RealmResourceIdentifier,
@@ -338,6 +339,27 @@ class _FileResource extends Resource<Args> {
         }
 
         if (reloadFile) {
+          // Mirrors the store's invalidation path: only reset the loader when
+          // the rewritten module has actually been imported (which includes
+          // entries cached as `state: 'broken'`). Resetting unconditionally
+          // would clone the whole loader on every external write — including
+          // boxel-cli writes for modules the host never loaded — and drop
+          // unrelated loaded modules. clearFetchCache is required because
+          // the module endpoint's ETag is keyed on unix-second-granularity
+          // `lastModified`; without it, a write landing in the same second
+          // as the prior fetch can be served as a 304 with the old broken
+          // body. The store only covers realms it subscribed to (i.e. ones
+          // it loaded a card instance from), so code-mode-only browsing of
+          // a .gts whose realm has no loaded instance relies on this path.
+          if (
+            hasExecutableExtension(normalizedURL) &&
+            this.loaderService.loader.isModuleLoaded(normalizedURL)
+          ) {
+            this.loaderService.resetLoader({
+              clearFetchCache: true,
+              reason: 'file-resource-external-invalidation',
+            });
+          }
           this.read.perform({ force: true });
         }
       }

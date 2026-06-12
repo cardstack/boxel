@@ -821,10 +821,8 @@ module(basename(__filename), function () {
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      let capturedInit: RequestInit | undefined;
       mockFetch.callsFake(
-        async (_input: string | URL | Request, init?: RequestInit) => {
-          capturedInit = init;
+        async (_input: string | URL | Request, _init?: RequestInit) => {
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
@@ -865,7 +863,26 @@ module(basename(__filename), function () {
           'Should pass along API response',
         );
 
-        assert.ok(capturedInit, 'fetch init should be captured');
+        // Find the forwarded upload call by URL rather than capturing the most
+        // recent stubbed call — background timers in the shared test prerender
+        // server (heartbeat to prerender-manager, periodic queue snapshots,
+        // etc.) also use `global.fetch` and can fire inside this test's stub
+        // window, so the last call through the stub is not necessarily ours.
+        const uploadCall = mockFetch.getCalls().find((call) => {
+          let raw = call.args[0];
+          let s = typeof raw === 'string' ? raw : raw.toString();
+          return s.includes('api.example.com/upload');
+        });
+        if (!uploadCall) {
+          // Diagnostic for the next failure: show what traffic the stub saw so
+          // the racing fetch can be identified from CI output alone.
+          console.error(
+            'multipart forward call not found; stubbed fetch saw:',
+            mockFetch.getCalls().map((c) => String(c.args[0])),
+          );
+        }
+        assert.ok(uploadCall, 'fetch was invoked against the upload URL');
+        const capturedInit = uploadCall?.args[1];
 
         const headersRecord =
           capturedInit?.headers instanceof Headers

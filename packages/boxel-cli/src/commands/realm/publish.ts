@@ -93,7 +93,9 @@ export async function publishRealm(
       (err.status === 400 || err.status === 409) &&
       options.republish !== false
     ) {
-      console.log(
+      // Progress, not payload: route to stderr via cliLog.info so it never
+      // corrupts stdout when the caller passed --json (stdout is JSON-only).
+      cliLog.info(
         `Publish returned ${err.status} (${(err.body ?? '').slice(0, 200)}). Unpublishing and retrying.`,
       );
       let unpublishResult = await unpublishRealm(normalizedPublished, {

@@ -79,7 +79,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { Captain } from '../../cards/captain';
+import type { Captain } from '../../../../test-realm-cards/contents/captain';
 
 let loader: Loader;
 
