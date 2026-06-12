@@ -7,6 +7,10 @@ import {
   type SearchEntryQuery,
 } from './search-entry.ts';
 import {
+  prerenderedSearchEntryQuery,
+  searchEntryDocToPrerenderedDoc,
+} from './search-compat.ts';
+import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -18,10 +22,9 @@ import {
 } from './cache/module-cache-invalidation.ts';
 import {
   makeCardTypeSummaryDoc,
-  transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type UnifiedSearchCollectionDocument,
+  type LinkableCollectionDocument,
   type SearchEntryCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types.ts';
@@ -5292,7 +5295,7 @@ export class Realm {
   public async search(
     query: Query,
     opts?: SearchOpts,
-  ): Promise<UnifiedSearchCollectionDocument> {
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     let engineOpts = {
       loadLinks: true as const,
@@ -5305,15 +5308,6 @@ export class Realm {
       // engine opts, so forward it (non-empty only — an empty array is a no-op).
       ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
     };
-    // Prefer-HTML: resolve each result to prerendered HTML where indexed and
-    // fall back to the full live card otherwise. Absent `render` (data-only or
-    // unspecified) keeps the full live-card document.
-    if (opts?.render) {
-      return await this.#realmIndexQueryEngine.searchUnified(query, {
-        ...engineOpts,
-        render: opts.render,
-      });
-    }
     return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
   }
 
@@ -5545,14 +5539,22 @@ export class Realm {
     },
   ): Promise<PrerenderedCardCollectionDocument> {
     assertQuery(query);
-    let results = await this.#realmIndexQueryEngine.searchPrerendered(query, {
-      htmlFormat: opts.htmlFormat,
-      cardUrls: opts.cardUrls,
+    // The legacy prerendered search expressed over the search-entry engine:
+    // both branches pinned (the `item` lets the coalescer recover a row's
+    // actual type where no rendering matched), no link expansion. The
+    // coalescer picks the requested ancestor's rendering and falls back to
+    // the native one, then flattens the first-class `css` resources into
+    // `meta.scopedCssUrls`.
+    let isFileMeta = await this.#realmIndexQueryEngine.queryTargetsFileMeta(
+      query.filter,
+    );
+    let doc = await this.#realmIndexQueryEngine.searchEntries(
+      prerenderedSearchEntryQuery(query, opts),
+    );
+    return searchEntryDocToPrerenderedDoc(doc, {
       renderType: opts.renderType,
-      includeErrors: true,
+      isFileMeta,
     });
-
-    return transformResultsToPrerenderedCardsDoc(results);
   }
 
   private async searchPrerenderedResponse(

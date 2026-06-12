@@ -81,7 +81,9 @@ const ITEM_PREFIX = 'item.';
 const ITEM_ANCHOR = 'item.on';
 const HTML_QUERY = 'htmlQuery';
 
-export const DEFAULT_HTML_QUERY: HtmlQuery = { eq: { format: 'fitted' } };
+export const DEFAULT_HTML_QUERY = {
+  eq: { format: 'fitted' },
+} as const satisfies HtmlQuery;
 
 const SEARCH_ENTRY_QUERY_MEMBERS = [
   'filter',
@@ -230,6 +232,32 @@ export function assertHtmlQuery(
 // Whether any renderType predicate appears in the htmlQuery (negated ones
 // count). When none does, only each result's own native type is in play; an
 // explicit predicate opens the full adoption-chain universe.
+// The formats an htmlQuery names in its eq leaves (any polarity), deduped —
+// the identities at which an errored row's failed renderings surface. An
+// htmlQuery constraining only renderType names none; the default format
+// stands in.
+export function htmlQueryFormats(query: HtmlQuery): PrerenderedHtmlFormat[] {
+  let formats = new Set<PrerenderedHtmlFormat>();
+  let walk = (node: HtmlQuery) => {
+    if ('eq' in node) {
+      if (node.eq.format !== undefined) {
+        formats.add(node.eq.format);
+      }
+    } else if ('every' in node) {
+      node.every.forEach(walk);
+    } else if ('any' in node) {
+      node.any.forEach(walk);
+    } else {
+      walk(node.not);
+    }
+  };
+  walk(query);
+  if (formats.size === 0) {
+    formats.add(DEFAULT_HTML_QUERY.eq.format);
+  }
+  return [...formats];
+}
+
 export function htmlQueryHasRenderTypePredicate(query: HtmlQuery): boolean {
   if ('eq' in query) {
     return query.eq.renderType !== undefined;

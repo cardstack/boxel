@@ -240,6 +240,20 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       }
     });
 
+    test('cardUrls narrows results across the federation', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+        cardUrls: [`${testRealm.url}john.json`],
+      });
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        response.body.data.map((entry: { id: string }) => entry.id),
+        [`${testRealm.url}john`],
+        'only the requested card across both realms',
+      );
+    });
+
     test('cache/ETag segregates by query, fields, and htmlQuery', async function (assert) {
       let post = (body: Record<string, unknown>) =>
         postSearch(body)
