@@ -28,6 +28,16 @@
   - `--json` for machine-readable output
   - `--fail-on-findings` to exit non-zero when failed jobs are found
 
+## Environment mode: isolated local test/dev environments
+
+You do not have to "wait for CI" to run tests. You can boot a full, isolated Boxel stack on this machine and run tests against your branch. This is **environment mode**, keyed off the `BOXEL_ENVIRONMENT` variable: each environment gets its own ports, database, and `*.localhost` hostnames (via a Traefik proxy), so it won't collide with another worktree's running stack.
+
+- **When to reach for it:** to run a *focused subset* of realm-server or host tests against your branch locally, instead of pushing and waiting for CI. The full host suite still belongs in CI (it crashes locally).
+- **Hard rule:** when booting any service or running any test that spins up real services (`mise run …`, `pnpm test`, `pnpm migrate`, the dev stack) from a worktree that is **not** the user's primary checkout, set `BOXEL_ENVIRONMENT=<worktree-slug>` first — the slug of the *current* worktree, never another one. Pure unit tests, lint, typecheck, and schema dumps do not need it.
+- **Not yet supported:** Matrix (Playwright) tests do **not** currently work in environment mode. Run those in standard mode or rely on CI.
+
+For the full procedure — worktree setup, fast startup with `INDEX_CACHE`, service hostnames, running each suite, and cleanup — **use the `environment-mode` skill.** Also see the README's "Environment mode: parallel environments" section.
+
 ## Testing instructions by package
 
 ### packages/ai-bot
@@ -68,7 +78,7 @@
 - `pnpm start` to start a process that will watch files and automatically rebuild
 - Tests require the realm-server to be running (must be run after `pnpm start`):
   `cd ../realm-server && pnpm start:all`
-- Do not try to run the entire host test suite locally. It crashes. Instead, rely on CI for the full test runs.
+- Do not try to run the entire host test suite locally. It crashes. Instead, rely on CI for the full test runs. (A *focused subset* can be run locally against an isolated stack — see "Environment mode" below.)
 - To run a subset of the tests:
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
