@@ -26,7 +26,12 @@ import EntityDisplayWithIcon from './components/entity-icon-display/index.gts';
 import EntityDisplayWithThumbnail from './components/entity-thumbnail-display/index.gts';
 import FieldContainer from './components/field-container/index.gts';
 import FilterList, { type Filter } from './components/filter-list/index.gts';
-import { FittedCard } from './components/fitted-card/index.gts';
+import FittedCard, {
+  type FittedCardLayout,
+  type FittedCardTitleTag,
+  FITTED_CARD_LAYOUT_OPTIONS,
+  FITTED_CARD_TITLE_TAG_OPTIONS,
+} from './components/fitted-card/index.gts';
 import FittedCardContainer from './components/fitted-card-container/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
@@ -91,6 +96,8 @@ import ViewSelector, {
 
 export {
   type Filter,
+  type FittedCardLayout,
+  type FittedCardTitleTag,
   type InsertionPoint,
   type KanbanColumnConfig,
   type KanbanPlacement,
@@ -138,6 +145,8 @@ export {
   FieldContainer,
   FilterList,
   findInsertionFromPointer,
+  FITTED_CARD_LAYOUT_OPTIONS,
+  FITTED_CARD_TITLE_TAG_OPTIONS,
   FittedCard,
   FittedCardContainer,
   GridContainer,

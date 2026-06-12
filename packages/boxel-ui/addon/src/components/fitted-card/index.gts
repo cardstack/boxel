@@ -579,7 +579,7 @@ export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
           --fc-subtitle-text-overflow: ellipsis;
           --fc-subtitle-white-space: nowrap;
         }
-        :has(.fc-image) {
+        .fitted-card:has(.fc-image) {
           --fc-badge-left-display: block;
         }
       }
@@ -593,7 +593,7 @@ export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
           --fc-meta-display: none;
           --fc-footer-display: none;
         }
-        :has(.fc-image) {
+        .fitted-card:has(.fc-image) {
           --fc-badge-left-display: block;
         }
       }

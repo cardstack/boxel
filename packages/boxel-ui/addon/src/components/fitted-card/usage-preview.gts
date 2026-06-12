@@ -103,6 +103,9 @@ export const FittedItemContainer: TemplateOnlyComponent<FittedItemContainerSigna
         position: absolute;
         top: 0;
         right: 0;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
         padding: var(--boxel-sp-4xs);
         background-color: var(--boxel-light);
         border-left: var(--boxel-border-card);
@@ -114,11 +117,6 @@ export const FittedItemContainer: TemplateOnlyComponent<FittedItemContainerSigna
       h4 {
         margin: 0;
         font-weight: 500;
-      }
-      .desc {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
       }
       .copy-btn {
         margin-left: auto;
