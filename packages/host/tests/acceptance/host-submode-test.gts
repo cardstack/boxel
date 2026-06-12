@@ -193,6 +193,65 @@ module('Acceptance | host submode', function (hooks) {
     };
   });
 
+  module('with a dangling host routing rule', function (hooks) {
+    hooks.beforeEach(async function () {
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(true),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
+      ]);
+      // A `/` routing rule whose target card was never created, so the
+      // `instance` link dangles.
+      realmContents['realm.json'] = {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Test Workspace B' },
+            hostRoutingRules: [{ path: '/' }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './does-not-exist' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: realmContents,
+      });
+    });
+
+    test('publish modal warns that a routing rule points to a missing card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await waitFor('[data-test-dangling-routing-warning]');
+      assert
+        .dom('[data-test-dangling-routing-warning]')
+        .exists('the dangling-routing warning shows in the publish modal');
+      assert
+        .dom('[data-test-dangling-routing-warning]')
+        .containsText(
+          'does-not-exist',
+          'the warning names the missing routing target',
+        );
+    });
+  });
+
   module('with a realm that is not publishable', function (hooks) {
     hooks.beforeEach(async function () {
       await setupAcceptanceTestRealm({
