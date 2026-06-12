@@ -450,18 +450,23 @@ function makeNewField({
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldRef.name});`;
   }
 
+  // Resolve any RRI-prefix in `fieldRef.module` to the virtual alias URL
+  // (e.g. `@cardstack/base/X` → `https://cardstack.com/base/X`), not the
+  // resolved real URL (`https://localhost:4201/base/X`). Existing imports
+  // in user source files use the virtual alias form, so emitting the
+  // resolved real URL would cause `importUtil` to add a duplicate import
+  // line instead of merging the new identifier into the existing one.
+  let virtualizedFieldModule: string = fieldRef.module;
+  if (virtualNetwork.isRegisteredPrefix(virtualizedFieldModule)) {
+    let resolved = virtualNetwork.toURL(virtualizedFieldModule);
+    let virtual = virtualNetwork.mapURL(resolved, 'real-to-virtual');
+    virtualizedFieldModule = (virtual ?? resolved).href;
+  }
+
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
-    // `resolveURL` of a registered prefix (e.g. `@cardstack/base/X`) returns
-    // the RESOLVED real URL (e.g. `https://localhost:4201/base/X`). Existing
-    // imports in user source files use the virtual alias form
-    // (`https://cardstack.com/base/X`), so emitting the resolved real URL
-    // here means `importUtil` adds a duplicate import line instead of
-    // merging the new identifier into the existing one. Convert back to
-    // the virtual alias via `mapURL(real-to-virtual)` so a new import
-    // matches the convention used in source files.
     let resolved = virtualNetwork.resolveURL(
-      fieldRef.module,
+      virtualizedFieldModule,
       incomingRelativeTo,
     );
     let virtual = virtualNetwork.mapURL(resolved, 'real-to-virtual');
@@ -471,7 +476,7 @@ function makeNewField({
       outgoingRealmURL,
     );
   } else {
-    relativeFieldModuleRef = fieldRef.module;
+    relativeFieldModuleRef = virtualizedFieldModule;
   }
 
   let fieldCardIdentifier = importUtil.import(
