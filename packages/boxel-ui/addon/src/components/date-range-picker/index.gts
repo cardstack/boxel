@@ -22,6 +22,8 @@ interface Signature {
   Args: {
     disabled?: boolean;
     end?: Date | null;
+    maxDate?: Date;
+    minDate?: Date;
     onSelect: TPowerCalendarRangeOnSelect;
     selected?: SelectedPowerCalendarRange;
     start?: Date | null;
@@ -132,6 +134,8 @@ export default class DateRangePicker extends Component<Signature> {
           <calendar.Days
             @weekdayFormat={{weekdayFormat}}
             @center={{this.leftCenter}}
+            @minDate={{@minDate}}
+            @maxDate={{@maxDate}}
           />
         </div>
 
@@ -160,6 +164,8 @@ export default class DateRangePicker extends Component<Signature> {
           <calendar.Days
             @weekdayFormat={{weekdayFormat}}
             @center={{this.rightCenter}}
+            @minDate={{@minDate}}
+            @maxDate={{@maxDate}}
           />
         </div>
       </div>
