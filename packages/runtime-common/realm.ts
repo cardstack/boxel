@@ -5545,11 +5545,15 @@ export class Realm {
     // coalescer picks the requested ancestor's rendering and falls back to
     // the native one, then flattens the first-class `css` resources into
     // `meta.scopedCssUrls`.
+    let isFileMeta = await this.#realmIndexQueryEngine.queryTargetsFileMeta(
+      query.filter,
+    );
     let doc = await this.#realmIndexQueryEngine.searchEntries(
       prerenderedSearchEntryQuery(query, opts),
     );
     return searchEntryDocToPrerenderedDoc(doc, {
       renderType: opts.renderType,
+      isFileMeta,
     });
   }
 

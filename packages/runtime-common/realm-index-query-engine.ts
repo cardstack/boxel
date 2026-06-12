@@ -970,7 +970,7 @@ export class RealmIndexQueryEngine {
     return doc;
   }
 
-  private async queryTargetsFileMeta(
+  async queryTargetsFileMeta(
     filter: Filter | undefined,
     opts?: Options,
   ): Promise<boolean> {

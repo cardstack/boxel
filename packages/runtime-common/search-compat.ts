@@ -157,6 +157,25 @@ export function searchEntryDocToLinkableDoc(
   return result;
 }
 
+// A serialized item's `adoptsFrom` may be relative to the instance; the
+// rendering attributes carry absolute refs, so resolve before comparing.
+function absoluteRef(
+  ref: CodeRef | undefined,
+  baseId: string,
+): CodeRef | undefined {
+  if (!ref || !('module' in ref)) {
+    return ref;
+  }
+  if (/^\.\.?\//.test(ref.module)) {
+    try {
+      return { ...ref, module: new URL(ref.module, baseId).href as never };
+    } catch {
+      return ref;
+    }
+  }
+  return ref;
+}
+
 function sameRef(a: CodeRef | undefined, b: CodeRef | undefined): boolean {
   return (
     !!a &&
@@ -176,7 +195,14 @@ function sameRef(a: CodeRef | undefined, b: CodeRef | undefined): boolean {
 // `css` resources flatten into `meta.scopedCssUrls`.
 export function searchEntryDocToPrerenderedDoc(
   doc: SearchEntryCollectionDocument,
-  opts: { renderType?: CodeRef },
+  opts: {
+    renderType?: CodeRef;
+    // The dispatch-level file signal: a file-meta query sets `meta.isFileMeta`
+    // even when it matches zero rows, so the caller (which knows the
+    // dispatch) passes it; the item-derived fallback covers callers that
+    // don't.
+    isFileMeta?: boolean;
+  },
 ): PrerenderedCardCollectionDocument {
   let htmlById = new Map<string, HtmlResource>();
   let scopedCssUrls: string[] = [];
@@ -195,11 +221,13 @@ export function searchEntryDocToPrerenderedDoc(
   }
 
   // A prerendered document is uniformly instances or files (the engine
-  // dispatches the whole query one way or the other), signaled by the items'
-  // type.
-  let isFileMeta = doc.data.some(
-    (entry) => entry.relationships.item?.data.type === 'file-meta',
-  );
+  // dispatches the whole query one way or the other) — the caller's
+  // dispatch-level signal wins; the items' type covers the rest.
+  let isFileMeta =
+    opts.isFileMeta ??
+    doc.data.some(
+      (entry) => entry.relationships.item?.data.type === 'file-meta',
+    );
   let data: PrerenderedCardResource[] = [];
   for (let entry of doc.data) {
     let item = itemFor(entry, byIdentity);
@@ -207,18 +235,19 @@ export function searchEntryDocToPrerenderedDoc(
       .map((ref) => htmlById.get(ref.id))
       .filter((member): member is HtmlResource => member !== undefined);
     // The requested ancestor's rendering when present; else the native one
-    // (the row's own type, recovered from the item); else whatever matched.
-    // This reproduces the legacy COALESCE(requested key, native key)
-    // selection.
-    let picked =
-      (opts.renderType
-        ? (members.find((member) =>
-            sameRef(member.attributes.renderType, opts.renderType),
-          ) ??
-          members.find((member) =>
-            sameRef(member.attributes.renderType, item?.meta.adoptsFrom),
-          ))
-        : undefined) ?? members[0];
+    // (the row's own type, recovered from the item); else nothing — exactly
+    // the legacy COALESCE(requested key, native key) selection, which never
+    // substituted an unrelated ancestor. Without a renderType request the
+    // native rule means the sole member is the native rendering.
+    let nativeRef = absoluteRef(item?.meta.adoptsFrom, entry.id);
+    let picked = opts.renderType
+      ? (members.find((member) =>
+          sameRef(member.attributes.renderType, opts.renderType),
+        ) ??
+        members.find((member) =>
+          sameRef(member.attributes.renderType, nativeRef),
+        ))
+      : members[0];
 
     let resource: PrerenderedCardResource = {
       type: 'prerendered-card',
