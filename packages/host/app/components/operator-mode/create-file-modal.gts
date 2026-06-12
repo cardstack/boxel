@@ -844,7 +844,16 @@ export default class CreateFileModal extends Component<Signature> {
         this.network.virtualNetwork,
       ) as ResolvedCodeRef
     ).module;
-    const absoluteModule = new URL(absoluteModuleHref);
+    // `codeRefWithAbsoluteIdentifier` returns the resolved real URL for
+    // RRI-prefix inputs (`@cardstack/base/X` → `https://localhost:4201/base/X`),
+    // but emitted source files use the virtual alias form
+    // (`https://cardstack.com/base/X`) for imports. Convert back to the
+    // virtual alias when one exists so the new import lines match the
+    // convention.
+    const resolvedModule = new URL(absoluteModuleHref);
+    const absoluteModule =
+      this.network.virtualNetwork.mapURL(resolvedModule, 'real-to-virtual') ??
+      resolvedModule;
     let moduleURL = maybeRelativeReference(
       absoluteModule,
       url,

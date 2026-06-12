@@ -435,7 +435,7 @@ module('Integration | field markdown specialized', function (hooks) {
     await renderCard(loader, card, 'isolated');
     assert.strictEqual(
       readMarkdown(this.element),
-      '`https://cardstack.com/base/string/default`',
+      '`@cardstack/base/string/default`',
     );
   });
 

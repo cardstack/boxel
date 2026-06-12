@@ -222,7 +222,7 @@ module(`Integration | realm indexing`, function (hooks) {
       'search doc includes contentHash',
     );
     assert.ok(
-      fileEntry?.deps?.includes(`${baseRealmRRI}file-api`),
+      fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
       'deps include base file-api module',
     );
     let includesSelfFileDependency = fileEntry?.deps?.includes(fileURL.href);
