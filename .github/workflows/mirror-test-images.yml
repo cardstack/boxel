@@ -1,0 +1,74 @@
+name: Mirror test Docker images to GHCR
+
+# Mirrors the test suite's pinned third-party images from Docker Hub into this
+# repo's GitHub Container Registry namespace, so CI pulls them from GHCR (free
+# egress to GitHub-hosted runners) instead of hitting Docker Hub directly — the
+# source of the recurring registry-1.docker.io pull timeouts. The
+# warm-test-images composite action consumes these. The tags are version-pinned
+# and rarely change, so a weekly refresh plus a refresh when the pins change is
+# enough. Run once manually (workflow_dispatch) to seed the packages, then make
+# them public so CI (and fork PRs) can pull them without authenticating.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mirror-test-images.yml
+      - packages/matrix/support/synapse/index.ts
+      - packages/matrix/docker/smtp4dev.ts
+      - mise-tasks/infra/ensure-pg
+      # The realm-server start-pg.sh is a symlink to this real file (where the
+      # postgres pin lives); a path filter on the symlink wouldn't see edits to
+      # the pinned version.
+      - packages/postgres/scripts/start-pg.sh
+
+concurrency:
+  group: mirror-test-images
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    name: Mirror images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Mirror images
+        env:
+          GHCR_PREFIX: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # <ghcr-package-suffix>:<tag>=<docker-hub-ref>. These versions must
+          # match what runs at test time and the warm-test-images action:
+          # packages/matrix/support/synapse/index.ts, packages/matrix/docker/
+          # smtp4dev.ts, mise-tasks/infra/ensure-pg, packages/postgres/scripts/
+          # start-pg.sh, and .github/actions/warm-test-images/action.yml.
+          images=(
+            "synapse:v1.126.0=matrixdotorg/synapse:v1.126.0"
+            "smtp4dev:v3.1=rnwood/smtp4dev:v3.1"
+            "postgres:16.3=postgres:16.3"
+          )
+          for entry in "${images[@]}"; do
+            # GHCR paths must be lowercase; the owner/repo already is, but guard.
+            dest="${GHCR_PREFIX,,}/${entry%%=*}"
+            src="${entry#*=}"
+            echo "Mirroring $src -> $dest"
+            # Copy the full manifest list registry-to-registry so every platform
+            # is mirrored (a plain pull/push would capture only the runner's
+            # arch and leave CI's linux/amd64 missing).
+            for attempt in 1 2 3 4 5; do
+              docker buildx imagetools create --tag "$dest" "$src" && break
+              if [ "$attempt" = 5 ]; then
+                echo "::error::failed to mirror $src after 5 attempts"
+                exit 1
+              fi
+              sleep $((attempt * 10))
+            done
+          done

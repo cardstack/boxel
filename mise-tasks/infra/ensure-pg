@@ -6,6 +6,10 @@
 # the container — that's fine, we just ensure it's started.
 if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
   echo "Starting new boxel-pg container on port ${PGPORT:-5435}..."
+  # If you bump postgres, also update start-pg.sh and the GHCR mirror so CI
+  # keeps caching it (it must match the version pinned there):
+  # .github/workflows/mirror-test-images.yml and
+  # .github/actions/warm-test-images/action.yml.
   docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 >/dev/null 2>&1 || true
 fi
 # Ensure the container is running (handles both the race case and stopped containers)
