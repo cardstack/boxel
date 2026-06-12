@@ -27,6 +27,8 @@ import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 import {
   deriveRealmName,
   ensureTrailingSlash,
+  isCardErrorJSONAPI,
+  isCardInstance,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
@@ -40,8 +42,10 @@ import config from '@cardstack/host/config/environment';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
+
 import type {
   PrivateDependencyViolation,
   ErrorDocumentViolation,
@@ -51,6 +55,9 @@ import type {
   ClaimedDomain,
   SubdomainAvailabilityResult,
 } from '@cardstack/host/services/realm-server';
+import type StoreService from '@cardstack/host/services/store';
+
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 type CustomSubdomainSelection = {
   url: string;
@@ -74,10 +81,14 @@ interface Signature {
 
 export default class PublishRealmModal extends Component<Signature> {
   @service declare private hostModeService: HostModeService;
+  @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private commandService: CommandService;
+  @service declare private store: StoreService;
+
+  #cardAPI?: typeof CardAPI;
 
   @tracked selectedPublishedRealmURLs: string[] = [];
   @tracked private customSubdomainSelection: CustomSubdomainSelection | null =
@@ -98,6 +109,9 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private errorDocumentViolations: ErrorDocumentViolation[] | null =
     null;
   @tracked private warningTypes: string[] | null = null;
+  @tracked private danglingRoutingRules:
+    | { path: string; reference: string }[]
+    | null = null;
 
   @tracked private initialSelectionsSet = false;
 
@@ -106,6 +120,16 @@ export default class PublishRealmModal extends Component<Signature> {
     this.ensureInitialSelectionsTask.perform();
     this.fetchBoxelClaimedDomain.perform();
     this.checkPrivateDependenciesTask.perform();
+    this.checkDanglingRoutingRulesTask.perform();
+  }
+
+  private async loadCardAPI() {
+    if (!this.#cardAPI) {
+      this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
+        'https://cardstack.com/base/card-api',
+      );
+    }
+    return this.#cardAPI;
   }
 
   get isSubdirectoryRealmPublished() {
@@ -138,6 +162,13 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get isCheckingPrivateDependencies() {
     return this.checkPrivateDependenciesTask.isRunning;
+  }
+
+  get shouldShowDanglingRoutingWarning() {
+    return (
+      Array.isArray(this.danglingRoutingRules) &&
+      this.danglingRoutingRules.length > 0
+    );
   }
 
   private privateRealmURLsForViolation = (
@@ -444,6 +475,56 @@ export default class PublishRealmModal extends Component<Signature> {
       this.privateDependencyViolations = null;
       this.errorDocumentViolations = null;
       this.warningTypes = null;
+    }
+  });
+
+  // Pre-publish check for host routing rules whose target card no longer
+  // exists. Publishing copies the realm config verbatim, including such a
+  // rule, and the published site then degrades the matched path to a 404
+  // placeholder — so warn the owner before they publish. Reads each rule's
+  // `instance` reference (preserved even when the link is broken) and
+  // confirms the target 404s.
+  private checkDanglingRoutingRulesTask = restartableTask(async () => {
+    this.danglingRoutingRules = null;
+    let realmURL = this.currentRealmURL;
+    if (!realmURL) {
+      return;
+    }
+    try {
+      let realmConfigId = `${ensureTrailingSlash(String(realmURL))}realm`;
+      let configCard = await this.store.get(realmConfigId);
+      if (!isCardInstance(configCard)) {
+        this.danglingRoutingRules = [];
+        return;
+      }
+      let api = await this.loadCardAPI();
+      let rules =
+        (configCard as unknown as { hostRoutingRules?: any[] })
+          .hostRoutingRules ?? [];
+      let dangling: { path: string; reference: string }[] = [];
+      for (let rule of rules) {
+        if (!rule) {
+          continue;
+        }
+        let slot = api.getRelationshipMembershipState(rule, 'instance')
+          .membership?.[0];
+        let reference = slot?.reference;
+        if (!reference) {
+          continue;
+        }
+        let targetId = new URL(reference, realmConfigId).href;
+        let target = await this.store.get(targetId);
+        if (isCardErrorJSONAPI(target) && target.status === 404) {
+          dangling.push({ path: rule.path ?? '/', reference: targetId });
+        }
+      }
+      this.danglingRoutingRules = dangling;
+    } catch (error) {
+      console.error(
+        'Failed to check for dangling routing rules before publishing',
+        error,
+      );
+      this.danglingRoutingRules = null;
     }
   });
 
@@ -819,6 +900,36 @@ export default class PublishRealmModal extends Component<Signature> {
               </div>
             </div>
           {{/if}}
+        {{/if}}
+
+        {{#if this.shouldShowDanglingRoutingWarning}}
+          <div
+            class='publish-warning warning'
+            data-test-dangling-routing-warning
+          >
+            <WarningIcon
+              class='publish-warning-icon'
+              width='20'
+              height='20'
+              role='presentation'
+            />
+            <div class='publish-warning-body'>
+              <div>
+                Some host routing rules point to a card that no longer exists.
+                Visitors to these paths will see a "page not found" error after
+                publishing.
+              </div>
+              <ul class='violation-list'>
+                {{#each this.danglingRoutingRules as |rule|}}
+                  <li>
+                    <code>{{rule.path}}</code>
+                    →
+                    {{rule.reference}}
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          </div>
         {{/if}}
 
         <div class='domain-options'>
