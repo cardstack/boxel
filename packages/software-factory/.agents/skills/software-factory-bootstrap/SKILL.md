@@ -146,17 +146,18 @@ module, every same-realm module it imports transitively
 (**including type-only imports**, which a runtime dep graph would
 miss but `boxel parse` needs), its sample instances, and its
 **card/app** Catalog Spec. Cross-realm imports
-   (`https://cardstack.com/base/...`) and component/function Specs
-   are left out on purpose. Pass `--realm <url>` only if the source
-   realm can't be auto-detected.
-   - **If the source card has no co-located test** — common for
-     catalog cards, which rarely ship `.test.gts` — write
-     **characterization tests** that capture its current behavior:
-     field defaults, computed-field outputs, and the key rendered
-     output of its formats. These establish the green baseline; they
-     are what the adjustment must not regress. Without them there is
-     nothing to protect and a zero-test `boxel test` run can never
-     count as green.
+(`https://cardstack.com/base/...`) and component/function Specs
+are left out on purpose. Pass `--realm <url>` only if the source
+realm can't be auto-detected.
+
+- **If the source card has no co-located test** — common for
+  catalog cards, which rarely ship `.test.gts` — write
+  **characterization tests** that capture its current behavior:
+  field defaults, computed-field outputs, and the key rendered
+  output of its formats. These establish the green baseline; they
+  are what the adjustment must not regress. Without them there is
+  nothing to protect and a zero-test `boxel test` run can never
+  count as green.
 
 2. **Confirm a green baseline.** Push the seeded workspace, then run
    the standard validators (per the "Validators" section of
