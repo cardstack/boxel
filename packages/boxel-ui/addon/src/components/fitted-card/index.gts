@@ -28,6 +28,11 @@ import { element } from '../../helpers.ts';
  *   @titleTag      – HTML element tag for the title heading (default: 'h1').
  *                    Pass 'h2' or 'h3' when cards appear in a list to preserve
  *                    correct heading hierarchy for screen readers.
+ *   @layout        – force a layout direction regardless of container size:
+ *                    'vertical'   — image always stacks on top of content
+ *                    'horizontal' — image always sits to the left of content
+ *                    'auto'       — default; layout is chosen by container-query
+ *                                  breakpoints based on aspect-ratio and size
  *
  * CSS custom properties (set on the host element or a wrapper):
  *   --fc-content-padding      padding inside the text column
@@ -110,12 +115,30 @@ import { element } from '../../helpers.ts';
  * footer content is in the caller's scope, not this component's.
  */
 
+export type FittedCardLayout = 'auto' | 'horizontal' | 'vertical';
+export type FittedCardTitleTag = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
+export const FITTED_CARD_LAYOUT_OPTIONS: FittedCardLayout[] = [
+  'auto',
+  'vertical',
+  'horizontal',
+];
+export const FITTED_CARD_TITLE_TAG_OPTIONS: FittedCardTitleTag[] = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+];
+
 interface FittedCardSignature {
   Args: {
     imageAlt?: string;
     imageLoading?: 'lazy' | 'eager';
     imageUrl?: string | null;
-    titleTag?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+    layout?: FittedCardLayout;
+    titleTag?: FittedCardTitleTag;
   };
   Blocks: {
     background: [];
@@ -135,7 +158,11 @@ interface FittedCardSignature {
 }
 
 export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
-  <article class='fitted-card' ...attributes>
+  <article
+    class='fitted-card'
+    data-layout={{if @layout @layout 'auto'}}
+    ...attributes
+  >
 
     {{#if (has-block 'background')}}
       <div class='fc-background'>{{yield to='background'}}</div>
@@ -268,6 +295,13 @@ export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
       }
       .fitted-card:has(.fc-image) {
         grid-template-columns: auto 1fr;
+      }
+      /* When <:placeholder> yields empty content, collapse the image column */
+      .fitted-card:has(.fc-placeholder:empty) {
+        grid-template-columns: 1fr;
+      }
+      .fc-image:has(> .fc-placeholder:empty) {
+        display: none;
       }
 
       .fc-background {
@@ -405,14 +439,6 @@ export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
       .fc-footer:empty,
       .fc-badge:not(:has(*)),
       .fc-badge-row:empty {
-        display: none;
-      }
-
-      /* When <:placeholder> yields empty content, collapse the image column */
-      .fitted-card:has(.fc-placeholder:empty) {
-        grid-template-columns: 1fr;
-      }
-      .fc-image:has(> .fc-placeholder:empty) {
         display: none;
       }
 
@@ -598,7 +624,7 @@ export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
           --fc-badge-row-display: none;
           --fc-meta-display: none;
         }
-        :not(:has(.fc-image)) {
+        .fitted-card:not(:has(.fc-image)) {
           --fc-badge-right-display: none;
           --fc-badge-left-display: none;
         }
@@ -738,6 +764,66 @@ export const FittedCard: TemplateOnlyComponent<FittedCardSignature> = <template>
         }
         .fc-footer {
           gap: var(--boxel-sp-sm);
+        }
+      }
+
+      /* ── Forced layout overrides ────────────────────────────────────
+         [data-layout] adds an attribute selector (0,2,0 specificity) which
+         beats plain class selectors inside container queries (0,1,0), so
+         these rules always win regardless of container dimensions.
+         ──────────────────────────────────────────────────────────────── */
+      .fitted-card[data-layout='vertical'] {
+        --fc-image-width: 100%;
+        --fc-image-max-width: 100%;
+        --fc-image-height: 45cqmin;
+        grid-template-columns: 1fr;
+      }
+      .fitted-card[data-layout='vertical']:has(.fc-image) {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+
+      .fitted-card[data-layout='horizontal'] {
+        --fc-image-width: 40cqh;
+        --fc-image-min-width: 3.75rem;
+        --fc-image-max-width: 12.5rem;
+        --fc-image-height: auto;
+        grid-template-columns: 1fr;
+      }
+      .fitted-card[data-layout='horizontal']:has(.fc-image) {
+        grid-template-columns: auto 1fr;
+        grid-template-rows: unset;
+      }
+
+      /* Vertical layout: hide image at strip sizes (landscape, height < 170px).
+         Strips are too short for a stacked image — collapse the image row. */
+      @container fitted-card (1.0 < aspect-ratio) and (height < 170px) {
+        .fitted-card[data-layout='vertical']:has(.fc-image) {
+          --fc-image-display: none;
+          grid-template-rows: unset;
+        }
+      }
+
+      /* Vertical layout: hide image at compact card (400+wide, 170–275px tall).
+         Not enough height to stack image above content usefully. */
+      @container fitted-card (1.0 < aspect-ratio) and (width >= 400px) and (170px <= height < 275px) {
+        .fitted-card[data-layout='vertical']:has(.fc-image) {
+          --fc-image-display: none;
+          grid-template-rows: unset;
+        }
+      }
+
+      /* Horizontal layout: portrait/square tiles are narrow, so 40cqh image width
+         eats too much of the card — reduce to leave room for content. */
+      @container fitted-card (aspect-ratio <= 1.0) and (height >= 200px) and (width < 400px) {
+        .fitted-card[data-layout='horizontal'] {
+          --fc-image-width: 30cqh;
+        }
+      }
+      /* Expanded card is very tall; 40cqh of 445px+ would be ~180px — cap it smaller. */
+      @container fitted-card (aspect-ratio <= 1.0) and (width >= 400px) and (height >= 445px) {
+        .fitted-card[data-layout='horizontal'] {
+          --fc-image-width: 25cqh;
         }
       }
     }

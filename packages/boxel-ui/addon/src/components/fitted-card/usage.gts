@@ -11,7 +11,13 @@ import CardContainer from '../card-container/index.gts';
 import FittedCardContainer from '../fitted-card-container/index.gts';
 import BoxelInput from '../input/index.gts';
 import Pill from '../pill/index.gts';
-import { FittedCard } from './index.gts';
+import {
+  type FittedCardLayout,
+  type FittedCardTitleTag,
+  FITTED_CARD_LAYOUT_OPTIONS,
+  FITTED_CARD_TITLE_TAG_OPTIONS,
+  FittedCard,
+} from './index.gts';
 import { FittedUsagePreview } from './usage-preview.gts';
 
 type BoolField =
@@ -197,6 +203,12 @@ export default class FittedCardUsage extends Component {
   @tracked imageUrl: string =
     'https://boxel-images.boxel.ai/app-assets/blog-posts/space-movie-thumb.jpeg';
   @tracked imageAlt: string = 'A sci-fi movie still';
+  @tracked imageLoading: 'eager' | 'lazy' | undefined = undefined;
+  @tracked layout: FittedCardLayout = 'auto';
+  @tracked titleTag: FittedCardTitleTag = 'h5';
+  imageLoadingOptions = ['lazy', 'eager'];
+  layoutOptions = FITTED_CARD_LAYOUT_OPTIONS;
+  titleTagOptions = FITTED_CARD_TITLE_TAG_OPTIONS;
 
   <template>
     <FreestyleUsage @name='FittedCard'>
@@ -543,7 +555,9 @@ export default class FittedCardUsage extends Component {
             class='my-fitted-card-class'
             @imageUrl={{if demo.showImage this.imageUrl}}
             @imageAlt={{this.imageAlt}}
-            @titleTag='h5'
+            @imageLoading={{this.imageLoading}}
+            @layout={{this.layout}}
+            @titleTag={{this.titleTag}}
           >
             <:placeholder>{{#if demo.showPlaceholder}}<BookOpen
                   width='24'
@@ -597,10 +611,23 @@ export default class FittedCardUsage extends Component {
         <Args.String
           @name='imageLoading'
           @description="Loading behaviour for the cover image: 'lazy' or 'eager'. Omit to use the browser default."
+          @options={{this.imageLoadingOptions}}
+          @value={{this.imageLoading}}
+          @onInput={{fn (mut this.imageLoading)}}
         />
         <Args.String
           @name='titleTag'
           @description="HTML heading element for the title: 'h1' (default), 'h2', 'h3', etc. Pass 'h2' or 'h3' when cards appear in a list to preserve heading hierarchy."
+          @options={{this.titleTagOptions}}
+          @value={{this.titleTag}}
+          @onInput={{fn (mut this.titleTag)}}
+        />
+        <Args.String
+          @name='layout'
+          @description="Force a layout direction regardless of container size: 'vertical' — image stacks on top; 'horizontal' — image sits to the left; 'auto' (default) — direction is chosen by container-query breakpoints based on aspect-ratio and size."
+          @options={{this.layoutOptions}}
+          @value={{this.layout}}
+          @onInput={{fn (mut this.layout)}}
         />
         <Args.Yield
           @name='title'

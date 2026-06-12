@@ -352,6 +352,7 @@ Optionally, you can use the `FittedCard` component from `@cardstack/boxel-ui/com
 
 ```gts
 import { FittedCard, Pill } from '@cardstack/boxel-ui/components';
+import type { FittedCardLayout, FittedCardTitleTag } from '@cardstack/boxel-ui/components';
 import BookOpen from '@cardstack/boxel-icons/book-open';
 import Calendar from '@cardstack/boxel-icons/calendar';
 
@@ -399,12 +400,15 @@ static fitted = class Fitted extends Component<typeof this> {
 
 #### Args
 
-| Arg             | Type     | Description                                                                                                                                                                    |
-| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@imageUrl`     | `string` | Cover image URL; triggers the image column layout                                                                                                                              |
-| `@imageAlt`     | `string` | Alt text for the cover image (defaults to `""`)                                                                                                                                |
-| `@imageLoading` | `string` | `'lazy'` or `'eager'`; omit to use the browser default                                                                                                                         |
-| `@titleTag`     | `string` | HTML heading element for the title: `'h1'` (default), `'h2'`, `'h3'`, etc. Pass `'h2'` or `'h3'` when cards appear in a list to preserve heading hierarchy for screen readers. |
+| Arg             | Type                 | Description                                                                                                                                                                                                                                               |
+| --------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@imageUrl`     | `string`             | Cover image URL; triggers the image column layout                                                                                                                                                                                                         |
+| `@imageAlt`     | `string`             | Alt text for the cover image (defaults to `""`)                                                                                                                                                                                                           |
+| `@imageLoading` | `string`             | `'lazy'` or `'eager'`; omit to use the browser default                                                                                                                                                                                                    |
+| `@titleTag`     | `FittedCardTitleTag` | HTML heading element for the title: `'h1'` (default), `'h2'`, `'h3'`, etc. Pass `'h2'` or `'h3'` when cards appear in a list to preserve heading hierarchy for screen readers.                                                                            |
+| `@layout`       | `FittedCardLayout`   | Force a layout direction regardless of container size: `'vertical'` — image always stacks on top; `'horizontal'` — image always sits to the left; `'auto'` (default) — direction is chosen by container-query breakpoints based on aspect-ratio and size. |
+
+`FittedCardLayout` and `FittedCardTitleTag` are exported named types from `@cardstack/boxel-ui/components`. When you need the allowed values as an array (e.g. for a dropdown), use the exported constants `FITTED_CARD_LAYOUT_OPTIONS` and `FITTED_CARD_TITLE_TAG_OPTIONS`.
 
 #### CSS custom properties
 
@@ -539,6 +543,21 @@ The runtime defines 16 named formats. Sizes are exact spec values (width × heig
 - Compact Card (400×170): increased padding + gap; hides both badges when no image
 - Full Card (400×275): larger font sizes; `line-clamp: 3`; hides both badges when no image
 - Expanded Card (400×445): full padding, image `height: 50cqh` with bottom scrim fade; hides both badges when no image
+
+#### `@layout` forced-mode overrides
+
+When `@layout` is `'vertical'` or `'horizontal'`, the image column direction is locked regardless of container size. Container-query breakpoints still apply for font sizes, padding, and section visibility — only the grid direction and image sizing are overridden.
+
+**`@layout='vertical'`** — image stacks above content (`width: 100%`, `height: 45cqmin`):
+
+- Strip sizes (`aspect-ratio > 1.0`, `height < 170px`) and compact card (`width ≥ 400px`, `170px ≤ height < 275px`): image is **hidden** — not enough vertical space to stack it usefully.
+
+**`@layout='horizontal'`** — image sits to the left (`width: 40cqh`):
+
+- Portrait/square tiles with `height ≥ 200px` and `width < 400px` (CardsGrid, Tall Tile, Large Tile): image width reduced to `30cqh` — avoids eating too much of a narrow card.
+- Expanded Card (`width ≥ 400px`, `height ≥ 445px`): image width reduced to `25cqh` — `40cqh` of a 445px+ card is ~180px, which is too wide.
+
+All image-sizing values are still overridable per-card with `--fc-image-width`.
 
 ### Form fields
 
