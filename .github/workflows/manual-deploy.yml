@@ -347,9 +347,11 @@ jobs:
     #
     # Gate on `deploy-realm-server` (wait-for-service-stability: true → the
     # new realm server is up and serving the new shell), NOT on
-    # `post-deploy-realm-server`: that job only POSTs the realm server's
-    # `/_post-deployment` endpoint and can fail independently (e.g. an edge
-    # 403), which would otherwise skip this recycle.
+    # `post-deploy-realm-server`: that job is a separate post-deploy hook
+    # (it POSTs the realm server's `/_post-deployment` endpoint) and can fail
+    # independently of the recycle's only real precondition — the new shell
+    # being served. Coupling to it would skip this recycle on an unrelated
+    # hook failure.
     needs: [build-prerender, deploy-realm-server]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
