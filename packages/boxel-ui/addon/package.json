@@ -52,7 +52,7 @@
     "ember-concurrency-ts": "catalog:",
     "ember-draggable-modifiers": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
-    "ember-freestyle": "^0.20.0",
+    "ember-freestyle": "^0.24.0",
     "ember-modifier": "^4.1.0",
     "ember-power-calendar": "^1.2.0",
     "ember-power-calendar-moment": "^1.0.2",
