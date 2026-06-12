@@ -178,6 +178,27 @@ export function isSearchEntryCollectionDocument(
   if (!Array.isArray(data)) {
     return false;
   }
+  // The guard runs on untrusted JSON: a present-but-malformed `included`
+  // would pass an unchecked guard and then throw in consumers that iterate
+  // it. Each member must be an identifiable resource; the four legal
+  // member types (`html` / `css` / `card` / `file-meta`) are not pinned
+  // individually so the wire can grow new included types compatibly.
+  if ('included' in doc && doc.included !== undefined) {
+    let { included } = doc;
+    if (!Array.isArray(included)) {
+      return false;
+    }
+    for (let resource of included) {
+      if (
+        typeof resource !== 'object' ||
+        resource == null ||
+        typeof resource.type !== 'string' ||
+        typeof resource.id !== 'string'
+      ) {
+        return false;
+      }
+    }
+  }
   return data.every((resource) => isSearchEntryResource(resource));
 }
 

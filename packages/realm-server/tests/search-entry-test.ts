@@ -9,6 +9,7 @@ import {
   htmlQueryHasRenderTypePredicate,
   htmlQueryMatches,
   isHtmlResource,
+  isSearchEntryCollectionDocument,
   isSearchEntryResource,
   isSparseItemResource,
   parseSearchEntryQueryFromPayload,
@@ -435,6 +436,56 @@ module(basename(__filename), function () {
       let parsed = parseSearchEntryQueryFromPayload(wire);
       assert.deepEqual(parsed.itemQuery, query);
       assert.deepEqual(parsed.htmlQuery, DEFAULT_HTML_QUERY);
+    });
+  });
+
+  module('search-entry collection document guard', function () {
+    let entry = () =>
+      buildSearchEntryResource({ url: cardUrl, itemType: 'card' });
+    let meta = { page: { total: 1 } };
+
+    test('accepts a well-formed document, with and without included', function (assert) {
+      assert.true(isSearchEntryCollectionDocument({ data: [entry()], meta }));
+      assert.true(
+        isSearchEntryCollectionDocument({
+          data: [entry()],
+          included: [{ type: 'card', id: cardUrl, attributes: {}, meta: {} }],
+          meta,
+        }),
+      );
+      assert.true(isSearchEntryCollectionDocument({ data: [], meta }));
+    });
+
+    test('rejects malformed data and included members', function (assert) {
+      assert.false(isSearchEntryCollectionDocument(null));
+      assert.false(isSearchEntryCollectionDocument({ data: [entry()] }));
+      assert.false(
+        isSearchEntryCollectionDocument({ data: 'nope', meta }),
+        'data must be an array',
+      );
+      assert.false(
+        isSearchEntryCollectionDocument({
+          data: [{ type: 'card', id: cardUrl }],
+          meta,
+        }),
+        'data members must be search-entry resources',
+      );
+      assert.false(
+        isSearchEntryCollectionDocument({
+          data: [entry()],
+          included: 'nope',
+          meta,
+        }),
+        'a present included must be an array',
+      );
+      assert.false(
+        isSearchEntryCollectionDocument({
+          data: [entry()],
+          included: [{ attributes: {} }],
+          meta,
+        }),
+        'included members must carry a (type, id) identity',
+      );
     });
   });
 
