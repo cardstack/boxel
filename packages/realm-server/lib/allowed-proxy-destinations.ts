@@ -42,7 +42,7 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
 // Matches IPv4/IPv6 literals (and `localhost`) that resolve to loopback,
 // link-local, or RFC 1918 private ranges. Hostnames that aren't IP literals
 // are treated as public; the origin allowlist is the primary control.
-function isNonPublicHost(hostname: string): boolean {
+export function isNonPublicHost(hostname: string): boolean {
   let host = hostname.toLowerCase();
   // IPv6 addresses arrive wrapped in brackets from URL.hostname.
   host = host.replace(/^\[/, '').replace(/\]$/, '');
@@ -51,21 +51,27 @@ function isNonPublicHost(hostname: string): boolean {
     return true;
   }
 
-  // IPv6 loopback / link-local / unique-local.
-  if (host === '::1' || host === '::') {
-    return true;
-  }
-  if (
-    host.startsWith('fe80:') || // link-local
-    host.startsWith('fc') || // unique-local fc00::/7
-    host.startsWith('fd')
-  ) {
-    return true;
-  }
-  // IPv4-mapped IPv6, e.g. ::ffff:169.254.169.254
-  let mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(host);
-  if (mapped) {
-    host = mapped[1];
+  // IPv6 literals contain a colon; only then do the IPv6 range checks
+  // apply, so a normal hostname like `fcm.googleapis.com` is never caught
+  // by the unique-local prefix check below.
+  if (host.includes(':')) {
+    // IPv4-mapped IPv6, e.g. ::ffff:169.254.169.254 — fall through to the
+    // IPv4 checks against the embedded address.
+    let mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
+    if (mapped) {
+      host = mapped[1];
+    } else {
+      if (host === '::1' || host === '::') {
+        return true; // loopback / unspecified
+      }
+      if (/^fe[89ab]/.test(host)) {
+        return true; // link-local fe80::/10 (fe80::–febf::)
+      }
+      if (/^f[cd]/.test(host)) {
+        return true; // unique-local fc00::/7
+      }
+      return false;
+    }
   }
 
   let ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
