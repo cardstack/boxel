@@ -82,6 +82,7 @@ import {
   buildHtmlResource,
   buildSearchEntryResource,
   buildSparseItemResource,
+  htmlQueryFormats,
   htmlQueryHasRenderTypePredicate,
   htmlQueryMatches,
   resolveHtmlQuery,
@@ -771,6 +772,26 @@ export class RealmIndexQueryEngine {
           });
           htmlResources.push(htmlResource);
           ids.push(htmlResource.id);
+        }
+        if (matched.length === 0 && hasError) {
+          // An error row's rendering set isn't empty-pending — the indexer
+          // ran and failed. Surface one error rendering (no last-known-good
+          // markup) per format the htmlQuery names, at the row's own type.
+          for (let format of htmlQueryFormats(htmlQuery)) {
+            let htmlResource = buildHtmlResource({
+              url: cardUrl,
+              format,
+              renderType: parseUsedRenderType(nativeKey) as
+                | ResolvedCodeRef
+                | undefined,
+              cardType: (row.display_names as string[] | null)?.[0] ?? '',
+              iconHtml: (row.icon_html as string | null) ?? undefined,
+              isError: true,
+              cssIds: [],
+            });
+            htmlResources.push(htmlResource);
+            ids.push(htmlResource.id);
+          }
         }
         // A pinned html branch always carries the (possibly empty) array;
         // the default mode omits the relationship on fallback rows.
