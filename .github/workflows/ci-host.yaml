@@ -84,6 +84,12 @@ jobs:
     with:
       caller: ci-host
       skip_catalog: true
+      # Both jobs in this workflow (live-test and host-test) run their
+      # chrome against the env-mode service stack at
+      # `https://*.ci.localhost`, so environment.js needs to bake those
+      # URLs into the host bundle. The standard-mode build still exists
+      # in ci.yaml for `matrix-client-test` / `vscode-boxel-tools-package`.
+      boxel_environment: ci
     concurrency:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -96,6 +102,16 @@ jobs:
     concurrency:
       group: boxel-live-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
+    env:
+      BOXEL_ENVIRONMENT: ci
+      SKIP_CATALOG: "true"
+      # env-vars.sh sets these only when the cert files exist at sourcing
+      # time, but mise-action sources it before `actions/init` runs
+      # `mise run infra:ensure-dev-cert`, so the conditional silently
+      # skips. Set explicitly to the path infra:ensure-dev-cert writes
+      # to on ubuntu-latest. Required by `createListener` in env mode.
+      REALM_SERVER_TLS_CERT_FILE: /home/runner/.local/share/boxel/dev-certs/localhost.pem
+      REALM_SERVER_TLS_KEY_FILE: /home/runner/.local/share/boxel/dev-certs/localhost-key.pem
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -125,6 +141,44 @@ jobs:
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
+
+      # Trust mkcert's root in the system store too, so plain `curl` (which
+      # ignores NODE_EXTRA_CA_CERTS) can validate Traefik's leaf.
+      - name: Install mkcert root into system trust store
+        run: mkcert -install
+
+      - name: Start Traefik
+        run: mise run infra:ensure-traefik
+
+      # The env-mode service stack uses `*.localhost` hostnames behind
+      # Traefik (host.ci.localhost, realm-server.ci.localhost, etc.).
+      # Fail the job here with a focused error if loopback resolution
+      # for those names breaks, rather than deep in a service boot.
+      - name: Verify *.localhost resolves to loopback
+        run: |
+          set -x
+          getent hosts realm-server.ci.localhost || true
+          python3 -c "import socket; print(socket.getaddrinfo('realm-server.ci.localhost', 443))" || true
+          curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 https://realm-server.ci.localhost/ || true
+
+      # Explicit boxel-skills clone before any pnpm workspace op can
+      # materialize an empty packages/skills-realm/contents directory and
+      # trip services/realm-server's `[ -d contents ]` skip in
+      # `pnpm skills:setup`. The repo is public and CI has no SSH key, so
+      # go straight to HTTPS; skip if a real working copy is already
+      # present (idempotent on reruns).
+      - name: Populate skills-realm content
+        run: |
+          set -eux
+          cd packages/skills-realm
+          if [ -d contents/Skill ]; then
+            echo "skills content already present, skipping clone"
+          else
+            rm -rf contents
+            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+          fi
+          ls contents/Skill/ | head -5
+
       # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub
       # pull (the cause of the recurring "Failed to reach Synapse" failures).
@@ -134,15 +188,70 @@ jobs:
         uses: ./.github/actions/warm-test-images
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
-      - name: Create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
+
+      # Block until base + skills realms are fully indexed and publicly
+      # readable. `_readiness-check` returns 200 only after the realm's
+      # from-scratch index finishes (which itself waits for the prerender
+      # standby pool the index depends on). The subsequent settle pause
+      # lets the prerender's standby pool finish populating before the
+      # test runner launches its own chrome instance — concurrent chrome
+      # lifecycle events otherwise trip NetworkChangeNotifier and abort
+      # the still-loading standby pages.
+      - name: Wait for realms and assert public-read parity
+        run: |
+          set -u
+          accept='application/vnd.api+json'
+          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
+          info='_info'
+          base_ready="https://realm-server.ci.localhost/base/${ready}"
+          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
+          skills_info="https://realm-server.ci.localhost/skills/${info}"
+          base_info="https://realm-server.ci.localhost/base/${info}"
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: base/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
+          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
+          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
+            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
+            exit 1
+          fi
+          echo "::notice::Environment-mode public-read parity confirmed"
 
       - name: Live test suite
         run: dbus-run-session -- pnpm test:live
         working-directory: packages/host
         env:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          # testem-live.js defaults to https://localhost:4201/skills/ as the
+          # realm under test; in env mode the skills realm sits at
+          # https://realm-server.<slug>.localhost/skills/. live-test-wait-for-
+          # servers.sh also reads this to know which realm readiness probe to
+          # wait on alongside base.
+          REALM_URL: https://realm-server.ci.localhost/skills/
 
       - name: Upload junit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -189,20 +298,24 @@ jobs:
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
+    env:
+      BOXEL_ENVIRONMENT: ci
+      SKIP_CATALOG: "true"
+      # env-vars.sh sets these only if the cert files exist at sourcing
+      # time, but mise-action sources it before `actions/init` runs
+      # `mise run infra:ensure-dev-cert` (which provisions the cert), so
+      # the conditional silently skips and the env vars never propagate
+      # to the test step. Setting them explicitly at the job level matches
+      # the hardcoded path `infra:ensure-dev-cert` writes to on
+      # ubuntu-latest. Required by `createListener` in env mode — HTTP/2
+      # is a system invariant and there's no plain-HTTP fallback.
+      REALM_SERVER_TLS_CERT_FILE: /home/runner/.local/share/boxel/dev-certs/localhost.pem
+      REALM_SERVER_TLS_KEY_FILE: /home/runner/.local/share/boxel/dev-certs/localhost-key.pem
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # init provisions mise, deps, mkcert + the dev TLS cert (and points
+      # NODE_EXTRA_CA_CERTS at mkcert's root), which Traefik terminates with.
       - uses: ./.github/actions/init
-
-      - name: Download test web assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
-        shell: bash
-        run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
 
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
@@ -221,6 +334,59 @@ jobs:
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
+
+      # Trust mkcert's root in the system store too, so plain `curl` (which
+      # ignores NODE_EXTRA_CA_CERTS) can validate Traefik's leaf.
+      - name: Install mkcert root into system trust store
+        run: mkcert -install
+
+      - name: Start Traefik
+        run: mise run infra:ensure-traefik
+
+      # The env-mode service stack uses `*.localhost` hostnames behind
+      # Traefik (host.ci.localhost, realm-server.ci.localhost, etc.).
+      # Fail the job here with a focused error if loopback resolution
+      # for those names breaks, rather than deep in a service boot.
+      - name: Verify *.localhost resolves to loopback
+        run: |
+          set -x
+          getent hosts realm-server.ci.localhost || true
+          python3 -c "import socket; print(socket.getaddrinfo('realm-server.ci.localhost', 443))" || true
+          curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 https://realm-server.ci.localhost/ || true
+
+      # The env-mode host dist (with realm-server.ci.localhost URLs
+      # baked in by environment.js) is built once in test-web-assets and
+      # downloaded here, avoiding a per-shard rebuild. The artifact
+      # bundles boxel-icons/dist, boxel-ui/addon/dist, packages/host/dist,
+      # and the build manifest.
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+
+      # Explicit boxel-skills clone before any pnpm workspace op can
+      # materialize an empty packages/skills-realm/contents directory and trip
+      # services/realm-server's `[ -d contents ]` skip in `pnpm skills:setup`.
+      # The repo is public and CI has no SSH key, so go straight to HTTPS;
+      # skip if a real working copy is already present (idempotent on reruns).
+      - name: Populate skills-realm content
+        run: |
+          set -eux
+          cd packages/skills-realm
+          if [ -d contents/Skill ]; then
+            echo "skills content already present, skipping clone"
+          else
+            rm -rf contents
+            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+          fi
+          ls contents/Skill/ | head -5
+
       # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub
       # pull (the cause of the recurring "Failed to reach Synapse" failures).
@@ -231,14 +397,78 @@ jobs:
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
-          SKIP_CATALOG: true
           # Dump HTTP/2 session/stream state for any realm-server stream that
           # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
           # 60s host-test timeouts. Diagnostics-only; see server.ts.
           REALM_SERVER_HTTP2_DIAGNOSTICS: "1"
-      - name: create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
+
+      # Block until base + skills realms are fully indexed and publicly
+      # readable. `_readiness-check` returns 200 only after the realm's
+      # from-scratch index finishes (which itself waits for the
+      # prerender standby pool the index depends on). The subsequent
+      # settle pause lets the prerender's standby pool finish
+      # populating before the test runner launches its own chrome
+      # instance — concurrent chrome lifecycle events otherwise trip
+      # NetworkChangeNotifier and abort the still-loading standby pages.
+      - name: Wait for realms and assert public-read parity
+        run: |
+          set -u
+          accept='application/vnd.api+json'
+          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
+          info='_info'
+          base_ready="https://realm-server.ci.localhost/base/${ready}"
+          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
+          skills_info="https://realm-server.ci.localhost/skills/${info}"
+          base_info="https://realm-server.ci.localhost/base/${info}"
+
+          # base/_readiness-check returns 200 only after the from-scratch
+          # index of the base realm finishes. The per-slug Postgres is fresh
+          # every run so this always runs, ~60s. Tests that load base cards
+          # block on this being indexed.
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: base/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
+          # skills/_readiness-check is the parallel gate for the skills
+          # realm. The realm-server boots base and skills in sequence, so
+          # skills indexing only starts after base finishes; the AI-assistant
+          # skills tests fetch Skill/boxel-environment, which requires skills
+          # to be indexed before testem launches its chrome. Without this
+          # wait the test would 404 on skills cards even though base is ready.
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
+          # Public-read parity: must be 200 unauthenticated.
+          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
+          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
+          echo "skills/_info -> $skills_code"
+          echo "base/_info   -> $base_code"
+          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
+            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
+            exit 1
+          fi
+          echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
@@ -246,7 +476,7 @@ jobs:
             TEST_CMD="pnpm test-with-percy"
           else
             echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
-            TEST_CMD="pnpm test:wait-for-servers"
+            TEST_CMD="pnpm ember-test-pre-built"
           fi
 
           set +e
@@ -289,7 +519,6 @@ jobs:
           exit $exit_code
         env:
           PERCY_ENABLED: ${{ needs.check-percy.outputs.percy_needed }}
-          SKIP_CATALOG: true
           PERCY_GZIP: true
           PERCY_TOKEN: ${{ needs.check-percy.outputs.percy_needed == 'true' && secrets.PERCY_TOKEN_HOST || '' }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}

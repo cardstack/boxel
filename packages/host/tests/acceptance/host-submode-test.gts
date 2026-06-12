@@ -13,6 +13,8 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import {
   getDbAdapter,
   setupLocalIndexing,
@@ -24,6 +26,16 @@ import {
   testRealmInfo,
   realmConfigCardJSON,
 } from '../helpers';
+
+// Per-user published-realm URL host. Standard mode: `localhost:4201`;
+// env mode: `realm-server.<slug>.localhost`. The publishing UI builds
+// URLs of the form `https://<username>.<host>/<realm>/` (or
+// `<custom-subdomain>.<host>/` for boxel-site claims), so the
+// assertions need to derive the host the same way the UI does.
+// publishedRealmBoxelSpaceDomain and publishedRealmBoxelSiteDomain are
+// distinct in the host config, but in this test environment they
+// resolve to the same value, so one const covers both.
+const publishedSpaceHost = ENV.publishedRealmBoxelSpaceDomain;
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
@@ -635,7 +647,9 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('.publishing-realm-popover').exists();
         assert
           .dom('.publishing-realm-popover')
-          .containsText(`Publishing to: https://testuser.localhost:4201/test/`);
+          .containsText(
+            `Publishing to: https://testuser.${publishedSpaceHost}/test/`,
+          );
         assert.dom('.publishing-realm-popover').exists();
         assert.dom('.loading-icon').exists();
 
@@ -668,7 +682,7 @@ module('Acceptance | host submode', function (hooks) {
           .dom(
             '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
           )
-          .hasAttribute('href', 'https://testuser.localhost:4201/test/')
+          .hasAttribute('href', `https://testuser.${publishedSpaceHost}/test/`)
           .hasAttribute('target', '_blank');
       });
 
@@ -679,15 +693,15 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'https://testuser.localhost:4201/test/': String(now),
-            'https://custom-site-name.localhost:4201/': String(now),
+            [`https://testuser.${publishedSpaceHost}/test/`]: String(now),
+            [`https://custom-site-name.${publishedSpaceHost}/`]: String(now),
           },
         });
 
@@ -732,7 +746,7 @@ module('Acceptance | host submode', function (hooks) {
       test('can unpublish realm', async function (assert) {
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['https://testuser.localhost:4201/test/']: (
+            [`https://testuser.${publishedSpaceHost}/test/`]: (
               new Date().getTime() -
               3 * 24 * 60 * 60 * 1000
             ).toString(),
@@ -852,7 +866,7 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-custom-subdomain-details]')
           .includesText(
-            'https://my-boxel-site.localhost:4201/ Not published yet',
+            `https://my-boxel-site.${publishedSpaceHost}/ Not published yet`,
           );
         assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
         assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
@@ -927,7 +941,7 @@ module('Acceptance | host submode', function (hooks) {
         let now = Date.now();
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'https://testuser.localhost:4201/test/': String(now),
+            [`https://testuser.${publishedSpaceHost}/test/`]: String(now),
             'https://another-domain.com/realm/': String(now - 1000),
           },
         });
@@ -943,7 +957,7 @@ module('Acceptance | host submode', function (hooks) {
             .dom('[data-test-open-site-button]')
             .hasAttribute(
               'href',
-              'https://testuser.localhost:4201/test/Person/1',
+              `https://testuser.${publishedSpaceHost}/test/Person/1`,
             )
             .hasAttribute('target', '_blank');
 
@@ -971,7 +985,7 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom(
-              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"]',
+              `[data-test-published-realm-item="https://testuser.${publishedSpaceHost}/test/Person/1"]`,
             )
             .exists();
           assert
@@ -983,11 +997,11 @@ module('Acceptance | host submode', function (hooks) {
           // Check that popover buttons have correct href attributes
           assert
             .dom(
-              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+              `[data-test-published-realm-item="https://testuser.${publishedSpaceHost}/test/Person/1"] [data-test-open-site-button]`,
             )
             .hasAttribute(
               'href',
-              'https://testuser.localhost:4201/test/Person/1',
+              `https://testuser.${publishedSpaceHost}/test/Person/1`,
             )
             .hasAttribute('target', '_blank');
 
@@ -1011,7 +1025,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1040,7 +1054,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'https://custom-site-name.localhost:4201/',
+              `https://custom-site-name.${publishedSpaceHost}/`,
               'shows claimed custom site URL',
             );
           assert
@@ -1071,7 +1085,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'https://custom-site-name.localhost:4201/',
+              `https://custom-site-name.${publishedSpaceHost}/`,
               'displays placeholder custom site URL after unclaim',
             );
           assert
@@ -1088,7 +1102,7 @@ module('Acceptance | host submode', function (hooks) {
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1116,7 +1130,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1163,7 +1177,7 @@ module('Acceptance | host submode', function (hooks) {
         await click('[data-test-publish-realm-button]');
         assert.dom('[data-test-publish-realm-modal]').exists();
 
-        let defaultUrl = 'https://testuser.localhost:4201/test/';
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
         assert
           .dom(`[data-test-domain-publish-error="${defaultUrl}"]`)
           .doesNotExist();
@@ -1194,13 +1208,13 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
 
-        let defaultUrl = 'https://testuser.localhost:4201/test/';
-        let customUrl = 'https://my-custom-site.localhost:4201/';
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
+        let customUrl = `https://my-custom-site.${publishedSpaceHost}/`;
 
         // Mock publish to succeed for default, fail for custom
         realmServer.publishRealm = async (
@@ -1277,7 +1291,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
@@ -1332,7 +1346,10 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom('[data-test-open-custom-subdomain-button]')
-            .hasAttribute('href', 'https://my-custom-site.localhost:4201/')
+            .hasAttribute(
+              'href',
+              `https://my-custom-site.${publishedSpaceHost}/`,
+            )
             .hasAttribute('target', '_blank');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
@@ -1345,7 +1362,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
@@ -1380,14 +1397,14 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['https://my-custom-site.localhost:4201/']: (
+            [`https://my-custom-site.${publishedSpaceHost}/`]: (
               new Date().getTime() -
               2 * 24 * 60 * 60 * 1000
             ).toString(),

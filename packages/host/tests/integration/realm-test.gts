@@ -154,7 +154,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -179,7 +179,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -225,7 +225,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://localhost:4202/test/pet',
+            module: `${testModuleRealm}pet`,
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -259,7 +259,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -292,13 +292,13 @@ module('Integration | realm', function (hooks) {
             relationships: {
               owner: {
                 links: {
-                  self: `https://localhost:4202/test/hassan`,
+                  self: `${testModuleRealm}hassan`,
                 },
               },
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -329,12 +329,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(
       json.data.relationships.owner.links.self,
-      'https://localhost:4202/test/hassan',
+      `${testModuleRealm}hassan`,
       'owner self link points to other realm',
     );
     assert.strictEqual(
       json.data.relationships.owner.data.id,
-      'https://localhost:4202/test/hassan',
+      `${testModuleRealm}hassan`,
       'owner data id points to other realm',
     );
     assert.strictEqual(
@@ -357,7 +357,7 @@ module('Integration | realm', function (hooks) {
     let hassan = included[0];
     assert.strictEqual(
       hassan.id,
-      'https://localhost:4202/test/hassan',
+      `${testModuleRealm}hassan`,
       'included hassan id',
     );
     assert.strictEqual(
@@ -628,7 +628,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -658,7 +658,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://localhost:4202/test/pet',
+                  module: `${testModuleRealm}pet`,
                   name: 'Pet',
                 },
               },
@@ -700,7 +700,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://localhost:4202/test/pet',
+            module: `${testModuleRealm}pet`,
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -734,7 +734,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -771,7 +771,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://localhost:4202/test/pet',
+              module: `${testModuleRealm}pet`,
               name: 'Pet',
             },
           },
@@ -861,7 +861,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -886,7 +886,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://localhost:4202/test/person',
+                  module: `${testModuleRealm}person`,
                   name: 'Person',
                 },
               },
@@ -943,7 +943,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -981,7 +981,7 @@ module('Integration | realm', function (hooks) {
     let { data: cards } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: rri(`https://localhost:4202/test/person`),
+          module: rri(`${testModuleRealm}person`),
           name: 'Person',
         },
         eq: { firstName: 'Van Gogh' },
@@ -1008,7 +1008,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/booking',
+                module: `${testModuleRealm}booking`,
                 name: 'Booking',
               },
             },
@@ -1039,7 +1039,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://localhost:4202/test/booking',
+                  module: `${testModuleRealm}booking`,
                   name: 'Booking',
                 },
               },
@@ -1086,7 +1086,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://localhost:4202/test/booking',
+            module: `${testModuleRealm}booking`,
             name: 'Booking',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1148,7 +1148,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1161,7 +1161,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1173,7 +1173,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1191,7 +1191,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1220,7 +1220,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1354,7 +1354,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `https://localhost:4202/test/pet-person`,
+              module: `${testModuleRealm}pet-person`,
               name: 'PetPerson',
             },
           },
@@ -1375,7 +1375,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1388,7 +1388,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1400,7 +1400,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1418,7 +1418,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1445,7 +1445,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1496,7 +1496,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1518,7 +1518,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1531,7 +1531,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1546,7 +1546,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1573,7 +1573,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1612,7 +1612,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1749,7 +1749,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1762,7 +1762,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1780,7 +1780,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1801,7 +1801,7 @@ module('Integration | realm', function (hooks) {
               relationships: { pets: { links: { self: null } } },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1835,7 +1835,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1857,7 +1857,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1869,7 +1869,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1881,7 +1881,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Burcu' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1899,7 +1899,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1926,7 +1926,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1967,7 +1967,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1989,7 +1989,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -2002,7 +2002,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -2014,7 +2014,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2026,7 +2026,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Burcu' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2044,7 +2044,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -2073,7 +2073,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -2113,7 +2113,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -2137,7 +2137,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2152,7 +2152,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2175,7 +2175,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },

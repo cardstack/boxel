@@ -21,7 +21,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { percySnapshot, testRealmURL } from '../../helpers';
+import { percySnapshot, testModuleRealm, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
@@ -1083,10 +1083,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
-    await fillIn(
-      '[data-test-search-field]',
-      'https://localhost:4202/test/nonexistent',
-    );
+    await fillIn('[data-test-search-field]', `${testModuleRealm}nonexistent`);
     await waitFor(`[data-test-search-label]`);
     assert.dom('[data-test-search-sheet-empty]').exists();
     assert
