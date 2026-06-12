@@ -103,6 +103,8 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     expect(attrs.properties).toHaveProperty('status');
     expect(attrs.properties).toHaveProperty('priority');
 
+    expect(attrs.properties).toHaveProperty('issueType');
+
     // enumField-backed fields with static options carry their allowed
     // values; agents consume these instead of grepping field sources.
     expect(attrs.properties.issueType.enum).toEqual([
