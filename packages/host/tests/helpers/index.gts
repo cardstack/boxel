@@ -136,8 +136,15 @@ type ModuleHooks = {
   after: (callback: () => void | Promise<void>) => void;
 };
 
+// Matrix homeserver URL. Standard mode: `http://localhost:8008`; env
+// mode: `https://matrix.<slug>.localhost`. ENV.matrixURL is the
+// already-resolved value (set by `environment.js` from BOXEL_ENVIRONMENT
+// or MATRIX_URL). The mock-matrix harness still routes requests to its
+// in-process mock — this URL is what the host code reads as
+// `ENV.matrixURL` and what the matrix-js-sdk gets as its default
+// homeserver, so it has to match whichever stack is actually running.
 const baseTestMatrix = {
-  url: new URL(`http://localhost:8008`),
+  url: new URL(ENV.matrixURL),
   username: 'test_realm',
   password: 'password',
 };
