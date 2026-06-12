@@ -153,16 +153,20 @@ interface PrerenderedCardOptions {
 }
 
 // Selects which columns the unified `search()` projects. `dataOnly` projects
-// the live serialization only (pristine_doc / error_doc); `render` projects the
-// format-specific HTML column plus the live serialization carried only on
-// no-HTML fallback rows.
+// the live serialization only (pristine_doc / error_doc); `render` projects
+// one format-specific HTML value plus the live serialization carried only on
+// no-HTML fallback rows; `renderSet` projects each row's full rendering set
+// (every per-format HTML column, JSONB maps whole) plus the live
+// serialization on every row — the caller selects renderings from the set
+// (the v2 htmlQuery evaluation).
 export type SearchProjection =
   | { kind: 'dataOnly' }
   | {
       kind: 'render';
       htmlFormat: PrerenderedHtmlFormat;
       renderType?: ResolvedCodeRef;
-    };
+    }
+  | { kind: 'renderSet' };
 
 export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
@@ -721,6 +725,14 @@ export class IndexQueryEngine {
     if (projection.kind === 'dataOnly') {
       selectClauseExpression = [
         'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
+      ];
+    } else if (projection.kind === 'renderSet') {
+      // The full rendering set: every per-format HTML column whole (the
+      // fitted/embedded JSONB maps keyed by render type, the scalar
+      // atom/head columns), plus the live serialization on every row. The
+      // caller enumerates candidate renderings and selects from the set.
+      selectClauseExpression = [
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(fitted_html) as fitted_html, ANY_VALUE(embedded_html) as embedded_html, ANY_VALUE(atom_html) as atom_html, ANY_VALUE(head_html) as head_html, ANY_VALUE(types) as types, ANY_VALUE(deps) as deps, ANY_VALUE(display_names) as display_names, ANY_VALUE(icon_html) as icon_html, ANY_VALUE(error_doc) as error_doc, ANY_VALUE(pristine_doc) as pristine_doc',
       ];
     } else {
       let htmlColumnExpression = this.buildHtmlColumnExpression({

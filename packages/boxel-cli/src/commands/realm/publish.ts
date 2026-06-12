@@ -1,17 +1,20 @@
 import type { Command } from 'commander';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
+  fetchPublishabilityReport,
   publishRealm as publishRealmOperation,
   type PublishRealmOutput,
   RealmOperationError,
   waitForReady,
 } from '@cardstack/runtime-common/realm-operations';
+import type { PublishabilityViolation } from '@cardstack/runtime-common/publishability';
 import { buildCliRealmClient } from '../../lib/realm-client.ts';
 import {
   getProfileManager,
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import { unpublishRealm } from './unpublish.ts';
+import { cliLog } from '../../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -26,6 +29,11 @@ export interface PublishOptions {
    * unpublish the target URL first and retry once. Default: true.
    */
   republish?: boolean;
+  /**
+   * Skip the publishability gate (private-dependency / error-document check).
+   * Default: false — the gate runs and blocks publishing on violations.
+   */
+  force?: boolean;
   profileManager?: ProfileManager;
 }
 
@@ -39,7 +47,9 @@ export interface PublishRealmResult {
 /**
  * Publish a source realm to a published-realm URL.
  *
- * Speaks the contract documented at
+ * Before publishing, runs the publishability gate (private-dependency /
+ * error-document check) and refuses to publish on violations unless `force`
+ * is set. Then speaks the contract documented at
  * `packages/realm-server/handlers/handle-publish-realm.ts`: the server
  * accepts the publish, returns `202 Accepted` with `status: "pending"`,
  * and the client polls `/<publishedRealmURL>/_readiness-check` until
@@ -57,6 +67,18 @@ export async function publishRealm(
   let normalizedSource = ensureTrailingSlash(sourceRealmURL);
   let normalizedPublished = ensureTrailingSlash(publishedRealmURL);
 
+  // Pre-publish gate: refuse to publish a realm with private-dependency or
+  // error-document violations (which would break the published site) unless
+  // the caller forces it.
+  if (!options.force) {
+    let report = await fetchPublishabilityReport(client, {
+      realmURL: normalizedSource,
+    });
+    if (!report.publishable) {
+      throw new Error(describeViolations(report.violations));
+    }
+  }
+
   let output: PublishRealmOutput;
   try {
     output = await publishRealmOperation(client, {
@@ -71,7 +93,9 @@ export async function publishRealm(
       (err.status === 400 || err.status === 409) &&
       options.republish !== false
     ) {
-      console.log(
+      // Progress, not payload: route to stderr via cliLog.info so it never
+      // corrupts stdout when the caller passed --json (stdout is JSON-only).
+      cliLog.info(
         `Publish returned ${err.status} (${(err.body ?? '').slice(0, 200)}). Unpublishing and retrying.`,
       );
       let unpublishResult = await unpublishRealm(normalizedPublished, {
@@ -118,6 +142,8 @@ export interface PublishCliOptions {
   wait?: boolean;
   timeout?: number;
   republish?: boolean;
+  force?: boolean;
+  json?: boolean;
 }
 
 export function publishCliOptsToOptions(
@@ -127,6 +153,7 @@ export function publishCliOptsToOptions(
     waitForReady: opts.wait !== false,
     timeoutMs: opts.timeout,
     republish: opts.republish !== false,
+    force: opts.force === true,
   };
 }
 
@@ -134,7 +161,7 @@ export function registerPublishCommand(realm: Command): void {
   realm
     .command('publish')
     .description(
-      'Publish a source realm to a published-realm URL, polling readiness until ready',
+      'Publish a source realm to a published-realm URL: runs the publishability gate (use --force to skip), then polls readiness until ready',
     )
     .argument('<source-realm-url>', 'URL of the source realm to publish')
     .argument(
@@ -151,6 +178,11 @@ export function registerPublishCommand(realm: Command): void {
       '--no-republish',
       'Do not auto-unpublish + retry when the server returns 400/409',
     )
+    .option(
+      '--force',
+      'Publish even if the realm has publishability violations (skips the gate)',
+    )
+    .option('--json', 'Output the result as JSON')
     .action(
       async (
         sourceRealmURL: string,
@@ -163,25 +195,64 @@ export function registerPublishCommand(realm: Command): void {
             publishedRealmURL,
             publishCliOptsToOptions(opts),
           );
-          console.log(
-            `${FG_GREEN}Published:${RESET} ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
-          );
+          if (opts.json) {
+            cliLog.output(JSON.stringify(result, null, 2));
+          } else {
+            console.log(
+              `${FG_GREEN}Published:${RESET} ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
+            );
+          }
         } catch (err) {
-          console.error(
-            `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
-          );
-          // Node's fetch surfaces the actual transport error (ECONNRESET,
-          // TLS failure, undici socket error, etc.) on `error.cause`. Print
-          // it so opaque "fetch failed" messages don't strand the caller.
-          // `!= null` rather than a truthy check so we don't drop
-          // falsy-but-defined causes (`''`, `0`, `false`, `NaN`).
-          if (err instanceof Error && err.cause != null) {
-            console.error(`${FG_RED}Caused by:${RESET}`, err.cause);
+          let message = err instanceof Error ? err.message : String(err);
+          if (opts.json) {
+            cliLog.output(JSON.stringify({ error: message }, null, 2));
+          } else {
+            console.error(`${FG_RED}Error:${RESET} ${message}`);
+            // Node's fetch surfaces the actual transport error (ECONNRESET,
+            // TLS failure, undici socket error, etc.) on `error.cause`. Print
+            // it so opaque "fetch failed" messages don't strand the caller.
+            // `!= null` rather than a truthy check so we don't drop
+            // falsy-but-defined causes (`''`, `0`, `false`, `NaN`).
+            if (err instanceof Error && err.cause != null) {
+              console.error(`${FG_RED}Caused by:${RESET}`, err.cause);
+            }
           }
           process.exit(1);
         }
       },
     );
+}
+
+// Summarizes publishability violations into a single actionable error message.
+// Mirrors the host PublishRealmCommand's gate messaging.
+export function describeViolations(
+  violations: PublishabilityViolation[],
+): string {
+  let privateCount = violations.filter(
+    (v) => v.kind === 'private-dependency',
+  ).length;
+  let errorCount = violations.filter((v) => v.kind === 'error-document').length;
+
+  let parts: string[] = [];
+  if (privateCount) {
+    parts.push(`${privateCount} private-dependency violation(s)`);
+  }
+  if (errorCount) {
+    parts.push(`${errorCount} error-document violation(s)`);
+  }
+  let summary = parts.length
+    ? parts.join(', ')
+    : `${violations.length} violation(s)`;
+
+  let resources = violations
+    .map((v) => v.resource)
+    .filter(Boolean)
+    .slice(0, 5)
+    .join(', ');
+
+  return `Realm is not publishable (${summary}). Resolve them or pass --force to override.${
+    resources ? ` Affected: ${resources}` : ''
+  }`;
 }
 
 function parseTimeoutOption(value: string): number {

@@ -9,8 +9,29 @@ Use this skill when the Issue you just picked up has
 `attributes.issueType: "bootstrap"`. Your job is to read the brief,
 make sure the target realm exists, and seed the project artifacts
 that drive the rest of the run: a Project card, an IssueTracker
-board, Knowledge Article cards with the brief context, and one
-implementation Issue per entry-point card the brief describes.
+board, Knowledge Article cards with the brief context, and the
+implementation Issues.
+
+## Two modes: greenfield vs adjust
+
+The brief tells you which mode you're in. Read the brief card's JSON
+(`boxel file read "<brief-path>.json" --realm <source-realm-url>`)
+and check `data.attributes.sourceCardUrl`:
+
+- **Greenfield** (`sourceCardUrl` absent or empty) — build new cards
+  from scratch. Create Project / IssueTracker / Knowledge Articles,
+  then one `feature` Issue per entry-point card. This is the
+  default; the rest of this skill describes it.
+- **Adjust** (`sourceCardUrl` set) — seed the target realm with a
+  working copy of the existing card it points at, confirm the copy
+  is green, then create `adjustment` Issues that describe deltas to
+  it. See **"Adjust flow"** below.
+
+Everything from the implementation loop onward (scheduling, the
+validators, status transitions, project completion) is identical for
+both modes — adjust is a superset, not a fork. The only differences
+are the seed-from-source sub-phase below and that adjust emits
+`adjustment` Issues instead of `feature` Issues.
 
 ## When you reach this skill
 
@@ -105,6 +126,86 @@ A freshly-created realm is empty, so the pull is a no-op except to
 establish the local-dir ↔ realm mapping. All subsequent writes
 happen in the workspace and propagate via
 `boxel realm push <local-dir> <realm-url>` when you sync.
+
+## Adjust flow (when the brief sets `sourceCardUrl`)
+
+Do this **in addition to** the standard Project / IssueTracker /
+Knowledge Article artifacts (those steps still apply), and **instead
+of** creating `feature` Issues per entry-point card.
+
+1. **Seed the source card + its same-realm dependency graph.** From
+   inside the workspace dir, run the dedicated ingestion command
+   (read-only from the source realm — it doesn't write to it):
+
+   ```bash
+   boxel realm ingest-card "<source-card-url>" .
+   ```
+
+It copies, preserving realm-relative paths, into the local workspace: the source card's
+module, every same-realm module it imports transitively
+(**including type-only imports**, which a runtime dep graph would
+miss but `boxel parse` needs), its sample instances, and its
+**card/app** Catalog Spec. Cross-realm imports
+(`https://cardstack.com/base/...`) and component/function Specs
+are left out on purpose. Pass `--realm <url>` only if the source
+realm can't be auto-detected.
+
+- **If the source card has no co-located test** — common for
+  catalog cards, which rarely ship `.test.gts` — write
+  **characterization tests** that capture its current behavior:
+  field defaults, computed-field outputs, and the key rendered
+  output of its formats. These establish the green baseline; they
+  are what the adjustment must not regress. Without them there is
+  nothing to protect and a zero-test `boxel test` run can never
+  count as green.
+
+2. **Confirm a green baseline.** Push the seeded workspace, then run
+   the standard validators (per the "Validators" section of
+   `software-factory-operations`: `boxel parse`, `boxel lint`,
+   evaluate-module, instantiate-card, `boxel test`) against the
+   seeded copy. They must **all pass before you create any
+   adjustment Issue**. Two traps:
+   - A validator reporting `filesChecked: 0` (or zero tests) is
+     **not** a pass — it usually means the push hasn't landed yet.
+     Re-sync and re-run.
+   - A red parse/eval/instantiate baseline usually means the copy is
+     incomplete (a missed same-realm dependency) — copy the missing
+     file and re-run. If you cannot get the baseline green, **stop
+     and report to the user** rather than proceeding; adjustment
+     Issues against a red baseline are meaningless.
+
+3. **Write a source-provenance Knowledge Article**
+   (`Knowledge Articles/<slug>-source-provenance.json`,
+   `articleType` per the schema): the `sourceCardUrl`, the list of
+   files copied, and the baseline validator results. This is what
+   later Issues read to understand what the seed was.
+
+4. **Create `adjustment` Issues** — one per coherent delta the brief
+   describes (not one-per-entry-point-card; that's the greenfield
+   rule). Use `issueType: "adjustment"` (confirm the enum via
+   `get-card-type-schema`). Each adjustment Issue's `description`
+   (immutable after creation) must name:
+   - the **workspace-relative target file(s)** to edit — the seeded
+     card and any support files the delta touches (they already
+     exist in the workspace);
+   - the **delta** — what changes, phrased as a diff against the
+     seeded baseline, not a from-scratch card spec;
+   - **acceptance** — the new expected behavior and its test
+     assertions, plus the standing requirement that the
+     **pre-existing baseline tests keep passing** (the delta must
+     not regress the green baseline).
+
+   Adjustment Issues direct edits at the **seeded artifacts** —
+   module, tests, sample instances, Spec. Don't write an Issue that
+   asks for a new module, instance, or Spec alongside the seeded
+   ones unless the brief explicitly asks for a new card.
+
+   Wire `project` / `relatedKnowledge` (include the provenance
+   article) / `blockedBy` exactly as for `feature` Issues.
+
+The agent that later picks up an `adjustment` Issue **edits** the
+seeded files rather than creating cards from scratch — see the
+"Adjustment issues" section of `software-factory-operations`.
 
 ## Discover the tracker module URL
 

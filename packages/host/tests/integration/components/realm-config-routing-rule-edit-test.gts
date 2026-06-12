@@ -5,18 +5,23 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  PermissionsContextName,
+  type Permissions,
+} from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
   testRealmURL,
+  provideConsumeContext,
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
-import { renderComponent } from '../../helpers/render-component';
+import { renderCard, renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
@@ -97,22 +102,22 @@ module(
       await renderRealmConfigEdit([{ path: '/docs' }]);
 
       await click('[data-test-add-new="instance"]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       // Wait on `data-test-realm-url` (always present) rather than
       // `data-test-realm` (the user-visible name, which races
       // `realm.info()` and may show the "Unknown Workspace"
       // placeholder during initial render — search-result-section.gts
       // documents the race).
       await waitFor(
-        `[data-test-card-catalog-modal] [data-test-realm-url="${testRealmURL}"]`,
+        `[data-test-card-chooser-modal] [data-test-realm-url="${testRealmURL}"]`,
       );
       // The realm picker is wrapped in WithKnownRealmsLoaded, which
       // renders a `<:loading>` block until the realms list resolves;
       // the actual picker trigger is only present in the `<:default>`
-      // block. Wait for it. Scoping to `[data-test-card-catalog-modal]`
+      // block. Wait for it. Scoping to `[data-test-card-chooser-modal]`
       // dodges the operator-mode SearchSheet, which renders its own
       // (unlocked) RealmPicker alongside the modal's.
-      await waitFor('[data-test-card-catalog-modal] [data-test-realm-picker]');
+      await waitFor('[data-test-card-chooser-modal] [data-test-realm-picker]');
 
       // power-select reflects `@disabled` on the trigger as
       // `aria-disabled="true"` — this is the reliable signal for
@@ -121,23 +126,40 @@ module(
       // round-trip its reactivity through the BoxelMultiSelectBasic →
       // PowerSelect → ember-basic-dropdown chain.
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-realm-picker]')
+        .dom('[data-test-card-chooser-modal] [data-test-realm-picker]')
         .hasAttribute('aria-disabled', 'true', 'the realm picker is locked');
+      // The picker's selected pill must NOT be the "All" / "Select All"
+      // option. If `consumingRealm` doesn't reach the chooser,
+      // `initialSelectedRealmsForPanel` returns undefined,
+      // `selectedRealms` stays empty, and `pickerSelected` falls back
+      // to the `Select All (...)` option (labeled "All") — meaning
+      // search is unscoped (the original code-submode bug).
+      // Check the selected-pill's own `data-test-boxel-picker-selected-item`
+      // value rather than the realm name, because the user-visible
+      // realm name comes from `realm.info()` and shows the
+      // "Unnamed Workspace" placeholder until that async fetch resolves.
       assert
         .dom(
-          '[data-test-card-catalog-modal] [data-test-realm-picker] [data-test-boxel-picker-remove-button]',
+          '[data-test-card-chooser-modal] [data-test-realm-picker] [data-test-boxel-picker-selected-item="All"]',
+        )
+        .doesNotExist(
+          'the realm picker is scoped to a specific realm, not the unscoped "All" select-all pill',
+        );
+      assert
+        .dom(
+          '[data-test-card-chooser-modal] [data-test-realm-picker] [data-test-boxel-picker-remove-button]',
         )
         .doesNotExist(
           'the consuming-realm pill does not offer a remove affordance when the picker is locked',
         );
       assert
         .dom(
-          `[data-test-card-catalog-modal] [data-test-realm-url="${testRealmURL}"]`,
+          `[data-test-card-chooser-modal] [data-test-realm-url="${testRealmURL}"]`,
         )
         .exists('candidates from the consuming realm are shown');
       assert
         .dom(
-          `[data-test-card-catalog-modal] [data-test-realm-url="${baseRealm.url}"]`,
+          `[data-test-card-chooser-modal] [data-test-realm-url="${baseRealm.url}"]`,
         )
         .doesNotExist('cross-realm candidates are excluded by the lock');
     });
@@ -198,6 +220,98 @@ module(
       assert
         .dom('[data-test-duplicate-path-warning]')
         .containsText('/', 'the duplicate banner names the conflicting path');
+    });
+
+    test('the chooser gets a consuming realm even when no RealmURLContext is provided (code submode)', async function (assert) {
+      // The interact-submode test above renders the realm config
+      // through an operator-mode stack item, which provides
+      // `RealmURLContext` — so LinksToEditor could derive
+      // `consumingRealm` either from that context or from the
+      // explicit `@consumingRealm` arg threaded by RoutingRuleEdit.
+      // In code submode the realm config renders through the
+      // playground / spec preview, OUTSIDE any stack item, so
+      // `RealmURLContext` is absent.
+      //
+      // Reproduce that condition directly: load the realm config from
+      // the realm (so its FieldDef instances have `[realmContext]`
+      // populated by `propagateRealmContext`) and render it via
+      // `renderCard`, which does not provide any operator-mode
+      // context. Then stub the global card-chooser registration to
+      // capture the opts that `chooseCard()` was invoked with, so the
+      // test can prove `consumingRealm` (and a derived
+      // `lockConsumingRealm`) flow through the model-level derivation
+      // rather than the context fallback.
+      let cardApi: typeof import('https://cardstack.com/base/card-api') =
+        await getService('loader-service').loader.import(
+          `${baseRealm.url}card-api`,
+        );
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        permissions: {
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: {
+          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': {
+            data: {
+              type: 'card',
+              attributes: { hostRoutingRules: [{ path: '/docs' }] },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/realm-config',
+                  name: 'RealmConfig',
+                },
+              },
+            },
+          },
+        },
+      });
+
+      let store = getService('store');
+      let realmConfig = await store.get(`${testRealmURL}realm`);
+
+      let capturedOpts: any;
+      let originalChooser = (globalThis as any)._CARDSTACK_CARD_CHOOSER;
+      (globalThis as any)._CARDSTACK_CARD_CHOOSER = {
+        chooseCard: async (_query: any, opts: any) => {
+          capturedOpts = opts;
+          return undefined;
+        },
+      };
+
+      // LinksToEditor only renders its add-new affordance when
+      // `permissions.canWrite` is truthy — that's normally provided by
+      // the stack item (interact) or the playground panel (code) via
+      // `PermissionsContext`. Without operator-mode mounted, the test
+      // has to provide it explicitly, otherwise LinksToEditor renders
+      // its "- Empty -" placeholder and `[data-test-add-new]` is
+      // missing.
+      let permissions: Permissions = { canRead: true, canWrite: true };
+      provideConsumeContext(PermissionsContextName, permissions);
+
+      try {
+        await renderCard(
+          getService('loader-service').loader,
+          realmConfig as InstanceType<typeof cardApi.CardDef>,
+          'edit',
+        );
+        await waitFor('[data-test-add-new="instance"]');
+        await click('[data-test-add-new="instance"]');
+
+        assert.ok(capturedOpts, 'chooseCard was invoked');
+        assert.strictEqual(
+          (capturedOpts?.consumingRealm as URL | undefined)?.href,
+          testRealmURL,
+          'consumingRealm reaches the chooser via @consumingRealm, not RealmURLContext',
+        );
+        assert.true(
+          capturedOpts?.lockConsumingRealm,
+          'lockConsumingRealm is honored when a consumingRealm is actually present',
+        );
+      } finally {
+        (globalThis as any)._CARDSTACK_CARD_CHOOSER = originalChooser;
+      }
     });
 
     test('typing into the path input always stores a leading slash', async function (assert) {

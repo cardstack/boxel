@@ -184,9 +184,12 @@ export class ListItem extends Component<ListItemSignature> {
           --boxel-icon-button-width: 2rem;
           --boxel-icon-button-height: 2rem;
           flex-shrink: 0;
+          /* Collapsed: the down-arrow icon points right. */
+          transform: rotate(-90deg);
         }
         .is-expanded > .dropdown-toggle {
-          transform: rotate(180deg);
+          /* Expanded: arrow points down. */
+          transform: rotate(0deg);
         }
         .filter-list__button {
           flex-grow: 1;
