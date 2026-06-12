@@ -19,10 +19,10 @@ async function dockerPull(
   baseDelayMs = 5000,
 ): Promise<void> {
   // Skip the registry round-trip when the image is already present. CI warms
-  // these pinned images through an ECR pull-through cache and retags them to
-  // their canonical Docker Hub names (see .github/actions/warm-test-images),
-  // so the pull would otherwise hit Docker Hub anyway — the source of the
-  // recurring "Failed to reach Synapse" host-test flake. The tags we pull are
+  // these pinned images from the GHCR mirror and retags them to their canonical
+  // Docker Hub names (see .github/actions/warm-test-images), so pulling here
+  // would otherwise hit Docker Hub anyway — the source of the recurring
+  // "Failed to reach Synapse" host-test flake. The tags we pull are
   // version-pinned, so a stale local copy is not a concern.
   if (await imageExistsLocally(image)) {
     return;
