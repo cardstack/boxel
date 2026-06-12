@@ -110,8 +110,10 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
 } {
   // Server-side deterministic delay:
   // This makes query timing explicit/reproducible so tests can assert that
-  // prerender waited for query resolution instead of "winning a race" by chance.
-  let originalSearch = RuntimeRealm.prototype.search;
+  // prerender waited for query resolution instead of "winning a race" by
+  // chance. The prerender tab's host reaches the realm through the v2
+  // federated search, so the hook point is `searchEntries`.
+  let originalSearchEntries = RuntimeRealm.prototype.searchEntries;
   let delayedSearchRequestCount = 0;
   let restored = false;
   // Sleeps that have not yet resolved. On restore() we wake them early so
@@ -119,10 +121,10 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
   // outlive the realm/db fixture and the resumed call hits a closed pg pool.
   let pendingSleepCancels = new Set<() => void>();
 
-  RuntimeRealm.prototype.search = async function (
+  RuntimeRealm.prototype.searchEntries = async function (
     this: RuntimeRealm,
-    query: Parameters<RuntimeRealm['search']>[0],
-  ): Promise<Awaited<ReturnType<RuntimeRealm['search']>>> {
+    ...args: Parameters<RuntimeRealm['searchEntries']>
+  ): Promise<Awaited<ReturnType<RuntimeRealm['searchEntries']>>> {
     // Exposed to tests as a stable signal that fallback search actually ran.
     delayedSearchRequestCount++;
     await new Promise<void>((resolve) => {
@@ -139,14 +141,14 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
       // The patch has been torn down — the test no longer cares about this
       // search and the realm fixture (including its pg pool) may already be
       // closed. Return an empty collection rather than reaching into a
-      // potentially-dead adapter; the caller (handle-search/searchRealms)
-      // will discard the result.
+      // potentially-dead adapter; the caller (handle-search-v2/
+      // searchEntryRealms) will discard the result.
       return {
         data: [],
         meta: { page: { total: 0 } },
-      } as Awaited<ReturnType<RuntimeRealm['search']>>;
+      } as Awaited<ReturnType<RuntimeRealm['searchEntries']>>;
     }
-    return await originalSearch.call(this, query);
+    return await originalSearchEntries.apply(this, args);
   };
 
   return {
@@ -154,13 +156,14 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
     restore: () => {
       restored = true;
       // Wake any in-flight sleepers immediately; the `restored` guard above
-      // makes them skip originalSearch() so they don't query a closed pool.
+      // makes them skip the original searchEntries() so they don't query a
+      // closed pool.
       let cancels = [...pendingSleepCancels];
       pendingSleepCancels.clear();
       for (let wake of cancels) {
         wake();
       }
-      RuntimeRealm.prototype.search = originalSearch;
+      RuntimeRealm.prototype.searchEntries = originalSearchEntries;
     },
   };
 }
@@ -189,7 +192,10 @@ export function installSearchRequestObserverPatch(): {
         let url = request.url?.();
         if (
           !url ||
-          (!url.endsWith('/_federated-search') && !url.endsWith('/_search'))
+          (!url.endsWith('/_federated-search') &&
+            !url.endsWith('/_federated-search-v2') &&
+            !url.endsWith('/_search') &&
+            !url.endsWith('/_search-v2'))
         ) {
           return;
         }

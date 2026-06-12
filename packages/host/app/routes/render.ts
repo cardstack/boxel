@@ -152,7 +152,7 @@ export default class RenderRoute extends Route<Model> {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }
-    // Drop any pending `_federated-search` in-flight entries the
+    // Drop any pending `_federated-search-v2` in-flight entries the
     // render-context coalescer accumulated during this visit. Entries
     // self-clear on settle, but a deactivate while one is still
     // in-flight could otherwise let a same-key caller arriving in the

@@ -1,9 +1,17 @@
-import { assertQuery, InvalidQueryError, type Query } from './query.ts';
 import {
+  assertQuery,
+  InvalidQueryError,
+  type Filter,
+  type Query,
+  type Sort,
+} from './query.ts';
+import {
+  emitSearchTiming,
   fanOutRealmSearch,
   SearchRequestError,
   type SearchOpts,
 } from './search-utils.ts';
+import { RequestTimings } from './request-timings.ts';
 import type {
   SearchEntryCollectionDocument,
   SearchEntryIncludedResource,
@@ -649,6 +657,108 @@ export function parseSearchEntryQueryFromPayload(
 }
 
 // ---------------------------------------------------------------------------
+// The wire grammar — what a v2 client sends to `_search-v2` /
+// `_federated-search-v2`. `SearchEntryWireQuery` is the search-entry-rooted
+// request body: entry membership addressed through `item.` paths (`item.on`
+// as the type anchor), the htmlQuery bound in the filter's top-level `eq`,
+// and the sparse fieldset under `fields[search-entry]`.
+//
+// `searchEntryWireQueryFromQuery` translates a legacy card-rooted `Query`
+// into that grammar — the exact inverse of the parser's addressing strip
+// (round-trip parity is pinned by test) — so an instances-level caller can
+// keep authoring the legacy query shape while the request runs against v2.
+// ---------------------------------------------------------------------------
+
+export interface SearchEntryWireSortExpression {
+  // an `item.`-prefixed field path (general sort fields included)
+  by: string;
+  'item.on'?: CodeRef;
+  direction?: 'asc' | 'desc';
+}
+
+export type SearchEntryWireFilter = {
+  'item.on'?: CodeRef;
+  any?: SearchEntryWireFilter[];
+  every?: SearchEntryWireFilter[];
+  not?: SearchEntryWireFilter;
+  // field paths inside the operators are `item.`-prefixed; the filter's
+  // top-level `eq` may additionally bind the bare `htmlQuery` field
+  eq?: Record<string, unknown>;
+  contains?: Record<string, unknown>;
+  in?: Record<string, unknown>;
+  range?: Record<string, unknown>;
+  matches?: string;
+};
+
+export interface SearchEntryWireQuery {
+  filter?: SearchEntryWireFilter;
+  sort?: SearchEntryWireSortExpression[];
+  page?: { number?: number; size: number; realmVersion?: number };
+  fields?: { 'search-entry': string[] };
+  cardUrls?: string[];
+  realms?: string[];
+}
+
+function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
+  let out: SearchEntryWireFilter = {};
+  for (let [key, value] of Object.entries(filter)) {
+    if (key === 'type' || key === 'on') {
+      // both legacy spellings of the type anchor (the standalone card-type
+      // filter and a node's `on`) are the wire grammar's `item.on`
+      out[ITEM_ANCHOR] = value as CodeRef;
+    } else if (key === 'any' || key === 'every') {
+      out[key] = (value as Filter[]).map(wireFilterFromFilter);
+    } else if (key === 'not') {
+      out.not = wireFilterFromFilter(value as Filter);
+    } else if (FIELD_KEYED_OPERATORS.includes(key)) {
+      out[key as 'eq' | 'contains' | 'in' | 'range'] = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(
+          ([fieldPath, fieldValue]) => [
+            `${ITEM_PREFIX}${fieldPath}`,
+            fieldValue,
+          ],
+        ),
+      );
+    } else if (key === 'matches') {
+      out.matches = value as string;
+    } else {
+      throw new Error(
+        `cannot translate filter member "${key}" to the search-entry wire grammar`,
+      );
+    }
+  }
+  return out;
+}
+
+export function searchEntryWireQueryFromQuery(
+  query: Query,
+  opts?: { fields?: string[] },
+): SearchEntryWireQuery {
+  // the legacy `realm`/`realms` members are deliberately not carried — the
+  // caller addresses realms at the request level; `asData`/`fields` are the
+  // legacy data path's members and have no wire spelling here (the v2
+  // projection is `opts.fields`, the `fields[search-entry]` sparse fieldset)
+  let wire: SearchEntryWireQuery = {};
+  if (query.filter) {
+    wire.filter = wireFilterFromFilter(query.filter);
+  }
+  if (query.sort) {
+    wire.sort = (query.sort as Sort).map((entry) => ({
+      by: `${ITEM_PREFIX}${entry.by}`,
+      ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),
+      ...(entry.direction ? { direction: entry.direction } : {}),
+    }));
+  }
+  if (query.page) {
+    wire.page = query.page;
+  }
+  if (opts?.fields) {
+    wire.fields = { 'search-entry': [...opts.fields] };
+  }
+  return wire;
+}
+
+// ---------------------------------------------------------------------------
 // The federated merge + runner. Concatenate `data` in realm order, sum
 // `meta.page.total`, and dedupe `included` by the JSON:API identity pair
 // `(type, id)` — `html`/`css`/`card`/`file-meta` resources referenced by
@@ -707,14 +817,36 @@ export async function searchEntryRealms(
   searchEntryQuery: SearchEntryQuery,
   opts?: SearchOpts,
 ): Promise<SearchEntryCollectionDocument> {
+  // Same instrumentation contract as `searchRealms`: a caller that threads
+  // its own collector (the realm-server handler) emits the complete
+  // request→response line itself; a caller that threads only a
+  // `loggingCorrelationId` (the host-test realm-server mock) gets the
+  // collector created — and the line emitted — here.
+  let ownsTimings = Boolean(opts?.loggingCorrelationId) && !opts?.timings;
+  let timings =
+    opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
+  let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
+  let startedAt = ownsTimings ? Date.now() : 0;
   let docs = await fanOutRealmSearch(
     realms,
     searchEntryQuery.itemQuery,
-    (realm) => realm.searchEntries(searchEntryQuery, opts),
+    (realm) => realm.searchEntries(searchEntryQuery, perRealmOpts),
     (label, queryLabel) =>
       `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
   );
-  return combineSearchEntryResults(docs);
+  let combined = combineSearchEntryResults(docs);
+  if (timings) {
+    timings.incr('results', combined.data?.length ?? 0);
+  }
+  if (ownsTimings && timings) {
+    emitSearchTiming(
+      `corr=${opts!.loggingCorrelationId}` +
+        ` realms=${realms.filter((realm) => Boolean(realm)).length}` +
+        ` total=${Date.now() - startedAt}ms ` +
+        timings.toLogFragment(),
+    );
+  }
+  return combined;
 }
 
 // ---------------------------------------------------------------------------
