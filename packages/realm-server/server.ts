@@ -446,7 +446,10 @@ export function startSessionKeepalive(
     let settled = false;
     let pongTimer: ReturnType<typeof setTimeout> | undefined;
     function finish(then: () => void) {
-      if (settled) {
+      // `stopped` covers a ping still in flight when the session closes or
+      // errors: its late pong callback / pong timeout must not record a miss
+      // or tear down a session that already ended normally.
+      if (settled || stopped) {
         return;
       }
       settled = true;

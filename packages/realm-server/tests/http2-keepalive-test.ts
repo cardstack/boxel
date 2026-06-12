@@ -188,6 +188,36 @@ module(basename(__filename), function () {
     );
   });
 
+  test('a ping in flight when the session closes does not trigger teardown', async function (assert) {
+    let fake = new FakeSession();
+    // Never pong, so the first ping scores a miss and the second is one
+    // pong-timeout away from the 2-miss teardown threshold when the session
+    // closes out from under it.
+    fake.pingImpl = () => true;
+    let stopKeepalive = startSessionKeepalive(asSession(fake), log, FAST);
+    try {
+      // FAST timeline: ping1 @20ms, miss1 @35ms, ping2 @55ms, and ping2's
+      // pong timeout would fire @70ms — close the session while ping2 is in
+      // flight and wait past that timeout.
+      await wait(60);
+      assert.strictEqual(fake.pingCount, 2, 'second ping is in flight');
+      fake.emit('close');
+      await wait(60);
+      assert.strictEqual(
+        fake.closeCount,
+        0,
+        'late pong timeout after session close does not tear down',
+      );
+      assert.strictEqual(
+        fake.destroyCount,
+        0,
+        'no force-destroy after session close',
+      );
+    } finally {
+      stopKeepalive();
+    }
+  });
+
   test('a session close event halts pinging without tearing down', async function (assert) {
     let fake = new FakeSession();
     fake.pingImpl = () => true; // would otherwise wedge and get closed
