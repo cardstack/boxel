@@ -88,6 +88,11 @@ import {
   type RenderingCandidate,
   type SearchEntryQuery,
 } from './search-entry.ts';
+import {
+  applySparseFieldset,
+  liveSearchEntryQuery,
+  searchEntryDocToLinkableDoc,
+} from './search-compat.ts';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
 import {
   normalizeQueryDefinition,
@@ -345,91 +350,19 @@ export class RealmIndexQueryEngine {
     query: Query,
     opts?: Options,
   ): Promise<LinkableCollectionDocument> {
-    let doc: LinkableCollectionDocument;
-    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
-
-    if (isFileMetaQuery) {
-      let { files, meta } = await this.#indexQueryEngine.searchFiles(
-        new URL(this.#realm.url),
-        query,
-        opts,
-      );
-      let resources = files.map((fileEntry) =>
-        fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
-      );
-      if (query.fields?.['file-meta'] !== undefined) {
-        resources = resources.map((r) =>
-          applySparseFieldset(r, query.fields!['file-meta']),
-        );
-      }
-      doc = {
-        data: resources,
-        meta,
-      };
-    } else {
-      let runCardSql = () =>
-        this.#indexQueryEngine.searchCards(
-          new URL(this.#realm.url),
-          query,
-          opts,
-        );
-      let { cards, meta } = opts?.timings
-        ? await opts.timings.time('sql', runCardSql)
-        : await runCardSql();
-      let cardResources = cards.map((resource) => ({
-        ...resource,
-        ...{ links: { self: resource.id } },
-      }));
-      if (query.fields?.['card'] !== undefined) {
-        cardResources = cardResources.map((r) =>
-          applySparseFieldset(r, query.fields!['card']),
-        );
-      }
-      doc = {
-        data: cardResources,
-        meta,
-      };
-    }
-
-    // TODO eventually the links will be cached in the index, and this will only
-    // fill in the included resources for links that were not cached (e.g.
-    // volatile fields)
-    //
-    // Prerender searches (`omitIncluded`) skip the relationship-assembly pass
-    // entirely: the host re-resolves every result card from its raw
-    // card+source file and consumes only `data[].id`, so `loadLinks` /
-    // `populateQueryFields` — the query-field umbrellas and the transitive
-    // `included[]` expansion — is provably throwaway work here. The response
-    // carries the pristine result rows (ids + attributes + static-link
-    // relationships) and page meta only. Live / external callers still run
-    // the full pass below.
-    if (opts?.loadLinks && !opts?.omitIncluded) {
-      let linkFields = isFileMetaQuery
-        ? query.fields?.['file-meta']
-        : query.fields?.['card'];
-      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
-      let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
-      // Process all root resources together so a single batched DB query
-      // resolves their first-level links (1+1 instead of N+M sequential
-      // round-trips). See CS-11038.
-      let runLoadLinks = () =>
-        this.loadLinks(
-          {
-            realmURL: this.realmURL,
-            rootResources: doc.data,
-            omit,
-          },
-          linkOpts,
-        );
-      let included = opts?.timings
-        ? await opts.timings.time('loadLinks', runLoadLinks)
-        : await runLoadLinks();
-      if (included.length > 0) {
-        doc.included = included;
-      }
-    }
-    await this.attachRealmInfo(doc);
-    return doc;
+    // The legacy live search expressed over the search-entry engine: full
+    // `item` serializations (the engine's file dispatch and loadLinks pass
+    // included), coalesced back to the legacy document at the edge — where
+    // the legacy sparse fieldset (`query.fields`) projects `data` with the
+    // legacy semantics. `linkFields` scopes the link expansion exactly as
+    // the legacy pass did.
+    let linkFields = query.fields?.['card'] ?? query.fields?.['file-meta'];
+    let engineOpts = linkFields ? { ...opts, linkFields } : opts;
+    let doc = await this.searchEntries(
+      liveSearchEntryQuery(query, { cardUrls: opts?.cardUrls }),
+      engineOpts,
+    );
+    return searchEntryDocToLinkableDoc(doc, { fields: query.fields });
   }
 
   // Prefer-HTML unified search. Runs the single `render` projection and applies
@@ -960,19 +893,12 @@ export class RealmIndexQueryEngine {
 
       let emitItem =
         itemOnEveryRow || (fieldset.itemAsFallback && htmlIds === undefined);
-      // Same neither-branch guard as the card path: keep membership visible
-      // through the empty html array when there is no serialization to fall
-      // back to.
-      if (fieldset.html && htmlIds === undefined && !file.resource?.id) {
-        htmlIds = [];
-        emitItem = false;
-      }
       let itemEmitted = false;
-      if (emitItem && file.resource?.id) {
-        let item: FileMetaResource = {
-          ...file.resource,
-          links: { self: file.resource.id },
-        };
+      if (emitItem) {
+        // The file's live serialization — the same synthesized resource the
+        // live search path serves (raw pristine rows can lag the synthesized
+        // attributes, e.g. inferred contentType / searchDoc extras).
+        let item: FileMetaResource = fileResourceFromIndex(new URL(url), file);
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
         } else {
@@ -2518,24 +2444,6 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
     candidates.push({ format: 'head', html: file.headHtml });
   }
   return candidates;
-}
-
-function applySparseFieldset<T extends CardResource<Saved> | FileMetaResource>(
-  resource: T,
-  fields: string[],
-): T {
-  // Per JSON:API spec, id, type, links, meta are always preserved.
-  // Only filter attributes.
-  if (fields.length === 0) {
-    return { ...resource, attributes: {} };
-  }
-  let filtered: Record<string, any> = {};
-  for (let field of fields) {
-    if (resource.attributes?.[field] !== undefined) {
-      filtered[field] = resource.attributes[field];
-    }
-  }
-  return { ...resource, attributes: filtered };
 }
 
 function fileResourceFromIndex(
