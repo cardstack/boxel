@@ -845,17 +845,14 @@ export default class CreateFileModal extends Component<Signature> {
       ) as ResolvedCodeRef
     ).module;
     // `codeRefWithAbsoluteIdentifier` returns the resolved real URL for
-    // RRI-prefix inputs (`@cardstack/base/X` → `https://localhost:4201/base/X`),
-    // but emitted source files use the virtual alias form
-    // (`https://cardstack.com/base/X`) for imports. Convert back to the
-    // virtual alias when one exists so the new import lines match the
-    // convention.
-    const resolvedModule = new URL(absoluteModuleHref);
-    const absoluteModule =
-      this.network.virtualNetwork.mapURL(resolvedModule, 'real-to-virtual') ??
-      resolvedModule;
+    // RRI-prefix inputs (`@cardstack/base/X` → `https://localhost:4201/base/X`).
+    // Canonicalize to the registered RRI prefix form when one matches so
+    // generated import lines use the stable identifier (`@cardstack/base/X`)
+    // instead of a deployment-specific real URL.
+    const canonicalModule =
+      this.network.virtualNetwork.unresolveURL(absoluteModuleHref);
     let moduleURL = maybeRelativeReference(
-      absoluteModule,
+      canonicalModule,
       url,
       new URL(this.selectedRealmURL),
     );
@@ -863,7 +860,7 @@ export default class CreateFileModal extends Component<Signature> {
 
     let componentImport = isFileDef
       ? ''
-      : `\nimport { Component } from 'https://cardstack.com/base/card-api';`;
+      : `\nimport { Component } from '@cardstack/base/card-api';`;
 
     // There is actually only one possible declaration collision: `className` and `parent`,
     // reconcile that particular collision as necessary.

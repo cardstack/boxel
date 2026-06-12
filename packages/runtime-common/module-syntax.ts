@@ -450,33 +450,25 @@ function makeNewField({
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldRef.name});`;
   }
 
-  // Resolve any RRI-prefix in `fieldRef.module` to the virtual alias URL
-  // (e.g. `@cardstack/base/X` → `https://cardstack.com/base/X`), not the
-  // resolved real URL (`https://localhost:4201/base/X`). Existing imports
-  // in user source files use the virtual alias form, so emitting the
-  // resolved real URL would cause `importUtil` to add a duplicate import
-  // line instead of merging the new identifier into the existing one.
-  let virtualizedFieldModule: string = fieldRef.module;
-  if (virtualNetwork.isRegisteredPrefix(virtualizedFieldModule)) {
-    let resolved = virtualNetwork.toURL(virtualizedFieldModule);
-    let virtual = virtualNetwork.mapURL(resolved, 'real-to-virtual');
-    virtualizedFieldModule = (virtual ?? resolved).href;
-  }
+  // Canonicalize `fieldRef.module` to the registered RRI prefix form
+  // (e.g. `@cardstack/base/X`) so generated import lines use the stable
+  // identifier rather than a deployment-specific real URL.
+  let canonicalFieldModule = virtualNetwork.unresolveURL(fieldRef.module);
 
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
     let resolved = virtualNetwork.resolveURL(
-      virtualizedFieldModule,
+      canonicalFieldModule,
       incomingRelativeTo,
     );
-    let virtual = virtualNetwork.mapURL(resolved, 'real-to-virtual');
+    let canonical = virtualNetwork.unresolveURL(resolved.href);
     relativeFieldModuleRef = maybeRelativeReference(
-      virtual ?? resolved,
+      canonical,
       outgoingRelativeTo,
       outgoingRealmURL,
     );
   } else {
-    relativeFieldModuleRef = virtualizedFieldModule;
+    relativeFieldModuleRef = canonicalFieldModule;
   }
 
   let fieldCardIdentifier = importUtil.import(
