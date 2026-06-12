@@ -24,7 +24,7 @@ import HTMLWorkerUrl from 'monaco-editor/esm/vs/language/html/html.worker.js?wor
 import JSONWorkerUrl from 'monaco-editor/esm/vs/language/json/json.worker.js?worker&url';
 import TSWorkerUrl from 'monaco-editor/esm/vs/language/typescript/ts.worker.js?worker&url';
 
-import type { SingleCardDocument } from '@cardstack/runtime-common';
+import { logger, type SingleCardDocument } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 import type CardService from '@cardstack/host/services/card-service';
@@ -43,6 +43,8 @@ export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
 const { serverEchoDebounceMs } = config;
+
+const log = logger('service:monaco');
 
 // `new Worker(url)` rejects cross-origin URLs, but importScripts inside a
 // worker is allowed to fetch them. When the worker URL is on a different
@@ -335,7 +337,30 @@ export default class MonacoService extends Service {
     if (!this.editor) {
       return;
     }
-    this.editor.focus();
+    // Cursor placement runs on debounced timers (e.g. restoring a position
+    // after a file opens or a definition is selected), so by the time it
+    // fires the user may already be typing in another text-entry element,
+    // like the AI assistant chat box. Grabbing focus then would redirect
+    // their keystrokes into the editor, where auto-save would persist the
+    // stray characters into the open file. Take focus only when it won't
+    // interrupt text entry happening elsewhere.
+    let active = document.activeElement;
+    let editorDom = this.editor.getDomNode();
+    let activeElementAcceptsText =
+      active instanceof HTMLElement &&
+      !editorDom?.contains(active) &&
+      (active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.isContentEditable);
+    if (activeElementAcceptsText) {
+      log.warn(
+        `monaco cursor update: leaving focus on ${active!.tagName.toLowerCase()} ${JSON.stringify(
+          (active as HTMLElement).dataset,
+        )} instead of taking it for the editor`,
+      );
+    } else {
+      this.editor.focus();
+    }
     this.editor.setPosition(cursorPosition);
     this.editor.revealLineNearTop(cursorPosition.lineNumber);
   }
