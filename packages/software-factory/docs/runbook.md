@@ -174,11 +174,11 @@ absolute URL of the card to adjust.
 Adjust is a superset of greenfield: one extra sub-phase inside
 bootstrap, then the standard Issue loop. During bootstrap the agent:
 
-1. **Seeds the target realm** with a working copy of the source card
+1. **Seeds the workspace (then the target realm on push)** with a working copy of the source card
    and its same-realm dependency graph —
    `boxel realm ingest-card "<source-card-url>" .` copies the card's
    module, the same-realm modules it imports (including type-only
-   imports), its sample instances, and its card-level Catalog Spec.
+   imports), its sample instances, and its card/app Catalog Spec.
    If the source card ships no co-located test (common for catalog
    cards), the agent writes **characterization tests** capturing its
    current behavior.
