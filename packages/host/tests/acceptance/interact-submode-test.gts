@@ -29,6 +29,7 @@ import type {
 
 import {
   percySnapshot,
+  testModuleRealm,
   testRealmURL,
   visitOperatorMode,
   type TestContextWithSave,
@@ -964,7 +965,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
+      setActiveRealms([testRealmURL, `${testModuleRealm}`]);
       await visitOperatorMode({
         stacks: [
           [
@@ -975,7 +976,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
           [
             {
-              id: 'https://localhost:4202/test/hassan',
+              id: `${testModuleRealm}hassan`,
               format: 'isolated',
             },
           ],
