@@ -78,13 +78,24 @@ export type InstantiateCardFn = (
   instanceData?: string,
 ) => Promise<InstantiateModuleResult>;
 
+export interface SearchSpecsResult {
+  specs: SpecInfo[];
+  error?: string;
+  /**
+   * Raw Spec-card count from the realm search, before the card/app
+   * filter. Lets discovery distinguish "the index hasn't caught up yet"
+   * (zero raw hits — worth polling) from "Spec cards exist but none are
+   * instantiable" (final — return immediately instead of polling to the
+   * deadline).
+   */
+  totalSpecCards?: number;
+}
+
 export interface DiscoverRealmSpecsOptions {
   targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to a client.search over Spec cards. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecsResult>;
 }
 
 export interface InstantiateRealmSpecsOptions {
@@ -179,7 +190,7 @@ export interface RunInstantiateResult {
  */
 export async function discoverRealmSpecs(
   options: DiscoverRealmSpecsOptions,
-): Promise<{ specs: SpecInfo[]; error?: string }> {
+): Promise<SearchSpecsResult> {
   let searchSpecsFn =
     options.searchSpecsFn ??
     ((realmUrl: string) => defaultSearchSpecs(options.client, realmUrl));
@@ -187,10 +198,13 @@ export async function discoverRealmSpecs(
   // Realm-side source POST indexing is async, so a newly-uploaded Spec
   // card may not be in the search index by the time we get here. Bounded-
   // poll until even one spec shows up so an agent or test that just
-  // pushed Spec files isn't penalized for indexing latency.
+  // pushed Spec files isn't penalized for indexing latency. When the
+  // search DID return Spec cards but the card/app filter dropped them
+  // all, the index is up to date and polling can't change the answer —
+  // return immediately.
   return retryWithPoll(
     () => searchSpecsFn(options.targetRealm),
-    (r) => !r.error && r.specs.length === 0,
+    (r) => !r.error && r.specs.length === 0 && (r.totalSpecCards ?? 0) === 0,
   );
 }
 
@@ -655,7 +669,7 @@ function emptyErrorResult(errorMessage: string): RunInstantiateResult {
 async function defaultSearchSpecs(
   client: BoxelCLIClient,
   realmUrl: string,
-): Promise<{ specs: SpecInfo[]; error?: string }> {
+): Promise<SearchSpecsResult> {
   let searchResult = await client.search(realmUrl, {
     filter: { type: specRef },
   });
@@ -664,6 +678,7 @@ async function defaultSearchSpecs(
     return { specs: [], error: searchResult.error };
   }
 
+  let totalSpecCards = (searchResult.data ?? []).length;
   let specs: SpecInfo[] = [];
   for (let card of searchResult.data ?? []) {
     let specId = (card as Record<string, unknown>).id as string | undefined;
@@ -738,7 +753,7 @@ async function defaultSearchSpecs(
     });
   }
 
-  return { specs };
+  return { specs, totalSpecCards };
 }
 
 /**

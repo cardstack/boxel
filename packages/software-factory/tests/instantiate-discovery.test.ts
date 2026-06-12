@@ -44,4 +44,34 @@ module('discoverRealmSpecs', function () {
     assert.strictEqual(error, undefined);
     assert.deepEqual(specs.map((s) => s.cardName).sort(), ['MyApp', 'MyCard']);
   });
+
+  test('a realm with only non-instantiable Specs returns immediately instead of polling', async function (assert) {
+    let searchCalls = 0;
+    let client = {
+      search: async () => {
+        searchCalls++;
+        return {
+          ok: true,
+          data: [
+            specCard('component-spec', 'component', 'ChartComponent'),
+            specCard('command-spec', 'command', 'formatChartLabel'),
+          ],
+        };
+      },
+    } as unknown as BoxelCLIClient;
+
+    let { specs, error, totalSpecCards } = await discoverRealmSpecs({
+      targetRealm: REALM,
+      client,
+    });
+
+    assert.strictEqual(error, undefined);
+    assert.deepEqual(specs, []);
+    assert.strictEqual(totalSpecCards, 2);
+    assert.strictEqual(
+      searchCalls,
+      1,
+      'Spec cards were found and filtered — the index is current, so no poll',
+    );
+  });
 });
