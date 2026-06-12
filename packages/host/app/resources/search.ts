@@ -257,7 +257,7 @@ export class SearchResource<
       if (!isLive && seedIsAuthoritative) {
         // The parent document already serialized the relationship set
         // we are resolving, so a re-query would only re-derive the
-        // same data and (in prerender) burn a `_federated-search`
+        // same data and (in prerender) burn a `_federated-search-v2`
         // round-trip per field per loaded card. Skip the search and
         // also bypass the query/realm equality check below so a
         // signature drift between the parent doc's `links.search` and

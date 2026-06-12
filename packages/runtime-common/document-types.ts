@@ -19,6 +19,7 @@ import {
   isCardResource,
   isFileMetaResource,
   isPrerenderedCardResource,
+  isSearchEntryResource,
 } from './resource-types.ts';
 
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
@@ -86,6 +87,10 @@ export interface SearchEntryCollectionDocument {
     htmlQuery?: HtmlQuery;
   };
 }
+
+// The public-API name for the raw v2 wire format a programmatic
+// `searchEntries` caller receives.
+export type SearchEntryResults = SearchEntryCollectionDocument;
 
 export interface SingleFileMetaDocument {
   data: FileMetaResource;
@@ -158,6 +163,22 @@ export function isLinkableCollectionDocument(
   doc: any,
 ): doc is LinkableCollectionDocument {
   return isCardCollectionDocument(doc) || isFileMetaCollectionDocument(doc);
+}
+
+export function isSearchEntryCollectionDocument(
+  doc: any,
+): doc is SearchEntryCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc) || !('meta' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  return data.every((resource) => isSearchEntryResource(resource));
 }
 
 export function isPrerenderedCardCollectionDocument(

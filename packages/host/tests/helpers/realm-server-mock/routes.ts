@@ -4,16 +4,20 @@ import {
   ensureTrailingSlash,
   parsePrerenderedSearchRequestFromPayload,
   parseRealmsFromPayload,
+  parseSearchEntryQueryFromPayload,
   parseSearchQueryFromPayload,
   parseSearchRequestPayload,
   SearchRequestError,
   sanitizeLoggingCorrelationId,
+  searchEntryRealms,
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
   type Query,
+  type SearchEntryCollectionDocument,
+  type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
 import {
@@ -134,6 +138,53 @@ function registerSearchRoutes() {
       let combined = await searchRealms(
         realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
         cardsQuery,
+        loggingCorrelationId ? { loggingCorrelationId } : undefined,
+      );
+
+      return new Response(JSON.stringify(combined), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      });
+    },
+  });
+
+  registerRealmServerRoute({
+    path: '/_federated-search-v2',
+    handler: async (req, _url) => {
+      let realmList: string[];
+      let payload: unknown;
+      try {
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let parsed;
+      try {
+        parsed = parseSearchEntryQueryFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      // Mirror the realm-server's `handle-search-v2`: read the client's
+      // correlation id off the request and thread it into searchEntryRealms,
+      // so the real `realm:search-timing` line is emitted (and observable by
+      // host integration tests) keyed by the id the client minted.
+      let loggingCorrelationId = sanitizeLoggingCorrelationId(
+        req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+      );
+      let combined = await searchEntryRealms(
+        realmList.map((realmURL) =>
+          getSearchEntrySearchableRealmForURL(realmURL, payload),
+        ),
+        parsed,
         loggingCorrelationId ? { loggingCorrelationId } : undefined,
       );
 
@@ -538,6 +589,63 @@ function getSearchableRealmForURL(
 
   remoteRealmCache.set(realmURL, remoteRealm);
   return remoteRealm;
+}
+
+// The v2 counterpart of `getSearchableRealmForURL`. In-process registry
+// realms expose `searchEntries` directly; a live remote realm (base, skills,
+// catalog on localhost:4201) is reached by passing the original wire payload
+// through to its per-realm `_search-v2` endpoint — the parsed query the
+// fan-out hands us is the server's internal form and has no wire spelling,
+// so the passthrough closes over the raw payload instead.
+function getSearchEntrySearchableRealmForURL(
+  realmURL: string,
+  rawPayload: unknown,
+):
+  | {
+      url?: string;
+      searchEntries: (
+        searchEntryQuery: SearchEntryQuery,
+      ) => Promise<SearchEntryCollectionDocument>;
+    }
+  | undefined {
+  let registry = getTestRealmRegistry();
+  let registryEntry = registry.get(ensureTrailingSlash(realmURL));
+  if (registryEntry?.realm) {
+    return registryEntry.realm;
+  }
+
+  let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm not in the registry: there is no real server to
+    // search, so treat it as unavailable. searchEntryRealms() drops undefined
+    // entries.
+    return undefined;
+  }
+  return {
+    url: resolvedRealmURL,
+    async searchEntries(_searchEntryQuery: SearchEntryQuery) {
+      let { realms: _realms, ...wireQuery } = rawPayload as Record<
+        string,
+        unknown
+      >;
+      let url = new URL('_search-v2', resolvedRealmURL);
+      let response = await globalThis.fetch(url.href, {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(wireQuery),
+      });
+      if (!response.ok) {
+        let responseText = await response.text();
+        throw new Error(
+          `Remote realm search-v2 failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
+        );
+      }
+      return (await response.json()) as SearchEntryCollectionDocument;
+    },
+  };
 }
 
 async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {

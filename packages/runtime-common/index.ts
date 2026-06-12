@@ -4,7 +4,6 @@ import type {
   LinkableResource,
   LooseLinkableResource,
   Meta,
-  Saved,
 } from './resource-types.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -691,7 +690,7 @@ export interface RealmPrerenderedCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
-import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query.ts';
+import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
@@ -832,6 +831,7 @@ export type {
   UnifiedSearchIncludedResource,
   SearchEntryCollectionDocument,
   SearchEntryIncludedResource,
+  SearchEntryResults,
 } from './document-types.ts';
 export type {
   CardResource,
@@ -852,6 +852,7 @@ export {
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
   isLinkableCollectionDocument,
+  isSearchEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {
@@ -1025,18 +1026,6 @@ export type getCards<T extends CardDef = CardDef> = (
 {
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
-  isLoading: boolean;
-  meta: QueryResultsMeta;
-};
-
-// Duck type of the SearchDataResource
-export type getSearchData = (
-  parent: object,
-  getQuery: () => DataQuery | undefined,
-  getRealms?: () => string[] | undefined,
-  opts?: { isLive?: boolean },
-) => {
-  resources: (CardResource<Saved> | FileMetaResource)[];
   isLoading: boolean;
   meta: QueryResultsMeta;
 };
