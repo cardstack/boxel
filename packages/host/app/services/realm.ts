@@ -720,6 +720,14 @@ export default class RealmService extends Service {
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
   private bulkInfoPromise: Promise<void> | undefined;
+  // realmOf runs once per instance added to the store, so its per-call costs
+  // multiply by instance count during large renders. RealmPaths is a pure
+  // function of the realm URL string (cache entries never go stale), and a
+  // resolved id→realm answer stays valid as long as that realm is still
+  // known — validated against `realms` on every hit, so realm removal and
+  // resetState can't serve a stale answer.
+  private realmPathsCache = new Map<string, RealmPaths>();
+  private realmOfCache = new Map<string, string>();
 
   @tracked private identifyRealmTracker = 0;
 
@@ -739,6 +747,8 @@ export default class RealmService extends Service {
     this.reauthentications.clear();
     this.bulkInfoPromise = undefined;
     this.identifyRealmTracker++;
+    this.realmPathsCache.clear();
+    this.realmOfCache.clear();
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -959,11 +969,22 @@ export default class RealmService extends Service {
 
   realmOf(input: RealmResourceIdentifier | URL): RealmIdentifier | undefined {
     let id = input instanceof URL ? rri(input.href) : input;
+    let cached = this.realmOfCache.get(id);
+    if (cached !== undefined && this.realms.has(cached)) {
+      return ri(cached);
+    }
     for (const realm of this.realms.keys()) {
-      if (new RealmPaths(new URL(realm)).inRealm(id)) {
+      let paths = this.realmPathsCache.get(realm);
+      if (!paths) {
+        paths = new RealmPaths(new URL(realm));
+        this.realmPathsCache.set(realm, paths);
+      }
+      if (paths.inRealm(id)) {
+        this.realmOfCache.set(id, realm);
         return ri(realm);
       }
     }
+    // Misses are not cached: a realm learned later may claim this id.
     return undefined;
   }
 

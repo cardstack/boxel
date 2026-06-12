@@ -87,6 +87,40 @@ module(basename(__filename), function () {
       );
     });
 
+    test('toURLHref resolves like toURL and tracks mapping changes', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      assert.strictEqual(
+        virtualNetwork.toURLHref('@cardstack/skills/Skill/foo'),
+        virtualNetwork.toURL('@cardstack/skills/Skill/foo').href,
+        'prefix-form resolves identically to toURL().href',
+      );
+      assert.strictEqual(
+        virtualNetwork.toURLHref('https://example.com/a?b=c#d'),
+        'https://example.com/a?b=c#d',
+        'URL-form normalizes identically to toURL().href',
+      );
+      // Cached entries must not outlive the mappings they were derived from.
+      virtualNetwork.removeRealmMapping('@cardstack/skills/');
+      assert.throws(
+        () => virtualNetwork.toURLHref('@cardstack/skills/Skill/foo'),
+        'a cached resolution is dropped when its mapping is removed',
+      );
+      // A failed resolution must not be negatively cached.
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      assert.strictEqual(
+        virtualNetwork.toURLHref('@cardstack/skills/Skill/foo'),
+        'https://localhost:4201/skills/Skill/foo',
+        'resolution recovers after the mapping is re-registered',
+      );
+    });
+
     test('resolveURL: root-relative ref joins against the mapped URL of a prefix-form base', function (assert) {
       let virtualNetwork = new VirtualNetwork();
       virtualNetwork.addRealmMapping(

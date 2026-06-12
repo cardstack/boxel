@@ -13,6 +13,7 @@ interface LocalOptions {
 // that only need URL-handling, like @cardstack/boxel-cli).
 interface RealmPathsVirtualNetwork {
   toURL(rri: string): URL;
+  toURLHref(rri: string): string;
 }
 
 export class RealmPaths {
@@ -128,8 +129,8 @@ export class RealmPaths {
     let realmURL: string;
     let inputURL: string;
     try {
-      realmURL = this.virtualNetwork.toURL(this.url).href;
-      inputURL = this.virtualNetwork.toURL(inputStr).href;
+      realmURL = this.virtualNetwork.toURLHref(this.url);
+      inputURL = this.virtualNetwork.toURLHref(inputStr);
     } catch {
       return false;
     }
