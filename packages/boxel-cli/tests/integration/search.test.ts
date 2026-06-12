@@ -1,18 +1,21 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getTestPrerenderer } from '#realm-server/tests/helpers/index';
+import {
+  getTestPrerenderer,
+  stopTestPrerenderServer,
+} from '#realm-server/tests/helpers/index';
 import { baseCardRef } from '@cardstack/runtime-common';
-import { search } from '../../src/commands/search';
-import { ProfileManager } from '../../src/lib/profile-manager';
+import { search } from '../../src/commands/search.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupJwtTestProfile,
-} from '../helpers/integration';
+} from '../helpers/integration.ts';
 
 const ownerUserId = '@cli-test:localhost';
 const testRealmURL = new URL('http://127.0.0.1:4444/test/');
@@ -76,6 +79,10 @@ beforeAll(async () => {
 afterAll(async () => {
   cleanupProfile?.();
   await stopTestRealmServer();
+  // The prerender server is memoized per module registry, but vitest gives
+  // each test file a fresh registry — stop the OS-level server so the next
+  // suite's getTestPrerenderer() doesn't hit EADDRINUSE.
+  await stopTestPrerenderServer();
 });
 
 describe('federated search (integration)', () => {

@@ -1,7 +1,7 @@
-import { sanitizeHtml } from './dompurify-runtime';
-import { escapeHtml } from './helpers/html';
-import { bfmCardReferenceExtensions } from './bfm-card-references';
-import { markedKatexPlaceholder } from './bfm-math';
+import { sanitizeHtml } from './dompurify-runtime.ts';
+import { escapeHtml } from './helpers/html.ts';
+import { bfmCardReferenceExtensions } from './bfm-card-references.ts';
+import { markedKatexPlaceholder } from './bfm-math.ts';
 
 import {
   Marked,

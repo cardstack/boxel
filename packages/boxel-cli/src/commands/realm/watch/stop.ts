@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import type { Command } from 'commander';
-import { listRegisteredProcesses } from '../../../lib/watch-process-registry';
-import { DIM, FG_GREEN, FG_RED, RESET } from '../../../lib/colors';
+import { listRegisteredProcesses } from '../../../lib/watch-process-registry.ts';
+import { DIM, FG_GREEN, FG_RED, RESET } from '../../../lib/colors.ts';
 
 export interface StoppedProcess {
   pid: number;

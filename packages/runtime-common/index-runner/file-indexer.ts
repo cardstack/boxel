@@ -11,20 +11,20 @@ import {
   type LocalPath,
   type ResolvedCodeRef,
   type Diagnostics,
-} from '../index';
+} from '../index.ts';
 import {
   CardError,
   coerceErrorMessage,
   isCardError,
   serializableError,
-} from '../error';
-import type { IndexRunnerDependencyManager } from './dependency-resolver';
-import { uniqueDeps } from './dependency-collections';
+} from '../error.ts';
+import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
+import { uniqueDeps } from './dependency-collections.ts';
 import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
-} from '../file-def-code-ref';
-import type { VirtualNetwork } from '../virtual-network';
+} from '../file-def-code-ref.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;

@@ -1,15 +1,16 @@
-import { transpileAmd } from './amd-transpile';
-import { Deferred } from './deferred';
-import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
-import { executableExtensions, logger } from './index';
+import { transpileAmd } from './amd-transpile/index.ts';
+import { Deferred } from './deferred.ts';
+import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
+import { executableExtensions, logger } from './index.ts';
 
-import { CardError, iconNotFoundMessage } from './error';
+import { CardError, iconNotFoundMessage } from './error.ts';
 import flatMap from 'lodash/flatMap';
 import {
+  shouldTrackRuntimeModuleGraph,
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
-} from './dependency-tracker';
-import type { VirtualNetwork } from './virtual-network';
+} from './dependency-tracker.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -447,6 +448,20 @@ export class Loader {
     rootModuleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): void {
+    // This walk repeats on every import() of the same module (e.g. when
+    // deserializing many cards of one type) yet records the identical node set
+    // each time; the probe collapses repeats to one Set lookup. Scoped apart
+    // from the relationship walk because this one excludes shimmed modules, so
+    // the two record slightly different node sets.
+    if (
+      !shouldTrackRuntimeModuleGraph(
+        'import',
+        rootModuleIdentifier,
+        dependencyTrackingContext,
+      )
+    ) {
+      return;
+    }
     for (let moduleIdentifier of this.collectKnownModuleDependencies(
       rootModuleIdentifier,
     )) {

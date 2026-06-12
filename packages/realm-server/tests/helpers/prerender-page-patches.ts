@@ -1,5 +1,5 @@
 import { Realm as RuntimeRealm } from '@cardstack/runtime-common';
-import { PagePool } from '../../prerender/page-pool';
+import { PagePool } from '../../prerender/page-pool.ts';
 
 export function installRealmServerAssertOwnRealmServerBypassPatch(): {
   restore: () => Promise<void>;

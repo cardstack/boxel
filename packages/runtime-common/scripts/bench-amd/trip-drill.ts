@@ -24,9 +24,9 @@ import { performance } from 'node:perf_hooks';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { fixturesDir, baselinePath } from './paths';
-import { transpileAmd } from '../../amd-transpile';
-import { stats } from './bench';
+import { fixturesDir, baselinePath } from './paths.ts';
+import { transpileAmd } from '../../amd-transpile/index.ts';
+import { stats } from './bench.ts';
 
 // 5ms/call is enough to push every fixture (median 0.65–10ms baseline)
 // past 1.25× tolerance with comfortable margin. Tunable via env var

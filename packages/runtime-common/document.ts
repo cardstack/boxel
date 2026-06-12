@@ -5,9 +5,9 @@ import {
   SupportedMimeType,
   CardError,
   isCardError,
-} from './index';
-import type { RealmResourceIdentifier } from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+} from './index.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 async function loadDocumentWithRequest(
   fetch: typeof globalThis.fetch,

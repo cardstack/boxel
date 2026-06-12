@@ -1,11 +1,11 @@
-import type { LooseCardResource, FileMetaResource } from './index';
-import { relationshipEntries } from './relationship-utils';
-import { RealmPaths } from './paths';
+import type { LooseCardResource, FileMetaResource } from './index.ts';
+import { relationshipEntries } from './relationship-utils.ts';
+import { RealmPaths } from './paths.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
-} from './realm-identifiers';
-import type { VirtualNetwork } from './virtual-network';
+} from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 export function maybeURL(
   possibleURL: string,

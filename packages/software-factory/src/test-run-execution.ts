@@ -4,13 +4,13 @@ import { join, normalize, resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
 
 import { chromium } from '@playwright/test';
 
-import { getNextValidationSequenceNumber } from './realm-operations';
-import { createTestRun, completeTestRun } from './test-run-cards';
-import { parseQunitResults } from './test-run-parsing';
+import { getNextValidationSequenceNumber } from './realm-operations.ts';
+import { createTestRun, completeTestRun } from './test-run-cards.ts';
+import { parseQunitResults } from './test-run-parsing.ts';
 import type {
   ExecuteTestRunOptions,
   QunitResults,
@@ -19,9 +19,14 @@ import type {
   RunTestsResult,
   TestRunHandle,
   TestRunRealmOptions,
-} from './test-run-types';
+} from './test-run-types.ts';
 import { findHostDistPackageDir } from '@cardstack/realm-test-harness';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
 
 let log = logger('test-run-execution');
 
@@ -427,6 +432,12 @@ interface QunitRunnerOptions {
   debug?: boolean;
   /** Optional slug shown in the served test page title. */
   slug?: string;
+  /**
+   * When set, the browser run is memoized per workspace fingerprint, so the
+   * agent's mid-turn `run_tests` and the pipeline's test step don't both
+   * drive the same QUnit suite over an unchanged realm.
+   */
+  cache?: ValidationRunCache;
 }
 
 interface QunitRunnerOutput {
@@ -440,6 +451,24 @@ interface QunitRunnerOutput {
  * (validation pipeline) or result flattening (in-memory tool).
  */
 async function runQunitInBrowser(
+  options: QunitRunnerOptions,
+): Promise<QunitRunnerOutput> {
+  if (options.cache) {
+    // Key by the run inputs so a cache instance shared across realms or
+    // runner configurations can never serve another run's results.
+    let key = `qunit:${cacheKeyForInputs([
+      options.targetRealm,
+      options.hostAppUrl,
+      options.hostDistDir ?? '',
+    ])}`;
+    return options.cache.getOrRun(key, () =>
+      runQunitInBrowserUncached(options),
+    );
+  }
+  return runQunitInBrowserUncached(options);
+}
+
+async function runQunitInBrowserUncached(
   options: QunitRunnerOptions,
 ): Promise<QunitRunnerOutput> {
   let start = Date.now();
@@ -582,6 +611,7 @@ export async function executeTestRunFromRealm(
       hostDistDir: options.hostDistDir,
       debug: options.debug,
       slug: options.slug,
+      cache: options.cache,
     });
 
     let attrs = parseQunitResults(qunitResults);
@@ -674,6 +704,7 @@ export async function runTestsInMemory(
       hostAppUrl: options.hostAppUrl,
       hostDistDir: options.hostDistDir,
       debug: options.debug,
+      cache: options.cache,
     });
 
     let attrs = parseQunitResults(qunitResults);

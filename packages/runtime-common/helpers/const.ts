@@ -2,8 +2,8 @@ import {
   rri,
   type RealmIdentifier,
   type RealmResourceIdentifier,
-} from '../realm-identifiers';
-import type { RealmInfo } from '../index';
+} from '../realm-identifiers.ts';
+import type { RealmInfo } from '../index.ts';
 export const testRealmURL = 'http://test-realm/test/' as RealmIdentifier;
 export const testHostModeRealmURL =
   'http://test-realm/user/test/' as RealmIdentifier;

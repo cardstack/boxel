@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { basename, join } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
@@ -16,14 +16,14 @@ import {
   realmSecretSeed,
   createVirtualNetwork,
   waitUntil,
-} from './helpers';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
+} from './helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import {
   addToCreditsLedger,
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 
 module(basename(__filename), function () {
   module(

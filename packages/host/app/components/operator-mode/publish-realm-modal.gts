@@ -24,15 +24,21 @@ import {
 import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import {
+  deriveRealmName,
+  ensureTrailingSlash,
+  resolvePublishedRealmUrl,
+} from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
+import CheckDomainAvailabilityCommand from '@cardstack/host/commands/check-domain-availability';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 
+import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -71,6 +77,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private commandService: CommandService;
 
   @tracked selectedPublishedRealmURLs: string[] = [];
   @tracked private customSubdomainSelection: CustomSubdomainSelection | null =
@@ -319,12 +326,14 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get subdirectoryRealmUrl() {
-    const protocol = this.getProtocol();
-    const matrixUsername = this.getMatrixUsername();
-    const domain = this.getDefaultPublishedRealmDomain();
-    const realmName = this.getRealmName();
-
-    return `${protocol}://${matrixUsername}.${domain}/${realmName}/`;
+    return resolvePublishedRealmUrl(
+      { type: 'subdirectory', name: this.getRealmName() },
+      {
+        protocol: this.getProtocol(),
+        matrixUsername: this.getMatrixUsername(),
+        spaceDomain: this.getDefaultPublishedRealmDomain(),
+      },
+    );
   }
 
   get subdirectoryRealmParts() {
@@ -366,8 +375,10 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private buildPublishedRealmUrl(hostname: string): string {
-    let protocol = this.getProtocol();
-    return `${protocol}://${hostname}/`;
+    return resolvePublishedRealmUrl(
+      { type: 'custom', name: hostname },
+      { protocol: this.getProtocol() },
+    );
   }
 
   private clearCustomSubdomainFeedback() {
@@ -476,24 +487,7 @@ export default class PublishRealmModal extends Component<Signature> {
     if (!realmUrl) {
       throw new Error('Current realm URL is not available');
     }
-
-    try {
-      const pathSegments = new URL(realmUrl).pathname
-        .split('/')
-        .filter((segment) => segment);
-      const lastSegment = pathSegments[pathSegments.length - 1];
-
-      if (!lastSegment) {
-        throw new Error('Could not extract realm name from URL path');
-      }
-
-      return lastSegment.toLowerCase();
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Failed to parse realm URL: ${error.message}`);
-      }
-      throw new Error('Failed to parse realm URL');
-    }
+    return deriveRealmName(realmUrl);
   }
 
   @action
@@ -597,8 +591,16 @@ export default class PublishRealmModal extends Component<Signature> {
       this.clearCustomSubdomainFeedback();
 
       try {
-        let result = await this.realmServer.checkDomainAvailability(subdomain);
-        this.customSubdomainAvailability = result;
+        // Check availability through the same command exposed to boxel-cli so
+        // the UI and headless callers share one path.
+        let command = new CheckDomainAvailabilityCommand(
+          this.commandService.commandContext,
+        );
+        let result = await command.execute({ type: 'custom', name: subdomain });
+        this.customSubdomainAvailability = {
+          available: result.available,
+          hostname: `${subdomain}.${this.customSubdomainBase}`,
+        };
 
         if (result.available) {
           // Keep the full domain including port if present (e.g., "localhost:4201")
@@ -639,7 +641,7 @@ export default class PublishRealmModal extends Component<Signature> {
           }
         } else {
           this.customSubdomainError =
-            result.error ?? 'This name is already taken';
+            result.reason ?? 'This name is already taken';
           this.setCustomSubdomainSelection(null);
         }
       } catch (error) {

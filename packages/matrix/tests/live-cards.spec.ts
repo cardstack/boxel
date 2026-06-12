@@ -1,5 +1,5 @@
-import { test, expect } from './fixtures';
-import { appURL } from '../support/isolated-realm-server';
+import { test, expect } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   createRealm,
   showAllCards,
@@ -9,7 +9,7 @@ import {
   getMonacoContent,
   waitUntil,
   createSubscribedUserAndLogin,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Live Cards', () => {
   const serverIndexUrl = new URL(appURL).origin;

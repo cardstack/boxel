@@ -3,8 +3,8 @@ import {
   type RenderTimeoutDiagnostics,
   logger,
 } from '@cardstack/runtime-common';
-import type { PagePool } from './page-pool';
-import type { AffinityActivityTracker } from './affinity-activity';
+import type { PagePool } from './page-pool.ts';
+import type { AffinityActivityTracker } from './affinity-activity.ts';
 
 const log = logger('prerenderer');
 

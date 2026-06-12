@@ -1,7 +1,7 @@
-import { rri } from '../realm-identifiers';
-import { trimExecutableExtension } from '../index';
-import type { VirtualNetwork } from '../virtual-network';
-import { canonicalURL } from './dependency-url';
+import { rri } from '../realm-identifiers.ts';
+import { trimExecutableExtension } from '../index.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import { canonicalURL } from './dependency-url.ts';
 
 export function isExtensionlessPath(url: URL): boolean {
   let lastSegment = url.pathname.split('/').pop() ?? '';

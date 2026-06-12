@@ -13,10 +13,15 @@ import type { BoxelCLIClient, LintResult } from '@cardstack/boxel-cli/api';
 import type {
   LintFileResultData,
   LintViolationData,
-} from './lint-result-cards';
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { readCard } from './workspace-fs';
+} from './lint-result-cards.ts';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { readCard } from './workspace-fs.ts';
+
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
 
 let log = logger('lint-execution');
 
@@ -61,6 +66,12 @@ export interface LintRealmFilesOptions {
     realmUrl: string,
     path: string,
   ) => Promise<{ ok: boolean; content?: string; error?: string }>;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + file
+   * set, so the agent's mid-turn `run_lint` and the pipeline's lint step
+   * don't both lint the same unchanged files.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface LintRealmFilesOutput {
@@ -90,6 +101,8 @@ export interface RunLintInMemoryOptions {
    * calling the realm.
    */
   path?: string;
+  /** See {@link LintRealmFilesOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunLintViolation {
@@ -152,6 +165,19 @@ export async function discoverLintableFiles(
  * `lint-error` entries; they do not abort the run.
  */
 export async function lintRealmFiles(
+  options: LintRealmFilesOptions,
+  files: string[],
+): Promise<LintRealmFilesOutput> {
+  if (options.cache) {
+    let key = `lint:${cacheKeyForInputs(files)}`;
+    return options.cache.getOrRun(key, () =>
+      lintRealmFilesUncached(options, files),
+    );
+  }
+  return lintRealmFilesUncached(options, files);
+}
+
+async function lintRealmFilesUncached(
   options: LintRealmFilesOptions,
   files: string[],
 ): Promise<LintRealmFilesOutput> {
@@ -293,6 +319,7 @@ export async function runLintInMemory(
         targetRealm: options.targetRealm,
         client: options.client,
         workspaceDir: options.workspaceDir,
+        cache: options.cache,
       },
       lintableFiles,
     );

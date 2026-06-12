@@ -8,8 +8,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-import { NodeAdapter } from '../node-realm';
-import { insertUser, setupDB } from './helpers';
+import { NodeAdapter } from '../node-realm.ts';
+import { insertUser, setupDB } from './helpers/index.ts';
 
 module(basename(__filename), function (hooks) {
   let dbAdapter: PgAdapter;

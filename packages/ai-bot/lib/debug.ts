@@ -1,4 +1,4 @@
-import { setTitle } from './set-title';
+import { setTitle } from './set-title.ts';
 import type OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';

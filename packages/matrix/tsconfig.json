@@ -3,6 +3,7 @@
     "target": "es2020",
     "allowJs": true,
     "moduleResolution": "node",
+    "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -23,21 +24,11 @@
     "experimentalDecorators": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": [
-        "../base/*"
-      ],
-      "@cardstack/boxel-ui": [
-        "../boxel-ui/addon"
-      ],
-      "@cardstack/boxel-ui/*": [
-        "../boxel-ui/addon/*"
-      ],
-      "*": [
-        "types/*"
-      ]
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "*": ["types/*"]
     }
   },
-  "include": [
-    "./**/*"
-  ]
+  "include": ["./**/*"]
 }

@@ -17,7 +17,11 @@ import { resolve } from 'node:path';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
+import { logger } from './logger.ts';
+import {
+  ValidationRunCache,
+  WorkspaceSyncGate,
+} from './validation-run-cache.ts';
 
 import {
   ClaudeCodeFactoryAgent,
@@ -25,26 +29,26 @@ import {
   FACTORY_DEFAULT_OPENROUTER_MODEL,
   type FactoryAgentProvider,
   type LoopAgent,
-} from './factory-agent';
-import { ContextBuilder } from './factory-context-builder';
-import { inferDarkfactoryModuleUrl } from './factory-seed';
-import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader';
+} from './factory-agent/index.ts';
+import { ContextBuilder } from './factory-context-builder.ts';
+import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
+import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader.ts';
 import {
   buildFactoryTools,
   type FactoryTool,
   type ToolBuilderConfig,
-} from './factory-tool-builder';
-import { ToolExecutor } from './factory-tool-executor';
-import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry';
+} from './factory-tool-builder.ts';
+import { ToolExecutor } from './factory-tool-executor.ts';
+import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry.ts';
 import {
   runIssueLoop,
   createDefaultPipeline,
   type IssueLoopConfig,
   type IssueLoopResult,
-} from './issue-loop';
-import { RealmIssueStore, type IssueStore } from './issue-scheduler';
-import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
-import { withStdoutRedirected } from './redirect-stdout';
+} from './issue-loop.ts';
+import { RealmIssueStore, type IssueStore } from './issue-scheduler.ts';
+import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader.ts';
+import { withStdoutRedirected } from './redirect-stdout.ts';
 
 let log = logger('factory-issue-loop-wiring');
 
@@ -171,8 +175,16 @@ export async function runFactoryIssueLoop(
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
-  let syncWorkspace = () =>
-    syncWorkspaceToRealm(client, targetRealm, workspaceDir);
+  // One sync gate + one validation-run cache per loop: the gate skips
+  // workspace→realm syncs when nothing changed since the last successful
+  // sync, and the cache lets the post-signal_done validation pipeline reuse
+  // engine runs the agent's mid-turn run_* tools already executed against
+  // the same workspace state.
+  let syncGate = new WorkspaceSyncGate(workspaceDir, () =>
+    syncWorkspaceToRealm(client, targetRealm, workspaceDir),
+  );
+  let syncWorkspace = () => syncGate.sync();
+  let validationCache = new ValidationRunCache(workspaceDir, { syncGate });
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealm,
     realmServerUrl,
@@ -181,6 +193,7 @@ export async function runFactoryIssueLoop(
     testResultsModuleUrl,
     hostAppUrl,
     syncWorkspace,
+    validationCache,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -229,6 +242,7 @@ export async function runFactoryIssueLoop(
       workspaceDir,
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
+      cache: validationCache,
     });
 
   // 6. Run issue loop

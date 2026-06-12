@@ -17,11 +17,11 @@ import {
   type RealmPermissions,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   ModuleCacheCoordinator,
   hashCoalesceKeyForAdvisoryLock,
-} from '../lib/module-cache-coordination';
+} from '../lib/module-cache-coordination.ts';
 
 // Lightweight helpers — these tests don't need the full
 // setupPermissionedRealmsCached fixture (real realm-server, real

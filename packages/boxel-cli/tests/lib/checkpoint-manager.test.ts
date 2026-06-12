@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { CheckpointManager } from '../../src/lib/checkpoint-manager';
+import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
 
 function writeFile(dir: string, relPath: string, content: string): void {
   const full = path.join(dir, relPath);

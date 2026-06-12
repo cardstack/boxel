@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
-import { Responder } from '../lib/responder';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { Responder } from '../lib/responder.ts';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import FakeTimers from '@sinonjs/fake-timers';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import * as Sentry from '@sentry/node';

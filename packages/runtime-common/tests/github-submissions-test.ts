@@ -1,5 +1,5 @@
-import { toBranchName } from '../github-submissions';
-import type { SharedTests } from '../helpers';
+import { toBranchName } from '../github-submissions.ts';
+import type { SharedTests } from '../helpers/index.ts';
 
 const BRANCH_PATTERN = /^[a-f0-9]{6}-(.+)$/;
 

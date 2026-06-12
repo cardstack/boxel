@@ -1,7 +1,7 @@
 // Main exports for ai-bot-helpers module
-export * from './types';
-export * from './constants';
-export * from './history';
-export * from './prompt';
-export * from './matrix-utils';
-export * from './debug';
+export * from './types.ts';
+export * from './constants.ts';
+export * from './history.ts';
+export * from './prompt.ts';
+export * from './matrix-utils.ts';
+export * from './debug.ts';

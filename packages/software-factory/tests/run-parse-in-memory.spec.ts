@@ -2,17 +2,17 @@ import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { runParseInMemory } from '../src/parse-execution';
+import { runParseInMemory } from '../src/parse-execution.ts';
 import {
   BROKEN_EXAMPLE_JSON,
   BROKEN_TEMPLATE_GTS,
   VALID_EXAMPLE_JSON,
   VALID_MODULE_GTS,
-} from './helpers/parse-test-fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from './helpers/parse-test-fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

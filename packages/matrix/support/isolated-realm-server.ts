@@ -5,7 +5,7 @@ import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
-import type { SynapseInstance } from './synapse';
+import type { SynapseInstance } from './synapse/index.ts';
 
 setGracefulCleanup();
 
@@ -22,7 +22,7 @@ setGracefulCleanup();
 // `writable` patch, and the hand-rolled `proxyAsset` forwarder).
 
 const testRealmCards = resolve(
-  join(__dirname, '..', '..', 'host', 'tests', 'cards'),
+  join(__dirname, '..', '..', 'test-realm-cards', 'contents'),
 );
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const skillsRealmDir = resolve(
@@ -689,7 +689,7 @@ export async function startServer({
 
   // /_catalog-realms only surfaces realms with show_as_catalog = true.
   // Matrix tests treat the test fixture realm and the skills realm as
-  // catalogs (workspace chooser, card-catalog modal); opt them in here
+  // catalogs (workspace chooser, card-chooser modal); opt them in here
   // so the harness doesn't depend on a sidecar value that the
   // metadata backfill trims on first boot.
   await server.executeSQL(
@@ -708,7 +708,9 @@ export interface SQLExecutor {
 
 export class BasicSQLExecutor implements SQLExecutor {
   pool: Pool;
-  constructor(readonly db: string) {
+  readonly db: string;
+  constructor(db: string) {
+    this.db = db;
     this.pool = new Pool({
       host: 'localhost',
       port: 5435,
@@ -733,13 +735,21 @@ export class IsolatedRealmServer implements SQLExecutor {
   private workerManagerStopped: (() => void) | undefined;
   private sqlResults: ((results: string) => void) | undefined;
   private sqlError: ((error: string) => void) | undefined;
+  private realmServerProcess: ReturnType<typeof spawn>;
+  private workerManagerProcess: ReturnType<typeof spawn>;
+  readonly realmPath: string; // useful for debugging
+  readonly db: string;
 
   constructor(
-    private realmServerProcess: ReturnType<typeof spawn>,
-    private workerManagerProcess: ReturnType<typeof spawn>,
-    readonly realmPath: string, // useful for debugging
-    readonly db: string,
+    realmServerProcess: ReturnType<typeof spawn>,
+    workerManagerProcess: ReturnType<typeof spawn>,
+    realmPath: string,
+    db: string,
   ) {
+    this.realmServerProcess = realmServerProcess;
+    this.workerManagerProcess = workerManagerProcess;
+    this.realmPath = realmPath;
+    this.db = db;
     workerManagerProcess.on('message', (message) => {
       if (message === 'stopped') {
         if (!this.workerManagerStopped) {

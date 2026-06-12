@@ -8,8 +8,11 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
+import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
+
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
 import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
@@ -129,19 +132,24 @@ export default class Card extends Route {
 
     let pathOrCardPath = cardPath ?? params.path;
 
-    let cardUrl: string | undefined = pathOrCardPath
-      ? await this.getCardUrl(pathOrCardPath)
+    let resolvedItem = pathOrCardPath
+      ? await this.resolvePathToStackItem(pathOrCardPath)
       : undefined;
-    let stacks: { id: string; format: string }[][] = [];
-    if (cardUrl) {
-      stacks = [
-        [
-          {
-            id: cardUrl,
-            format: 'isolated',
-          },
-        ],
-      ];
+    let stacks: { id: string; format: string; type?: StackItemType }[][] = [];
+    if (resolvedItem) {
+      // Only carry `type` when the resolved instance is a file. The canonical
+      // serializer (OperatorModeStateService.rawStateWithSavedCardsOnly)
+      // omits `type` for cards, so emitting `type: 'card'` here would diverge
+      // from the canonical string and trip the equality guard on every
+      // subsequent model refresh.
+      let stackItem: { id: string; format: string; type?: StackItemType } = {
+        id: resolvedItem.id,
+        format: 'isolated',
+      };
+      if (resolvedItem.type === 'file') {
+        stackItem.type = 'file';
+      }
+      stacks = [[stackItem]];
     }
     let operatorModeStateObject = operatorModeState
       ? JSON.parse(operatorModeState)
@@ -217,7 +225,9 @@ export default class Card extends Route {
     await this.hostModeService.updateHeadTemplate(headCardId);
   }
 
-  private async getCardUrl(cardPath: string): Promise<string | undefined> {
+  private async resolvePathToStackItem(
+    cardPath: string,
+  ): Promise<{ id: string; type: StackItemType } | undefined> {
     let cardUrl;
     if (hostsOwnAssets) {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
@@ -249,18 +259,23 @@ export default class Card extends Route {
       cardUrl = new URL(cardPath, window.location.origin).href;
     }
 
-    // we only get a card to understand its canonical URL so it's ok to fetch
-    // a card that is detached from the store as we only care about it's ID.
-    let canonicalCardUrl: string | undefined;
-    // the peek takes advantage of the store cache so this should be quick
-    canonicalCardUrl = (await this.store.get(cardUrl))?.id;
-    if (!canonicalCardUrl) {
+    // we only get an instance to understand its canonical URL so it's ok to
+    // fetch one that is detached from the store as we only care about its id.
+    // For a URL pointing at a binary file (e.g. an image), the store's card
+    // path auto-reroutes to a file-meta load and returns a FileDef — so the
+    // resulting stack item lands on FileDef isolated rendering instead of
+    // failing to hydrate the URL as a CardDef.
+    let resolved = await this.store.get(cardUrl);
+    let canonicalUrl = resolved?.id;
+    if (!canonicalUrl) {
       // TODO: show a 404 page
       // https://linear.app/cardstack/issue/CS-7364/show-user-a-clear-message-when-they-try-to-access-a-realm-they-cannot
       alert(`Card not found: ${cardUrl}`);
+      return undefined;
     }
-    cardUrl = canonicalCardUrl;
-
-    return cardUrl;
+    return {
+      id: canonicalUrl,
+      type: isFileDefInstance(resolved) ? 'file' : 'card',
+    };
   }
 }

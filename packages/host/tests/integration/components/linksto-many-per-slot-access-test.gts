@@ -32,7 +32,7 @@ import {
   contains,
   field,
   getDataBucket,
-  getRelationship,
+  getRelationshipMembershipState,
   linksToMany,
   setupBaseRealm,
   StringField,
@@ -158,7 +158,8 @@ module(
       assert.strictEqual(pets[1], undefined, 'third read');
       // The slot never re-triggers a load, so its structured failure is still
       // readable through the typed surface — it is hidden, not erased.
-      let states = getRelationship(person, 'pets') as RelationshipStateType[];
+      let states = getRelationshipMembershipState(person, 'pets')
+        .membership as RelationshipStateType[];
       assert.strictEqual(states[1].kind, 'not-found');
       assert.strictEqual(states[1].reference, GHOST_URL);
     });
@@ -288,7 +289,8 @@ module(
       // Wait until the broken reference settles to a terminal not-found and the
       // present sibling has resolved to its card.
       await waitUntil(() => {
-        let states = getRelationship(person, 'pets') as RelationshipStateType[];
+        let states = getRelationshipMembershipState(person, 'pets')
+          .membership as RelationshipStateType[];
         return states[0]?.kind === 'present' && states[1]?.kind === 'not-found';
       });
 

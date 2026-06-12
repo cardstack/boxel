@@ -21,12 +21,12 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../lib/profile-manager';
-import { FG_RED, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
-import { findBoxelCliRoot } from '../lib/find-package-root';
-import { validateRealmRelativePath } from '../lib/realm-relative-path';
-import { search } from './search';
+} from '../lib/profile-manager.ts';
+import { FG_RED, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
+import { findBoxelCliRoot } from '../lib/find-package-root.ts';
+import { validateRealmRelativePath } from '../lib/realm-relative-path.ts';
+import { search } from './search.ts';
 
 /**
  * Inlined to avoid cascading the runtime-common index's URL-style

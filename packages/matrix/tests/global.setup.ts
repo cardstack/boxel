@@ -3,14 +3,14 @@ import {
   synapseStop,
   registerUser,
   createRegistrationToken,
-} from '../support/synapse';
+} from '../support/synapse/index.ts';
 import {
   startServer as startRealmServer,
   startPrerenderServer,
-} from '../support/isolated-realm-server';
-import type { IsolatedRealmServer } from '../support/isolated-realm-server';
-import { registerRealmUsers, REGISTRATION_TOKEN } from '../helpers';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
+} from '../support/isolated-realm-server.ts';
+import type { IsolatedRealmServer } from '../support/isolated-realm-server.ts';
+import { registerRealmUsers, REGISTRATION_TOKEN } from '../helpers/index.ts';
+import { smtpStart, smtpStop } from '../docker/smtp4dev.ts';
 
 export default async function setup() {
   await smtpStart();

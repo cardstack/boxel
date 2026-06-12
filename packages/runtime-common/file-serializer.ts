@@ -5,19 +5,19 @@ import {
   type CodeRef,
   type Definition,
   type FieldDefinition,
-} from './index';
+} from './index.ts';
 import {
   type LooseSingleCardDocument,
   type CardResource,
   type Relationship,
   relationshipEntries,
   isCodeRef,
-} from './index';
-import type { VirtualNetwork } from './virtual-network';
-import { isMeta, type CardFields, type Meta } from './resource-types';
-import type { DefinitionLookup } from './definition-lookup';
-import { serialize as serializeCodeRef } from './serializers/code-ref';
-import { maybeRelativeReference as makeRelativeReference } from './url';
+} from './index.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { isMeta, type CardFields, type Meta } from './resource-types.ts';
+import type { DefinitionLookup } from './definition-lookup.ts';
+import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
+import { maybeRelativeReference as makeRelativeReference } from './url.ts';
 
 export default async function serialize({
   doc,

@@ -12,7 +12,7 @@ import type {
 import { rri } from '@cardstack/runtime-common';
 import type { FederatedCardTypeSummaryEntry } from '@cardstack/runtime-common/document-types';
 import type { PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -21,9 +21,9 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   realmConfigCardJSON,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import type { RealmHttpServer as Server } from '../../server';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import type { RealmHttpServer as Server } from '../../server.ts';
 
 interface FederatedTypesResponse {
   data: FederatedCardTypeSummaryEntry[];

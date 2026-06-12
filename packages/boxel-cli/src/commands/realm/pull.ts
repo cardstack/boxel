@@ -1,13 +1,13 @@
 import type { Command } from 'commander';
-import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base';
+import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -18,12 +18,11 @@ interface PullOptions extends SyncOptions {
 class RealmPuller extends RealmSyncBase {
   hasError = false;
   downloadedFiles: string[] = [];
+  private pullOptions: PullOptions;
 
-  constructor(
-    private pullOptions: PullOptions,
-    authenticator: RealmAuthenticator,
-  ) {
+  constructor(pullOptions: PullOptions, authenticator: RealmAuthenticator) {
     super(pullOptions, authenticator);
+    this.pullOptions = pullOptions;
   }
 
   async sync(): Promise<void> {
@@ -233,20 +232,16 @@ export async function pull(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
-      realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      return { files: [], error: resolution.error };
-    }
-    authenticator = resolution.authenticator;
+  const resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    return { files: [], error: resolution.error };
   }
+  const authenticator = resolution.authenticator;
 
   try {
     const puller = new RealmPuller(

@@ -14,25 +14,25 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
 import {
   discoverRealmSpecs,
   instantiateRealmSpecs,
   type InstantiateCardFn,
   type InstanceInstantiationRecord,
   type SpecInfo,
-} from '../instantiate-execution';
+} from '../instantiate-execution.ts';
 import {
   createInstantiateResult,
   completeInstantiateResult,
   type InstantiateCardEntryData,
-} from '../instantiate-result-cards';
-import { logger } from '../logger';
+} from '../instantiate-result-cards.ts';
+import { logger } from '../logger.ts';
 
-import { getNextValidationSequenceNumber } from '../realm-operations';
+import { getNextValidationSequenceNumber } from '../realm-operations.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
 
 let log = logger('instantiate-validation-step');
 
@@ -43,11 +43,14 @@ let log = logger('instantiate-validation-step');
 export type {
   InstantiateModuleResult,
   SpecInfo,
-} from '../instantiate-execution';
+} from '../instantiate-execution.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 export interface InstantiateValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   instantiateResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Example instance
@@ -277,6 +280,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
         instantiateCardFn: this.config.instantiateCardFn,
+        cache: this.config.cache,
       },
       specInfos,
     );

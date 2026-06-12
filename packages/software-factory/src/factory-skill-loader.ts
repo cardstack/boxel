@@ -1,8 +1,12 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
-import { logger } from './logger';
+import type {
+  IssueData,
+  ProjectData,
+  ResolvedSkill,
+} from './factory-agent/index.ts';
+import { logger } from './logger.ts';
 
 const log = logger('factory-skill-loader');
 
@@ -78,15 +82,6 @@ const GTS_KEYWORDS = [
   'ember',
   'CardDef',
   'FieldDef',
-];
-
-/** Keywords that indicate factory workflow / delivery issues. */
-const FACTORY_WORKFLOW_KEYWORDS = [
-  'factory',
-  'delivery',
-  'workflow',
-  'pipeline',
-  'orchestrat',
 ];
 
 /**
@@ -207,9 +202,13 @@ export class DefaultSkillResolver implements SkillResolver {
       skills.push('ember-best-practices');
     }
 
-    if (matchesAnyKeyword(issueText, FACTORY_WORKFLOW_KEYWORDS)) {
-      skills.push('software-factory-operations');
-    }
+    // Every non-bootstrap issue is a factory delivery issue (write/edit
+    // cards, run the validators, record progress), so always load the
+    // operations skill. It used to be gated on keywords in the issue text,
+    // which silently dropped the edit-in-place / guard-the-baseline guidance
+    // for sparse, human-authored issues (e.g. a one-line "Modernize the
+    // look" adjustment added via the board UI).
+    skills.push('software-factory-operations');
 
     // Check for additional skills from knowledge articles on the project
     // and from related knowledge on the issue itself.

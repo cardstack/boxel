@@ -5,6 +5,7 @@ import {
   beginRuntimeDependencyTrackingSession,
   endRuntimeDependencyTrackingSession,
   resetRuntimeDependencyTracker,
+  shouldTrackRuntimeModuleGraph,
   snapshotRuntimeDependencies,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
@@ -362,6 +363,98 @@ module(basename(__filename), function (hooks) {
     assert.strictEqual(fetchCount, 1, 'cache-hit import does not refetch');
   });
 
+  test('captures and dedups repeated tracking with no active context', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'no-context-dedup',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // Outside any withContext scope — the relationship walk a template render
+    // drives — the same dependency is tracked once per linked element. The dep
+    // must still be captured, and repeats must not drop it.
+    for (let i = 0; i < 5; i++) {
+      trackRuntimeInstanceDependency('https://example.com/repeated-dep');
+      trackRuntimeModuleDependency('https://example.com/cards/repeated.gts');
+    }
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.deepEqual(
+      snapshot.deps.filter((d) => d.includes('repeated')),
+      [
+        'https://example.com/cards/repeated',
+        'https://example.com/repeated-dep.json',
+      ],
+      'each repeated dependency is captured exactly once with no active context',
+    );
+  });
+
+  test('captures dep under a real context even after no-context tracking', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'no-context-then-context',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // First tracked with no active context (unscoped, non-query), then under an
+    // explicit context with a consumer. Dedup is per-context, so the second
+    // recording must still land rather than being skipped as a repeat.
+    trackRuntimeInstanceDependency('https://example.com/shared');
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:no-context-then-context',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/shared');
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/shared.json'),
+      'dependency is captured across the no-context and explicit-context reads',
+    );
+  });
+
+  test('does not dedup a mutated explicit context', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'mutated-explicit-context',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // Explicit contexts are public API and structurally mutable. The same
+    // object, tracked first as a query and then mutated to non-query, must
+    // record under both modes — identity must never short-circuit the second
+    // call into dropping the non-query context (which would wrongly exclude the
+    // dep as query-only).
+    let context = {
+      mode: 'query' as 'query' | 'non-query',
+      queryField: 'matches',
+      source: 'test:mutated-explicit',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+    trackRuntimeInstanceDependency('https://example.com/mutating-dep', context);
+    context.mode = 'non-query';
+    trackRuntimeInstanceDependency('https://example.com/mutating-dep', context);
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/mutating-dep.json'),
+      'dep tracked under a mutated explicit context is retained as non-query',
+    );
+    assert.notOk(
+      snapshot.excludedQueryOnlyDeps.includes(
+        'https://example.com/mutating-dep.json',
+      ),
+      'dep is not misclassified as query-only after the context mutated',
+    );
+  });
+
   test('getter-level attribution tracks only accessed relationship targets', async function (assert) {
     beginRuntimeDependencyTrackingSession({
       sessionKey: 'getter-level-attribution',
@@ -392,6 +485,207 @@ module(basename(__filename), function (hooks) {
     assert.notOk(
       snapshot.deps.includes('https://example.com/hidden-link.json'),
       'non-rendered relationship target is not captured',
+    );
+  });
+
+  test('module-graph probe permits a walk exactly once per context per session', function (assert) {
+    let moduleURL = 'https://example.com/cards/aggregate.gts';
+    let queryContext = {
+      mode: 'query' as const,
+      queryField: 'members',
+      source: 'test:graph-probe',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+
+    assert.false(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
+      'inactive tracker permits no walk (nothing would record)',
+    );
+
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'graph-probe',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    assert.true(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
+      'first probe under an active session permits the walk',
+    );
+    assert.false(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
+      'repeat probe with an equivalent context is collapsed',
+    );
+    assert.false(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
+        ...queryContext,
+      }),
+      'equivalence is by value, not object identity',
+    );
+    assert.false(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
+        ...queryContext,
+        consumerKind: undefined,
+      }),
+      "an omitted consumerKind dedups against the recorded default ('instance')",
+    );
+
+    assert.true(
+      shouldTrackRuntimeModuleGraph('import', moduleURL, queryContext),
+      'a different scope walks again (sites record different node sets)',
+    );
+    assert.true(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
+        ...queryContext,
+        mode: 'non-query',
+      }),
+      'a different mode walks again (query-only classification must not stick)',
+    );
+    assert.true(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, {
+        ...queryContext,
+        consumer: 'https://example.com/other-consumer.json',
+      }),
+      'a different consumer walks again',
+    );
+    assert.true(
+      shouldTrackRuntimeModuleGraph(
+        'relationship',
+        'https://example.com/cards/other-type.gts',
+        queryContext,
+      ),
+      'a different root module walks again',
+    );
+
+    resetRuntimeDependencyTracker();
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'graph-probe',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+    assert.true(
+      shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
+      'reset clears walk markers so a fresh session re-walks',
+    );
+  });
+
+  test('module-graph probe with no explicit context dedups via the active context', async function (assert) {
+    let moduleURL = 'https://example.com/cards/aggregate.gts';
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'graph-probe-stack-context',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:stack-context',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        assert.true(
+          shouldTrackRuntimeModuleGraph('relationship', moduleURL),
+          'first probe inside a context scope permits the walk',
+        );
+        assert.false(
+          shouldTrackRuntimeModuleGraph('relationship', moduleURL),
+          'repeat probe inside the same scope is collapsed',
+        );
+      },
+    );
+    // A fresh withContext scope builds a new context object, but its
+    // recording-relevant fields are identical — the walk must stay collapsed
+    // (this is the repeat-getter-invocation case object-identity dedup misses).
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:stack-context',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        assert.false(
+          shouldTrackRuntimeModuleGraph('relationship', moduleURL),
+          'an equivalent later scope is still collapsed (value equivalence)',
+        );
+      },
+    );
+  });
+
+  test('imports under query then non-query contexts leave module deps non-query', async function (assert) {
+    // The import-time module-graph walk is skipped on repeats; mode is part of
+    // the walk identity, so a graph first walked under a query context must
+    // still re-walk under a later non-query context — otherwise its modules
+    // would be misclassified query-only and excluded from deps.
+    let loader = new Loader(
+      async () => new Response('export const value = 1;', { status: 200 }),
+    );
+    let moduleURL = 'https://example.com/cards/query-then-non-query.gts';
+
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'import-mode-transition',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+    let queryContext = {
+      mode: 'query' as const,
+      queryField: 'matches',
+      source: 'test:import-query',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+    let nonQueryContext = {
+      mode: 'non-query' as const,
+      source: 'test:import-non-query',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+    await loader.import(moduleURL, queryContext);
+    await loader.import(moduleURL, nonQueryContext);
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/cards/query-then-non-query'),
+      'module imported under both modes is retained in deps',
+    );
+    assert.notOk(
+      snapshot.excludedQueryOnlyDeps.includes(
+        'https://example.com/cards/query-then-non-query',
+      ),
+      'module is not misclassified as query-only',
+    );
+  });
+
+  test('repeat imports in one session still record module deps', async function (assert) {
+    let loader = new Loader(
+      async () => new Response('export const value = 1;', { status: 200 }),
+    );
+    let moduleURL = 'https://example.com/cards/repeat-import.gts';
+
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'repeat-import',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+    let context = {
+      mode: 'non-query' as const,
+      source: 'test:repeat-import',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+    // Models deserializing many cards of one type: each deserialization
+    // imports the same module. The collapsed repeats must not lose the dep.
+    for (let i = 0; i < 3; i++) {
+      await loader.import(moduleURL, context);
+    }
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/cards/repeat-import'),
+      'module dep is recorded once across repeated imports',
     );
   });
 });

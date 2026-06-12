@@ -6,9 +6,9 @@ import {
   ToolSafetyError,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
-} from '../src/factory-tool-executor';
-import { ToolRegistry } from '../src/factory-tool-registry';
-import { createMockClient } from './helpers/mock-client';
+} from '../src/factory-tool-executor.ts';
+import { ToolRegistry } from '../src/factory-tool-registry.ts';
+import { createMockClient } from './helpers/mock-client.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

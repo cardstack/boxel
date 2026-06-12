@@ -11,9 +11,9 @@ import {
   query,
 } from '@cardstack/runtime-common';
 
-import { insertJob, insertUser, realmSecretSeed } from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest } from './helpers';
+import { insertJob, insertUser, realmSecretSeed } from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { setupServerEndpointsTest } from './helpers.ts';
 
 module(`server-endpoints/${basename(__filename)}`, function (hooks) {
   let context = setupServerEndpointsTest(hooks);

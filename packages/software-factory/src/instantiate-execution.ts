@@ -22,10 +22,15 @@ import {
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
-import { readCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
+import { readCard } from './workspace-fs.ts';
+
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
 
 let log = logger('instantiate-execution');
 
@@ -94,6 +99,12 @@ export interface InstantiateRealmSpecsOptions {
   workspaceDir: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + spec
+   * set, so the agent's mid-turn `run_instantiate` and the pipeline's
+   * instantiate step don't both instantiate the same unchanged examples.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface InstantiateRealmSpecsOutput {
@@ -123,6 +134,8 @@ export interface RunInstantiateInMemoryOptions {
   path?: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /** See {@link InstantiateRealmSpecsOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunInstantiateFailure {
@@ -190,6 +203,25 @@ export async function discoverRealmSpecs(
  * exercised.
  */
 export async function instantiateRealmSpecs(
+  options: InstantiateRealmSpecsOptions,
+  specs: SpecInfo[],
+): Promise<InstantiateRealmSpecsOutput> {
+  if (options.cache) {
+    let inputs = specs.flatMap((s) => [
+      s.specId,
+      s.moduleUrl,
+      s.cardName,
+      ...s.exampleUrls,
+    ]);
+    let key = `instantiate:${cacheKeyForInputs(inputs)}`;
+    return options.cache.getOrRun(key, () =>
+      instantiateRealmSpecsUncached(options, specs),
+    );
+  }
+  return instantiateRealmSpecsUncached(options, specs);
+}
+
+async function instantiateRealmSpecsUncached(
   options: InstantiateRealmSpecsOptions,
   specs: SpecInfo[],
 ): Promise<InstantiateRealmSpecsOutput> {
@@ -364,6 +396,7 @@ export async function runInstantiateInMemory(
         client: options.client,
         workspaceDir: options.workspaceDir,
         instantiateCardFn,
+        cache: options.cache,
       },
       specsResult.specs,
     );
@@ -485,11 +518,11 @@ async function prepareExampleInstance(
   // `CodeRef`. Running it first means the nested accesses below cannot
   // throw.
   //
-  // NB: we import from the decorator-free `/card-document-shape` subpath
-  // (not the `/document-types` barrel entry that re-exports it) because
-  // this module is exercised by the software-factory Playwright harness,
-  // which can't compile the `@Memoize()` decorators reachable through
-  // the heavier runtime-common entry points.
+  // NB: we import from the lightweight `/card-document-shape` subpath
+  // (not the `/document-types` barrel entry that re-exports it) so the
+  // software-factory Playwright harness that exercises this module does
+  // not have to pull in the heavier, Node-oriented runtime-common entry
+  // points.
   if (!isSingleCardDocument(parsedDoc)) {
     return {
       error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,

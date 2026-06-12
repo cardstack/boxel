@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
-import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
+import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker.ts';
 import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
   grafanaSecret,
@@ -12,16 +12,16 @@ import {
   matrixRegistrationSecret,
   matrixURL,
   realmSecretSeed,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import {
   adminImpersonateUser,
   appendRealmToUserAccountData,
   loginAsMatrixAdmin,
   registerUser,
-} from '../../synapse';
+} from '../../synapse.ts';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 // The handle-upsert-realm-user-permission flow logs in as the local

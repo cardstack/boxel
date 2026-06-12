@@ -15,9 +15,13 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
 
 let log = logger('eval-execution');
 
@@ -75,6 +79,12 @@ export interface EvaluateRealmModulesOptions {
     moduleUrl: string,
     realmUrl: string,
   ) => Promise<EvalModuleResult>;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + file
+   * set, so the agent's mid-turn `run_evaluate` and the pipeline's eval
+   * step don't both prerender the same unchanged modules.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface EvaluateRealmModulesOutput {
@@ -112,6 +122,8 @@ export interface RunEvaluateInMemoryOptions {
    * validates test files.
    */
   path?: string;
+  /** See {@link EvaluateRealmModulesOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunEvaluateFailure {
@@ -187,6 +199,19 @@ export async function discoverEvaluableFiles(
  * in-place; they do not abort the run.
  */
 export async function evaluateRealmModules(
+  options: EvaluateRealmModulesOptions,
+  files: string[],
+): Promise<EvaluateRealmModulesOutput> {
+  if (options.cache) {
+    let key = `evaluate:${cacheKeyForInputs(files)}`;
+    return options.cache.getOrRun(key, () =>
+      evaluateRealmModulesUncached(options, files),
+    );
+  }
+  return evaluateRealmModulesUncached(options, files);
+}
+
+async function evaluateRealmModulesUncached(
   options: EvaluateRealmModulesOptions,
   files: string[],
 ): Promise<EvaluateRealmModulesOutput> {
@@ -305,6 +330,7 @@ export async function runEvaluateInMemory(
           targetRealm: options.targetRealm,
           realmServerUrl: options.realmServerUrl,
           client: options.client,
+          cache: options.cache,
         },
         evaluableFiles,
       );

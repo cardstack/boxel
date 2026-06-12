@@ -5,25 +5,29 @@
 
 SCRIPTS_DIR="./scripts"
 
+# Serve a throwaway copy of the test realm fixtures so a running realm
+# server never writes into the repo's source tree.
+TEST_REALM_DIR=$(mktemp -d)
+cp -R ../test-realm-cards/contents/. "$TEST_REALM_DIR"/
+
 # In environment mode, share the dev icons server; otherwise start our own
 if [ -z "$BOXEL_ENVIRONMENT" ]; then
   sh "$SCRIPTS_DIR/start-icons.sh" &
   ICONS_PID=$!
-  cleanup_icons_server() {
-    if [ -n "$ICONS_PID" ]; then
-      kill "$ICONS_PID" >/dev/null 2>&1 || true
-    fi
-  }
-  trap cleanup_icons_server EXIT
-  # INT/TERM additionally exit 0 — see mise-tasks/services/worker for why.
-  # Clearing EXIT inside the signal handler avoids running cleanup twice.
-  trap 'trap - EXIT; cleanup_icons_server; exit 0' INT TERM
-else
-  # Even without an icons server to clean up, swallow signal-induced 143s so
-  # the orchestrator's Ctrl-C doesn't surface as `ERROR: "start:test-realms"
-  # exited with 143`.
-  trap 'exit 0' INT TERM
 fi
+
+cleanup() {
+  rm -rf "$TEST_REALM_DIR"
+  if [ -n "$ICONS_PID" ]; then
+    kill "$ICONS_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+# INT/TERM additionally exit 0 so the orchestrator's Ctrl-C doesn't surface
+# as `ERROR: "start:test-realms" exited with 143` — see
+# mise-tasks/services/worker for why. Clearing EXIT inside the signal
+# handler avoids running cleanup twice.
+trap 'trap - EXIT; cleanup; exit 0' INT TERM
 
 if [ -n "$ENV_MODE" ]; then
   WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_TEST_MGR_URL}"
@@ -69,7 +73,7 @@ NODE_ENV=test \
   --fromUrl="${REALM_TEST_URL}/node-test/" \
   --toUrl="${REALM_TEST_URL}/node-test/" \
   \
-  --path='../host/tests/cards' \
+  --path="$TEST_REALM_DIR" \
   --username='test_realm' \
   --fromUrl="${REALM_TEST_URL}/test/" \
   --toUrl="${REALM_TEST_URL}/test/" \
