@@ -9,13 +9,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  rri,
-  baseRRI,
-  Deferred,
-  type Realm,
-} from '@cardstack/runtime-common';
+import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
@@ -285,7 +279,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   }
 
   let adapter: TestRealmAdapter;
-  let realm: Realm;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -316,7 +309,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         testRealmURL2,
       );
     }
-    ({ adapter, realm } = await withCachedRealmSetup(async () => {
+    ({ adapter } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
         realmURL: testRealmURL2,
@@ -1625,14 +1618,23 @@ export class TestCard extends Animal {
         },
       );
 
-      // realm.write mirrors what the realm-server does when
-      // WriteTextFileCommand's PUT lands: persist source, transpile, index,
-      // and broadcast the `index/incremental` event with the new URL in
-      // `invalidations`. No clientRequestId is passed — the same shape the
-      // bot uses when it patches/creates a card module.
-      await realm.write(newFilePath, newFileSource);
+      // Mirror WriteTextFileCommand exactly. `cardService.saveSource` with
+      // saveType 'create-file' POSTs the new source to the realm and tags
+      // the request with `X-Boxel-Client-Request-Id: create-file:<uuid>`,
+      // which the realm echoes back in the `index/incremental` event.
+      // This shape — saveType 'create-file' and that clientRequestId
+      // prefix — is what the AI assistant produces and what the
+      // invalidation handler must treat as reload-worthy even though the
+      // id is in `cardService.clientRequestIds`.
+      let cardService = getService('card-service');
+      await cardService.saveSource(
+        new URL(newFileUrl),
+        newFileSource,
+        'create-file',
+      );
       await incrementalEvent.promise;
       await settled();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
 
       assert
         .dom('[data-test-card-url-bar-error]')
@@ -1645,6 +1647,10 @@ export class TestCard extends Animal {
           newFileUrl,
           'code submode stays on the new file URL after recovery',
         );
+      assert.ok(
+        getMonacoContent().includes('AiCreatedCard'),
+        'monaco loads the recovered file body, not a stale buffer',
+      );
     });
   });
 });
