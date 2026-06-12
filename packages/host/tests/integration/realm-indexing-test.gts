@@ -4797,7 +4797,12 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/lodash',
         'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
-      ],
+        // Sort the expected list so the assertion is robust against
+        // the iconsBase URL scheme/host: standard mode puts icons at
+        // `http://localhost:4206/`, env mode at `https://icons.<slug>.localhost/`,
+        // and the lexical position of those entries among the other
+        // URLs differs accordingly.
+      ].sort(),
       'the card references for the instance are correct',
     );
   });
@@ -4964,7 +4969,8 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/lodash',
         'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
-      ],
+        // See note on iconsBase ordering above.
+      ].sort(),
       'the card references for the instance are correct',
     );
   });
