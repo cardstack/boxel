@@ -473,7 +473,7 @@ jobs:
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
           if [ "$PERCY_ENABLED" = "true" ]; then
-            TEST_CMD="percy exec --parallel -- pnpm ember-test-pre-built"
+            TEST_CMD="pnpm test-with-percy"
           else
             echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
             TEST_CMD="pnpm ember-test-pre-built"
