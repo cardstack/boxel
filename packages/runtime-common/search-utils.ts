@@ -592,7 +592,7 @@ export function emitSearchTiming(line: string): void {
 // runners differ only in which per-realm method they call, how they label a
 // failure, and which merge they apply — the settle semantics, input ordering,
 // and per-realm error isolation are identical and live here.
-async function fanOutRealmSearch<R extends { url?: string }, Doc>(
+export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
   realms: Array<R | null | undefined>,
   query: Query,
   call: (realm: R) => Promise<Doc>,

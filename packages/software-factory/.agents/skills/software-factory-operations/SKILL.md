@@ -518,6 +518,48 @@ If you cannot make progress at any step, set the Issue's `status`
 to `"blocked"`, append a comment explaining what's stuck, push, and
 report back to the user. See `software-factory-scheduling`.
 
+## Adjustment issues (adjust flow)
+
+When the Issue you picked up has `issueType: "adjustment"`, you are
+**editing an existing, already-seeded card** — not creating one from
+scratch. The bootstrap step seeded the source card and its
+same-realm dependency graph into the workspace and confirmed a green
+baseline before this Issue existed, so the files named in the
+Issue's description are **already present** (see the "Adjust flow"
+section of `software-factory-bootstrap`).
+
+How adjustment work differs from a greenfield `feature` Issue:
+
+- **Read the seeded files first.** The Issue description names the
+  target file(s). `Read` each one (and `Grep` for siblings) before
+  touching anything — you are modifying working code, not authoring
+  a blank slate. The source-provenance Knowledge Article (linked via
+  `relatedKnowledge`) records where the seed came from and its
+  baseline results.
+- **Apply only the delta.** Use `Edit` for surgical changes to the
+  seeded `.gts` / `.json`. Don't rewrite the card; change exactly
+  what the delta calls for.
+- **Guard the baseline.** The pre-existing tests are part of the
+  contract. Extend `.test.gts` with assertions for the new behavior,
+  but the **existing tests must still pass** — `boxel test` covers
+  both. A delta that breaks a baseline test is not done; fix it, or
+  bail out per "Bailing out" above.
+- **Operate on the seeded artifacts — never create parallel ones.**
+  The delta is applied by editing the existing seeded files: the
+  card module, its tests, its sample instances, and its Spec. If the
+  delta adds or renames a field, update the **existing** sample
+  instances to reflect it (so they demonstrate the new behavior) and
+  keep the Spec's `linkedExamples` pointing at them —
+  instantiate-card and `boxel parse` must stay green. Do **not** add
+  a new instance, module, or Spec to showcase a change; a new card
+  (or instance) is created only when the Issue explicitly calls for
+  one.
+- **Then the standard loop applies unchanged** — the "Required flow
+  per Issue" steps with "write" read as "edit": local `boxel parse`
+  pre-flight, push, run the five validators, write the
+  `Validations/` artifact cards, fix on failure, mark `done` only
+  when everything passes. Same validators, same bail-out limits.
+
 ## Target realm artifact structure
 
 ```

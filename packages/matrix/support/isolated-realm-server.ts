@@ -22,7 +22,7 @@ setGracefulCleanup();
 // `writable` patch, and the hand-rolled `proxyAsset` forwarder).
 
 const testRealmCards = resolve(
-  join(__dirname, '..', '..', 'host', 'tests', 'cards'),
+  join(__dirname, '..', '..', 'test-realm-cards', 'contents'),
 );
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const skillsRealmDir = resolve(
@@ -689,7 +689,7 @@ export async function startServer({
 
   // /_catalog-realms only surfaces realms with show_as_catalog = true.
   // Matrix tests treat the test fixture realm and the skills realm as
-  // catalogs (workspace chooser, card-catalog modal); opt them in here
+  // catalogs (workspace chooser, card-chooser modal); opt them in here
   // so the harness doesn't depend on a sidecar value that the
   // metadata backfill trims on first boot.
   await server.executeSQL(

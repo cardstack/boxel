@@ -1030,28 +1030,22 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'BlogPost',
       });
       await chooseAnotherInstance();
-      assert.dom('[data-test-card-catalog-modal]').exists();
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 3 });
+      assert.dom('[data-test-card-chooser-modal]').exists();
+      assert.dom('[data-test-item-button]').exists({ count: 3 });
       assert
-        .dom(
-          `[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`,
-        )
+        .dom(`[data-test-item-button="${testRealmURL}BlogPost/mad-hatter"]`)
         .exists();
       assert
-        .dom(
-          `[data-test-card-catalog-item="${testRealmURL}BlogPost/urban-living"]`,
-        )
+        .dom(`[data-test-item-button="${testRealmURL}BlogPost/urban-living"]`)
         .exists();
       assert
-        .dom(
-          `[data-test-card-catalog-item="${testRealmURL}BlogPost/remote-work"]`,
-        )
+        .dom(`[data-test-item-button="${testRealmURL}BlogPost/remote-work"]`)
         .exists();
 
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`,
+        `[data-test-item-button="${testRealmURL}BlogPost/mad-hatter"]`,
       );
-      await click('[data-test-card-catalog-go-button]');
+      await click('[data-test-card-chooser-go-button]');
       assertCardExists(
         assert,
         `${testRealmURL}BlogPost/mad-hatter`,

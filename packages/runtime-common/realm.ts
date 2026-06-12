@@ -1,6 +1,11 @@
 import { Deferred } from './deferred.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
+import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
+import {
+  parseSearchEntryQueryFromPayload,
+  type SearchEntryQuery,
+} from './search-entry.ts';
 import {
   rri,
   type RealmResourceIdentifier,
@@ -17,6 +22,7 @@ import {
   type SingleCardDocument,
   type SingleFileMetaDocument,
   type UnifiedSearchCollectionDocument,
+  type SearchEntryCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types.ts';
 import type { CardResource, Relationship } from './resource-types.ts';
@@ -958,6 +964,16 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchResponse.bind(this),
+      )
+      .get(
+        '/_search-v2',
+        SupportedMimeType.CardJson,
+        this.searchEntriesResponse.bind(this),
+      )
+      .query(
+        '/_search-v2',
+        SupportedMimeType.CardJson,
+        this.searchEntriesResponse.bind(this),
       )
       .get(
         '/_search-prerendered',
@@ -5385,6 +5401,94 @@ export class Realm {
         });
       }
       // Re-throw other errors
+      throw e;
+    }
+  }
+
+  // The v2 search: the parsed search-entry query (the item. membership
+  // query + the applied htmlQuery + the sparse fieldset) against the
+  // search-entry projection engine. Same opts threading as `search` —
+  // `cardUrls` rides inside the SearchEntryQuery itself.
+  public async searchEntries(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: SearchOpts,
+  ): Promise<SearchEntryCollectionDocument> {
+    let engineOpts = {
+      loadLinks: true as const,
+      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
+      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.timings ? { timings: opts.timings } : {}),
+    };
+    return await this.#realmIndexQueryEngine.searchEntries(
+      searchEntryQuery,
+      engineOpts,
+    );
+  }
+
+  private async searchEntriesResponse(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (request.method !== 'QUERY') {
+      return createResponse({
+        body: JSON.stringify(buildSearchErrorBody('method must be QUERY')),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch (e: any) {
+      return createResponse({
+        body: JSON.stringify(
+          buildSearchErrorBody(
+            `Request body is not valid JSON: ${e?.message ?? e}`,
+          ),
+        ),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    try {
+      let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
+      let duringPrerender = isDuringPrerenderRequest(request);
+      let doc = await this.searchEntries(searchEntryQuery, {
+        cacheOnlyDefinitions: duringPrerender,
+        // Inside a prerender the search skips the `loadLinks`
+        // relationship-assembly pass entirely: the host re-resolves every
+        // result from its raw card+source file, so the transitive
+        // `included[]` expansion is throwaway work in this path.
+        omitIncluded: duringPrerender,
+      });
+      return createResponse({
+        body: JSON.stringify(doc, null, 2),
+        init: {
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    } catch (e) {
+      if (e instanceof SearchRequestError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
       throw e;
     }
   }
