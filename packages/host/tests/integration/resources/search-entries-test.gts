@@ -1,7 +1,9 @@
 import { destroy } from '@ember/destroyable';
 import { setOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { settled, waitUntil } from '@ember/test-helpers';
+import { render, settled, waitUntil } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -17,7 +19,10 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-import { SearchEntriesResource } from '@cardstack/host/resources/search-entries';
+import {
+  getSearchEntriesResource,
+  SearchEntriesResource,
+} from '@cardstack/host/resources/search-entries';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -343,7 +348,9 @@ module('Integration | search-entries resource', function (hooks) {
         3,
         'both realms contribute entries',
       );
-      let realm2EntryBefore = search.entries.find(
+      let entriesBefore = [...search.entries];
+      let orderBefore = entriesBefore.map((entry) => entry.id);
+      let realm2EntryBefore = entriesBefore.find(
         (entry) => entry.realmUrl === testRealm2URL,
       );
       assert.ok(realm2EntryBefore, 'realm 2 contributed an entry');
@@ -356,6 +363,11 @@ module('Integration | search-entries resource', function (hooks) {
         [testRealmURL],
         'the refresh fetch is scoped to the realm whose index moved',
       );
+      assert.deepEqual(
+        search.entries.map((entry) => entry.id),
+        [...orderBefore, `${testRealmURL}books/3`],
+        'surviving rows keep their positions; the new row appends',
+      );
       let realm2EntryAfter = search.entries.find(
         (entry) => entry.realmUrl === testRealm2URL,
       );
@@ -364,12 +376,15 @@ module('Integration | search-entries resource', function (hooks) {
         realm2EntryBefore,
         "realm 2's entry keeps its identity through realm 1's refresh",
       );
-      assert.strictEqual(
-        search.entries.filter((entry) => entry.realmUrl === testRealmURL)
-          .length,
-        3,
-        "realm 1's rows are refreshed",
-      );
+      for (let entryBefore of entriesBefore.filter(
+        (entry) => entry.realmUrl === testRealmURL,
+      )) {
+        assert.strictEqual(
+          search.entries.find((entry) => entry.id === entryBefore.id),
+          entryBefore,
+          `unchanged refreshed row ${entryBefore.id} keeps its identity`,
+        );
+      }
       assert.strictEqual(search.meta.page.total, 4);
     } finally {
       storeService.searchEntries = originalSearchEntries;
@@ -589,5 +604,79 @@ module('Integration | search-entries resource', function (hooks) {
     } finally {
       storeService.searchEntries = originalSearchEntries;
     }
+  });
+
+  // modify() runs inside a tracked computation (property access on the
+  // resource proxy during render), so these tests exercise the resource the
+  // way a real component consumes it — any tracked read-then-write inside
+  // modify() throws Glimmer's mutation-after-consumption assertion here,
+  // which plain-JS consumption can never surface.
+  module('rendered consumption', function () {
+    class QueryState {
+      @tracked query: SearchEntryWireQuery | undefined;
+    }
+
+    class Harness extends GlimmerComponent<{
+      Args: { state: QueryState };
+    }> {
+      search = getSearchEntriesResource(this, () => this.args.state.query);
+      <template>
+        <div data-test-entry-count>{{this.search.entries.length}}</div>
+      </template>
+    }
+
+    test('a rendered consumer activates from an idle query and clears back to idle', async function (assert) {
+      let state = new QueryState();
+
+      await render(<template><Harness @state={{state}} /></template>);
+      assert
+        .dom('[data-test-entry-count]')
+        .hasText('0', 'an idle (undefined) query renders empty');
+
+      state.query = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await settled();
+      assert
+        .dom('[data-test-entry-count]')
+        .hasText('2', 'setting the query activates the search');
+
+      state.query = undefined;
+      await settled();
+      assert
+        .dom('[data-test-entry-count]')
+        .hasText('0', 'returning to idle clears the standing entries');
+
+      state.query = {
+        filter: { 'item.on': bookRef, eq: { 'item.status': 'ready' } },
+        realms: [testRealmURL],
+      };
+      await settled();
+      assert
+        .dom('[data-test-entry-count]')
+        .hasText('1', 'a fresh query after idle re-activates');
+    });
+
+    test('changing realms while entries are standing re-runs cleanly', async function (assert) {
+      let state = new QueryState();
+      state.query = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+
+      await render(<template><Harness @state={{state}} /></template>);
+
+      assert.dom('[data-test-entry-count]').hasText('2');
+
+      state.query = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealm2URL],
+      };
+      await settled();
+      assert
+        .dom('[data-test-entry-count]')
+        .hasText('1', "only the new realm's entries remain after the re-run");
+    });
   });
 });

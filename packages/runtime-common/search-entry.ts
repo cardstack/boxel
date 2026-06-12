@@ -21,6 +21,7 @@ import {
   HtmlResourceType,
   SearchEntryResourceType,
   htmlResourceId,
+  resourceIdentity,
   type CardResource,
   type CardResourceType,
   type FileMetaResource,
@@ -788,7 +789,7 @@ export function combineSearchEntryResults(
       if (resource.id) {
         // NUL-separated so a `(type, id)` pair can't alias another by
         // concatenation (no resource type or id contains a NUL byte).
-        let identity = `${resource.type}\u0000${resource.id}`;
+        let identity = resourceIdentity(resource.type, resource.id);
         if (includedByIdentity.has(identity)) {
           continue;
         }

@@ -1,4 +1,4 @@
-import { registerDestructor } from '@ember/destroyable';
+import { isDestroyed, registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
@@ -16,6 +16,9 @@ import {
   isFileMetaResource,
   isHtmlResource,
   logger as runtimeLogger,
+  resourceIdentity,
+  rri,
+  RealmPaths,
   type CardResource,
   type ErrorEntry,
   type FileMetaResource,
@@ -29,7 +32,7 @@ import {
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import { normalizeRealms, resolveCardRealmUrl } from '../lib/realm-utils';
+import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -110,6 +113,7 @@ export class SearchEntriesResource extends Resource<Args> {
 
   #previousQuery: SearchEntryWireQuery | undefined;
   #previousRealms: string[] | undefined;
+  #idleClearScheduled = false;
   #log = runtimeLogger('search-entries-resource');
   // Kept private for tests/internal load bookkeeping.
   // @ts-ignore read only via the test cast.
@@ -132,6 +136,12 @@ export class SearchEntriesResource extends Resource<Args> {
 
     if (query === undefined) {
       // Clear stale state so live subscriptions don't re-fire the old query.
+      // The untracked bookkeeping clears synchronously; the tracked result
+      // state must not — modify() runs inside a tracked computation (a
+      // property access on the resource proxy, typically mid-render), so a
+      // synchronous read-then-write of `_entries` would trip Glimmer's
+      // mutation-after-consumption assertion and self-invalidate this
+      // resource's cache on every access.
       this.#previousQuery = undefined;
       this.#previousRealms = undefined;
       this.realmsNeedingRefresh.clear();
@@ -141,9 +151,26 @@ export class SearchEntriesResource extends Resource<Args> {
         subscription.unsubscribe();
       }
       this.subscriptions = [];
-      this._entries.splice(0, this._entries.length);
-      this._meta = { page: { total: 0 } };
-      this._errors = undefined;
+      if (!this.#idleClearScheduled) {
+        this.#idleClearScheduled = true;
+        void Promise.resolve().then(() => {
+          this.#idleClearScheduled = false;
+          // Apply only if still idle and alive — a query may have arrived
+          // (or the resource been torn down) between schedule and flush.
+          if (this.#previousQuery !== undefined || isDestroyed(this)) {
+            return;
+          }
+          if (this._entries.length > 0) {
+            this._entries.splice(0, this._entries.length);
+          }
+          if (this._meta.page.total !== 0 || this._meta.htmlQuery) {
+            this._meta = { page: { total: 0 } };
+          }
+          if (this._errors !== undefined) {
+            this._errors = undefined;
+          }
+        });
+      }
       return;
     }
 
@@ -187,16 +214,9 @@ export class SearchEntriesResource extends Resource<Args> {
       return;
     }
 
-    if (realmsChanged && this.#previousRealms !== undefined) {
-      // Drop rows from realms no longer searched; the run below replaces the
-      // rest.
-      let kept = this._entries.filter((entry) =>
-        realms.includes(entry.realmUrl),
-      );
-      this._entries.splice(0, this._entries.length, ...kept);
-    }
-
-    this.#previousQuery = query;
+    // Snapshot, don't alias: a caller that mutates a long-lived query object
+    // in place would otherwise be compared against itself and never re-run.
+    this.#previousQuery = structuredClone(query);
     this.#previousRealms = realms;
     // A query/realm change owns the whole result set again.
     this.realmsNeedingRefresh.clear();
@@ -244,13 +264,27 @@ export class SearchEntriesResource extends Resource<Args> {
         let fresh = this.buildEntries(doc);
 
         if (isPartialRefresh) {
-          // Replace only the fetched realms' rows; rows from other realms
-          // keep their identity (realm A's refresh leaves realm B's entries
-          // untouched).
-          let kept = this._entries.filter(
-            (entry) => !realmsToFetch.includes(entry.realmUrl),
-          );
-          this._entries.splice(0, this._entries.length, ...kept, ...fresh);
+          // Merge in place: rows from unfetched realms keep their position
+          // and identity; a refreshed row that survives keeps its position
+          // (and its identity when nothing about it changed); vanished rows
+          // drop out; new rows append. Live updates must not reshuffle the
+          // visible list, and unchanged rows must stay render-stable.
+          let refreshedRealms = new Set(realmsToFetch);
+          let freshById = new Map(fresh.map((entry) => [entry.id, entry]));
+          let merged: SearchEntry[] = [];
+          for (let entry of this._entries) {
+            if (!refreshedRealms.has(entry.realmUrl)) {
+              merged.push(entry);
+              continue;
+            }
+            let replacement = freshById.get(entry.id);
+            if (replacement !== undefined) {
+              merged.push(isEqual(entry, replacement) ? entry : replacement);
+              freshById.delete(entry.id);
+            }
+          }
+          merged.push(...freshById.values());
+          this._entries.splice(0, this._entries.length, ...merged);
           // Unpaginated (a partial refresh precondition), so the standing
           // entry count is the exact whole-set total; the response's total
           // only speaks for the fetched realm subset.
@@ -259,7 +293,19 @@ export class SearchEntriesResource extends Resource<Args> {
             page: { total: this._entries.length },
           };
         } else {
-          this._entries.splice(0, this._entries.length, ...fresh);
+          // Server order is authoritative on a full run, but an unchanged
+          // row keeps its object identity so live re-runs don't force every
+          // row to re-render.
+          let previousById = new Map(
+            this._entries.map((entry) => [entry.id, entry]),
+          );
+          let next = fresh.map((entry) => {
+            let previous = previousById.get(entry.id);
+            return previous !== undefined && isEqual(previous, entry)
+              ? previous
+              : entry;
+          });
+          this._entries.splice(0, this._entries.length, ...next);
           this._meta = doc.meta;
           this.hasCompletedFullRun = true;
         }
@@ -310,9 +356,26 @@ export class SearchEntriesResource extends Resource<Args> {
       } else if (isCssResource(resource)) {
         cssHrefById.set(resource.id, resource.attributes.href);
       } else if (isCardResource(resource) || isFileMetaResource(resource)) {
-        itemsByIdentity.set(`${resource.type} ${resource.id}`, resource);
+        itemsByIdentity.set(
+          resourceIdentity(resource.type, resource.id),
+          resource,
+        );
       }
     }
+
+    // One RealmPaths per searched realm per build — not per entry.
+    let realmPaths = this.realmsToSearch.map(
+      (realm) => new RealmPaths(new URL(realm)),
+    );
+    let realmUrlFor = (id: string): string => {
+      let idRRI = rri(id);
+      for (let paths of realmPaths) {
+        if (paths.inRealm(idRRI)) {
+          return paths.url;
+        }
+      }
+      return new RealmPaths(this.network.virtualNetwork.toURL(id)).url;
+    };
 
     return doc.data.map((entry) => {
       let renderings = (entry.relationships.html?.data ?? [])
@@ -321,15 +384,11 @@ export class SearchEntriesResource extends Resource<Args> {
         .map((html) => buildRendering(html!, cssHrefById));
       let itemRef = entry.relationships.item?.data;
       let item = itemRef
-        ? itemsByIdentity.get(`${itemRef.type} ${itemRef.id}`)
+        ? itemsByIdentity.get(resourceIdentity(itemRef.type, itemRef.id))
         : undefined;
       return {
         id: entry.id,
-        realmUrl: resolveCardRealmUrl(
-          entry.id,
-          this.realmsToSearch,
-          this.network.virtualNetwork,
-        ),
+        realmUrl: realmUrlFor(entry.id),
         html: renderings,
         ...(item ? { item } : {}),
       };
@@ -361,6 +420,13 @@ function buildRendering(
 // and re-runs on incremental index events with a per-realm partial refresh.
 // Realms ride in the query's `realms` member; omitted, every available realm
 // is searched.
+//
+// Create exactly once per owner — a class field or a one-time assignment,
+// never inside a getter or during render. Every call builds an independent
+// resource with its own realm subscriptions and fetches; per-render calls
+// pile up live instances on the parent until the parent is destroyed. Vary
+// the search through the `getQuery` thunk (it is re-read reactively), not by
+// constructing new resources.
 export function getSearchEntriesResource(
   parent: object,
   getQuery: () => SearchEntryWireQuery | undefined,
