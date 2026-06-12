@@ -22,7 +22,7 @@ export const issueStatusOptions: Option[] = [
   {
     value: 'in_progress',
     label: 'In Progress',
-    color: '#f9cd4a',
+    color: '#b8860b',
   },
   { value: 'blocked', label: 'Blocked', color: '#db1731' },
   { value: 'review', label: 'In Review', color: '#285028' },
