@@ -241,9 +241,6 @@ jobs:
           fi
           echo "::notice::Environment-mode public-read parity confirmed"
 
-      - name: Settle prerender standby pool
-        run: sleep 60
-
       - name: Live test suite
         run: dbus-run-session -- pnpm test:live
         working-directory: packages/host
@@ -472,16 +469,6 @@ jobs:
             exit 1
           fi
           echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
-
-      # Give the prerender's standby pool a moment to fully populate before
-      # the test runner launches its own chrome instance. Without this, the
-      # standby pages can still be loading host.ci.localhost asset chunks
-      # when the test starts, and the resulting flurry of chrome lifecycle
-      # events trips NetworkChangeNotifier, aborting the still-loading
-      # standby with ERR_NETWORK_CHANGED and leaving prerender unavailable
-      # to indexing.
-      - name: Settle prerender standby pool
-        run: sleep 60
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
