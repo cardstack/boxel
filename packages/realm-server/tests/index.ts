@@ -180,6 +180,7 @@ const ALL_TEST_FILES: string[] = [
   './file-watcher-events-test',
   './full-index-on-startup-test',
   './full-reindex-test',
+  './http2-keepalive-test',
   './indexing-test',
   './lazy-mount-test',
   './listener-dispatcher-test',
