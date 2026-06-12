@@ -115,6 +115,37 @@ module('Integration | Component | fitted-card', function (hooks) {
     });
   });
 
+  // ── @layout ───────────────────────────────────────────────────────────────
+
+  module('@layout', function () {
+    test('defaults to data-layout="auto" when @layout is omitted', async function (assert) {
+      await render(
+        <template>
+          <FittedCard><:title>T</:title></FittedCard>
+        </template>,
+      );
+      assert.dom('article').hasAttribute('data-layout', 'auto');
+    });
+
+    test('@layout="vertical" sets data-layout="vertical"', async function (assert) {
+      await render(
+        <template>
+          <FittedCard @layout='vertical'><:title>T</:title></FittedCard>
+        </template>,
+      );
+      assert.dom('article').hasAttribute('data-layout', 'vertical');
+    });
+
+    test('@layout="horizontal" sets data-layout="horizontal"', async function (assert) {
+      await render(
+        <template>
+          <FittedCard @layout='horizontal'><:title>T</:title></FittedCard>
+        </template>,
+      );
+      assert.dom('article').hasAttribute('data-layout', 'horizontal');
+    });
+  });
+
   // ── CSS custom property overrides ─────────────────────────────────────────
 
   module('CSS custom property overrides smoke test', function () {
