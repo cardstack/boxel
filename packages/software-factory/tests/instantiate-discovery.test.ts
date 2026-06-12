@@ -74,4 +74,26 @@ module('discoverRealmSpecs', function () {
       'Spec cards were found and filtered — the index is current, so no poll',
     );
   });
+
+  test('an injected empty result without a raw count is final — no polling', async function (assert) {
+    let searchCalls = 0;
+    let { specs, error } = await discoverRealmSpecs({
+      targetRealm: REALM,
+      client: clientReturning([]),
+      // The legacy injected shape used by test doubles that mean
+      // "nothing to validate" — no totalSpecCards signal.
+      searchSpecsFn: async () => {
+        searchCalls++;
+        return { specs: [] };
+      },
+    });
+
+    assert.strictEqual(error, undefined);
+    assert.deepEqual(specs, []);
+    assert.strictEqual(
+      searchCalls,
+      1,
+      'no raw-count signal means the result is final, not an index race',
+    );
+  });
 });

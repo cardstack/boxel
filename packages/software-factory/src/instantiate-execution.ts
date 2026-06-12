@@ -86,7 +86,10 @@ export interface SearchSpecsResult {
    * filter. Lets discovery distinguish "the index hasn't caught up yet"
    * (zero raw hits — worth polling) from "Spec cards exist but none are
    * instantiable" (final — return immediately instead of polling to the
-   * deadline).
+   * deadline). Optional because injected `searchSpecsFn` test doubles
+   * predate it: `undefined` means "no raw-count signal" and is treated
+   * as final, so an injected empty result returns immediately instead
+   * of polling for 30s.
    */
   totalSpecCards?: number;
 }
@@ -198,13 +201,15 @@ export async function discoverRealmSpecs(
   // Realm-side source POST indexing is async, so a newly-uploaded Spec
   // card may not be in the search index by the time we get here. Bounded-
   // poll until even one spec shows up so an agent or test that just
-  // pushed Spec files isn't penalized for indexing latency. When the
-  // search DID return Spec cards but the card/app filter dropped them
-  // all, the index is up to date and polling can't change the answer —
-  // return immediately.
+  // pushed Spec files isn't penalized for indexing latency. Poll ONLY on
+  // affirmative evidence of that race — the search itself returned zero
+  // Spec cards (`totalSpecCards === 0`). When Spec cards were found but
+  // the card/app filter dropped them all, or an injected searchSpecsFn
+  // reports no raw count at all, the result is final — polling can't
+  // change the answer.
   return retryWithPoll(
     () => searchSpecsFn(options.targetRealm),
-    (r) => !r.error && r.specs.length === 0 && (r.totalSpecCards ?? 0) === 0,
+    (r) => !r.error && r.specs.length === 0 && r.totalSpecCards === 0,
   );
 }
 
