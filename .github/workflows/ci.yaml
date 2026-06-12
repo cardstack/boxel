@@ -567,17 +567,6 @@ jobs:
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
             -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
 
-  # Realm-server tests run in *standard mode*, deliberately. The
-  # tests use supertest with plain-HTTP/1.1 against in-process fixture
-  # realm-servers on random `127.0.0.1:444X` ports; env-mode's
-  # createListener (server.ts) requires HTTPS+HTTP/2 and has no
-  # plain-HTTP fallback, so fixture spawns under BOXEL_ENVIRONMENT
-  # error out with "HTTP/2 requires a TLS cert/key" or the h2 server
-  # rejects the plain bytes as garbage. Env-mode code paths in
-  # realm-server are still covered by tests that toggle
-  # BOXEL_ENVIRONMENT internally (e.g. listener-dispatcher-test.ts).
-  # See follow-up issue for the work required to run this job in env
-  # mode end-to-end.
   realm-server-test:
     name: Realm Server Tests
     needs: [change-check, test-web-assets]

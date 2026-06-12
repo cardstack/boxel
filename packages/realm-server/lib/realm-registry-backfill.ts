@@ -167,10 +167,9 @@ async function upsertBootstrapRealms(
 //
 // Per-(username, env-url) granularity: only inserts if no row exists at
 // the env URL for that user — so a custom permission added later via the
-// admin UI isn't clobbered by a subsequent boot. Following the same
-// path-keyed design as the prior public-read-only parity, this stays in
-// lockstep with whatever the migrations declare (no second hardcoded
-// realm list); only realms whose path is already declared in
+// admin UI isn't clobbered by a subsequent boot. The path-keyed match
+// keeps this in lockstep with whatever the migrations declare (no second
+// hardcoded realm list); only realms whose path is already declared in
 // `realm_user_permissions` are touched, so it cannot grant access to a
 // realm policy never authorized.
 //
