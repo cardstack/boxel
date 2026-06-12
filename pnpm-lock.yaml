@@ -369,9 +369,18 @@ catalogs:
     ember-concurrency-ts:
       specifier: ^0.3.1
       version: 0.3.1
+    ember-freestyle:
+      specifier: ^0.24.0
+      version: 0.24.0
+    ember-keyboard:
+      specifier: ^9.0.4
+      version: 9.0.4
     ember-modify-based-class-resource:
       specifier: ^1.1.0
       version: 1.1.2
+    ember-page-title:
+      specifier: ^9.0.3
+      version: 9.0.3
     ember-qunit:
       specifier: ^9.0.4
       version: 9.0.4
@@ -1303,7 +1312,7 @@ importers:
         specifier: ^1.0.1
         version: 1.2.0(@babel/core@7.29.0)
       ember-freestyle:
-        specifier: ^0.24.0
+        specifier: 'catalog:'
         version: 0.24.0(@babel/core@7.29.0)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2)
       ember-modifier:
         specifier: ^4.1.0
@@ -1611,7 +1620,7 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
       ember-freestyle:
-        specifier: ^0.24.0
+        specifier: 'catalog:'
         version: 0.24.0(@babel/core@7.29.0)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2(postcss@8.5.14))
       ember-load-initializers:
         specifier: ^3.0.0
@@ -1620,7 +1629,7 @@ importers:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.0)
       ember-page-title:
-        specifier: ^9.0.3
+        specifier: 'catalog:'
         version: 9.0.3
       ember-qunit:
         specifier: 'catalog:'
@@ -2240,10 +2249,10 @@ importers:
         specifier: ^1.0.1
         version: 1.2.0(@babel/core@7.29.0)
       ember-freestyle:
-        specifier: ^0.24.0
+        specifier: 'catalog:'
         version: 0.24.0(@babel/core@7.29.0)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2)
       ember-keyboard:
-        specifier: ^9.0.4
+        specifier: 'catalog:'
         version: 9.0.4(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))
       ember-lifeline:
         specifier: ^7.0.0
@@ -2255,7 +2264,7 @@ importers:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.0)
       ember-page-title:
-        specifier: ^9.0.3
+        specifier: 'catalog:'
         version: 9.0.3
       ember-provide-consume-context:
         specifier: ^0.8.0
@@ -19059,13 +19068,19 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       '@percy/cli-exec': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-build@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19082,7 +19097,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19108,14 +19126,20 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19123,7 +19147,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.13(typescript@5.9.3)':
     dependencies:
