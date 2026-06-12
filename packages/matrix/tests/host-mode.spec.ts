@@ -73,9 +73,13 @@ async function publishRealm(
 // `_publish-realm` POST is the heaviest, contention-prone step in the suite,
 // so collapsing two publishes into one is what keeps the routing tests from
 // timing out on a first-attempt publish under shard load.
+//
+// `options.routingRuleTarget` overrides the rule's `instance` link (default
+// `./white-paper`). Point it at a card that is never created to exercise a
+// dangling routing target.
 async function createAndPublishHostModeRealm(
   page: Page,
-  options: { routingRulePath?: string } = {},
+  options: { routingRulePath?: string; routingRuleTarget?: string } = {},
 ): Promise<PublishedHostModeRealm> {
   const serverIndexUrl = new URL(appURL).origin;
   const { username, password } = await createSubscribedUserAndLogin(
@@ -256,7 +260,7 @@ async function createAndPublishHostModeRealm(
           },
           relationships: {
             'hostRoutingRules.0.instance': {
-              links: { self: './white-paper' },
+              links: { self: options.routingRuleTarget ?? './white-paper' },
             },
           },
           meta: {
@@ -557,5 +561,42 @@ test.describe('Host mode routing rules', () => {
     await expect(
       page.locator(`[data-test-host-mode-card="${expectedRoutedCardId}"]`),
     ).toBeVisible();
+  });
+
+  // A routing rule whose target card no longer exists must degrade
+  // gracefully: the realm config keeps the rule (the read path only filters
+  // cross-realm targets, not missing ones), so serve-index rewrites the root
+  // to the dead card and the SPA's first store fetch for it 404s. Rather than
+  // taking the whole published site down with a raw card error, the host
+  // renders a friendly 404 placeholder for that path.
+  test('dangling `/` routing rule target renders a 404 placeholder', async ({
+    page,
+  }) => {
+    let realm = await createAndPublishHostModeRealm(page, {
+      routingRulePath: '/',
+      // Never created in the helper, so the rule dangles.
+      routingRuleTarget: './dangling-target',
+    });
+
+    // The usual card-marker gate can't be used here: the target 404s, so
+    // no isolated HTML is ever served at the root. Gate instead on the
+    // dead target's id appearing in serve-index's injected hostRoutingMap
+    // — that confirms the RealmConfig card is indexed and the rewrite is
+    // live (the base config ships an empty hostRoutingMap, so the slug
+    // only shows up once the rule is active).
+    await waitForPublishedMarker(
+      page,
+      realm.publishedRealmURL,
+      'dangling-target',
+    );
+
+    await page.goto(realm.publishedRealmURL, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page.locator('[data-test-host-mode-404]')).toBeVisible();
+
+    // It's a clean placeholder, not the raw card-error/debug treatment.
+    await expect(page.locator('[data-test-card-error]')).toHaveCount(0);
   });
 });
