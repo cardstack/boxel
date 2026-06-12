@@ -356,8 +356,15 @@ export class RealmIndexQueryEngine {
     // included), coalesced back to the legacy document at the edge — where
     // the legacy sparse fieldset (`query.fields`) projects `data` with the
     // legacy semantics. `linkFields` scopes the link expansion exactly as
-    // the legacy pass did.
-    let linkFields = query.fields?.['card'] ?? query.fields?.['file-meta'];
+    // the legacy pass did — selected by the query's actual dispatch, since a
+    // request may carry fieldsets for both types.
+    let linkFields: string[] | undefined;
+    if (query.fields) {
+      let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
+      linkFields = isFileMetaQuery
+        ? query.fields['file-meta']
+        : query.fields['card'];
+    }
     let engineOpts = linkFields ? { ...opts, linkFields } : opts;
     let doc = await this.searchEntries(
       liveSearchEntryQuery(query, { cardUrls: opts?.cardUrls }),

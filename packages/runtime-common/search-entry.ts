@@ -81,7 +81,9 @@ const ITEM_PREFIX = 'item.';
 const ITEM_ANCHOR = 'item.on';
 const HTML_QUERY = 'htmlQuery';
 
-export const DEFAULT_HTML_QUERY: HtmlQuery = { eq: { format: 'fitted' } };
+export const DEFAULT_HTML_QUERY = {
+  eq: { format: 'fitted' },
+} as const satisfies HtmlQuery;
 
 const SEARCH_ENTRY_QUERY_MEMBERS = [
   'filter',
@@ -251,7 +253,7 @@ export function htmlQueryFormats(query: HtmlQuery): PrerenderedHtmlFormat[] {
   };
   walk(query);
   if (formats.size === 0) {
-    formats.add('fitted');
+    formats.add(DEFAULT_HTML_QUERY.eq.format);
   }
   return [...formats];
 }
