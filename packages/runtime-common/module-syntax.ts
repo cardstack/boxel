@@ -452,8 +452,21 @@ function makeNewField({
 
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
+    // `resolveURL` of a registered prefix (e.g. `@cardstack/base/X`) returns
+    // the RESOLVED real URL (e.g. `https://localhost:4201/base/X`). Existing
+    // imports in user source files use the virtual alias form
+    // (`https://cardstack.com/base/X`), so emitting the resolved real URL
+    // here means `importUtil` adds a duplicate import line instead of
+    // merging the new identifier into the existing one. Convert back to
+    // the virtual alias via `mapURL(real-to-virtual)` so a new import
+    // matches the convention used in source files.
+    let resolved = virtualNetwork.resolveURL(
+      fieldRef.module,
+      incomingRelativeTo,
+    );
+    let virtual = virtualNetwork.mapURL(resolved, 'real-to-virtual');
     relativeFieldModuleRef = maybeRelativeReference(
-      virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo),
+      virtual ?? resolved,
       outgoingRelativeTo,
       outgoingRealmURL,
     );
