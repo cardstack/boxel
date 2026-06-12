@@ -348,7 +348,7 @@ export default class MonacoService extends Service {
     let editorDom = this.editor.getDomNode();
     let activeElementAcceptsText =
       active instanceof HTMLElement &&
-      !(editorDom?.contains(active) ?? false) &&
+      !editorDom?.contains(active) &&
       (active.tagName === 'INPUT' ||
         active.tagName === 'TEXTAREA' ||
         active.isContentEditable);
