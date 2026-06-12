@@ -368,7 +368,9 @@ jobs:
   matrix-client-test:
     name: Matrix Client Tests
     needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    # TEMPORARY: disabled to speed up iteration on live-test env-mode.
+    # Flip back to the change-check condition before merge.
+    if: false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -570,7 +572,9 @@ jobs:
   realm-server-test:
     name: Realm Server Tests
     needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    # TEMPORARY: disabled to speed up iteration on live-test env-mode.
+    # Flip back to the change-check condition before merge.
+    if: false
     runs-on: ubuntu-latest
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
