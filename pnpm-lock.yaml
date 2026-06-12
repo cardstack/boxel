@@ -690,12 +690,15 @@ overrides:
   jsesc: ^3.0.0
   ember-modifier: ^4.1.0
   tracked-built-ins: ^4.1.2
+  ember-elsewhere: github:backspace/ember-elsewhere#fix-injection-imports
+  ember-set-body-class: github:johanrd/ember-set-body-class#deprecate-import-inject-as-service
 
 pnpmfileChecksum: sha256-4aYtIGLH5VZ7602JwdeiRO9eMz2VW/CY+BbwLNpu1Bw=
 
 patchedDependencies:
   '@embroider/compat@3.9.4': db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2
   '@embroider/webpack': 3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff
+  ember-animated@2.2.0: de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475
   ember-basic-dropdown@8.0.4: 19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428
   ember-css-url@1.0.0: 0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d
   ember-eslint-parser: 364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425
@@ -1280,7 +1283,7 @@ importers:
         version: 3.4.2
       ember-animated:
         specifier: 'catalog:'
-        version: 2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
+        version: 2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
       ember-basic-dropdown:
         specifier: 8.0.4
         version: 8.0.4(patch_hash=19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glimmer/component@2.1.1)(@glimmer/tracking@1.1.2)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
@@ -1318,8 +1321,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1(@babel/core@7.29.0)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2)
       ember-set-body-class:
-        specifier: ^1.0.2
-        version: 1.0.2
+        specifier: github:johanrd/ember-set-body-class#deprecate-import-inject-as-service
+        version: https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1
       ember-sortable:
         specifier: ^5.3.1
         version: 5.3.3(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@ember/test-waiters@4.1.1(@glint/template@1.7.7))(@glint/template@1.7.7)(ember-modifier@4.3.0(@babel/core@7.29.0))
@@ -1928,7 +1931,7 @@ importers:
         version: 8.2.2
       ember-animated:
         specifier: 'catalog:'
-        version: 2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
+        version: 2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
       ember-concurrency:
         specifier: 'catalog:'
         version: 5.2.0(@babel/core@7.29.0)(@glint/template@1.7.7)
@@ -2175,7 +2178,7 @@ importers:
         version: 2.3.2(@babel/core@7.29.0)
       ember-animated:
         specifier: 'catalog:'
-        version: 2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
+        version: 2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
       ember-async-data:
         specifier: ^1.0.3
         version: 1.0.3(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
@@ -2228,8 +2231,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
       ember-elsewhere:
-        specifier: ^2.0.0
-        version: 2.0.0(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
+        specifier: github:backspace/ember-elsewhere#fix-injection-imports
+        version: https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-exam:
         specifier: ^10.1.0
         version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.0.4(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)(qunit@2.25.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.25.0)(webpack@5.106.2)
@@ -9702,8 +9705,9 @@ packages:
     resolution: {integrity: sha512-3slTltQV5ke53t3YVP2GYoswsQ6y+lhuVzKmt09tbEx91DapG8I/xa8W5OA0StvcQlavL3/vHrz/vCQEFs8bBA==}
     engines: {node: 14.* || 16.* || >= 18}
 
-  ember-elsewhere@2.0.0:
-    resolution: {integrity: sha512-663e57ghtYCZsqIWpmfa9o2XfbI9vHt8qAiVWOFsdRuFF1FDVKZr3moAY2xNTQ2u2FH0ELh6ResCDUIiyh1d+A==}
+  ember-elsewhere@https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3:
+    resolution: {gitHosted: true, integrity: sha512-wIFkZ0jyQDDQ5TYRdWLv4HeLA0iO+JLiU5BReZ00fWEgZWhHu9+PMO7uD7FJ9OUSmUP3S3deXbaZCcmMnD+e9Q==, tarball: https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3}
+    version: 2.0.0
     engines: {node: 12.* || 14.* || >= 16}
 
   ember-eslint-parser@0.13.0:
@@ -9867,8 +9871,9 @@ packages:
     resolution: {integrity: sha512-89oVHVJwmLDvGvAUWgS87KpBoRhy3aZ6U0Ql6HOmU4TrPkyaa8pM0W81wj9cIwjYprcQtN9EwzZMHnq46+oUyw==}
     engines: {node: 8.* || 10.* || >= 12}
 
-  ember-set-body-class@1.0.2:
-    resolution: {integrity: sha512-SEsTwFp9SHTg4LgebhkUuLgYWg1VZD7I1QcrV2sTY583wu216OThoSs5szvS/KgSc1xD1Z22TFvOb848t2hGfw==}
+  ember-set-body-class@https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1:
+    resolution: {gitHosted: true, integrity: sha512-UYb2VgCRZsh2AxkWCW7Crz7VzJF8KgiHhDvcr0EnfOw/ozzQbueOzFvTRsNDbO+wr/+lqLevETMHHdYzwIaupw==, tarball: https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1}
+    version: 1.0.2
     engines: {node: 10.* || 12.* || >= 14.*}
 
   ember-sortable@5.3.3:
@@ -19082,13 +19087,19 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       '@percy/cli-exec': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-build@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19105,7 +19116,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19131,14 +19145,20 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19146,7 +19166,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -23119,7 +23142,7 @@ snapshots:
       - '@babel/core'
       - supports-color
 
-  ember-animated@2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7):
+  ember-animated@2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7):
     dependencies:
       '@embroider/addon-shim': 1.10.2
       '@embroider/macros': 1.16.13(@glint/template@1.7.7)
@@ -23928,7 +23951,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-elsewhere@2.0.0(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
+  ember-elsewhere@https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
     dependencies:
       '@embroider/util': 1.13.1(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-cli-babel: 7.26.11
@@ -24238,7 +24261,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-set-body-class@1.0.2:
+  ember-set-body-class@https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1:
     dependencies:
       ember-cli-babel: 7.26.11
     transitivePeerDependencies:

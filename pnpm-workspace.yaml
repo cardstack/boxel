@@ -264,6 +264,8 @@ overrides:
   jsesc: ^3.0.0
   ember-modifier: ^4.1.0
   tracked-built-ins: ^4.1.2
+  ember-elsewhere: "github:backspace/ember-elsewhere#fix-injection-imports"
+  ember-set-body-class: "github:johanrd/ember-set-body-class#deprecate-import-inject-as-service"
 peerDependencyRules:
   allowedVersions:
     mustache: "3"
@@ -281,6 +283,7 @@ patchedDependencies:
   "@embroider/webpack": patches/@embroider__webpack.patch
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
+  ember-animated@2.2.0: patches/ember-animated@2.2.0.patch
 allowBuilds:
   "@percy/core": true
   "@vscode/vsce-sign": true

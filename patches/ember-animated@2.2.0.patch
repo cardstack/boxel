@@ -1,0 +1,123 @@
+diff --git a/dist/-private/ember-internals.js b/dist/-private/ember-internals.js
+index a9f10ec25086b0caa591a4cc00799333b2240b17..62ce44b4c99f86786a776560502c16f0232b09f9 100644
+--- a/dist/-private/ember-internals.js
++++ b/dist/-private/ember-internals.js
+@@ -1,6 +1,6 @@
+ import { get } from '@ember/object';
+ import { guidFor } from '@ember/object/internals';
+-import Ember from 'ember';
++import { getViewBounds } from '@ember/-internals/views';
+ 
+ /*
+   This module is intended to encapsulate all the known places where
+@@ -10,9 +10,6 @@ import Ember from 'ember';
+   same thing but for code that is only needed in the test environment.
+ 
+  */
+-const {
+-  getViewBounds
+-} = Ember.ViewUtils;
+ function componentNodes(view) {
+   let bounds = getViewBounds(view);
+   return {
+diff --git a/dist/-private/ember-scheduler.js b/dist/-private/ember-scheduler.js
+index 7769cf231111a0e3659403029ed306295aec0901..79e54fd0be83a36f436ceb8d1674ecfcf9d8b9b8 100644
+--- a/dist/-private/ember-scheduler.js
++++ b/dist/-private/ember-scheduler.js
+@@ -1,7 +1,7 @@
+ import { scheduleOnce, join } from '@ember/runloop';
+ import { addObserver } from '@ember/object/observers';
+ import { computed, set } from '@ember/object';
+-import Ember from 'ember';
++import { setClassicDecorator } from '@ember/-internals/metal';
+ import { DEBUG } from '@glimmer/env';
+ import { stop, spawn, logErrors, current } from './scheduler.js';
+ import { microwait } from './concurrency-helpers.js';
+@@ -25,7 +25,7 @@ function _computed(fn) {
+     // eslint-disable-next-line prefer-rest-params
+     return computed(fn)(...arguments);
+   };
+-  Ember._setClassicDecorator(cp);
++  setClassicDecorator(cp);
+   return cp;
+ }
+ let handlerCounter = 0;
+diff --git a/dist/components/animated-beacon.js b/dist/components/animated-beacon.js
+index e215e8961ec75e46de4bd63f0afb8e086d9394ec..ff9342628ac6a86225d3d19cc8309b3491116313 100644
+--- a/dist/components/animated-beacon.js
++++ b/dist/components/animated-beacon.js
+@@ -1,5 +1,5 @@
+ import Component, { setComponentTemplate } from '@ember/component';
+-import { inject } from '@ember/service';
++import { service } from '@ember/service';
+ import { task } from '../-private/ember-scheduler.js';
+ import { afterRender, microwait } from '../-private/concurrency-helpers.js';
+ import { componentNodes } from '../-private/ember-internals.js';
+@@ -70,7 +70,7 @@ class AnimatedBeacon extends Component {
+   tagName = '';
+   _inserted = false;
+   static {
+-    g(this.prototype, "motionService", [inject('-ea-motion')]);
++    g(this.prototype, "motionService", [service('-ea-motion')]);
+   }
+   #motionService = (i(this, "motionService"), void 0);
+   didInsertElement() {
+diff --git a/dist/components/animated-container.js b/dist/components/animated-container.js
+index 99d99f00c8bdbe0d926fcc9510515b1130c67472..6663eb132282a9194138e87632c0439a11b90626 100644
+--- a/dist/components/animated-container.js
++++ b/dist/components/animated-container.js
+@@ -1,4 +1,4 @@
+-import { inject } from '@ember/service';
++import { service } from '@ember/service';
+ import Component, { setComponentTemplate } from '@ember/component';
+ import { alias } from '@ember/object/computed';
+ import { action } from '@ember/object';
+@@ -67,7 +67,7 @@ var TEMPLATE = precompileTemplate("{{!\n  The @class is only there to support a
+ class AnimatedContainerComponent extends Component {
+   tagName = '';
+   static {
+-    g(this.prototype, "motionService", [inject('-ea-motion')]);
++    g(this.prototype, "motionService", [service('-ea-motion')]);
+   }
+   #motionService = (i(this, "motionService"), void 0);
+   /**
+diff --git a/dist/components/animated-each.js b/dist/components/animated-each.js
+index 830b251c71b99a438875029861d16ccdf9d326a3..bba9ac935d096538f77e48a4a9042098b909eead 100644
+--- a/dist/components/animated-each.js
++++ b/dist/components/animated-each.js
+@@ -1,6 +1,6 @@
+ import { alias } from '@ember/object/computed';
+ import { computed, get, action } from '@ember/object';
+-import { inject } from '@ember/service';
++import { service } from '@ember/service';
+ import Component, { setComponentTemplate } from '@ember/component';
+ import assertNever from 'assert-never';
+ import { task } from '../-private/ember-scheduler.js';
+@@ -60,7 +60,7 @@ class AnimatedEach extends Component {
+   tagName = '';
+   static positionalParams = ['items'];
+   static {
+-    g(this.prototype, "motionService", [inject('-ea-motion')]);
++    g(this.prototype, "motionService", [service('-ea-motion')]);
+   }
+   #motionService = (i(this, "motionService"), void 0);
+   /**
+diff --git a/dist/components/animated-orphans.js b/dist/components/animated-orphans.js
+index 104a1d67a96c36c393ada9c696d1ebade27314a3..dd88917302a3131149196754059f125b3909d9b5 100644
+--- a/dist/components/animated-orphans.js
++++ b/dist/components/animated-orphans.js
+@@ -1,4 +1,4 @@
+-import { inject } from '@ember/service';
++import { service } from '@ember/service';
+ import { action } from '@ember/object';
+ import { alias } from '@ember/object/computed';
+ import Component, { setComponentTemplate } from '@ember/component';
+@@ -33,7 +33,7 @@ class AnimatedOrphans extends Component {
+     this.classNames = this.classNames.concat(['animated-orphans']);
+   }
+   static {
+-    g(this.prototype, "motionService", [inject('-ea-motion')]);
++    g(this.prototype, "motionService", [service('-ea-motion')]);
+   }
+   #motionService = (i(this, "motionService"), void 0);
+   _newOrphanTransitions = [];
