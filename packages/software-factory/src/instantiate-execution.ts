@@ -172,10 +172,10 @@ export interface RunInstantiateResult {
 
 /**
  * Search the realm for Spec cards and return the ref + linkedExamples for
- * each card/app spec. Field specs are skipped (they don't produce
- * instantiable cards). linkedExample URLs that resolve outside the target
- * realm are dropped to prevent leaking the realm auth token to external
- * origins.
+ * each card/app spec. Specs of any other specType (field, component,
+ * command) are skipped — they don't reference instantiable cards.
+ * linkedExample URLs that resolve outside the target realm are dropped to
+ * prevent leaking the realm auth token to external origins.
  */
 export async function discoverRealmSpecs(
   options: DiscoverRealmSpecsOptions,
@@ -678,10 +678,16 @@ async function defaultSearchSpecs(
       continue;
     }
 
-    // Field specs don't produce instantiable instances — skip.
+    // Only card/app specs reference instantiable CardDefs. Field,
+    // component, and command specs point at exports the prerenderer
+    // cannot instantiate — catalog cards commonly ship them alongside
+    // the card spec — so they are skipped rather than failing the run.
+    // Same allowlist `boxel realm ingest-card` applies at seed time.
     let specType = attributes.specType as string | undefined;
-    if (specType === 'field') {
-      log.info(`Spec ${specId} is a field spec — skipping`);
+    if (specType !== 'card' && specType !== 'app') {
+      log.info(
+        `Spec ${specId} has specType ${specType ?? '(none)'} — not instantiable, skipping`,
+      );
       continue;
     }
 

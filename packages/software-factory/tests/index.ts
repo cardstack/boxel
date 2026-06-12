@@ -21,6 +21,7 @@ import './test-step.test.ts';
 import './lint-step.test.ts';
 import './eval-step.test.ts';
 import './eval-execution.test.ts';
+import './instantiate-discovery.test.ts';
 import './instantiate-step.test.ts';
 import './parse-step.test.ts';
 import './port-allocator.test.ts';
