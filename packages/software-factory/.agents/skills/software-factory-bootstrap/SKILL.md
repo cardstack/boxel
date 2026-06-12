@@ -141,11 +141,11 @@ of** creating `feature` Issues per entry-point card.
    boxel realm ingest-card "<source-card-url>" .
    ```
 
-   It copies, preserving realm-relative paths: the source card's
-   module, every same-realm module it imports transitively
-   (**including type-only imports**, which a runtime dep graph would
-   miss but `boxel parse` needs), its sample instances, and its
-   **card-level** Catalog Spec. Cross-realm imports
+It copies, preserving realm-relative paths, into the local workspace: the source card's
+module, every same-realm module it imports transitively
+(**including type-only imports**, which a runtime dep graph would
+miss but `boxel parse` needs), its sample instances, and its
+**card/app** Catalog Spec. Cross-realm imports
    (`https://cardstack.com/base/...`) and component/function Specs
    are left out on purpose. Pass `--realm <url>` only if the source
    realm can't be auto-detected.
