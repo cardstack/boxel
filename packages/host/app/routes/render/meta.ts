@@ -93,6 +93,14 @@ export default class RenderMetaRoute extends Route<Model> {
     try {
       let serializeStart = performance.now();
       let vn = this.network.virtualNetwork;
+      // [META-DIAG] TEMPORARY breadcrumbs to localize the unprofiled
+      // render.meta wedge. The synchronous serialize→rel-loop→searchDoc block
+      // hangs ~150s on some cards, and the hang is masked by any CPU/trace
+      // profiling, so cheap console.log is the only viable probe. The last
+      // breadcrumb a card emits before going silent in the prerender logs
+      // names the hung phase. Remove once localized.
+      // eslint-disable-next-line no-console
+      console.log(`[META-DIAG] serialize-start id=${instance.id}`);
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
         virtualNetwork: vn,
@@ -104,6 +112,10 @@ export default class RenderMetaRoute extends Route<Model> {
           ),
       }) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[META-DIAG] serialize-done rel-loop-start id=${instance.id}`,
+      );
       for (let { relationship } of relationshipEntries(
         serialized.data.relationships,
       )) {
@@ -111,9 +123,13 @@ export default class RenderMetaRoute extends Route<Model> {
         delete relationship.data;
       }
 
+      // eslint-disable-next-line no-console
+      console.log(`[META-DIAG] searchdoc-start id=${instance.id}`);
       let searchDocStart = performance.now();
       searchDoc = api.searchDoc(instance);
       searchDocMs = performance.now() - searchDocStart;
+      // eslint-disable-next-line no-console
+      console.log(`[META-DIAG] searchdoc-done id=${instance.id}`);
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
