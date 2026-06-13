@@ -85,14 +85,6 @@ export default class RenderMetaRoute extends Route<Model> {
     if (passOpen) {
       api.beginComputePass();
     }
-    // FIX (Approach A): mark the synchronous serialize + searchDoc window so
-    // query-field resolution stays seed-only. While set, a query-backed
-    // relationship that the indexer did not seed resolves to empty instead
-    // of kicking off a live, re-entrant search — that live resolution, when
-    // the field's reverse query points back at the card being serialized,
-    // deadlocks the render thread for ~150s. Cleared in the finally below so
-    // the flag never leaks past this synchronous block.
-    (globalThis as any).__boxelMetaSerializing = true;
     let serialized: SingleCardDocument;
     let serializeMs: number;
     let searchDoc: Record<string, any>;
@@ -111,6 +103,17 @@ export default class RenderMetaRoute extends Route<Model> {
       console.log(`[META-DIAG] serialize-start id=${instance.id}`);
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        // Do NOT expand query-backed relationships during the indexer's
+        // synchronous serialize. A reverse `linksToMany` whose query resolves
+        // back to the card being serialized (e.g. Customer.policies -> this
+        // Policy) drives a re-entrant blow-up across the cyclic card graph
+        // when recursed with includeComputeds — pegging the render thread for
+        // ~150s until the prerender visit aborts and the index job rejects.
+        // The store's own save path already passes omitQueryFields; the meta
+        // serialize was the lone caller that didn't. The field's value still
+        // lands in the search doc (built separately, cycle-guarded) and its
+        // deps are tracked via the excludeQueryOnly snapshot below.
+        omitQueryFields: true,
         virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
@@ -139,7 +142,6 @@ export default class RenderMetaRoute extends Route<Model> {
       // eslint-disable-next-line no-console
       console.log(`[META-DIAG] searchdoc-done id=${instance.id}`);
     } finally {
-      (globalThis as any).__boxelMetaSerializing = false;
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
       }

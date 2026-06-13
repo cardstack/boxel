@@ -134,28 +134,6 @@ export function ensureQueryFieldSearchResource(
     queryFieldState.set(field.name, fieldState);
   }
 
-  // FIX (Approach A): freeze query-field resolution during render.meta's
-  // synchronous serialize. That phase is a pure read of already-resolved
-  // state; it must never trigger (or consult a live, possibly-unresolved)
-  // search. Resolving here re-enters the card graph synchronously and, when
-  // the field's reverse query resolves back to the card being serialized
-  // (e.g. Customer.policies -> the in-flight Policy), deadlocks the render
-  // thread for ~150s and the indexer rejects the job. If the field is
-  // seed-backed (the indexer wrote its relationship data into the parent
-  // doc), fall through and resolve from the seed as usual. Otherwise return
-  // empty: the field's authoritative value is computed on its OWN index
-  // entry, where it is the top card and IS seeded.
-  if ((globalThis as any).__boxelMetaSerializing) {
-    let seeded = Boolean(
-      fieldState.seedRecords?.length ||
-      fieldState.seedCardURLs?.length ||
-      fieldState.seedSearchURL,
-    );
-    if (!seeded) {
-      return undefined;
-    }
-  }
-
   let searchResource = fieldState.searchResource;
   if (searchResource) {
     __qf2log('reuse');
