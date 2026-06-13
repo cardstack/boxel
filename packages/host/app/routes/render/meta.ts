@@ -85,6 +85,14 @@ export default class RenderMetaRoute extends Route<Model> {
     if (passOpen) {
       api.beginComputePass();
     }
+    // FIX (Approach A): mark the synchronous serialize + searchDoc window so
+    // query-field resolution stays seed-only. While set, a query-backed
+    // relationship that the indexer did not seed resolves to empty instead
+    // of kicking off a live, re-entrant search — that live resolution, when
+    // the field's reverse query points back at the card being serialized,
+    // deadlocks the render thread for ~150s. Cleared in the finally below so
+    // the flag never leaks past this synchronous block.
+    (globalThis as any).__boxelMetaSerializing = true;
     let serialized: SingleCardDocument;
     let serializeMs: number;
     let searchDoc: Record<string, any>;
@@ -131,6 +139,7 @@ export default class RenderMetaRoute extends Route<Model> {
       // eslint-disable-next-line no-console
       console.log(`[META-DIAG] searchdoc-done id=${instance.id}`);
     } finally {
+      (globalThis as any).__boxelMetaSerializing = false;
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
       }

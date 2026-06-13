@@ -1716,7 +1716,24 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         instance,
         this,
         dependencyTrackingContext,
-      )!;
+      );
+      if (!searchResource) {
+        // FIX (Approach A): resolution was intentionally skipped — during
+        // render.meta's synchronous serialize, a query field that is not
+        // seed-backed must not resolve live. Resolving there re-enters the
+        // card graph synchronously and, for a self-referential reverse query
+        // (the field resolves back to the card being serialized), deadlocks
+        // the render thread (~150s -> indexer rejects). Surface an empty
+        // plural; the field's authoritative value is computed on its own
+        // index entry, where it is the top card and IS seeded.
+        if (__qfLog) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[QF-DIAG] resolution-skipped field=${this.name} consumer=${instance.id} read#${__qfN}`,
+          );
+        }
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
       if (__qfLog) {
         // eslint-disable-next-line no-console
         console.log(
