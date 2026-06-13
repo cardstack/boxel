@@ -41,7 +41,12 @@ import {
   relativeTo,
   rri,
 } from '@cardstack/runtime-common';
-import { getFieldOverrides, getFields, serializedGet } from './field-support';
+import {
+  getFieldOverrides,
+  getFields,
+  peekAtField,
+  serializedGet,
+} from './field-support';
 
 // [SERIALIZE-DIAG] TEMPORARY (cs-meta-wedge-diag). The unprofiled
 // render.meta wedge hangs inside `serializeCard` — META-DIAG proves the
@@ -284,17 +289,23 @@ export function serializeCardResource(
 ): LooseCardResource | LooseFileMetaResource {
   __serializeDiagDepth++;
   let d = __serializeDiagDepth;
-  // Top two levels of the serialize tree, inside the prerender render
-  // context only (where the wedge lives). Depth 1 is the rendered card;
-  // depth 2 is each card it links to directly. The depth-1 run named
-  // `customer` as the field whose serializedGet never returns — depth 2
-  // makes the recursion INTO the customer card emit its own breadcrumbs,
-  // so the last `field-start` overall names the exact sub-field that hangs.
-  // If instead the hang is in peekAtField (computing the link value),
-  // customer's `resource-enter` never appears and the last line stays
-  // `field-start field=customer`. Either way the last line localizes it.
+  // Top of the serialize tree only, inside the prerender render context
+  // (where the wedge lives). Depth 1 is the rendered card. A prior depth-2
+  // build (per-field breadcrumbs INTO the customer card) ran clean — the
+  // extra ~hundreds of synchronous logs in the linked-card subtree shifted
+  // the timing enough to mask the race, the same way CPU profiling does. So
+  // this build stays at depth 1 (same log volume as the build that DID
+  // reproduce) and instead splits each RELATIONSHIP field's serializedGet
+  // into peekAtField (loading the linked card) vs field.serialize
+  // (recursing + computing the linked card's aggregates). The split is
+  // observational — the real serialization still runs through the
+  // unchanged serializedGet below; we only call peekAtField an extra,
+  // idempotent time to bracket it. `field=customer` with a peek-start and
+  // no peek-done ⇒ the hang is loading the Customer link; a serialize-start
+  // with no serialize-done ⇒ it is recursing into Customer (the policies
+  // query / aggregates). ~4 extra lines per link field, no masking.
   let diag =
-    __serializeDiagDepth <= 2 &&
+    __serializeDiagDepth === 1 &&
     Boolean((globalThis as any).__boxelRenderContext);
   let diagId = diag ? ((model as any).id ?? '<unsaved>') : '';
   try {
@@ -339,15 +350,42 @@ export function serializeCardResource(
           .join(',')}`,
       );
     }
-    let fieldResources = entries.map(([fieldName]) => {
+    let fieldResources = entries.map(([fieldName, field]) => {
+      let isRel =
+        field.fieldType === 'linksTo' || field.fieldType === 'linksToMany';
       if (diag) {
         // eslint-disable-next-line no-console
         console.log(
-          `[SERIALIZE-DIAG] field-start d=${d} id=${diagId} field=${fieldName}`,
+          `[SERIALIZE-DIAG] field-start d=${d} id=${diagId} field=${fieldName} type=${field.fieldType}`,
         );
+        if (isRel) {
+          // Observational only — does not change serialization. peekAtField
+          // is idempotent for a link (returns the loaded instance / sentinel),
+          // so calling it here to bracket the load is safe; the real value is
+          // re-read inside serializedGet below.
+          // eslint-disable-next-line no-console
+          console.log(
+            `[SERIALIZE-DIAG] peek-start id=${diagId} field=${fieldName}`,
+          );
+          peekAtField(model, fieldName);
+          // eslint-disable-next-line no-console
+          console.log(
+            `[SERIALIZE-DIAG] peek-done id=${diagId} field=${fieldName}`,
+          );
+          // eslint-disable-next-line no-console
+          console.log(
+            `[SERIALIZE-DIAG] serialize-start id=${diagId} field=${fieldName}`,
+          );
+        }
       }
       let resource = serializedGet(model, fieldName, doc, visited, opts);
       if (diag) {
+        if (isRel) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[SERIALIZE-DIAG] serialize-done id=${diagId} field=${fieldName}`,
+          );
+        }
         // eslint-disable-next-line no-console
         console.log(
           `[SERIALIZE-DIAG] field-done d=${d} id=${diagId} field=${fieldName}`,
