@@ -32,6 +32,8 @@
   "author": "Cardstack",
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.1.2",
     "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
     "@types/qunit": "catalog:",
