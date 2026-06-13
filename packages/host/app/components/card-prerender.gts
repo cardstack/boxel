@@ -121,6 +121,8 @@ export default class CardPrerender extends Component {
   }): Promise<ModuleRenderResponse> {
     return await withRenderContext(async () => {
       try {
+        // eslint-disable-next-line no-console
+        console.log(`[WEDGE-DIAG] prerenderModule:start url=${url}`);
         let run = () =>
           this.modulePrerenderTask.perform({
             url,
@@ -128,7 +130,10 @@ export default class CardPrerender extends Component {
             auth,
             renderOptions,
           });
-        return isTesting() ? await run() : await withTimersBlocked(run);
+        let out = isTesting() ? await run() : await withTimersBlocked(run);
+        // eslint-disable-next-line no-console
+        console.log(`[WEDGE-DIAG] prerenderModule:done url=${url}`);
+        return out;
       } catch (e: any) {
         if (!didCancel(e)) {
           throw e;
@@ -599,6 +604,10 @@ export default class CardPrerender extends Component {
       ancestorLevel = 0,
       renderOptions?: RenderRouteOptions,
     ) => {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[WEDGE-DIAG] html:recognize fmt=${format} lvl=${ancestorLevel} id=${url}`,
+      );
       let routeInfo = await this.router.recognizeAndLoad(
         `${this.#renderBasePath(
           url,
@@ -634,17 +643,29 @@ export default class CardPrerender extends Component {
       } else {
         captureMode = 'outerHTML';
       }
+      // eslint-disable-next-line no-console
+      console.log(
+        `[WEDGE-DIAG] html:render-start fmt=${format} lvl=${ancestorLevel} id=${url}`,
+      );
       let captured = await this.renderService.renderCardComponent(
         component,
         captureMode,
         format,
         this.waitForLinkedData,
       );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[WEDGE-DIAG] html:render-done fmt=${format} lvl=${ancestorLevel} id=${url}`,
+      );
 
       if (typeof captured !== 'string') {
         return null;
       }
       await this.#ensureRenderReady(routeInfo);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[WEDGE-DIAG] html:ready-done fmt=${format} lvl=${ancestorLevel} id=${url}`,
+      );
       return this.processCapturedMarkup(captured, {
         isPlainText: format === 'markdown',
       });
@@ -658,17 +679,25 @@ export default class CardPrerender extends Component {
       types: string[],
       renderOptions?: RenderRouteOptions,
     ) => {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[WEDGE-DIAG] ancestors:start fmt=${format} levels=${types.length} id=${url}`,
+      );
       let ancestors: Record<string, string> = {};
       for (let i = 0; i < types.length; i++) {
         let res = await this.renderHTML.perform(url, format, i, renderOptions);
         ancestors[types[i]] = res as string;
       }
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] ancestors:done fmt=${format} id=${url}`);
       return ancestors;
     },
   );
 
   async #primeCardType(url: string, context: CardRenderContext) {
     try {
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] primeCardType:fetch-start id=${url}`);
       let response = await this.network.authedFetch(url, {
         method: 'GET',
         headers: {
@@ -690,6 +719,8 @@ export default class CardPrerender extends Component {
         this.loaderService.loader,
       );
       this.#cardTypeTracker.set(context, cardType);
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] primeCardType:done id=${url}`);
     } catch (_error) {
       // ignore
     }
@@ -697,11 +728,17 @@ export default class CardPrerender extends Component {
 
   private waitForLinkedData = async () => {
     await Promise.resolve(); // ensure lazy link fetches enqueue
+    // eslint-disable-next-line no-console
+    console.log(`[WEDGE-DIAG] waitForLinkedData:store-loaded-start`);
     await this.store.loaded();
+    // eslint-disable-next-line no-console
+    console.log(`[WEDGE-DIAG] waitForLinkedData:store-loaded-done`);
   };
 
   private renderMeta = enqueueTask(
     async (url: string, renderOptions?: RenderRouteOptions) => {
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] meta:recognize id=${url}`);
       let routeInfo = await this.router.recognizeAndLoad(
         `${this.#renderBasePath(url, renderOptions)}/meta`,
       );
@@ -709,12 +746,16 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       await this.#ensureRenderReady(routeInfo);
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] meta:ready-done id=${url}`);
       return routeInfo.attributes as PrerenderMeta;
     },
   );
 
   private renderIcon = enqueueTask(
     async (url: string, renderOptions?: RenderRouteOptions) => {
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] icon:recognize id=${url}`);
       let routeInfo = await this.router.recognizeAndLoad(
         `${this.#renderBasePath(url, renderOptions)}/icon`,
       );
@@ -722,6 +763,8 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] icon:render-start id=${url}`);
       let captured = await this.renderService.renderCardComponent(
         component,
         'outerHTML',
@@ -732,6 +775,8 @@ export default class CardPrerender extends Component {
         return null;
       }
       await this.#ensureRenderReady(routeInfo);
+      // eslint-disable-next-line no-console
+      console.log(`[WEDGE-DIAG] icon:ready-done id=${url}`);
       return this.processCapturedMarkup(captured);
     },
   );
@@ -749,7 +794,14 @@ export default class CardPrerender extends Component {
         let readyPromise = (current as RouteInfoWithAttributes).attributes
           ?.readyPromise;
         if (readyPromise && typeof readyPromise.then === 'function') {
-          return readyPromise;
+          // eslint-disable-next-line no-console
+          console.log(
+            `[WEDGE-DIAG] ensureRenderReady:readyPromise-await-start`,
+          );
+          return readyPromise.then(() => {
+            // eslint-disable-next-line no-console
+            console.log(`[WEDGE-DIAG] ensureRenderReady:readyPromise-resolved`);
+          });
         }
         break;
       }
