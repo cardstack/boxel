@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  baseRealmRRI,
   type PrerenderMeta,
   type RenderRouteOptions,
   rri,
@@ -332,7 +333,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       [
         `${testRealmURL}cat/Cat`,
         `${testRealmURL}pet/Pet`,
-        `${baseRealm.url}card-api/CardDef`,
+        `${baseRealmRRI}card-api/CardDef`,
       ],
       'types are correct',
     );

@@ -16,7 +16,7 @@ import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import { baseRealm, type getCards } from '@cardstack/runtime-common';
+import { baseRealmRRI, type getCards } from '@cardstack/runtime-common';
 import LayoutBoardSplitIcon from '@cardstack/boxel-icons/layout-board-split';
 import PlantIcon from '@cardstack/boxel-icons/plant';
 
@@ -221,7 +221,7 @@ class Isolated extends Component<typeof GardenDesign> {
           sort: [
             {
               on: {
-                module: `${baseRealm.url}card-api`,
+                module: `${baseRealmRRI}card-api`,
                 name: 'CardDef',
               },
               by: 'cardTitle',

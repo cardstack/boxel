@@ -178,7 +178,7 @@ function buildSpecDocument() {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },

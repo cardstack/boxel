@@ -121,14 +121,38 @@ export class VirtualNetwork {
   }
 
   /**
-   * Convert a resolved URL back to its registered prefix form when one
-   * matches, e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
-   * URLs that don't match any registered prefix are returned as-is.
+   * Convert a URL back to its registered prefix form when one matches,
+   * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+   *
+   * If the input doesn't directly match any realm-prefix target, and the
+   * input is URL-shaped, chase through any virtual→real URL mapping (e.g.
+   * `https://cardstack.com/base/X` → `http://localhost:4201/base/X`) and
+   * retry the realm-prefix match. This bridges the gap when a realm
+   * prefix is registered against the resolved URL but the caller hands
+   * us the unresolved virtual URL.
+   *
+   * Inputs that match no prefix and no URL mapping are returned as-is.
    */
   unresolveURL(url: string): RealmResourceIdentifier {
     for (let [prefix, target] of this.realmMappings) {
       if (url.startsWith(target)) {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
+      }
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      let resolved: string | undefined;
+      try {
+        resolved = this.resolveURLMapping(url, 'virtual-to-real');
+      } catch {
+        resolved = undefined;
+      }
+      if (resolved && resolved !== url) {
+        for (let [prefix, target] of this.realmMappings) {
+          if (resolved.startsWith(target)) {
+            return (prefix +
+              resolved.slice(target.length)) as RealmResourceIdentifier;
+          }
+        }
       }
     }
     return url as RealmResourceIdentifier;

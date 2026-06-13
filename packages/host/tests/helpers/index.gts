@@ -1021,7 +1021,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1050,7 +1050,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1079,7 +1079,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1108,7 +1108,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1147,7 +1147,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'SystemCard',
         },
       },
@@ -2213,7 +2213,7 @@ export function realmConfigCardJSON(
       attributes: attrs,
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/realm-config',
+          module: '@cardstack/base/realm-config',
           name: 'RealmConfig',
         },
       },

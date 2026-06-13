@@ -158,7 +158,7 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: rri('https://cardstack.com/base/string'),
+                        module: rri('@cardstack/base/string'),
                         name: 'default',
                       },
                       serializerName: undefined,

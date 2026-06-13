@@ -7,6 +7,7 @@ import { md5 } from 'super-fast-md5';
 
 import {
   baseRealm,
+  baseRealmRRI,
   baseCardRef,
   internalKeyFor,
   ri,
@@ -110,7 +111,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -135,7 +136,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/card-api'),
+            module: rri('@cardstack/base/card-api'),
             name: 'CardDef',
           },
           realmURL: ri('http://test-realm/test/'),
@@ -236,7 +237,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -246,7 +247,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -286,7 +287,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://cardstack.com/base/card-api'),
+              module: rri('@cardstack/base/card-api'),
               name: 'CardDef',
             },
           },
@@ -1025,7 +1026,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -1067,7 +1068,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/spec'),
+            module: rri('@cardstack/base/spec'),
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1136,7 +1137,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -1196,7 +1197,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/spec'),
+            module: rri('@cardstack/base/spec'),
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2899,7 +2900,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -3302,7 +3303,7 @@ module(`Integration | realm indexing`, function (hooks) {
             relationships: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -3356,7 +3357,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/spec'),
+            module: rri('@cardstack/base/spec'),
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -4812,7 +4813,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}spec`,
+                module: `${baseRealmRRI}spec`,
                 name: 'Spec',
               },
               fields: {
@@ -5094,7 +5095,7 @@ posts/ignore-me.json
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -5106,7 +5107,7 @@ posts/ignore-me.json
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },
@@ -5151,7 +5152,7 @@ posts/ignore-me.json
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -5165,7 +5166,7 @@ posts/ignore-me.json
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },

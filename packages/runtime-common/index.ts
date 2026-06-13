@@ -1245,9 +1245,7 @@ export async function apiFor(
   let loader =
     Loader.getLoaderFor(cardOrFieldOrClass) ??
     loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
-  let api = await loader.import<typeof CardAPI>(
-    'https://cardstack.com/base/card-api',
-  );
+  let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
   if (!api) {
     throw new Error(`could not load card API`);
   }

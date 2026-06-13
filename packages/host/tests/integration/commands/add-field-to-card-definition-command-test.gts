@@ -77,7 +77,7 @@ module(
         fieldName: 'lastName',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: rri('https://cardstack.com/base/string'),
+          module: rri('@cardstack/base/string'),
           name: 'default',
         },
         fieldType: 'contains',
@@ -116,7 +116,7 @@ module(
         fieldDefinitionType: 'field',
         fieldType: 'contains',
         fieldRef: {
-          module: rri('https://cardstack.com/base/string'),
+          module: rri('@cardstack/base/string'),
           name: 'default',
         },
         incomingRelativeTo: undefined,

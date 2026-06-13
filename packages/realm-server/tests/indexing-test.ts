@@ -397,7 +397,7 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/card-api'),
+            module: rri('@cardstack/base/card-api'),
             name: 'CardDef',
           },
         },
@@ -1129,7 +1129,7 @@ module(basename(__filename), function () {
         'deps include mismatch extractor module',
       );
       assert.ok(
-        deps.includes('https://cardstack.com/base/file-api'),
+        deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
       );
     });
@@ -1165,7 +1165,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: rri('https://cardstack.com/base/text-file-def'),
+          module: rri('@cardstack/base/text-file-def'),
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
