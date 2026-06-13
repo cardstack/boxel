@@ -95,7 +95,22 @@ export function ensureQueryFieldSearchResource(
     log.info(`field ${field.name} is not a query field, skipping`);
     return undefined;
   }
+  // [QF2] TEMPORARY (cs-meta-wedge-diag) — fine-grained bracket of each
+  // synchronous sub-call. The QF-DIAG getter probe proved this function
+  // never returns for a self-referential query field (Customer.policies)
+  // resolved during a link target's synchronous serialize. The last [QF2]
+  // breadcrumb before silence names the sub-call that deadlocks. Render-
+  // context gated; fires once per (consumer,field) on the creation path.
+  let __qf2id = `${(instance as CardDef).id ?? '<unsaved>'}#${field.name}`;
+  let __qf2log = (m: string) => {
+    if ((globalThis as any).__boxelRenderContext) {
+      // eslint-disable-next-line no-console
+      console.log(`[QF2] ${m} ${__qf2id}`);
+    }
+  };
+  __qf2log('enter');
   let fieldDefinition = buildFieldDefinition(field);
+  __qf2log('fielddef-done');
   if (!fieldDefinition) {
     log.warn(`field ${field.name} missing fieldDefinition, skipping`);
     return undefined;
@@ -120,6 +135,7 @@ export function ensureQueryFieldSearchResource(
   }
   let searchResource = fieldState.searchResource;
   if (searchResource) {
+    __qf2log('reuse');
     // Intentionally do NOT call `trackQueryFieldLoads` here. The barrier
     // it registers exists to plug a one-shot timing race at resource
     // creation, between the field getter returning and the resource's
@@ -153,7 +169,10 @@ export function ensureQueryFieldSearchResource(
         `query-field-support requires the CardStore to have a VirtualNetwork`,
       );
     }
-    return resolveQueryAndRealm(instance, field, fieldDefinition, vn);
+    __qf2log('resolveQuery-start');
+    let __qf2r = resolveQueryAndRealm(instance, field, fieldDefinition, vn);
+    __qf2log('resolveQuery-done');
+    return __qf2r;
   };
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
@@ -174,6 +193,7 @@ export function ensureQueryFieldSearchResource(
   log.info(
     `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
+  __qf2log(`getres-start isLive=${isLive} seed=${seedRecords?.length ?? 0}`);
   searchResource = store.getSearchResource(
     instance,
     () => args()?.query,
@@ -195,13 +215,18 @@ export function ensureQueryFieldSearchResource(
         : undefined,
     },
   );
+  __qf2log('getres-done');
   fieldState.searchResource = searchResource;
+  __qf2log('track-start');
   trackQueryFieldLoads(store, field.name, fieldState);
+  __qf2log('track-done');
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+  __qf2log('surface-done');
   // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
   // a `peek` before it existed entangled nothing, so nudge observers to
   // re-read now that the resource (and its tracked running flag) is available.
   bumpFieldLoadingSignal(instance, field.name);
+  __qf2log('ensure-return');
 
   return searchResource;
 }
