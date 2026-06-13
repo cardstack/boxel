@@ -22,6 +22,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
+import { resolvePrerenderManagerURL } from './prerender/config.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import {
   isEnvironmentMode,
@@ -363,6 +364,43 @@ const smokeTestHostApp = async () => {
   throw lastError ?? new Error('host app smoke test timed out');
 };
 
+// Report the host-shell token this realm server is serving to the prerender
+// manager. The manager echoes it on heartbeat responses so prerender servers
+// recycle their browsers when it changes — i.e. when a deploy ships a new
+// host bundle. Runs at boot (after the smoke test confirmed the shell is
+// reachable): a deploy restarts this process, so a new bundle is reported
+// here and picked up by the prerender fleet. Best-effort — a missing or
+// unreachable manager must never block realm-server boot.
+const reportHostShellToManager = async () => {
+  try {
+    let html = await getIndexHTML();
+    let { createHash } = await import('crypto');
+    let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    let managerURL = resolvePrerenderManagerURL();
+    let response = await fetch(`${managerURL}/host-shell`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+      },
+      body: JSON.stringify({ data: { attributes: { hash } } }),
+    });
+    if (response.ok) {
+      console.log(
+        `Reported host shell token ${hash} to prerender manager at ${managerURL}`,
+      );
+    } else {
+      console.warn(
+        `Prerender manager rejected host shell report: ${response.status}`,
+      );
+    }
+  } catch (e: any) {
+    console.warn(
+      `Failed to report host shell token to prerender manager: ${e?.message ?? e}`,
+    );
+  }
+};
+
 (async () => {
   try {
     await smokeTestHostApp();
@@ -375,6 +413,9 @@ const smokeTestHostApp = async () => {
     console.error(`Unable to fetch from host app URL ${distURL}: ${detail}`);
     process.exit(-2);
   }
+  // Fire-and-forget: tell the prerender manager which host shell we're
+  // serving so the prerender fleet recycles after a host redeploy.
+  void reportHostShellToManager();
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
