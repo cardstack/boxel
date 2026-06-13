@@ -419,6 +419,35 @@ module(basename(__filename), function () {
           'http://other.example.com/foo',
         );
       });
+
+      test('chases through an addURLMapping virtual URL whose resolved form matches a registered prefix', function (assert) {
+        let vn = new VirtualNetwork();
+        // A virtual alias URL mapped to the resolved real URL...
+        vn.addURLMapping(
+          new URL('https://cardstack.com/base/'),
+          new URL('http://localhost:4201/base/'),
+        );
+        // ...while the realm prefix is registered against the resolved URL.
+        vn.addRealmMapping('@cardstack/base/', 'http://localhost:4201/base/');
+        // The virtual URL doesn't directly match the realm target, so
+        // unresolveURL must chase it through the URL mapping first.
+        assert.strictEqual(
+          vn.unresolveURL('https://cardstack.com/base/card-api'),
+          '@cardstack/base/card-api',
+        );
+      });
+
+      test('returns the input unchanged when chase-through resolves but no realm prefix matches', function (assert) {
+        let vn = new VirtualNetwork();
+        vn.addURLMapping(
+          new URL('https://example.com/foo/'),
+          new URL('http://localhost:9999/foo/'),
+        );
+        assert.strictEqual(
+          vn.unresolveURL('https://example.com/foo/bar'),
+          'https://example.com/foo/bar',
+        );
+      });
     });
 
     module('toURL', function () {
