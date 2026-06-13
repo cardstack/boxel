@@ -43,6 +43,19 @@ import {
 } from '@cardstack/runtime-common';
 import { getFieldOverrides, getFields, serializedGet } from './field-support';
 
+// [SERIALIZE-DIAG] TEMPORARY (cs-meta-wedge-diag). The unprofiled
+// render.meta wedge hangs inside `serializeCard` — META-DIAG proves the
+// thread enters `serialize-start` and never reaches `serialize-done`, but
+// absence-of-log can't say WHERE inside. These breadcrumbs log each
+// top-level field right before its `serializedGet` (peekAtField →
+// computeVia → field.serialize). The last `field-start` with no matching
+// `field-done` names the hung field — a positive signal, not an inference
+// from silence. Module-level depth counter so we only print the top of the
+// serialize tree (nested cards stay quiet), gated to the prerender render
+// context so the shared serializer stays silent in the host app and tests
+// and the handful of logs can't drown the timing-sensitive wedge.
+let __serializeDiagDepth = 0;
+
 // --- Type Exports ---
 
 export type JSONAPIResource =
@@ -269,48 +282,94 @@ export function serializeCardResource(
   visited: Set<string> = new Set(),
   resourceType: string = CardResourceType,
 ): LooseCardResource | LooseFileMetaResource {
-  let adoptsFrom = identifyCard(
-    model.constructor,
-    opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
-  );
-  if (!adoptsFrom) {
-    throw new Error(`bug: could not identify card: ${model.constructor.name}`);
+  __serializeDiagDepth++;
+  // Only the top of the serialize tree, and only inside the prerender
+  // render context (where the wedge lives). When the hang is deep inside a
+  // nested card, the top-level field whose subtree never returns is still
+  // the one printed last — enough to name the offending slot, then drill in.
+  let diag =
+    __serializeDiagDepth === 1 &&
+    Boolean((globalThis as any).__boxelRenderContext);
+  let diagId = diag ? ((model as any).id ?? '<unsaved>') : '';
+  try {
+    if (diag) {
+      // eslint-disable-next-line no-console
+      console.log(`[SERIALIZE-DIAG] resource-enter id=${diagId}`);
+    }
+    let adoptsFrom = identifyCard(
+      model.constructor,
+      opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
+    );
+    if (!adoptsFrom) {
+      throw new Error(
+        `bug: could not identify card: ${model.constructor.name}`,
+      );
+    }
+    let { includeUnrenderedFields: _remove, ...fieldOpts } = opts ?? {};
+    let { id: _removedIdField, ...fields } = getFields(model, {
+      ...fieldOpts,
+      usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
+    });
+    let overrides = getFieldOverrides(model);
+    // `serializeCardResource` is reachable from the recursive field-serialize
+    // symbol path without opts (e.g. callSerializeHook with no opts arg).
+    // That path doesn't read `opts.virtualNetwork`, so the synthesized
+    // working opts can lack it; cast through SerializeOpts | undefined to
+    // satisfy the required-VN type while preserving runtime behavior.
+    opts = { ...(opts ?? {}), overrides } as SerializeOpts | undefined;
+    let entries = Object.entries(fields)
+      .filter(
+        ([_fieldName, field]) =>
+          !(opts?.omitQueryFields && field.queryDefinition !== undefined),
+      )
+      .filter(([_fieldName, field]) =>
+        opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
+      );
+    if (diag) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[SERIALIZE-DIAG] fields-resolved id=${diagId} nFields=${entries.length} fields=${entries
+          .map(([n]) => n)
+          .join(',')}`,
+      );
+    }
+    let fieldResources = entries.map(([fieldName]) => {
+      if (diag) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[SERIALIZE-DIAG] field-start id=${diagId} field=${fieldName}`,
+        );
+      }
+      let resource = serializedGet(model, fieldName, doc, visited, opts);
+      if (diag) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[SERIALIZE-DIAG] field-done id=${diagId} field=${fieldName}`,
+        );
+      }
+      return resource;
+    });
+    let realmURL = getCardMeta(model, 'realmURL');
+    if (diag) {
+      // eslint-disable-next-line no-console
+      console.log(`[SERIALIZE-DIAG] all-fields-done id=${diagId}`);
+    }
+    return merge(
+      {
+        attributes: {},
+      },
+      ...fieldResources,
+      {
+        type: resourceType,
+        meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
+      },
+      // Only CardDef instances can be unsaved (without an id), so when model.id
+      // is falsy we know the model is a CardDef which has [localId].
+      model.id ? { id: model.id } : { lid: (model as CardDef)[localId] },
+    );
+  } finally {
+    __serializeDiagDepth--;
   }
-  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
-  let { id: removedIdField, ...fields } = getFields(model, {
-    ...fieldOpts,
-    usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
-  });
-  let overrides = getFieldOverrides(model);
-  // `serializeCardResource` is reachable from the recursive field-serialize
-  // symbol path without opts (e.g. callSerializeHook with no opts arg).
-  // That path doesn't read `opts.virtualNetwork`, so the synthesized
-  // working opts can lack it; cast through SerializeOpts | undefined to
-  // satisfy the required-VN type while preserving runtime behavior.
-  opts = { ...(opts ?? {}), overrides } as SerializeOpts | undefined;
-  let fieldResources = Object.entries(fields)
-    .filter(
-      ([_fieldName, field]) =>
-        !(opts?.omitQueryFields && field.queryDefinition !== undefined),
-    )
-    .filter(([_fieldName, field]) =>
-      opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
-    )
-    .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
-  let realmURL = getCardMeta(model, 'realmURL');
-  return merge(
-    {
-      attributes: {},
-    },
-    ...fieldResources,
-    {
-      type: resourceType,
-      meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
-    },
-    // Only CardDef instances can be unsaved (without an id), so when model.id
-    // is falsy we know the model is a CardDef which has [localId].
-    model.id ? { id: model.id } : { lid: (model as CardDef)[localId] },
-  );
 }
 
 export function serializeFileDef(
