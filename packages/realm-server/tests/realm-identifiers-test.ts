@@ -423,12 +423,12 @@ module(basename(__filename), function () {
       test('chases through addURLMapping when the input is a virtual URL whose resolved form matches a registered prefix', function (assert) {
         let vn = new VirtualNetwork();
         vn.addURLMapping(
-          new URL('@cardstack/base/'),
+          new URL('https://cardstack.com/base/'),
           new URL('http://localhost:4201/base/'),
         );
         vn.addRealmMapping('@cardstack/base/', 'http://localhost:4201/base/');
         assert.strictEqual(
-          vn.unresolveURL('@cardstack/base/card-api'),
+          vn.unresolveURL('https://cardstack.com/base/card-api'),
           '@cardstack/base/card-api',
           'virtual URL resolves through addURLMapping then matches @cardstack/base/',
         );
