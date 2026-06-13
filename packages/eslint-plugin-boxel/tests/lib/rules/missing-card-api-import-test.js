@@ -95,6 +95,55 @@ ruleTester.run('missing-card-api-import', rule, {
       ],
     },
     {
+      // The configured target module is the RRI prefix form, but the
+      // file imports the equivalent virtual-alias URL form. The fix
+      // must merge into the existing import rather than emitting a
+      // second, duplicate import line — the two specifiers refer to the
+      // same module (see REALM_PREFIX_ALIASES in import-utils).
+      code: `import {
+        contains,
+        field,
+        linksTo,
+      } from 'https://cardstack.com/base/card-api';
+      import StringField from 'https://cardstack.com/base/string';
+
+      import { Chain } from './chain';
+
+      export class Payment extends FieldDef {
+        @field chain = linksTo(Chain);
+        @field address = contains(StringField);
+      }
+      `,
+      output: `import {
+        contains,
+        field,
+        linksTo, FieldDef,
+      } from 'https://cardstack.com/base/card-api';
+      import StringField from 'https://cardstack.com/base/string';
+
+      import { Chain } from './chain';
+
+      export class Payment extends FieldDef {
+        @field chain = linksTo(Chain);
+        @field address = contains(StringField);
+      }
+      `,
+      options: [
+        {
+          importMappings: {
+            FieldDef: ['FieldDef', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+
+      errors: [
+        {
+          type: 'Identifier',
+          message: rule.meta.messages['missing-card-api-import'],
+        },
+      ],
+    },
+    {
       code: `import {
         field,
         linksTo,
