@@ -6,6 +6,39 @@ const log = logger('allowed-proxy-destinations');
 
 export type AuthMethod = 'header' | 'url-parameter';
 
+// A request URL is allowed only when it targets the exact same origin as a
+// configured destination AND its path falls under the destination's path. A
+// substring/`includes` check is unsafe: an attacker can embed an allowlisted
+// string anywhere in an otherwise hostile URL (e.g.
+// `https://attacker.example/x?=https://openrouter.ai/...`) to pass the check
+// and have the server attach the real upstream API key while fetching the
+// attacker's host.
+function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
+  let destination: URL;
+  try {
+    destination = new URL(destinationUrl);
+  } catch {
+    return false;
+  }
+
+  if (requestUrl.origin !== destination.origin) {
+    return false;
+  }
+
+  let requestPath = requestUrl.pathname;
+  let destinationPath = destination.pathname;
+
+  // Exact path, or the request path is nested under the destination path at a
+  // segment boundary (so `/v1` does not match `/v1-evil`).
+  if (requestPath === destinationPath) {
+    return true;
+  }
+  if (destinationPath.endsWith('/')) {
+    return requestPath.startsWith(destinationPath);
+  }
+  return requestPath.startsWith(`${destinationPath}/`);
+}
+
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
@@ -89,8 +122,17 @@ export class AllowedProxyDestinations {
     url: string,
   ): Promise<AllowedProxyDestination | undefined> {
     await this.ensureCacheValid();
+
+    let requestUrl: URL;
+    try {
+      requestUrl = new URL(url);
+    } catch {
+      // Unparseable URL can never match an allowlisted destination.
+      return undefined;
+    }
+
     return Object.entries(this.destinations).find(([destinationUrl]) =>
-      url.includes(destinationUrl),
+      matchesDestination(requestUrl, destinationUrl),
     )?.[1];
   }
 
