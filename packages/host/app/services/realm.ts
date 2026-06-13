@@ -970,8 +970,13 @@ export default class RealmService extends Service {
   realmOf(input: RealmResourceIdentifier | URL): RealmIdentifier | undefined {
     let id = input instanceof URL ? rri(input.href) : input;
     let cached = this.realmOfCache.get(id);
-    if (cached !== undefined && this.realms.has(cached)) {
-      return ri(cached);
+    if (cached !== undefined) {
+      if (this.realms.has(cached)) {
+        return ri(cached);
+      }
+      // The answer pointed at a realm that is no longer known — evict so a
+      // stale id doesn't pay validation + full scan on every call.
+      this.realmOfCache.delete(id);
     }
     for (const realm of this.realms.keys()) {
       let paths = this.realmPathsCache.get(realm);
