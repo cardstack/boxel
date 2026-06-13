@@ -283,18 +283,24 @@ export function serializeCardResource(
   resourceType: string = CardResourceType,
 ): LooseCardResource | LooseFileMetaResource {
   __serializeDiagDepth++;
-  // Only the top of the serialize tree, and only inside the prerender
-  // render context (where the wedge lives). When the hang is deep inside a
-  // nested card, the top-level field whose subtree never returns is still
-  // the one printed last — enough to name the offending slot, then drill in.
+  let d = __serializeDiagDepth;
+  // Top two levels of the serialize tree, inside the prerender render
+  // context only (where the wedge lives). Depth 1 is the rendered card;
+  // depth 2 is each card it links to directly. The depth-1 run named
+  // `customer` as the field whose serializedGet never returns — depth 2
+  // makes the recursion INTO the customer card emit its own breadcrumbs,
+  // so the last `field-start` overall names the exact sub-field that hangs.
+  // If instead the hang is in peekAtField (computing the link value),
+  // customer's `resource-enter` never appears and the last line stays
+  // `field-start field=customer`. Either way the last line localizes it.
   let diag =
-    __serializeDiagDepth === 1 &&
+    __serializeDiagDepth <= 2 &&
     Boolean((globalThis as any).__boxelRenderContext);
   let diagId = diag ? ((model as any).id ?? '<unsaved>') : '';
   try {
     if (diag) {
       // eslint-disable-next-line no-console
-      console.log(`[SERIALIZE-DIAG] resource-enter id=${diagId}`);
+      console.log(`[SERIALIZE-DIAG] resource-enter d=${d} id=${diagId}`);
     }
     let adoptsFrom = identifyCard(
       model.constructor,
@@ -328,7 +334,7 @@ export function serializeCardResource(
     if (diag) {
       // eslint-disable-next-line no-console
       console.log(
-        `[SERIALIZE-DIAG] fields-resolved id=${diagId} nFields=${entries.length} fields=${entries
+        `[SERIALIZE-DIAG] fields-resolved d=${d} id=${diagId} nFields=${entries.length} fields=${entries
           .map(([n]) => n)
           .join(',')}`,
       );
@@ -337,14 +343,14 @@ export function serializeCardResource(
       if (diag) {
         // eslint-disable-next-line no-console
         console.log(
-          `[SERIALIZE-DIAG] field-start id=${diagId} field=${fieldName}`,
+          `[SERIALIZE-DIAG] field-start d=${d} id=${diagId} field=${fieldName}`,
         );
       }
       let resource = serializedGet(model, fieldName, doc, visited, opts);
       if (diag) {
         // eslint-disable-next-line no-console
         console.log(
-          `[SERIALIZE-DIAG] field-done id=${diagId} field=${fieldName}`,
+          `[SERIALIZE-DIAG] field-done d=${d} id=${diagId} field=${fieldName}`,
         );
       }
       return resource;
@@ -352,7 +358,7 @@ export function serializeCardResource(
     let realmURL = getCardMeta(model, 'realmURL');
     if (diag) {
       // eslint-disable-next-line no-console
-      console.log(`[SERIALIZE-DIAG] all-fields-done id=${diagId}`);
+      console.log(`[SERIALIZE-DIAG] all-fields-done d=${d} id=${diagId}`);
     }
     return merge(
       {
