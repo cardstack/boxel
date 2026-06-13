@@ -324,6 +324,15 @@ export {
   isSparseItemResource,
 } from './card-document-shape.ts';
 
+// The map/set key for a JSON:API `(type, id)` identity pair. NUL-separated so
+// one pair can't alias another by concatenation — no resource type or id
+// contains a NUL byte.
+// `id` may be absent on an unsaved resource; the literal "undefined" segment
+// it produces is still a stable, non-aliasing key.
+export function resourceIdentity(type: string, id: string | undefined): string {
+  return `${type}\u0000${id}`;
+}
+
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
 // URL. Server and host compute it through this one helper so identical
 // stylesheets dedupe to the same `(type, id)` in `included`. md5 is our

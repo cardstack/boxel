@@ -1,13 +1,14 @@
 import type { Query, SparseFieldsets } from './query.ts';
 import { DEFAULT_HTML_QUERY, type SearchEntryQuery } from './search-entry.ts';
-import type {
-  CardResource,
-  FileMetaResource,
-  HtmlQuery,
-  HtmlResource,
-  PrerenderedCardResource,
-  Saved,
-  SearchEntryResource,
+import {
+  resourceIdentity,
+  type CardResource,
+  type FileMetaResource,
+  type HtmlQuery,
+  type HtmlResource,
+  type PrerenderedCardResource,
+  type Saved,
+  type SearchEntryResource,
 } from './resource-types.ts';
 import type {
   LinkableCollectionDocument,
@@ -107,7 +108,7 @@ function itemFor(
   if (!ref) {
     return undefined;
   }
-  return byIdentity.get(`${ref.type}\u0000${ref.id}`);
+  return byIdentity.get(resourceIdentity(ref.type, ref.id));
 }
 
 // Coalesce a search-entry document into the legacy live-search shape: the
@@ -125,7 +126,7 @@ export function searchEntryDocToLinkableDoc(
       (resource.type === 'card' || resource.type === 'file-meta') &&
       resource.id
     ) {
-      byIdentity.set(`${resource.type}\u0000${resource.id}`, resource);
+      byIdentity.set(resourceIdentity(resource.type, resource.id), resource);
     }
   }
 
@@ -138,13 +139,13 @@ export function searchEntryDocToLinkableDoc(
     }
     let fields = opts?.fields?.[item.type === 'card' ? 'card' : 'file-meta'];
     data.push(fields !== undefined ? applySparseFieldset(item, fields) : item);
-    dataIdentities.add(`${item.type}\u0000${item.id}`);
+    dataIdentities.add(resourceIdentity(item.type, item.id));
   }
 
   let included = (doc.included ?? []).filter(
     (resource): resource is CardResource<Saved> | FileMetaResource =>
       (resource.type === 'card' || resource.type === 'file-meta') &&
-      !dataIdentities.has(`${resource.type}\u0000${resource.id}`),
+      !dataIdentities.has(resourceIdentity(resource.type, resource.id)),
   );
 
   let result: LinkableCollectionDocument = {
@@ -216,7 +217,7 @@ export function searchEntryDocToPrerenderedDoc(
       (resource.type === 'card' || resource.type === 'file-meta') &&
       resource.id
     ) {
-      byIdentity.set(`${resource.type}\u0000${resource.id}`, resource);
+      byIdentity.set(resourceIdentity(resource.type, resource.id), resource);
     }
   }
 
