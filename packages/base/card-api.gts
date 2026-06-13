@@ -1622,6 +1622,16 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   }
 }
 
+// [QF-DIAG] TEMPORARY (cs-meta-wedge-diag). Per (consumer,field) read
+// counter for the query-field getter probe below. The wedge is a synchronous
+// serialize of a card that consumes a query-backed linksToMany (Customer.policies)
+// which resolves async. This counter lets the probe (a) report the first few
+// reads with their resolved `instances` count — telling us whether the field
+// comes back COLD (0) at serialize time — and (b) detect a synchronous spin
+// (the realm jq engine re-reading an unsettled resource) by logging every
+// 2000th read instead of flooding. Render-context gated; remove when localized.
+const __qfDiagReads = new Map<string, number>();
+
 class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   FieldT,
   any[] | null
@@ -1683,12 +1693,36 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         consumer: instance.id,
         source: 'card-api:linksToMany:getter',
       });
+      // [QF-DIAG] TEMPORARY — bracket the query-field resolution to localize
+      // the synchronous serialize wedge. read-start/resource-ready straddle
+      // `ensureQueryFieldSearchResource` (so a start with no resource-ready =
+      // boxel resolution itself hung); read-done reports `instances` so a `0`
+      // at `serialize-start customer` = the field is COLD at serialize time.
+      // Throttled (first 8 reads + every 2000th) so a spin shows as climbing
+      // read# without flooding/masking. Render-context only.
+      let __qfInPrerender = Boolean((globalThis as any).__boxelRenderContext);
+      let __qfKey = `${instance.id}#${this.name}`;
+      let __qfN = (__qfDiagReads.get(__qfKey) ?? 0) + 1;
+      __qfDiagReads.set(__qfKey, __qfN);
+      let __qfLog = __qfInPrerender && (__qfN <= 8 || __qfN % 2000 === 0);
+      if (__qfLog) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[QF-DIAG] read-start field=${this.name} consumer=${instance.id} read#${__qfN}`,
+        );
+      }
       let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,
         dependencyTrackingContext,
       )!;
+      if (__qfLog) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[QF-DIAG] resource-ready field=${this.name} consumer=${instance.id} read#${__qfN}`,
+        );
+      }
       // Resource-level failure: `ensureQueryFieldSearchResource` plants a
       // single whole-field sentinel in the bucket (the search fails as a
       // unit, not per element). The empty array hands callers a usable
@@ -1707,6 +1741,12 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
       let records = searchResource.instances ?? ([] as any[]);
+      if (__qfLog) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[QF-DIAG] read-done field=${this.name} consumer=${instance.id} read#${__qfN} instances=${(records as any[]).length}`,
+        );
+      }
       trackRuntimeRelationshipDependencies(
         records,
         this.card,
