@@ -225,7 +225,6 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
                 capture,
                 format,
                 () => this.waitForPendingDocumentLoads(),
-                url,
               );
               return new PrerenderedCard(
                 {

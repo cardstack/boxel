@@ -56,7 +56,6 @@ import {
 } from '../utils/render-timer-stub';
 
 import type { Model as HtmlRouteModel } from '../routes/render/html';
-import type { Model as IconRouteModel } from '../routes/render/icon';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
@@ -640,7 +639,6 @@ export default class CardPrerender extends Component {
         captureMode,
         format,
         this.waitForLinkedData,
-        (routeInfo.attributes as HtmlRouteModel).instance?.id,
       );
 
       if (typeof captured !== 'string') {
@@ -729,7 +727,6 @@ export default class CardPrerender extends Component {
         'outerHTML',
         'isolated',
         this.waitForLinkedData,
-        (routeInfo.attributes as IconRouteModel).instance?.id,
       );
       if (typeof captured !== 'string') {
         return null;

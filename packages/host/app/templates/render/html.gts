@@ -48,18 +48,17 @@ class RenderHtmlTemplate extends Component<Signature> {
     return getCardCollection;
   }
 
-  // Seed the render-ancestry cycle guard with the root card's id so the
-  // card being rendered counts as its own ancestor. The field components
-  // beneath extend this set as they descend; when an embed would re-enter a
-  // card already on the spine (the root, or any card embedded above), it
-  // degrades to a bounded atom stand-in instead of recursing forever.
-  // Consumers compare the set by content (`ancestry.has(id)`), so a fresh
-  // Set per access is fine — this route renders a single card once.
+  // Start the render-ancestry cycle guard with an EMPTY set: the card being
+  // rendered has no ancestors above it, so it must render in its requested
+  // format. Each field component beneath extends the set with its own card id
+  // as it descends (see RenderAncestryProvider), so a descendant that links
+  // back to a card already on the spine degrades to a bounded atom stand-in
+  // instead of recursing forever. Seeding the root's own id here would make the
+  // root match its own cycle check and collapse to an atom.
   @provide(RenderAncestryContextName)
   // @ts-ignore "renderAncestry" is declared but only read via the context system
   private get renderAncestry(): Set<string> {
-    let id = this.args.model.instance?.id;
-    return new Set(id ? [id] : []);
+    return new Set<string>();
   }
 
   @provide(CardContextName)

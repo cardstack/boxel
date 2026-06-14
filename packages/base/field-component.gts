@@ -147,39 +147,21 @@ export class DefaultFormatsProvider extends Component<DefaultFormatsProviderSign
 
 const EMPTY_ANCESTRY: ReadonlySet<string> = new Set();
 
-// Module-level seed for the render-ancestry guard, used ONLY by render paths
-// that render a card component directly rather than inside a context provider
-// (the in-browser prerenderer's `renderCardComponent`, which calls Glimmer's
-// synchronous `renderComponent` with no surrounding `@provide`). It is read
-// only when a `RenderAncestryConsumer` finds no provided context — i.e. at the
-// root card's own field embeds. Once a field component provides a context one
-// level down, every deeper consumer reads the provided set and ignores this
-// seed. The caller MUST set it immediately before a synchronous render and
-// clear it (in a `finally`, before any await) immediately after, so it never
-// leaks across renders. The route-driven path provides the context the normal
-// way (see render/html.gts) and never consults this.
-let renderAncestrySeed: ReadonlySet<string> | null = null;
-
-export function setRenderAncestrySeed(seed: ReadonlySet<string> | null): void {
-  renderAncestrySeed = seed;
-}
-
 interface RenderAncestryConsumerSignature {
   Blocks: { default: [Set<string>] };
 }
 
-// Yields the set of card ids currently on the render spine — the rendered
-// card plus every card embedded above this point. Resolves the provided
-// context first; at the root (no provider above) it falls back to the
-// module-level seed, then to an empty set. An empty set leaves rendering
-// unchanged, so off-path renders are unaffected.
+// Yields the set of card ids on the render spine ABOVE this point — every card
+// embedded above the one about to render, NOT including it. The root has no
+// provider above it, so it resolves to an empty set and renders in its
+// requested format; each field component then extends the set with its own card
+// id when providing to its children (see RenderAncestryProvider). An empty set
+// leaves rendering unchanged, so off-path renders are unaffected.
 export class RenderAncestryConsumer extends Component<RenderAncestryConsumerSignature> {
   @consume(RenderAncestryContextName) declare ancestry: Set<string> | undefined;
 
   get effectiveAncestry(): Set<string> {
-    return (this.ancestry ??
-      renderAncestrySeed ??
-      EMPTY_ANCESTRY) as Set<string>;
+    return (this.ancestry ?? EMPTY_ANCESTRY) as Set<string>;
   }
 
   <template>{{yield this.effectiveAncestry}}</template>

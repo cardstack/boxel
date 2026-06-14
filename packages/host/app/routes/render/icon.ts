@@ -3,15 +3,11 @@ import type Transition from '@ember/routing/transition';
 
 import { cardTypeIcon } from '@cardstack/runtime-common';
 
-import type {
-  CardDef,
-  CardOrFieldTypeIcon,
-} from 'https://cardstack.com/base/card-api';
+import type { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 
 import type { Model as ParentModel } from '../render';
 
 export interface Model {
-  instance: CardDef;
   Component: CardOrFieldTypeIcon;
 }
 
@@ -47,6 +43,6 @@ export default class RenderIconRoute extends Route<Model> {
         `static icon of ${instance.constructor.name} is undefined — check that the import resolves to a valid icon component`,
       );
     }
-    return { instance, Component: component };
+    return { Component: component };
   }
 }
