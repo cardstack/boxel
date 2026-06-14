@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   PermissionsContextName,
+  RenderAncestryContextName,
   type Permissions,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -41,10 +42,16 @@ import { setupRenderingTest } from '../../helpers/setup';
 // no terminal condition. That is unbounded synchronous recursion on the render
 // thread (the indexer wedge these tests guard against).
 //
-// The fix threads a `Set<string>` of ancestor card ids down the embed path. A
-// field about to embed a card whose id is already on that spine degrades to a
-// bounded `atom` stand-in (marked `data-test-render-cycle-atom`) instead of
-// recursing into it.
+// The fix threads a `Set<string>` of ancestor card ids down the embed path. The
+// rendered card starts with an empty ancestry and renders in its requested
+// format; each card on the spine then extends the set with its own id as the
+// render descends into it. A field about to embed a card whose id is already on
+// that spine degrades to a bounded `atom` stand-in (marked
+// `data-test-render-cycle-atom`) instead of recursing into it. The cut happens
+// at the FIRST re-entry of a card already on the spine — the re-entered card is
+// shown as an atom and its embedded body is not rendered again, so a self-link
+// (a -> a) cuts at the first embed and a mutual cycle (a -> b -> a) cuts when
+// the spine returns to `a`.
 //
 // These tests build the cycle out of *present, already-resolved* in-memory
 // links — `getDataBucket(card).set(fieldName, otherCard)` plants the linked
@@ -132,13 +139,14 @@ module('Integration | render cycle guard', function (hooks) {
     getDataBucket(a).set('partner', b);
     getDataBucket(b).set('partner', a);
 
-    // Renders `a` isolated. Spine: a(isolated) -> b(embedded, full) ->
-    // a(embedded, full) -> b is now on the spine again -> atom. Without the
-    // guard this would recurse a -> b -> a -> b -> ... forever and never resolve.
+    // Renders `a` isolated. Spine: a(isolated, root) -> b(embedded, full) ->
+    // a is now on the spine again -> atom. Without the guard this would recurse
+    // a -> b -> a -> b -> ... forever and never resolve.
     await renderCard(loader, a, 'isolated');
 
     // (i) The render COMPLETED — reaching this assertion at all is the core
-    // regression signal (an unguarded cycle never returns from the flush).
+    // regression signal (an unguarded cycle never returns from the flush). The
+    // root rendered in its requested isolated format.
     assert
       .dom(`[data-test-node-root='A']`)
       .exists('the cyclic graph rendered to completion (the root is present)');
@@ -151,12 +159,13 @@ module('Integration | render cycle guard', function (hooks) {
         { count: 1 },
         'exactly one spine re-entry is degraded to a cycle atom',
       );
-    // The re-entered card here is B (a -> b -> a -> [b as atom]).
+    // The re-entered card here is A: the spine returns to the root
+    // (a -> b -> [a as atom]).
     assert
       .dom('[data-test-render-cycle-atom]')
       .hasAttribute(
         'data-boxel-card-id',
-        `${testRealmURL}Node/b`,
+        `${testRealmURL}Node/a`,
         'the cycle atom stands in for the card that was re-entered',
       )
       .hasAttribute(
@@ -165,31 +174,34 @@ module('Integration | render cycle guard', function (hooks) {
         'the spine re-entry is rendered in atom format',
       );
 
-    // (iii) The cycle atom is bounded: it stands in for B (identified by id) but
-    // does NOT re-render B's full embedded field tree, so the recursion stopped.
+    // (iii) The cycle atom is bounded: it stands in for A (identified by id) but
+    // does NOT re-render A's full embedded field tree, so the recursion stopped.
     assert
       .dom('[data-test-render-cycle-atom] [data-test-node-body]')
       .doesNotExist(
         'the cycle atom does not re-render the full field tree of the re-entered card',
       );
 
-    // Each distinct card on the spine renders its full embedded body exactly
-    // once before the cycle is cut — no card is rendered fully twice.
+    // B renders its full embedded body exactly once. A is only ever the
+    // isolated root or the cut atom, so its embedded body never renders.
     assert
       .dom(`[data-test-node-body='A']`)
-      .exists({ count: 1 }, 'A renders its full body once');
+      .doesNotExist(
+        'the root never renders an embedded body (root or atom only)',
+      );
     assert
       .dom(`[data-test-node-body='B']`)
       .exists(
         { count: 1 },
-        'B renders its full body once (then is cut as atom)',
+        'B renders its full body once before the spine returns to the root',
       );
   });
 
   test('singular linksTo: a direct self-cycle (a -> a) terminates and the self re-entry degrades to an atom', async function (assert) {
     // The same shape as above with a single instance linking to itself, which
-    // also exercises the field-component cycle branch. Spine: a(isolated) ->
-    // a(embedded, full) -> a is on the spine -> atom.
+    // also exercises the field-component cycle branch. Spine: a(isolated, root)
+    // -> a is already on the spine -> atom. The root's own self-embed is the
+    // first re-entry, so it is cut to an atom immediately.
     class Node extends CardDef {
       static displayName = 'Node';
       @field firstName = contains(StringField);
@@ -235,11 +247,13 @@ module('Integration | render cycle guard', function (hooks) {
         'the cycle atom stands in for the card linking to itself',
       )
       .hasAttribute('data-test-card-format', 'atom');
-    // The card renders its full body exactly once (the depth-1 embed); the
-    // depth-2 self re-entry is the atom, not a second full body.
+    // The root renders in its isolated format, and its self-embed is the first
+    // re-entry, so it is cut to the atom — the embedded body never renders.
     assert
       .dom(`[data-test-node-body='Solo']`)
-      .exists({ count: 1 }, 'the card renders its full body once, then is cut');
+      .doesNotExist(
+        'the self-embed is cut to an atom, so the embedded body never renders',
+      );
     assert
       .dom('[data-test-render-cycle-atom] [data-test-node-body]')
       .doesNotExist(
@@ -279,9 +293,10 @@ module('Integration | render cycle guard', function (hooks) {
     // A present list that contains the card itself: items === [a].
     getDataBucket(a).set('items', [a]);
 
-    // Spine: a(isolated) -> items[0]=a (full, embedded) -> a's items[0]=a is on
-    // the spine -> atom. Without the guard the list element a would re-enter
-    // forever (a -> items[a] -> a -> items[a] -> ...).
+    // Spine: a(isolated, root) -> items[0]=a is already on the spine -> atom.
+    // The element is the root re-entered, so it is cut at the first occurrence.
+    // Without the guard the list element a would re-enter forever
+    // (a -> items[a] -> a -> items[a] -> ...).
     await renderCard(loader, a, 'isolated');
 
     assert
@@ -307,13 +322,13 @@ module('Integration | render cycle guard', function (hooks) {
         'atom',
         'the cyclic element is forced to atom format',
       );
-    // The card renders its full body exactly once (the depth-1 element); the
-    // depth-2 self-element is the atom, not another full body.
+    // The root renders its isolated format, and its sole list element is the
+    // root itself — cut to an atom at the first occurrence — so the embedded
+    // body never renders.
     assert
       .dom(`[data-test-node-body='A']`)
-      .exists(
-        { count: 1 },
-        'the card body renders once before the cycle is cut',
+      .doesNotExist(
+        'the cyclic element is cut to an atom, so the embedded body never renders',
       );
   });
 
@@ -377,6 +392,159 @@ module('Integration | render cycle guard', function (hooks) {
       .dom('[data-test-render-cycle-atom]')
       .doesNotExist(
         'no cycle atom for an acyclic graph — the guard is surgical',
+      );
+  });
+
+  // -------------------------------------------------------------------------
+  // The route render path: the ROOT must render in its requested format, not as
+  // its own cycle atom.
+  // -------------------------------------------------------------------------
+  // The tests above render through the `renderCard` helper with no ancestry
+  // provided above the root, so they only exercise the descendant embeds. The
+  // capture paths that the indexer/prerenderer actually use seed the
+  // render-ancestry guard ABOVE the root: the `/render/html` route does it with
+  // a `@provide(RenderAncestryContextName)` (see render/html.gts). What that
+  // provided set contains is exactly what this fix is about. These two cases
+  // pin the contract the route must honour, and reproduce the regression
+  // deterministically through the same provided-context mechanism the route
+  // uses (a present in-memory cycle, no realm round trip).
+  //
+  // `provideConsumeContext(RenderAncestryContextName, set)` provides the set at
+  // the app root, exactly where the route's `@provide` sits relative to the
+  // rendered card; the root card's `RenderAncestryConsumer` reads it as its
+  // ancestry.
+  test('route render path: an EMPTY provided ancestry renders the root in its requested format and only a descendant re-entry degrades to an atom', async function (assert) {
+    class Node extends CardDef {
+      static displayName = 'Node';
+      @field firstName = contains(StringField);
+      @field partner = linksTo(() => Node);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-node-body={{@model.firstName}}>
+            <@fields.firstName />
+            <@fields.partner @format='embedded' />
+          </div>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-node-root={{@model.firstName}}>
+            <@fields.partner @format='embedded' />
+          </div>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}test-cards`, { Node });
+
+    // a -> b -> a: the root (a) links to b, which links back to the root.
+    let a = new Node({ firstName: 'A' });
+    let b = new Node({ firstName: 'B' });
+    await saveCard(a, `${testRealmURL}Node/a`, loader);
+    await saveCard(b, `${testRealmURL}Node/b`, loader);
+    getDataBucket(a).set('partner', b);
+    getDataBucket(b).set('partner', a);
+
+    // Provide an EMPTY render-ancestry set above the root, exactly as the fixed
+    // render/html route does. The root has no ancestors, so it must render in
+    // its requested isolated format.
+    provideConsumeContext(RenderAncestryContextName, new Set<string>());
+    await renderCard(loader, a, 'isolated');
+
+    // (i) The root rendered in its requested isolated format. If the provided
+    // set had contained the root's own id (the pre-fix route behavior, exercised
+    // in the next test), the root would have matched its own cycle check and
+    // this isolated body would be replaced by the bounded atom template.
+    assert
+      .dom(`[data-test-node-root='A']`)
+      .exists('the root rendered in its requested isolated format');
+    // (ii) Exactly one embed re-enters a card already on the spine — the genuine
+    // descendant re-entry of the root (a -> b -> [a as atom]).
+    assert
+      .dom('[data-test-render-cycle-atom]')
+      .exists(
+        { count: 1 },
+        'exactly one descendant re-entry is degraded to a cycle atom',
+      );
+    assert
+      .dom('[data-test-render-cycle-atom]')
+      .hasAttribute(
+        'data-boxel-card-id',
+        `${testRealmURL}Node/a`,
+        'the cycle atom stands in for the root, re-entered beneath the descendant',
+      )
+      .hasAttribute('data-test-card-format', 'atom');
+    // (iii) That re-entry is reached through the descendant b's full body, which
+    // only renders if the root rendered its isolated body and descended into b.
+    assert
+      .dom(`[data-test-node-body='B'] [data-test-render-cycle-atom]`)
+      .exists(
+        { count: 1 },
+        'the cycle atom is the root re-entered beneath the descendant, not the root itself',
+      );
+    assert
+      .dom(`[data-test-node-body='B']`)
+      .exists(
+        { count: 1 },
+        'the descendant renders its full body once before the cycle is cut',
+      );
+  });
+
+  test('route render path: seeding the provided ancestry with the root id collapses the root to an atom (the regression this fix prevents)', async function (assert) {
+    // The pre-fix route provided the render-ancestry set seeded with the root
+    // card's own id. This test pins WHY that is wrong and is the failing case
+    // the fix repairs: with the root's id on the spine above it, the root
+    // matches its own cycle check and collapses to a bounded atom — its
+    // requested format never renders (the bug where a saved card was captured as
+    // a bare atom, e.g. an image card with no img element). The fix makes the
+    // route provide an empty set instead (the previous test).
+    class Node extends CardDef {
+      static displayName = 'Node';
+      @field firstName = contains(StringField);
+      @field partner = linksTo(() => Node);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-node-body={{@model.firstName}}>
+            <@fields.firstName />
+            <@fields.partner @format='embedded' />
+          </div>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-node-root={{@model.firstName}}>
+            <@fields.partner @format='embedded' />
+          </div>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}test-cards`, { Node });
+
+    let a = new Node({ firstName: 'A' });
+    let b = new Node({ firstName: 'B' });
+    await saveCard(a, `${testRealmURL}Node/a`, loader);
+    await saveCard(b, `${testRealmURL}Node/b`, loader);
+    getDataBucket(a).set('partner', b);
+    getDataBucket(b).set('partner', a);
+
+    // Seed the provided ancestry with the ROOT's own id — the pre-fix route
+    // behavior. The root's RenderAncestryConsumer reads this set and finds its
+    // own id already present.
+    provideConsumeContext(RenderAncestryContextName, new Set([a.id]));
+    await renderCard(loader, a, 'isolated');
+
+    // The root collapsed to its atom stand-in: the isolated body never rendered,
+    // and the topmost card is the cycle atom standing in for the root itself.
+    assert
+      .dom(`[data-test-node-root='A']`)
+      .doesNotExist(
+        'a root seeded with its own id never renders its requested format',
+      );
+    assert
+      .dom(
+        `[data-test-render-cycle-atom][data-boxel-card-id='${testRealmURL}Node/a']`,
+      )
+      .exists(
+        'the root itself is degraded to a cycle atom — the regression the fix prevents',
       );
   });
 });
