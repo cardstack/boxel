@@ -31,6 +31,7 @@ import type {
   CardStore,
   BoxComponent,
 } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { render, teardown } from '../lib/isolated-render';
@@ -195,25 +196,87 @@ export default class RenderService extends Service {
     capture: 'innerHTML' | 'outerHTML' | 'textContent' = 'outerHTML',
     format: Format = 'isolated',
     waitForAsync?: () => Promise<void>,
+    rootCardId?: string,
   ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
+    // Resolve the card-api up front so the compute-memo pass can wrap each
+    // synchronous render flush below. Awaiting here is safe — it happens
+    // before any pass is opened.
+    let api = await this.cardService.getAPI();
     try {
       if (waitForAsync) {
         // Additional settle passes are needed because rendering can start new
         // async work (for example nested query-backed relationships).
         for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
-          render(component, element, this.owner, format);
+          this.#renderWithComputeMemo(
+            api,
+            component,
+            element,
+            format,
+            rootCardId,
+          );
           await waitForAsync();
         }
       }
       // Final render after waiting for async work so captured HTML reflects the
       // latest loaded state.
-      render(component, element, this.owner, format);
+      this.#renderWithComputeMemo(api, component, element, format, rootCardId);
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(element);
       return parseCardHtml(html, capture);
     } finally {
       clearIsolatedRenderElement(element);
+    }
+  }
+
+  // Wrap one synchronous Glimmer render flush in a compute-memo pass and seed
+  // the render-ancestry cycle guard.
+  //
+  // Compute-memo pass: repeated computed-field reads during the render (e.g. a
+  // `jq` aggregation read once per embedded element) hit the per-instance memo
+  // instead of re-running `computeVia` every time — the same mechanism
+  // `render.meta` uses around serialize + searchDoc.
+  //
+  // Ancestry seed: this path renders the card component directly (Glimmer's
+  // `renderComponent`), with no surrounding context provider, so the root card
+  // is not otherwise on the ancestry spine. Seeding the module-level fallback
+  // with its id makes it count as its own ancestor, so a descendant that links
+  // back to the root degrades to a bounded atom instead of rendering the root a
+  // second time. The route-driven render path provides the same context via
+  // `@provide` in render/html.gts and never consults this seed.
+  //
+  // BOTH the pass and the seed MUST be scoped to a purely synchronous region:
+  // `render()` runs `iterator.sync()` with no awaits, and the `finally` closes
+  // the pass and clears the seed BEFORE this method returns and before the
+  // caller's next `await`. A memo or seed leaking across an await would corrupt
+  // a later reactive cycle, so neither ever spans the inter-pass
+  // `waitForAsync()`. Guarded with `typeof` checks like `render.meta`: during a
+  // cold boot the host can briefly hold a base/card-api build predating these
+  // exports, in which case we render without them (still correct).
+  #renderWithComputeMemo(
+    api: typeof CardAPI,
+    component: BoxComponent,
+    element: SimpleElement,
+    format: Format,
+    rootCardId?: string,
+  ): void {
+    let passOpen = typeof api.beginComputePass === 'function';
+    if (passOpen) {
+      api.beginComputePass();
+    }
+    let seedSet = typeof api.setRenderAncestrySeed === 'function';
+    if (seedSet) {
+      api.setRenderAncestrySeed(rootCardId ? new Set([rootCardId]) : null);
+    }
+    try {
+      render(component, element, this.owner, format);
+    } finally {
+      if (seedSet && typeof api.setRenderAncestrySeed === 'function') {
+        api.setRenderAncestrySeed(null);
+      }
+      if (passOpen && typeof api.endComputePass === 'function') {
+        api.endComputePass();
+      }
     }
   }
 

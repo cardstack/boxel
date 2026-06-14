@@ -13,6 +13,7 @@ import {
   type BoxComponent,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
+  setRenderAncestrySeed,
 } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
@@ -214,6 +215,7 @@ export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 export {
   beginComputePass,
   endComputePass,
+  setRenderAncestrySeed,
   deserialize,
   getBrokenLinks,
   getCardMeta,

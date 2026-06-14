@@ -639,6 +639,7 @@ export default class CardPrerender extends Component {
         captureMode,
         format,
         this.waitForLinkedData,
+        (routeInfo.attributes as HtmlRouteModel).instance?.id,
       );
 
       if (typeof captured !== 'string') {

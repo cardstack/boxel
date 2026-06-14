@@ -18,6 +18,7 @@ import {
   CardContextName,
   DefaultFormatsContextName,
   PermissionsContextName,
+  RenderAncestryContextName,
   getField,
   Loader,
   isCardInstance,
@@ -142,6 +143,84 @@ export class DefaultFormatsProvider extends Component<DefaultFormatsProviderSign
   get defaultFormats() {
     return this.args.value;
   }
+}
+
+const EMPTY_ANCESTRY: ReadonlySet<string> = new Set();
+
+// Module-level seed for the render-ancestry guard, used ONLY by render paths
+// that render a card component directly rather than inside a context provider
+// (the in-browser prerenderer's `renderCardComponent`, which calls Glimmer's
+// synchronous `renderComponent` with no surrounding `@provide`). It is read
+// only when a `RenderAncestryConsumer` finds no provided context — i.e. at the
+// root card's own field embeds. Once a field component provides a context one
+// level down, every deeper consumer reads the provided set and ignores this
+// seed. The caller MUST set it immediately before a synchronous render and
+// clear it (in a `finally`, before any await) immediately after, so it never
+// leaks across renders. The route-driven path provides the context the normal
+// way (see render/html.gts) and never consults this.
+let renderAncestrySeed: ReadonlySet<string> | null = null;
+
+export function setRenderAncestrySeed(seed: ReadonlySet<string> | null): void {
+  renderAncestrySeed = seed;
+}
+
+interface RenderAncestryConsumerSignature {
+  Blocks: { default: [Set<string>] };
+}
+
+// Yields the set of card ids currently on the render spine — the rendered
+// card plus every card embedded above this point. Resolves the provided
+// context first; at the root (no provider above) it falls back to the
+// module-level seed, then to an empty set. An empty set leaves rendering
+// unchanged, so off-path renders are unaffected.
+export class RenderAncestryConsumer extends Component<RenderAncestryConsumerSignature> {
+  @consume(RenderAncestryContextName) declare ancestry: Set<string> | undefined;
+
+  get effectiveAncestry(): Set<string> {
+    return (this.ancestry ??
+      renderAncestrySeed ??
+      EMPTY_ANCESTRY) as Set<string>;
+  }
+
+  <template>{{yield this.effectiveAncestry}}</template>
+}
+
+interface RenderAncestryProviderSignature {
+  Args: { value: Set<string> };
+  Blocks: { default: [] };
+}
+
+export class RenderAncestryProvider extends Component<RenderAncestryProviderSignature> {
+  @provide(RenderAncestryContextName)
+  get ancestry() {
+    return this.args.value;
+  }
+}
+
+// Build the ancestry set for a child render node: the parent's ancestors
+// plus this card's id. A fresh, immutable set per node means siblings only
+// ever see their true ancestors, never each other (a shared mutable set
+// would leak the first sibling's descendants into the second).
+export function extendAncestry(prev: Set<string>, id: string): Set<string> {
+  let next = new Set(prev);
+  next.add(id);
+  return next;
+}
+
+// True when `card` is already on the render spine — i.e. embedding it here
+// would re-enter a card we are already rendering above. Only cards with a
+// stable `id` participate; an unsaved card (no id) can't form a persisted
+// cycle and renders normally. Accepts `BaseDef` so the field-component
+// template (whose `card` is the boxed `BaseDef` value) can call it without a
+// cast; only `id` is read.
+export function isRenderCycle(ancestry: Set<string>, card: BaseDef): boolean {
+  // Callers reach this only for a card value (the field-component card branch /
+  // a present linksToMany element), so the card carries an `id`. `BaseDef`
+  // itself doesn't declare `id`, hence the cast; an unsaved card has an
+  // empty/absent id at runtime, which `Boolean` filters out so it renders
+  // normally.
+  let id = (card as CardDef).id as unknown as string | undefined;
+  return Boolean(id) && ancestry.has(id as string);
 }
 
 interface PermissionsConsumerSignature {
@@ -342,54 +421,120 @@ export function getBoxComponent(
                 }}
                   {{#if (isCard model.value)}}
                     {{#let model.value as |card|}}
-                      <DefaultFormatsProvider
-                        @value={{defaultFieldFormats effectiveFormats.cardDef}}
-                      >
-                        <CardContainer
-                          @displayBoundaries={{displayContainer}}
-                          @isThemed={{hasTheme card}}
-                          @cssImports={{getCssImports card}}
-                          class={{cn
-                            'field-component-card'
-                            (concat effectiveFormats.cardDef '-format')
-                            (concat 'display-container-' displayContainer)
-                          }}
-                          {{context.cardComponentModifier
-                            card=card
-                            format=effectiveFormats.cardDef
-                            fieldType=field.fieldType
-                            fieldName=field.name
-                          }}
-                          style={{getThemeStyles card}}
-                          data-boxel-card-id={{card.id}}
-                          data-boxel-card-format={{effectiveFormats.cardDef}}
-                          data-test-card={{card.id}}
-                          data-test-card-format={{effectiveFormats.cardDef}}
-                          data-test-field-component-card
-                          ...attributes
-                        >
-                          <c.CardOrFieldFormatComponent
-                            @cardOrField={{cardOrField}}
-                            @model={{card}}
-                            @fields={{c.fields}}
-                            @format={{effectiveFormats.cardDef}}
-                            @set={{model.set}}
-                            @fieldName={{model.name}}
-                            @context={{context}}
-                            @configuration={{this.resolvedConfiguration}}
-                            @createCard={{cardCrudFunctions.createCard}}
-                            @viewCard={{cardCrudFunctions.viewCard}}
-                            @saveCard={{cardCrudFunctions.saveCard}}
-                            @editCard={{cardCrudFunctions.editCard}}
-                            @canEdit={{and
-                              (not field.computeVia)
-                              (not field.queryDefinition)
-                              permissions.canWrite
-                            }}
-                            @typeConstraint={{@typeConstraint}}
-                          />
-                        </CardContainer>
-                      </DefaultFormatsProvider>
+                      <RenderAncestryConsumer as |ancestry|>
+                        {{#if (isRenderCycle ancestry card)}}
+                          {{! Render-time cycle: this card is already on the
+                              render spine above us. Embedding it normally would
+                              re-enter the cyclic graph and never terminate, so
+                              degrade to a bounded atom stand-in (title/reference
+                              only — the default atom template embeds no links).
+                              Still provide an extended ancestry so a custom atom
+                              template that re-embeds a spine card degrades too. }}
+                          <RenderAncestryProvider
+                            @value={{extendAncestry ancestry card.id}}
+                          >
+                            {{#let (lookupComponents 'atom') as |atom|}}
+                              <DefaultFormatsProvider
+                                @value={{defaultFieldFormats 'atom'}}
+                              >
+                                <CardContainer
+                                  @displayBoundaries={{false}}
+                                  class={{cn
+                                    'field-component-card'
+                                    'atom-format'
+                                    'display-container-false'
+                                  }}
+                                  {{context.cardComponentModifier
+                                    card=card
+                                    format='atom'
+                                    fieldType=field.fieldType
+                                    fieldName=field.name
+                                  }}
+                                  data-boxel-card-id={{card.id}}
+                                  data-boxel-card-format='atom'
+                                  data-test-card={{card.id}}
+                                  data-test-card-format='atom'
+                                  data-test-field-component-card
+                                  data-test-render-cycle-atom
+                                  ...attributes
+                                >
+                                  <atom.CardOrFieldFormatComponent
+                                    @cardOrField={{cardOrField}}
+                                    @model={{card}}
+                                    @fields={{atom.fields}}
+                                    @format='atom'
+                                    @set={{model.set}}
+                                    @fieldName={{model.name}}
+                                    @context={{context}}
+                                    @configuration={{this.resolvedConfiguration}}
+                                    @createCard={{cardCrudFunctions.createCard}}
+                                    @viewCard={{cardCrudFunctions.viewCard}}
+                                    @saveCard={{cardCrudFunctions.saveCard}}
+                                    @editCard={{cardCrudFunctions.editCard}}
+                                    @canEdit={{false}}
+                                    @typeConstraint={{@typeConstraint}}
+                                  />
+                                </CardContainer>
+                              </DefaultFormatsProvider>
+                            {{/let}}
+                          </RenderAncestryProvider>
+                        {{else}}
+                          <RenderAncestryProvider
+                            @value={{extendAncestry ancestry card.id}}
+                          >
+                            <DefaultFormatsProvider
+                              @value={{defaultFieldFormats
+                                effectiveFormats.cardDef
+                              }}
+                            >
+                              <CardContainer
+                                @displayBoundaries={{displayContainer}}
+                                @isThemed={{hasTheme card}}
+                                @cssImports={{getCssImports card}}
+                                class={{cn
+                                  'field-component-card'
+                                  (concat effectiveFormats.cardDef '-format')
+                                  (concat 'display-container-' displayContainer)
+                                }}
+                                {{context.cardComponentModifier
+                                  card=card
+                                  format=effectiveFormats.cardDef
+                                  fieldType=field.fieldType
+                                  fieldName=field.name
+                                }}
+                                style={{getThemeStyles card}}
+                                data-boxel-card-id={{card.id}}
+                                data-boxel-card-format={{effectiveFormats.cardDef}}
+                                data-test-card={{card.id}}
+                                data-test-card-format={{effectiveFormats.cardDef}}
+                                data-test-field-component-card
+                                ...attributes
+                              >
+                                <c.CardOrFieldFormatComponent
+                                  @cardOrField={{cardOrField}}
+                                  @model={{card}}
+                                  @fields={{c.fields}}
+                                  @format={{effectiveFormats.cardDef}}
+                                  @set={{model.set}}
+                                  @fieldName={{model.name}}
+                                  @context={{context}}
+                                  @configuration={{this.resolvedConfiguration}}
+                                  @createCard={{cardCrudFunctions.createCard}}
+                                  @viewCard={{cardCrudFunctions.viewCard}}
+                                  @saveCard={{cardCrudFunctions.saveCard}}
+                                  @editCard={{cardCrudFunctions.editCard}}
+                                  @canEdit={{and
+                                    (not field.computeVia)
+                                    (not field.queryDefinition)
+                                    permissions.canWrite
+                                  }}
+                                  @typeConstraint={{@typeConstraint}}
+                                />
+                              </CardContainer>
+                            </DefaultFormatsProvider>
+                          </RenderAncestryProvider>
+                        {{/if}}
+                      </RenderAncestryConsumer>
                     {{/let}}
                   {{else if
                     (and

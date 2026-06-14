@@ -27,6 +27,8 @@ import {
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
+  RenderAncestryConsumer,
+  isRenderCycle,
   getBoxComponent,
 } from './field-component';
 import { Button, IconButton, Pill } from '@cardstack/boxel-ui/components';
@@ -618,6 +620,16 @@ function brokenSlotsFor(
     rel.kind === 'error' || rel.kind === 'not-found' ? rel : undefined,
   );
 }
+
+// Render-time cycle check for a single `linksToMany` element. A broken slot's
+// raw value is a sentinel (or `undefined`) with no `id`, so it never matches an
+// ancestor — only a present card already on the render spine degrades to atom.
+function isPluralChildCycle(
+  ancestry: Set<string>,
+  child: CardDef | undefined,
+): boolean {
+  return isCardInstance(child) && isRenderCycle(ancestry, child);
+}
 const componentCache = initSharedState(
   'linksToManyComponentCache',
   () => new WeakMap<Box<BaseDef[]>, { component: BoxComponent }>(),
@@ -651,6 +663,11 @@ export function getLinksToManyComponent({
   // per-child component identity; this only feeds the inner branch that swaps in
   // the placeholder, so a broken slot never destabilizes its siblings.
   let getBrokenSlots = () => brokenSlotsFor(model, field.name);
+  // Per-slot child cards, index-aligned with getComponents(). Used only to read
+  // each element's id for the render-time ancestry cycle check below; the box's
+  // value is the linked card (or a sentinel for a broken slot, which has no id
+  // and so never matches an ancestor).
+  let getChildCards = () => arrayField.children.map((child) => child.value);
   let isComputed = !!field.computeVia || !!field.queryDefinition;
   let isFileDefField = isFileDef(field.card);
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
@@ -686,40 +703,58 @@ export function getLinksToManyComponent({
               data-test-plural-view-format={{effectiveFormat}}
               ...attributes
             >
-              {{#let (getBrokenSlots) as |brokenSlots|}}
-                {{#each (getComponents) as |Item i|}}
-                  <div class='linksToMany-itemContainer'>
-                    {{#let (get brokenSlots i) as |broken|}}
-                      {{#if broken}}
-                        <CardCrudFunctionsConsumer as |crud|>
-                          <BrokenLinkTemplate
-                            @brokenUrl={{broken.reference}}
-                            @errorDoc={{broken.errorDoc}}
-                            @state={{broken.kind}}
-                            @format={{brokenLinkFormat
+              <RenderAncestryConsumer as |ancestry|>
+                {{#let (getBrokenSlots) (getChildCards) as |brokenSlots childCards|}}
+                  {{#each (getComponents) as |Item i|}}
+                    <div class='linksToMany-itemContainer'>
+                      {{#let (get brokenSlots i) as |broken|}}
+                        {{#if broken}}
+                          <CardCrudFunctionsConsumer as |crud|>
+                            <BrokenLinkTemplate
+                              @brokenUrl={{broken.reference}}
+                              @errorDoc={{broken.errorDoc}}
+                              @state={{broken.kind}}
+                              @format={{brokenLinkFormat
+                                effectiveFormat
+                                effectiveFormat
+                              }}
+                              @viewCard={{crud.viewCard}}
+                              data-test-plural-view-item={{i}}
+                            />
+                          </CardCrudFunctionsConsumer>
+                        {{else if (isPluralChildCycle ancestry (get childCards i))}}
+                          {{! Render-time cycle: this element is already on the
+                              render spine. Force the bounded atom stand-in.
+                              `<Item>` is itself a field component that also
+                              detects the cycle, so the format hint and the
+                              component's own guard agree on atom; the ancestry
+                              extension is owned by the field component (it adds
+                              each child id), so we deliberately do not provide
+                              an extended set here. }}
+                          <Item
+                            @format='atom'
+                            @displayContainer={{false}}
+                            class='linksToMany-item'
+                            data-test-plural-view-item={{i}}
+                            data-test-render-cycle-atom
+                          />
+                        {{else}}
+                          <Item
+                            @format={{getPluralChildFormat
                               effectiveFormat
-                              effectiveFormat
+                              model
+                              isFileDefField
                             }}
-                            @viewCard={{crud.viewCard}}
+                            @displayContainer={{@displayContainer}}
+                            class='linksToMany-item'
                             data-test-plural-view-item={{i}}
                           />
-                        </CardCrudFunctionsConsumer>
-                      {{else}}
-                        <Item
-                          @format={{getPluralChildFormat
-                            effectiveFormat
-                            model
-                            isFileDefField
-                          }}
-                          @displayContainer={{@displayContainer}}
-                          class='linksToMany-item'
-                          data-test-plural-view-item={{i}}
-                        />
-                      {{/if}}
-                    {{/let}}
-                  </div>
-                {{/each}}
-              {{/let}}
+                        {{/if}}
+                      {{/let}}
+                    </div>
+                  {{/each}}
+                {{/let}}
+              </RenderAncestryConsumer>
             </div>
           {{/let}}
         {{/if}}
