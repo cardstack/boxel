@@ -3499,7 +3499,36 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      if (isFileLink) {
+      // Inside an indexing render the store is job-scoped: the prerender tab is
+      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
+      // render of each indexing job, so every instance in it was deserialized
+      // during THIS job, from a realm source that is immutable for the job's
+      // life. So an instance already in the store is current — reuse it directly
+      // instead of re-fetching its card+source and re-running the full field
+      // deserialization on every link edge that points at it. That per-edge
+      // redundancy is what makes a densely cross-linked render quadratic (the
+      // same target reached through many parents is rebuilt once per parent).
+      // The per-consumer dependency is still recorded so invalidation tracks
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
+      // render (the live app) a link may be stale after invalidation and must
+      // reload, and a render with no job id has no job-scoped-store guarantee.
+      let inIndexingRender =
+        typeof globalThis !== 'undefined' &&
+        Boolean((globalThis as any).__boxelRenderContext) &&
+        Boolean((globalThis as any).__boxelJobId);
+      let reusable = inIndexingRender
+        ? isFileLink
+          ? store.getFileMeta(reference)
+          : store.getCard(reference)
+        : undefined;
+      if (reusable && instanceOf(reusable, field.card)) {
+        if (isFileLink) {
+          trackRuntimeFileDependency(reference, dependencyTrackingContext);
+        } else {
+          trackRuntimeInstanceDependency(reference, dependencyTrackingContext);
+        }
+        fieldValue = reusable;
+      } else if (isFileLink) {
         let fileMetaDoc = await store.loadFileMetaDocument(reference, {
           dependencyTrackingContext,
         });
