@@ -20,6 +20,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -143,6 +144,7 @@ class _FileResource extends Resource<Args> {
   @service declare private cardService: CardService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
   @service declare private store: StoreService;
 
   constructor(owner: Owner) {
@@ -178,6 +180,28 @@ class _FileResource extends Resource<Args> {
     this._url = url;
     this.onStateChange = onStateChange;
     this.onRedirect = onRedirect;
+
+    // Subscribe to realm events BEFORE the first fetch so a 404 result
+    // (e.g. the AI assistant navigates code-submode to a file it just
+    // created, before realm indexing has caught up) can still be recovered
+    // when the realm subsequently broadcasts an `index/incremental` event
+    // for this URL. Without this, the success-branch `setSubscription`
+    // below at the end of `read` is never reached on the 404 path, leaving
+    // the resource permanently in `not-found` despite the realm having
+    // since delivered the file.
+    let realmId = this.realm.realmOf(rri(url));
+    if (realmId) {
+      this.setSubscription(realmId, this.onRealmInvalidation);
+    } else {
+      // No early subscription possible — the realm service hasn't yet
+      // discovered the realm that owns this URL. Recovery from an initial
+      // 404 then depends on the success-branch `setSubscription` inside
+      // `read`, which only fires if the fetch eventually succeeds.
+      log.debug(
+        `FileResource: no known realm for ${url} at modify-time; deferring subscription to read-success branch`,
+      );
+    }
+
     this.read.perform();
   }
 
@@ -285,86 +309,112 @@ class _FileResource extends Resource<Args> {
       },
     });
 
-    this.setSubscription(realmURL, (event: RealmEventContent) => {
-      if (
-        event.eventName !== 'index' ||
-        // we wait specifically for the index complete event ("incremental") so
-        // that the subsequent index read retrieves the latest contents of the file
-        event.indexType !== 'incremental' ||
-        !Array.isArray(event.invalidations)
-      ) {
-        return;
-      }
-
-      let { invalidations } = event as { invalidations: string[] };
-      let normalizedURL = this.url.endsWith('.json')
-        ? this.url.replace(/\.json$/, '')
-        : this.url;
-
-      if (invalidations.includes(normalizedURL)) {
-        realmEventsLogger.trace(
-          `file resource ${normalizedURL} processing invalidation`,
-          event,
-        );
-
-        let clientRequestId = event.clientRequestId;
-        let reloadFile = false;
-
-        if (!clientRequestId || clientRequestId.startsWith('instance:')) {
-          reloadFile = true;
-          realmEventsLogger.debug(
-            `reloading file resource ${normalizedURL} because realm event has ${!clientRequestId ? 'no clientRequestId' : 'clientRequestId from instance editor'}`,
-          );
-        } else if (
-          clientRequestId.startsWith('editor:') ||
-          clientRequestId.startsWith('editor-with-instance:')
-        ) {
-          if (this.cardService.clientRequestIds.has(clientRequestId)) {
-            realmEventsLogger.debug(
-              `ignoring because request id is contained in known clientRequestIds`,
-              event.clientRequestId,
-            );
-          } else {
-            reloadFile = true;
-            realmEventsLogger.debug(
-              `reloading file resource ${normalizedURL} because request id is ${clientRequestId}, not contained within known clientRequestIds`,
-              Object.keys(this.cardService.clientRequestIds),
-            );
-          }
-        } else if (clientRequestId.startsWith('bot-patch:')) {
-          reloadFile = true;
-          realmEventsLogger.debug(
-            `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
-          );
-        }
-
-        if (reloadFile) {
-          // Mirrors the store's invalidation path: only reset the loader when
-          // the rewritten module has actually been imported (which includes
-          // entries cached as `state: 'broken'`). Resetting unconditionally
-          // would clone the whole loader on every external write — including
-          // boxel-cli writes for modules the host never loaded — and drop
-          // unrelated loaded modules. clearFetchCache is required because
-          // the module endpoint's ETag is keyed on unix-second-granularity
-          // `lastModified`; without it, a write landing in the same second
-          // as the prior fetch can be served as a 304 with the old broken
-          // body. The store only covers realms it subscribed to (i.e. ones
-          // it loaded a card instance from), so code-mode-only browsing of
-          // a .gts whose realm has no loaded instance relies on this path.
-          if (
-            hasExecutableExtension(normalizedURL) &&
-            this.loaderService.loader.isModuleLoaded(normalizedURL)
-          ) {
-            this.loaderService.resetLoader({
-              clearFetchCache: true,
-              reason: 'file-resource-external-invalidation',
-            });
-          }
-          this.read.perform({ force: true });
-        }
-      }
-    });
+    this.setSubscription(realmURL, this.onRealmInvalidation);
   });
+
+  private onRealmInvalidation = (event: RealmEventContent): void => {
+    if (
+      event.eventName !== 'index' ||
+      // we wait specifically for the index complete event ("incremental") so
+      // that the subsequent index read retrieves the latest contents of the file
+      event.indexType !== 'incremental' ||
+      !Array.isArray(event.invalidations)
+    ) {
+      return;
+    }
+
+    let { invalidations } = event as { invalidations: string[] };
+    // Match invalidations against both the currently-requested URL
+    // (`this._url`, kept current by `modify`) and the URL the resource
+    // most recently loaded into `innerState`. Both are necessary
+    // because:
+    //   - `innerState.url` may be a realm-canonicalized form of `_url`
+    //     (e.g. `experiments/author` redirects to `experiments/author.gts`)
+    //     and the realm emits invalidations for the canonical form.
+    //   - During a transition (modify called with a new URL while
+    //     innerState still holds a prior file), `innerState.url` is
+    //     stale; only `_url` reflects what the caller is asking for —
+    //     dropping the event here would orphan the new file.
+    let normalize = (raw: string) =>
+      raw.endsWith('.json') ? raw.replace(/\.json$/, '') : raw;
+    let candidates = new Set<string>([normalize(this._url)]);
+    if (this.innerState.state !== 'loading') {
+      candidates.add(normalize(this.innerState.url));
+    }
+    let normalizedURL = invalidations.find((inv) => candidates.has(inv));
+
+    if (normalizedURL) {
+      realmEventsLogger.trace(
+        `file resource ${normalizedURL} processing invalidation`,
+        event,
+      );
+
+      let clientRequestId = event.clientRequestId;
+      let reloadFile = false;
+
+      if (!clientRequestId || clientRequestId.startsWith('instance:')) {
+        reloadFile = true;
+        realmEventsLogger.debug(
+          `reloading file resource ${normalizedURL} because realm event has ${!clientRequestId ? 'no clientRequestId' : 'clientRequestId from instance editor'}`,
+        );
+      } else if (
+        clientRequestId.startsWith('editor:') ||
+        clientRequestId.startsWith('editor-with-instance:')
+      ) {
+        if (this.cardService.clientRequestIds.has(clientRequestId)) {
+          realmEventsLogger.debug(
+            `ignoring because request id is contained in known clientRequestIds`,
+            event.clientRequestId,
+          );
+        } else {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${normalizedURL} because request id is ${clientRequestId}, not contained within known clientRequestIds`,
+            Object.keys(this.cardService.clientRequestIds),
+          );
+        }
+      } else if (
+        clientRequestId.startsWith('bot-patch:') ||
+        // create-file writes originate from this host (cardService.saveSource
+        // with saveType 'create-file' — the path WriteTextFileCommand uses)
+        // but the FileResource may not yet have any content because its first
+        // fetch raced indexing and 404'd. The clientRequestId being in
+        // cardService.clientRequestIds does NOT imply we already have the
+        // content (unlike the editor: case), so we still need to reload.
+        clientRequestId.startsWith('create-file:')
+      ) {
+        reloadFile = true;
+        realmEventsLogger.debug(
+          `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
+        );
+      }
+
+      if (reloadFile) {
+        // Mirrors the store's invalidation path: only reset the loader when
+        // the rewritten module has actually been imported (which includes
+        // entries cached as `state: 'broken'`). Resetting unconditionally
+        // would clone the whole loader on every external write — including
+        // boxel-cli writes for modules the host never loaded — and drop
+        // unrelated loaded modules. clearFetchCache is required because
+        // the module endpoint's ETag is keyed on unix-second-granularity
+        // `lastModified`; without it, a write landing in the same second
+        // as the prior fetch can be served as a 304 with the old broken
+        // body. The store only covers realms it subscribed to (i.e. ones
+        // it loaded a card instance from), so code-mode-only browsing of
+        // a .gts whose realm has no loaded instance relies on this path.
+        if (
+          hasExecutableExtension(normalizedURL) &&
+          this.loaderService.loader.isModuleLoaded(normalizedURL)
+        ) {
+          this.loaderService.resetLoader({
+            clearFetchCache: true,
+            reason: 'file-resource-external-invalidation',
+          });
+        }
+        this.read.perform({ force: true });
+      }
+    }
+  };
 
   writeTask = restartableTask(
     async (

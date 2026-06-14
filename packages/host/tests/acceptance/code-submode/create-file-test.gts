@@ -1,4 +1,10 @@
-import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
@@ -6,6 +12,8 @@ import QUnit, { module, test } from 'qunit';
 import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   percySnapshot,
@@ -1529,4 +1537,104 @@ export class TestCard extends Animal {
       });
     },
   );
+
+  // When the AI assistant (or any external writer) creates a new .gts and
+  // then updates the code-submode codePath to the just-written URL, the
+  // host's FileResource (packages/host/app/resources/file.ts) can lose the
+  // race against the realm's index pipeline. The first authedFetch returns
+  // 404 and `read` transitions into `state: 'not-found'`. The realm later
+  // broadcasts `index/incremental` for the new URL, and the FileResource
+  // must react to that event and recover — otherwise the URL bar stays
+  // stuck on "This resource does not exist" until the user re-navigates.
+  //
+  // This test simulates the external write by navigating to a non-existent
+  // URL, confirming the URL bar shows the not-found error, then performing
+  // the write via the realm directly (mirroring what the realm-server does
+  // when a card+source PUT lands). After the realm broadcasts the matching
+  // `index/incremental` event, the URL bar must recover.
+  module('when an external write creates a new file', function (hooks) {
+    hooks.beforeEach(function () {
+      setRealmPermissions({
+        [baseRealm.url]: ['read'],
+        [testRealmURL]: ['read', 'write'],
+      });
+    });
+
+    test('code submode recovers when a newly-created file arrives via a realm index/incremental event', async function (assert) {
+      let newFilePath = 'ai-created-card.gts';
+      let newFileUrl = `${testRealmURL}${newFilePath}`;
+      let newFileSource = `
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export default class AiCreatedCard extends CardDef {
+          static displayName = 'Ai Created Card';
+        }
+      `;
+
+      // Simulate the AI assistant updating the codePath to a file that does
+      // not yet exist in the realm. The host has not seen this URL before,
+      // so FileResource.read will hit 404.
+      await visitOperatorMode(newFileUrl);
+
+      await waitFor('[data-test-card-url-bar-error]');
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .containsText(
+          'This resource does not exist',
+          'URL bar surfaces the not-found error on initial 404',
+        );
+
+      // The realm broadcasts the incremental invalidation event over matrix
+      // once indexing of the newly-written file completes. Subscribe so we
+      // can await its arrival deterministically before asserting recovery.
+      let incrementalEvent = new Deferred<void>();
+      let unsubscribe = getService('message-service').subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
+          if (
+            ev.eventName === 'index' &&
+            ev.indexType === 'incremental' &&
+            Array.isArray(ev.invalidations) &&
+            (ev.invalidations as string[]).includes(newFileUrl)
+          ) {
+            unsubscribe();
+            incrementalEvent.fulfill();
+          }
+        },
+      );
+
+      // Mirror WriteTextFileCommand exactly. `cardService.saveSource` with
+      // saveType 'create-file' POSTs the new source to the realm and tags
+      // the request with `X-Boxel-Client-Request-Id: create-file:<uuid>`,
+      // which the realm echoes back in the `index/incremental` event.
+      // This shape — saveType 'create-file' and that clientRequestId
+      // prefix — is what the AI assistant produces and what the
+      // invalidation handler must treat as reload-worthy even though the
+      // id is in `cardService.clientRequestIds`.
+      let cardService = getService('card-service');
+      await cardService.saveSource(
+        new URL(newFileUrl),
+        newFileSource,
+        'create-file',
+      );
+      await incrementalEvent.promise;
+      await settled();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .doesNotExist(
+          'URL bar error clears after the realm broadcasts the index/incremental event for the new file',
+        );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          newFileUrl,
+          'code submode stays on the new file URL after recovery',
+        );
+      assert.ok(
+        getMonacoContent().includes('AiCreatedCard'),
+        'monaco loads the recovered file body, not a stale buffer',
+      );
+    });
+  });
 });
