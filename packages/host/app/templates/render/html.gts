@@ -12,6 +12,7 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   CardContextName,
+  RenderAncestryContextName,
 } from '@cardstack/runtime-common';
 
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
@@ -45,6 +46,20 @@ class RenderHtmlTemplate extends Component<Signature> {
   @provide(GetCardCollectionContextName)
   private get getCardCollection() {
     return getCardCollection;
+  }
+
+  // Seed the render-ancestry cycle guard with the root card's id so the
+  // card being rendered counts as its own ancestor. The field components
+  // beneath extend this set as they descend; when an embed would re-enter a
+  // card already on the spine (the root, or any card embedded above), it
+  // degrades to a bounded atom stand-in instead of recursing forever.
+  // Consumers compare the set by content (`ancestry.has(id)`), so a fresh
+  // Set per access is fine — this route renders a single card once.
+  @provide(RenderAncestryContextName)
+  // @ts-ignore "renderAncestry" is declared but only read via the context system
+  private get renderAncestry(): Set<string> {
+    let id = this.args.model.instance?.id;
+    return new Set(id ? [id] : []);
   }
 
   @provide(CardContextName)

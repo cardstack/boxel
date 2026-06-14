@@ -103,17 +103,6 @@ export default class RenderMetaRoute extends Route<Model> {
       console.log(`[META-DIAG] serialize-start id=${instance.id}`);
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
-        // Do NOT expand query-backed relationships during the indexer's
-        // synchronous serialize. A reverse `linksToMany` whose query resolves
-        // back to the card being serialized (e.g. Customer.policies -> this
-        // Policy) drives a re-entrant blow-up across the cyclic card graph
-        // when recursed with includeComputeds — pegging the render thread for
-        // ~150s until the prerender visit aborts and the index job rejects.
-        // The store's own save path already passes omitQueryFields; the meta
-        // serialize was the lone caller that didn't. The field's value still
-        // lands in the search doc (built separately, cycle-guarded) and its
-        // deps are tracked via the excludeQueryOnly snapshot below.
-        omitQueryFields: true,
         virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(

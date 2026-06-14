@@ -79,6 +79,15 @@ export const CardURLContextName = 'card-url-context';
 
 export const RealmURLContextName = 'realm-url-context';
 
+// Carries the set of card ids currently on the render spine (the rendered
+// card and every card embedded above the consuming field component). The
+// field component consumes this to detect a render-time cycle: when a card
+// it is about to embed is already an ancestor, it degrades that card to a
+// bounded atom stand-in instead of recursing into it. Mirrors the
+// `visited`-set cycle guard in `serialize` and the `stack` guard in
+// `queryableValue`, but for the render/embed traversal.
+export const RenderAncestryContextName = 'render-ancestry-context';
+
 export interface Permissions {
   readonly canRead: boolean;
   readonly canWrite: boolean;
