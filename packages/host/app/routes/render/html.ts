@@ -92,12 +92,6 @@ export default class RenderHtmlRoute extends Route<Model> {
     // time model() runs we know it's defined.
     let instance = renderModel!.instance!;
 
-    // [STABILITY-DIAG] TEMPORARY format/level context so the settle-loop
-    // breadcrumbs in render.ts can be attributed to a specific render step.
-    // eslint-disable-next-line no-console
-    console.log(
-      `[STABILITY-DIAG] html-route fmt=${format} lvl=${ancestor_level} id=${instance.id}`,
-    );
     if (!isValidFormat(format)) {
       throw new Error('todo: invalid format');
     }

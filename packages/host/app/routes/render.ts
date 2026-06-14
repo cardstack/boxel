@@ -810,16 +810,6 @@ export default class RenderRoute extends Route<Model> {
 
   async #waitForRenderLoadStability(cardId: string): Promise<void> {
     (globalThis as any).__boxelSetRenderStage?.('waiting-stability');
-    // [STABILITY-DIAG] TEMPORARY. The unprofiled 150s wedge lands in this
-    // settle loop (stage=waiting-stability). Surface per-pass state at a
-    // visible level so the last line a wedged card emits names the cause:
-    // store.loaded() hanging (pass logged, no next pass) vs loadGeneration
-    // never stabilizing (passes keep logging with changing gen + the same
-    // in-flight doc URLs re-loading). Remove once localized.
-    // eslint-disable-next-line no-console
-    console.log(
-      `[STABILITY-DIAG] settle-start cardId=${cardId} inflightCards=${this.store.cardDocsInFlight.length} inflightFiles=${this.store.fileMetaDocsInFlight.length}`,
-    );
     let settleStartMs = nowMs();
     let stablePasses = 0;
     let passesCompleted = 0;
@@ -828,17 +818,9 @@ export default class RenderRoute extends Route<Model> {
     let frameWaitMs = 0;
     let observedGeneration = this.store.loadGeneration;
     for (let pass = 0; pass < READY_SETTLE_MAX_PASSES; pass++) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[STABILITY-DIAG] pass=${pass} gen=${this.store.loadGeneration} stable=${stablePasses} inflightCards=${JSON.stringify(this.store.cardDocsInFlight.slice(0, 8))} inflightFiles=${this.store.fileMetaDocsInFlight.length}`,
-      );
       let storeLoadStartMs = nowMs();
       await this.store.loaded();
       storeLoadWaitMs += nowMs() - storeLoadStartMs;
-      // eslint-disable-next-line no-console
-      console.log(
-        `[STABILITY-DIAG] pass=${pass} store-loaded-resolved gen=${this.store.loadGeneration}`,
-      );
       let frameWaitStartMs = nowMs();
       await this.#waitForNextRenderFrame();
       frameWaitMs += nowMs() - frameWaitStartMs;
@@ -864,10 +846,6 @@ export default class RenderRoute extends Route<Model> {
     storeLoadWaitMs += nowMs() - finalStoreLoadStartMs;
     let totalSettleMs = nowMs() - settleStartMs;
     let reachedMaxPasses = passesCompleted >= READY_SETTLE_MAX_PASSES;
-    // eslint-disable-next-line no-console
-    console.log(
-      `[STABILITY-DIAG] settle-done cardId=${cardId} passes=${passesCompleted} stable=${stablePasses} genChanges=${generationChanges} reachedMaxPasses=${reachedMaxPasses} totalMs=${Math.round(totalSettleMs)}`,
-    );
 
     renderReadyLogger.debug(
       `waitForRenderLoadStability settled cardId=${cardId} passes=${passesCompleted}/${READY_SETTLE_MAX_PASSES} stablePasses=${stablePasses} generationChanges=${generationChanges} totalMs=${formatMs(totalSettleMs)} storeLoadMs=${formatMs(storeLoadWaitMs)} frameWaitMs=${formatMs(frameWaitMs)} reachedMaxPasses=${reachedMaxPasses}`,
