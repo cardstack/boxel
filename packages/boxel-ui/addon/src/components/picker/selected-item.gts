@@ -165,8 +165,7 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
         display: block;
       }
       .picker-selected-item__remove:hover {
-        background: none;
-        opacity: 0.7;
+        background: var(--boxel-200);
       }
     </style>
   </template>

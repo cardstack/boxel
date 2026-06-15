@@ -20,6 +20,7 @@ export interface BeforeOptionsWithSearchSignature {
       ) => PickerOption[];
       isSelectAllActive?: boolean;
       onSearchTermChange?: (term: string) => void;
+      searchEnabled?: boolean;
       searchPlaceholder?: string;
       searchTerm?: string;
       selectAllOption?: PickerOption;
@@ -56,6 +57,11 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
   get searchPlaceholder() {
     return this.args.extra?.searchPlaceholder || 'Search...';
+  }
+
+  get showSearch() {
+    if (this.args.select.disabled) return false;
+    return this.args.extra?.searchEnabled ?? true;
   }
 
   get selectAllOption() {
@@ -226,18 +232,23 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
   <template>
     <div class='picker-before-options' data-test-boxel-picker-before-options>
-      <div class='picker-before-options__search' data-test-boxel-picker-search>
-        <BoxelInput
-          @type='search'
-          @value={{this.searchTerm}}
-          @onInput={{this.updateSearchTerm}}
-          @placeholder={{this.searchPlaceholder}}
-          @autocomplete='off'
-          class='picker-before-options__search-input'
-          {{autoFocus}}
-          {{on 'keydown' this.handleKeydown}}
-        />
-      </div>
+      {{#if this.showSearch}}
+        <div
+          class='picker-before-options__search'
+          data-test-boxel-picker-search
+        >
+          <BoxelInput
+            @type='search'
+            @value={{this.searchTerm}}
+            @onInput={{this.updateSearchTerm}}
+            @placeholder={{this.searchPlaceholder}}
+            @autocomplete='off'
+            class='picker-before-options__search-input'
+            {{autoFocus}}
+            {{on 'keydown' this.handleKeydown}}
+          />
+        </div>
+      {{/if}}
 
       <div
         class='picker-before-options__selected-summary'

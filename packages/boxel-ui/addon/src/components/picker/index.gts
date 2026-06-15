@@ -42,6 +42,8 @@ export interface PickerSignature {
     options: PickerOption[];
     placeholder?: string;
     renderInPlace?: boolean;
+    /** Defaults to true. When false, the search input section is hidden. */
+    searchEnabled?: boolean;
     searchPlaceholder?: string;
     selected: PickerOption[];
   };
@@ -219,10 +221,15 @@ export default class Picker extends Component<PickerSignature> {
     return true;
   };
 
+  get isSearchEnabled() {
+    return this.args.searchEnabled ?? true;
+  }
+
   get extra() {
     return {
       ...this.args.extra,
       label: this.args.label,
+      searchEnabled: this.isSearchEnabled,
       searchTerm: this.searchTerm,
       searchPlaceholder: this.args.searchPlaceholder,
       onSearchTermChange: this.onSearchTermChange,
