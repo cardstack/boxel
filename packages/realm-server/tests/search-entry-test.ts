@@ -9,10 +9,12 @@ import {
   htmlQueryHasRenderTypePredicate,
   htmlQueryMatches,
   isHtmlResource,
+  isSearchEntryCollectionDocument,
   isSearchEntryResource,
   isSparseItemResource,
   parseSearchEntryQueryFromPayload,
   resolveHtmlQuery,
+  searchEntryWireQueryFromQuery,
   SearchRequestError,
   DEFAULT_HTML_QUERY,
   rri,
@@ -315,6 +317,174 @@ module(basename(__filename), function () {
         parseError({ sort: [{ by: 'item.title', on: authorRef }] }).code,
         'invalid-query',
         'sort anchor is addressed as item.on',
+      );
+    });
+  });
+
+  // The legacy-Query → wire-grammar translation is the parser's inverse;
+  // round-tripping a translated query through the parser must recover the
+  // original itemQuery exactly.
+  module('wire query translation', function () {
+    test('translates the standalone card-type filter to the item.on anchor', function (assert) {
+      let wire = searchEntryWireQueryFromQuery({ filter: { type: authorRef } });
+      assert.deepEqual(wire, { filter: { 'item.on': authorRef } });
+      let parsed = parseSearchEntryQueryFromPayload(wire);
+      assert.deepEqual(parsed.itemQuery, {
+        filter: { type: authorRef },
+      } as any);
+    });
+
+    test('round-trips the full filter grammar, sort, and page', function (assert) {
+      let query = {
+        filter: {
+          on: authorRef,
+          every: [
+            { eq: { status: 'ready' } },
+            {
+              any: [
+                { contains: { title: 'Mango' } },
+                { not: { in: { category: ['fiction', 'poetry'] } } },
+              ],
+            },
+            { range: { editions: { gt: 0, lte: 10 } } },
+          ],
+        },
+        sort: [
+          { by: 'title', on: authorRef, direction: 'asc' as const },
+          { by: 'lastModified' as const, direction: 'desc' as const },
+        ],
+        page: { number: 1, size: 20 },
+      };
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire, {
+        filter: {
+          'item.on': authorRef,
+          every: [
+            { eq: { 'item.status': 'ready' } },
+            {
+              any: [
+                { contains: { 'item.title': 'Mango' } },
+                { not: { in: { 'item.category': ['fiction', 'poetry'] } } },
+              ],
+            },
+            { range: { 'item.editions': { gt: 0, lte: 10 } } },
+          ],
+        },
+        sort: [
+          { by: 'item.title', 'item.on': authorRef, direction: 'asc' },
+          { by: 'item.lastModified', direction: 'desc' },
+        ],
+        page: { number: 1, size: 20 },
+      });
+      let parsed = parseSearchEntryQueryFromPayload(wire);
+      assert.deepEqual(parsed.itemQuery, query as any);
+      assert.deepEqual(parsed.htmlQuery, DEFAULT_HTML_QUERY);
+    });
+
+    test('round-trips a full-text matches filter', function (assert) {
+      let query = { filter: { matches: 'mango' } } as any;
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire, { filter: { matches: 'mango' } });
+      assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
+    });
+
+    test('pins the requested sparse fieldset', function (assert) {
+      let parsed = parseSearchEntryQueryFromPayload(
+        searchEntryWireQueryFromQuery(
+          { filter: { type: authorRef } },
+          { fields: ['item'] },
+        ),
+      );
+      assert.deepEqual(parsed.fieldset, {
+        html: false,
+        item: { kind: 'full' },
+        itemAsFallback: false,
+      });
+
+      parsed = parseSearchEntryQueryFromPayload(
+        searchEntryWireQueryFromQuery(
+          { filter: { type: authorRef } },
+          { fields: ['item.title', 'item.status'] },
+        ),
+      );
+      assert.deepEqual(parsed.fieldset, {
+        html: false,
+        item: { kind: 'sparse', fields: ['title', 'status'] },
+        itemAsFallback: false,
+      });
+    });
+
+    test('drops the legacy realm members — realms are addressed at the request level', function (assert) {
+      let wire = searchEntryWireQueryFromQuery({
+        filter: { type: authorRef },
+        realms: ['http://localhost:4201/test/'],
+      });
+      assert.deepEqual(wire, { filter: { 'item.on': authorRef } });
+      assert.strictEqual(
+        parseSearchEntryQueryFromPayload(wire).realms,
+        undefined,
+      );
+    });
+
+    test('a userland field literally named htmlQuery stays an item field, never the binding', function (assert) {
+      let query = { filter: { on: authorRef, eq: { htmlQuery: 'x' } } } as any;
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire.filter, {
+        'item.on': authorRef,
+        eq: { 'item.htmlQuery': 'x' },
+      });
+      let parsed = parseSearchEntryQueryFromPayload(wire);
+      assert.deepEqual(parsed.itemQuery, query);
+      assert.deepEqual(parsed.htmlQuery, DEFAULT_HTML_QUERY);
+    });
+  });
+
+  module('search-entry collection document guard', function () {
+    let entry = () =>
+      buildSearchEntryResource({ url: cardUrl, itemType: 'card' });
+    let meta = { page: { total: 1 } };
+
+    test('accepts a well-formed document, with and without included', function (assert) {
+      assert.true(isSearchEntryCollectionDocument({ data: [entry()], meta }));
+      assert.true(
+        isSearchEntryCollectionDocument({
+          data: [entry()],
+          included: [{ type: 'card', id: cardUrl, attributes: {}, meta: {} }],
+          meta,
+        }),
+      );
+      assert.true(isSearchEntryCollectionDocument({ data: [], meta }));
+    });
+
+    test('rejects malformed data and included members', function (assert) {
+      assert.false(isSearchEntryCollectionDocument(null));
+      assert.false(isSearchEntryCollectionDocument({ data: [entry()] }));
+      assert.false(
+        isSearchEntryCollectionDocument({ data: 'nope', meta }),
+        'data must be an array',
+      );
+      assert.false(
+        isSearchEntryCollectionDocument({
+          data: [{ type: 'card', id: cardUrl }],
+          meta,
+        }),
+        'data members must be search-entry resources',
+      );
+      assert.false(
+        isSearchEntryCollectionDocument({
+          data: [entry()],
+          included: 'nope',
+          meta,
+        }),
+        'a present included must be an array',
+      );
+      assert.false(
+        isSearchEntryCollectionDocument({
+          data: [entry()],
+          included: [{ attributes: {} }],
+          meta,
+        }),
+        'included members must carry a (type, id) identity',
       );
     });
   });

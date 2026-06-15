@@ -335,21 +335,29 @@ module(basename(__filename), function () {
       assert.strictEqual(pinnedJane.relationships.item, undefined);
     });
 
-    test('an error row with nothing renderable keeps membership with an empty html array', async function (assert) {
+    test('an error row with nothing renderable surfaces a markupless error rendering', async function (assert) {
       // a first indexing attempt that failed: error flagged, no last-known-good
-      // renderings, no serialization to fall back to
+      // renderings, no serialization to fall back to. The indexer ran and
+      // failed, so the rendering surfaces in its failed state — isError, no
+      // html — at the format the htmlQuery names and the row's own type.
       await dbAdapter.execute(
         `UPDATE boxel_index SET has_error = TRUE, pristine_doc = NULL, fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
       );
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
       let jane = entryFor(doc, janeId)!;
-      assert.deepEqual(
-        jane.relationships.html,
-        { data: [] },
-        'membership stays visible through the empty html array',
-      );
+      let htmlId = `${janeId}#fitted#${personKey}`;
+      assert.deepEqual(htmlIdsOf(jane), [htmlId]);
       assert.strictEqual(jane.relationships.item, undefined);
+      let html = htmlIn(doc, htmlId)!;
+      assert.true(html.attributes.isError);
+      assert.false('html' in html.attributes, 'no last-known-good markup');
+      assert.strictEqual(html.attributes.format, 'fitted');
+      assert.deepEqual(html.attributes.renderType, {
+        module: `${realmHref}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(html.attributes.cardType, 'Person');
     });
 
     test('file results flow through the same fieldset semantics', async function (assert) {

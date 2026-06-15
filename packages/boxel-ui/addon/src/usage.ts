@@ -25,6 +25,7 @@ import EntityThumbnailDisplayUsage from './components/entity-thumbnail-display/u
 import FieldContainerUsage from './components/field-container/usage.gts';
 import FilterListUsage from './components/filter-list/usage.gts';
 import FittedCardContainerUsage from './components/fitted-card-container/usage.gts';
+import FittedCardUsage from './components/fitted-card/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
@@ -81,6 +82,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['FieldContainer', FieldContainerUsage],
   ['FilterList', FilterListUsage],
   ['FittedCardContainer', FittedCardContainerUsage],
+  ['FittedCard', FittedCardUsage],
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],

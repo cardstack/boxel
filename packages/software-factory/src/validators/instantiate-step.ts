@@ -21,6 +21,7 @@ import {
   instantiateRealmSpecs,
   type InstantiateCardFn,
   type InstanceInstantiationRecord,
+  type SearchSpecsResult,
   type SpecInfo,
 } from '../instantiate-execution.ts';
 import {
@@ -64,9 +65,7 @@ export interface InstantiateValidationStepConfig {
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
   /** Injected for testing — defaults to a spec search via the shared engine. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecsResult>;
   /** Injected for testing — defaults to the shared engine's instantiate-card caller. */
   instantiateCardFn?: InstantiateCardFn;
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */

@@ -289,6 +289,89 @@ export async function seedValidCardWithSpec(
 }
 
 /**
+ * A support module shaped like the ones catalog cards ship: a plain
+ * Glimmer component plus a helper function — neither is a CardDef.
+ */
+export const CHART_COMPONENT_MODULE_GTS = `import GlimmerComponent from '@glimmer/component';
+
+export class ChartComponent extends GlimmerComponent {
+  <template>
+    <div>chart</div>
+  </template>
+}
+
+export function formatChartLabel(value: number): string {
+  return String(value);
+}
+`;
+
+/** A component Spec — references a Glimmer component, not a CardDef. */
+export function componentSpecJson(): string {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: {
+          specType: 'component',
+          ref: { module: '../chart-component', name: 'ChartComponent' },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/spec',
+            name: 'Spec',
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+/** A command Spec — references a plain function export, not a CardDef. */
+export function commandSpecJson(): string {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: {
+          specType: 'command',
+          ref: { module: '../chart-component', name: 'formatChartLabel' },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/spec',
+            name: 'Spec',
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+/**
+ * Seed the valid card + example + card Spec alongside a component
+ * module with component and command Specs — the mix a catalog card
+ * seeded by `boxel realm pull` (rather than `ingest-card`) presents to
+ * the instantiate validator.
+ */
+export async function seedValidCardWithMixedSpecs(
+  client: BoxelCLIClient,
+  realmUrl: string,
+): Promise<void> {
+  await seedFilesAndWaitForIndex(client, realmUrl, [
+    { path: 'instantiate-test-card.gts', content: VALID_MODULE_GTS },
+    { path: 'ValidCard/example-1.json', content: validExampleJson() },
+    { path: 'Spec/valid-card-spec.json', content: validCardSpecJson() },
+    { path: 'chart-component.gts', content: CHART_COMPONENT_MODULE_GTS },
+    { path: 'Spec/chart-component-spec.json', content: componentSpecJson() },
+    { path: 'Spec/format-chart-label-spec.json', content: commandSpecJson() },
+  ]);
+}
+
+/**
  * Seed `tags-card.gts`, a well-formed `TagsCard/bad-example.json`, and
  * a Spec linking to that file. The realm-side example is intentionally
  * the WELL-FORMED placeholder (`validTagsExampleJson`) — the test

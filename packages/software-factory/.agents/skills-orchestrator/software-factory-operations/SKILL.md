@@ -208,14 +208,19 @@ pipeline (which persists `TestRun` / `LintResult` / `ParseResult` /
 `EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling
 any of these mid-turn is optional.
 
-**Side effect to know about:** the realm-touching validators
-(`run_evaluate`, `run_instantiate`, `run_tests`) sync your workspace to
-the realm before invoking the prerenderer, so they push whatever you've
-just written. That's the same write the orchestrator's between-iteration
-sync would have done — it's not destructive, but it does mean calling
-these tools is the moment your local writes hit the realm. The lighter
-validators (`run_lint`, `run_parse`) run entirely in-process and don't
-touch the realm.
+**Side effect to know about:** every `run_*` validator syncs your
+workspace to the realm before checking, so calling one pushes whatever
+you've just written. That's the same write the orchestrator's
+between-iteration sync would have done — it's not destructive, but it
+does mean calling these tools is the moment your local writes hit the
+realm.
+
+**Zero coverage is never green:** a whole-realm `run_*` call that finds
+nothing to check (0 files / modules / instances / tests) returns
+`status: "error"`, not a pass — it means the realm doesn't contain the
+files you meant to validate (sync hasn't landed, or they were never
+written). Re-run once the files are on the realm; never count such a
+result toward a green baseline or a done Issue.
 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel`
   rules) and return an in-memory `RunLintResult` with `status`,
@@ -242,7 +247,13 @@ durationMs, testFiles, failures, errorMessage? }`. Use it when you
   `parseableFiles` entries are always returned in the `.json` / `.gts`
   / `.gjs` / `.ts` form, so you can feed any of them straight back into
   `path`. Prefer the single-file form right after writing or editing one
-  file.
+  file — **but know its limit**: the file is type-checked in isolation,
+  so a file that imports same-realm siblings (e.g. a component that
+  `import type`s its card module) can report cross-file resolution
+  errors a whole-realm run does not. Whole-realm `run_parse` is the
+  source of truth; when a single-file run fails only on imports of
+  files you know exist, re-run without `path` instead of chasing the
+  errors.
 - `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` /
   `.ts` / `.js`) in the target realm via the prerenderer sandbox and
   return a `RunEvaluateResult` (status, module counts, per-failure

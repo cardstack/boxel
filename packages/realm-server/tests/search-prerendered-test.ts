@@ -244,6 +244,30 @@ module(basename(__filename), function () {
               );
             }
           });
+
+          test('a file-meta query matching zero files still carries meta.isFileMeta', async function (assert) {
+            let response = await request
+              .post(searchPath)
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .send({
+                filter: {
+                  on: {
+                    module: rri('https://cardstack.com/base/card-api'),
+                    name: 'FileDef',
+                  },
+                  eq: { url: `${realmHref}does-not-exist.md` },
+                },
+                prerenderedHtmlFormat: 'fitted',
+              });
+            assert.strictEqual(response.status, 200);
+            assert.strictEqual(response.body.data.length, 0);
+            assert.strictEqual(response.body.meta.page.total, 0);
+            assert.true(
+              response.body.meta.isFileMeta,
+              'the dispatch-level file signal survives an empty result',
+            );
+          });
         },
       );
 

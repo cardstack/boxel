@@ -113,9 +113,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         ); /* necessary for our various overlays utilizing box-shadow */
         word-break: break-word;
       }
-      .content:not(:has(input)) {
-        text-box-trim: trim-both;
-      }
 
       .horizontal {
         grid-template-columns:

@@ -48,7 +48,7 @@ export function jobIdHeader(): Record<string, string> {
   return j ? { [X_BOXEL_JOB_ID_HEADER]: j } : {};
 }
 
-// Per-search correlation id. Minted fresh for each `_federated-search`
+// Per-search correlation id. Minted fresh for each `_federated-search-v2`
 // fetch the SPA issues while rendering inside a prerender tab, and stamped
 // as `x-boxel-logging-correlation-id`. The realm-server reads it back out and keys its
 // `realm:search-timing` line on it, so a search the prerender observes as

@@ -1,5 +1,6 @@
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { logger } from './log.ts';
+import { resourceIdentity } from './resource-types.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { assertQuery, InvalidQueryError, type Query } from './query.ts';
 import { RequestTimings } from './request-timings.ts';
@@ -461,7 +462,7 @@ export function combineSearchResults(
         if (resource.id) {
           // NUL-separated so a `(type, id)` pair can't alias another by
           // concatenation (no resource type or id contains a NUL byte).
-          let identity = `${resource.type}\u0000${resource.id}`;
+          let identity = resourceIdentity(resource.type, resource.id);
           if (includedByIdentity.has(identity)) {
             continue;
           }
