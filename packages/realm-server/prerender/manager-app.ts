@@ -551,6 +551,18 @@ export function buildPrerenderManagerApp(options?: {
         ctxt.body = { errors: [{ status: 400, message: 'hash is required' }] };
         return;
       }
+      // Normalize and bound the token before storing it: it is echoed into a
+      // response header on every heartbeat, so a stray-whitespace variant would
+      // spuriously read as a change, and an oversized value would bloat every
+      // heartbeat response. The real token is a short hex digest, so anything
+      // longer is malformed — reject rather than silently truncate (a truncated
+      // token would never match and would recycle forever).
+      hash = hash.trim();
+      if (hash.length > 64) {
+        ctxt.status = 400;
+        ctxt.body = { errors: [{ status: 400, message: 'hash too long' }] };
+        return;
+      }
       if (registry.hostShellHash !== hash) {
         log.info(
           `host shell token changed (${registry.hostShellHash ?? 'none'} -> ${hash}); prerender servers will recycle on next heartbeat`,
