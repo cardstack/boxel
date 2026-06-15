@@ -5515,7 +5515,7 @@ export class Realm {
       let job = await this.#queue.publish<LintResult>({
         jobType: `lint-source`,
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
-        timeout: 10,
+        timeout: 30,
         priority: userInitiatedPriority,
         args: { source, filename } satisfies LintArgs,
       });
