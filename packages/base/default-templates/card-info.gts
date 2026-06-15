@@ -236,10 +236,14 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           <FieldContainer
             class='card-info-field'
             @label='Thumbnail URL'
+            @tag='label'
             @icon={{ImageIcon}}
             data-test-field='cardInfo-thumbnailURL'
           >
-            <div class='thumbnail-picker'>
+            <div
+              class='thumbnail-picker'
+              data-thumbnail-picker-controls
+            >
               <div class='thumbnail-picker-inputs'>
                 <span
                   class='thumbnail-picker-input-slot'
@@ -444,7 +448,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
   private clearThumbnail = () => {
     let cardInfo = this.args.model?.cardInfo;
     if (cardInfo) {
-      cardInfo.cardThumbnailURL = null as unknown as string;
+      cardInfo.cardThumbnailURL = null;
     }
   };
 
@@ -459,6 +463,11 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
     );
     if (file?.url) {
       cardInfo.cardThumbnailURL = file.url;
+      // Preserve the linked image relationship so cardInfo.cardThumbnail
+      // reflects the chosen ImageDef as well
+      if (file.id) {
+        cardInfo.cardThumbnail = file;
+      }
     }
   };
 }
