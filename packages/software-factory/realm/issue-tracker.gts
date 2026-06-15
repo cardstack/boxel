@@ -22,18 +22,20 @@ import NumberField from 'https://cardstack.com/base/number';
 
 import {
   Accordion,
+  BoxelDropdown,
   BoxelSelect,
   FieldContainer,
   FittedCard,
   KanbanColumnConfigSidebar,
   KanbanPlane,
   ContextButton,
+  Menu,
   Switch,
   Tooltip,
   type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import BookOpen from '@cardstack/boxel-icons/book-open';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
@@ -43,6 +45,7 @@ import LayoutSidebarRightCollapse from '@cardstack/boxel-icons/layout-sidebar-ri
 import LayoutSidebarRightExpand from '@cardstack/boxel-icons/layout-sidebar-right-expand';
 import MessageSquare from '@cardstack/boxel-icons/message-square';
 import Settings from '@cardstack/boxel-icons/settings';
+import ListFilter from '@cardstack/boxel-icons/list-filter';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -2147,6 +2150,17 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     this.isSidebarOpen = !this.isSidebarOpen;
   };
 
+  get groupByMenuItems(): MenuItem[] {
+    return this.groupByDimensions.map(
+      (dim) =>
+        new MenuItem({
+          label: dim.label,
+          action: () => this.updateGroupBy(dim),
+          checked: dim.key === this.activeGroupBy,
+        }),
+    );
+  }
+
   openCard = (index: number): void => {
     let card = this.args.model.cards?.[index];
     if (card) {
@@ -2295,68 +2309,91 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               </div>
             {{/if}}
           </div>
-          <div>
-            <span class='kanban-card-count' data-test-issue-tracker-card-count>
-              {{#if (eq this.cardCount 1)}}
-                1 card
-              {{else}}
-                {{this.cardCount}}
-                cards
-              {{/if}}
-            </span>
-          </div>
         </div>
         <div class='toolbar-right'>
-          <FieldContainer
-            @label='Group by'
-            class='toolbar-field group-by-selector'
-            data-test-group-by-selector
-          >
-            <BoxelSelect
-              @options={{this.groupByDimensions}}
-              @selected={{this.selectedGroupByDimension}}
-              @onChange={{this.updateGroupBy}}
-              @renderInPlace={{true}}
-              as |dim|
+          <span class='kanban-card-count' data-test-issue-tracker-card-count>
+            {{#if (eq this.cardCount 1)}}
+              1 card
+            {{else}}
+              {{this.cardCount}}
+              cards
+            {{/if}}
+          </span>
+          <div class='toolbar-actions'>
+            <div class='compact-group-by-btn'>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <Tooltip @placement='top'>
+                    <:trigger>
+                      <ContextButton
+                        @icon={{ListFilter}}
+                        @label='Group by: {{this.selectedGroupByDimension.label}}'
+                        @variant='secondary'
+                        {{bindings}}
+                      />
+                    </:trigger>
+                    <:content>Group by</:content>
+                  </Tooltip>
+                </:trigger>
+                <:content as |dd|>
+                  <Menu
+                    @items={{this.groupByMenuItems}}
+                    @closeMenu={{dd.close}}
+                  />
+                </:content>
+              </BoxelDropdown>
+            </div>
+            <FieldContainer
+              @label='Group by'
+              class='toolbar-field group-by-selector'
+              data-test-group-by-selector
             >
-              <span data-test-group-by-option={{dim.key}}>{{dim.label}}</span>
-            </BoxelSelect>
-          </FieldContainer>
-          <FieldContainer
-            @label='Hide empty'
-            @inline={{true}}
-            class='toolbar-field'
-          >
-            <Switch
-              @isEnabled={{this.hideEmpty}}
-              @onChange={{this.toggleHideEmptyColumns}}
-              @label='Hide empty columns'
-              data-test-hide-empty-switch
-            />
-          </FieldContainer>
-          <Tooltip @placement='bottom'>
-            <:trigger>
-              <ContextButton
-                class='configure-btn'
-                @icon={{Settings}}
-                @label={{if
-                  this.isSidebarOpen
-                  'Close config sidebar'
-                  'Open config sidebar'
-                }}
-                @variant='highlight'
-                @isToggle={{true}}
-                @isActive={{this.isSidebarOpen}}
-                data-test-configure-columns-btn
-                {{on 'click' this.toggleSidebar}}
+              <BoxelSelect
+                @options={{this.groupByDimensions}}
+                @selected={{this.selectedGroupByDimension}}
+                @onChange={{this.updateGroupBy}}
+                @renderInPlace={{true}}
+                as |dim|
+              >
+                <span data-test-group-by-option={{dim.key}}>{{dim.label}}</span>
+              </BoxelSelect>
+            </FieldContainer>
+            <FieldContainer
+              @label='Hide empty'
+              @inline={{true}}
+              class='toolbar-field hide-empty-field'
+            >
+              <Switch
+                @isEnabled={{this.hideEmpty}}
+                @onChange={{this.toggleHideEmptyColumns}}
+                @label='Hide empty columns'
+                data-test-hide-empty-switch
               />
-            </:trigger>
-            <:content>{{if
-                this.isSidebarOpen
-                'Close config'
-                'Configure columns'
-              }}</:content>
-          </Tooltip>
+            </FieldContainer>
+            <Tooltip @placement='top'>
+              <:trigger>
+                <ContextButton
+                  class='configure-btn'
+                  @icon={{Settings}}
+                  @label={{if
+                    this.isSidebarOpen
+                    'Close config sidebar'
+                    'Open config sidebar'
+                  }}
+                  @variant='highlight'
+                  @isToggle={{true}}
+                  @isActive={{this.isSidebarOpen}}
+                  data-test-configure-columns-btn
+                  {{on 'click' this.toggleSidebar}}
+                />
+              </:trigger>
+              <:content>{{if
+                  this.isSidebarOpen
+                  'Close config'
+                  'Configure columns'
+                }}</:content>
+            </Tooltip>
+          </div>
         </div>
       </header>
       <div class='kanban-body'>
@@ -2408,6 +2445,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @onWipLimitChange={{this.handleWipLimitChange}}
             @onReorder={{this.handleColumnsChange}}
             @hideEmpty={{this.hideEmpty}}
+            @onHideEmptyChange={{this.toggleHideEmpty}}
           />
         </div>
       </div>
@@ -2430,6 +2468,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         --boxel-kanban-muted-fg: var(--board-muted-fg);
         --boxel-kanban-border: var(--board-border);
 
+        container-type: inline-size;
         height: 100%;
         display: flex;
         flex-direction: column;
@@ -2454,13 +2493,19 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       .kanban-heading {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
+        gap: var(--boxel-sp-4xs);
       }
       .toolbar-right {
         display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-4xs);
+        color: var(--board-muted-fg);
+      }
+      .toolbar-actions {
+        display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        color: var(--board-muted-fg);
       }
       .kanban-title {
         display: flex;
@@ -2552,6 +2597,68 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       }
       .kanban-config-sidebar-wrap > :deep(aside) {
         border-top: none;
+      }
+      .kanban-config-sidebar-wrap :deep(.hide-empty-row) {
+        display: none;
+      }
+
+      .compact-group-by-btn {
+        display: none;
+        position: relative;
+      }
+
+      /* ── Narrow (< 640px): stack toolbar, overlay config sidebar ── */
+      @container (width < 640px) {
+        .kanban-toolbar {
+          flex-wrap: wrap;
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        }
+        .toolbar-left {
+          flex: 1;
+          min-width: 0;
+        }
+        .toolbar-right {
+          flex-shrink: 0;
+          align-items: center;
+        }
+        .group-by-selector {
+          display: none;
+        }
+        .hide-empty-field {
+          display: none;
+        }
+        .compact-group-by-btn {
+          display: block;
+        }
+        .kanban-config-sidebar-wrap :deep(.hide-empty-row) {
+          display: flex;
+        }
+        .toolbar-actions {
+          gap: var(--boxel-sp-4xs);
+        }
+        /* Keep collapse toggle visible on touch screens that have no hover */
+        .kanban-area :deep(.col-collapse-btn) {
+          opacity: 0.5;
+        }
+        /* Overlay the config sidebar so it doesn't shrink the kanban area */
+        .kanban-config-sidebar-wrap.is-open {
+          position: absolute;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          box-shadow: -4px 0 16px
+            color-mix(in oklch, var(--boxel-dark) 15%, transparent);
+        }
+      }
+
+      /* ── Very narrow (< 420px): further compress ── */
+      @container (width < 420px) {
+        .kanban-toolbar {
+          padding: var(--boxel-sp-2xs);
+        }
+        .kanban-title {
+          font-size: 0.875rem;
+        }
       }
     </style>
   </template>
