@@ -429,6 +429,24 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   /** Prevent mousedown on toolbar/popup buttons from stealing editor focus/selection */
   _preventFocusLoss = (e: Event) => e.preventDefault();
 
+  /**
+   * Clicking anywhere in the editor surface (padding, empty space below the
+   * text) focuses the editor and drops the cursor at the end of the document —
+   * so the whole area reads as editable, like a textarea. Clicks landing on the
+   * CM content or an embedded card widget are left for CodeMirror to handle.
+   */
+  _focusEditorOnPointerDown = (event: Event) => {
+    let view = this.editorView;
+    if (!view) return;
+    let target = event.target as HTMLElement | null;
+    if (target?.closest('.cm-content') || target?.closest('.cm-card-widget')) {
+      return;
+    }
+    event.preventDefault();
+    view.focus();
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+  };
+
   _wrapBold = () => this._toolbarAction('**');
   _wrapItalic = () => this._toolbarAction('*');
   _wrapStrikethrough = () => this._toolbarAction('~~');
@@ -834,9 +852,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           {{/each}}
         </div>
 
+        {{! template-lint-disable no-invalid-interactive }}
         <div
           class='codemirror-mount'
           data-test-codemirror-mount
+          {{on 'mousedown' this._focusEditorOnPointerDown}}
           {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
         ></div>
 
@@ -981,13 +1001,33 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     <style scoped>
       @layer baseComponent {
         .codemirror-editor {
+          display: flex;
+          flex-direction: column;
           min-height: 120px;
           border: 1px solid var(--boxel-border-color);
           border-radius: var(--boxel-border-radius);
+          outline: 1px solid transparent;
           position: relative;
+          transition:
+            border-color var(--boxel-transition),
+            outline-color var(--boxel-transition);
         }
 
+        /* Match our input/textarea hover + focus affordances so the field
+           reads as editable. :focus-within stands in for :focus-visible since
+           the focusable element is the nested CodeMirror content. */
+        .codemirror-editor:hover:not(:focus-within) {
+          border-color: var(--border, currentColor);
+        }
+
+        .codemirror-editor:focus-within {
+          border-color: var(--ring, var(--boxel-highlight));
+          outline-color: var(--ring, var(--boxel-highlight));
+        }
+
+        /* Fill the field so clicking anywhere below the text focuses it. */
         .codemirror-mount {
+          flex: 1;
           padding: var(--boxel-sp-xs);
           cursor: text;
         }
