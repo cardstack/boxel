@@ -596,7 +596,11 @@ test.describe('Host mode routing rules', () => {
 
     await expect(page.locator('[data-test-host-mode-404]')).toBeVisible();
 
-    // It's a clean placeholder, not the raw card-error/debug treatment.
-    await expect(page.locator('[data-test-card-error]')).toHaveCount(0);
+    // The collapsible technical detail stays available below the placeholder
+    // for the realm owner debugging the dead reference.
+    await expect(page.locator('[data-test-error-display]')).toBeVisible();
+    await expect(page.locator('[data-test-toggle-details]')).toContainText(
+      'Show Details',
+    );
   });
 });
