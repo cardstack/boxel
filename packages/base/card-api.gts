@@ -3532,7 +3532,20 @@ function lazilyLoadLink(
           ? store.getFileMeta(reference)
           : store.getCard(reference)
         : undefined;
-      if (reusable && instanceOf(reusable, field.card)) {
+      // Only reuse an instance that finished deserializing. The job-scoped
+      // store also holds partially-built, non-tracked instances: a failed
+      // `_updateFromSerialized` leaves its half-built instance behind (the
+      // store keeps it so cyclic deserialization can resolve), with
+      // `isSavedInstance` still false — it flips true only at the end of a
+      // successful deserialize. Reusing such a partial would skip the
+      // load/error path that plants the broken-link sentinel and index an
+      // incomplete target; falling through re-attempts the load and re-plants
+      // the sentinel.
+      if (
+        reusable &&
+        reusable[isSavedInstance] === true &&
+        instanceOf(reusable, field.card)
+      ) {
         if (isFileLink) {
           trackRuntimeFileDependency(reference, dependencyTrackingContext);
         } else {
