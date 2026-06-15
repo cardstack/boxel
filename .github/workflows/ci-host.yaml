@@ -239,6 +239,24 @@ jobs:
             echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
             exit 1
           fi
+
+          # icons.<slug>.localhost serves a static dist via http-server
+          # behind Traefik; there's no _readiness-check, so probe a stable
+          # file. A failure here means either the Traefik route isn't
+          # registered yet or http-server hasn't bound its port.
+          icons_probe="https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js"
+          ok=0
+          for i in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$icons_probe" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: icons probe -> $code (waiting)"
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::icons probe did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
           echo "::notice::Environment-mode public-read parity confirmed"
 
       - name: Live test suite
@@ -468,6 +486,24 @@ jobs:
             echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
             exit 1
           fi
+
+          # icons.<slug>.localhost serves a static dist via http-server
+          # behind Traefik; there's no _readiness-check, so probe a stable
+          # file. A failure here means either the Traefik route isn't
+          # registered yet or http-server hasn't bound its port.
+          icons_probe="https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js"
+          ok=0
+          for i in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$icons_probe" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: icons probe -> $code (waiting)"
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::icons probe did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
           echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
