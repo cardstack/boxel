@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { parse } from 'date-fns';
-import { restartableTask } from 'ember-concurrency';
+import { didCancel, restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import {
@@ -243,6 +243,17 @@ class _FileResource extends Resource<Args> {
         return;
       }
     } catch (err: any) {
+      // `read` is restartable: when an invalidation event arrives while
+      // a read is in flight, `read.perform({force: true})` cancels this
+      // instance and starts a fresh one. ember-concurrency surfaces the
+      // cancel as a TaskCancelation thrown at the awaited fetch. The
+      // fresh task's `updateState({ state: 'ready' })` can land before
+      // the cancelled task's awaited promise resolves; treating the
+      // cancellation as a real fetch failure would then overwrite that
+      // ready state with `not-found`.
+      if (didCancel(err)) {
+        return;
+      }
       log.error(`Could not get file ${this._url}, err: ${err.message}`);
       this.updateState({ state: 'not-found', url: rri(this._url) });
       return;
