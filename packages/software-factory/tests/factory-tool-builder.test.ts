@@ -1270,3 +1270,351 @@ module('buildFactoryTools — get_card_schema', function () {
     assert.true(/non-empty string "name"/.test(err2?.message ?? ''));
   });
 });
+
+module('buildFactoryTools — vacuous pass rejection', function () {
+  function findTool(tools: FactoryTool[], name: string): FactoryTool {
+    let tool = tools.find((t) => t.name === name);
+    if (!tool) throw new Error(`tool ${name} not registered`);
+    return tool;
+  }
+
+  const PASSED_EMPTY_PARSE = {
+    status: 'passed' as const,
+    filesChecked: 0,
+    filesWithErrors: 0,
+    errorCount: 0,
+    durationMs: 0,
+    parseableFiles: [],
+    errors: [],
+  };
+
+  test('whole-realm run_parse that checked 0 files becomes an error', async function (assert) {
+    let config = makeConfig({
+      runParseInMemory: async () => PASSED_EMPTY_PARSE,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_parse').execute(
+      {},
+    )) as typeof PASSED_EMPTY_PARSE & { errorMessage?: string };
+
+    assert.strictEqual(result.status, 'error');
+    assert.true(/NOT a pass/.test(result.errorMessage ?? ''));
+    assert.strictEqual(result.filesChecked, 0);
+  });
+
+  test('single-file run_parse is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runParseInMemory: async () => PASSED_EMPTY_PARSE,
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_parse').execute({
+      path: 'my-card.gts',
+    })) as typeof PASSED_EMPTY_PARSE;
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
+  test('single-file run_lint is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runLintInMemory: async () => ({
+        status: 'passed' as const,
+        filesChecked: 0,
+        filesWithErrors: 0,
+        errorCount: 0,
+        warningCount: 0,
+        durationMs: 0,
+        lintableFiles: [],
+        violations: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_lint').execute({
+      path: 'my-card.gts',
+    })) as { status: string };
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
+  test('single-file run_evaluate is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runEvaluateInMemory: async () => ({
+        status: 'passed' as const,
+        modulesChecked: 0,
+        modulesWithErrors: 0,
+        durationMs: 0,
+        evaluableFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_evaluate').execute({
+      path: 'my-card.gts',
+    })) as { status: string };
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
+  test('single-file run_instantiate is exempt from the rewrite', async function (assert) {
+    let config = makeConfig({
+      runInstantiateInMemory: async () => ({
+        status: 'passed' as const,
+        instancesChecked: 0,
+        instancesWithErrors: 0,
+        durationMs: 0,
+        instanceFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_instantiate').execute({
+      path: 'MyCard/example-1.json',
+    })) as { status: string };
+
+    assert.strictEqual(result.status, 'passed');
+  });
+
+  test('whole-realm run_parse pass with real coverage is untouched', async function (assert) {
+    let config = makeConfig({
+      runParseInMemory: async () => ({
+        ...PASSED_EMPTY_PARSE,
+        filesChecked: 3,
+        parseableFiles: ['a.gts', 'b.gts', 'Spec/a.json'],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_parse').execute(
+      {},
+    )) as typeof PASSED_EMPTY_PARSE & { errorMessage?: string };
+
+    assert.strictEqual(result.status, 'passed');
+    assert.strictEqual(result.errorMessage, undefined);
+  });
+
+  test('whole-realm run_lint that checked 0 files becomes an error', async function (assert) {
+    let config = makeConfig({
+      runLintInMemory: async () => ({
+        status: 'passed' as const,
+        filesChecked: 0,
+        filesWithErrors: 0,
+        errorCount: 0,
+        warningCount: 0,
+        durationMs: 0,
+        lintableFiles: [],
+        violations: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_lint').execute({})) as {
+      status: string;
+      errorMessage?: string;
+    };
+
+    assert.strictEqual(result.status, 'error');
+    assert.true(/NOT a pass/.test(result.errorMessage ?? ''));
+  });
+
+  test('whole-realm run_evaluate that checked 0 modules becomes an error', async function (assert) {
+    let config = makeConfig({
+      runEvaluateInMemory: async () => ({
+        status: 'passed' as const,
+        modulesChecked: 0,
+        modulesWithErrors: 0,
+        durationMs: 0,
+        evaluableFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_evaluate').execute({})) as {
+      status: string;
+      errorMessage?: string;
+    };
+
+    assert.strictEqual(result.status, 'error');
+    assert.true(/NOT a pass/.test(result.errorMessage ?? ''));
+  });
+
+  test('whole-realm run_instantiate that checked 0 instances becomes an error', async function (assert) {
+    let config = makeConfig({
+      runInstantiateInMemory: async () => ({
+        status: 'passed' as const,
+        instancesChecked: 0,
+        instancesWithErrors: 0,
+        durationMs: 0,
+        instanceFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_instantiate').execute({})) as {
+      status: string;
+      errorMessage?: string;
+    };
+
+    assert.strictEqual(result.status, 'error');
+    assert.true(/NOT a pass/.test(result.errorMessage ?? ''));
+  });
+
+  test('run_tests that ran 0 test files becomes an error', async function (assert) {
+    let config = makeConfig({
+      runTestsInMemory: async () => ({
+        status: 'passed' as const,
+        passedCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        durationMs: 0,
+        testFiles: [],
+        failures: [],
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_tests').execute({})) as {
+      status: string;
+      errorMessage?: string;
+    };
+
+    assert.strictEqual(result.status, 'error');
+    assert.true(/NOT a pass/.test(result.errorMessage ?? ''));
+  });
+
+  test('non-passed results are never rewritten, even with zero coverage', async function (assert) {
+    let config = makeConfig({
+      runParseInMemory: async () => ({
+        ...PASSED_EMPTY_PARSE,
+        status: 'error' as const,
+        errorMessage: 'discovery exploded',
+      }),
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await findTool(tools, 'run_parse').execute({})) as {
+      status: string;
+      errorMessage?: string;
+    };
+
+    assert.strictEqual(result.status, 'error');
+    assert.strictEqual(result.errorMessage, 'discovery exploded');
+  });
+});
+
+module('buildFactoryTools — run_parse / run_lint workspace sync', function () {
+  test('run_parse syncs the workspace before the engine runs', async function (assert) {
+    let events: string[] = [];
+    let config = makeConfig({
+      syncWorkspace: async () => {
+        events.push('sync');
+        return { ok: true };
+      },
+      runParseInMemory: async () => {
+        events.push('engine');
+        return {
+          status: 'passed' as const,
+          filesChecked: 1,
+          filesWithErrors: 0,
+          errorCount: 0,
+          durationMs: 0,
+          parseableFiles: ['a.gts'],
+          errors: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    await tools.find((t) => t.name === 'run_parse')!.execute({});
+
+    assert.deepEqual(events, ['sync', 'engine']);
+  });
+
+  test('run_parse surfaces a sync failure without invoking the engine', async function (assert) {
+    let engineRan = false;
+    let config = makeConfig({
+      syncWorkspace: async () => ({ ok: false, error: 'realm rejected push' }),
+      runParseInMemory: async () => {
+        engineRan = true;
+        throw new Error('engine must not run');
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await tools
+      .find((t) => t.name === 'run_parse')!
+      .execute({})) as { status: string; errorMessage?: string };
+
+    assert.false(engineRan);
+    assert.strictEqual(result.status, 'error');
+    assert.true(/realm rejected push/.test(result.errorMessage ?? ''));
+  });
+
+  test('run_lint syncs the workspace before the engine runs', async function (assert) {
+    let events: string[] = [];
+    let config = makeConfig({
+      syncWorkspace: async () => {
+        events.push('sync');
+        return { ok: true };
+      },
+      runLintInMemory: async () => {
+        events.push('engine');
+        return {
+          status: 'passed' as const,
+          filesChecked: 1,
+          filesWithErrors: 0,
+          errorCount: 0,
+          warningCount: 0,
+          durationMs: 0,
+          lintableFiles: ['a.gts'],
+          violations: [],
+        };
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    await tools.find((t) => t.name === 'run_lint')!.execute({});
+
+    assert.deepEqual(events, ['sync', 'engine']);
+  });
+
+  test('run_lint surfaces a sync failure without invoking the engine', async function (assert) {
+    let engineRan = false;
+    let config = makeConfig({
+      syncWorkspace: async () => ({ ok: false, error: 'realm rejected push' }),
+      runLintInMemory: async () => {
+        engineRan = true;
+        throw new Error('engine must not run');
+      },
+    });
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(config, executor, new ToolRegistry());
+
+    let result = (await tools
+      .find((t) => t.name === 'run_lint')!
+      .execute({})) as { status: string; errorMessage?: string };
+
+    assert.false(engineRan);
+    assert.strictEqual(result.status, 'error');
+    assert.true(/realm rejected push/.test(result.errorMessage ?? ''));
+  });
+});

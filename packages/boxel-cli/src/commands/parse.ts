@@ -108,11 +108,14 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 
 // Node modules: in-monorepo, host has every transitive dep glint needs
 // already installed. In a published install we don't ship host's
-// node_modules, so we fall back to boxel-cli's own node_modules — which
-// has `@glint/ember-tsc`, `typescript`, and `content-tag` as runtime
-// dependencies (CS-11165). Diagnostics from third-party imports that
-// exist only in host/node_modules but not in boxel-cli's will surface as
-// "Cannot find module …"; we filter those out in `runGlintCheck` below.
+// node_modules, so we fall back to boxel-cli's own node_modules. That
+// means a third-party import in card code only type-checks if the
+// package is a runtime dependency of boxel-cli: `@glint/ember-tsc`,
+// `typescript`, and `content-tag` (CS-11165), plus the packages card
+// code itself commonly imports — `@glimmer/component` and
+// `@glimmer/tracking` (CS-11509). Imports outside that set surface as
+// "Cannot find module …" parse errors; the fix is adding the package
+// as a boxel-cli dependency, not shimming it.
 const NODE_MODULES_PATH = BUNDLED_TYPES_DIR
   ? join(BOXEL_CLI_PATH, 'node_modules')
   : join(PACKAGES_PATH, 'host', 'node_modules');
