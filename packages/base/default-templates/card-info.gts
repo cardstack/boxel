@@ -446,7 +446,9 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
   }
 
   private clearThumbnail = () => {
-    let cardInfo = this.args.model?.cardInfo;
+    let cardInfo = this.args.model?.cardInfo as
+      | { cardThumbnailURL: string | null }
+      | undefined;
     if (cardInfo) {
       cardInfo.cardThumbnailURL = null;
     }
@@ -458,7 +460,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       return;
     }
     let imageRef = identifyCard(ImageDef);
-    let file = await chooseFile(
+    let file = await chooseFile<InstanceType<typeof ImageDef>>(
       imageRef ? { fileType: imageRef, fileTypeName: 'Image' } : undefined,
     );
     if (file?.url) {
