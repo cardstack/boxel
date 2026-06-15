@@ -208,6 +208,26 @@ async function syncWorkspaceForToolRun(
   return `Failed to sync workspace to realm before ${toolName}: ${result.error ?? 'unknown error'}`;
 }
 
+/**
+ * A whole-realm `run_*` result that "passed" while checking zero
+ * files/modules/instances/tests is vacuous: it usually means the realm
+ * doesn't yet contain the files the agent intends to validate (a sync
+ * that hasn't landed, an index still catching up, or files that were
+ * never written) — not that the realm is genuinely clean. The agent
+ * must never count it as green, so the tools rewrite it into an error
+ * result. Single-file runs are exempt: an explicit `path` either
+ * resolves to one checked file or errors on its own.
+ */
+function vacuousPassMessage(toolName: string, what: string): string {
+  return (
+    `${toolName} found nothing to check (0 ${what}) — this is NOT a ` +
+    'pass. This tool already synced your workspace before running, ' +
+    "so either the realm index hasn't caught up yet (re-run this " +
+    `tool) or the ${what} you intend to validate were never ` +
+    'written. A green result must check at least one of them.'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Argument validation helpers
 // ---------------------------------------------------------------------------
@@ -319,12 +339,20 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
           errorMessage: syncError,
         };
       }
-      return execute({
+      let result = await execute({
         targetRealm: config.targetRealm,
         client: config.client,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
         cache: config.validationCache,
       });
+      if (result.status === 'passed' && result.testFiles.length === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_tests', 'test files'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -339,7 +367,10 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
       'details). Without "path", lints every .gts / .gjs / .ts / .js file ' +
       'in the target realm. With "path", lints only that single realm-' +
       'relative file — handy for a quick self-check right after writing ' +
-      'one file. Safe to call repeatedly for mid-turn self-validation — ' +
+      'one file. The tool pushes your workspace to the realm before ' +
+      'linting so files you just wrote are visible — the same sync the ' +
+      'orchestrator runs after signal_done, brought forward. ' +
+      'Safe to call repeatedly for mid-turn self-validation — ' +
       'this tool does NOT create a LintResult card or any other realm ' +
       'artifact. The orchestrator still runs the full validation pipeline ' +
       '(which writes a LintResult card) automatically after signal_done, ' +
@@ -360,13 +391,35 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      return execute({
+      let syncError = await syncWorkspaceForToolRun(config, 'run_lint');
+      if (syncError) {
+        return {
+          status: 'error',
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          warningCount: 0,
+          durationMs: 0,
+          lintableFiles: [],
+          violations: [],
+          errorMessage: syncError,
+        };
+      }
+      let result = await execute({
         targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
         cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (!path && result.status === 'passed' && result.filesChecked === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_lint', 'lintable files'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -423,13 +476,21 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
           errorMessage: syncError,
         };
       }
-      return execute({
+      let result = await execute({
         targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (!path && result.status === 'passed' && result.modulesChecked === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_evaluate', 'evaluable modules'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -450,7 +511,17 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
       'is required (paths without one are rejected) — whole-realm ' +
       'discovery already normalizes Spec linkedExamples to include .json, ' +
       'so the "parseableFiles" entries returned by a prior whole-realm ' +
-      'run can be fed straight back into "path" verbatim. Safe to call ' +
+      'run can be fed straight back into "path" verbatim. The tool ' +
+      'pushes your workspace to the realm before parsing so files you ' +
+      'just wrote are visible — the same sync the orchestrator runs ' +
+      'after signal_done, brought forward. CAVEAT on single-file runs: ' +
+      'a file is type-checked in isolation, so a file that imports ' +
+      'same-realm siblings (e.g. a component that `import type`s the ' +
+      'card module) can report cross-file resolution errors that a ' +
+      'whole-realm run does not. Whole-realm parse is the source of ' +
+      'truth — when a single-file run fails only on imports of files ' +
+      'you know exist, re-run without "path" instead of chasing the ' +
+      'errors. Safe to call ' +
       'repeatedly for mid-turn self-validation — this tool does NOT ' +
       'create a ParseResult card or any other realm artifact. The ' +
       'orchestrator still runs the full validation pipeline (which writes ' +
@@ -472,13 +543,34 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      return execute({
+      let syncError = await syncWorkspaceForToolRun(config, 'run_parse');
+      if (syncError) {
+        return {
+          status: 'error',
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          durationMs: 0,
+          parseableFiles: [],
+          errors: [],
+          errorMessage: syncError,
+        };
+      }
+      let result = await execute({
         targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
         cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (!path && result.status === 'passed' && result.filesChecked === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_parse', 'parseable files'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -545,7 +637,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
           errorMessage: syncError,
         };
       }
-      return execute({
+      let result = await execute({
         targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
@@ -553,6 +645,21 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (
+        !path &&
+        result.status === 'passed' &&
+        result.instancesChecked === 0
+      ) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage(
+            'run_instantiate',
+            'Spec-linked instances',
+          ),
+        };
+      }
+      return result;
     },
   };
 }
