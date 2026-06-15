@@ -5,7 +5,7 @@ import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   trimJsonExtension,
@@ -26,14 +26,6 @@ import ListIcon from '@cardstack/boxel-icons/list';
 import ListOrderedIcon from '@cardstack/boxel-icons/list-ordered';
 import BlockquoteIcon from '@cardstack/boxel-icons/blockquote';
 import LinkIcon from '@cardstack/boxel-icons/link';
-import {
-  computePosition,
-  flip,
-  shift,
-  offset,
-  autoUpdate,
-} from '@floating-ui/dom';
-import type { VirtualElement } from '@floating-ui/dom';
 
 // The CodeMirrorContext type is defined in the host app's lazy-loaded module.
 // We only use it as a type here — the actual module is loaded at runtime via
@@ -59,6 +51,7 @@ interface SelectionFormats {
 
 interface SelectionInfo {
   hasSelection: boolean;
+  hasFocus: boolean;
   from: number;
   to: number;
   formats: SelectionFormats;
@@ -145,6 +138,10 @@ interface CodeMirrorEditorSignature {
       getQuery: () => Record<string, unknown> | undefined,
     ) => { instances: CardDef[]; isLoading: boolean } | undefined;
   };
+  Blocks: {
+    /** Controls rendered at the start of the docked toolbar (e.g. the view selector). */
+    leadingControls: [];
+  };
   Element: HTMLDivElement;
 }
 
@@ -163,7 +160,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   @tracked _formatPickerCardUrl: string | null = null;
   @tracked _formatPickerCardTitle: string | null = null;
 
-  // ── Floating toolbar state ──────────────────────────────────────────────
+  // ── Docked toolbar state ────────────────────────────────────────────────
   @tracked _selectionInfo: SelectionInfo | null = null;
 
   private editorView: any = null;
@@ -236,9 +233,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   }
 
   private _focusSearchInput = () => {
-    // Scope query to this editor instance's parent to avoid focusing
+    // Scope query to this editor instance's container to avoid focusing
     // the wrong input when multiple editors exist on the page
-    let container = this.editorView?.dom?.parentElement;
+    let container = this.editorView?.dom?.closest('.codemirror-editor');
     let input = (container ?? document).querySelector(
       '[data-codemirror-card-search-input]',
     ) as HTMLInputElement;
@@ -349,15 +346,19 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this.editorView?.focus();
   };
 
-  // ── Floating toolbar ────────────────────────────────────────────────────
+  // ── Docked toolbar ──────────────────────────────────────────────────────
 
   private _handleSelectionChange = (info: SelectionInfo) => {
     if (isDestroying(this) || isDestroyed(this)) return;
     this._selectionInfo = info;
   };
 
-  get showToolbar(): boolean {
-    return !!this._selectionInfo?.hasSelection;
+  /**
+   * Formatting controls are enabled only while the editor holds focus. The
+   * view selector (rendered into the leadingControls block) is always enabled.
+   */
+  get toolbarEnabled(): boolean {
+    return !!this._selectionInfo?.hasFocus;
   }
 
   get toolbarFormats(): SelectionFormats {
@@ -371,69 +372,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       }
     );
   }
-
-  positionToolbar = modifier((element: HTMLElement) => {
-    let view = this.editorView;
-    if (!view) return;
-
-    let virtualEl: VirtualElement = {
-      getBoundingClientRect: () => {
-        let { from, to } = view.state.selection.main;
-        let fromCoords = view.coordsAtPos(from);
-        let toCoords = view.coordsAtPos(to);
-        if (!fromCoords || !toCoords) {
-          return {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          } as DOMRect;
-        }
-        let left = Math.min(fromCoords.left, toCoords.left);
-        let top = fromCoords.top;
-        let right = Math.max(fromCoords.right, toCoords.right);
-        let bottom = toCoords.bottom;
-        return {
-          x: left,
-          y: top,
-          width: right - left,
-          height: bottom - top,
-          top,
-          left,
-          right,
-          bottom,
-        } as DOMRect;
-      },
-    };
-
-    let cleanup = autoUpdate(virtualEl, element, () => {
-      // Hide toolbar if selection scrolled out of the visible container
-      let scrollParent = view.dom.closest('.boxel-card-container');
-      let parentRect = scrollParent?.getBoundingClientRect();
-      let selRect = virtualEl.getBoundingClientRect();
-      if (
-        parentRect &&
-        (selRect.bottom < parentRect.top || selRect.top > parentRect.bottom)
-      ) {
-        element.style.display = 'none';
-        return;
-      }
-      element.style.display = '';
-
-      computePosition(virtualEl, element, {
-        placement: 'top',
-        middleware: [offset(8), flip(), shift({ padding: 8 })],
-      }).then(({ x, y }) => {
-        Object.assign(element.style, { left: `${x}px`, top: `${y}px` });
-      });
-    });
-
-    return cleanup;
-  });
 
   /** Prevent mousedown on toolbar/popup buttons from stealing editor focus/selection */
   _preventFocusLoss = (e: Event) => e.preventDefault();
@@ -455,7 +393,16 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     let view = this.editorView;
     if (!view) return;
     let { from, to } = view.state.selection.main;
-    if (from === to) return;
+    if (from === to) {
+      // No selection: insert empty link syntax with the cursor inside the
+      // brackets so the user can type the link text — [|](url).
+      view.dispatch({
+        changes: { from, insert: '[](url)' },
+        selection: { anchor: from + 1 },
+      });
+      view.focus();
+      return;
+    }
 
     // Check if selection is inside a markdown link by scanning for [text](url)
     // around the selection boundaries
@@ -846,69 +793,77 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   <template>
     {{#if this.cm}}
-      <div
-        class='codemirror-editor'
-        data-test-codemirror-editor
-        {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
-        ...attributes
-      >
-      </div>
+      <div class='codemirror-editor' data-test-codemirror-editor ...attributes>
+        {{! ── Docked toolbar ── }}
+        {{! template-lint-disable no-pointer-down-event-binding }}
+        <div class='codemirror-toolbar' data-test-markdown-toolbar>
+          {{yield to='leadingControls'}}
+          {{#if (has-block 'leadingControls')}}
+            <span class='toolbar-divider'></span>
+          {{/if}}
 
-      {{! ── Floating toolbar ── }}
-      {{! template-lint-disable no-pointer-down-event-binding }}
-      {{#if this.showToolbar}}
-        <div
-          class='codemirror-floating-toolbar'
-          {{this.positionToolbar}}
-          data-test-floating-toolbar
-        >
           <button
             class='toolbar-btn
-              {{if this.toolbarFormats.bold "toolbar-btn--active"}}'
+              {{if this.toolbarFormats.bold "toolbar-btn--active"}}
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-bold
+            type='button'
             title='Bold'
             aria-label='Bold'
             aria-pressed='{{this.toolbarFormats.bold}}'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._wrapBold}}
           ><BoldIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn
-              {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
+              {{if this.toolbarFormats.italic "toolbar-btn--active"}}
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-italic
+            type='button'
             title='Italic'
             aria-label='Italic'
             aria-pressed='{{this.toolbarFormats.italic}}'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._wrapItalic}}
           ><ItalicIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn
-              {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
+              {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-strikethrough
+            type='button'
             title='Strikethrough'
             aria-label='Strikethrough'
             aria-pressed='{{this.toolbarFormats.strikethrough}}'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._wrapStrikethrough}}
           ><StrikethroughIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn
-              {{if this.toolbarFormats.code "toolbar-btn--active"}}'
+              {{if this.toolbarFormats.code "toolbar-btn--active"}}
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-code
+            type='button'
             title='Code'
             aria-label='Code'
             aria-pressed='{{this.toolbarFormats.code}}'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._wrapCode}}
           ><CodeIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn
-              {{if this.toolbarFormats.link "toolbar-btn--active"}}'
+              {{if this.toolbarFormats.link "toolbar-btn--active"}}
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-link
+            type='button'
             title='Link'
             aria-label='Link'
             aria-pressed='{{this.toolbarFormats.link}}'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._toggleLink}}
           ><LinkIcon width='16' height='16' /></button>
@@ -916,26 +871,35 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           <span class='toolbar-divider'></span>
 
           <button
-            class='toolbar-btn'
+            class='toolbar-btn
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-h1
+            type='button'
             title='Heading 1'
             aria-label='Heading 1'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._insertH1}}
           ><Heading1Icon width='16' height='16' /></button>
           <button
-            class='toolbar-btn'
+            class='toolbar-btn
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-h2
+            type='button'
             title='Heading 2'
             aria-label='Heading 2'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._insertH2}}
           ><Heading2Icon width='16' height='16' /></button>
           <button
-            class='toolbar-btn'
+            class='toolbar-btn
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-h3
+            type='button'
             title='Heading 3'
             aria-label='Heading 3'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._insertH3}}
           ><Heading3Icon width='16' height='16' /></button>
@@ -943,33 +907,47 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           <span class='toolbar-divider'></span>
 
           <button
-            class='toolbar-btn'
+            class='toolbar-btn
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-bullet-list
+            type='button'
             title='Bullet List'
             aria-label='Bullet List'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._toggleBulletList}}
           ><ListIcon width='16' height='16' /></button>
           <button
-            class='toolbar-btn'
+            class='toolbar-btn
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-numbered-list
+            type='button'
             title='Numbered List'
             aria-label='Numbered List'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._toggleNumberedList}}
           ><ListOrderedIcon width='16' height='16' /></button>
           <button
-            class='toolbar-btn'
+            class='toolbar-btn
+              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
             data-test-toolbar-blockquote
+            type='button'
             title='Blockquote'
             aria-label='Blockquote'
+            disabled={{not this.toolbarEnabled}}
             {{on 'mousedown' this._preventFocusLoss}}
             {{on 'click' this._toggleBlockquote}}
           ><BlockquoteIcon width='16' height='16' /></button>
         </div>
-      {{/if}}
 
-      {{! ── Card search popup ── }}
+        <div
+          class='codemirror-mount'
+          data-test-codemirror-mount
+          {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
+        ></div>
+
+        {{! ── Card search popup ── }}
       {{! template-lint-disable no-pointer-down-event-binding }}
       {{#if this._cardSearchMode}}
         <div
@@ -1053,6 +1031,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           </button>
         </div>
       {{/if}}
+      </div>
 
       {{#if this.livePreview}}
         {{#each this.cardRenderTargets as |target|}}
@@ -1110,11 +1089,14 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       @layer baseComponent {
         .codemirror-editor {
           min-height: 120px;
-          padding: var(--boxel-sp-xs);
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          cursor: text;
+          border: 1px solid var(--boxel-border-color);
+          border-radius: var(--boxel-border-radius);
           position: relative;
+        }
+
+        .codemirror-mount {
+          padding: var(--boxel-sp-xs);
+          cursor: text;
         }
 
         .codemirror-editor :deep(.cm-editor) {
@@ -1352,21 +1334,20 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           word-break: break-all;
         }
 
-        /* ── Floating toolbar ── */
-        .codemirror-floating-toolbar {
-          position: fixed;
-          z-index: 110;
+        /* ── Docked toolbar ── */
+        .codemirror-toolbar {
+          position: sticky;
+          top: 0;
+          z-index: 10;
           display: flex;
           align-items: center;
-          gap: 2px;
-          padding: 4px 6px;
-          background: var(--boxel-dark, #27272a);
-          border-radius: 8px;
-          box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
-          pointer-events: auto;
-          width: max-content;
-          top: 0;
-          left: 0;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-5xs);
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+          background: var(--boxel-100);
+          border-bottom: 1px solid var(--boxel-200);
+          border-top-left-radius: var(--boxel-border-radius);
+          border-top-right-radius: var(--boxel-border-radius);
         }
 
         .toolbar-btn {
@@ -1376,28 +1357,37 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           width: 28px;
           height: 28px;
           border: none;
-          border-radius: 4px;
+          border-radius: var(--boxel-border-radius-sm);
           background: transparent;
-          color: var(--boxel-light, #fafafa);
+          color: var(--boxel-500);
           cursor: pointer;
           padding: 0;
-          transition: background-color 0.1s;
+          transition:
+            background-color 0.1s,
+            color 0.1s;
         }
 
-        .toolbar-btn:hover {
-          background: rgb(255 255 255 / 0.15);
+        .toolbar-btn:hover:not(:disabled) {
+          background: var(--boxel-100);
+          color: var(--boxel-700);
         }
 
-        .toolbar-btn--active {
-          background: rgb(255 255 255 / 0.2);
-          color: var(--boxel-highlight, #6366f1);
+        .toolbar-btn--active:not(:disabled) {
+          background: var(--boxel-200);
+          color: var(--boxel-700);
+        }
+
+        .toolbar-btn:disabled,
+        .toolbar-btn--disabled {
+          color: var(--boxel-300);
+          cursor: not-allowed;
         }
 
         .toolbar-divider {
           width: 1px;
           height: 18px;
-          background: rgb(255 255 255 / 0.2);
-          margin: 0 4px;
+          background: var(--boxel-200);
+          margin: 0 var(--boxel-sp-5xs);
         }
 
         .codemirror-editor-loading {

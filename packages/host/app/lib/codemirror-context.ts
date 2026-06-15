@@ -881,9 +881,19 @@ function createSlashCommandSource(
 function wrapWith(marker: string) {
   return (view: EditorView): boolean => {
     let { from, to } = view.state.selection.main;
-    if (from === to) return false;
-    let selected = view.state.sliceDoc(from, to);
     let len = marker.length;
+
+    // No selection: insert an empty pair of markers and drop the cursor
+    // between them so the user can type the content (e.g. **|**).
+    if (from === to) {
+      view.dispatch({
+        changes: { from, insert: marker + marker },
+        selection: { anchor: from + len },
+      });
+      return true;
+    }
+
+    let selected = view.state.sliceDoc(from, to);
 
     // Case 1: Selection includes the markers (source mode selection)
     if (
@@ -938,6 +948,8 @@ const markdownKeymap = keymap.of([
 
 export interface SelectionInfo {
   hasSelection: boolean;
+  /** Whether the editor currently holds focus. Drives toolbar enablement. */
+  hasFocus: boolean;
   from: number;
   to: number;
   /** Which inline formats are active in the current selection */
@@ -1026,11 +1038,15 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       if (update.docChanged) {
         onDocChange(update.state.doc.toString());
       }
-      if (onSelectionChange && (update.selectionSet || update.docChanged)) {
+      if (
+        onSelectionChange &&
+        (update.selectionSet || update.docChanged || update.focusChanged)
+      ) {
         let { from, to } = update.state.selection.main;
         let hasSelection = from !== to;
         onSelectionChange({
           hasSelection,
+          hasFocus: update.view.hasFocus,
           from,
           to,
           formats: hasSelection
