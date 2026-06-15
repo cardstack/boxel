@@ -124,9 +124,28 @@ let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 let computedCallCount = 0;
 let computedCacheHitCount = 0;
 
+// Render-pass loop ceiling. The prerender wedge is a rare, timing-triggered
+// SYNCHRONOUS loop in one render flush (a normally-trivial card pegs the main
+// thread for minutes, `mainThreadResponsive=false`, nothing in flight). The
+// thread is so pegged that nothing EXTERNAL can intervene — not CDP, not the
+// render timeout, not a watchdog — so the only place a guard can fire is from
+// INSIDE the loop. Every graph-traversal loop (Glimmer re-render, a `jq`
+// recursive descent over the cyclic relation graph, a field-resolution cycle)
+// has to call `getter` to read fields, so a wall-clock budget checked here
+// fires from within the loop and unwinds with a stack — the first signal that
+// has ever survived this peg. A budget (not a raw count) avoids false-positives
+// on legitimately heavy-but-finite renders (the realm's dashboards run ~20s).
+// Only armed while a compute pass is open (prerender render flush + render.meta
+// serialize), so the live-SPA getter is untouched.
+const RENDER_PASS_BUDGET_MS = 60_000;
+const PASS_BUDGET_CHECK_EVERY = 50_000;
+let passStartMs = 0;
+let passGetterCalls = 0;
+
 export interface ComputePassSnapshot {
   calls: number;
   cacheHits: number;
+  getterCalls: number;
 }
 
 // Open a synchronous compute-memo pass. Callers MUST pair this with
@@ -138,6 +157,9 @@ export function beginComputePass(): void {
   passComputeMemo = new WeakMap();
   computedCallCount = 0;
   computedCacheHitCount = 0;
+  passGetterCalls = 0;
+  passStartMs =
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 // Close the pass and return the per-traversal counter delta. The memo
@@ -147,9 +169,11 @@ export function endComputePass(): ComputePassSnapshot {
   let snapshot = {
     calls: computedCallCount,
     cacheHits: computedCacheHitCount,
+    getterCalls: passGetterCalls,
   };
   computedCallCount = 0;
   computedCacheHitCount = 0;
+  passGetterCalls = 0;
   return snapshot;
 }
 
@@ -157,6 +181,35 @@ export function getter<CardT extends BaseDefConstructor>(
   instance: BaseDef,
   field: Field<CardT>,
 ): BaseInstanceType<CardT> {
+  // Render-pass loop ceiling (see RENDER_PASS_BUDGET_MS). Armed only while a
+  // compute pass is open (prerender), so the live SPA pays nothing. Every
+  // PASS_BUDGET_CHECK_EVERY field reads, check the wall clock; if this single
+  // synchronous pass has burned the budget it is a runaway loop the external
+  // timeout can't break — throw from inside it with a deep stack so the
+  // looping caller (jq engine / Glimmer / serialize) is captured in the error
+  // doc. `RangeError`-style message kept distinctive for log/DB grep.
+  if (passComputeMemo !== null) {
+    if (++passGetterCalls % PASS_BUDGET_CHECK_EVERY === 0) {
+      let now =
+        typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - passStartMs > RENDER_PASS_BUDGET_MS) {
+        let prevLimit = Error.stackTraceLimit;
+        Error.stackTraceLimit = 200;
+        let err = new Error(
+          `[RENDER-LOOP-CEILING] one synchronous render pass exceeded ` +
+            `${RENDER_PASS_BUDGET_MS}ms after ${passGetterCalls} field reads; ` +
+            `last field='${String(field.name)}' instance='${
+              (instance as { id?: string }).id ?? '<unsaved>'
+            }'. Likely a synchronous render/compute loop — stack points at the ` +
+            `looping caller.`,
+        );
+        Error.stackTraceLimit = prevLimit;
+        passGetterCalls = 0; // avoid re-throw storms on the same pass
+        throw err;
+      }
+    }
+  }
+
   let deserialized = getDataBucket(instance);
   // this establishes that our field should rerender when cardTracking for this card changes
   cardTracking.get(instance);
