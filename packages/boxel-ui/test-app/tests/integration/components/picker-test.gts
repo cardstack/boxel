@@ -254,6 +254,80 @@ module('Integration | Component | picker', function (hooks) {
       .doesNotExist('Option 1 checkbox is unchecked after deselecting');
   });
 
+  // When a consumer reconstructs PickerOption objects on every render
+  // rather than keeping object references stable, power-select's
+  // identity-based multi-select toggle can't match the clicked option
+  // against @selected and emits a duplicate-id selection. Picker
+  // normalizes by id so a duplicate signals a toggle-off.
+  test('picker toggles selection by id when consumer rebuilds option objects each render', async function (assert) {
+    class SelectionController {
+      @tracked selectedIds: string[] = [];
+
+      get options(): PickerOption[] {
+        return [
+          { id: 'select-all', label: 'All', type: 'select-all' },
+          { id: '1', label: 'Option 1' },
+          { id: '2', label: 'Option 2' },
+        ];
+      }
+
+      get selected(): PickerOption[] {
+        if (this.selectedIds.length === 0) {
+          return this.options.filter((o) => o.type === 'select-all');
+        }
+        return this.selectedIds.map((id) => ({ id, label: `Option ${id}` }));
+      }
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selectedIds = newSelected
+        .filter((o) => o.type !== 'select-all')
+        .map((o) => o.id);
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{controller.options}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const optionOne = () =>
+      document
+        .querySelector(
+          '.ember-power-select-options [data-test-boxel-picker-option-row="1"]',
+        )!
+        .closest('.ember-power-select-option') as HTMLElement;
+
+    await click(optionOne());
+    assert.deepEqual(
+      controller.selectedIds,
+      ['1'],
+      'first click selects option 1',
+    );
+
+    await click(optionOne());
+    assert.deepEqual(
+      controller.selectedIds,
+      [],
+      'second click on the same option unselects it (no duplicate)',
+    );
+    assert
+      .dom(
+        '[data-test-boxel-picker-option-row="1"] .picker-option-row__checkbox--selected',
+      )
+      .doesNotExist('checkbox is unchecked after toggle off');
+  });
+
   test('picker shows search input when searchEnabled is true', async function (assert) {
     class SelectionController {
       @tracked selected: PickerOption[] = [];
