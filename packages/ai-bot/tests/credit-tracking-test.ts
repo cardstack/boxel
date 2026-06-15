@@ -214,4 +214,65 @@ module('Credit Tracking', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  test('an earlier fallback settling does not unlink a newer same-user entry', async (assert) => {
+    let { adapter } = makeFakeAdapter();
+    let resolvers: Record<string, () => void> = {};
+    let originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = (url: string) => {
+      let id = new URL(url).searchParams.get('id')!;
+      return new Promise((resolve) => {
+        resolvers[id] = () =>
+          resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ data: { total_cost: 0.001 } }),
+          });
+      });
+    };
+    try {
+      let map = new Map<string, Promise<void>>();
+      scheduleFallbackCostTracking({
+        dbAdapter: adapter,
+        matrixUserId: '@u:localhost',
+        generationId: 'gen-1',
+        openRouterApiKey: 'k',
+        trackAiUsageCostPromises: map,
+      });
+      let first = map.get('@u:localhost');
+      scheduleFallbackCostTracking({
+        dbAdapter: adapter,
+        matrixUserId: '@u:localhost',
+        generationId: 'gen-2',
+        openRouterApiKey: 'k',
+        trackAiUsageCostPromises: map,
+      });
+      let second = map.get('@u:localhost');
+      assert.notStrictEqual(
+        first,
+        second,
+        'the second fallback chained a new map entry',
+      );
+
+      // Settle the EARLIER fallback first — it must not delete the chained
+      // entry that now also represents the still-pending second fallback.
+      resolvers['gen-1']();
+      await first;
+      assert.strictEqual(
+        map.get('@u:localhost'),
+        second,
+        'the newer chained entry survives the earlier debit settling',
+      );
+
+      // Settling the second drains the chain and clears the entry.
+      resolvers['gen-2']();
+      await second;
+      assert.false(
+        map.has('@u:localhost'),
+        'the entry is removed once all chained debits settle',
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

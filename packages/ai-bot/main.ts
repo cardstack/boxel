@@ -558,35 +558,49 @@ Common issues are:
                 // Debit the inline cost INSIDE the lock so the next same-user
                 // request observes it before validating. This path has the
                 // best data (both costInUsd from inline chunks and
-                // generationId).
-                if (
-                  typeof costInUsd === 'number' &&
-                  Number.isFinite(costInUsd) &&
-                  costInUsd > 0
-                ) {
-                  await spendUsageCost(
-                    assistant.pgAdapter,
-                    senderMatrixUserId,
-                    costInUsd,
-                  );
-                } else if (generationId) {
-                  // No inline cost: fall back to the slow generation-cost API.
-                  // Register it in the tracking map here (inside the lock) so
-                  // the next same-user request's waitForPendingCreditTracking
-                  // observes it, but let the fetch + debit run detached — its
-                  // backoff can take up to 10 minutes and must not pin the
-                  // lock's connection that long.
-                  scheduleFallbackCostTracking({
-                    dbAdapter: assistant.pgAdapter,
-                    matrixUserId: senderMatrixUserId,
-                    generationId,
-                    openRouterApiKey: process.env.OPENROUTER_API_KEY!,
-                    trackAiUsageCostPromises,
+                // generationId). The user-facing response is already
+                // finalized, so a billing-write failure here must not skip the
+                // activeGenerations cleanup below (a stale entry would make a
+                // later message abort an already-finished run); swallow and log
+                // it, and let the next request surface any billing error via
+                // validateAICredits / waitForPendingCreditTracking.
+                try {
+                  if (
+                    typeof costInUsd === 'number' &&
+                    Number.isFinite(costInUsd) &&
+                    costInUsd > 0
+                  ) {
+                    await spendUsageCost(
+                      assistant.pgAdapter,
+                      senderMatrixUserId,
+                      costInUsd,
+                    );
+                  } else if (generationId) {
+                    // No inline cost: fall back to the slow generation-cost
+                    // API. Register it in the tracking map here (inside the
+                    // lock) so the next same-user request's
+                    // waitForPendingCreditTracking observes it, but let the
+                    // fetch + debit run detached — its backoff can take up to
+                    // 10 minutes and must not pin the lock's connection that
+                    // long.
+                    scheduleFallbackCostTracking({
+                      dbAdapter: assistant.pgAdapter,
+                      matrixUserId: senderMatrixUserId,
+                      generationId,
+                      openRouterApiKey: process.env.OPENROUTER_API_KEY!,
+                      trackAiUsageCostPromises,
+                    });
+                  } else {
+                    log.warn(
+                      `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
+                    );
+                  }
+                } catch (costError) {
+                  log.error(`[${eventId}] Failed to record AI usage cost`);
+                  log.error(costError);
+                  Sentry.captureException(costError, {
+                    extra: { roomId: room.roomId, eventId },
                   });
-                } else {
-                  log.warn(
-                    `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
-                  );
                 }
                 activeGenerations.delete(room.roomId);
               }

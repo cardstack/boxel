@@ -51,6 +51,12 @@ export async function waitForPendingCreditTracking(
  * Each scheduled fallback always performs its own debit — unlike the old
  * per-process barrier it never early-returns when another debit is pending,
  * so concurrent costs are not coalesced away.
+ *
+ * The map entry is the chain of ALL pending fallback debits for the user
+ * (the new work joined to whatever was already pending), so
+ * waitForPendingCreditTracking waits for every still-in-flight debit. The
+ * entry is removed only while it still points at this chain, so an earlier
+ * debit settling can't unlink a newer fallback that overwrote it.
  */
 export function scheduleFallbackCostTracking(opts: {
   dbAdapter: DBAdapter;
@@ -82,8 +88,15 @@ export function scheduleFallbackCostTracking(opts: {
         `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`,
       );
     }
-  })().finally(() => {
-    trackAiUsageCostPromises.delete(matrixUserId);
+  })();
+
+  let prior = trackAiUsageCostPromises.get(matrixUserId);
+  let tracked: Promise<void> = (
+    prior ? Promise.allSettled([prior, work]).then(() => undefined) : work
+  ).finally(() => {
+    if (trackAiUsageCostPromises.get(matrixUserId) === tracked) {
+      trackAiUsageCostPromises.delete(matrixUserId);
+    }
   });
-  trackAiUsageCostPromises.set(matrixUserId, work);
+  trackAiUsageCostPromises.set(matrixUserId, tracked);
 }
