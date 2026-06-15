@@ -254,11 +254,11 @@ module('Integration | Component | picker', function (hooks) {
       .doesNotExist('Option 1 checkbox is unchecked after deselecting');
   });
 
-  // Regression: CS-11321. Consumers like RealmPicker rebuild PickerOption
-  // objects on every render rather than maintaining stable references.
-  // Power-select's identity-based toggle then fails to recognize an
-  // already-selected option, so a second click used to append a duplicate
-  // instead of unselecting. Picker.onChange normalizes by id to fix this.
+  // When a consumer reconstructs PickerOption objects on every render
+  // rather than keeping object references stable, power-select's
+  // identity-based multi-select toggle can't match the clicked option
+  // against @selected and emits a duplicate-id selection. Picker
+  // normalizes by id so a duplicate signals a toggle-off.
   test('picker toggles selection by id when consumer rebuilds option objects each render', async function (assert) {
     class SelectionController {
       @tracked selectedIds: string[] = [];
