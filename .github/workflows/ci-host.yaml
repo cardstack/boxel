@@ -542,8 +542,14 @@ jobs:
           # Transient chunk-fetch failures present as `ChunkLoadError` under
           # webpack and as `Failed to fetch dynamically imported module` /
           # `NetworkError when attempting to fetch resource` under Vite.
-          # Retry the whole shard once when we detect any of these.
-          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource'
+          # Env-mode CI also sees momentary `Failed to fetch` against the
+          # per-slug Traefik hostnames mid-run (icons.<slug>.localhost
+          # most often, occasionally realm-server.<slug>.localhost) — same
+          # category: a service was briefly unreachable. The realm-server
+          # path has its own `withRetries` and recovers silently; icons
+          # doesn't, so the failure surfaces in any test that imports an
+          # icon. Retry the whole shard once when we detect any of these.
+          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^/]+: fetch failed'
           if [ $exit_code -ne 0 ] && grep -Eq "$RETRY_PATTERN" /tmp/test-output.log; then
             echo ""
             echo "::warning::Transient chunk-fetch failure detected — retrying shard ${{ matrix.shardIndex }}"
