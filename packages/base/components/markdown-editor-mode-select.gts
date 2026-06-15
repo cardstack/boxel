@@ -1,14 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
-export type ViewMode = 'compose' | 'source' | 'preview';
+export type MarkdownEditorMode = 'compose' | 'source' | 'preview';
 
-interface ViewOption {
-  value: ViewMode;
+interface ModeOption {
+  value: MarkdownEditorMode;
   label: string;
 }
 
-const VIEW_OPTIONS: ViewOption[] = [
+const MODE_OPTIONS: ModeOption[] = [
   { value: 'compose', label: 'Compose' },
   { value: 'source', label: 'Source' },
   { value: 'preview', label: 'Preview' },
@@ -16,26 +16,28 @@ const VIEW_OPTIONS: ViewOption[] = [
 
 interface Signature {
   Args: {
-    mode: ViewMode;
-    onChange: (mode: ViewMode) => void;
+    mode: MarkdownEditorMode;
+    onChange: (mode: MarkdownEditorMode) => void;
   };
   Element: HTMLElement;
 }
 
 /**
- * Presentational view-selector for the markdown editor toolbar. Wraps
- * BoxelSelect to switch between the Compose, Source, and Preview views.
- * Always enabled — unlike the formatting controls, the view selector works
- * regardless of editor focus.
+ * Mode selector for the markdown editor toolbar. Wraps BoxelSelect to switch
+ * between the Compose, Source, and Preview modes. Always enabled — unlike the
+ * formatting controls, it works regardless of editor focus.
+ *
+ * Named distinctly from boxel-ui's `ViewSelector` (a card/list/grid toggle),
+ * which is a different affordance.
  */
-export default class ViewSelector extends GlimmerComponent<Signature> {
-  get selectedOption(): ViewOption {
+export default class MarkdownEditorModeSelect extends GlimmerComponent<Signature> {
+  get selectedOption(): ModeOption {
     return (
-      VIEW_OPTIONS.find((o) => o.value === this.args.mode) ?? VIEW_OPTIONS[0]
+      MODE_OPTIONS.find((o) => o.value === this.args.mode) ?? MODE_OPTIONS[0]
     );
   }
 
-  handleChange = (option: ViewOption | undefined) => {
+  handleChange = (option: ModeOption | undefined) => {
     if (option) {
       this.args.onChange(option.value);
     }
@@ -43,23 +45,25 @@ export default class ViewSelector extends GlimmerComponent<Signature> {
 
   <template>
     <BoxelSelect
-      class='view-selector'
-      @options={{VIEW_OPTIONS}}
+      class='markdown-editor-mode-select'
+      @options={{MODE_OPTIONS}}
       @selected={{this.selectedOption}}
       @onChange={{this.handleChange}}
       @searchEnabled={{false}}
       @renderInPlace={{true}}
       @matchTriggerWidth={{false}}
-      @dropdownClass='view-selector-dropdown'
-      data-test-view-selector={{this.selectedOption.value}}
+      @dropdownClass='markdown-editor-mode-select-dropdown'
+      data-test-markdown-mode-select={{this.selectedOption.value}}
       ...attributes
       as |option|
     >
-      <span data-test-view-option={{option.value}}>{{option.label}}</span>
+      <span
+        data-test-markdown-mode-option={{option.value}}
+      >{{option.label}}</span>
     </BoxelSelect>
 
     <style scoped>
-      .view-selector {
+      .markdown-editor-mode-select {
         /* Compact the trigger: tight padding and a small label↔caret gap,
            via the BoxelSelect trigger tokens. */
         --boxel-select-trigger-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
@@ -73,7 +77,7 @@ export default class ViewSelector extends GlimmerComponent<Signature> {
          rounded when open. The default attaches the menu by squaring the
          trigger's bottom corners; !important wins without depending on
          ember-power-select's internal class names. */
-      .view-selector[aria-expanded='true'] {
+      .markdown-editor-mode-select[aria-expanded='true'] {
         border-radius: var(--boxel-form-control-border-radius) !important;
       }
     </style>
@@ -82,11 +86,11 @@ export default class ViewSelector extends GlimmerComponent<Signature> {
         outside this component's scoped-style reach (mirrors BoxelSelect). }}
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .boxel-select__dropdown.view-selector-dropdown {
+      .boxel-select__dropdown.markdown-editor-mode-select-dropdown {
         width: max-content;
         min-width: 7rem;
       }
-      .view-selector-dropdown .boxel-select-option-text {
+      .markdown-editor-mode-select-dropdown .boxel-select-option-text {
         white-space: nowrap;
       }
     </style>

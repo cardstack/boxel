@@ -21,7 +21,9 @@ import {
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
-import ViewSelector, { type ViewMode } from './view-selector';
+import MarkdownEditorModeSelect, {
+  type MarkdownEditorMode,
+} from './components/markdown-editor-mode-select';
 import { CardContextConsumer } from './field-component';
 
 /**
@@ -144,10 +146,10 @@ export class RichMarkdownField extends FieldDef {
 
   static edit = class Edit extends Component<typeof this> {
     _modeState = new TrackedObject({
-      value: 'compose' as ViewMode,
+      value: 'compose' as MarkdownEditorMode,
     });
 
-    get _mode(): ViewMode {
+    get _mode(): MarkdownEditorMode {
       return this._modeState.value;
     }
 
@@ -175,16 +177,16 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
-    setMode = (mode: ViewMode) => {
+    setMode = (mode: MarkdownEditorMode) => {
       this._modeState.value = mode;
     };
     <template>
       <div class='rich-markdown-editor'>
         {{#if (eq this._mode 'preview')}}
-          {{! Preview has no CodeMirrorEditor, so the sticky view selector
+          {{! Preview has no CodeMirrorEditor, so the sticky mode selector
               lives in its own docked bar above the rendered markdown. }}
           <div class='rich-markdown-toolbar' data-test-markdown-toolbar>
-            <ViewSelector @mode={{this._mode}} @onChange={{this.setMode}} />
+            <MarkdownEditorModeSelect @mode={{this._mode}} @onChange={{this.setMode}} />
           </div>
           <div class='rich-markdown-preview' data-test-markdown-preview>
             <MarkdownTemplate
@@ -206,7 +208,7 @@ export class RichMarkdownField extends FieldDef {
               @getCards={{context.getCards}}
             >
               <:leadingControls>
-                <ViewSelector @mode={{this._mode}} @onChange={{this.setMode}} />
+                <MarkdownEditorModeSelect @mode={{this._mode}} @onChange={{this.setMode}} />
               </:leadingControls>
             </CodeMirrorEditor>
           </CardContextConsumer>
