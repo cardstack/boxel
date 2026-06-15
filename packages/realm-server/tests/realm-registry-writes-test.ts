@@ -128,7 +128,7 @@ module(basename(__filename), function () {
     });
 
     test('does not clobber a bootstrap row that shares the URL', async function (assert) {
-      const url = 'https://cardstack.com/base/';
+      const url = '@cardstack/base/';
       await seedBootstrapRow(dbAdapter, url);
 
       await upsertPublishedRealmInRegistry(dbAdapter, {
@@ -236,7 +236,7 @@ module(basename(__filename), function () {
     });
 
     test('does NOT delete a bootstrap row (kind != bootstrap guard)', async function (assert) {
-      const url = 'https://cardstack.com/base/';
+      const url = '@cardstack/base/';
       await seedBootstrapRow(dbAdapter, url);
       await deleteRegistryRowByUrl(dbAdapter, url);
 

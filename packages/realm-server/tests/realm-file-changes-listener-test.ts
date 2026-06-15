@@ -63,13 +63,10 @@ module(basename(__filename), function () {
     });
 
     test('parses url:path without a port in the url', function (assert) {
-      assert.deepEqual(
-        parsePayload('https://cardstack.com/base/:card-api.gts'),
-        {
-          url: 'https://cardstack.com/base/',
-          path: 'card-api.gts',
-        },
-      );
+      assert.deepEqual(parsePayload('@cardstack/base/:card-api.gts'), {
+        url: '@cardstack/base/',
+        path: 'card-api.gts',
+      });
     });
 
     test('parses a nested path', function (assert) {

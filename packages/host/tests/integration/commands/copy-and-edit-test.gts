@@ -113,7 +113,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/theme',
+                  module: '@cardstack/base/theme',
                   name: 'default',
                 },
               },

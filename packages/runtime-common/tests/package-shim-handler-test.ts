@@ -222,7 +222,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       );
       handler.shimModule('@cardstack/runtime-common', {
         Loader: class {},
-        baseRealm: 'https://cardstack.com/base/',
+        baseRealm: '@cardstack/base/',
       });
       let requestUrl = `${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`;
       let response = await handler.handle(new Request(requestUrl));
@@ -259,7 +259,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       // `/marked-sync` subpath, not on the main runtime-common barrel.
       handler.shimModule('@cardstack/runtime-common', {
         Loader: class {},
-        baseRealm: 'https://cardstack.com/base/',
+        baseRealm: '@cardstack/base/',
       });
       handler.shimModule('@cardstack/runtime-common/marked-sync', {
         markdownToHtml: () => '',

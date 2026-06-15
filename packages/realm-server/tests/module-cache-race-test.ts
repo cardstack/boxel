@@ -1277,7 +1277,7 @@ module(basename(__filename), function () {
             attributes: { cardInfo: { name: 'Peer Realm' } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },
@@ -1744,7 +1744,7 @@ module(basename(__filename), function () {
             attributes: { cardInfo: { name: 'Startup Realm' } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },

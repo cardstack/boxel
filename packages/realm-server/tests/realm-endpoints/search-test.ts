@@ -1,7 +1,12 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, baseRRI, type Realm, rri } from '@cardstack/runtime-common';
+import {
+  baseRealmRRI,
+  baseRRI,
+  type Realm,
+  rri,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
@@ -232,7 +237,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 on: {
-                  module: `${baseRealm.url}card-api`,
+                  module: `${baseRealmRRI}card-api`,
                   name: 'FileDef',
                 },
                 eq: {
@@ -264,7 +269,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 type: {
-                  module: `${baseRealm.url}markdown-file-def`,
+                  module: `${baseRealmRRI}markdown-file-def`,
                   name: 'MarkdownDef',
                 },
               },

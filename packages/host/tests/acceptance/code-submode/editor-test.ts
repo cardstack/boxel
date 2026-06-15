@@ -262,7 +262,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/cards-grid',
+                  module: '@cardstack/base/cards-grid',
                   name: 'CardsGrid',
                 },
               },
@@ -303,7 +303,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                 },
               },
               attributes: {

@@ -12,7 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 const fileSearchQuery = {
   filter: {
     type: {
-      module: rri('https://cardstack.com/base/card-api'),
+      module: rri('@cardstack/base/card-api'),
       name: 'FileDef',
     },
   },

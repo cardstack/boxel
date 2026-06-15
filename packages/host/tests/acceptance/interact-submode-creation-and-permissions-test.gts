@@ -917,17 +917,13 @@ module(
           .dom('[data-test-highlights-card-container="ai-app-generator"]')
           .exists();
         assert
-          .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          )
+          .dom('[data-test-card="@cardstack/base/ai-app-generator"] textarea')
           .hasValue(
             'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.',
           );
         await click('[data-test-boxel-button][title="About Me"]');
         assert
-          .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          )
+          .dom('[data-test-card="@cardstack/base/ai-app-generator"] textarea')
           .hasValue(
             'Build a personal portfolio page with your background, skills, and contact information',
           );
@@ -1020,13 +1016,11 @@ module(
           'Design a travel planner dashboard that tracks itineraries, bookings, and budgets';
 
         await fillIn(
-          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+          '[data-test-card="@cardstack/base/ai-app-generator"] textarea',
           typedPrompt,
         );
         assert
-          .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          )
+          .dom('[data-test-card="@cardstack/base/ai-app-generator"] textarea')
           .hasValue(typedPrompt);
 
         await click('[data-test-create-this-for-me]');

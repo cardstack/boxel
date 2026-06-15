@@ -681,11 +681,11 @@ export class MyCard extends CardDef {
 
       // Should use single quotes based on prettier configuration
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/string'"),
+        responseJson.output.includes("'@cardstack/base/string'"),
         'Single quotes are used for imports',
       );
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/card-api'"),
+        responseJson.output.includes("'@cardstack/base/card-api'"),
         'Single quotes are used consistently',
       );
       assert.ok(

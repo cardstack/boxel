@@ -32,9 +32,9 @@ function ref(module: string, name: string): ResolvedCodeRef {
 
 const testRealmURL = 'http://eq-containment-test/';
 
-const stringRef = ref('https://cardstack.com/base/string', 'default');
-const numberRef = ref('https://cardstack.com/base/number', 'default');
-const booleanRef = ref('https://cardstack.com/base/boolean', 'default');
+const stringRef = ref('@cardstack/base/string', 'default');
+const numberRef = ref('@cardstack/base/number', 'default');
+const booleanRef = ref('@cardstack/base/boolean', 'default');
 const policyRef = ref(`${testRealmURL}policy`, 'Policy');
 const customerRef = ref(`${testRealmURL}customer`, 'Customer');
 const metadataRef = ref(`${testRealmURL}policy`, 'Metadata');

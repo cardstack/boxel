@@ -110,7 +110,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 '@cardstack/boxel-host/commands/get-card-type-schema/default',
               commandInput: {
                 codeRef: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },

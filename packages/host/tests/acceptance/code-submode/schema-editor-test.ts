@@ -10,7 +10,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI, Deferred } from '@cardstack/runtime-common';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -333,7 +333,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -347,13 +347,13 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
                 cardDescription: 'A field that captures big int values',
                 specType: 'field',
                 ref: {
-                  module: `${baseRealm.url}big-integer`,
+                  module: `${baseRealmRRI}big-integer`,
                   name: 'default',
                 },
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -367,13 +367,13 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
                 cardDescription: 'A field that captures date values',
                 specType: 'field',
                 ref: {
-                  module: `${baseRealm.url}date`,
+                  module: `${baseRealmRRI}date`,
                   name: 'default',
                 },
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -1206,7 +1206,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-tooltip-content]');
     assert
       .dom('[data-test-tooltip-content]')
-      .hasText('https://cardstack.com/base/card-api (BaseDef)');
+      .hasText('@cardstack/base/card-api (BaseDef)');
 
     await triggerEvent(
       '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',

@@ -540,7 +540,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -987,7 +987,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -1099,7 +1099,7 @@ module(basename(__filename), function () {
             attributes: { cardInfo: { name } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
