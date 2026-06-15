@@ -23,6 +23,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { resolvePrerenderManagerURL } from './prerender/config.ts';
+import { computeHostShellHash } from './prerender/prerender-constants.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import {
   isEnvironmentMode,
@@ -373,9 +374,7 @@ const smokeTestHostApp = async () => {
 // unreachable manager must never block realm-server boot.
 const reportHostShellToManager = async () => {
   try {
-    let html = await getIndexHTML();
-    let { createHash } = await import('crypto');
-    let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    let hash = await computeHostShellHash(await getIndexHTML());
     let managerURL = resolvePrerenderManagerURL();
     let response = await fetch(`${managerURL}/host-shell`, {
       method: 'POST',

@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 
 import { createServeIndex } from '../handlers/serve-index.ts';
+import { computeHostShellHash } from '../prerender/prerender-constants.ts';
 
 function buildDeps(getIndexHTML: () => Promise<string>) {
   return {
@@ -112,5 +113,45 @@ module(basename(__filename), function () {
     let d = await retrieveIndexHTML();
     assert.strictEqual(calls, 1, 'subsequent calls also reuse the cache');
     assert.strictEqual(d, a, 'cached value is returned identically');
+  });
+
+  test('getHostShellHash digests the raw index HTML, matching the manager report', async function (assert) {
+    let raw = validIndexHTML();
+    let { getHostShellHash, retrieveIndexHTML } = createServeIndex(
+      buildDeps(async () => raw),
+    );
+
+    let hash = await getHostShellHash();
+    assert.strictEqual(
+      hash,
+      await computeHostShellHash(raw),
+      'token is the digest of the raw getIndexHTML — the same value the realm server reports to the manager',
+    );
+
+    // The served shell is the rewritten HTML, which differs from the raw — the
+    // token must not be derived from it, or it would never match the manager's.
+    let rewritten = await retrieveIndexHTML();
+    assert.notStrictEqual(
+      hash,
+      await computeHostShellHash(rewritten),
+      'token is not derived from the rewritten shell',
+    );
+  });
+
+  test('getHostShellHash is memoized — getIndexHTML runs once across calls', async function (assert) {
+    let calls = 0;
+    let { getHostShellHash } = createServeIndex(
+      buildDeps(async () => {
+        calls += 1;
+        return validIndexHTML();
+      }),
+    );
+
+    let [a, b] = await Promise.all([getHostShellHash(), getHostShellHash()]);
+    let c = await getHostShellHash();
+
+    assert.strictEqual(a, b, 'concurrent callers receive the same token');
+    assert.strictEqual(b, c, 'subsequent calls reuse the cached token');
+    assert.strictEqual(calls, 1, 'getIndexHTML was only invoked once');
   });
 });

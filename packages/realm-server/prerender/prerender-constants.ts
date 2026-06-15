@@ -12,6 +12,16 @@ export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
 export const PRERENDER_HOST_SHELL_HASH_HEADER =
   'X-Boxel-Prerender-Host-Shell-Hash';
 
+// Single definition of the host-shell token so every producer agrees on it:
+// the realm server reports it to the manager at boot, serves it from
+// `GET /_host-shell-hash`, and a prerender server seeds its warm baseline from
+// that endpoint. A short md5 digest of the host index HTML — it only has to
+// change when the host bundle changes; callers treat it opaquely.
+export async function computeHostShellHash(indexHTML: string): Promise<string> {
+  let { createHash } = await import('crypto');
+  return createHash('md5').update(indexHTML).digest('hex').slice(0, 8);
+}
+
 // CS-10872: correlates one client-initiated prerender call across
 // remote-prerenderer → manager → prerender-server. The client assigns
 // the ID on the first request; the manager and prerender-server echo

@@ -771,7 +771,7 @@ export class RealmServer {
   }
 
   private buildApp() {
-    let { serveIndex, serveHostApp } = createServeIndex({
+    let { serveIndex, serveHostApp, getHostShellHash } = createServeIndex({
       serverURL: this.serverURL,
       assetsURL: this.assetsURL,
       realms: this.realms,
@@ -855,6 +855,7 @@ export class RealmServer {
           serveHostApp,
           serveIndex,
           serveFromRealm,
+          getHostShellHash,
           sendEvent,
           queue: this.queue,
           realms: this.realms,

@@ -19,6 +19,7 @@ import {
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { Prerenderer } from './index.ts';
+import { boxelHostURL } from './prerenderer.ts';
 import type { Timings } from './render-runner.ts';
 import { resolvePrerenderManagerURL } from './config.ts';
 import {
@@ -1046,11 +1047,14 @@ export function createPrerenderHttpServer(options?: {
   let drainingResolved = false;
   let drainingDeferred = new Deferred<void>();
   let heartbeatTimer: NodeJS.Timeout | undefined;
-  // Host-shell token the standbys were last warmed against, learned from the
+  // Host-shell token the standbys were last warmed against. Seeded at startup
+  // from the realm server we load the shell from (GET /_host-shell-hash) so it
+  // reflects the shell we actually warmed against, then kept current from the
   // manager's heartbeat responses (PRERENDER_HOST_SHELL_HASH_HEADER). When the
   // manager reports a different token — the host was redeployed and the realm
   // server is now serving a new shell — the browser is recycled so pages
-  // reload it. Undefined until the first heartbeat that carries a token.
+  // reload it. Undefined only if the startup seed failed, in which case the
+  // first heartbeat that carries a token adopts it as the baseline.
   let warmedHostShellHash: string | undefined;
   let recyclingForHostChange = false;
   let isClosing = false;
@@ -1168,6 +1172,39 @@ export function createPrerenderHttpServer(options?: {
       });
   }
 
+  // Seed the warm baseline from the realm server we warm against, so the first
+  // heartbeat compares against the shell we actually loaded rather than
+  // adopting whatever token the manager happens to report. This closes the gap
+  // where a server warmed against an old shell, but whose first token-carrying
+  // heartbeat reports a newer shell, would adopt the new token without
+  // recycling and stay pinned to the stale shell. Best-effort and time-bounded:
+  // on any failure we leave the baseline unset and fall back to adopting the
+  // first reported token.
+  async function seedWarmedHostShellHash() {
+    let controller = new AbortController();
+    let timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      let response = await fetch(`${boxelHostURL}/_host-shell-hash`, {
+        headers: { Accept: 'application/vnd.api+json' },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        log.debug(`host shell token seed skipped: HTTP ${response.status}`);
+        return;
+      }
+      let body: any = await response.json();
+      let hash = body?.data?.attributes?.hash;
+      if (typeof hash === 'string' && hash.trim().length > 0) {
+        warmedHostShellHash = hash.trim();
+        log.info(`seeded warmed host shell token ${warmedHostShellHash}`);
+      }
+    } catch (e) {
+      log.debug('Failed to seed warmed host shell token:', e as any);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function startHeartbeatLoop() {
     if (heartbeatTimer) return;
     void sendHeartbeat();
@@ -1209,7 +1246,10 @@ export function createPrerenderHttpServer(options?: {
         serverURL = actualURL;
         prerenderer.serverURL = actualURL;
       }
-      startHeartbeatLoop();
+      // Seed the baseline before the first heartbeat so it can't adopt a
+      // newer-than-what-we-warmed-against token; then start heartbeating
+      // regardless of whether the seed succeeded.
+      void seedWarmedHostShellHash().finally(() => startHeartbeatLoop());
     } catch (e) {
       log.debug('Error scheduling registration with prerender manager:', e);
     }
