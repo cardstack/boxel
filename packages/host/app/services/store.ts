@@ -30,6 +30,7 @@ import {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isSearchEntryCollectionDocument,
+  isSparseItemResource,
   resolveFileDefCodeRef,
   searchEntryDocToLinkableDoc,
   searchEntryWireQueryFromQuery,
@@ -1033,6 +1034,22 @@ export default class StoreService extends Service implements StoreInterface {
       return { data: [], meta: { page: { total: 0 } } };
     }
     return await this.fetchSearchEntryDoc(query, searchRealms);
+  }
+
+  // Selective inflate for a `<SearchResults>` consumer of `searchEntries`:
+  // deposit one full `item` serialization into the store so a by-URL read (or
+  // the hydration GET) resolves it without a round-trip. A sparse `item` (one
+  // carrying `meta.sparseFields`) is never deposited — it would misrepresent
+  // the instance and could clobber a correctly-loaded full one — so the call
+  // is a no-op for it; `search-entry`s carry no serialization to deposit.
+  // Idempotent: an already-resident instance is returned as-is.
+  async inflateSearchEntryItem(
+    resource: CardResource<Saved> | FileMetaResource,
+  ): Promise<void> {
+    if (isSparseItemResource(resource)) {
+      return;
+    }
+    await this.addResourceFromSearchData(resource);
   }
 
   private normalizeSearchRealms(realms: string[] | undefined): string[] {
