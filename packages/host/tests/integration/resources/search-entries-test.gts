@@ -203,17 +203,12 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
+  // Orthogonal to the /render route (which host tests don't exercise — that's
+  // the server prerendering suite): this drives the resource directly with the
+  // prerender signal set by hand and asserts it registers its search with the
+  // render store's readiness mechanism. The end-to-end "/render waits for the
+  // search before HTML capture" behavior is covered server-side.
   test('registers the in-flight search with the render store readiness signal during a prerender', async function (assert) {
-    // The render route's settle loop (`routes/render.ts`
-    // `#waitForRenderLoadStability`) only awaits the *render* store's
-    // `loaded()` / `loadGeneration`. A card rendering this surface in a
-    // prerenderable template must register its v2 search with the render store
-    // or the prerender captures HTML before the search resolves — an empty
-    // result list. The html-only branch deposits nothing into the store, so the
-    // registration itself (not an item deposit) is what moves the generation.
-    // An acceptance-level capture can't isolate this — the resource's
-    // test-waiter makes `await visit` wait for the search regardless of the
-    // readiness wiring — so this asserts the wiring directly.
     let renderStore = getService('render-store');
     let trackedLoads: Promise<unknown>[] = [];
     let originalTrackLoad = renderStore.trackLoad.bind(renderStore);
@@ -257,6 +252,8 @@ module('Integration | search-entries resource', function (hooks) {
         'the tracked load is the real search and it produced results',
       );
     } finally {
+      // `trackLoad` is a StoreService prototype method, so the spy is an own
+      // property; deleting it restores the inherited method.
       delete (renderStore as any).trackLoad;
       delete (globalThis as any).__boxelRenderContext;
     }

@@ -126,7 +126,11 @@ export class SearchEntriesResource extends Resource<Args> {
   // `prerendered-card-search` and the v1 `SearchResource` route render-context
   // work through the render store.
   private get runtimeStore(): StoreService {
-    if ((globalThis as any).__boxelRenderContext) {
+    // Strict `=== true` to match the prerender header / job-priority helpers
+    // (`prerender-fetch-headers.ts`, `resolveOutboundJobPriority`): store
+    // selection and header emission must agree, so a search routed to the
+    // render store is also sent with prerender headers.
+    if ((globalThis as any).__boxelRenderContext === true) {
       let renderStore = getOwner(this)?.lookup('service:render-store') as
         | StoreService
         | undefined;
