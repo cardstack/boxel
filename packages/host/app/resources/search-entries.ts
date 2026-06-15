@@ -23,10 +23,9 @@ import {
   type ErrorEntry,
   type FileMetaResource,
   type HtmlResource,
-  type PrerenderedHtmlFormat,
-  type ResolvedCodeRef,
   type Saved,
   type SearchEntryCollectionDocument,
+  type SearchEntryRendering,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
@@ -42,25 +41,10 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
 
-// One rendering of an entry: the wire's `html` resource flattened, with its
-// `styles` references resolved to the stylesheets' hrefs (the stylesheets
-// themselves are already imported through the loader by the time entries are
-// exposed). `id` is the (card URL, format, renderType) composite — an opaque
-// cache key; the readable rendering dimensions are the `format`/`renderType`
-// fields.
-export interface SearchEntryRendering {
-  id: string;
-  // Absent only on an error rendering with no last-known-good HTML.
-  html?: string;
-  cardType: string;
-  iconHtml?: string;
-  isError: boolean;
-  format: PrerenderedHtmlFormat;
-  // The type this rendering was rendered as. A file rendering carries none
-  // (files render natively).
-  renderType?: ResolvedCodeRef;
-  cssUrls: string[];
-}
+// `SearchEntryRendering` is the card-facing rendering view-model (it rides the
+// v2 `@context` search surface), so it lives in runtime-common; re-exported
+// here because this resource builds it and call sites import it from here.
+export type { SearchEntryRendering };
 
 // One v2 search result, joined from the wire document: the `search-entry`
 // resource plus the `html` renderings and/or `item` serialization it

@@ -14,6 +14,7 @@ import {
   CardContextName,
 } from '@cardstack/runtime-common';
 
+import SearchResults from '@cardstack/host/components/card-search/search-results';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -56,6 +57,7 @@ class RenderHtmlTemplate extends Component<Signature> {
       getCardCollection: this.getCardCollection,
       store: this.store,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      searchResultsComponent: SearchResults,
       mode: 'host',
       submode: 'host',
     };
