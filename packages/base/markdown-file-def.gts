@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
+  identifyCard,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
@@ -22,6 +23,18 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import { FrontmatterField } from './frontmatter-field';
+import {
+  frontmatterFieldForKind,
+  isKnownFrontmatterKind,
+} from './frontmatter-kinds';
+import { parseFrontmatter } from './frontmatter-parse';
+
+// Channel for routing per-field meta (e.g. the concrete subclass of a
+// polymorphic field) from `extractAttributes` to the index resource builder,
+// without it leaking into the flat `search_doc`. The host file extractor reads
+// the same global symbol. See `file-def-attributes-extractor.ts`.
+const fileFieldMetaSymbol = Symbol.for('boxel:file-field-meta');
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const EXCERPT_MAX_LENGTH = 500;
@@ -447,6 +460,13 @@ export class MarkdownDef extends FileDef {
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
 
+  // The file's YAML frontmatter. When the frontmatter declares a recognized
+  // `kind` (e.g. `kind: skill`), this holds the matching subclass instance
+  // (e.g. `SkillField`); otherwise it stays a base `FrontmatterField`. The
+  // concrete subclass is recorded in `meta.fields.frontmatter.adoptsFrom` by
+  // `extractAttributes`, so it rehydrates as the right type on read.
+  @field frontmatter = contains(FrontmatterField);
+
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: MarkdownDef) {
       if (!this.content) {
@@ -496,6 +516,14 @@ export class MarkdownDef extends FileDef {
       excerpt: string;
       content: string;
       cardReferenceUrls: string[];
+      // Flat, searchable frontmatter projection (e.g. `kind: 'skill'` →
+      // `searchFiles({ filter: { eq: { kind: 'skill' } } })`). `name` is NOT
+      // surfaced flat because it collides with the FileDef's filename; the
+      // skill name lives in `frontmatter.name`.
+      kind?: string;
+      description?: string;
+      // The nested frontmatter field value, typed by `kind` via the registry.
+      frontmatter?: Record<string, unknown>;
     }>
   > {
     let extension = getExtension(url);
@@ -516,10 +544,31 @@ export class MarkdownDef extends FileDef {
     let markdown = new TextDecoder().decode(bytes);
     let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
 
-    return {
+    let frontmatterData: Record<string, unknown> = {};
+    let body = markdown;
+    try {
+      let parsed = parseFrontmatter(normalizeMarkdown(markdown));
+      frontmatterData = parsed.data;
+      body = parsed.body;
+    } catch (err) {
+      // Invalid YAML: index the markdown without frontmatter rather than fail
+      // the whole file. TODO(CS-11545): surface this via indexing diagnostics
+      // instead of only a console warning (spec Risks — visible parse errors).
+      console.warn(`[markdown-file-def] frontmatter parse failed for ${url}:`, err);
+    }
+
+    let attributes: SerializedFile<{
+      title: string;
+      excerpt: string;
+      content: string;
+      cardReferenceUrls: string[];
+      kind?: string;
+      description?: string;
+      frontmatter?: Record<string, unknown>;
+    }> = {
       ...base,
-      title: extractTitle(markdown, fallbackTitle),
-      excerpt: extractExcerpt(markdown),
+      title: extractTitle(body, fallbackTitle),
+      excerpt: extractExcerpt(body),
       content: markdown,
       cardReferenceUrls: extractCardReferenceUrls(
         markdown,
@@ -527,5 +576,31 @@ export class MarkdownDef extends FileDef {
         new VirtualNetwork(),
       ),
     };
+
+    let kind =
+      typeof frontmatterData.kind === 'string'
+        ? frontmatterData.kind
+        : undefined;
+    if (kind !== undefined) {
+      attributes.kind = kind; // flat, searchable
+    }
+
+    // When the kind maps to a known frontmatter subclass, carry the nested
+    // field value and record the concrete subclass so it rehydrates as that
+    // type. The base (declared) FrontmatterField needs no override.
+    if (isKnownFrontmatterKind(kind)) {
+      attributes.frontmatter = frontmatterData;
+      if (typeof frontmatterData.description === 'string') {
+        attributes.description = frontmatterData.description; // flat, searchable
+      }
+      let adoptsFrom = identifyCard(frontmatterFieldForKind(kind));
+      if (adoptsFrom) {
+        (attributes as Record<PropertyKey, unknown>)[fileFieldMetaSymbol] = {
+          frontmatter: { adoptsFrom },
+        };
+      }
+    }
+
+    return attributes;
   }
 }
