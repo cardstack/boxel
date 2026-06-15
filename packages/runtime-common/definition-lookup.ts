@@ -915,6 +915,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
     let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
+      // CS-10753 DIAG: definition key miss under the RRI flip. Logs the
+      // computed lookup key, the canonical module URL it resolved
+      // through, and the keys actually present in the loaded module
+      // entry so we can see exactly where the key form diverges.
+      console.error(
+        `[CS-10753 DIAG] definition miss: codeRef.module=${codeRef.module} canonicalModuleURL=${canonicalModuleURL} moduleId=${moduleId} availableKeys=${JSON.stringify(
+          Object.keys(moduleEntry.definitions),
+        )}`,
+      );
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
       });
