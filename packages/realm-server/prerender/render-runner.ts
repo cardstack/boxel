@@ -816,6 +816,7 @@ export class RenderRunner {
           sessionAuth: string,
           id: string | undefined,
           jobPriority: number | undefined,
+          renderNonce: string,
         ) => {
           localStorage.setItem('boxel-session', sessionAuth);
           (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
@@ -823,10 +824,21 @@ export class RenderRunner {
           (
             globalThis as unknown as { __boxelJobPriority?: number }
           ).__boxelJobPriority = jobPriority;
+          // Per-card render identity for the field-getter render-loop ceiling
+          // (`base/field-support.ts`). Set here on the prerender server — which
+          // deploys with realm-server/prerender — rather than from the statically
+          // built host SPA, so the ceiling never depends on a separate host
+          // deploy. The url is unique per card, so the ceiling resets its
+          // per-card field-read counter on each new visit (a reused tab renders
+          // many cards via in-page SPA transitions, so module state persists).
+          (
+            globalThis as unknown as { __boxelRenderNonce?: string }
+          ).__boxelRenderNonce = renderNonce;
         },
         auth,
         jobId,
         priority,
+        url,
       );
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
