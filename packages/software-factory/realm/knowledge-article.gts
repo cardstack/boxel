@@ -186,7 +186,11 @@ export class KnowledgeArticle extends CardDef {
           <:eyebrow>
             <span class='ka-badge'>
               <BookOpen width='12' height='12' aria-hidden='true' />
-              {{if @model.articleType @model.articleType 'Article'}}
+              {{#if @model.articleType}}
+                <@fields.articleType @format='atom' />
+              {{else}}
+                Article
+              {{/if}}
             </span>
           </:eyebrow>
           <:title><@fields.cardTitle /></:title>
@@ -271,7 +275,13 @@ export class KnowledgeArticle extends CardDef {
               height='14'
               aria-hidden='true'
             />
-            <span>{{if @model.articleType @model.articleType 'Article'}}</span>
+            <span>
+              {{#if @model.articleType}}
+                <@fields.articleType @format='atom' />
+              {{else}}
+                Article
+              {{/if}}
+            </span>
           </div>
           <h1 class='ka-title'>{{if
               @model.articleTitle
