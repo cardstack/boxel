@@ -2686,6 +2686,11 @@ export class IssueTracker extends KanbanBoard {
       return cardTitle ?? 'Issue Tracker Board';
     },
   });
+  @field cardTheme = linksTo(() => Theme, {
+    computeVia: function (this: IssueTracker) {
+      return this.cardInfo?.theme ?? this.project?.cardTheme;
+    },
+  });
 
   static isolated = IssueTrackerIsolated;
 }
