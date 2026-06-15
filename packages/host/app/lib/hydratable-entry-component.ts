@@ -6,6 +6,7 @@ import {
 import { precompileTemplate } from '@ember/template-compilation';
 
 import type {
+  ErrorEntry,
   Format,
   ResolvedCodeRef,
   StoreReadType,
@@ -42,8 +43,12 @@ export interface HydratableEntryArgs {
   // The format the live/hydrated card renders as, so it matches the
   // prerendered HTML the query selected.
   format: Format;
-  // An error rendering never hydrates.
+  // An error rendering never hydrates; with no inert HTML it falls through to
+  // the host error component.
   isError: boolean;
+  // The error doc the host error component surfaces when this row falls through
+  // to it.
+  errorDoc?: ErrorEntry;
   // The hydration gesture for an HTML-backed row.
   mode: HydrationMode;
 }
@@ -56,6 +61,7 @@ class _HydratableEntryComponent {
     readonly type: StoreReadType | undefined,
     readonly format: Format,
     readonly isError: boolean,
+    readonly errorDoc: ErrorEntry | undefined,
     readonly mode: HydrationMode,
   ) {}
 }
@@ -69,6 +75,7 @@ setComponentTemplate(
       @type={{this.type}}
       @format={{this.format}}
       @isError={{this.isError}}
+      @errorDoc={{this.errorDoc}}
       @mode={{this.mode}}
       ...attributes
     />`,
@@ -112,6 +119,7 @@ export function hydratableEntryComponent(
     args.type,
     args.format,
     args.isError,
+    args.errorDoc,
     args.mode,
   ) as unknown as EntryComponent;
 }

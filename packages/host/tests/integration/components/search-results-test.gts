@@ -153,6 +153,51 @@ function bookItem(
   } as unknown as CardResource<Saved>;
 }
 
+// An `item` serialization standing in for a card that failed to render: it
+// carries the error doc in `meta.error` and no usable attributes. Drives the
+// terminal rung — the host error component.
+function errorItem(url: string, message: string): CardResource<Saved> {
+  return {
+    type: 'card',
+    id: url,
+    meta: {
+      adoptsFrom: { module: testRRI('book'), name: 'Book' },
+      error: {
+        type: 'instance-error',
+        error: {
+          title: 'Card Error',
+          status: 500,
+          message,
+          additionalErrors: null,
+        },
+      },
+    },
+    links: { self: url },
+  } as unknown as CardResource<Saved>;
+}
+
+// An error rendering carrying no last-known-good HTML: `isError` with the
+// `html` string absent. With no item alongside it, the row has nothing to
+// render but its error state — the host error component, with a generic
+// message (no error doc rode along).
+function htmlIncludedNoLastKnownGood(
+  url: string,
+): SearchEntryIncludedResource[] {
+  return [
+    {
+      type: HtmlResourceType,
+      id: renderingIdFor(url),
+      attributes: {
+        cardType: 'Book',
+        isError: true,
+        format: 'fitted',
+        renderType: bookRef,
+      },
+      relationships: { styles: { data: [] } },
+    },
+  ];
+}
+
 module('Integration | Component | search-results', function (hooks) {
   let loader: Loader;
   let storeService: StoreService;
@@ -444,6 +489,105 @@ module('Integration | Component | search-results', function (hooks) {
       assert.notOk(
         isCardInstance(storeService.peek(BOOK_1)),
         'no hydration GET fired for an error row',
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  test('an error item with no html falls through to the host error component', async function (assert) {
+    // No good html, no last-known-good html, and the live item carries an
+    // error doc — the terminal rung. The host error component surfaces the
+    // doc's message and the row never enters the store or fires a GET.
+    let restore = stubSearchEntries({
+      data: [itemEntryResource(BOOK_1)],
+      included: [errorItem(BOOK_1, 'Boom: failed to render')],
+      meta: { page: { total: 1 } },
+    });
+    try {
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await render(
+        <template>
+          <TestContext>
+            <SearchResults @query={{query}} @mode='hover' />
+          </TestContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-search-result-error]')),
+      );
+
+      assert
+        .dom(`[data-test-search-result-error="${BOOK_1}"]`)
+        .exists('the host error component renders for an error item')
+        .containsText(
+          'Boom: failed to render',
+          'it surfaces the error doc message',
+        );
+      assert
+        .dom(`[data-test-hydratable-card="${BOOK_1}"]`)
+        .doesNotExist('an error item is not a hydratable card');
+      assert.notOk(
+        isCardInstance(storeService.peek(BOOK_1)),
+        'an error item is never deposited into the store',
+      );
+
+      await triggerEvent(
+        `[data-test-search-result-error="${BOOK_1}"]`,
+        'mouseenter',
+      );
+      assert.notOk(
+        isCardInstance(storeService.peek(BOOK_1)),
+        'hovering the host error component fires no hydration GET',
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  test('an error rendering with no last-known-good html falls through to the host error component', async function (assert) {
+    // The html rendering is an error rendering carrying no html string, and no
+    // item rode along — nothing renders but the error state, so the host error
+    // component shows its generic message.
+    let restore = stubSearchEntries({
+      data: [htmlEntryResource(BOOK_1)],
+      included: htmlIncludedNoLastKnownGood(BOOK_1),
+      meta: {
+        page: { total: 1 },
+        htmlQuery: { eq: { format: 'fitted', renderType: bookRef } },
+      },
+    });
+    try {
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await render(
+        <template>
+          <TestContext>
+            <SearchResults @query={{query}} @mode='hover' />
+          </TestContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-search-result-error]')),
+      );
+
+      assert
+        .dom(`[data-test-search-result-error="${BOOK_1}"]`)
+        .exists(
+          'the host error component renders when there is nothing to show',
+        )
+        .containsText(
+          'could not be rendered',
+          'it shows the generic message when no error doc rode along',
+        );
+      assert.notOk(
+        isCardInstance(storeService.peek(BOOK_1)),
+        'a bare error rendering never enters the store',
       );
     } finally {
       restore();
