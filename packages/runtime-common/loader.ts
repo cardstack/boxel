@@ -310,52 +310,48 @@ export class Loader {
     });
   }
 
-  async getConsumedModules(
-    moduleIdentifier: string,
-    consumed: string[] = [],
-    initialIdentifier = moduleIdentifier,
-  ): Promise<string[]> {
+  async getConsumedModules(moduleIdentifier: string): Promise<string[]> {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
     // are treated as the same module for cycle detection and self-exclusion.
-    let resolvedHref = this.virtualNetwork
-      ? this.virtualNetwork.toURL(moduleIdentifier).href
-      : new URL(moduleIdentifier).href;
-    let resolvedInitial = this.virtualNetwork
-      ? this.virtualNetwork.toURL(initialIdentifier).href
-      : new URL(initialIdentifier).href;
+    // The walk is Set-based and resolves each identifier once: this runs per
+    // module across large dependency graphs, so an array-scan accumulator or
+    // a per-identifier URL construction multiplies into real render time.
+    let resolveHref = (id: string) =>
+      this.virtualNetwork
+        ? this.virtualNetwork.toURLHref(id)
+        : new URL(id).href;
+    let visited = new Set<string>();
+    let walk = async (id: string, href: string): Promise<void> => {
+      if (visited.has(href)) {
+        return;
+      }
+      visited.add(href);
 
-    if (consumed.includes(resolvedHref)) {
-      return [];
-    }
+      let module = this.getModule(href);
+      if (!module || module.state === 'fetching') {
+        // we haven't yet tried importing the module or we are still in the
+        // process of importing the module
+        try {
+          await this.import<Record<string, any>>(id);
+        } catch (err: any) {
+          this.log.warn(
+            `encountered an error trying to load the module ${id}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
+          );
+        }
+        module = this.getModule(href);
+      }
+      if (module?.state === 'evaluated' || module?.state === 'broken') {
+        for (let consumedModule of module.consumedModules) {
+          await walk(consumedModule, resolveHref(consumedModule));
+        }
+      }
+    };
+    let initialHref = resolveHref(moduleIdentifier);
+    await walk(moduleIdentifier, initialHref);
     // you can't consume yourself
-    if (resolvedHref !== resolvedInitial) {
-      consumed.push(resolvedHref);
-    }
-
-    let module = this.getModule(resolvedHref);
-
-    if (!module || module.state === 'fetching') {
-      // we haven't yet tried importing the module or we are still in the process of importing the module
-      try {
-        await this.import<Record<string, any>>(moduleIdentifier);
-      } catch (err: any) {
-        this.log.warn(
-          `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
-        );
-      }
-    }
-    if (module?.state === 'evaluated' || module?.state === 'broken') {
-      for (let consumedModule of module?.consumedModules ?? []) {
-        await this.getConsumedModules(
-          consumedModule,
-          consumed,
-          initialIdentifier,
-        );
-      }
-      return [...new Set(consumed)]; // Get rid of duplicates
-    }
-    return [];
+    visited.delete(initialHref);
+    return [...visited];
   }
 
   static identify(

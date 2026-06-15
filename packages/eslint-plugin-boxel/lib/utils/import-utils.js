@@ -5,6 +5,12 @@
 // module so a missing import configured in one form merges into an
 // existing import that uses the other form. Add new realms here as the
 // runtime registers their aliases.
+//
+// Transition shim: this map only exists because base-realm modules can
+// still be imported in either form. Once the virtual-alias URL form
+// (`https://cardstack.com/base/...`) is fully retired and all source
+// uses the RRI prefix form, this map and the two helpers below collapse
+// to identity and can be removed — callers compare specifiers directly.
 const REALM_PREFIX_ALIASES = {
   '@cardstack/base/': 'https://cardstack.com/base/',
 };

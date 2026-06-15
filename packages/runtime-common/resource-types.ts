@@ -1,4 +1,5 @@
 import { md5 } from 'super-fast-md5';
+import type { ErrorEntry } from './error.ts';
 import type { RealmInfo } from './realm.ts';
 import { type CodeRef, type ResolvedCodeRef, moduleFrom } from './code-ref.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
@@ -106,6 +107,11 @@ export type CardResourceMeta = Meta & {
   // the instance and could clobber a correctly-loaded full one). Absence
   // marks the serialization full.
   sparseFields?: string[];
+  // The result's error doc, when this serialization stands in for a card that
+  // failed to render/index. Present => the live `item` cannot render, so a
+  // consumer falls through to the host error component (the terminal rung of
+  // the resolution chain) and never deposits the resource into the Store.
+  error?: ErrorEntry;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -118,6 +124,9 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
+  // See CardResourceMeta.error — a file-meta serialization can likewise carry
+  // the result's error doc when it failed to render.
+  error?: ErrorEntry;
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
