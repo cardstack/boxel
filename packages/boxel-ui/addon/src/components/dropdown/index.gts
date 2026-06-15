@@ -383,12 +383,6 @@ class BoxelDropdown extends Component<Signature> {
         }
       }
     </style>
-    {{! template-lint-disable require-scoped-style }}
-    <style>
-      .ember-basic-dropdown-content {
-        background: none;
-      }
-    </style>
   </template>
 
   dropdownModifier = createModifier<DropdownTriggerSignature>(function (

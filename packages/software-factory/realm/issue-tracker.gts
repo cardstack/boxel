@@ -3,6 +3,7 @@ import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
+import { htmlSafe } from '@ember/template';
 import { dropTask } from 'ember-concurrency';
 
 import {
@@ -2805,6 +2806,183 @@ export class IssueTracker extends KanbanBoard {
       return this.cardInfo?.theme ?? this.project?.cardTheme;
     },
   });
+
+  static fitted = class Fitted extends Component<typeof IssueTracker> {
+    get issueCount(): number {
+      return this.args.model.cards?.length ?? 0;
+    }
+
+    get sortedColumns(): Array<{
+      label: string;
+      style: ReturnType<typeof htmlSafe> | undefined;
+    }> {
+      return [...(this.args.model.columns ?? [])]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((col) => ({
+          label: col.label ?? col.key ?? '',
+          style: col.color ? htmlSafe(`--col-color: ${col.color}`) : undefined,
+        }))
+        .filter((col) => col.label);
+    }
+
+    <template>
+      <FittedCard class='tracker-fitted' @titleTag='h3'>
+        <:eyebrow>
+          <div class='tracker-eyebrow'>
+            <SquareKanban width='14' height='14' aria-hidden='true' />
+            <span>BOARD</span>
+          </div>
+        </:eyebrow>
+        <:title><@fields.cardTitle /></:title>
+        <:subtitle>
+          {{#if @model.project}}
+            <span class='tracker-project'>{{@model.project.cardTitle}}</span>
+          {{/if}}
+        </:subtitle>
+        <:meta>
+          {{#if this.sortedColumns.length}}
+            <div class='tracker-columns'>
+              {{#each this.sortedColumns as |col|}}
+                <span class='column-chip' style={{col.style}}>
+                  <span class='column-dot' aria-hidden='true'></span>
+                  <span class='column-label'>{{col.label}}</span>
+                </span>
+              {{/each}}
+            </div>
+          {{/if}}
+        </:meta>
+        <:footer>
+          {{#if this.issueCount}}
+            <span class='stat-item'>
+              <CheckboxIcon
+                class='stat-icon'
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />{{this.issueCount}}
+            </span>
+          {{/if}}
+        </:footer>
+      </FittedCard>
+      <style scoped>
+        .tracker-fitted {
+          --fc-badge-right-display: none;
+          --fc-meta-display: none;
+          --fc-subtitle-display: none;
+          --boxel-heading-font-weight: 600;
+          box-shadow: inset 3px 0 0 oklch(55% 0.18 264);
+        }
+        .tracker-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          color: oklch(55% 0.18 264);
+          font-weight: 700;
+        }
+        @container fitted-card (width >= 150px) and (height >= 65px) {
+          .tracker-fitted {
+            --fc-subtitle-display: block;
+          }
+        }
+        @container fitted-card (width >= 150px) and (height >= 170px) {
+          .tracker-fitted {
+            --fc-meta-display: block;
+            --fc-title-line-clamp: 3;
+          }
+        }
+        @container fitted-card (aspect-ratio <= 1.0) and (width <= 150px) and
+          (height <= 170px) {
+          .tracker-fitted {
+            --fc-meta-display: none;
+          }
+        }
+        @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
+          .tracker-fitted {
+            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          }
+        }
+        @container fitted-card (width >= 150px) and (65px <= height <= 170px) {
+          .tracker-fitted {
+            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+              var(--boxel-sp-2xs) var(--boxel-sp);
+          }
+        }
+        @container fitted-card (width >= 150px) and (height > 170px) {
+          .tracker-fitted {
+            --fc-title-font-size: 1rem;
+            --fc-content-padding: var(--boxel-sp);
+          }
+        }
+        .tracker-project {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-500));
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tracker-columns {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-4xs);
+          padding-top: var(--boxel-sp-xs);
+          border-top: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          width: 100%;
+        }
+        .column-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25em;
+          font-size: 0.625rem;
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          background: color-mix(
+            in oklch,
+            var(--col-color, var(--muted, var(--boxel-100))) 10%,
+            transparent
+          );
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--col-color, var(--muted-foreground, var(--boxel-400))) 35%,
+              transparent
+            );
+          border-radius: 0.25rem;
+          padding: 0.1em 0.4em;
+          letter-spacing: 0.04em;
+        }
+        .column-dot {
+          width: 0.375rem;
+          height: 0.375rem;
+          border-radius: 50%;
+          background: var(
+            --col-color,
+            var(--muted-foreground, var(--boxel-500))
+          );
+          flex-shrink: 0;
+        }
+        .stat-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25em;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          margin-left: auto;
+        }
+        .stat-icon {
+          flex-shrink: 0;
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = this.fitted;
 
   static edit = IssueTrackerEdit;
   static isolated = IssueTrackerIsolated;
