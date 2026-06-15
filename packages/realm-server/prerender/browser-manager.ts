@@ -7,7 +7,11 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 
 import { isHttpsLoopback } from '../lib/is-https-loopback.ts';
-import { v8ProfEnabled, v8ProfJsFlags } from './v8-prof.ts';
+import {
+  v8ProfEnabled,
+  v8ProfJsFlags,
+  prepareV8ProfForLaunch,
+} from './v8-prof.ts';
 
 const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
@@ -73,6 +77,7 @@ export class BrowserManager {
     // concurrent renderer processes don't clobber one another; the timeout
     // path post-processes the log into the prerender-server logs.
     if (v8ProfEnabled()) {
+      await prepareV8ProfForLaunch();
       launchArgs.push(`--js-flags=${v8ProfJsFlags()}`);
     }
 

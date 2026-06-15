@@ -40,6 +40,34 @@ export function v8ProfJsFlags(): string {
   return `--prof --logfile=${V8_PROF_LOG_DIR}/${V8_PROF_LOG_PREFIX}%p.log`;
 }
 
+// Browser-launch wall-clock; logs older than this are from a previous run.
+let v8ProfLaunchAt = 0;
+
+// Call once at browser launch (when armed) to isolate this run's profile
+// logs. The OS temp dir is shared and the container can be reused across
+// deploys, so a stale `--prof` log from an earlier run could otherwise be
+// picked as the timeout diagnostic and point at the wrong stack. Delete
+// any pre-existing logs and stamp the launch time so the timeout-path
+// processor only ever considers logs written by THIS browser run.
+export async function prepareV8ProfForLaunch(): Promise<void> {
+  if (!v8ProfEnabled()) {
+    return;
+  }
+  v8ProfLaunchAt = Date.now();
+  try {
+    let entries = await fs.readdir(V8_PROF_LOG_DIR);
+    await Promise.all(
+      entries
+        .filter((e) => e.startsWith(V8_PROF_LOG_PREFIX) && e.endsWith('.log'))
+        .map((e) =>
+          fs.rm(path.join(V8_PROF_LOG_DIR, e), { force: true }).catch(() => {}),
+        ),
+    );
+  } catch (e) {
+    log.debug('v8 --prof stale-log cleanup failed:', e);
+  }
+}
+
 // Best-effort summary of the hottest frames from the renderer's `--prof`
 // log via `node --prof-process`. Called on the timeout path only when
 // armed. Time-boxed — the log can be large, and the pegged render's
@@ -58,21 +86,29 @@ export async function processV8ProfTopFrames(
     if (logs.length === 0) {
       return '<no v8 --prof log found>';
     }
-    // The pegged render produces by far the most samples, so its
-    // renderer's log is the largest.
-    let withSizes = await Promise.all(
+    let withStats = await Promise.all(
       logs.map(async (name) => {
         let full = path.join(V8_PROF_LOG_DIR, name);
         try {
           let st = await fs.stat(full);
-          return { full, size: st.size };
+          return { full, mtimeMs: st.mtimeMs, size: st.size };
         } catch {
-          return { full, size: 0 };
+          return { full, mtimeMs: 0, size: 0 };
         }
       }),
     );
-    withSizes.sort((a, b) => b.size - a.size);
-    let logPath = withSizes[0].full;
+    // Only this browser run's logs (cleared + stamped at launch), and
+    // among those the most-recently-written one — the renderer that was
+    // still spinning up to the timeout, not an earlier completed render's
+    // larger-but-stale log.
+    let fromThisRun = withStats.filter(
+      (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt,
+    );
+    if (fromThisRun.length === 0) {
+      return '<no v8 --prof log from this run>';
+    }
+    fromThisRun.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    let logPath = fromThisRun[0].full;
     let { stdout } = await execFileAsync(
       process.execPath,
       ['--prof-process', logPath],
