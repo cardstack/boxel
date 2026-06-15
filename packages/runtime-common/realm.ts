@@ -3008,7 +3008,11 @@ export class Realm {
     if (!maybeFileRef) {
       return {
         kind: 'not-found',
-        response: notFound(request, requestContext, `${request.url} not found`),
+        response: notFound(
+          request,
+          requestContext,
+          `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+        ),
       };
     }
 
@@ -6887,7 +6891,7 @@ export class Realm {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
+              module: '@cardstack/base/realm-config',
               name: 'RealmConfig',
             },
           },
@@ -6921,7 +6925,8 @@ export class Realm {
         let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
         if (
           !isPlainObject(adoptsFrom) ||
-          adoptsFrom.module !== 'https://cardstack.com/base/realm-config' ||
+          this.#virtualNetwork.unresolveURL(adoptsFrom.module) !==
+            '@cardstack/base/realm-config' ||
           adoptsFrom.name !== 'RealmConfig'
         ) {
           return systemError({

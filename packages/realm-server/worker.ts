@@ -133,6 +133,13 @@ for (let i = 0; i < fromUrls.length; i++) {
   let to = new URL(String(toUrls[i]));
   if (isUrlLike(from)) {
     virtualNetwork.addURLMapping(new URL(from), to);
+    // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Also
+    // register the realm-prefix mapping so unresolveURL on either form
+    // produces the same canonical RRI — same reasoning as main.ts.
+    let m = from.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+    if (m) {
+      virtualNetwork.addRealmMapping(`@cardstack/${m[1]}/`, to.href);
+    }
   } else {
     virtualNetwork.addRealmMapping(from, to.href);
   }
