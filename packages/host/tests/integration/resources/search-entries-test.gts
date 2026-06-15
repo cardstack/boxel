@@ -203,6 +203,65 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
+  test('registers the in-flight search with the render store readiness signal during a prerender', async function (assert) {
+    // The render route's settle loop (`routes/render.ts`
+    // `#waitForRenderLoadStability`) only awaits the *render* store's
+    // `loaded()` / `loadGeneration`. A card rendering this surface in a
+    // prerenderable template must register its v2 search with the render store
+    // or the prerender captures HTML before the search resolves — an empty
+    // result list. The html-only branch deposits nothing into the store, so the
+    // registration itself (not an item deposit) is what moves the generation.
+    // An acceptance-level capture can't isolate this — the resource's
+    // test-waiter makes `await visit` wait for the search regardless of the
+    // readiness wiring — so this asserts the wiring directly.
+    let renderStore = getService('render-store');
+    let trackedLoads: Promise<unknown>[] = [];
+    let originalTrackLoad = renderStore.trackLoad.bind(renderStore);
+    renderStore.trackLoad = (load: Promise<unknown>) => {
+      trackedLoads.push(load);
+      originalTrackLoad(load);
+    };
+    let generationBefore = renderStore.loadGeneration;
+    (globalThis as any).__boxelRenderContext = true;
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL],
+          },
+        },
+      }));
+      // Reading a resource property runs modify(), which performs the search
+      // and registers it — synchronously, before the fetch resolves.
+      let load = search.loaded;
+      assert.strictEqual(
+        trackedLoads.length,
+        1,
+        'the search registers exactly one load with the render store',
+      );
+      assert.strictEqual(
+        trackedLoads[0],
+        load,
+        'the registered load is the in-flight v2 search',
+      );
+      assert.true(
+        renderStore.loadGeneration > generationBefore,
+        'registering the search advances the render store load generation, so the settle loop waits for it',
+      );
+
+      await load;
+      assert.strictEqual(
+        search.entries.length,
+        2,
+        'the tracked load is the real search and it produced results',
+      );
+    } finally {
+      delete (renderStore as any).trackLoad;
+      delete (globalThis as any).__boxelRenderContext;
+    }
+  });
+
   test('re-runs the search on an incremental index event', async function (assert) {
     let search = getResourceForTest(storeService, () => ({
       named: {
