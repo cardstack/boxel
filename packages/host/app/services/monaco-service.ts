@@ -2,7 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
-import { isTesting } from '@embroider/macros';
+import { isDevelopingApp, isTesting } from '@embroider/macros';
 
 import { tracked } from '@glimmer/tracking';
 
@@ -63,6 +63,13 @@ function makeMonacoWorker(workerUrl: string): Worker {
     } finally {
       URL.revokeObjectURL(blobUrl);
     }
+  }
+  // Vite's dev server serves worker files as ES modules (the worker source
+  // starts with `import` statements). A classic Worker can't parse those.
+  // The production vite build bundles each worker into a self-contained
+  // classic script with no imports, so the module type is dev-only.
+  if (isDevelopingApp()) {
+    return new Worker(absolute.href, { type: 'module' });
   }
   return new Worker(absolute.href);
 }
