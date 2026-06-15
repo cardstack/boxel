@@ -2457,7 +2457,18 @@ export class BaseDef {
         return null;
       }
       let valueId = (value as { id?: string }).id;
-      if (stack.includes(value)) {
+      // Cycle guard. `stack.includes(value)` alone is object-identity, which
+      // misses a logical cycle when the same card is re-entered as a DIFFERENT
+      // object instance (re-deserialization / query-resolution producing fresh
+      // objects mid-render) — recursing without bound. Also break by id, the
+      // same id-based `visited` guard `serialize` uses (`visited.has(value.id)`
+      // in the field `serialize` paths), so a fresh-object re-entry degrades to
+      // `{ id }` instead of recursing forever.
+      if (
+        stack.includes(value) ||
+        (valueId != null &&
+          stack.some((s) => (s as { id?: string }).id === valueId))
+      ) {
         return { id: valueId };
       }
       function makeAbsoluteURL(maybeRelativeReference: string) {
