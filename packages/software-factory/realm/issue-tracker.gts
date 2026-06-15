@@ -2664,6 +2664,120 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   </template>
 }
 
+// ── IssueTrackerEdit ──────────────────────────────────────────────────
+
+class IssueTrackerEdit extends Component<typeof IssueTracker> {
+  toggleHideEmptyColumns = () => {
+    this.args.model.hideEmptyColumns = !this.args.model.hideEmptyColumns;
+  };
+
+  <template>
+    <div class='issue-tracker-edit'>
+      <div class='edit-form'>
+        <div class='field-row'>
+          <FieldContainer @label='Board Title' @tag='label' @vertical={{true}}>
+            <@fields.boardTitle />
+          </FieldContainer>
+          <FieldContainer @label='Theme' @tag='label' @vertical={{true}}>
+            <@fields.cardInfo.theme />
+          </FieldContainer>
+        </div>
+        <FieldContainer @label='Project' @vertical={{true}}>
+          <@fields.project />
+        </FieldContainer>
+        <div class='settings-section'>
+          <h2 class='section-heading'>Board Settings</h2>
+          <div class='settings-fields'>
+            <div class='field-row'>
+              <FieldContainer @label='Group By' @tag='label' @vertical={{true}}>
+                <@fields.groupBy />
+              </FieldContainer>
+              <FieldContainer @label='Hide Empty Columns' @inline={{true}}>
+                <Switch
+                  @isEnabled={{@model.hideEmptyColumns}}
+                  @onChange={{this.toggleHideEmptyColumns}}
+                  @label='Hide empty columns'
+                />
+              </FieldContainer>
+            </div>
+            <FieldContainer
+              @label='Fallback Column Key'
+              @tag='label'
+              @vertical={{true}}
+            >
+              <div class='field-hint'>
+                Optional. Issues with no matching column land here. Leave blank
+                to use the first column.
+              </div>
+              <@fields.groupByFallbackKey />
+            </FieldContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+    <style scoped>
+      .issue-tracker-edit {
+        container-type: inline-size;
+        overflow-y: auto;
+        height: 100%;
+      }
+      .edit-form {
+        max-width: 75rem;
+        margin: 0 auto;
+        padding: var(--boxel-sp-xl);
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-lg);
+        align-items: start;
+      }
+      :deep(.links-to-editor .field-component-card) {
+        min-height: 2.5rem;
+        max-height: 2.5rem;
+        height: 2.5rem;
+      }
+      .settings-section {
+        border: 1px solid var(--border, var(--boxel-border-color));
+        border-radius: var(--boxel-border-radius-lg, 0.5rem);
+        overflow: hidden;
+      }
+      .section-heading {
+        margin: 0;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--foreground, var(--boxel-dark));
+        padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+        background: var(--muted, var(--boxel-100));
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+      }
+      .settings-fields {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .field-hint {
+        margin-bottom: var(--boxel-sp-xs);
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+
+      @container (width < 480px) {
+        .edit-form {
+          padding: var(--boxel-sp);
+        }
+        .field-row {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
 // ── IssueTracker ──────────────────────────────────────────────────────
 
 export class IssueTracker extends KanbanBoard {
@@ -2692,5 +2806,6 @@ export class IssueTracker extends KanbanBoard {
     },
   });
 
+  static edit = IssueTrackerEdit;
   static isolated = IssueTrackerIsolated;
 }
