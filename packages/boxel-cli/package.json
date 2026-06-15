@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/boxel-cli",
-  "version": "0.4.0-unstable.1",
+  "version": "0.4.0-unstable.2",
   "license": "MIT",
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
