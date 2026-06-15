@@ -170,6 +170,7 @@ export default class RenderRoute extends Route<Model> {
     // invalidation is handled by `fetchSearchDoc`'s entry-time
     // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
+    (globalThis as any).__boxelRenderNonce = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
     // CS-10872: also tear down the stage setter + timestamp. Without
@@ -225,6 +226,11 @@ export default class RenderRoute extends Route<Model> {
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
     this.currentTransition = transition;
+    // Per-visit nonce for the field-getter render-loop ceiling (see
+    // `field-support.ts`). The ceiling resets its per-card field-read counter
+    // when this changes, scoping it to a single card's render on this route.
+    (globalThis as unknown as { __boxelRenderNonce?: string }).__boxelRenderNonce =
+      nonce;
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);

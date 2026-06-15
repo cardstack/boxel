@@ -124,28 +124,35 @@ let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 let computedCallCount = 0;
 let computedCacheHitCount = 0;
 
-// Render-pass loop ceiling. The prerender wedge is a rare, timing-triggered
-// SYNCHRONOUS loop in one render flush (a normally-trivial card pegs the main
-// thread for minutes, `mainThreadResponsive=false`, nothing in flight). The
-// thread is so pegged that nothing EXTERNAL can intervene — not CDP, not the
-// render timeout, not a watchdog — so the only place a guard can fire is from
-// INSIDE the loop. Every graph-traversal loop (Glimmer re-render, a `jq`
-// recursive descent over the cyclic relation graph, a field-resolution cycle)
-// has to call `getter` to read fields, so a wall-clock budget checked here
-// fires from within the loop and unwinds with a stack — the first signal that
-// has ever survived this peg. A budget (not a raw count) avoids false-positives
-// on legitimately heavy-but-finite renders (the realm's dashboards run ~20s).
-// Only armed while a compute pass is open (prerender render flush + render.meta
-// serialize), so the live-SPA getter is untouched.
-const RENDER_PASS_BUDGET_MS = 60_000;
-const PASS_BUDGET_CHECK_EVERY = 50_000;
-let passStartMs = 0;
-let passGetterCalls = 0;
+// Render loop ceiling. The prerender wedge is a rare, timing-triggered
+// SYNCHRONOUS loop in one render of a normally-trivial card: it pegs the main
+// thread for minutes (`mainThreadResponsive=false`, nothing in flight). The
+// thread is so pegged that nothing EXTERNAL can intervene — not CDP (even
+// `Profiler.enable` times out), not the render timeout, not a watchdog — so the
+// only place a guard can fire is from INSIDE the loop. Every graph-traversal
+// loop (Glimmer re-render, a `jq` recursive descent over the cyclic relation
+// graph, a field-resolution cycle) has to call `getter` to read fields, so a
+// per-render field-read ceiling checked here fires from within the loop and
+// unwinds with a stack — the first signal that has ever survived this peg.
+//
+// Scoping: armed ONLY on the real `/render` route — which is the path that
+// wedges — and keyed entirely off `__boxelRenderNonce`, the per-visit nonce
+// that route sets on `globalThis`. The counter resets whenever the nonce
+// changes (a new card render), so the ceiling is a single card's field-read
+// count, not a job-wide tally. This deliberately does NOT touch the compute
+// pass (`beginComputePass`) — that machinery belongs to `render.meta` + the
+// test-only in-browser card-prerender, a different path; the nonce is absent
+// there, so the ceiling stays dormant on it (and on the live SPA). A legit card
+// does thousands of reads (dashboards more, but bounded and finite); only a
+// runaway loop reaches the ceiling, and it does so in seconds — far before the
+// 90s render timeout. Count, not wall-clock, so a stubbed clock can't disarm it.
+const RENDER_GETTER_CEILING = 10_000_000;
+let renderGetterCalls = 0;
+let lastRenderNonce: unknown;
 
 export interface ComputePassSnapshot {
   calls: number;
   cacheHits: number;
-  getterCalls: number;
 }
 
 // Open a synchronous compute-memo pass. Callers MUST pair this with
@@ -157,9 +164,6 @@ export function beginComputePass(): void {
   passComputeMemo = new WeakMap();
   computedCallCount = 0;
   computedCacheHitCount = 0;
-  passGetterCalls = 0;
-  passStartMs =
-    typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 // Close the pass and return the per-traversal counter delta. The memo
@@ -169,11 +173,9 @@ export function endComputePass(): ComputePassSnapshot {
   let snapshot = {
     calls: computedCallCount,
     cacheHits: computedCacheHitCount,
-    getterCalls: passGetterCalls,
   };
   computedCallCount = 0;
   computedCacheHitCount = 0;
-  passGetterCalls = 0;
   return snapshot;
 }
 
@@ -181,30 +183,32 @@ export function getter<CardT extends BaseDefConstructor>(
   instance: BaseDef,
   field: Field<CardT>,
 ): BaseInstanceType<CardT> {
-  // Render-pass loop ceiling (see RENDER_PASS_BUDGET_MS). Armed only while a
-  // compute pass is open (prerender), so the live SPA pays nothing. Every
-  // PASS_BUDGET_CHECK_EVERY field reads, check the wall clock; if this single
-  // synchronous pass has burned the budget it is a runaway loop the external
-  // timeout can't break — throw from inside it with a deep stack so the
-  // looping caller (jq engine / Glimmer / serialize) is captured in the error
-  // doc. `RangeError`-style message kept distinctive for log/DB grep.
-  if (passComputeMemo !== null) {
-    if (++passGetterCalls % PASS_BUDGET_CHECK_EVERY === 0) {
-      let now =
-        typeof performance !== 'undefined' ? performance.now() : Date.now();
-      if (now - passStartMs > RENDER_PASS_BUDGET_MS) {
+  // Render loop ceiling (see RENDER_GETTER_CEILING). Armed only on the real
+  // `/render` route, detected by the per-visit `__boxelRenderNonce` it sets; the
+  // counter resets when the nonce changes (new card). Reaching the ceiling in
+  // one card render means a synchronous render/compute loop the external timeout
+  // can't break — throw from inside it with a deep stack so the looping caller
+  // (jq engine / Glimmer / serialize) is captured in the error doc. Marker kept
+  // distinctive for log/DB grep.
+  if (typeof globalThis !== 'undefined') {
+    let g = globalThis as any;
+    if (g.__boxelRenderContext && g.__boxelRenderNonce != null) {
+      if (g.__boxelRenderNonce !== lastRenderNonce) {
+        lastRenderNonce = g.__boxelRenderNonce;
+        renderGetterCalls = 0;
+      }
+      if (++renderGetterCalls > RENDER_GETTER_CEILING) {
+        renderGetterCalls = 0; // avoid throw-storm within the same render
         let prevLimit = Error.stackTraceLimit;
         Error.stackTraceLimit = 200;
         let err = new Error(
-          `[RENDER-LOOP-CEILING] one synchronous render pass exceeded ` +
-            `${RENDER_PASS_BUDGET_MS}ms after ${passGetterCalls} field reads; ` +
-            `last field='${String(field.name)}' instance='${
+          `[RENDER-LOOP-CEILING] one card render exceeded ${RENDER_GETTER_CEILING} ` +
+            `field reads — a synchronous render/compute loop the external timeout ` +
+            `can't break. last field='${String(field.name)}' instance='${
               (instance as { id?: string }).id ?? '<unsaved>'
-            }'. Likely a synchronous render/compute loop — stack points at the ` +
-            `looping caller.`,
+            }'. Stack points at the looping caller.`,
         );
         Error.stackTraceLimit = prevLimit;
-        passGetterCalls = 0; // avoid re-throw storms on the same pass
         throw err;
       }
     }
