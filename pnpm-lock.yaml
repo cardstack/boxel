@@ -1022,6 +1022,12 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
         version: 5.2.0
+      '@glimmer/component':
+        specifier: ^2.0.0
+        version: 2.1.1
+      '@glimmer/tracking':
+        specifier: ^1.1.2
+        version: 1.1.2
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
