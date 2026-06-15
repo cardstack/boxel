@@ -36,7 +36,7 @@ import { search } from './search.ts';
  * `@cardstack/runtime-common/constants`.
  */
 const SPEC_TYPE = {
-  module: 'https://cardstack.com/base/spec',
+  module: '@cardstack/base/spec',
   name: 'Spec',
 } as const;
 

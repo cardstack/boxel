@@ -131,7 +131,7 @@ interface Signature {
 // template — used when the caller doesn't thread a resolved render type.
 let defaultResultsCardRef: ResolvedCodeRef = {
   name: 'CardDef',
-  module: rri('https://cardstack.com/base/card-api'),
+  module: rri('@cardstack/base/card-api'),
 };
 
 function isNewCardArgs(item: ItemType): item is NewCardArgs {
