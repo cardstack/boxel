@@ -1487,6 +1487,51 @@ module('Integration | Component | picker', function (hooks) {
       .exists({ count: 4 }, 'Main list still renders without the search input');
   });
 
+  test('keyboard navigation works when @searchEnabled={{false}}', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+          @searchEnabled={{false}}
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-before-options]');
+
+    const focusTarget = '[data-test-boxel-picker-focus-target]';
+
+    // Select-all is highlighted on open via activateFirstItem
+    assert
+      .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
+      .exists('Select-all is highlighted on open even without a search input');
+
+    // ArrowDown should still move the highlight into the main list
+    await triggerKeyEvent(focusTarget, 'keydown', 'ArrowDown');
+
+    assert
+      .dom(
+        '.ember-power-select-options .ember-power-select-option[aria-current="true"]',
+      )
+      .exists(
+        'ArrowDown moves the highlight into the main list when search is hidden',
+      );
+  });
+
   test('disabled picker marks the trigger with a disabled visual state', async function (assert) {
     const selected: PickerOption[] = [];
 

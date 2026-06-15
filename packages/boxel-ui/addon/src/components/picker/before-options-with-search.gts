@@ -60,7 +60,6 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
   }
 
   get showSearch() {
-    if (this.args.select.disabled) return false;
     return this.args.extra?.searchEnabled ?? true;
   }
 
@@ -231,7 +230,15 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
   }
 
   <template>
-    <div class='picker-before-options' data-test-boxel-picker-before-options>
+    {{! Keydown lives on the wrapper so navigation works even when the
+        search input is hidden — events bubble from the input or the
+        focus-target div. }}
+    <div
+      class='picker-before-options'
+      data-test-boxel-picker-before-options
+      tabindex='-1'
+      {{on 'keydown' this.handleKeydown}}
+    >
       {{#if this.showSearch}}
         <div
           class='picker-before-options__search'
@@ -245,9 +252,15 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
             @autocomplete='off'
             class='picker-before-options__search-input'
             {{autoFocus}}
-            {{on 'keydown' this.handleKeydown}}
           />
         </div>
+      {{else}}
+        <div
+          class='picker-before-options__focus-target'
+          tabindex='-1'
+          data-test-boxel-picker-focus-target
+          {{autoFocus}}
+        ></div>
       {{/if}}
 
       <div
@@ -316,6 +329,17 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
       .picker-before-options__search-input:focus-visible,
       .search {
+        outline: none;
+      }
+
+      .picker-before-options__focus-target {
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        outline: none;
+      }
+
+      .picker-before-options:focus-visible {
         outline: none;
       }
 

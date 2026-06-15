@@ -164,9 +164,6 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
         border-radius: var(--boxel-border-radius-xs);
         display: block;
       }
-      .picker-selected-item__remove:hover {
-        background: var(--boxel-200);
-      }
     </style>
   </template>
 }
