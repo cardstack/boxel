@@ -71,6 +71,7 @@ interface CodeMirrorContext {
   undo: any;
   redo: any;
   wrapWith: (marker: string) => (view: any) => boolean;
+  toggleLink: (view: any) => boolean;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -143,6 +144,35 @@ interface CodeMirrorEditorSignature {
     leadingControls: [];
   };
   Element: HTMLDivElement;
+}
+
+interface ToolbarItem {
+  divider?: boolean;
+  testId?: string;
+  label?: string;
+  icon?: unknown;
+  action?: () => void;
+  active?: boolean;
+  ariaPressed?: 'true' | 'false';
+}
+
+const EMPTY_FORMATS: SelectionFormats = Object.freeze({
+  bold: false,
+  italic: false,
+  code: false,
+  strikethrough: false,
+  link: false,
+});
+
+function sameToolbarState(a: SelectionInfo, b: SelectionInfo): boolean {
+  return (
+    a.hasFocus === b.hasFocus &&
+    a.formats.bold === b.formats.bold &&
+    a.formats.italic === b.formats.italic &&
+    a.formats.code === b.formats.code &&
+    a.formats.strikethrough === b.formats.strikethrough &&
+    a.formats.link === b.formats.link
+  );
 }
 
 export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorSignature> {
@@ -350,6 +380,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   private _handleSelectionChange = (info: SelectionInfo) => {
     if (isDestroying(this) || isDestroyed(this)) return;
+    // The toolbar is always mounted and only reads hasFocus + the format
+    // booleans, so skip the tracked write (and its re-render) when neither
+    // changed — every cursor move otherwise dirties all the buttons.
+    let prev = this._selectionInfo;
+    if (prev && sameToolbarState(prev, info)) return;
     this._selectionInfo = info;
   };
 
@@ -362,15 +397,33 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   }
 
   get toolbarFormats(): SelectionFormats {
-    return (
-      this._selectionInfo?.formats ?? {
-        bold: false,
-        italic: false,
-        code: false,
-        strikethrough: false,
-        link: false,
-      }
-    );
+    return this._selectionInfo?.formats ?? EMPTY_FORMATS;
+  }
+
+  /**
+   * Toolbar contents in display order. `divider: true` entries render a
+   * separator; the rest render a formatting button. `ariaPressed` is set only
+   * for the inline-format toggles (bold/italic/etc.), left undefined for the
+   * insert-only buttons (headings/lists) so the attribute is omitted.
+   */
+  get toolbarButtons(): ToolbarItem[] {
+    let f = this.toolbarFormats;
+    let pressed = (active: boolean) => (active ? 'true' : 'false');
+    return [
+      { testId: 'bold', label: 'Bold', icon: BoldIcon, action: this._wrapBold, active: f.bold, ariaPressed: pressed(f.bold) },
+      { testId: 'italic', label: 'Italic', icon: ItalicIcon, action: this._wrapItalic, active: f.italic, ariaPressed: pressed(f.italic) },
+      { testId: 'strikethrough', label: 'Strikethrough', icon: StrikethroughIcon, action: this._wrapStrikethrough, active: f.strikethrough, ariaPressed: pressed(f.strikethrough) },
+      { testId: 'code', label: 'Code', icon: CodeIcon, action: this._wrapCode, active: f.code, ariaPressed: pressed(f.code) },
+      { testId: 'link', label: 'Link', icon: LinkIcon, action: this._toggleLink, active: f.link, ariaPressed: pressed(f.link) },
+      { divider: true },
+      { testId: 'h1', label: 'Heading 1', icon: Heading1Icon, action: this._insertH1 },
+      { testId: 'h2', label: 'Heading 2', icon: Heading2Icon, action: this._insertH2 },
+      { testId: 'h3', label: 'Heading 3', icon: Heading3Icon, action: this._insertH3 },
+      { divider: true },
+      { testId: 'bullet-list', label: 'Bullet List', icon: ListIcon, action: this._toggleBulletList },
+      { testId: 'numbered-list', label: 'Numbered List', icon: ListOrderedIcon, action: this._toggleNumberedList },
+      { testId: 'blockquote', label: 'Blockquote', icon: BlockquoteIcon, action: this._toggleBlockquote },
+    ];
   }
 
   /** Prevent mousedown on toolbar/popup buttons from stealing editor focus/selection */
@@ -390,53 +443,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   };
 
   _toggleLink = () => {
+    let cm = this._cm;
     let view = this.editorView;
-    if (!view) return;
-    let { from, to } = view.state.selection.main;
-    if (from === to) {
-      // No selection: insert empty link syntax with the cursor inside the
-      // brackets so the user can type the link text — [|](url).
-      view.dispatch({
-        changes: { from, insert: '[](url)' },
-        selection: { anchor: from + 1 },
-      });
-      view.focus();
-      return;
-    }
-
-    // Check if selection is inside a markdown link by scanning for [text](url)
-    // around the selection boundaries
-    let doc = view.state.doc.toString();
-    let bracketOpen = doc.lastIndexOf('[', from);
-    if (bracketOpen >= 0) {
-      let parenClose = doc.indexOf(')', to - 1);
-      if (parenClose >= 0) {
-        let between = doc.slice(bracketOpen, parenClose + 1);
-        let linkMatch = between.match(/^\[(.+)\]\(.*\)$/);
-        if (linkMatch) {
-          view.dispatch({
-            changes: {
-              from: bracketOpen,
-              to: parenClose + 1,
-              insert: linkMatch[1],
-            },
-          });
-          view.focus();
-          return;
-        }
-      }
-    }
-
-    // Wrap selection as link text with placeholder URL, cursor selects "url"
-    let selected = view.state.sliceDoc(from, to);
-    let insert = `[${selected}](url)`;
-    view.dispatch({
-      changes: { from, to, insert },
-      selection: {
-        anchor: from + selected.length + 3,
-        head: from + selected.length + 6,
-      },
-    });
+    if (!cm || !view) return;
+    cm.toggleLink(view);
     view.focus();
   };
 
@@ -802,143 +812,26 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             <span class='toolbar-divider'></span>
           {{/if}}
 
-          <button
-            class='toolbar-btn
-              {{if this.toolbarFormats.bold "toolbar-btn--active"}}
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-bold
-            type='button'
-            title='Bold'
-            aria-label='Bold'
-            aria-pressed='{{this.toolbarFormats.bold}}'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._wrapBold}}
-          ><BoldIcon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if this.toolbarFormats.italic "toolbar-btn--active"}}
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-italic
-            type='button'
-            title='Italic'
-            aria-label='Italic'
-            aria-pressed='{{this.toolbarFormats.italic}}'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._wrapItalic}}
-          ><ItalicIcon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-strikethrough
-            type='button'
-            title='Strikethrough'
-            aria-label='Strikethrough'
-            aria-pressed='{{this.toolbarFormats.strikethrough}}'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._wrapStrikethrough}}
-          ><StrikethroughIcon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if this.toolbarFormats.code "toolbar-btn--active"}}
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-code
-            type='button'
-            title='Code'
-            aria-label='Code'
-            aria-pressed='{{this.toolbarFormats.code}}'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._wrapCode}}
-          ><CodeIcon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if this.toolbarFormats.link "toolbar-btn--active"}}
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-link
-            type='button'
-            title='Link'
-            aria-label='Link'
-            aria-pressed='{{this.toolbarFormats.link}}'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._toggleLink}}
-          ><LinkIcon width='16' height='16' /></button>
-
-          <span class='toolbar-divider'></span>
-
-          <button
-            class='toolbar-btn
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-h1
-            type='button'
-            title='Heading 1'
-            aria-label='Heading 1'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._insertH1}}
-          ><Heading1Icon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-h2
-            type='button'
-            title='Heading 2'
-            aria-label='Heading 2'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._insertH2}}
-          ><Heading2Icon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-h3
-            type='button'
-            title='Heading 3'
-            aria-label='Heading 3'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._insertH3}}
-          ><Heading3Icon width='16' height='16' /></button>
-
-          <span class='toolbar-divider'></span>
-
-          <button
-            class='toolbar-btn
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-bullet-list
-            type='button'
-            title='Bullet List'
-            aria-label='Bullet List'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._toggleBulletList}}
-          ><ListIcon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-numbered-list
-            type='button'
-            title='Numbered List'
-            aria-label='Numbered List'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._toggleNumberedList}}
-          ><ListOrderedIcon width='16' height='16' /></button>
-          <button
-            class='toolbar-btn
-              {{if (not this.toolbarEnabled) "toolbar-btn--disabled"}}'
-            data-test-toolbar-blockquote
-            type='button'
-            title='Blockquote'
-            aria-label='Blockquote'
-            disabled={{not this.toolbarEnabled}}
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._toggleBlockquote}}
-          ><BlockquoteIcon width='16' height='16' /></button>
+          {{#each this.toolbarButtons as |btn|}}
+            {{#if btn.divider}}
+              <span class='toolbar-divider'></span>
+            {{else}}
+              <button
+                class='toolbar-btn {{if btn.active "toolbar-btn--active"}}'
+                data-test-toolbar={{btn.testId}}
+                type='button'
+                title={{btn.label}}
+                aria-label={{btn.label}}
+                aria-pressed={{btn.ariaPressed}}
+                disabled={{not this.toolbarEnabled}}
+                {{on 'mousedown' this._preventFocusLoss}}
+                {{on 'click' btn.action}}
+              >{{#let btn.icon as |Icon|}}<Icon
+                    width='16'
+                    height='16'
+                  />{{/let}}</button>
+            {{/if}}
+          {{/each}}
         </div>
 
         <div
@@ -1335,21 +1228,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         }
 
         /* ── Docked toolbar ── */
-        .codemirror-toolbar {
-          position: sticky;
-          top: 0;
-          z-index: 10;
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-5xs);
-          padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
-          background: var(--boxel-100);
-          border-bottom: 1px solid var(--boxel-200);
-          border-top-left-radius: var(--boxel-border-radius);
-          border-top-right-radius: var(--boxel-border-radius);
-        }
-
+        /* The sticky docked-bar layout (.codemirror-toolbar container) is
+           provided by the host RichMarkdownField so the compose/source bar and
+           the preview bar share one definition. Only the buttons are styled
+           here. */
         .toolbar-btn {
           display: flex;
           align-items: center;
@@ -1377,8 +1259,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           color: var(--boxel-700);
         }
 
-        .toolbar-btn:disabled,
-        .toolbar-btn--disabled {
+        .toolbar-btn:disabled {
           color: var(--boxel-300);
           cursor: not-allowed;
         }

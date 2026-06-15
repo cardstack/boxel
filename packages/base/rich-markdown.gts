@@ -21,7 +21,7 @@ import {
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
-import ViewSelector from './view-selector';
+import ViewSelector, { type ViewMode } from './view-selector';
 import { CardContextConsumer } from './field-component';
 
 /**
@@ -144,10 +144,10 @@ export class RichMarkdownField extends FieldDef {
 
   static edit = class Edit extends Component<typeof this> {
     _modeState = new TrackedObject({
-      value: 'compose' as 'compose' | 'source' | 'preview',
+      value: 'compose' as ViewMode,
     });
 
-    get _mode(): 'compose' | 'source' | 'preview' {
+    get _mode(): ViewMode {
       return this._modeState.value;
     }
 
@@ -175,7 +175,7 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
-    setMode = (mode: 'compose' | 'source' | 'preview') => {
+    setMode = (mode: ViewMode) => {
       this._modeState.value = mode;
     };
     <template>
@@ -219,19 +219,30 @@ export class RichMarkdownField extends FieldDef {
           flex-direction: column;
         }
 
-        .rich-markdown-toolbar {
+        /* Single source of truth for the docked sticky bar, shared by the
+           compose/source toolbar (rendered inside CodeMirrorEditor) and the
+           preview-only bar below — keeps the two from drifting. CodeMirrorEditor
+           is used solely by this field, so owning its bar appearance here is
+           safe. */
+        .rich-markdown-toolbar,
+        .rich-markdown-editor :deep(.codemirror-toolbar) {
           position: sticky;
           top: 0;
           z-index: 10;
           display: flex;
           align-items: center;
+          flex-wrap: wrap;
           gap: var(--boxel-sp-5xs);
           padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
           background: var(--boxel-100);
-          border: 1px solid var(--boxel-border-color);
           border-bottom: 1px solid var(--boxel-200);
           border-top-left-radius: var(--boxel-border-radius);
           border-top-right-radius: var(--boxel-border-radius);
+        }
+
+        .rich-markdown-toolbar {
+          border: 1px solid var(--boxel-border-color);
+          border-bottom: 1px solid var(--boxel-200);
         }
 
         .rich-markdown-preview {

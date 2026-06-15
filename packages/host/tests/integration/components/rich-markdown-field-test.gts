@@ -827,17 +827,22 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
     await renderCard(loader, card, 'edit');
 
-    await waitFor('[data-test-toolbar-bold]');
+    await waitFor('[data-test-toolbar="bold"]');
     assert
-      .dom('[data-test-toolbar-bold]')
+      .dom('[data-test-toolbar="bold"]')
       .isDisabled('Bold is disabled before the editor gains focus');
+
+    // The view selector is always enabled — it opens even without editor focus
+    // (the trigger is a div, so assert behavior rather than the disabled prop).
+    await click('[data-test-view-selector]');
     assert
-      .dom('[data-test-view-selector]')
-      .isNotDisabled('the view selector is always enabled');
+      .dom('[data-test-view-option="source"]')
+      .exists('view selector opens without editor focus');
+    await click('[data-test-view-option="compose"]');
 
     await focus('.cm-content');
     assert
-      .dom('[data-test-toolbar-bold]')
+      .dom('[data-test-toolbar="bold"]')
       .isNotDisabled('Bold is enabled once the editor has focus');
   });
 

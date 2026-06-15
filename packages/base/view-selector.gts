@@ -29,8 +29,6 @@ interface Signature {
  * regardless of editor focus.
  */
 export default class ViewSelector extends GlimmerComponent<Signature> {
-  options = VIEW_OPTIONS;
-
   get selectedOption(): ViewOption {
     return (
       VIEW_OPTIONS.find((o) => o.value === this.args.mode) ?? VIEW_OPTIONS[0]
@@ -46,7 +44,7 @@ export default class ViewSelector extends GlimmerComponent<Signature> {
   <template>
     <BoxelSelect
       class='view-selector'
-      @options={{this.options}}
+      @options={{VIEW_OPTIONS}}
       @selected={{this.selectedOption}}
       @onChange={{this.handleChange}}
       @searchEnabled={{false}}
@@ -72,10 +70,11 @@ export default class ViewSelector extends GlimmerComponent<Signature> {
         width: auto;
       }
       /* The open menu is a detached rounded card, so keep the trigger fully
-         rounded when open — overrides ember-power-select's default, which
-         squares the trigger's bottom corners to attach it to the dropdown. */
-      .view-selector.ember-power-select-trigger[aria-expanded='true'] {
-        border-radius: var(--boxel-form-control-border-radius);
+         rounded when open. The default attaches the menu by squaring the
+         trigger's bottom corners; !important wins without depending on
+         ember-power-select's internal class names. */
+      .view-selector[aria-expanded='true'] {
+        border-radius: var(--boxel-form-control-border-radius) !important;
       }
     </style>
     {{! The dropdown sizes to its widest label rather than collapsing to the
@@ -87,8 +86,7 @@ export default class ViewSelector extends GlimmerComponent<Signature> {
         width: max-content;
         min-width: 7rem;
       }
-      .view-selector-dropdown .boxel-select-option-text,
-      .view-selector-dropdown .ember-power-select-option {
+      .view-selector-dropdown .boxel-select-option-text {
         white-space: nowrap;
       }
     </style>

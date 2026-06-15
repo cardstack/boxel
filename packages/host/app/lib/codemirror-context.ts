@@ -938,6 +938,61 @@ function wrapWith(marker: string) {
   };
 }
 
+// Toggle a markdown link around the selection. Uses the syntax tree to detect
+// an enclosing [text](url) — a string scan can match across unrelated brackets
+// and delete text the user never selected.
+function toggleLink(view: EditorView): boolean {
+  let { from, to } = view.state.selection.main;
+
+  let node: any = syntaxTree(view.state).resolveInner(from, 1);
+  let link: any = null;
+  for (let n: any = node; n; n = n.parent) {
+    if (n.name === 'Link') {
+      link = n;
+      break;
+    }
+  }
+  if (link && from >= link.from && to <= link.to) {
+    // Unlink: replace the whole node with just its text (between [ and ]).
+    let marks: { from: number; to: number }[] = [];
+    let c = link.cursor();
+    if (c.firstChild()) {
+      do {
+        if (c.name === 'LinkMark') marks.push({ from: c.from, to: c.to });
+      } while (c.nextSibling());
+    }
+    if (marks.length >= 2) {
+      let text = view.state.sliceDoc(marks[0].to, marks[1].from);
+      view.dispatch({
+        changes: { from: link.from, to: link.to, insert: text },
+      });
+      return true;
+    }
+  }
+
+  if (from === to) {
+    // No selection: insert empty link syntax with the cursor inside the
+    // brackets so the user can type the link text — [|](url).
+    view.dispatch({
+      changes: { from, insert: '[](url)' },
+      selection: { anchor: from + 1 },
+    });
+    return true;
+  }
+
+  // Wrap the selection as link text with a placeholder URL, selecting "url".
+  let selected = view.state.sliceDoc(from, to);
+  let insert = `[${selected}](url)`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: {
+      anchor: from + selected.length + 3,
+      head: from + selected.length + 6,
+    },
+  });
+  return true;
+}
+
 const markdownKeymap = keymap.of([
   { key: 'Mod-b', run: wrapWith('**') },
   { key: 'Mod-i', run: wrapWith('*') },
@@ -1081,6 +1136,7 @@ export interface CodeMirrorContext {
   openCardSearchEffect: typeof openCardSearchEffect;
   focusChangeEffect: typeof focusChangeEffect;
   wrapWith: typeof wrapWith;
+  toggleLink: typeof toggleLink;
 }
 
 const codemirrorContext: CodeMirrorContext = {
@@ -1092,6 +1148,7 @@ const codemirrorContext: CodeMirrorContext = {
   openCardSearchEffect,
   focusChangeEffect,
   wrapWith,
+  toggleLink,
 };
 
 export default codemirrorContext;
