@@ -874,6 +874,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       contextOpts,
     );
     if (!context) {
+      console.error(
+        `[CS-10753 DIAG] no-context: codeRef.module=${codeRef.module} name=${codeRef.name} canonicalModuleURL=${canonicalModuleURL} realms=${JSON.stringify(
+          this.#realms.map((r) => r.url),
+        )}`,
+      );
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Could not determine realm owner for module URL: ${codeRef.module}`,
       });
@@ -897,12 +902,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
 
     if (!moduleEntry) {
+      console.error(
+        `[CS-10753 DIAG] no-module-entry: codeRef.module=${codeRef.module} name=${codeRef.name} canonicalModuleURL=${canonicalModuleURL} realmURL=${realmURL} resolvedRealmURL=${resolvedRealmURL} cacheScope=${cacheScope}`,
+      );
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Module entry not found for URL: ${codeRef.module}`,
       });
     }
 
     if (moduleEntry.error) {
+      console.error(
+        `[CS-10753 DIAG] module-entry-error: codeRef.module=${codeRef.module} name=${codeRef.name} canonicalModuleURL=${canonicalModuleURL} error=${JSON.stringify(
+          moduleEntry.error,
+        ).slice(0, 400)}`,
+      );
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: moduleEntry.error,
       });
