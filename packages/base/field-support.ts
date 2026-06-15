@@ -124,32 +124,6 @@ let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 let computedCallCount = 0;
 let computedCacheHitCount = 0;
 
-// Render loop ceiling. The prerender wedge is a rare, timing-triggered
-// SYNCHRONOUS loop in one render of a normally-trivial card: it pegs the main
-// thread for minutes (`mainThreadResponsive=false`, nothing in flight). The
-// thread is so pegged that nothing EXTERNAL can intervene — not CDP (even
-// `Profiler.enable` times out), not the render timeout, not a watchdog — so the
-// only place a guard can fire is from INSIDE the loop. Every graph-traversal
-// loop (Glimmer re-render, a `jq` recursive descent over the cyclic relation
-// graph, a field-resolution cycle) has to call `getter` to read fields, so a
-// per-render field-read ceiling checked here fires from within the loop and
-// unwinds with a stack — the first signal that has ever survived this peg.
-//
-// Scoping: armed ONLY on the real `/render` route — which is the path that
-// wedges — and keyed entirely off `__boxelRenderNonce`, the per-visit nonce
-// that route sets on `globalThis`. The counter resets whenever the nonce
-// changes (a new card render), so the ceiling is a single card's field-read
-// count, not a job-wide tally. This deliberately does NOT touch the compute
-// pass (`beginComputePass`) — that machinery belongs to `render.meta` + the
-// test-only in-browser card-prerender, a different path; the nonce is absent
-// there, so the ceiling stays dormant on it (and on the live SPA). A legit card
-// does thousands of reads (dashboards more, but bounded and finite); only a
-// runaway loop reaches the ceiling, and it does so in seconds — far before the
-// 90s render timeout. Count, not wall-clock, so a stubbed clock can't disarm it.
-const RENDER_GETTER_CEILING = 10_000_000;
-let renderGetterCalls = 0;
-let lastRenderNonce: unknown;
-
 export interface ComputePassSnapshot {
   calls: number;
   cacheHits: number;
@@ -183,37 +157,6 @@ export function getter<CardT extends BaseDefConstructor>(
   instance: BaseDef,
   field: Field<CardT>,
 ): BaseInstanceType<CardT> {
-  // Render loop ceiling (see RENDER_GETTER_CEILING). Armed only on the real
-  // `/render` route, detected by the per-visit `__boxelRenderNonce` it sets; the
-  // counter resets when the nonce changes (new card). Reaching the ceiling in
-  // one card render means a synchronous render/compute loop the external timeout
-  // can't break — throw from inside it with a deep stack so the looping caller
-  // (jq engine / Glimmer / serialize) is captured in the error doc. Marker kept
-  // distinctive for log/DB grep.
-  if (typeof globalThis !== 'undefined') {
-    let g = globalThis as any;
-    if (g.__boxelRenderContext && g.__boxelRenderNonce != null) {
-      if (g.__boxelRenderNonce !== lastRenderNonce) {
-        lastRenderNonce = g.__boxelRenderNonce;
-        renderGetterCalls = 0;
-      }
-      if (++renderGetterCalls > RENDER_GETTER_CEILING) {
-        renderGetterCalls = 0; // avoid throw-storm within the same render
-        let prevLimit = Error.stackTraceLimit;
-        Error.stackTraceLimit = 200;
-        let err = new Error(
-          `[RENDER-LOOP-CEILING] one card render exceeded ${RENDER_GETTER_CEILING} ` +
-            `field reads — a synchronous render/compute loop the external timeout ` +
-            `can't break. last field='${String(field.name)}' instance='${
-              (instance as { id?: string }).id ?? '<unsaved>'
-            }'. Stack points at the looping caller.`,
-        );
-        Error.stackTraceLimit = prevLimit;
-        throw err;
-      }
-    }
-  }
-
   let deserialized = getDataBucket(instance);
   // this establishes that our field should rerender when cardTracking for this card changes
   cardTracking.get(instance);

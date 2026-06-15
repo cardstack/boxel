@@ -252,19 +252,6 @@ export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
-
-// [QUERYABLE-VALUE-TRAP] state — see `CardDef[queryableValue]`. Diagnostic for
-// the prerender wedge: the serialize recursion is guarded only by an
-// object-identity cycle check, which misses a logical cycle when the same card
-// appears as two different object instances mid-render (re-deserialization /
-// query-resolution producing fresh objects). That can recurse unboundedly
-// (depth) or re-serialize shared subtrees combinatorially (breadth) — a
-// synchronous peg the external timeout can't break. This counts serialize
-// invocations within one top-level serialize and throws (with the ancestor id
-// trail + a deep stack) past a ceiling no legitimate card approaches.
-let qvSerializeCount = 0;
-const QV_TRAP_COUNT_CEILING = 5_000_000;
-const QV_TRAP_DEPTH_CEILING = 2_000;
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const emptyValue = Symbol.for('cardstack-empty-value');
 
@@ -2470,43 +2457,19 @@ export class BaseDef {
         return null;
       }
       let valueId = (value as { id?: string }).id;
-      if (stack.includes(value)) {
-        return { id: valueId };
-      }
-      // [QUERYABLE-VALUE-TRAP] (see module state above). Armed only in an
-      // indexing render (`__boxelRenderContext` + the per-visit
-      // `__boxelRenderNonce` the prerender server stamps), so the live SPA is
-      // untouched. Reset at each top-level serialize (`stack.length === 0`), so
-      // the count is one card's serialize fan-out, not a job-wide tally.
+      // Cycle guard. `stack.includes(value)` alone is object-identity, which
+      // misses a logical cycle when the same card is re-entered as a DIFFERENT
+      // object instance (re-deserialization / query-resolution producing fresh
+      // objects mid-render) — recursing without bound. Also break by id, the
+      // same id-based `visited` guard `serialize` uses (`visited.has(value.id)`
+      // in the field `serialize` paths), so a fresh-object re-entry degrades to
+      // `{ id }` instead of recursing forever.
       if (
-        typeof globalThis !== 'undefined' &&
-        (globalThis as any).__boxelRenderContext &&
-        (globalThis as any).__boxelRenderNonce != null
+        stack.includes(value) ||
+        (valueId != null &&
+          stack.some((s) => (s as { id?: string }).id === valueId))
       ) {
-        if (stack.length === 0) {
-          qvSerializeCount = 0;
-        }
-        if (
-          ++qvSerializeCount > QV_TRAP_COUNT_CEILING ||
-          stack.length > QV_TRAP_DEPTH_CEILING
-        ) {
-          let prevLimit = Error.stackTraceLimit;
-          Error.stackTraceLimit = 200;
-          let trail = stack
-            .map((v) => (v as { id?: string })?.id ?? '?')
-            .slice(0, 40)
-            .join(' -> ');
-          let err = new Error(
-            `[QUERYABLE-VALUE-TRAP] serialize recursion blew its ceiling ` +
-              `(invocations=${qvSerializeCount}, depth=${stack.length}) at ` +
-              `id='${valueId ?? '<none>'}'. The object-identity cycle guard ` +
-              `likely missed a logical cycle (same card, different object ` +
-              `instance). Ancestor id trail: ${trail}`,
-          );
-          Error.stackTraceLimit = prevLimit;
-          qvSerializeCount = 0; // avoid throw-storm
-          throw err;
-        }
+        return { id: valueId };
       }
       function makeAbsoluteURL(maybeRelativeReference: string) {
         if (!value[relativeTo]) {
