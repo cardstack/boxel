@@ -113,8 +113,26 @@ class RenderableSearchEntry {
     return this.raw.item;
   }
 
+  // The error doc carried on the `item` serialization's `meta`. Present => the
+  // live item cannot render, so the row falls through to the host error
+  // component and the item is never deposited into the Store.
+  get itemErrorDoc(): ErrorEntry | undefined {
+    return this.item?.meta.error;
+  }
+
+  // The row is in an error state when its chosen rendering is an error
+  // rendering (a last-known-good or bare error placeholder, both
+  // non-hydratable) or its `item` serialization carries an error doc. Drives
+  // both "never hydrate" and the fall-through to the host error component.
   get isError(): boolean {
-    return this.html?.isError ?? false;
+    return (this.html?.isError ?? false) || this.itemErrorDoc != null;
+  }
+
+  // The error doc the host error component surfaces (rung 4). It comes from the
+  // `item`'s `meta`; an error rendering with no last-known-good HTML and no
+  // item carries no doc, so the component shows a generic message.
+  get errorDoc(): ErrorEntry | undefined {
+    return this.itemErrorDoc;
   }
 
   // `card` vs `file-meta`: the serialization carries its own type; an HTML-only
@@ -162,6 +180,7 @@ class RenderableSearchEntry {
         type: this.type,
         format: this.format,
         isError: this.isError,
+        errorDoc: this.errorDoc,
         mode: this.mode,
       });
     }
@@ -282,12 +301,14 @@ export default class SearchResults extends Component<Signature> {
   // Selective Store inflate: deposit only full `item` serializations so a
   // by-URL read (or the hydration GET) resolves without a round-trip. Sparse
   // items and `search-entry`s are never deposited (the store method no-ops on a
-  // sparse item). A render-side effect keyed on the live entry set, so it
-  // deposits an item-bearing row whenever one lands on a re-run.
+  // sparse item); an item carrying an error doc is skipped here too — it stands
+  // in for a card that failed to render and must not enter the Store. A
+  // render-side effect keyed on the live entry set, so it deposits an
+  // item-bearing row whenever one lands on a re-run.
   private inflateFullItems = modifier(
     (_element: Element, [entries]: [RenderableSearchEntry[]]) => {
       for (let entry of entries) {
-        if (entry.item) {
+        if (entry.item && !entry.itemErrorDoc) {
           // Fire-and-forget; a deposit failure (e.g. a malformed resource)
           // must not reject unhandled mid-render — the row still renders
           // (resolving its instance on demand) and the next re-run retries.

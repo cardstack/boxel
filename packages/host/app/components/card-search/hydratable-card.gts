@@ -9,6 +9,7 @@ import { consume } from 'ember-provide-consume-context';
 import {
   CardContextName,
   GetCardContextName,
+  type ErrorEntry,
   type Format,
   type ResolvedCodeRef,
   type StoreReadType,
@@ -20,6 +21,8 @@ import type { HTMLComponent } from '@cardstack/host/lib/html-component';
 import type { BaseDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
+
+import SearchResultError from './search-result-error';
 
 // How an HTML-backed search result becomes a live, running card. `none` stays
 // inert; `hover` / `click` / `touch` fetch the card on the matching gesture and
@@ -81,8 +84,13 @@ interface Signature {
     // The resource type to resolve — `card` (default) or `file-meta`, so a
     // full live file-meta row renders its `FileDef` instead of nothing.
     type?: StoreReadType;
-    // An error rendering never hydrates.
+    // An error rendering never hydrates. When set and there's no inert HTML to
+    // show (no last-known-good rendering), the row resolves to the host error
+    // component (`SearchResultError`) — the terminal rung of the chain.
     isError?: boolean;
+    // The error doc surfaced by the host error component when this row falls
+    // through to it. Absent => the component shows a generic message.
+    errorDoc?: ErrorEntry;
     // The hydration gesture (defaults to `none`).
     mode?: HydrationMode;
     // The format the live/hydrated card renders as, so it matches the
@@ -217,6 +225,15 @@ export default class HydratableCard extends Component<Signature> {
         }}
         data-hydration={{this.hydrationState}}
         data-test-hydratable-card={{@cardId}}
+        ...attributes
+      />
+    {{else if @isError}}
+      {{! The terminal rung: an error result with no good html, no
+          last-known-good html, and no renderable live item. Inert and
+          non-hydratable — no gesture, no GET. }}
+      <SearchResultError
+        @cardId={{@cardId}}
+        @error={{@errorDoc}}
         ...attributes
       />
     {{/if}}
