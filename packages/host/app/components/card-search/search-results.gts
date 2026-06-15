@@ -5,10 +5,14 @@ import { modifier } from 'ember-modifier';
 
 import {
   isResolvedCodeRef,
+  isValidPrerenderedHtmlFormat,
+  logger as runtimeLogger,
   type CardResource,
   type ErrorEntry,
   type FileMetaResource,
+  type Format,
   type HtmlQuery,
+  type PrerenderedHtmlFormat,
   type ResolvedCodeRef,
   type Saved,
   type SearchEntryCollectionDocument,
@@ -67,6 +71,19 @@ function renderTypeFromHtmlQuery(
   return undefined;
 }
 
+// The query's requested format, echoed once at the document level. Used so an
+// item-only (live) fallback renders at the same format the HTML rows the query
+// selected would have. A composite html query (no single `eq` leaf) and the
+// default both fall back to `fitted`.
+function formatFromHtmlQuery(
+  query: HtmlQuery | undefined,
+): PrerenderedHtmlFormat {
+  if (query && 'eq' in query && isValidPrerenderedHtmlFormat(query.eq.format)) {
+    return query.eq.format;
+  }
+  return 'fitted';
+}
+
 // One v2 search result as a renderable view-model. Wraps the resource's raw
 // `SearchEntry`, exposing the chosen `html` rendering, the raw `item`
 // serialization, and a ready-to-render `component` that renders HTML inert (and
@@ -76,6 +93,7 @@ class RenderableSearchEntry {
   constructor(
     private raw: SearchEntry,
     private fallbackRenderType: ResolvedCodeRef | undefined,
+    private fallbackFormat: PrerenderedHtmlFormat,
     private mode: HydrationMode,
   ) {}
 
@@ -119,6 +137,13 @@ class RenderableSearchEntry {
     return this.html ? this.html.renderType : this.fallbackRenderType;
   }
 
+  // The format the live/hydrated card renders as: the rendering's own format for
+  // an HTML-backed row, the query's requested format for an item-only fallback
+  // (so it matches its HTML siblings).
+  get format(): Format {
+    return this.html ? this.html.format : this.fallbackFormat;
+  }
+
   // Built once, lazily: an inert row never reaches here, and an unchanged row
   // keeps the same component object across live re-runs (its view-model is
   // memoized by raw-entry identity), so the rendered list stays render-stable.
@@ -135,6 +160,7 @@ class RenderableSearchEntry {
         component: inert,
         renderType: this.renderType,
         type: this.type,
+        format: this.format,
         isError: this.isError,
         mode: this.mode,
       });
@@ -190,6 +216,12 @@ export default class SearchResults extends Component<Signature> {
   // object identity across live re-runs when nothing about it changed, so the
   // same render-stable view-model (and its built component) is reused.
   #renderables = new WeakMap<SearchEntry, RenderableSearchEntry>();
+  // The render inputs a view-model captures at construction (gesture mode + the
+  // document-level fallback render type/format). They are not part of a row's
+  // raw identity, so when any of them changes the memoized view-models are
+  // stale and the cache is dropped.
+  #renderInputsKey: string | undefined;
+  #log = runtimeLogger('search-results');
 
   private get mode(): HydrationMode {
     return this.args.mode ?? 'hover';
@@ -199,15 +231,35 @@ export default class SearchResults extends Component<Signature> {
     return renderTypeFromHtmlQuery(this.searchEntries.meta.htmlQuery);
   }
 
+  private get fallbackFormat(): PrerenderedHtmlFormat {
+    return formatFromHtmlQuery(this.searchEntries.meta.htmlQuery);
+  }
+
   private get entries(): RenderableSearchEntry[] {
-    let fallback = this.fallbackRenderType;
+    let fallbackRenderType = this.fallbackRenderType;
+    let fallbackFormat = this.fallbackFormat;
     let mode = this.mode;
+    let inputsKey = JSON.stringify([mode, fallbackRenderType, fallbackFormat]);
+    if (inputsKey !== this.#renderInputsKey) {
+      // Pure memoization bookkeeping — see the per-row note below. Dropping the
+      // cache when the captured inputs change rebuilds view-models with the new
+      // mode/render type/format instead of reusing stale ones.
+      // eslint-disable-next-line ember/no-side-effects
+      this.#renderInputsKey = inputsKey;
+      // eslint-disable-next-line ember/no-side-effects
+      this.#renderables = new WeakMap();
+    }
     return this.searchEntries.entries.map((raw) => {
       let existing = this.#renderables.get(raw);
       if (existing) {
         return existing;
       }
-      let renderable = new RenderableSearchEntry(raw, fallback, mode);
+      let renderable = new RenderableSearchEntry(
+        raw,
+        fallbackRenderType,
+        fallbackFormat,
+        mode,
+      );
       // Pure memoization keyed on the resource's stable entry identity — it
       // dirties no tracked state, and keeping unchanged rows' view-models (and
       // their built components) prevents a live re-run from re-mounting every
@@ -236,7 +288,17 @@ export default class SearchResults extends Component<Signature> {
     (_element: Element, [entries]: [RenderableSearchEntry[]]) => {
       for (let entry of entries) {
         if (entry.item) {
-          void this.store.inflateSearchEntryItem(entry.item);
+          // Fire-and-forget; a deposit failure (e.g. a malformed resource)
+          // must not reject unhandled mid-render — the row still renders
+          // (resolving its instance on demand) and the next re-run retries.
+          this.store
+            .inflateSearchEntryItem(entry.item)
+            .catch((err: unknown) => {
+              this.#log.error(
+                `failed to inflate search-entry item ${entry.id}`,
+                err,
+              );
+            });
         }
       }
     },

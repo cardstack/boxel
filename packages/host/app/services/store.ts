@@ -1042,7 +1042,7 @@ export default class StoreService extends Service implements StoreInterface {
   // carrying `meta.sparseFields`) is never deposited — it would misrepresent
   // the instance and could clobber a correctly-loaded full one — so the call
   // is a no-op for it; `search-entry`s carry no serialization to deposit.
-  // Idempotent: an already-resident instance is returned as-is.
+  // Idempotent: depositing is skipped when the instance is already resident.
   async inflateSearchEntryItem(
     resource: CardResource<Saved> | FileMetaResource,
   ): Promise<void> {

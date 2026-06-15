@@ -9,6 +9,7 @@ import { consume } from 'ember-provide-consume-context';
 import {
   CardContextName,
   GetCardContextName,
+  type Format,
   type ResolvedCodeRef,
   type StoreReadType,
   type getCard,
@@ -84,6 +85,9 @@ interface Signature {
     isError?: boolean;
     // The hydration gesture (defaults to `none`).
     mode?: HydrationMode;
+    // The format the live/hydrated card renders as, so it matches the
+    // prerendered HTML the query selected (defaults to `fitted`).
+    format?: Format;
   };
 }
 
@@ -134,6 +138,10 @@ export default class HydratableCard extends Component<Signature> {
       return 'none';
     }
     return this.args.mode ?? 'none';
+  }
+
+  private get format(): Format {
+    return this.args.format ?? 'fitted';
   }
 
   // The resolved live instance — a `CardDef` or a `FileDef`. Short-circuits
@@ -191,7 +199,7 @@ export default class HydratableCard extends Component<Signature> {
           needed. }}
       <CardRenderer
         @card={{this.liveCard}}
-        @format='fitted'
+        @format={{this.format}}
         @codeRef={{@renderType}}
         @displayContainer={{false}}
         data-hydration={{this.hydrationState}}

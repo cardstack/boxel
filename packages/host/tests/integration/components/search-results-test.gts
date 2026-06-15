@@ -183,6 +183,14 @@ module('Integration | Component | search-results', function (hooks) {
           </div>
         </template>
       };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div class='embedded-book' data-test-embedded-book>
+            Embedded:
+            <@fields.title />
+          </div>
+        </template>
+      };
     }
 
     await setupIntegrationTestRealm({
@@ -303,6 +311,45 @@ module('Integration | Component | search-results', function (hooks) {
         isCardInstance(storeService.peek(BOOK_2)),
         'the full item was inflated into the store',
       );
+    } finally {
+      restore();
+    }
+  });
+
+  test('a live fallback renders at the format the query selected', async function (assert) {
+    // An item-only row for an `embedded` search renders the live card at
+    // `embedded`, not the hardcoded `fitted`, so it matches the HTML rows the
+    // query would have produced.
+    let restore = stubSearchEntries({
+      data: [itemEntryResource(BOOK_1)],
+      included: [bookItem(BOOK_1, 'Mango')],
+      meta: {
+        page: { total: 1 },
+        htmlQuery: { eq: { format: 'embedded', renderType: bookRef } },
+      },
+    });
+    try {
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await render(
+        <template>
+          <TestContext>
+            <SearchResults @query={{query}} />
+          </TestContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-embedded-book]')),
+      );
+
+      assert
+        .dom('[data-test-embedded-book]')
+        .hasText('Embedded: Mango', 'the live fallback rendered at embedded');
+      assert
+        .dom('[data-test-live-book]')
+        .doesNotExist('it did not fall back to the fitted format');
     } finally {
       restore();
     }

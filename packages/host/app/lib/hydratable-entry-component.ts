@@ -5,7 +5,11 @@ import {
 } from '@ember/component';
 import { precompileTemplate } from '@ember/template-compilation';
 
-import type { ResolvedCodeRef, StoreReadType } from '@cardstack/runtime-common';
+import type {
+  Format,
+  ResolvedCodeRef,
+  StoreReadType,
+} from '@cardstack/runtime-common';
 
 import HydratableCard, {
   type HydrationMode,
@@ -35,6 +39,9 @@ export interface HydratableEntryArgs {
   renderType?: ResolvedCodeRef;
   // `card` (default) or `file-meta` — the resource type the row resolves to.
   type?: StoreReadType;
+  // The format the live/hydrated card renders as, so it matches the
+  // prerendered HTML the query selected.
+  format: Format;
   // An error rendering never hydrates.
   isError: boolean;
   // The hydration gesture for an HTML-backed row.
@@ -47,6 +54,7 @@ class _HydratableEntryComponent {
     readonly component: HTMLComponent | undefined,
     readonly renderType: ResolvedCodeRef | undefined,
     readonly type: StoreReadType | undefined,
+    readonly format: Format,
     readonly isError: boolean,
     readonly mode: HydrationMode,
   ) {}
@@ -59,6 +67,7 @@ setComponentTemplate(
       @component={{this.component}}
       @renderType={{this.renderType}}
       @type={{this.type}}
+      @format={{this.format}}
       @isError={{this.isError}}
       @mode={{this.mode}}
       ...attributes
@@ -101,6 +110,7 @@ export function hydratableEntryComponent(
     args.component,
     args.renderType,
     args.type,
+    args.format,
     args.isError,
     args.mode,
   ) as unknown as EntryComponent;
