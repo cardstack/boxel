@@ -236,21 +236,21 @@ export class RichMarkdownField extends FieldDef {
           flex-wrap: wrap;
           gap: var(--boxel-sp-5xs);
           padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
-          background: var(--boxel-100);
-          border-bottom: 1px solid var(--boxel-200);
+          background: var(--muted, var(--boxel-100));
+          border-bottom: 1px solid var(--border, var(--boxel-200));
           border-top-left-radius: var(--boxel-border-radius);
           border-top-right-radius: var(--boxel-border-radius);
         }
 
         .rich-markdown-toolbar {
-          border: 1px solid var(--boxel-border-color);
-          border-bottom: 1px solid var(--boxel-200);
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-bottom: 1px solid var(--border, var(--boxel-200));
         }
 
         .rich-markdown-preview {
           min-height: 120px;
           padding: var(--boxel-sp-xs);
-          border: 1px solid var(--boxel-border-color);
+          border: 1px solid var(--border, var(--boxel-border-color));
           border-top: none;
           border-bottom-left-radius: var(--boxel-border-radius);
           border-bottom-right-radius: var(--boxel-border-radius);

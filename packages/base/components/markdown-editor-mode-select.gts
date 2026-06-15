@@ -68,9 +68,13 @@ export default class MarkdownEditorModeSelect extends GlimmerComponent<Signature
            via the BoxelSelect trigger tokens. */
         --boxel-select-trigger-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
         --boxel-select-trigger-gap: var(--boxel-sp-xxs);
-        /* Teal brand accent on hover/open, matching the mock and the
-           selected-option highlight (rather than the default dark border). */
-        --boxel-select-focus-border-color: var(--boxel-highlight);
+        /* Accent on hover/open: the theme ring/primary when themed, else the
+           teal brand color — matching the mock and the selected-option
+           highlight (rather than the default dark border). */
+        --boxel-select-focus-border-color: var(
+          --ring,
+          var(--primary, var(--boxel-highlight))
+        );
         width: auto;
       }
       /* The open menu is a detached rounded card, so keep the trigger fully

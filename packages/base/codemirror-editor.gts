@@ -1004,7 +1004,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           display: flex;
           flex-direction: column;
           min-height: 120px;
-          border: 1px solid var(--boxel-border-color);
+          border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: var(--boxel-border-radius);
           outline: 1px solid transparent;
           position: relative;
@@ -1272,6 +1272,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
            provided by the host RichMarkdownField so the compose/source bar and
            the preview bar share one definition. Only the buttons are styled
            here. */
+        /* Colors inherit the card theme (--foreground/--primary/--border) and
+           fall back to the boxel palette when no theme is applied, so the
+           toolbar stays legible in dark themes. */
         .toolbar-btn {
           display: flex;
           align-items: center;
@@ -1281,7 +1284,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           border: none;
           border-radius: var(--boxel-border-radius-sm);
           background: transparent;
-          color: var(--boxel-500);
+          color: var(--foreground, var(--boxel-500));
           cursor: pointer;
           padding: 0;
           transition:
@@ -1290,24 +1293,23 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         }
 
         .toolbar-btn:hover:not(:disabled) {
-          background: var(--boxel-100);
-          color: var(--boxel-700);
+          background: color-mix(in oklab, currentColor 8%, transparent);
         }
 
         .toolbar-btn--active:not(:disabled) {
-          background: var(--boxel-200);
-          color: var(--boxel-700);
+          background: var(--primary, var(--boxel-200));
+          color: var(--primary-foreground, var(--boxel-700));
         }
 
         .toolbar-btn:disabled {
-          color: var(--boxel-300);
+          color: var(--muted-foreground, var(--boxel-300));
           cursor: not-allowed;
         }
 
         .toolbar-divider {
           width: 1px;
           height: 18px;
-          background: var(--boxel-200);
+          background: var(--border, var(--boxel-200));
           margin: 0 var(--boxel-sp-5xs);
         }
 
