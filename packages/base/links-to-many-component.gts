@@ -653,6 +653,22 @@ export function getLinksToManyComponent({
   let getBrokenSlots = () => brokenSlotsFor(model, field.name);
   let isComputed = !!field.computeVia || !!field.queryDefinition;
   let isFileDefField = isFileDef(field.card);
+  // Inside an indexing render the resolved content of a query-backed
+  // `linksToMany` is throwaway: the host re-resolves query fields live at view
+  // time and consumes only the result ids, and the indexer records membership
+  // server-side from the parent doc's `relationships.{field}.data`. So
+  // deep-rendering each result here is pure waste — and on a densely
+  // query-backed graph it is the combinatorial breadth that pegs a render (the
+  // same instance reached along many sibling paths). Emit each result as a
+  // bounded atom instead: no embedded render, so no recursion into the result's
+  // own links/query fields. Gated on `__boxelJobId` (not just the render flag)
+  // so it applies only to indexing renders whose HTML is stored-then-rehydrated;
+  // the SPA and non-indexing prerenders deep-render as before.
+  let boundQueryResultInPrerender = () =>
+    !!field.queryDefinition &&
+    typeof globalThis !== 'undefined' &&
+    Boolean((globalThis as any).__boxelRenderContext) &&
+    Boolean((globalThis as any).__boxelJobId);
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
@@ -704,6 +720,20 @@ export function getLinksToManyComponent({
                             data-test-plural-view-item={{i}}
                           />
                         </CardCrudFunctionsConsumer>
+                      {{else if (boundQueryResultInPrerender)}}
+                        {{! Indexing render of a query-backed field: the
+                            resolved content is throwaway (re-resolved live at
+                            view time), so emit a bounded atom instead of
+                            deep-rendering the result. Caps render breadth on
+                            dense query-backed graphs; membership is recorded
+                            server-side from the parent doc relationships. }}
+                        <Item
+                          @format='atom'
+                          @displayContainer={{false}}
+                          class='linksToMany-item'
+                          data-test-plural-view-item={{i}}
+                          data-test-prerender-query-atom
+                        />
                       {{else}}
                         <Item
                           @format={{getPluralChildFormat
