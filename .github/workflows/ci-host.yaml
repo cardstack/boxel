@@ -189,6 +189,16 @@ jobs:
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
 
+      # Register the matrix users (realm_server, base_realm, …) the
+      # realm-server logs in as. Without this the worker's `_mtimes`
+      # request to the realm-server is unauthenticated and gets 404, so
+      # the from-scratch index finishes with zero files and every later
+      # card fetch 404s. Script waits for Synapse to be reachable before
+      # registering, so the ordering with `Start test services` is safe.
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+
       # Block until base + skills realms are fully indexed and publicly
       # readable. `_readiness-check` returns 200 only after the realm's
       # from-scratch index finishes (which itself waits for the prerender
@@ -419,6 +429,16 @@ jobs:
           # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
           # 60s host-test timeouts. Diagnostics-only; see server.ts.
           REALM_SERVER_HTTP2_DIAGNOSTICS: "1"
+
+      # Register the matrix users (realm_server, base_realm, …) the
+      # realm-server logs in as. Without this the worker's `_mtimes`
+      # request to the realm-server is unauthenticated and gets 404, so
+      # the from-scratch index finishes with zero files and every later
+      # card fetch 404s. Script waits for Synapse to be reachable before
+      # registering, so the ordering with `Start test services` is safe.
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
 
       # Block until base + skills realms are fully indexed and publicly
       # readable. `_readiness-check` returns 200 only after the realm's

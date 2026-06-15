@@ -568,7 +568,7 @@ module('Integration | card-delete', function (hooks) {
   test('can delete a card that is a selected item', async function (assert) {
     setCardInOperatorModeState(
       [`${testRealmURL}index`],
-      [`${testModuleRealm}`],
+      [`${testModuleRealm}index`],
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
