@@ -7,6 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 
 import { isHttpsLoopback } from '../lib/is-https-loopback.ts';
+import { v8ProfEnabled, v8ProfJsFlags } from './v8-prof.ts';
 
 const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
@@ -59,6 +60,20 @@ export class BrowserManager {
       process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
     if (extraArgs && extraArgs.length > 0) {
       launchArgs.push(...extraArgs);
+    }
+
+    // Diagnostic (off by default): arm V8's kernel-signal CPU sampler
+    // (`--prof`) in the renderer at launch. The SIGPROF timer preempts the
+    // thread on a schedule it can't refuse, so it samples a CPU-pegged
+    // loop — even one stuck in a non-yielding NATIVE call where
+    // `Debugger.pause` can't get a back-edge — and it never needs the
+    // pegged thread to service a CDP `stop`. The cost: it samples EVERY
+    // render, so it can perturb a timing-sensitive wedge; enable it only
+    // for a run that needs the native-peg fallback. Per-pid logfile so
+    // concurrent renderer processes don't clobber one another; the timeout
+    // path post-processes the log into the prerender-server logs.
+    if (v8ProfEnabled()) {
+      launchArgs.push(`--js-flags=${v8ProfJsFlags()}`);
     }
 
     this.#browser = await puppeteer.launch({

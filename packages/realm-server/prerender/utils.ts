@@ -18,6 +18,12 @@ import {
 import { fromAffinityKey } from './affinity.ts';
 import { captureTraceStream } from './trace-capture.ts';
 import {
+  capturePausedCallStack,
+  formatPausedStack,
+  type PausedStackCapture,
+} from './pause-capture.ts';
+import { v8ProfEnabled, processV8ProfTopFrames } from './v8-prof.ts';
+import {
   ensureHeapSampling,
   captureHeapSamplingProfile,
 } from './heap-sampler.ts';
@@ -1686,6 +1692,27 @@ export async function withTimeout<T>(
       });
       cpuProfileTopFrames = formatTopFrames(summary);
     }
+    // One-shot stack capture of the still-pegged renderer via
+    // `Debugger.pause`. Where the CPU profiler above structurally can't
+    // capture a hard wedge (its `stop` needs the pegged thread to
+    // serialize the profile), a debugger pause lands inside the
+    // synchronous loop at the next V8 interrupt check and reports the
+    // call frames directly — and it adds zero overhead until the single
+    // pause, so it can't mask a timing-sensitive wedge the way continuous
+    // sampling can. Out-of-process (CDP), so it survives a pegged JS
+    // thread; only on the timeout path, so it's free on a healthy render.
+    let pausedStack: PausedStackCapture | null = null;
+    if (!page.isClosed()) {
+      pausedStack = await capturePausedCallStack(page, { budgetMs: 8000 });
+    }
+    // Native-peg fallback (armed only when `PRERENDER_V8_PROF=true`):
+    // summarize the renderer's kernel-sampled V8 `--prof` log. Worth
+    // reading mainly when `pausedStack` came back `pause-timeout` — i.e.
+    // the peg is a non-yielding native call the debugger couldn't enter.
+    let v8ProfTopFrames: string | null = null;
+    if (v8ProfEnabled()) {
+      v8ProfTopFrames = await processV8ProfTopFrames();
+    }
     // Out-of-band CDP view of fetches still outstanding — survives a
     // wedged JS thread, so it's available even when the in-page hooks
     // below are skipped. The longest-lived entry is what a waiting
@@ -1791,6 +1818,13 @@ export async function withTimeout<T>(
         (topPending ? `(top: ${topPending.url} ${topPending.ageMs}ms)` : '') +
         ` concurrentRenders=${concurrentRenders}` +
         (cpuProfileTopFrames ? ` cpuTopFrames: ${cpuProfileTopFrames}` : '') +
+        (pausedStack?.heapUsedMB != null
+          ? ` jsHeapUsedMB=${pausedStack.heapUsedMB.toFixed(0)}`
+          : '') +
+        (formatPausedStack(pausedStack)
+          ? ` pausedStack: ${formatPausedStack(pausedStack)}`
+          : '') +
+        (v8ProfTopFrames ? `\nv8ProfTopFrames:\n${v8ProfTopFrames}` : '') +
         ` DOM:\n${dom?.trim()}`,
     );
     // Diagnostics ride on the outer `RenderError.diagnostics` as a
