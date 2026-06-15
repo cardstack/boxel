@@ -35,7 +35,7 @@ const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()
   ? serviceURL('host')
   : 'https://localhost:4200';
-export const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
+const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
 type PoolMeta = {

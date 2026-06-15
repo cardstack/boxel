@@ -74,7 +74,6 @@ import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts'
 import handleRunCommand from './handlers/handle-run-command.ts';
 import handleScreenshotCard from './handlers/handle-screenshot-card.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
-import { PRERENDER_HOST_SHELL_HASH_HEADER } from './prerender/prerender-constants.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
 export type CreateRoutesArgs = {
@@ -100,7 +99,6 @@ export type CreateRoutesArgs = {
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
-  getHostShellHash: () => Promise<string>;
   sendEvent: (
     user: string,
     eventType: string,
@@ -145,18 +143,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serveFromRealm,
   );
   router.get('/_standby', healthCheck, args.serveHostApp, args.serveFromRealm);
-  // The host-shell token this server is serving. A prerender server seeds its
-  // warm baseline from here at startup so it compares heartbeats against the
-  // shell it actually warmed against (the realm server it loads `/_standby`
-  // from is the authority), rather than adopting the first token the manager
-  // happens to report. The value matches what this server reports to the
-  // manager. Non-sensitive (a digest of public HTML), so no auth.
-  router.get('/_host-shell-hash', async (ctxt: Koa.Context) => {
-    let hash = await args.getHostShellHash();
-    ctxt.set(PRERENDER_HOST_SHELL_HASH_HEADER, hash);
-    ctxt.body = { data: { type: 'host-shell', attributes: { hash } } };
-    ctxt.status = 200;
-  });
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',

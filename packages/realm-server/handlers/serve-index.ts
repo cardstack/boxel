@@ -20,7 +20,6 @@ import {
 } from '../lib/index-html-injection.ts';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
 import { fullRequestURL } from '../middleware/index.ts';
-import { computeHostShellHash } from '../prerender/prerender-constants.ts';
 import {
   findOrMountRealm,
   getPublishedRealmInfo,
@@ -49,10 +48,6 @@ export type ServeIndexHandlers = {
   // isolation. Same closure backs `serveIndex` / `serveHostApp` so the
   // production cache behaviour is preserved.
   retrieveIndexHTML: () => Promise<string>;
-  // The current host-shell token (md5 of the host index HTML), served from
-  // `GET /_host-shell-hash` and matching what the realm server reports to the
-  // prerender manager. A prerender server seeds its warm baseline from this.
-  getHostShellHash: () => Promise<string>;
 };
 
 const log = logger('realm-server');
@@ -183,30 +178,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       });
     }
 
-    return work;
-  }
-
-  // Token for the host shell this server is serving. Computed from the raw
-  // host index HTML (not the rewritten body) so it matches the value the realm
-  // server reports to the prerender manager — the prerender fleet compares the
-  // two to detect a host redeploy. Promise-memoized for the process lifetime
-  // like the shell itself (so concurrent callers share one getIndexHTML call);
-  // recomputed in dev where the shell isn't cached.
-  let promiseForHostShellHash: Promise<string> | undefined;
-  async function getHostShellHash(): Promise<string> {
-    let isDev = assetsURL.hostname === 'localhost';
-    if (!isDev && promiseForHostShellHash) {
-      return promiseForHostShellHash;
-    }
-    let work = (async () => computeHostShellHash(await getIndexHTML()))();
-    if (!isDev) {
-      promiseForHostShellHash = work;
-      // On failure clear the cache so the next call retries instead of
-      // awaiting a permanently-rejected promise.
-      work.catch(() => {
-        promiseForHostShellHash = undefined;
-      });
-    }
     return work;
   }
 
@@ -552,7 +523,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     );
   };
 
-  return { serveIndex, serveHostApp, retrieveIndexHTML, getHostShellHash };
+  return { serveIndex, serveHostApp, retrieveIndexHTML };
 }
 
 function truncateLogLines(value: string, maxLines = 3): string {

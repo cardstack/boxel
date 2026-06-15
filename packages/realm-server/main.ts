@@ -22,7 +22,6 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
-import { computeHostShellHash } from './prerender/prerender-constants.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import {
   isEnvironmentMode,
@@ -373,13 +372,11 @@ const smokeTestHostApp = async () => {
 // unreachable manager must never block realm-server boot.
 const reportHostShellToManager = async () => {
   try {
-    let hash = await computeHostShellHash(await getIndexHTML());
-    // Report to the same prerender manager this realm server already sends
-    // prerender requests to. `prerendererUrl` is the manager's address (the
-    // manager fronts the pool). Resolving a separate PRERENDER_MANAGER_URL here
-    // is wrong on the realm-server side: that env var is only set on the
-    // prerender-server tasks, so on the realm server it fell back to localhost
-    // and the report never reached the manager.
+    let html = await getIndexHTML();
+    let { createHash } = await import('crypto');
+    let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    // Report to the manager URL the realm server already uses (prerendererUrl);
+    // PRERENDER_MANAGER_URL is only set on the prerender-server tasks.
     let managerURL = prerendererUrl.replace(/\/$/, '');
     let response = await fetch(`${managerURL}/host-shell`, {
       method: 'POST',
