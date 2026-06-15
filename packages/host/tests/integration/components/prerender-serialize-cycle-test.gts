@@ -101,13 +101,17 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
 
     // a2 — a FRESH object carrying A's id but a distinctive field value: the
     // "same logical card, different object instance" the object-identity guard
-    // can't see. b links to a2 (not the canonical a), and a2 links back to b, so
-    // the serialize traversal is a -> b -> a2 -> b, with the A re-entry fresh.
+    // can't see. b links to a2 (not the canonical a), so the serialize traversal
+    // is a -> b -> a2, and a2 re-enters A's id while A is still on the stack.
+    // a2 has no outgoing link, so the render below terminates (a -> b -> a2) —
+    // only the serialize-side cycle guard is under test here, not render-cycle
+    // handling. Without the id-based guard the serialize simply expands a2 once
+    // (its `firstName` lands in the doc and the assertion fails) rather than
+    // looping; with it, a2 collapses to `{ id }`.
     let a2 = new Node({ firstName: 'A-DUPLICATE-FRESH-OBJECT' });
     api.setCardAsSavedForTest(a2 as any, `${testRealmURL}Node/a`);
     getDataBucket(a).set('link', b);
     getDataBucket(b).set('link', a2);
-    getDataBucket(a2 as any).set('link', b);
 
     // Render once so the `link` field counts as a used linksTo (queryableValue
     // serializes used links only). Reaching past this line also proves the
