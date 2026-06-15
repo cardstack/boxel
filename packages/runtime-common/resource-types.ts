@@ -1,5 +1,5 @@
 import { md5 } from 'super-fast-md5';
-import type { ErrorEntry } from './index.ts';
+import type { ErrorEntry } from './error.ts';
 import type { RealmInfo } from './realm.ts';
 import { type CodeRef, type ResolvedCodeRef, moduleFrom } from './code-ref.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
