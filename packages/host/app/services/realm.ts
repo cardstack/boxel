@@ -728,6 +728,12 @@ export default class RealmService extends Service {
   // resetState can't serve a stale answer.
   private realmPathsCache = new Map<string, RealmPaths>();
   private realmOfCache = new Map<string, string>();
+  // The authorization middleware reads `token()` on every fetch, and a single
+  // render can issue hundreds — each one landing in `restoreSessionsFromStorage`
+  // for any realm it hasn't resolved yet. We memoize on the raw storage string
+  // so an unchanged blob is never re-parsed or re-walked; a later write (a newly
+  // seeded realm session) changes the string and re-runs the walk.
+  private lastRestoredSessionsString: string | undefined = undefined;
 
   @tracked private identifyRealmTracker = 0;
 
@@ -749,6 +755,7 @@ export default class RealmService extends Service {
     this.identifyRealmTracker++;
     this.realmPathsCache.clear();
     this.realmOfCache.clear();
+    this.lastRestoredSessionsString = undefined;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -828,10 +835,15 @@ export default class RealmService extends Service {
   }
 
   restoreSessionsFromStorage(): void {
-    let tokens = SessionStorage.getAll();
-    if (!tokens) {
+    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
+    if (sessionsString === this.lastRestoredSessionsString) {
       return;
     }
+    this.lastRestoredSessionsString = sessionsString;
+    if (!sessionsString) {
+      return;
+    }
+    let tokens = JSON.parse(sessionsString) as Record<string, string>;
     for (let [realmURL, token] of Object.entries(tokens)) {
       let resource = this.getOrCreateRealmResource(realmURL, token);
       if (token && resource.token !== token) {
