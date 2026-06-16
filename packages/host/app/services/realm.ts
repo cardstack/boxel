@@ -312,6 +312,22 @@ class RealmResource {
                 indexingWaiter.endAsync(this.indexingWaiterToken);
                 this.indexingWaiterToken = null;
               }
+              // Renaming a realm edits its RealmConfig card (realm.json),
+              // which surfaces as an incremental re-index that invalidates the
+              // config card. Refresh realm info then, so the workspace chooser
+              // label and index card title update without a reload. Other
+              // re-indexes (full/copy, or incremental of unrelated cards) are
+              // deliberately left alone — refetching on those would, among
+              // other things, clobber client-managed publish state. Instance
+              // invalidations carry the card id without `.json`, so the
+              // RealmConfig card at `<realm>/realm.json` appears as
+              // `<realm>/realm`.
+              if (
+                data.indexType === 'incremental' &&
+                data.invalidations.includes(`${this.realmURL}realm`)
+              ) {
+                this.refreshInfo();
+              }
               break;
             default:
               throw assertNever(data);
@@ -386,62 +402,100 @@ class RealmResource {
       if (this.info) {
         return;
       }
-      let headers: Record<string, string> = {
-        Accept: SupportedMimeType.RealmInfo,
-        ...(this.auth.type === 'logged-in'
-          ? { Authorization: `Bearer ${this.token}` }
-          : {}),
-      };
-      let response: Response;
-      try {
-        response = await this.network.authedFetch(`${this.realmURL}_info`, {
-          method: 'QUERY',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ realms: [this.realmURL] }),
-        });
-      } catch (error) {
-        if (isTesting()) {
-          console.warn(
-            `[realm-service] realm info fetch failed ${JSON.stringify({
-              realmURL: this.realmURL,
-              error: String(error),
-            })}`,
-          );
-        }
-        throw error;
-      }
-      if (response.status !== 200) {
-        let responseText = await response.text();
-        if (isTesting()) {
-          console.warn(
-            `[realm-service] realm info fetch bad status ${JSON.stringify({
-              realmURL: this.realmURL,
-              status: response.status,
-              responseText,
-            })}`,
-          );
-        }
-        throw new Error(
-          `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
-        );
-      }
-      let json = await waitForPromise(response.json());
-      let realmData = Array.isArray(json.data) ? json.data[0] : json.data;
-      let info: RealmInfo = {
-        url: realmData.id,
-        ...realmData.attributes,
-      };
-      let isPublic = Boolean(
-        response.headers.get('x-boxel-realm-public-readable') ||
-        response.headers.get('x-boxel-realms-public-readable'),
-      );
+      let { info, isPublic } = await this.fetchInfoFromServer();
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {
       this.fetchingInfo = undefined;
     }
+  });
+
+  // Fetches the realm's current `_info` from the realm server. Used both for
+  // the initial load (fetchInfoTask) and to refresh an already-loaded info
+  // when the realm re-indexes (refreshInfo), e.g. after the realm is renamed.
+  private async fetchInfoFromServer(): Promise<{
+    info: RealmInfo;
+    isPublic: boolean;
+  }> {
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.RealmInfo,
+      ...(this.auth.type === 'logged-in'
+        ? { Authorization: `Bearer ${this.token}` }
+        : {}),
+    };
+    let response: Response;
+    try {
+      response = await this.network.authedFetch(`${this.realmURL}_info`, {
+        method: 'QUERY',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ realms: [this.realmURL] }),
+      });
+    } catch (error) {
+      if (isTesting()) {
+        console.warn(
+          `[realm-service] realm info fetch failed ${JSON.stringify({
+            realmURL: this.realmURL,
+            error: String(error),
+          })}`,
+        );
+      }
+      throw error;
+    }
+    if (response.status !== 200) {
+      let responseText = await response.text();
+      if (isTesting()) {
+        console.warn(
+          `[realm-service] realm info fetch bad status ${JSON.stringify({
+            realmURL: this.realmURL,
+            status: response.status,
+            responseText,
+          })}`,
+        );
+      }
+      throw new Error(
+        `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
+      );
+    }
+    let json = await waitForPromise(response.json());
+    let realmData = Array.isArray(json.data) ? json.data[0] : json.data;
+    let info: RealmInfo = {
+      url: realmData.id,
+      ...realmData.attributes,
+    };
+    let isPublic = Boolean(
+      response.headers.get('x-boxel-realm-public-readable') ||
+      response.headers.get('x-boxel-realms-public-readable'),
+    );
+    return { info, isPublic };
+  }
+
+  // Re-fetches realm info after a re-index and mutates the existing tracked
+  // `info` object in place so consumers (workspace chooser label, index card
+  // title) reactively pick up changes such as a renamed realm. Mutating in
+  // place — rather than replacing the object — keeps the reference stable for
+  // `@cached` getters that hold onto it.
+  private refreshInfo() {
+    return this.refreshInfoTask.perform();
+  }
+
+  private refreshInfoTask = restartableTask(async () => {
+    if (!this.info) {
+      // Nothing loaded yet; the initial fetchInfo will pick up current values.
+      await this.fetchInfo();
+      return;
+    }
+    let { info, isPublic } = await this.fetchInfoFromServer();
+    // `_info` always returns the full RealmInfo attribute set (unset fields
+    // come back as explicit `null`), so assigning onto the existing object
+    // can't strand a stale key. Preserve client-managed publish state:
+    // publish()/unpublish() own `lastPublishedAt`, and `_info` may not yet
+    // reflect a just-published realm, so a rename refresh must not clobber it.
+    Object.assign(this.info, info, {
+      isPublic,
+      lastPublishedAt: this.info.lastPublishedAt,
+    });
   });
 
   async setRealmInfoProperty(
