@@ -6,13 +6,9 @@
 //
 // Requires the host test-services stack / CI to run.
 
-import type { RenderingTestContext } from '@ember/test-helpers';
-
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, baseRRI } from '@cardstack/runtime-common';
-import type { Loader } from '@cardstack/runtime-common/loader';
+import { baseRRI } from '@cardstack/runtime-common';
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import {
@@ -59,15 +55,8 @@ const markdownRef = {
   name: 'MarkdownDef',
 };
 
-let loader: Loader;
-
 module('Integration | CS-11545 | markdown skill search', function (hooks) {
   setupRenderingTest(hooks);
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
-  });
-
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
   setupRealmCacheTeardown(hooks);
