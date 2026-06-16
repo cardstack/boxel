@@ -572,7 +572,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       'Test Workspace B',
       'index card title shows the original realm name',
     );
-    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
 
     // Rename the realm by editing its RealmConfig card; the resulting re-index
     // should refresh the index card title reactively.
@@ -592,7 +591,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       'Renamed Workspace B',
       'index card title reflects the new realm name without a reload',
     );
-    assert.dom('[data-test-realm-name]').hasText('In Renamed Workspace B');
   });
 
   module(

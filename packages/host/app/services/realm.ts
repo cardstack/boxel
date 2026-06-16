@@ -312,16 +312,18 @@ class RealmResource {
                 indexingWaiter.endAsync(this.indexingWaiterToken);
                 this.indexingWaiterToken = null;
               }
-              // A re-index may have changed realm info (e.g. the realm was
-              // renamed via its RealmConfig card). Refresh so the workspace
-              // chooser label and index card title update without a reload.
-              // For incremental indexing this only matters when the realm's
-              // config card was invalidated, so skip the refetch otherwise.
-              // Instance invalidations carry the card id (no `.json`), so the
+              // Renaming a realm edits its RealmConfig card (realm.json),
+              // which surfaces as an incremental re-index that invalidates the
+              // config card. Refresh realm info then, so the workspace chooser
+              // label and index card title update without a reload. Other
+              // re-indexes (full/copy, or incremental of unrelated cards) are
+              // deliberately left alone — refetching on those would, among
+              // other things, clobber client-managed publish state. Instance
+              // invalidations carry the card id without `.json`, so the
               // RealmConfig card at `<realm>/realm.json` appears as
               // `<realm>/realm`.
               if (
-                data.indexType !== 'incremental' ||
+                data.indexType === 'incremental' &&
                 data.invalidations.includes(`${this.realmURL}realm`)
               ) {
                 this.refreshInfo();
@@ -485,7 +487,13 @@ class RealmResource {
       return;
     }
     let { info, isPublic } = await this.fetchInfoFromServer();
-    Object.assign(this.info, info, { isPublic });
+    // Preserve client-managed publish state: publish()/unpublish() own
+    // `lastPublishedAt`, and `_info` may not yet reflect a just-published
+    // realm, so a rename refresh must not clobber it.
+    Object.assign(this.info, info, {
+      isPublic,
+      lastPublishedAt: this.info.lastPublishedAt,
+    });
   });
 
   async setRealmInfoProperty(
