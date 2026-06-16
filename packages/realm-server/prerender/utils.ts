@@ -22,7 +22,7 @@ import {
   formatPausedStack,
   type PausedStackCapture,
 } from './pause-capture.ts';
-import { v8ProfEnabled, processV8ProfTopFrames } from './v8-prof.ts';
+import { v8ProfEnabled, uploadV8ProfLog } from './v8-prof.ts';
 import {
   ensureHeapSampling,
   captureHeapSamplingProfile,
@@ -1705,13 +1705,14 @@ export async function withTimeout<T>(
     if (!page.isClosed()) {
       pausedStack = await capturePausedCallStack(page, { budgetMs: 8000 });
     }
-    // Native-peg fallback (armed only when `PRERENDER_V8_PROF=true`):
-    // summarize the renderer's kernel-sampled V8 `--prof` log. Worth
-    // reading mainly when `pausedStack` came back `pause-timeout` — i.e.
-    // the peg is a non-yielding native call the debugger couldn't enter.
-    let v8ProfTopFrames: string | null = null;
+    // Hard-peg capture (armed only when `PRERENDER_V8_PROF=true`): ship the
+    // pegged isolate's raw kernel-sampled V8 `--prof` log to the artifact
+    // bucket, keyed by this render's realm/card/job, to be symbolized offline.
+    // This is the capture that survives a peg so hard it starves CDP — i.e.
+    // exactly when `pausedStack` comes back `debugger-enable-timeout`.
+    let v8ProfStatus: string | null = null;
     if (v8ProfEnabled()) {
-      v8ProfTopFrames = await processV8ProfTopFrames();
+      v8ProfStatus = await uploadV8ProfLog(artifactKeyPartsFor(profileContext));
     }
     // Out-of-band CDP view of fetches still outstanding — survives a
     // wedged JS thread, so it's available even when the in-page hooks
@@ -1824,7 +1825,7 @@ export async function withTimeout<T>(
         (formatPausedStack(pausedStack)
           ? ` pausedStack: ${formatPausedStack(pausedStack)}`
           : '') +
-        (v8ProfTopFrames ? `\nv8ProfTopFrames:\n${v8ProfTopFrames}` : '') +
+        (v8ProfStatus ? ` v8ProfLog: ${v8ProfStatus}` : '') +
         ` DOM:\n${dom?.trim()}`,
     );
     // Diagnostics ride on the outer `RenderError.diagnostics` as a

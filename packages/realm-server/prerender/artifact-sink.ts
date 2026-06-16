@@ -52,12 +52,19 @@ const DEFAULT_REGION = 'us-east-1';
 // usual tools recognise: `.cpuprofile` (Chrome DevTools / speedscope),
 // `.trace.json` (Chrome tracing / Perfetto), `.heapprofile` (DevTools
 // allocation-sampling view).
-export type ArtifactKind = 'cpuprofile' | 'trace' | 'heap';
+export type ArtifactKind = 'cpuprofile' | 'trace' | 'heap' | 'v8log';
 
 const SUFFIX_BY_KIND: Record<ArtifactKind, string> = {
   cpuprofile: 'cpuprofile',
   trace: 'trace.json',
   heap: 'heapprofile',
+  // Raw V8 `--prof` tick log (the renderer's `isolate-…-prerender-v8-prof`
+  // file), uploaded as-is and symbolized offline with `node --prof-process`.
+  // This is the one capture that survives a hard synchronous CPU peg: the
+  // kernel SIGPROF sampler writes it from a separate thread, so it lands even
+  // when the main thread is too pegged to service CDP — but it's too large to
+  // `--prof-process` inside the render-timeout budget, so we ship the bytes.
+  v8log: 'v8log',
 };
 
 // The render-identifying fields that key an artifact. All but `kind` are

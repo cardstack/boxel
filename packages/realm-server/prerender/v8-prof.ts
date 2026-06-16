@@ -1,31 +1,29 @@
 // Diagnostic V8 `--prof` (kernel-signal CPU sampling) for the prerender
-// renderer. Off by default (`PRERENDER_V8_PROF=true` to arm).
+// renderer — the one capture that survives a hard synchronous CPU peg.
 //
-// Why this exists alongside `Debugger.pause` (pause-capture.ts):
+// When a render pegs the main thread hard, CDP can't read it: `Debugger.enable`
+// / `Profiler.enable` time out because the pegged thread can't service the
+// protocol (see pause-capture.ts / trace-capture.ts). V8's `--prof` sampler is
+// driven by the kernel SIGPROF timer and written by a separate thread, so it
+// records the spinning frame regardless — straight to a file on disk.
 //
-//   `Debugger.pause` reads a synchronous JS loop (V8 honors the pause at a
-//   back-edge) with zero continuous overhead. But if the wedge is one long
-//   NON-YIELDING native call there is no back-edge, and pause times out.
-//   `--prof` covers that gap: the kernel SIGPROF timer preempts the thread
-//   mid-instruction regardless of what it's running (JS or native), so the
-//   busiest frame wins the samples — exactly the case `Debugger.pause`
-//   can't reach. It also never needs the pegged thread to service a CDP
-//   `stop` (the failure mode of the CDP `Profiler`; see trace-capture.ts).
+// The catch: that file accumulates every render on the isolate since browser
+// launch (tens of MB), so `node --prof-process` on it blows the render-timeout
+// budget. So we don't parse it in-container. On the render timeout we ship the
+// RAW log to the prerender S3 artifacts bucket, keyed by realm/card/job, and
+// symbolize it offline (`node --prof-process`) where there's no deadline and
+// the peg dominates the top self-time frames.
 //
-//   The trade-off, and why it's gated off: it samples EVERY render, so its
-//   own interrupts can perturb a timing-sensitive wedge enough to dissolve
-//   it. Run it only when `Debugger.pause` reports `pause-timeout` (a
-//   suspected native peg).
+// Off by default (`PRERENDER_V8_PROF=true` to arm) — it samples every render,
+// so it can perturb a timing-sensitive wedge; arm it deliberately.
 
 import { logger } from '@cardstack/runtime-common';
-import { promises as fs } from 'fs';
+import { promises as fs, createReadStream } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { uploadArtifact, type ArtifactKeyParts } from './artifact-sink.ts';
 
 const log = logger('prerenderer');
-const execFileAsync = promisify(execFile);
 
 export const V8_PROF_LOG_DIR = tmpdir();
 export const V8_PROF_LOG_PREFIX = 'prerender-v8-prof-';
@@ -74,83 +72,85 @@ export async function prepareV8ProfForLaunch(): Promise<void> {
   }
 }
 
-// Best-effort summary of the hottest frames from the renderer's `--prof`
-// log via `node --prof-process`. Called on the timeout path only when
-// armed. Time-boxed — the log can be large, and the pegged render's
-// samples dominate it, so the top self-time frames name the wedge.
-export async function processV8ProfTopFrames(
-  budgetMs = 40000,
+// Find the pegged isolate's `--prof` log among this browser run's logs.
+// Returns the chosen file (or a self-diagnosing reason string).
+async function pickV8ProfLog(): Promise<
+  { full: string; sizeMB: string } | { reason: string }
+> {
+  let entries = await fs.readdir(V8_PROF_LOG_DIR);
+  // `includes`, not `startsWith`: V8's per-isolate logging prepends
+  // `isolate-<addr>-` to the --logfile name, so the file is e.g.
+  // `isolate-0x…-prerender-v8-prof-<pid>.log`.
+  let logs = entries.filter(
+    (e) => e.includes(V8_PROF_LOG_PREFIX) && e.endsWith('.log'),
+  );
+  if (logs.length === 0) {
+    let present = entries.filter((e) => e.endsWith('.log')).slice(0, 12);
+    return {
+      reason: `<no v8 --prof log found; .log present: ${present.join(', ') || 'none'}>`,
+    };
+  }
+  let withStats = await Promise.all(
+    logs.map(async (name) => {
+      let full = path.join(V8_PROF_LOG_DIR, name);
+      try {
+        let st = await fs.stat(full);
+        return { full, mtimeMs: st.mtimeMs, size: st.size };
+      } catch {
+        return { full, mtimeMs: 0, size: 0 };
+      }
+    }),
+  );
+  // This browser run's logs only (stale ones were cleared + the launch time
+  // stamped). Pick the LARGEST: the pegged isolate accumulates by far the
+  // most samples over the peg, so its log dwarfs sibling isolates' and
+  // earlier renders' — and the peg dominates its frames regardless of what
+  // else it rendered.
+  let fromThisRun = withStats.filter(
+    (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt,
+  );
+  if (fromThisRun.length === 0) {
+    let seen = withStats
+      .map((s) => `${path.basename(s.full)}(${s.size}b)`)
+      .slice(0, 8);
+    return {
+      reason: `<no v8 --prof log from this run; seen: ${seen.join(', ')}>`,
+    };
+  }
+  fromThisRun.sort((a, b) => b.size - a.size);
+  return {
+    full: fromThisRun[0].full,
+    sizeMB: (fromThisRun[0].size / (1024 * 1024)).toFixed(1),
+  };
+}
+
+// On the render timeout (when armed), ship the pegged isolate's RAW `--prof`
+// log to the artifact sink, keyed by realm/card/job so the wedging task's log
+// is self-identifying across the fleet. We don't `--prof-process` it here: the
+// accumulated log is too large to symbolize inside the timeout budget, and the
+// sink streams it (managed multipart) so memory stays bounded. Symbolize the
+// artifact offline with `node --prof-process`. Returns a short status for the
+// timeout log line.
+export async function uploadV8ProfLog(
+  keyParts: Omit<ArtifactKeyParts, 'kind'>,
 ): Promise<string | null> {
   if (!v8ProfEnabled()) {
     return null;
   }
   try {
-    let entries = await fs.readdir(V8_PROF_LOG_DIR);
-    // `includes`, not `startsWith`: V8's per-isolate logging prepends
-    // `isolate-<addr>-` to the --logfile name, so the file is e.g.
-    // `isolate-0x…-prerender-v8-prof-<pid>.log`.
-    let logs = entries.filter(
-      (e) => e.includes(V8_PROF_LOG_PREFIX) && e.endsWith('.log'),
-    );
-    if (logs.length === 0) {
-      // Name what IS present, so a still-missed pattern is self-diagnosing.
-      let present = entries.filter((e) => e.endsWith('.log')).slice(0, 12);
-      return `<no v8 --prof log found; .log present: ${present.join(', ') || 'none'}>`;
+    let picked = await pickV8ProfLog();
+    if ('reason' in picked) {
+      return picked.reason;
     }
-    let withStats = await Promise.all(
-      logs.map(async (name) => {
-        let full = path.join(V8_PROF_LOG_DIR, name);
-        try {
-          let st = await fs.stat(full);
-          return { full, mtimeMs: st.mtimeMs, size: st.size };
-        } catch {
-          return { full, mtimeMs: 0, size: 0 };
-        }
-      }),
-    );
-    // Only this browser run's logs (stale prior-run logs were cleared +
-    // the launch time stamped). Among those pick the LARGEST: the pegged
-    // isolate accumulates by far the most samples over the 60s peg, so its
-    // log dwarfs sibling isolates' and earlier renders' — and the peg's
-    // samples dominate its top frames regardless of what else it rendered.
-    let fromThisRun = withStats.filter(
-      (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt,
-    );
-    if (fromThisRun.length === 0) {
-      let seen = withStats
-        .map((s) => `${path.basename(s.full)}(${s.size}b)`)
-        .slice(0, 8);
-      return `<no v8 --prof log from this run; seen: ${seen.join(', ')}>`;
-    }
-    fromThisRun.sort((a, b) => b.size - a.size);
-    let logPath = fromThisRun[0].full;
-    let sizeMB = (fromThisRun[0].size / (1024 * 1024)).toFixed(1);
-    let stdout: string;
-    try {
-      ({ stdout } = await execFileAsync(
-        process.execPath,
-        ['--prof-process', logPath],
-        { timeout: budgetMs, maxBuffer: 128 * 1024 * 1024 },
-      ));
-    } catch (e) {
-      // Report the reason + size rather than swallowing it: a large
-      // accumulated log (every render since browser launch) can blow the
-      // time-box or the stdout cap, and we need to SEE that, not get null.
-      let err = e as { code?: string; killed?: boolean; message?: string };
-      return `<prof-process failed on ${path.basename(logPath)} (${sizeMB}MB)${err.killed ? ' [killed: timed out]' : ''}: ${err.code ?? ''} ${String(err.message ?? e).slice(0, 140)}>`;
-    }
-    let lines = stdout.split('\n');
-    // The bottom-up "[Summary]" section lists self-time by category; the
-    // top JS/C++ entries that follow name the hot function.
-    let summaryIdx = lines.findIndex((l) => /\[Summary\]/.test(l));
-    let slice =
-      summaryIdx >= 0
-        ? lines.slice(summaryIdx, summaryIdx + 60)
-        : lines.slice(0, 60);
-    let summary = slice.join('\n').trim();
-    return `[${path.basename(logPath)} ${sizeMB}MB]\n${summary || '<empty prof summary>'}`;
+    await uploadArtifact({
+      ...keyParts,
+      kind: 'v8log',
+      body: createReadStream(picked.full),
+      contentType: 'text/plain',
+    });
+    return `uploaded v8 --prof log ${path.basename(picked.full)} (${picked.sizeMB}MB) to artifact bucket — symbolize offline with \`node --prof-process\``;
   } catch (e) {
     // Never silently null — surface the reason on the timeout line.
-    return `<v8 --prof reader error: ${String((e as { message?: string }).message ?? e).slice(0, 160)}>`;
+    return `<v8 --prof upload error: ${String((e as { message?: string }).message ?? e).slice(0, 160)}>`;
   }
 }
