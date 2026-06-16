@@ -189,7 +189,8 @@
     "uuid": "catalog:",
     "vite": "^8.0.8",
     "wait-for-localhost-cli": "catalog:",
-    "wtfnode": "^0.10.1"
+    "wtfnode": "^0.10.1",
+    "yaml": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
