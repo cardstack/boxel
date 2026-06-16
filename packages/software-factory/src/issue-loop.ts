@@ -30,6 +30,21 @@ import { retryWithPoll } from './retry-with-poll.ts';
 
 let log = logger('issue-loop');
 
+/**
+ * Thrown by the `syncWorkspace` wrapper when `--halt-on-sync-error` is set
+ * and a sync fails. The loop's per-step `try/catch` blocks normally swallow
+ * sync failures (logging a warning and continuing), which is correct for a
+ * resilient run but defeats the debug flag. They rethrow this specific error
+ * so the run halts immediately — before the next sync's recovery pull mutates
+ * the workspace and masks the realm/index inconsistency under investigation.
+ */
+export class SyncHaltError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SyncHaltError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Validator interface
 // ---------------------------------------------------------------------------
@@ -148,6 +163,26 @@ export interface IssueIterationResult {
   innerIterations: number;
   toolCallLog: ToolCallEntry[];
   lastValidation?: ValidationResults;
+  /** Wall-clock attribution for this issue. See {@link IssueTiming}. */
+  timing?: IssueTiming;
+}
+
+/**
+ * Per-issue wall-clock attribution. The factory's runtime is dominated by
+ * three buckets — LLM agent turns, the validation pipeline (esp. browser
+ * test runs), and workspace↔realm syncs — and a run otherwise gives no way
+ * to tell which one cost the hour. `totalMs` is the issue's wall clock; the
+ * gap between it and (agent+validation+sync) is scheduler/index-poll overhead.
+ */
+export interface IssueTiming {
+  agentMs: number;
+  validationMs: number;
+  syncMs: number;
+  totalMs: number;
+}
+
+function fmtSecs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export interface IssueLoopResult {
@@ -238,6 +273,29 @@ export async function runIssueLoop(
   let outerCycles = 0;
   let exhaustedIssues = new Set<string>();
 
+  // Wall-clock attribution. `grand`/`cur` accumulate the three cost buckets
+  // across the whole run and within the current outer cycle respectively;
+  // `cur` is reset when each issue is picked up. Sync time is captured by
+  // routing every syncWorkspace() call through `timedSync`.
+  let loopStartMs = Date.now();
+  let grand: IssueTiming = {
+    agentMs: 0,
+    validationMs: 0,
+    syncMs: 0,
+    totalMs: 0,
+  };
+  let cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
+  let timedSync = async () => {
+    let start = Date.now();
+    try {
+      return await syncWorkspace();
+    } finally {
+      let elapsed = Date.now() - start;
+      cur.syncMs += elapsed;
+      grand.syncMs += elapsed;
+    }
+  };
+
   log.info(
     `Starting issue loop: targetRealm=${targetRealm}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
   );
@@ -275,6 +333,11 @@ export async function runIssueLoop(
       break;
     }
 
+    // Reset per-issue timing accumulators; `cycleStartMs` anchors this
+    // issue's total wall clock.
+    cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
+    let cycleStartMs = Date.now();
+
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
     );
@@ -287,7 +350,7 @@ export async function runIssueLoop(
     if (issue.status !== 'in_progress') {
       try {
         await issueStore.updateIssue(issue.id, { status: 'in_progress' });
-        let pickupSync = await syncWorkspace();
+        let pickupSync = await timedSync();
         if (!pickupSync.ok) {
           // The status flip is local until sync lands. If the sync
           // failed, the realm is still showing `backlog` and a
@@ -311,6 +374,7 @@ export async function runIssueLoop(
           );
         }
       } catch (err) {
+        if (err instanceof SyncHaltError) throw err;
         log.warn(
           `  Failed to set issue to in_progress: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -349,10 +413,16 @@ export async function runIssueLoop(
       });
 
       // Run the agent — it calls tools during its turn
+      let agentStartMs = Date.now();
       let result = await agent.run(context, tools);
+      let agentMs = Date.now() - agentStartMs;
+      cur.agentMs += agentMs;
+      grand.agentMs += agentMs;
       allToolCalls.push(...result.toolCalls);
 
-      log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
+      log.info(
+        `  Agent returned ${result.toolCalls.length} tool call(s) in ${fmtSecs(agentMs)}`,
+      );
 
       // The agent itself reports "I cannot proceed" via two paths:
       // calling `request_clarification` (clarification.message), or
@@ -366,8 +436,9 @@ export async function runIssueLoop(
         log.info(`  Agent reported blocked: ${blockMessage}`);
         try {
           await issueStore.updateIssue(issue.id, { status: 'blocked' });
-          await syncWorkspace();
+          await timedSync();
         } catch (err) {
+          if (err instanceof SyncHaltError) throw err;
           log.warn(
             `  Failed to mark issue as blocked after agent block: ${err instanceof Error ? err.message : String(err)}`,
           );
@@ -379,17 +450,21 @@ export async function runIssueLoop(
       // Push the agent's workspace writes to the realm so the prerenderer-
       // backed validators (eval / instantiate / test-step's QUnit run) see
       // the latest source when they execute against the realm.
-      let preValidationSync = await syncWorkspace();
+      let preValidationSync = await timedSync();
 
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
+      let validationStartMs = Date.now();
       validationResults = await validator.validate(targetRealm, iteration);
+      let validationMs = Date.now() - validationStartMs;
+      cur.validationMs += validationMs;
+      grand.validationMs += validationMs;
 
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they
       // appear in the Boxel UI.
-      let postValidationSync = await syncWorkspace();
+      let postValidationSync = await timedSync();
 
       let syncFailed = !preValidationSync.ok || !postValidationSync.ok;
       let syncError = preValidationSync.error ?? postValidationSync.error;
@@ -419,7 +494,7 @@ export async function runIssueLoop(
         validationContext = validationSummary;
       }
       log.info(
-        `  Validation: ${formatValidation(validationResults)}${
+        `  Validation: ${formatValidation(validationResults)} in ${fmtSecs(validationMs)}${
           syncFailed ? ' (sync failed — ignoring validation pass/fail)' : ''
         }`,
       );
@@ -443,7 +518,7 @@ export async function runIssueLoop(
           // the loop reads stale `in_progress` and runs another inner
           // iteration (or, with a low maxIterationsPerIssue, exits as
           // max_iterations instead of done).
-          let doneSync = await syncWorkspace();
+          let doneSync = await timedSync();
           if (!doneSync.ok) {
             log.warn(
               `  Marked issue done locally but sync failed (${doneSync.error ?? 'unknown'}); refresh may still see prior status`,
@@ -453,6 +528,7 @@ export async function runIssueLoop(
             `  Issue marked done (agent called signal_done, validation passed, sync succeeded)`,
           );
         } catch (err) {
+          if (err instanceof SyncHaltError) throw err;
           log.warn(
             `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
           );
@@ -546,8 +622,18 @@ export async function runIssueLoop(
       exhaustedIssues.add(issue.id);
     }
 
+    let issueTiming: IssueTiming = {
+      agentMs: cur.agentMs,
+      validationMs: cur.validationMs,
+      syncMs: cur.syncMs,
+      totalMs: Date.now() - cycleStartMs,
+    };
+
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
+    );
+    log.info(
+      `  Timing: agent ${fmtSecs(issueTiming.agentMs)}, validation ${fmtSecs(issueTiming.validationMs)}, sync ${fmtSecs(issueTiming.syncMs)}, total ${fmtSecs(issueTiming.totalMs)}`,
     );
 
     issueResults.push({
@@ -557,6 +643,7 @@ export async function runIssueLoop(
       innerIterations,
       toolCallLog: allToolCalls,
       lastValidation: validationResults,
+      timing: issueTiming,
     });
 
     // Reload issues to pick up new issues the agent may have created
@@ -601,7 +688,7 @@ export async function runIssueLoop(
         // (catalog UI shows it as ACTIVE even after every issue is
         // marked done). Same syncWorkspace the orchestrator uses
         // elsewhere; failure logs but doesn't block.
-        let projectSync = await syncWorkspace();
+        let projectSync = await timedSync();
         if (!projectSync.ok) {
           log.warn(
             `Failed to sync project status update: ${projectSync.error ?? 'unknown error'}`,
@@ -617,5 +704,46 @@ export async function runIssueLoop(
     }
   }
 
+  grand.totalMs = Date.now() - loopStartMs;
+  logTimingSummary(issueResults, grand);
+
   return { outcome, outerCycles, issueResults };
+}
+
+/**
+ * Log a per-issue + grand-total wall-clock attribution table at the end of a
+ * run. Answers "where did the hour go" by splitting time across agent turns,
+ * the validation pipeline, and workspace syncs. The unattributed remainder
+ * (total minus the three buckets) is scheduler + index-poll overhead.
+ */
+function logTimingSummary(
+  issueResults: IssueIterationResult[],
+  grand: IssueTiming,
+): void {
+  let timed = issueResults.filter(
+    (r): r is IssueIterationResult & { timing: IssueTiming } =>
+      r.timing != null,
+  );
+  if (timed.length === 0) {
+    return;
+  }
+
+  log.info('Run timing summary (where the time went):');
+  log.info(
+    `  ${'issue'.padEnd(36)} ${'agent'.padStart(8)} ${'valid'.padStart(8)} ${'sync'.padStart(8)} ${'total'.padStart(8)}`,
+  );
+  for (let r of timed) {
+    let label = (r.issueSummary || r.issueId).slice(0, 36).padEnd(36);
+    log.info(
+      `  ${label} ${fmtSecs(r.timing.agentMs).padStart(8)} ${fmtSecs(r.timing.validationMs).padStart(8)} ${fmtSecs(r.timing.syncMs).padStart(8)} ${fmtSecs(r.timing.totalMs).padStart(8)}`,
+    );
+  }
+  let attributed = grand.agentMs + grand.validationMs + grand.syncMs;
+  let overheadMs = Math.max(0, grand.totalMs - attributed);
+  log.info(
+    `  ${'TOTAL'.padEnd(36)} ${fmtSecs(grand.agentMs).padStart(8)} ${fmtSecs(grand.validationMs).padStart(8)} ${fmtSecs(grand.syncMs).padStart(8)} ${fmtSecs(grand.totalMs).padStart(8)}`,
+  );
+  log.info(
+    `  Unattributed (scheduling + index polling): ${fmtSecs(overheadMs)} of ${fmtSecs(grand.totalMs)} wall clock`,
+  );
 }
