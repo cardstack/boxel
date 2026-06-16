@@ -22,18 +22,20 @@ import NumberField from 'https://cardstack.com/base/number';
 
 import {
   Accordion,
+  BoxelDropdown,
   BoxelSelect,
   FieldContainer,
   FittedCard,
   KanbanColumnConfigSidebar,
   KanbanPlane,
   ContextButton,
+  Menu,
   Switch,
   Tooltip,
   type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import BookOpen from '@cardstack/boxel-icons/book-open';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
@@ -43,6 +45,7 @@ import LayoutSidebarRightCollapse from '@cardstack/boxel-icons/layout-sidebar-ri
 import LayoutSidebarRightExpand from '@cardstack/boxel-icons/layout-sidebar-right-expand';
 import MessageSquare from '@cardstack/boxel-icons/message-square';
 import Settings from '@cardstack/boxel-icons/settings';
+import ListFilter from '@cardstack/boxel-icons/list-filter';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -1992,8 +1995,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       });
     }
 
-    let fallbackKey = this.args.model.groupByFallbackKey;
-    if (fallbackKey && optionKeys.has(fallbackKey)) return baseColumns;
     let hasOrphan = cards.some((card) => {
       let v = (card as any)[fieldName];
       return !v || !optionKeys.has(v);
@@ -2147,6 +2148,17 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     this.isSidebarOpen = !this.isSidebarOpen;
   };
 
+  get groupByMenuItems(): MenuItem[] {
+    return this.groupByDimensions.map(
+      (dim) =>
+        new MenuItem({
+          label: dim.label,
+          action: () => this.updateGroupBy(dim),
+          checked: dim.key === this.activeGroupBy,
+        }),
+    );
+  }
+
   openCard = (index: number): void => {
     let card = this.args.model.cards?.[index];
     if (card) {
@@ -2227,15 +2239,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let stored = this.args.model?.placements;
     let cards = this.args.model?.cards ?? [];
     let fieldName = this.groupByFieldName;
-    let fallbackKey = this.args.model.groupByFallbackKey;
-
     let resolveColumn = (fieldValue: string | null | undefined): string => {
       return (
         (fieldValue
           ? this.columns.find((c) => c.key === fieldValue)?.key
-          : undefined) ??
-        (fallbackKey
-          ? this.columns.find((c) => c.key === fallbackKey)?.key
           : undefined) ??
         this.columns.find((c) => c.key === 'uncategorized')?.key ??
         this.firstColumn?.key ??
@@ -2295,68 +2302,91 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               </div>
             {{/if}}
           </div>
-          <div>
-            <span class='kanban-card-count' data-test-issue-tracker-card-count>
-              {{#if (eq this.cardCount 1)}}
-                1 card
-              {{else}}
-                {{this.cardCount}}
-                cards
-              {{/if}}
-            </span>
-          </div>
         </div>
         <div class='toolbar-right'>
-          <FieldContainer
-            @label='Group by'
-            class='toolbar-field group-by-selector'
-            data-test-group-by-selector
-          >
-            <BoxelSelect
-              @options={{this.groupByDimensions}}
-              @selected={{this.selectedGroupByDimension}}
-              @onChange={{this.updateGroupBy}}
-              @renderInPlace={{true}}
-              as |dim|
+          <span class='kanban-card-count' data-test-issue-tracker-card-count>
+            {{#if (eq this.cardCount 1)}}
+              1 card
+            {{else}}
+              {{this.cardCount}}
+              cards
+            {{/if}}
+          </span>
+          <div class='toolbar-actions'>
+            <div class='compact-group-by-btn'>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <Tooltip @placement='top'>
+                    <:trigger>
+                      <ContextButton
+                        @icon={{ListFilter}}
+                        @label='Group by'
+                        @variant='secondary'
+                        {{bindings}}
+                      />
+                    </:trigger>
+                    <:content>Group by</:content>
+                  </Tooltip>
+                </:trigger>
+                <:content as |dd|>
+                  <Menu
+                    @items={{this.groupByMenuItems}}
+                    @closeMenu={{dd.close}}
+                  />
+                </:content>
+              </BoxelDropdown>
+            </div>
+            <FieldContainer
+              @label='Group by'
+              class='toolbar-field group-by-selector'
+              data-test-group-by-selector
             >
-              <span data-test-group-by-option={{dim.key}}>{{dim.label}}</span>
-            </BoxelSelect>
-          </FieldContainer>
-          <FieldContainer
-            @label='Hide empty'
-            @inline={{true}}
-            class='toolbar-field'
-          >
-            <Switch
-              @isEnabled={{this.hideEmpty}}
-              @onChange={{this.toggleHideEmptyColumns}}
-              @label='Hide empty columns'
-              data-test-hide-empty-switch
-            />
-          </FieldContainer>
-          <Tooltip @placement='bottom'>
-            <:trigger>
-              <ContextButton
-                class='configure-btn'
-                @icon={{Settings}}
-                @label={{if
-                  this.isSidebarOpen
-                  'Close config sidebar'
-                  'Open config sidebar'
-                }}
-                @variant='highlight'
-                @isToggle={{true}}
-                @isActive={{this.isSidebarOpen}}
-                data-test-configure-columns-btn
-                {{on 'click' this.toggleSidebar}}
+              <BoxelSelect
+                @options={{this.groupByDimensions}}
+                @selected={{this.selectedGroupByDimension}}
+                @onChange={{this.updateGroupBy}}
+                @renderInPlace={{true}}
+                as |dim|
+              >
+                <span data-test-group-by-option={{dim.key}}>{{dim.label}}</span>
+              </BoxelSelect>
+            </FieldContainer>
+            <FieldContainer
+              @label='Hide empty'
+              @inline={{true}}
+              class='toolbar-field hide-empty-field'
+            >
+              <Switch
+                @isEnabled={{this.hideEmpty}}
+                @onChange={{this.toggleHideEmptyColumns}}
+                @label='Hide empty columns'
+                data-test-hide-empty-switch
               />
-            </:trigger>
-            <:content>{{if
-                this.isSidebarOpen
-                'Close config'
-                'Configure columns'
-              }}</:content>
-          </Tooltip>
+            </FieldContainer>
+            <Tooltip @placement='top'>
+              <:trigger>
+                <ContextButton
+                  class='configure-btn'
+                  @icon={{Settings}}
+                  @label={{if
+                    this.isSidebarOpen
+                    'Close config sidebar'
+                    'Open config sidebar'
+                  }}
+                  @variant='highlight'
+                  @isToggle={{true}}
+                  @isActive={{this.isSidebarOpen}}
+                  data-test-configure-columns-btn
+                  {{on 'click' this.toggleSidebar}}
+                />
+              </:trigger>
+              <:content>{{if
+                  this.isSidebarOpen
+                  'Close config'
+                  'Configure columns'
+                }}</:content>
+            </Tooltip>
+          </div>
         </div>
       </header>
       <div class='kanban-body'>
@@ -2408,6 +2438,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @onWipLimitChange={{this.handleWipLimitChange}}
             @onReorder={{this.handleColumnsChange}}
             @hideEmpty={{this.hideEmpty}}
+            @onHideEmptyChange={{this.toggleHideEmpty}}
           />
         </div>
       </div>
@@ -2430,6 +2461,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         --boxel-kanban-muted-fg: var(--board-muted-fg);
         --boxel-kanban-border: var(--board-border);
 
+        container-type: inline-size;
         height: 100%;
         display: flex;
         flex-direction: column;
@@ -2454,13 +2486,19 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       .kanban-heading {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
+        gap: var(--boxel-sp-4xs);
       }
       .toolbar-right {
         display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-4xs);
+        color: var(--board-muted-fg);
+      }
+      .toolbar-actions {
+        display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        color: var(--board-muted-fg);
       }
       .kanban-title {
         display: flex;
@@ -2553,6 +2591,172 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       .kanban-config-sidebar-wrap > :deep(aside) {
         border-top: none;
       }
+      .kanban-config-sidebar-wrap :deep(.hide-empty-row) {
+        display: none;
+      }
+
+      .compact-group-by-btn {
+        display: none;
+        position: relative;
+      }
+
+      /* ── Narrow (< 640px): stack toolbar, overlay config sidebar ── */
+      @container (width < 640px) {
+        .kanban-toolbar {
+          flex-wrap: wrap;
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        }
+        .toolbar-left {
+          flex: 1;
+          min-width: 0;
+        }
+        .toolbar-right {
+          flex-shrink: 0;
+          align-items: center;
+        }
+        .group-by-selector {
+          display: none;
+        }
+        .hide-empty-field {
+          display: none;
+        }
+        .compact-group-by-btn {
+          display: block;
+        }
+        .kanban-config-sidebar-wrap :deep(.hide-empty-row) {
+          display: flex;
+        }
+        .toolbar-actions {
+          gap: var(--boxel-sp-4xs);
+        }
+        /* Keep collapse toggle visible on touch screens that have no hover */
+        .kanban-area :deep(.col-collapse-btn) {
+          opacity: 0.5;
+        }
+        /* Overlay the config sidebar so it doesn't shrink the kanban area */
+        .kanban-config-sidebar-wrap.is-open {
+          position: absolute;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          box-shadow: -4px 0 16px
+            color-mix(in oklch, var(--boxel-dark) 15%, transparent);
+        }
+      }
+
+      /* ── Very narrow (< 420px): further compress ── */
+      @container (width < 420px) {
+        .kanban-toolbar {
+          padding: var(--boxel-sp-2xs);
+        }
+        .kanban-title {
+          font-size: 0.875rem;
+        }
+      }
+    </style>
+  </template>
+}
+
+// ── IssueTrackerEdit ──────────────────────────────────────────────────
+
+class IssueTrackerEdit extends Component<typeof IssueTracker> {
+  toggleHideEmptyColumns = () => {
+    this.args.model.hideEmptyColumns = !this.args.model.hideEmptyColumns;
+  };
+
+  <template>
+    <div class='issue-tracker-edit'>
+      <div class='edit-form'>
+        <div class='field-row'>
+          <FieldContainer @label='Board Title' @tag='label' @vertical={{true}}>
+            <@fields.boardTitle />
+          </FieldContainer>
+          <FieldContainer @label='Theme' @tag='label' @vertical={{true}}>
+            <@fields.cardInfo.theme />
+          </FieldContainer>
+        </div>
+        <FieldContainer @label='Project' @vertical={{true}}>
+          <@fields.project />
+        </FieldContainer>
+        <div class='settings-section'>
+          <h2 class='section-heading'>Board Options</h2>
+          <div class='settings-fields'>
+            <div class='field-row'>
+              <FieldContainer @label='Group By' @tag='label' @vertical={{true}}>
+                <@fields.groupBy />
+              </FieldContainer>
+              <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
+                <Switch
+                  @isEnabled={{@model.hideEmptyColumns}}
+                  @onChange={{this.toggleHideEmptyColumns}}
+                  @label='Hide empty columns'
+                />
+              </FieldContainer>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+    <style scoped>
+      .issue-tracker-edit {
+        container-type: inline-size;
+        overflow-y: auto;
+        height: 100%;
+      }
+      .edit-form {
+        max-width: 75rem;
+        margin: 0 auto;
+        padding: var(--boxel-sp-xl);
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-lg);
+        align-items: start;
+      }
+      .field-row > :deep(.boxel-field.vertical) {
+        height: 100%;
+      }
+      .field-row > :deep(.boxel-field.vertical > .content) {
+        align-self: center;
+      }
+      :deep(.links-to-editor .field-component-card) {
+        min-height: 2.5rem;
+        max-height: 2.5rem;
+        height: 2.5rem;
+      }
+      .settings-section {
+        border: 1px solid var(--border, var(--boxel-border-color));
+        border-radius: var(--boxel-border-radius-lg, 0.5rem);
+        overflow: hidden;
+      }
+      .section-heading {
+        margin: 0;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--foreground, var(--boxel-dark));
+        padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+        background: var(--muted, var(--boxel-100));
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+      }
+      .settings-fields {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+
+      @container (width < 480px) {
+        .edit-form {
+          padding: var(--boxel-sp);
+        }
+        .field-row {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+      }
     </style>
   </template>
 }
@@ -2564,7 +2768,7 @@ export class IssueTracker extends KanbanBoard {
 
   @field project = linksTo(() => Project);
   @field groupBy = contains(GroupByField);
-  @field groupByFallbackKey = contains(StringField);
+
   @field cards = linksToMany(() => Issue, {
     computeVia: function (this: IssueTracker) {
       return this.project?.issues;
@@ -2579,6 +2783,189 @@ export class IssueTracker extends KanbanBoard {
       return cardTitle ?? 'Issue Tracker Board';
     },
   });
+  @field cardTheme = linksTo(() => Theme, {
+    computeVia: function (this: IssueTracker) {
+      return this.cardInfo?.theme ?? this.project?.cardTheme;
+    },
+  });
 
+  static fitted = class Fitted extends Component<typeof IssueTracker> {
+    get issueCount(): number {
+      return this.args.model.cards?.length ?? 0;
+    }
+
+    get sortedColumns(): Array<{
+      label: string;
+      style: string;
+    }> {
+      return [...(this.args.model.columns ?? [])]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((col) => ({
+          label: col.label ?? col.key ?? '',
+          style: col.color,
+        }))
+        .filter((col) => col.label);
+    }
+
+    <template>
+      <FittedCard class='tracker-fitted' @titleTag='h3'>
+        <:eyebrow>
+          <div class='tracker-eyebrow'>
+            <SquareKanban width='14' height='14' aria-hidden='true' />
+            <span>BOARD</span>
+          </div>
+        </:eyebrow>
+        <:title><@fields.cardTitle /></:title>
+        <:subtitle>
+          {{#if @model.project}}
+            <span class='tracker-project'>{{@model.project.cardTitle}}</span>
+          {{/if}}
+        </:subtitle>
+        <:meta>
+          {{#if this.sortedColumns.length}}
+            <div class='tracker-columns'>
+              {{#each this.sortedColumns as |col|}}
+                <span class='column-chip' style={{cssVar col-color=col.style}}>
+                  <span class='column-dot' aria-hidden='true'></span>
+                  <span class='column-label'>{{col.label}}</span>
+                </span>
+              {{/each}}
+            </div>
+          {{/if}}
+        </:meta>
+        <:footer>
+          {{#if this.issueCount}}
+            <span class='stat-item'>
+              <CheckboxIcon
+                class='stat-icon'
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />{{this.issueCount}}
+            </span>
+          {{/if}}
+        </:footer>
+      </FittedCard>
+      <style scoped>
+        .tracker-fitted {
+          --fc-badge-right-display: none;
+          --fc-meta-display: none;
+          --fc-subtitle-display: none;
+          --boxel-heading-font-weight: 600;
+          box-shadow: inset 3px 0 0 oklch(55% 0.18 264);
+        }
+        .tracker-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          color: oklch(55% 0.18 264);
+          font-weight: 700;
+        }
+        @container fitted-card (width >= 150px) and (height >= 65px) {
+          .tracker-fitted {
+            --fc-subtitle-display: block;
+          }
+        }
+        @container fitted-card (width >= 150px) and (height >= 170px) {
+          .tracker-fitted {
+            --fc-meta-display: block;
+            --fc-title-line-clamp: 3;
+          }
+        }
+        @container fitted-card (aspect-ratio <= 1.0) and (width <= 150px) and
+          (height <= 170px) {
+          .tracker-fitted {
+            --fc-meta-display: none;
+          }
+        }
+        @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
+          .tracker-fitted {
+            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          }
+        }
+        @container fitted-card (width >= 150px) and (65px <= height <= 170px) {
+          .tracker-fitted {
+            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
+              var(--boxel-sp-2xs) var(--boxel-sp);
+          }
+        }
+        @container fitted-card (width >= 150px) and (height > 170px) {
+          .tracker-fitted {
+            --fc-title-font-size: 1rem;
+            --fc-content-padding: var(--boxel-sp);
+          }
+        }
+        .tracker-project {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-500));
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tracker-columns {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-4xs);
+          padding-top: var(--boxel-sp-xs);
+          border-top: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          width: 100%;
+        }
+        .column-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25em;
+          font-size: 0.625rem;
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          background: color-mix(
+            in oklch,
+            var(--col-color, var(--muted, var(--boxel-100))) 10%,
+            transparent
+          );
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--col-color, var(--muted-foreground, var(--boxel-400))) 35%,
+              transparent
+            );
+          border-radius: 0.25rem;
+          padding: 0.1em 0.4em;
+          letter-spacing: 0.04em;
+        }
+        .column-dot {
+          width: 0.375rem;
+          height: 0.375rem;
+          border-radius: 50%;
+          background: var(
+            --col-color,
+            var(--muted-foreground, var(--boxel-500))
+          );
+          flex-shrink: 0;
+        }
+        .stat-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25em;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          margin-left: auto;
+        }
+        .stat-icon {
+          flex-shrink: 0;
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = this.fitted;
+
+  static edit = IssueTrackerEdit;
   static isolated = IssueTrackerIsolated;
 }

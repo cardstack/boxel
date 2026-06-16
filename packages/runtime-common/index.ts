@@ -9,7 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
-import type { SerializedError } from './error.ts';
+import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -124,13 +124,9 @@ export interface RenderResponse extends PrerenderMeta {
   error?: RenderError;
 }
 
-export interface ErrorEntry {
-  type: 'instance-error' | 'module-error' | 'file-error';
-  error: SerializedError;
-  types?: string[];
-  searchData?: Record<string, any>;
-  cardType?: string;
-}
+// `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
+// re-exported here so barrel consumers reach it unchanged.
+export type { ErrorEntry } from './error.ts';
 
 // CS-10872: attached to timeout-class RenderErrors so the persisted
 // error document tells operators *where* the time went. All fields
@@ -1296,6 +1292,7 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search.ts';
+export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,

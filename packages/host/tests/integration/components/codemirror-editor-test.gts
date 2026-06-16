@@ -1017,7 +1017,7 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
-  test('wrapWith does nothing when no text is selected', async function (assert) {
+  test('wrapWith inserts empty markers with cursor centered when no selection', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
 
@@ -1038,11 +1038,18 @@ module('Integration | codemirror-context', function (hooks) {
       view.dispatch({ selection: { anchor: 6, head: 6 } });
       let result = cmContext.wrapWith('**')(view);
 
-      assert.false(result, 'returns false when no selection');
+      assert.true(result, 'returns true after inserting markers');
       assert.strictEqual(
         view.state.doc.toString(),
-        'Hello World',
-        'document is unchanged',
+        'Hello ****World',
+        'an empty pair of bold markers is inserted at the cursor',
+      );
+      let sel = view.state.selection.main;
+      assert.true(sel.empty, 'cursor is collapsed (no selection)');
+      assert.strictEqual(
+        sel.from,
+        8,
+        'cursor sits between the two pairs of markers',
       );
 
       view.destroy();

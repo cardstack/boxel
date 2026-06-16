@@ -83,6 +83,10 @@ export default class BoxelSelectUsage extends Component {
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelSelectFocusBorderColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelSelectTriggerPadding: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelSelectTriggerGap: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownBackgroundColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownBorderColor: CSSVariableInfo;
@@ -114,6 +118,8 @@ export default class BoxelSelectUsage extends Component {
         boxel-select-text-color=this.boxelSelectTextColor.value
         boxel-select-placeholder-color=this.boxelSelectPlaceholderColor.value
         boxel-select-focus-border-color=this.boxelSelectFocusBorderColor.value
+        boxel-select-trigger-padding=this.boxelSelectTriggerPadding.value
+        boxel-select-trigger-gap=this.boxelSelectTriggerGap.value
         boxel-dropdown-background-color=this.boxelDropdownBackgroundColor.value
         boxel-dropdown-border-color=this.boxelDropdownBorderColor.value
         boxel-dropdown-text-color=this.boxelDropdownTextColor.value
@@ -256,6 +262,20 @@ export default class BoxelSelectUsage extends Component {
             @description='Global override for select focus border color (highest priority)'
             @value={{this.boxelSelectFocusBorderColor.value}}
             @onInput={{this.boxelSelectFocusBorderColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-select-trigger-padding'
+            @type='padding'
+            @description='Padding of the trigger (defaults to var(--boxel-sp-xs) horizontal-ish); shrink for a compact trigger'
+            @value={{this.boxelSelectTriggerPadding.value}}
+            @onInput={{this.boxelSelectTriggerPadding.update}}
+          />
+          <Css.Basic
+            @name='boxel-select-trigger-gap'
+            @type='dimension'
+            @description='Gap between the trigger content and the caret icon (defaults to var(--boxel-sp))'
+            @value={{this.boxelSelectTriggerGap.value}}
+            @onInput={{this.boxelSelectTriggerGap.update}}
           />
           <Css.Basic
             @name='boxel-dropdown-background-color'
