@@ -56,11 +56,42 @@ function timestampPrefix(): string {
 
 const LOG_METHODS = ['trace', 'debug', 'info', 'warn', 'error', 'log'] as const;
 
+// @cardstack/logger severity order; the instance's numeric threshold
+// (`_level`) is an index into this. Mirrors the library's own gate so we can
+// tell, before calling through, whether a line will actually be emitted.
+const LEVEL_ORDER = [
+  'trace',
+  'debug',
+  'info',
+  'warn',
+  'error',
+  'none',
+] as const;
+
+function willEmit(raw: Logger, method: (typeof LOG_METHODS)[number]): boolean {
+  // `log` always prints (matches the library). For levelled methods, emit
+  // when the method's severity is at or above the instance threshold.
+  // `_level` is @cardstack/logger@0.2.1's private per-instance threshold; if a
+  // future version drops it, the `?? 0` fallback just makes every line emit
+  // (reverting to a slightly-skewed delta, never an error).
+  if (method === 'log') return true;
+  let threshold = (raw as unknown as { _level?: number })._level ?? 0;
+  return LEVEL_ORDER.indexOf(method) >= threshold;
+}
+
 function withTimestamps(raw: Logger): Logger {
   let wrapped = {} as Logger;
   for (let method of LOG_METHODS) {
-    wrapped[method] = (message: string, ...args: unknown[]) =>
-      raw[method](`${timestampPrefix()} ${message}`, ...args);
+    wrapped[method] = (message: string, ...args: unknown[]) => {
+      // Only stamp — and only advance the shared delta baseline — for a line
+      // that will actually print. Otherwise a suppressed debug call between
+      // two visible lines would make the next line's +Δms measure from an
+      // invisible point. The suppressed call is still forwarded (it no-ops).
+      if (!willEmit(raw, method)) {
+        return raw[method](message, ...args);
+      }
+      return raw[method](`${timestampPrefix()} ${message}`, ...args);
+    };
   }
   return wrapped;
 }
