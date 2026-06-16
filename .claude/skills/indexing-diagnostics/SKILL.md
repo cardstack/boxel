@@ -961,16 +961,23 @@ Arm it:
 3. Re-run the index. On a wedge, grep the prerender-server log for `v8ProfLog: uploaded` — and pull the artifact (next section).
 4. Set it back to `false` + restart when done — it samples **every** render while on.
 
-**Symbolize offline** (the `boxel-claude-readonly` role has `s3:GetObject` on `boxel-prerender-artifacts-*`):
+**Symbolize offline.** With an aws-access session for the env (`boxel-claude-readonly` has `s3:GetObject`/`ListBucket` on `boxel-prerender-artifacts-*`), the helper fetches the newest matching `.v8log` and runs `node --prof-process` for you:
 
 ```sh
-aws s3 ls --recursive s3://boxel-prerender-artifacts-<env>/<env>/<realm>/   # find the .v8log key
+packages/realm-server/scripts/symbolize-prerender-wedge.sh --env staging --realm bxl-dependency-order-test
+# --key <exact-s3-key> for a specific artifact; --list to just enumerate candidates; --top N for deeper sections
+```
+
+It self-documents why this is offline rather than in-container. Under the hood it's just:
+
+```sh
+aws s3api list-objects-v2 --bucket boxel-prerender-artifacts-<env> --prefix <env>/ ...   # newest .v8log for the realm
 aws s3 cp s3://boxel-prerender-artifacts-<env>/<key> /tmp/wedge.v8log
 node --prof-process /tmp/wedge.v8log \
   | sed -n '/\[Summary\]/,+14p; /\[JavaScript\]/,+30p; /\[Bottom up (heavy) profile\]/,+50p'
 ```
 
-The peg dominates the cumulative log (a 60s spin at 1 kHz is ~60k ticks; every other render on the tab is sub-second), so the top self-time frame — and the heaviest `[Bottom up]` path — is the wedge.
+The log self-contains its `code-creation` records, so `--prof-process` names the JS frames from the file alone — no binaries or source maps. Native/Chrome frames stay opaque (that'd need Chrome debug symbols); the JS layer is what names the wedge. The peg dominates the cumulative log (a 60s spin at 1 kHz is ~60k ticks; every other render on the tab is sub-second), so the top self-time frame — and the heaviest `[Bottom up]` path — is the wedge.
 
 **Masking note.** `--prof` samples continuously, but for a _synchronous_ peg that doesn't matter: a sync loop's control flow doesn't depend on timing, so sampling records _where_ it spins without changing _that_ it spins. The heavier CDP profiler / trace masking that's bitten before is the risk for _timing-sensitive async_ work — so confirm `mainThreadResponsive=false` before reaching for it.
 
