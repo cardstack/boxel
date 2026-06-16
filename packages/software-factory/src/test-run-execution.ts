@@ -24,6 +24,20 @@ import {
 
 let log = logger('test-run-execution');
 
+// How long to wait for the in-browser QUnit suite to reach `runEnd` before
+// giving up. A hung test page (boot error, infinite loop, never-resolving
+// promise) would otherwise block for boxel-cli's full 300s default with no
+// signal. Default 60s; override via FACTORY_TEST_TIMEOUT_MS for a heavy suite.
+const DEFAULT_QUNIT_TIMEOUT_MS = 60_000;
+
+function qunitTimeoutMs(): number {
+  let raw = process.env.FACTORY_TEST_TIMEOUT_MS;
+  let parsed = raw != null && raw.trim() !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_QUNIT_TIMEOUT_MS;
+}
+
 // ---------------------------------------------------------------------------
 // Resume Logic
 // ---------------------------------------------------------------------------
@@ -227,18 +241,43 @@ async function runQunitInBrowserUncached(
   // for the target realm.
   let authorization =
     (await options.client.getRealmToken(options.targetRealm)) ?? undefined;
-  let { qunitResults, durationMs } = await runRealmQunit(options.targetRealm, {
-    hostAppUrl: options.hostAppUrl,
-    ...(options.hostDistDir ? { hostDistDir: options.hostDistDir } : {}),
-    ...(options.debug ? { debug: options.debug } : {}),
-    ...(authorization ? { authorization } : {}),
-  });
+  // The factory owns the timeout value (boxel-cli only exposes the knob) so a
+  // hung test page fails fast instead of blocking the full 300s default.
+  let timeoutMs = qunitTimeoutMs();
+  let start = Date.now();
+  let qunitResults: QunitResults;
+  let durationMs: number;
+  try {
+    let run = await runRealmQunit(options.targetRealm, {
+      hostAppUrl: options.hostAppUrl,
+      timeoutMs,
+      ...(options.hostDistDir ? { hostDistDir: options.hostDistDir } : {}),
+      ...(options.debug ? { debug: options.debug } : {}),
+      ...(authorization ? { authorization } : {}),
+    });
+    // boxel-cli's QunitResults is structurally identical to the factory's; the
+    // cast keeps the parse/card layer typed against the local definition.
+    qunitResults = run.qunitResults as QunitResults;
+    durationMs = run.durationMs;
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    // boxel-cli surfaces a timeout as Playwright's opaque "Timeout <n>ms
+    // exceeded". Replace it with a diagnostic that names the likely cause.
+    if (/Timeout\s+\d+ms exceeded/i.test(message)) {
+      let waited = Date.now() - start;
+      throw new Error(
+        `QUnit suite did not finish within ${timeoutMs}ms (waited ${waited}ms). ` +
+          `The page never reached runEnd — likely an Ember boot error, a hanging ` +
+          `test, or a never-resolving promise. Re-run with --debug for browser ` +
+          `console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
+      );
+    }
+    throw err;
+  }
   log.debug(
     `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
   );
-  // boxel-cli's QunitResults is structurally identical to the factory's; the
-  // cast keeps the parse/card layer typed against the local definition.
-  return { qunitResults: qunitResults as QunitResults, durationMs };
+  return { qunitResults, durationMs };
 }
 
 // ---------------------------------------------------------------------------
