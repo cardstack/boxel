@@ -622,6 +622,51 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('getFields is memoized per instance in the render context and invalidates as the instance grows', function (assert) {
+    let person = new PersonDef({ name: 'Mango' });
+    try {
+      (globalThis as any).__boxelRenderContext = true;
+
+      let first = api.getFields(person, { usedLinksToFieldsOnly: true });
+      let second = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.strictEqual(
+        first,
+        second,
+        'a repeat call in the render context returns the memoized field map',
+      );
+      assert.notOk(
+        'bestFriend' in first,
+        'an unused linksTo field is absent before it is populated',
+      );
+
+      // Populating a linksTo field grows the data bucket, so the memo token no
+      // longer matches and the next call recomputes.
+      (person as any).bestFriend = new PersonDef({ name: 'Van Gogh' });
+      let third = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.notStrictEqual(
+        third,
+        first,
+        'growing the instance invalidates the memo',
+      );
+      assert.ok(
+        'bestFriend' in third,
+        'the now-used linksTo field appears after the bucket grows',
+      );
+
+      // Outside the render context the result is never memoized.
+      delete (globalThis as any).__boxelRenderContext;
+      let live1 = api.getFields(person, { usedLinksToFieldsOnly: true });
+      let live2 = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.notStrictEqual(
+        live1,
+        live2,
+        'the live app always gets a fresh field map',
+      );
+    } finally {
+      delete (globalThis as any).__boxelRenderContext;
+    }
+  });
+
   test('can drop reference to a card url', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
