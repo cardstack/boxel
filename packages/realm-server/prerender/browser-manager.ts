@@ -29,19 +29,16 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    // The Chromium sandbox is a real boundary here — the renderer executes
-    // user-authored card code — so keep it on wherever it works and disable
-    // it only where it must be off: in the container (the sandbox can't
-    // initialize there, so the image sets PUPPETEER_DISABLE_SANDBOX), in CI,
-    // and when the V8 `--prof` diagnostic is armed (a sandboxed renderer
-    // can't write the profile log to disk).
-    let disableSandbox =
-      process.env.CI === 'true' ||
-      process.env.PUPPETEER_DISABLE_SANDBOX === 'true' ||
-      v8ProfEnabled();
-    if (disableSandbox) {
-      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
-    }
+    // Always launch the prerender renderer with the Chromium sandbox off — it
+    // always has, and we require it to. This task runs only in a container
+    // where the sandbox can't initialize, so Chrome won't start with it on
+    // (and the V8 `--prof` diagnostic needs the renderer able to write its log
+    // to disk, which the sandbox blocks). The security boundary is the task
+    // itself: the prerenderer is a separate, segregated ECS task, isolated
+    // from the realm-server. Forced unconditionally rather than gated on CI /
+    // PUPPETEER_DISABLE_SANDBOX so a missing env var can't silently break the
+    // launch.
+    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf
     // cert), Chromium needs to be told to accept it. mkcert's root CA
