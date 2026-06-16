@@ -1871,6 +1871,14 @@ export default class StoreService extends Service implements StoreInterface {
     if (!isCardInstance(instanceOrError)) {
       return;
     }
+    if (this.renderContextBlocksPersistence()) {
+      // Persistence is blocked in this context, so the change subscription that
+      // drives autosave can never produce a save. Skipping it avoids the
+      // per-instance subscribe/unsubscribe churn — and the `getFields`
+      // dependency-graph walk each one triggers — for every instance a render
+      // loads.
+      return;
+    }
     let instance = instanceOrError;
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary

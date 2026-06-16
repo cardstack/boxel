@@ -965,6 +965,8 @@ Arm it:
 3. Re-run the index. On a wedge, grep the prerender-server log for `v8ProfLog: uploaded` — and pull the artifact (next section).
 4. Set it back to `false` + restart when done — it samples **every** render while on.
 
+> **Expect a multi-minute lag between the job rejecting and the `.v8log` landing in S3.** The worker rejects the indexing job at the shorter **request-abort** timeout (`client-aborted after 120000ms` in the manager log), but the `v8log` only uploads when the prerender-server's longer **render-level** timeout (`RENDER_TIMEOUT_MS`) fires — the renderer keeps pegging after the worker gives up — plus the S3 PUT. Observed gap on staging: job rejected at `20:02:33`, `v8ProfLog: uploaded` + artifact in S3 at `20:07:52` (~5 min later). So don't read "job rejected, no artifact yet" as a failed capture — poll the bucket (`symbolize-prerender-wedge.sh … --list`, or `s3api list-objects-v2`) for a few minutes before concluding the capture didn't happen.
+
 **Symbolize offline.** With an aws-access session for the env (`boxel-claude-readonly` has `s3:GetObject`/`ListBucket` on `boxel-prerender-artifacts-*`), the helper fetches the newest matching `.v8log` and runs `node --prof-process` for you:
 
 ```sh
