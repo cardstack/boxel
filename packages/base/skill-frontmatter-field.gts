@@ -6,15 +6,16 @@ import {
   type BaseDefComponent,
 } from './card-api';
 import StringField from './string';
-import { BoxelFrontmatterField } from './boxel-frontmatter-field';
+import { FrontmatterField } from './frontmatter-field';
 import { CommandField } from './command-field';
 
-// The `boxel:` namespace of a skill markdown file (`boxel.kind: skill`). Mirrors
-// the field shape of the legacy `Skill` card so the host's command-definition
-// upload flow reads `markdownDef.boxel.commands` exactly as it reads
-// `Skill.commands`. `name`/`description` are sourced from the shared top-level
-// frontmatter (see `MarkdownDef.extractAttributes`).
-export class SkillFrontmatterField extends BoxelFrontmatterField {
+// A skill markdown file's frontmatter (`boxel.kind: skill`). Adds typed fields
+// on top of the base `FrontmatterField` (which holds the raw frontmatter in
+// `rawContent`). Mirrors the field shape of the legacy `Skill` card so the
+// host's command-definition upload flow reads `markdownDef.frontmatter.commands`
+// exactly as it reads `Skill.commands`. `name`/`description` are sourced from the
+// shared top-level frontmatter keys (see `MarkdownDef.extractAttributes`).
+export class SkillFrontmatterField extends FrontmatterField {
   static displayName = 'Skill';
 
   @field name = contains(StringField);
