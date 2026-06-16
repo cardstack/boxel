@@ -496,9 +496,15 @@ function ensureRuntimeCommonImport(ast: any, filename: string): void {
     filename,
   ).program.body[0];
 
+  // Only merge into a value-level runtime-common import. Appending the
+  // `searchEntryWireQueryFromQuery` value specifier to a declaration-level
+  // `import type { … }` would make it type-only too (erased at runtime); in that
+  // case fall through and add a separate value import instead.
   let existing = body.find(
     (n: any) =>
-      n.type === 'ImportDeclaration' && n.source.value === RUNTIME_COMMON,
+      n.type === 'ImportDeclaration' &&
+      n.source.value === RUNTIME_COMMON &&
+      n.importKind !== 'type',
   );
 
   if (!existing) {

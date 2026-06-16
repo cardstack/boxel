@@ -78,6 +78,37 @@ export class EmbeddedList extends GlimmerComponent<Sig> {
 }
 `;
 
+// The only runtime-common import is declaration-level type-only. The adapter is
+// a runtime value, so it must NOT be appended to that import (which would erase
+// it) — it goes in a separate value import.
+const TRANSFORMABLE_TYPE_ONLY_IMPORT = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+
+import type { Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class TypeOnlyList extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent
+      @query={{@query}}
+      @realms={{@realms}}
+      @isLive={{true}}
+    >
+      <:response as |cards|>
+        {{#each cards key='url' as |card|}}
+          <card.component />
+        {{/each}}
+      </:response>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
 // The result array is handed to a child component instead of being iterated
 // directly — the child still expects the old PrerenderedCardLike shape, so this
 // can't be reshaped mechanically and must be reported for hand migration.
@@ -244,6 +275,30 @@ module(basename(__filename), function () {
         ),
       ),
       'no bare eq.format escapes the htmlQuery binding',
+    );
+  });
+
+  test('does not corrupt a declaration-level type-only runtime-common import', function (assert) {
+    let { status, output, reasons } = transformContextSearch(
+      TRANSFORMABLE_TYPE_ONLY_IMPORT,
+      { filename: 'type-only.gts' },
+    );
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.true(
+      /import type \{\s*Query\s*\} from '@cardstack\/runtime-common'/.test(
+        output,
+      ),
+      'leaves the existing import type { Query } intact',
+    );
+    assert.true(
+      /import\s+\{[^}]*searchEntryWireQueryFromQuery[^}]*\}\s+from\s+'@cardstack\/runtime-common'/.test(
+        output,
+      ),
+      'adds the adapter via a separate value import',
+    );
+    assert.false(
+      /import type \{[^}]*searchEntryWireQueryFromQuery/.test(output),
+      'the adapter is never imported type-only',
     );
   });
 
