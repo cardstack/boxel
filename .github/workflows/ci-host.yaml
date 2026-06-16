@@ -549,14 +549,18 @@ jobs:
           # path has its own `withRetries` and recovers silently; icons
           # doesn't, so the failure surfaces in any test that imports an
           # icon. Retry the whole shard once when we detect any of these.
-          # The cross-realm-fetch 404 line is a transient env-mode boot race:
+          # The realm-test 404 lines are a transient env-mode boot race:
           # when the dev realm-server's from-scratch index takes the long
-          # path on a given runner, the test realm-server occasionally
-          # mounts before its bootstrap finishes, and `linksTo` integration
-          # tests that fetch `${testModuleRealm}<card>` see a 404 from the
-          # live test realm. A second shard pass typically lands after the
-          # race resolves.
-          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^/]+: fetch failed|cross-realm fetch failed for https://realm-test\.[^/]+'
+          # path on a given runner, the test realm-server's from-scratch
+          # index occasionally finishes with zero files indexed, so any
+          # test that reads a card from `${testModuleRealm}` sees a 404
+          # from the live test realm. Both `cross-realm fetch failed` (the
+          # loader's wrapped error during cross-realm linksTo resolution)
+          # and `Could not find https://realm-test.<host>` (the realm-server's
+          # raw notFound when the host store does a direct GET) point at
+          # the same race; match both. A second shard pass typically lands
+          # after the race resolves.
+          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^/]+: fetch failed|cross-realm fetch failed for https://realm-test\.[^/]+|Could not find https://realm-test\.[^/"]+'
           if [ $exit_code -ne 0 ] && grep -Eq "$RETRY_PATTERN" /tmp/test-output.log; then
             echo ""
             echo "::warning::Transient chunk-fetch failure detected — retrying shard ${{ matrix.shardIndex }}"
