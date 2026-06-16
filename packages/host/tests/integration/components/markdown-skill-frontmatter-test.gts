@@ -37,14 +37,15 @@ function streamOf(markdown: string): () => Promise<Uint8Array> {
 }
 
 const SKILL_MD = `---
-kind: skill
 name: Realm Sync
 description: Sync workspace files
-commands:
-  - codeRef:
-      module: '@cardstack/boxel-host/commands/realm-sync'
-      name: SyncCommand
-    requiresApproval: true
+boxel:
+  kind: skill
+  commands:
+    - codeRef:
+        module: '@cardstack/boxel-host/commands/realm-sync'
+        name: SyncCommand
+      requiresApproval: true
 ---
 # Realm Sync
 
@@ -70,24 +71,28 @@ module(
       let { SkillField } = await loader.import<any>(
         `${baseRealm.url}skill-field`,
       );
-      let { FrontmatterField } = await loader.import<any>(
-        `${baseRealm.url}frontmatter-field`,
+      let { BoxelFrontmatterField } = await loader.import<any>(
+        `${baseRealm.url}boxel-frontmatter-field`,
       );
       let { parseFrontmatter } = await loader.import<any>(
         `${baseRealm.url}frontmatter-parse`,
       );
-      return { MarkdownDef, SkillField, FrontmatterField, parseFrontmatter };
+      return { MarkdownDef, SkillField, BoxelFrontmatterField, parseFrontmatter };
     }
 
     test('parseFrontmatter splits the YAML block from the body', async function (assert) {
       let { parseFrontmatter } = await loadBase();
       let { data, body } = parseFrontmatter(SKILL_MD);
-      assert.strictEqual(data.kind, 'skill', 'kind parsed');
-      assert.strictEqual(data.name, 'Realm Sync', 'name parsed');
+      assert.strictEqual(data.name, 'Realm Sync', 'top-level name parsed');
       assert.strictEqual(
-        (data.commands as any[])[0].codeRef.name,
+        (data.boxel as any).kind,
+        'skill',
+        'boxel.kind parsed',
+      );
+      assert.strictEqual(
+        (data.boxel as any).commands[0].codeRef.name,
         'SyncCommand',
-        'nested command codeRef parsed',
+        'nested boxel.commands codeRef parsed',
       );
       assert.true(
         body.startsWith('# Realm Sync'),
@@ -115,21 +120,21 @@ module(
         'flat searchable description written',
       );
       assert.strictEqual(
-        attrs.frontmatter.name,
+        attrs.boxel.name,
         'Realm Sync',
-        'nested frontmatter value carried',
+        'boxel.name sourced from shared top-level name',
       );
       assert.strictEqual(
-        attrs.frontmatter.commands[0].requiresApproval,
+        attrs.boxel.commands[0].requiresApproval,
         true,
-        'nested command survives extraction',
+        'nested boxel.command survives extraction',
       );
 
       let routed = (attrs as Record<PropertyKey, any>)[FILE_FIELD_META];
       assert.deepEqual(
-        routed?.frontmatter?.adoptsFrom,
+        routed?.boxel?.adoptsFrom,
         identifyCard(SkillField),
-        'routed per-field meta points frontmatter at SkillField',
+        'routed per-field meta points boxel at SkillField',
       );
     });
 
@@ -152,7 +157,7 @@ module(
         fieldsMeta,
       );
       assert.deepEqual(
-        (resource.meta as any).fields?.frontmatter?.adoptsFrom,
+        (resource.meta as any).fields?.boxel?.adoptsFrom,
         identifyCard(SkillField),
         'buildFileResource now threads meta.fields (gap closed)',
       );
@@ -163,21 +168,21 @@ module(
         undefined,
       );
       assert.true(
-        instance.frontmatter instanceof SkillField,
-        'frontmatter rehydrated as SkillField subclass',
+        instance.boxel instanceof SkillField,
+        'boxel rehydrated as SkillField subclass',
       );
       assert.strictEqual(
-        instance.frontmatter.name,
+        instance.boxel.name,
         'Realm Sync',
         'subclass field survives round-trip',
       );
       assert.strictEqual(
-        instance.frontmatter.commands.length,
+        instance.boxel.commands.length,
         1,
         'commands survive round-trip',
       );
       assert.strictEqual(
-        instance.frontmatter.commands[0].codeRef.name,
+        instance.boxel.commands[0].codeRef.name,
         'SyncCommand',
         'command codeRef survives round-trip',
       );

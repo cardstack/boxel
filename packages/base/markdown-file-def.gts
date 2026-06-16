@@ -23,11 +23,11 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
-import { FrontmatterField } from './frontmatter-field';
+import { BoxelFrontmatterField } from './boxel-frontmatter-field';
 import {
-  frontmatterFieldForKind,
-  isKnownFrontmatterKind,
-} from './frontmatter-kinds';
+  boxelFieldForKind,
+  isKnownBoxelKind,
+} from './boxel-frontmatter-kinds';
 import { parseFrontmatter } from './frontmatter-parse';
 
 // Channel for routing per-field meta (e.g. the concrete subclass of a
@@ -460,12 +460,13 @@ export class MarkdownDef extends FileDef {
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
 
-  // The file's YAML frontmatter. When the frontmatter declares a recognized
-  // `kind` (e.g. `kind: skill`), this holds the matching subclass instance
-  // (e.g. `SkillField`); otherwise it stays a base `FrontmatterField`. The
-  // concrete subclass is recorded in `meta.fields.frontmatter.adoptsFrom` by
-  // `extractAttributes`, so it rehydrates as the right type on read.
-  @field frontmatter = contains(FrontmatterField);
+  // The `boxel:` namespace of the file's YAML frontmatter. When it declares a
+  // recognized `kind` (e.g. `boxel.kind: skill`), this holds the matching
+  // subclass instance (e.g. `SkillField`); otherwise it stays a base
+  // `BoxelFrontmatterField`. The concrete subclass is recorded in
+  // `meta.fields.boxel.adoptsFrom` by `extractAttributes`, so it rehydrates as
+  // the right type on read.
+  @field boxel = contains(BoxelFrontmatterField);
 
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: MarkdownDef) {
@@ -516,14 +517,14 @@ export class MarkdownDef extends FileDef {
       excerpt: string;
       content: string;
       cardReferenceUrls: string[];
-      // Flat, searchable frontmatter projection (e.g. `kind: 'skill'` →
-      // `searchFiles({ filter: { eq: { kind: 'skill' } } })`). `name` is NOT
-      // surfaced flat because it collides with the FileDef's filename; the
-      // skill name lives in `frontmatter.name`.
+      // Flat, searchable projection of the boxel namespace (e.g. `kind: 'skill'`
+      // → `searchFiles({ filter: { eq: { kind: 'skill' } } })`). The skill name
+      // is NOT surfaced flat because it collides with the FileDef's filename; it
+      // lives in `boxel.name`.
       kind?: string;
       description?: string;
-      // The nested frontmatter field value, typed by `kind` via the registry.
-      frontmatter?: Record<string, unknown>;
+      // The nested `boxel` field value, typed by `boxel.kind` via the registry.
+      boxel?: Record<string, unknown>;
     }>
   > {
     let extension = getExtension(url);
@@ -564,7 +565,7 @@ export class MarkdownDef extends FileDef {
       cardReferenceUrls: string[];
       kind?: string;
       description?: string;
-      frontmatter?: Record<string, unknown>;
+      boxel?: Record<string, unknown>;
     }> = {
       ...base,
       title: extractTitle(body, fallbackTitle),
@@ -577,26 +578,40 @@ export class MarkdownDef extends FileDef {
       ),
     };
 
+    // Boxel-specific frontmatter is namespaced under `boxel:`; generic
+    // top-level keys (shared with Claude Code) never trigger Boxel behavior.
+    let boxelNamespace =
+      frontmatterData.boxel &&
+      typeof frontmatterData.boxel === 'object' &&
+      !Array.isArray(frontmatterData.boxel)
+        ? (frontmatterData.boxel as Record<string, unknown>)
+        : undefined;
     let kind =
-      typeof frontmatterData.kind === 'string'
-        ? frontmatterData.kind
+      typeof boxelNamespace?.kind === 'string'
+        ? boxelNamespace.kind
         : undefined;
     if (kind !== undefined) {
       attributes.kind = kind; // flat, searchable
     }
 
-    // When the kind maps to a known frontmatter subclass, carry the nested
-    // field value and record the concrete subclass so it rehydrates as that
-    // type. The base (declared) FrontmatterField needs no override.
-    if (isKnownFrontmatterKind(kind)) {
-      attributes.frontmatter = frontmatterData;
+    // When `boxel.kind` maps to a known subclass, assemble the `boxel` field
+    // value (kind + commands from the namespace; name/description from the
+    // shared top-level keys) and record the concrete subclass so it rehydrates
+    // as that type. The base BoxelFrontmatterField needs no override.
+    if (isKnownBoxelKind(kind)) {
+      attributes.boxel = {
+        kind,
+        name: frontmatterData.name,
+        description: frontmatterData.description,
+        commands: boxelNamespace?.commands,
+      };
       if (typeof frontmatterData.description === 'string') {
         attributes.description = frontmatterData.description; // flat, searchable
       }
-      let adoptsFrom = identifyCard(frontmatterFieldForKind(kind));
+      let adoptsFrom = identifyCard(boxelFieldForKind(kind));
       if (adoptsFrom) {
         (attributes as Record<PropertyKey, unknown>)[fileFieldMetaSymbol] = {
-          frontmatter: { adoptsFrom },
+          boxel: { adoptsFrom },
         };
       }
     }

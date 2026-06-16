@@ -436,7 +436,7 @@ export function buildFileResource(
     meta: {
       adoptsFrom,
       // Per-field subclass overrides for nested polymorphic fields (e.g.
-      // `frontmatter` → SkillField). Without this the field rehydrates as its
+      // `boxel` → SkillField). Without this the field rehydrates as its
       // declared base type. Supplied by `extractAttributes` (see below).
       ...(fieldsMeta ? { fields: fieldsMeta } : {}),
       ...(queryFieldDefs ? { queryFieldDefs } : {}),
