@@ -1643,7 +1643,9 @@ export default class StoreService extends Service implements StoreInterface {
     // display it. The realm index card (CardsGrid) renders the realm name as
     // its title, so reload it when the config card is re-indexed to refresh
     // that title without a browser reload. Scoped to the config card so we
-    // don't reload on every unrelated card edit.
+    // don't reload on every unrelated card edit. Instance invalidations carry
+    // the card id without `.json`, so the RealmConfig card at
+    // `<realm>/realm.json` appears here as `<realm>/realm`.
     let realmConfigCardId = `${event.realmURL}realm`;
     if (invalidations.includes(realmConfigCardId)) {
       let indexCardId = `${event.realmURL}index`;

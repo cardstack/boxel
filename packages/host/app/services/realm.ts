@@ -487,9 +487,11 @@ class RealmResource {
       return;
     }
     let { info, isPublic } = await this.fetchInfoFromServer();
-    // Preserve client-managed publish state: publish()/unpublish() own
-    // `lastPublishedAt`, and `_info` may not yet reflect a just-published
-    // realm, so a rename refresh must not clobber it.
+    // `_info` always returns the full RealmInfo attribute set (unset fields
+    // come back as explicit `null`), so assigning onto the existing object
+    // can't strand a stale key. Preserve client-managed publish state:
+    // publish()/unpublish() own `lastPublishedAt`, and `_info` may not yet
+    // reflect a just-published realm, so a rename refresh must not clobber it.
     Object.assign(this.info, info, {
       isPublic,
       lastPublishedAt: this.info.lastPublishedAt,

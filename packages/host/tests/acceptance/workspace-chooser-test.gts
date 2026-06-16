@@ -15,6 +15,7 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { testRealmInfo } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -234,6 +235,54 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert
         .dom(`[data-test-workspace-list] [data-test-workspace="Workspace A"]`)
         .doesNotExist('the stale workspace name is gone');
+    });
+
+    test('an unrelated card re-index preserves client-managed publish state', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      assert
+        .dom(
+          `[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-name]`,
+        )
+        .hasText('Workspace A');
+
+      // publish()/unpublish() manage lastPublishedAt on the realm resource;
+      // stand in for that here.
+      let realmService = getService('realm') as any;
+      let resource = realmService.realms.get(realmAURL);
+      resource.info.lastPublishedAt = {
+        'https://example.com/published/': '123',
+      };
+
+      // An incremental re-index of an unrelated card (the RealmConfig card is
+      // NOT invalidated) must not refresh realm info — refetching _info there
+      // would clobber the publish state the publish flow owns client-side.
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          realmAURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${realmAURL}index`],
+          realmURL: realmAURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await settled();
+
+      assert.deepEqual(
+        realmService.info(realmAURL).lastPublishedAt,
+        { 'https://example.com/published/': '123' },
+        'publish state is preserved when an unrelated card is re-indexed',
+      );
+      assert
+        .dom(
+          `[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-name]`,
+        )
+        .hasText('Workspace A', 'realm name is unchanged');
     });
   });
 
