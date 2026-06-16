@@ -117,6 +117,7 @@ import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
+import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
 import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
@@ -1026,24 +1027,32 @@ export default class MatrixService extends Service {
           (currentSkillsConfig?.enabledSkillCards ??
             []) as FileAPI.SerializedFile[];
         let enabledCommandDefinitions: SkillModule.CommandField[] = [];
-        let enabledSkillCards = (
-          await Promise.all(
-            enabledSkillCardFileDefs.map(async (fileDef) => {
-              const card = await this.store.get<SkillModule.Skill>(
-                fileDef.sourceUrl,
-              );
-              if (isSkillCard in card) {
-                enabledCommandDefinitions = enabledCommandDefinitions.concat(
-                  (card as SkillModule.Skill).commands ?? [],
-                );
-              }
-              return card;
-            }),
-          )
-        ).filter((card) => isSkillCard in card) as SkillModule.Skill[];
-        let enabledSkillFileDefs = await this.uploadCards(
-          enabledSkillCards as CardDef[],
+        // Skill cards re-upload their serialized card content; skill markdown
+        // files re-upload their file content. Both contribute commands.
+        let skillCardsToReupload: SkillModule.Skill[] = [];
+        let markdownSkillFileDefs: FileDef[] = [];
+        await Promise.all(
+          enabledSkillCardFileDefs.map(async (fileDef) => {
+            let source = await loadSkillSource(this.store, fileDef.sourceUrl);
+            if (!source) {
+              return;
+            }
+            enabledCommandDefinitions = enabledCommandDefinitions.concat(
+              getSkillSourceCommands(source),
+            );
+            if (isSkillCard in source) {
+              skillCardsToReupload.push(source as SkillModule.Skill);
+            } else {
+              markdownSkillFileDefs.push(this.fileAPI.createFileDef(fileDef));
+            }
+          }),
         );
+        let enabledSkillFileDefs = await this.uploadCards(
+          skillCardsToReupload as CardDef[],
+        );
+        let enabledMarkdownSkillFileDefs = markdownSkillFileDefs.length
+          ? await this.uploadFiles(markdownSkillFileDefs)
+          : [];
         // get the unique subset of enabledCommandDefinitions by functionName
         enabledCommandDefinitions = this.getUniqueCommandDefinitions(
           enabledCommandDefinitions,
@@ -1052,9 +1061,10 @@ export default class MatrixService extends Service {
           enabledCommandDefinitions,
         );
         return {
-          enabledSkillCards: enabledSkillFileDefs.map((fileDef) =>
-            fileDef.serialize(),
-          ),
+          enabledSkillCards: [
+            ...enabledSkillFileDefs,
+            ...enabledMarkdownSkillFileDefs,
+          ].map((fileDef) => fileDef.serialize()),
           disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
           commandDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
