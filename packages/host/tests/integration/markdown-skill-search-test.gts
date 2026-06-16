@@ -6,9 +6,10 @@
 //
 // Runs under the host test-services stack / CI.
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRRI } from '@cardstack/runtime-common';
+import { baseRRI, baseRealm } from '@cardstack/runtime-common';
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import {
@@ -114,6 +115,35 @@ module('Integration | markdown skill search', function (hooks) {
     assert.ok(
       ids.includes(`${testRealmURL}notes/plain.md`),
       'plain markdown is a MarkdownDef too',
+    );
+  });
+
+  test('reading a skill markdown file rehydrates frontmatter as SkillFrontmatterField', async function (assert) {
+    // The realm serves a file's `meta.fields` (the per-field subclass override)
+    // alongside the indexed resource, so the polymorphic `frontmatter` field
+    // rehydrates as its concrete subclass on read rather than the declared base.
+    let loader = getService('loader-service').loader;
+    let { SkillFrontmatterField } = await loader.import<any>(
+      `${baseRealm.url}skill-frontmatter-field`,
+    );
+    let store = getService('store');
+    let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
+    let instance: any = await store.get(url, { type: 'file-meta' });
+
+    assert.strictEqual(instance?.kind, 'skill', 'kind read back as skill');
+    assert.true(
+      instance?.frontmatter instanceof SkillFrontmatterField,
+      'frontmatter rehydrated as SkillFrontmatterField, not the base FrontmatterField',
+    );
+    assert.strictEqual(
+      instance.frontmatter.commands.length,
+      1,
+      'typed commands survive the realm file-meta read',
+    );
+    assert.strictEqual(
+      instance.frontmatter.commands[0].codeRef.name,
+      'SyncCommand',
+      'command codeRef survives the realm file-meta read',
     );
   });
 });
