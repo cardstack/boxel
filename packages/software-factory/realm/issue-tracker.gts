@@ -36,7 +36,7 @@ import {
   type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import BookOpen from '@cardstack/boxel-icons/book-open';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
@@ -2328,7 +2328,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
                     <:trigger>
                       <ContextButton
                         @icon={{ListFilter}}
-                        @label='Group by: {{this.selectedGroupByDimension.label}}'
+                        @label='Group by'
                         @variant='secondary'
                         {{bindings}}
                       />
@@ -2814,13 +2814,13 @@ export class IssueTracker extends KanbanBoard {
 
     get sortedColumns(): Array<{
       label: string;
-      style: ReturnType<typeof htmlSafe> | undefined;
+      style: string;
     }> {
       return [...(this.args.model.columns ?? [])]
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
         .map((col) => ({
           label: col.label ?? col.key ?? '',
-          style: col.color ? htmlSafe(`--col-color: ${col.color}`) : undefined,
+          style: col.color,
         }))
         .filter((col) => col.label);
     }
@@ -2843,7 +2843,7 @@ export class IssueTracker extends KanbanBoard {
           {{#if this.sortedColumns.length}}
             <div class='tracker-columns'>
               {{#each this.sortedColumns as |col|}}
-                <span class='column-chip' style={{col.style}}>
+                <span class='column-chip' style={{cssVar col-color=col.style}}>
                   <span class='column-dot' aria-hidden='true'></span>
                   <span class='column-label'>{{col.label}}</span>
                 </span>
