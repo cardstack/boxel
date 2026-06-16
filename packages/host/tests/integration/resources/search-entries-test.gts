@@ -203,6 +203,62 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
+  // Orthogonal to the /render route (which host tests don't exercise — that's
+  // the server prerendering suite): this drives the resource directly with the
+  // prerender signal set by hand and asserts it registers its search with the
+  // render store's readiness mechanism. The end-to-end "/render waits for the
+  // search before HTML capture" behavior is covered server-side.
+  test('registers the in-flight search with the render store readiness signal during a prerender', async function (assert) {
+    let renderStore = getService('render-store');
+    let trackedLoads: Promise<unknown>[] = [];
+    let originalTrackLoad = renderStore.trackLoad.bind(renderStore);
+    renderStore.trackLoad = (load: Promise<unknown>) => {
+      trackedLoads.push(load);
+      originalTrackLoad(load);
+    };
+    let generationBefore = renderStore.loadGeneration;
+    (globalThis as any).__boxelRenderContext = true;
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL],
+          },
+        },
+      }));
+      // Reading a resource property runs modify(), which performs the search
+      // and registers it — synchronously, before the fetch resolves.
+      let load = search.loaded;
+      assert.strictEqual(
+        trackedLoads.length,
+        1,
+        'the search registers exactly one load with the render store',
+      );
+      assert.strictEqual(
+        trackedLoads[0],
+        load,
+        'the registered load is the in-flight v2 search',
+      );
+      assert.true(
+        renderStore.loadGeneration > generationBefore,
+        'registering the search advances the render store load generation, so the settle loop waits for it',
+      );
+
+      await load;
+      assert.strictEqual(
+        search.entries.length,
+        2,
+        'the tracked load is the real search and it produced results',
+      );
+    } finally {
+      // `trackLoad` is a StoreService prototype method, so the spy is an own
+      // property; deleting it restores the inherited method.
+      delete (renderStore as any).trackLoad;
+      delete (globalThis as any).__boxelRenderContext;
+    }
+  });
+
   test('re-runs the search on an incremental index event', async function (assert) {
     let search = getResourceForTest(storeService, () => ({
       named: {
