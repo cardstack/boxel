@@ -954,7 +954,7 @@ When `pausedStack` is starved, the kernel-signal sampler is the capture that sti
 
 It is **not** symbolized in-container — the log accumulates every render on the isolate since launch (tens of MB), and `node --prof-process` on that blows the render-timeout budget (that's why an in-container summary kept coming back empty). Instead, on the timeout the prerender server **streams the raw log to the prerender S3 artifacts bucket** as a `v8log` artifact, keyed `env/realm/jobId/card/step/<ts>.v8log` — so the wedging task's log is self-identifying (no shelling into the N prerender tasks to find it). Once the upload is durable the server **deletes the local log** (the wedged page is evicted, so its isolate writes no more), keeping these tens-of-MB files from piling up on the container disk. The timeout log line reports the outcome:
 
-- `v8ProfLog: uploaded … (NMB) to artifact bucket (local log removed) …` — success; fetch the artifact (below).
+- `v8ProfLog: uploaded … (NMB) to artifact bucket (local log removed) …` — success; fetch the artifact (below). If several renderer isolates were active this run the line instead reads `(largest of N this-run logs, runner-up …MB — kept …; re-symbolize another with the helper's --key)` — the largest is a heuristic for the pegged isolate, so if its frames don't look wedged, `--list` the candidates and `--key` a different one.
 - `v8ProfLog: <v8 --prof log not persisted …; kept local …>` — sink disabled / budget spent / upload failed, so the local copy is **retained** (not destroyed for a capture you can't fetch).
 - `v8ProfLog: <no v8 --prof log from this run; seen: …>` — armed but no log written (e.g. the browser didn't relaunch after the flag flip).
 

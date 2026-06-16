@@ -13,8 +13,9 @@
 // RAW log to the prerender S3 artifacts bucket, keyed by realm/card/job, and
 // symbolize it offline (`node --prof-process`) where there's no deadline and
 // the peg dominates the top self-time frames. Once the upload is durable we
-// delete the local log so these tens-of-MB files don't pile up on the
-// container's disk over the browser's long life.
+// delete the local log (when the pegged isolate is unambiguous) so these
+// tens-of-MB files don't pile up on the container's disk over the browser's
+// long life.
 //
 // Off by default (`PRERENDER_V8_PROF=true` to arm) — it samples every render,
 // so it can perturb a timing-sensitive wedge; arm it deliberately.
@@ -77,7 +78,13 @@ export async function prepareV8ProfForLaunch(): Promise<void> {
 // Find the pegged isolate's `--prof` log among this browser run's logs.
 // Returns the chosen file (or a self-diagnosing reason string).
 async function pickV8ProfLog(): Promise<
-  { full: string; sizeMB: string } | { reason: string }
+  | {
+      full: string;
+      sizeMB: string;
+      candidates: number;
+      runnerUpMB: string | null;
+    }
+  | { reason: string }
 > {
   let entries = await fs.readdir(V8_PROF_LOG_DIR);
   // `includes`, not `startsWith`: V8's per-isolate logging prepends
@@ -104,10 +111,13 @@ async function pickV8ProfLog(): Promise<
     }),
   );
   // This browser run's logs only (stale ones were cleared + the launch time
-  // stamped). Pick the LARGEST: the pegged isolate accumulates by far the
-  // most samples over the peg, so its log dwarfs sibling isolates' and
-  // earlier renders' — and the peg dominates its frames regardless of what
-  // else it rendered.
+  // stamped). Pick the LARGEST: a CPU peg samples continuously at the kernel
+  // timer's rate, so over a 60s wedge the pegged isolate's log dwarfs
+  // IO-bound healthy renderers' and earlier renders'. This is a heuristic by
+  // cumulative size — under several concurrent renderers a long-lived busy
+  // isolate's log could rival the peg's — so we return the candidate count
+  // and runner-up size; the caller surfaces them and the helper's `--key`
+  // lets you symbolize a different one if the largest wasn't the wedge.
   let fromThisRun = withStats.filter(
     (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt,
   );
@@ -120,9 +130,12 @@ async function pickV8ProfLog(): Promise<
     };
   }
   fromThisRun.sort((a, b) => b.size - a.size);
+  let toMB = (n: number) => (n / (1024 * 1024)).toFixed(1);
   return {
     full: fromThisRun[0].full,
-    sizeMB: (fromThisRun[0].size / (1024 * 1024)).toFixed(1),
+    sizeMB: toMB(fromThisRun[0].size),
+    candidates: fromThisRun.length,
+    runnerUpMB: fromThisRun[1] ? toMB(fromThisRun[1].size) : null,
   };
 }
 
@@ -156,20 +169,27 @@ export async function uploadV8ProfLog(
       // destroying it for a capture we can't retrieve.
       return `<v8 --prof log not persisted to artifact bucket (sink disabled/declined/failed); kept local ${path.basename(picked.full)} (${picked.sizeMB}MB)>`;
     }
-    // Durable in S3, so reclaim the container's local disk: these logs run
-    // tens of MB and `--logfile` accumulates them in the OS temp dir across
-    // the browser's long life. A render timeout evicts the wedged page (its
-    // isolate tears down; the next visit writes a FRESH log), so deleting
-    // this one strands nothing. `await uploadArtifact` has fully drained the
-    // read stream by now, so the unlink is safe; it frees the dirent
-    // immediately and the bytes once the evicted renderer process exits.
-    let cleanup = ' (local log removed)';
-    try {
-      await fs.rm(picked.full, { force: true });
-    } catch (e) {
-      cleanup = ` (local delete failed: ${String((e as { message?: string }).message ?? e).slice(0, 80)})`;
+    // Reclaim the container's local disk, but only when the pick is
+    // unambiguous. A single this-run log is unmistakably the wedged isolate's,
+    // and a render timeout evicts that page — so its renderer exits and the
+    // unlink frees the bytes (the next visit writes a fresh log, stranding
+    // nothing). With multiple this-run logs the largest may belong to a
+    // still-live concurrent renderer; unlinking that frees no space (V8 holds
+    // the fd open) and loses its future samples — so keep them all and let the
+    // next browser-launch sweep reclaim them. `await uploadArtifact` has
+    // drained the read stream by now, so the unlink is safe.
+    let disposition: string;
+    if (picked.candidates === 1) {
+      try {
+        await fs.rm(picked.full, { force: true });
+        disposition = ' (local log removed)';
+      } catch (e) {
+        disposition = ` (local delete failed: ${String((e as { message?: string }).message ?? e).slice(0, 80)})`;
+      }
+    } else {
+      disposition = ` (largest of ${picked.candidates} this-run logs, runner-up ${picked.runnerUpMB}MB — kept for the next-launch sweep; re-symbolize another with the helper's --key)`;
     }
-    return `uploaded v8 --prof log ${path.basename(picked.full)} (${picked.sizeMB}MB) to artifact bucket${cleanup} — symbolize offline with \`node --prof-process\``;
+    return `uploaded v8 --prof log ${path.basename(picked.full)} (${picked.sizeMB}MB) to artifact bucket${disposition} — symbolize offline with \`node --prof-process\``;
   } catch (e) {
     // Never silently null — surface the reason on the timeout line.
     return `<v8 --prof upload error: ${String((e as { message?: string }).message ?? e).slice(0, 160)}>`;
