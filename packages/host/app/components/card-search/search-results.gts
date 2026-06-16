@@ -15,8 +15,8 @@ import {
   type PrerenderedHtmlFormat,
   type ResolvedCodeRef,
   type Saved,
-  type SearchEntryCollectionDocument,
-  type SearchEntryWireQuery,
+  type SearchResultsComponentSignature,
+  type SearchResultsYield,
   type StoreReadType,
 } from '@cardstack/runtime-common';
 
@@ -188,33 +188,6 @@ class RenderableSearchEntry {
   }
 }
 
-// The block argument: the heterogeneous result stream plus its loading/meta/
-// error state. Mirrors the documented public API (`results.entries` /
-// `.isLoading` / `.meta` / `.errors`).
-export interface SearchResultsYield {
-  entries: RenderableSearchEntry[];
-  isLoading: boolean;
-  meta: SearchEntryCollectionDocument['meta'];
-  errors: ErrorEntry[] | undefined;
-}
-
-interface Signature {
-  Element: HTMLElement;
-  Args: {
-    // The `search-entry`-rooted v2 query. Re-issued live on invalidation;
-    // changing it re-runs the search. Undefined → idle (no results).
-    query: SearchEntryWireQuery | undefined;
-    // The hydration gesture for HTML-backed rows — a host-UX choice, never on
-    // the wire. A full live row ignores it. Defaults to `hover` (the fitted
-    // fast path); pass `none` to keep rows inert, `click`/`touch` to gate on
-    // those gestures.
-    mode?: HydrationMode;
-  };
-  Blocks: {
-    default: [SearchResultsYield];
-  };
-}
-
 // The one v2 search component family. Consumes the heterogeneous `search-entry`
 // stream from `getSearchEntriesResource` and renders it transparently —
 // prerendered HTML inert (the fast path, hydrated lazily on interaction) or the
@@ -223,7 +196,7 @@ interface Signature {
 // the default stream of `entry.component`s itself. Additive: it supersedes the
 // `prerendered-card-search` component and the live `SearchContent` tree as call
 // sites migrate.
-export default class SearchResults extends Component<Signature> {
+export default class SearchResults extends Component<SearchResultsComponentSignature> {
   @service declare private store: StoreService;
 
   // Created once per component (the resource owns its own realm subscriptions

@@ -37,6 +37,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardChooserModal from '../card-chooser/modal';
+import SearchResults from '../card-search/search-results';
 import PrerenderedCardSearch from '../prerendered-card-search';
 import { Submodes } from '../submode-switcher';
 
@@ -108,6 +109,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       store: this.store,
       commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      searchResultsComponent: SearchResults,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,
     };
