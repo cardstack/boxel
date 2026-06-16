@@ -498,18 +498,23 @@ const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
 function shouldRetryFetch(url: URL) {
-  // `*.localhost` is reserved for local development and tests by RFC 6761,
-  // so retrying never affects production. Env-mode services live at
-  // `<service>.<slug>.localhost` and are reached through a local Traefik;
-  // the realm-server worker fetches its own realm's `_mtimes` via this
-  // hostname on boot, and if Traefik hasn't picked up the dynamic route
-  // file yet the first attempt fails with ECONNRESET. Without a retry,
-  // that single failure rejects the from-scratch-index job and leaves the
-  // realm mounted but unindexed. This check has to live ahead of the
-  // `__environment === 'test'` gate below — worker processes don't set
-  // that global (only `main.ts` does), so the gate would otherwise short
-  // out before this branch is reached.
-  if (url.hostname.endsWith('.localhost')) {
+  // Env-mode services live at `<service>.<slug>.localhost` and are
+  // reached through a local Traefik. The realm-server worker fetches
+  // its own realm's `_mtimes` via this hostname on boot, and if Traefik
+  // hasn't picked up the dynamic route file yet the first attempt fails
+  // with ECONNRESET. Without a retry, that single failure rejects the
+  // from-scratch-index job and leaves the realm mounted but unindexed.
+  // Gate on `BOXEL_ENVIRONMENT` rather than the `__environment === 'test'`
+  // global below: worker processes don't set that global (only `main.ts`
+  // does), and the standard-mode realm-server tests do set it — those
+  // tests POST to `testuser.localhost:4445` and rely on no-retry
+  // behavior for their publish/unpublish flows, so we must scope this
+  // retry to env-mode runs only.
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.BOXEL_ENVIRONMENT &&
+    url.hostname.endsWith('.localhost')
+  ) {
     return true;
   }
 
