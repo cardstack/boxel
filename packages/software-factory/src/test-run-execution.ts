@@ -30,6 +30,25 @@ import {
 
 let log = logger('test-run-execution');
 
+// How long to wait for the in-browser QUnit suite to reach `runEnd` before
+// giving up. A hung test page (boot error, infinite loop, never-resolving
+// promise) used to block for the full 5 minutes with no signal — far longer
+// than any legitimate card suite needs. Default to 60s and let an operator
+// override via FACTORY_TEST_TIMEOUT_MS for an unusually heavy suite.
+const DEFAULT_QUNIT_TIMEOUT_MS = 60_000;
+
+function qunitTimeoutMs(): number {
+  let raw = process.env.FACTORY_TEST_TIMEOUT_MS;
+  let parsed = raw != null && raw.trim() !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_QUNIT_TIMEOUT_MS;
+}
+
+function fmtMs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 // ---------------------------------------------------------------------------
 // Resume Logic
 // ---------------------------------------------------------------------------
@@ -547,19 +566,33 @@ async function runQunitInBrowserUncached(
     // Wait for QUnit to finish (results collected via inline script hooks).
     // Note: waitForFunction(fn, arg, options) — pass null as arg so the
     // timeout option is correctly in the third position.
-    await page.waitForFunction(
-      () => (window as any).__qunitResults?.runEnd !== null,
-      null,
-      { timeout: 300_000 },
-    );
+    let timeoutMs = qunitTimeoutMs();
+    try {
+      await page.waitForFunction(
+        () => (window as any).__qunitResults?.runEnd !== null,
+        null,
+        { timeout: timeoutMs },
+      );
+    } catch {
+      // Playwright's native message ("Timeout 60000ms exceeded") doesn't say
+      // what timed out or how long we actually waited. Replace it with a
+      // diagnostic that names the likely cause and is greppable.
+      let waited = Date.now() - start;
+      throw new Error(
+        `QUnit suite did not reach runEnd within ${timeoutMs}ms (waited ${waited}ms). ` +
+          `The page never set __qunitResults.runEnd — likely an Ember boot error, ` +
+          `a hanging test, or a never-resolving promise. Re-run with --debug to see ` +
+          `browser console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
+      );
+    }
 
     let qunitResults: QunitResults = await page.evaluate(
       () => (window as any).__qunitResults,
     );
 
     let durationMs = Date.now() - start;
-    log.debug(
-      `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
+    log.info(
+      `QUnit completed in ${fmtMs(durationMs)}: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
     );
 
     return { qunitResults, durationMs };
