@@ -585,6 +585,11 @@ export class PgQueueRunner implements QueueRunner {
 
           let jobs = (await query([
             // find the queue with the oldest job that isn't running and lock it.
+            // Break created_at ties on the monotonic id so the job enqueued
+            // first always wins — two jobs in the same concurrency group can
+            // share a created_at (current_timestamp is the transaction start
+            // time), and without the tiebreaker the worker could claim them
+            // out of enqueue order.
             `WITH
               pending_jobs AS (
                 SELECT * FROM jobs WHERE status='unfulfilled' and priority >=`,
@@ -603,7 +608,7 @@ export class PgQueueRunner implements QueueRunner {
               AND j.concurrency_group NOT IN (
                 SELECT concurrency_group FROM active_concurrency_groups
               )
-              ORDER BY j.created_at
+              ORDER BY j.created_at, j.id
               LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
