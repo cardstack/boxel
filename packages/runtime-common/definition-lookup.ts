@@ -106,7 +106,7 @@ function canonicalURL(
   // to real URLs so that realm-membership checks and DB lookups work.
   if (virtualNetwork.isRegisteredPrefix(url)) {
     try {
-      return virtualNetwork.toURL(url).href;
+      return toFetchableForm(virtualNetwork.toURL(url), virtualNetwork);
     } catch (_e) {
       // fall through to normal URL handling
     }
@@ -115,11 +115,26 @@ function canonicalURL(
     let parsed = new URL(url, relativeTo);
     parsed.search = '';
     parsed.hash = '';
-    return parsed.href;
+    return toFetchableForm(parsed, virtualNetwork);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;
   }
+}
+
+// A base-realm module resolves to a real URL (e.g.
+// `http://localhost:4201/base/X`), but that realm is reachable in-process
+// only under its virtual-alias URL (`https://cardstack.com/base/X`) — the
+// alias is what the loader's mounted handler / origin-matched auth
+// interceptor recognizes. A direct fetch of the bare real URL bypasses
+// that and fails at the transport, poisoning the module's definition
+// entry. When a real→virtual URL mapping is registered (only base today),
+// return the alias form so the definition-load target is fetchable.
+// Realms with no alias map (user realms, catalog, …) are served at their
+// real URL and are returned unchanged.
+function toFetchableForm(real: URL, virtualNetwork: VirtualNetwork): string {
+  let virtual = virtualNetwork.mapURL(real, 'real-to-virtual');
+  return (virtual ?? real).href;
 }
 
 function normalizeExecutableURL(url: string): string {
