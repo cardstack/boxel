@@ -9,6 +9,17 @@ SCRIPTS_DIR="./scripts"
 # server never writes into the repo's source tree.
 TEST_REALM_DIR=$(mktemp -d)
 cp -R ../test-realm-cards/contents/. "$TEST_REALM_DIR"/
+# Diagnostics: env-mode CI has been seeing the test realm-server's
+# from-scratch index finish with `files_completed=0` for both
+# `/test/` (this temp dir) and `/node-test/` (./tests/fixtures/realistic),
+# which means the realm-server's `_mtimes` endpoint is walking what
+# looks like an empty directory. Log file counts at this point so the
+# CI log makes it obvious whether the cp succeeded, whether the
+# checked-in fixtures directory is populated, and whether anything
+# wipes them between here and the realm-server boot.
+echo "[test-realms diag] TEST_REALM_DIR=$TEST_REALM_DIR file_count=$(ls -1A "$TEST_REALM_DIR" 2>/dev/null | wc -l | tr -d ' ')"
+echo "[test-realms diag] ../test-realm-cards/contents file_count=$(ls -1A ../test-realm-cards/contents 2>/dev/null | wc -l | tr -d ' ')"
+echo "[test-realms diag] ./tests/fixtures/realistic file_count=$(ls -1A ./tests/fixtures/realistic 2>/dev/null | wc -l | tr -d ' ')"
 
 # In environment mode, share the dev icons server; otherwise start our own
 if [ -z "$BOXEL_ENVIRONMENT" ]; then
