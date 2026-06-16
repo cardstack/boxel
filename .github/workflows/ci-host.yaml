@@ -549,7 +549,14 @@ jobs:
           # path has its own `withRetries` and recovers silently; icons
           # doesn't, so the failure surfaces in any test that imports an
           # icon. Retry the whole shard once when we detect any of these.
-          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^/]+: fetch failed'
+          # The cross-realm-fetch 404 line is a transient env-mode boot race:
+          # when the dev realm-server's from-scratch index takes the long
+          # path on a given runner, the test realm-server occasionally
+          # mounts before its bootstrap finishes, and `linksTo` integration
+          # tests that fetch `${testModuleRealm}<card>` see a 404 from the
+          # live test realm. A second shard pass typically lands after the
+          # race resolves.
+          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^/]+: fetch failed|cross-realm fetch failed for https://realm-test\.[^/]+'
           if [ $exit_code -ne 0 ] && grep -Eq "$RETRY_PATTERN" /tmp/test-output.log; then
             echo ""
             echo "::warning::Transient chunk-fetch failure detected — retrying shard ${{ matrix.shardIndex }}"
