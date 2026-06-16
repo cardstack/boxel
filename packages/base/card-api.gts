@@ -2491,7 +2491,15 @@ export class BaseDef {
             includeComputeds: true,
             usedLinksToFieldsOnly: true,
           }),
-        ).map(([fieldName, field]) => {
+        )
+          // A query-backed field is resolved live from a query; the index has no
+          // way to invalidate it when matching cards change, so its value in the
+          // search doc would always be stale. Skip it entirely rather than
+          // traverse (and deep-resolve) the query closure into the doc — the
+          // host re-resolves these fields at view time, and the indexer records
+          // membership from `relationships.{field}.data` separately.
+          .filter(([, field]) => !field?.queryDefinition)
+          .map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
             return [

@@ -95,6 +95,13 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        // A query-backed field is resolved live and the index can't invalidate
+        // it, so its serialized value would always be stale — and deep-
+        // serializing the query closure into `included[]` is what wedges a
+        // densely cross-linked realm. Membership comes from the file's own
+        // relationships, so omit query fields here (the relationship data is
+        // stripped below regardless).
+        omitQueryFields: true,
         virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
