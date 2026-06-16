@@ -440,6 +440,12 @@ interface QunitRunnerOptions {
    * BoxelCLIClient) authenticate without an active CLI profile for the realm.
    */
   authorization?: string;
+  /**
+   * How long to wait for the suite to reach `runEnd`, in ms. Defaults to
+   * 300_000. A numeric knob only — callers that want a tighter bound (and
+   * their own diagnostics) set it; the runner adds no logging of its own.
+   */
+  timeoutMs?: number;
 }
 
 async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
@@ -545,7 +551,7 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
         (window as unknown as { __qunitResults?: { runEnd: unknown } })
           .__qunitResults?.runEnd !== null,
       null,
-      { timeout: 300_000 },
+      { timeout: options.timeoutMs ?? 300_000 },
     );
 
     let qunitResults = (await page.evaluate(
@@ -572,6 +578,8 @@ export interface RunRealmQunitOptions {
   debug?: boolean;
   /** Realm JWT to inject; lets callers authenticate without a CLI profile. */
   authorization?: string;
+  /** Wait-for-runEnd timeout in ms; defaults to 300_000. */
+  timeoutMs?: number;
   profileManager?: ProfileManager;
 }
 
@@ -596,6 +604,7 @@ export async function runRealmQunit(
     hostDistDir: options.hostDistDir,
     debug: options.debug,
     authorization: options.authorization,
+    timeoutMs: options.timeoutMs,
   });
 }
 
