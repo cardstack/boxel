@@ -839,11 +839,14 @@ export default class RealmService extends Service {
     if (sessionsString === this.lastRestoredSessionsString) {
       return;
     }
-    this.lastRestoredSessionsString = sessionsString;
     if (!sessionsString) {
+      this.lastRestoredSessionsString = sessionsString;
       return;
     }
     let tokens = JSON.parse(sessionsString) as Record<string, string>;
+    // Record the memo only after a successful parse, so a malformed blob can't
+    // poison it and suppress a later retry.
+    this.lastRestoredSessionsString = sessionsString;
     for (let [realmURL, token] of Object.entries(tokens)) {
       let resource = this.getOrCreateRealmResource(realmURL, token);
       if (token && resource.token !== token) {
