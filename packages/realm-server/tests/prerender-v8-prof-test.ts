@@ -103,7 +103,7 @@ module('prerender v8-prof', function (hooks) {
   test('armed with no log present → self-diagnosing reason', async function (assert) {
     let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
     assert.true(
-      typeof status === 'string' && status.includes('no v8 --prof log'),
+      (status ?? '').includes('no v8 --prof log'),
       `reason names the absence, got: ${status}`,
     );
   });
@@ -120,13 +120,14 @@ module('prerender v8-prof', function (hooks) {
     created.push(small, big);
 
     let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
+    let s = status ?? '';
 
     assert.true(
-      typeof status === 'string' && status.includes(path.basename(big)),
+      s.includes(path.basename(big)),
       `picks the largest (pegged-isolate) log, got: ${status}`,
     );
     assert.true(
-      typeof status === 'string' && status.includes('kept local'),
+      s.includes('kept local'),
       'sink disabled → reports the local copy was retained',
     );
     // The safety property: a capture that never reached S3 is not destroyed.
@@ -150,7 +151,7 @@ module('prerender v8-prof', function (hooks) {
     let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
 
     assert.true(
-      typeof status === 'string' && status.includes(path.basename(freshSmall)),
+      (status ?? '').includes(path.basename(freshSmall)),
       `picks the fresh log over the larger stale one, got: ${status}`,
     );
   });
@@ -163,7 +164,7 @@ module('prerender v8-prof', function (hooks) {
     let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
 
     assert.true(
-      typeof status === 'string' && status.includes('from this run'),
+      (status ?? '').includes('from this run'),
       `distinguishes stale-only from absent, got: ${status}`,
     );
   });
