@@ -110,6 +110,10 @@ export type CreateRoutesArgs = {
   };
   assetsURL: URL;
   prerenderer?: Prerenderer;
+  // Reports the current host-shell token to the prerender manager. The
+  // post-deployment hook calls it so the fleet's recycle signal is refreshed
+  // once the new code is live and the service is stable.
+  reportHostShell?: () => Promise<void>;
   searchCache: JobScopedSearchCache;
 };
 

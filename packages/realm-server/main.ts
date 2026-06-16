@@ -414,9 +414,6 @@ const reportHostShellToManager = async () => {
     console.error(`Unable to fetch from host app URL ${distURL}: ${detail}`);
     process.exit(-2);
   }
-  // Fire-and-forget: tell the prerender manager which host shell we're
-  // serving so the prerender fleet recycles after a host redeploy.
-  void reportHostShellToManager();
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
@@ -636,6 +633,7 @@ const reportHostShellToManager = async () => {
       ? getRegistrationSecret
       : undefined,
     prerenderer,
+    reportHostShell: reportHostShellToManager,
   });
 
   let httpServer = server.listen(port);
@@ -776,6 +774,16 @@ const reportHostShellToManager = async () => {
   // HTTP listener accepts traffic. Non-pinned realms (source, published)
   // wait for first-request mount via reconciler.lookupOrMount().
   await server.start();
+
+  // Now that the HTTP listener is accepting traffic and serving the new host
+  // shell, tell the prerender manager which shell we're serving so the fleet
+  // recycles after a host redeploy. Reporting earlier (before the listener is
+  // live) races a rolling deploy: the manager could echo the new token while
+  // the load balancer still routes to the old task, so a prerender would
+  // recycle against the old shell, record the new token, and stop retrying.
+  // The post-deployment hook reports again once the service is fully stable.
+  // Fire-and-forget — a missing/unreachable manager must never affect serving.
+  void reportHostShellToManager();
 
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,
