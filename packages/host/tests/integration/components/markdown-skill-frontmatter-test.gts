@@ -155,8 +155,9 @@ module('Integration | markdown skill frontmatter', function (hooks) {
     // Mirror what the file extractor does: lift the routed field meta out of
     // the flat searchDoc and thread it into the resource's meta.fields.
     let cleaned: Record<string, any> = { ...attrs };
-    let fieldsMeta = cleaned[FILE_FIELD_META];
-    delete cleaned[FILE_FIELD_META];
+    let cleanedBag = cleaned as Record<PropertyKey, any>;
+    let fieldsMeta = cleanedBag[FILE_FIELD_META];
+    delete cleanedBag[FILE_FIELD_META];
 
     let resource = buildFileResource(
       url,

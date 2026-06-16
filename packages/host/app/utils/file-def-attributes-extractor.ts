@@ -206,11 +206,12 @@ export class FileDefAttributesExtractor {
         // `search_doc`. The base FileDef sets the same `Symbol.for` key.
         let fieldMetaSymbol = Symbol.for('boxel:file-field-meta');
         let cleanedDoc: Record<string, any> = { ...searchDoc };
-        let fieldsMeta = cleanedDoc[fieldMetaSymbol] as
+        let cleanedBag = cleanedDoc as Record<PropertyKey, any>;
+        let fieldsMeta = cleanedBag[fieldMetaSymbol] as
           | NonNullable<FileMetaResource['meta']['fields']>
           | undefined;
         if (fieldsMeta) {
-          delete cleanedDoc[fieldMetaSymbol];
+          delete cleanedBag[fieldMetaSymbol];
         }
         return {
           status: 'ready',
