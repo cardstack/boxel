@@ -963,7 +963,7 @@ export default class PublishRealmModal extends Component<Signature> {
               disabled={{not this.claimedDomainIsGenerated}}
             />
             <label class='option-title' for='unlisted-link-checkbox'>Unlisted
-              link</label>
+              Link</label>
 
             <div class='domain-details' data-test-unlisted-link-details>
               {{#if this.claimedDomainIsGenerated}}
