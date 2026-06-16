@@ -42,6 +42,7 @@ export class IssueOptionField extends FieldDef {
           @vertical={{true}}
         >
           <@fields.label />
+          <em>Required</em>
         </FieldContainer>
         <FieldContainer
           class='option-edit-field'
@@ -49,6 +50,7 @@ export class IssueOptionField extends FieldDef {
           @vertical={{true}}
         >
           <@fields.value />
+          <em>Required</em>
         </FieldContainer>
         <FieldContainer
           class='option-edit-field'
@@ -102,6 +104,9 @@ export class IssueOptionField extends FieldDef {
         }
         .option-edit-field {
           min-width: 0;
+        }
+        .option-edit-field em {
+          opacity: 0.6;
         }
         @media (max-width: 40rem) {
           .option-edit {
