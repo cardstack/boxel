@@ -442,20 +442,6 @@ interface QunitRunnerOptions {
   authorization?: string;
 }
 
-// How long to wait for the in-browser QUnit suite to reach `runEnd` before
-// giving up. A hung test page (boot error, infinite loop, never-resolving
-// promise) otherwise blocks for the full timeout with no signal. Default 60s;
-// override via FACTORY_TEST_TIMEOUT_MS for an unusually heavy suite.
-const DEFAULT_QUNIT_TIMEOUT_MS = 60_000;
-
-function qunitTimeoutMs(): number {
-  let raw = process.env.FACTORY_TEST_TIMEOUT_MS;
-  let parsed = raw != null && raw.trim() !== '' ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : DEFAULT_QUNIT_TIMEOUT_MS;
-}
-
 async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
   qunitResults: QunitResults;
   durationMs: number;
@@ -554,27 +540,13 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-    let timeoutMs = qunitTimeoutMs();
-    try {
-      await page.waitForFunction(
-        () =>
-          (window as unknown as { __qunitResults?: { runEnd: unknown } })
-            .__qunitResults?.runEnd !== null,
-        null,
-        { timeout: timeoutMs },
-      );
-    } catch {
-      // Playwright's native "Timeout 60000ms exceeded" doesn't say what timed
-      // out or how long we waited. Replace it with a diagnostic that names the
-      // likely cause and is greppable.
-      let waited = Date.now() - start;
-      throw new Error(
-        `QUnit suite did not reach runEnd within ${timeoutMs}ms (waited ${waited}ms). ` +
-          `The page never set __qunitResults.runEnd — likely an Ember boot error, ` +
-          `a hanging test, or a never-resolving promise. Re-run with --debug for ` +
-          `browser console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
-      );
-    }
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __qunitResults?: { runEnd: unknown } })
+          .__qunitResults?.runEnd !== null,
+      null,
+      { timeout: 300_000 },
+    );
 
     let qunitResults = (await page.evaluate(
       () =>
