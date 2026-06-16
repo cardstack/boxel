@@ -20,6 +20,16 @@ export class FrontmatterField extends FieldDef {
   // (e.g. `MarkdownDef.kind`, `SkillFrontmatterField.name`).
   @field rawContent = contains(JsonField);
 
+  // Map a file's parsed frontmatter into this field's serialized attributes.
+  // The base keeps the whole frontmatter as the raw copy; subclasses add their
+  // own typed fields. A subclass is the only thing that knows its own
+  // frontmatter schema.
+  static fromFrontmatter(
+    frontmatter: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return { rawContent: frontmatter };
+  }
+
   static embedded: BaseDefComponent = class Embedded extends Component<
     typeof this
   > {

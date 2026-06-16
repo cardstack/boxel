@@ -22,6 +22,26 @@ export class SkillFrontmatterField extends FrontmatterField {
   @field description = contains(StringField);
   @field commands = containsMany(CommandField);
 
+  // `name`/`description` come from the shared top-level frontmatter keys;
+  // `commands` from the `boxel:` namespace. Only this subclass knows that
+  // mapping.
+  static fromFrontmatter(
+    frontmatter: Record<string, unknown>,
+  ): Record<string, unknown> {
+    let boxel =
+      frontmatter.boxel &&
+      typeof frontmatter.boxel === 'object' &&
+      !Array.isArray(frontmatter.boxel)
+        ? (frontmatter.boxel as Record<string, unknown>)
+        : undefined;
+    return {
+      ...super.fromFrontmatter(frontmatter),
+      name: frontmatter.name,
+      description: frontmatter.description,
+      commands: boxel?.commands,
+    };
+  }
+
   static embedded: BaseDefComponent = class Embedded extends Component<
     typeof this
   > {

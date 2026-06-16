@@ -595,28 +595,22 @@ export class MarkdownDef extends FileDef {
       attributes.kind = kind; // direct, indexed, searchable
     }
 
-    // Capture the whole frontmatter as JSON whenever present (the raw,
-    // lossless copy). For a recognized `boxel.kind`, also populate the typed
-    // subclass fields — `name`/`description` from the shared top-level keys,
-    // `commands` from the boxel namespace — and record the concrete subclass so
-    // the field rehydrates as that type. The base FrontmatterField needs no
-    // override.
+    // `boxel.kind` selects the FrontmatterField subclass; the subclass maps the
+    // parsed frontmatter into its own field value (the base keeps the raw copy).
+    // MarkdownDef stays ignorant of any kind's schema. A recognized kind is
+    // recorded so the field rehydrates as that subclass on read.
     if (Object.keys(frontmatterData).length > 0) {
-      let frontmatterValue: Record<string, unknown> = {
-        rawContent: frontmatterData,
-      };
+      let frontmatterFieldClass = frontmatterFieldForKind(kind);
+      attributes.frontmatter =
+        frontmatterFieldClass.fromFrontmatter(frontmatterData);
       if (isKnownFrontmatterKind(kind)) {
-        frontmatterValue.name = frontmatterData.name;
-        frontmatterValue.description = frontmatterData.description;
-        frontmatterValue.commands = boxelNamespace?.commands;
-        let adoptsFrom = identifyCard(frontmatterFieldForKind(kind));
+        let adoptsFrom = identifyCard(frontmatterFieldClass);
         if (adoptsFrom) {
           (attributes as Record<PropertyKey, unknown>)[fileFieldMetaSymbol] = {
             frontmatter: { adoptsFrom },
           };
         }
       }
-      attributes.frontmatter = frontmatterValue;
     }
 
     return attributes;
