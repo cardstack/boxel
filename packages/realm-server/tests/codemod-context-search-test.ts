@@ -47,6 +47,37 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
 }
 `;
 
+// Same clean shape, but a non-default `@format` — which must be bound through
+// the htmlQuery field (a bare `eq.format` is rejected by the wire grammar).
+const TRANSFORMABLE_EMBEDDED = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class EmbeddedList extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent
+      @query={{@query}}
+      @format='embedded'
+      @realms={{@realms}}
+      @isLive={{true}}
+    >
+      <:response as |cards|>
+        {{#each cards key='url' as |card|}}
+          <card.component />
+        {{/each}}
+      </:response>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
 // The result array is handed to a child component instead of being iterated
 // directly — the child still expects the old PrerenderedCardLike shape, so this
 // can't be reshaped mechanically and must be reported for hand migration.
@@ -191,6 +222,29 @@ module(basename(__filename), function () {
     assert.false(output.includes('card.url'), 'no card.url reference remains');
     assert.false(/<:loading>/.test(output), 'no named :loading block remains');
     assert.false(/<:response/.test(output), 'no named :response block remains');
+  });
+
+  test('binds a non-default @format through htmlQuery (not a bare eq.format)', function (assert) {
+    let { status, output, reasons } = transformContextSearch(
+      TRANSFORMABLE_EMBEDDED,
+      { filename: 'embedded-list.gts' },
+    );
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.true(
+      /htmlQuery:\s*\{\s*eq:\s*\{\s*format:\s*'embedded'\s*\}\s*\}/.test(
+        output,
+      ),
+      'embedded format is bound through htmlQuery',
+    );
+    assert.false(
+      /eq:\s*\{[^}]*\bformat:\s*'embedded'/.test(
+        output.replace(
+          /htmlQuery:\s*\{\s*eq:\s*\{\s*format:\s*'embedded'\s*\}\s*\}/,
+          '',
+        ),
+      ),
+      'no bare eq.format escapes the htmlQuery binding',
+    );
   });
 
   test('is idempotent — a second run is a no-op', function (assert) {

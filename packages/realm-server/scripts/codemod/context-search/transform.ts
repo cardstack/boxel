@@ -533,8 +533,11 @@ function buildGetter(spec: GetterSpec, filename: string): any {
     lines.push(`      ...query,`);
     if (spec.realmsExpr) lines.push(`      realms: ${spec.realmsExpr},`);
     if (spec.cardUrlsExpr) lines.push(`      cardUrls: ${spec.cardUrlsExpr},`);
+    // Rendering selection is bound through the `htmlQuery` field nested in the
+    // filter's top-level `eq`; a bare `eq.format` would be read as an `item.`
+    // field path and rejected.
     lines.push(
-      `      filter: { ...query.filter, eq: { ...query.filter?.eq, format: '${spec.format}' } },`,
+      `      filter: { ...query.filter, eq: { ...query.filter?.eq, htmlQuery: { eq: { format: '${spec.format}' } } } },`,
     );
     lines.push(`    };`);
     lines.push(`  }`);
