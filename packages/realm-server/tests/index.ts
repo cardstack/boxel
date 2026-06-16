@@ -208,6 +208,7 @@ const ALL_TEST_FILES: string[] = [
   './is-json-content-type-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
+  './prerender-v8-prof-test',
   './queue-test',
   './finalize-orphan-reservations-test',
   './finalize-child-fatal-failure-test',

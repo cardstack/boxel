@@ -75,8 +75,12 @@ export { DURING_PRERENDER_HEADER } from '@cardstack/runtime-common';
 export { sanitizePrerenderJobId } from '@cardstack/runtime-common';
 
 // Base timeout for a single prerender capture on the prerender server
-// (DOM rendering + data loading inside the headless browser).
-const DEFAULT_RENDER_TIMEOUT_MS = 90_000;
+// (DOM rendering + data loading inside the headless browser). A healthy
+// render completes in well under 30s; 60s cleanly separates a genuine
+// wedge from the slowest legitimate cards, and (with the request-timeout
+// overhead below) fires the render-level timeout — and its hang
+// diagnostics — before the request-level abort gives up on the render.
+const DEFAULT_RENDER_TIMEOUT_MS = 60_000;
 // Additional budget for request-level timeouts that wrap render work across
 // process/network boundaries (manager proxying, serialization, retries, etc).
 // Request timeout defaults are computed as:
