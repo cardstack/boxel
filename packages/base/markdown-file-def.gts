@@ -571,9 +571,13 @@ export class MarkdownDef extends FileDef {
       ...base,
       title: extractTitle(body, fallbackTitle),
       excerpt: extractExcerpt(body),
-      content: markdown,
+      // The body with any frontmatter block stripped — what the markdown /
+      // isolated / embedded paths render. The parsed frontmatter lives in
+      // `frontmatter.rawContent`, and the verbatim file is always served from
+      // the realm, so nothing is lost.
+      content: body,
       cardReferenceUrls: extractCardReferenceUrls(
-        markdown,
+        body,
         url,
         new VirtualNetwork(),
       ),

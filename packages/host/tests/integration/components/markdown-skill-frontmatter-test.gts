@@ -115,6 +115,14 @@ module('Integration | markdown skill frontmatter', function (hooks) {
     );
 
     assert.strictEqual(attrs.kind, 'skill', 'direct searchable kind written');
+    assert.true(
+      attrs.content.startsWith('# Realm Sync'),
+      'content is the body — the frontmatter block is stripped',
+    );
+    assert.notOk(
+      attrs.content.includes('boxel:'),
+      'content excludes the raw frontmatter',
+    );
     assert.strictEqual(
       attrs.frontmatter.rawContent.boxel.kind,
       'skill',
