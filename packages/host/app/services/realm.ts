@@ -733,7 +733,7 @@ export default class RealmService extends Service {
   // for any realm it hasn't resolved yet. We memoize on the raw storage string
   // so an unchanged blob is never re-parsed or re-walked; a later write (a newly
   // seeded realm session) changes the string and re-runs the walk.
-  private lastRestoredSessionsString: string | undefined = undefined;
+  private lastRestoredSessionsString: string | null = null;
 
   @tracked private identifyRealmTracker = 0;
 
@@ -755,7 +755,7 @@ export default class RealmService extends Service {
     this.identifyRealmTracker++;
     this.realmPathsCache.clear();
     this.realmOfCache.clear();
-    this.lastRestoredSessionsString = undefined;
+    this.lastRestoredSessionsString = null;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
