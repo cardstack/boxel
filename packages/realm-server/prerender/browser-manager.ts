@@ -29,12 +29,13 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    let disableSandbox =
-      process.env.CI === 'true' ||
-      process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
-    if (disableSandbox) {
-      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
-    }
+    // Always disable the Chromium sandbox for the prerender renderer. It
+    // only ever renders the realm's own trusted cards (never untrusted web
+    // content) and always runs in a container where the sandbox must be off
+    // for Chrome to launch — and for the renderer to write the V8 `--prof`
+    // diagnostic log. Unconditional rather than gated on CI /
+    // PUPPETEER_DISABLE_SANDBOX so it never silently depends on the env.
+    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf
     // cert), Chromium needs to be told to accept it. mkcert's root CA
