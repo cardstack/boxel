@@ -62,6 +62,12 @@ export interface FactoryEntrypointOptions {
    * Set via `--enable-boxel-ui-discovery` on the CLI.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * Debug flag — halt the run on the first failed workspace sync instead of
+   * recovering via a pull. Freezes realm + index state at the point of
+   * failure for inspection. Set via `--halt-on-sync-error`. See CS-11575.
+   */
+  haltOnSyncError?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -173,6 +179,9 @@ export function getFactoryEntrypointUsage(): string {
     '                              When omitted, the agent has no awareness of boxel-ui',
     '                              components — neither the discovery skill nor the',
     '                              system-prompt catalog exception is loaded. Feature flag.',
+    '  --halt-on-sync-error        Debug: stop the run on the first failed workspace sync',
+    '                              instead of recovering via a pull, freezing realm + index',
+    '                              state at the point of failure for inspection.',
     '  --help                      Show this usage information',
     '',
     'Auth:',
@@ -222,6 +231,9 @@ export function parseFactoryEntrypointArgs(
           type: 'boolean',
         },
         'enable-boxel-ui-discovery': {
+          type: 'boolean',
+        },
+        'halt-on-sync-error': {
           type: 'boolean',
         },
       },
@@ -278,6 +290,8 @@ export function parseFactoryEntrypointArgs(
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
     enableBoxelUiDiscovery:
       parsed.values['enable-boxel-ui-discovery'] === true ? true : undefined,
+    haltOnSyncError:
+      parsed.values['halt-on-sync-error'] === true ? true : undefined,
   };
 }
 
@@ -376,6 +390,7 @@ export async function runFactoryEntrypoint(
     debug: options.debug,
     retryBlocked: options.retryBlocked,
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
+    haltOnSyncError: options.haltOnSyncError,
   });
 
   summary.issueLoop = {
