@@ -12,7 +12,9 @@
 // budget. So we don't parse it in-container. On the render timeout we ship the
 // RAW log to the prerender S3 artifacts bucket, keyed by realm/card/job, and
 // symbolize it offline (`node --prof-process`) where there's no deadline and
-// the peg dominates the top self-time frames.
+// the peg dominates the top self-time frames. Once the upload is durable we
+// delete the local log so these tens-of-MB files don't pile up on the
+// container's disk over the browser's long life.
 //
 // Off by default (`PRERENDER_V8_PROF=true` to arm) — it samples every render,
 // so it can perturb a timing-sensitive wedge; arm it deliberately.
@@ -142,13 +144,32 @@ export async function uploadV8ProfLog(
     if ('reason' in picked) {
       return picked.reason;
     }
-    await uploadArtifact({
+    let uploaded = await uploadArtifact({
       ...keyParts,
       kind: 'v8log',
       body: createReadStream(picked.full),
       contentType: 'text/plain',
     });
-    return `uploaded v8 --prof log ${path.basename(picked.full)} (${picked.sizeMB}MB) to artifact bucket — symbolize offline with \`node --prof-process\``;
+    if (!uploaded) {
+      // The bytes did NOT land in S3 (sink disabled / budget spent / upload
+      // failed). Keep the local log — it's the only copy — rather than
+      // destroying it for a capture we can't retrieve.
+      return `<v8 --prof log not persisted to artifact bucket (sink disabled/declined/failed); kept local ${path.basename(picked.full)} (${picked.sizeMB}MB)>`;
+    }
+    // Durable in S3, so reclaim the container's local disk: these logs run
+    // tens of MB and `--logfile` accumulates them in the OS temp dir across
+    // the browser's long life. A render timeout evicts the wedged page (its
+    // isolate tears down; the next visit writes a FRESH log), so deleting
+    // this one strands nothing. `await uploadArtifact` has fully drained the
+    // read stream by now, so the unlink is safe; it frees the dirent
+    // immediately and the bytes once the evicted renderer process exits.
+    let cleanup = ' (local log removed)';
+    try {
+      await fs.rm(picked.full, { force: true });
+    } catch (e) {
+      cleanup = ` (local delete failed: ${String((e as { message?: string }).message ?? e).slice(0, 80)})`;
+    }
+    return `uploaded v8 --prof log ${path.basename(picked.full)} (${picked.sizeMB}MB) to artifact bucket${cleanup} — symbolize offline with \`node --prof-process\``;
   } catch (e) {
     // Never silently null — surface the reason on the timeout line.
     return `<v8 --prof upload error: ${String((e as { message?: string }).message ?? e).slice(0, 160)}>`;

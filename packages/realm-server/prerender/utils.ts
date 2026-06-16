@@ -1544,12 +1544,13 @@ async function runWithAffinityProfile<T>(
     maxRunMs: timeoutMs,
     run: observe,
     onRawProfile: wantCpuProfile
-      ? (rawProfile) =>
-          uploadArtifact({
+      ? async (rawProfile) => {
+          await uploadArtifact({
             ...keyParts,
             kind: 'cpuprofile',
             body: Buffer.from(JSON.stringify(rawProfile), 'utf8'),
-          })
+          });
+        }
       : undefined,
   })
     .then(async (summary) => {

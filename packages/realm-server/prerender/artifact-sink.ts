@@ -229,15 +229,18 @@ let sessionBytesUsed = 0;
 let uploadSeq = 0;
 let budgetExhaustedLogged = false;
 
-// Uploads one artifact. Resolves once the object is durable in S3 (so a
-// per-render `await` genuinely persists before the next render), or sooner
-// if the sink is disabled / the budget is spent / the upload fails — none
-// of which ever throw or reject. Declines (does not truncate) once the
-// session budget is reached, so it never produces an invalid blob.
-export async function uploadArtifact(upload: ArtifactUpload): Promise<void> {
+// Uploads one artifact. Resolves `true` once the object is durable in S3 (so
+// a per-render `await` genuinely persists before the next render), and `false`
+// if it didn't land — the sink is disabled, the session budget is spent, or
+// the upload failed. Never throws or rejects, and declines (does not truncate)
+// once the budget is reached, so it never produces an invalid blob. The
+// boolean lets a caller that holds the only local copy (the V8 `--prof` log)
+// gate its post-upload cleanup on a genuine success rather than destroying a
+// copy that was never persisted.
+export async function uploadArtifact(upload: ArtifactUpload): Promise<boolean> {
   let bucket = artifactBucket();
   if (!bucket) {
-    return;
+    return false;
   }
   if (sessionBytesUsed >= getMaxSessionBytes()) {
     if (!budgetExhaustedLogged) {
@@ -247,7 +250,7 @@ export async function uploadArtifact(upload: ArtifactUpload): Promise<void> {
           `declining further artifact uploads for this process`,
       );
     }
-    return;
+    return false;
   }
 
   let key = buildArtifactKey(upload, new Date(), uploadSeq++);
@@ -273,10 +276,12 @@ export async function uploadArtifact(upload: ArtifactUpload): Promise<void> {
       `artifact-sink uploaded ${upload.kind} key=${key} bytes=${loaded} ` +
         `sessionBytes=${sessionBytesUsed}/${getMaxSessionBytes()}`,
     );
+    return true;
   } catch (e) {
     // Best-effort: a failed flush is a missing diagnostic, not a render
     // failure. Count nothing against the budget.
     log.warn(`artifact-sink failed to upload ${upload.kind} key=${key}:`, e);
+    return false;
   }
 }
 
