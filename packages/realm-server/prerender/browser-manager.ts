@@ -76,8 +76,12 @@ export class BrowserManager {
     // for a run that needs the native-peg fallback. Per-pid logfile so
     // concurrent renderer processes don't clobber one another; the timeout
     // path post-processes the log into the prerender-server logs.
+    // Always sweep stale --prof logs from the container's ephemeral /tmp
+    // (no EFS here — the only filesystem is the container's), even when
+    // disabled, so flipping the flag off + restarting cleans up the prior
+    // "on" period's logs. Arm the sampler itself only when enabled.
+    await prepareV8ProfForLaunch();
     if (v8ProfEnabled()) {
-      await prepareV8ProfForLaunch();
       launchArgs.push(`--js-flags=${v8ProfJsFlags()}`);
     }
 

@@ -50,10 +50,14 @@ let v8ProfLaunchAt = 0;
 // any pre-existing logs and stamp the launch time so the timeout-path
 // processor only ever considers logs written by THIS browser run.
 export async function prepareV8ProfForLaunch(): Promise<void> {
-  if (!v8ProfEnabled()) {
-    return;
+  // Sweep stale logs on EVERY browser launch, even when disabled — so
+  // flipping PRERENDER_V8_PROF off and restarting clears the logs the
+  // prior "on" period left behind (the OS temp dir is shared and the
+  // container can outlive a single browser). Only stamp the launch time
+  // when armed (the reader uses it to scope to this run's logs).
+  if (v8ProfEnabled()) {
+    v8ProfLaunchAt = Date.now();
   }
-  v8ProfLaunchAt = Date.now();
   try {
     let entries = await fs.readdir(V8_PROF_LOG_DIR);
     await Promise.all(
