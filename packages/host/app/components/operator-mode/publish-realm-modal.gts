@@ -1044,8 +1044,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 </div>
               {{else}}
                 <p class='unlisted-link-description'>
-                  Publish to a private, hard-to-guess link that doesn't reveal
-                  your username or workspace name. Anyone with the link can view
+                  Publish to a hard-to-guess link. Anyone with the link can view
                   it.
                 </p>
               {{/if}}
