@@ -524,6 +524,29 @@ jobs:
             exit 1
           fi
 
+          # The live test realm-server's `/test/` realm contains the
+          # source for `testModuleRealm` URLs the host tests load
+          # (hassan, mango, etc.). `start-server-and-test` releases when
+          # `/node-test/_readiness-check` 200s, but node-test and test
+          # index sequentially in the same realm-server process — so
+          # `/node-test/` can be ready while `/test/` is still
+          # indexing. Without this wait, fast tests race the indexer
+          # and see the realm-server's notFound response (rendered as
+          # "Card Error: Not Found" in Percy snapshots).
+          test_realm_ready="https://realm-test.ci.localhost/test/${ready}"
+          ok=0
+          for i in $(seq 1 60); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$test_realm_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: realm-test/test/_readiness-check -> $code (waiting)"
+            sleep 5
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::realm-test/test/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
           echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
