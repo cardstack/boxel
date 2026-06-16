@@ -3,7 +3,6 @@ import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
-import { htmlSafe } from '@ember/template';
 import { dropTask } from 'ember-concurrency';
 
 import {
@@ -1996,8 +1995,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       });
     }
 
-    let fallbackKey = this.args.model.groupByFallbackKey;
-    if (fallbackKey && optionKeys.has(fallbackKey)) return baseColumns;
     let hasOrphan = cards.some((card) => {
       let v = (card as any)[fieldName];
       return !v || !optionKeys.has(v);
@@ -2242,15 +2239,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let stored = this.args.model?.placements;
     let cards = this.args.model?.cards ?? [];
     let fieldName = this.groupByFieldName;
-    let fallbackKey = this.args.model.groupByFallbackKey;
-
     let resolveColumn = (fieldValue: string | null | undefined): string => {
       return (
         (fieldValue
           ? this.columns.find((c) => c.key === fieldValue)?.key
-          : undefined) ??
-        (fallbackKey
-          ? this.columns.find((c) => c.key === fallbackKey)?.key
           : undefined) ??
         this.columns.find((c) => c.key === 'uncategorized')?.key ??
         this.firstColumn?.key ??
@@ -2687,13 +2679,13 @@ class IssueTrackerEdit extends Component<typeof IssueTracker> {
           <@fields.project />
         </FieldContainer>
         <div class='settings-section'>
-          <h2 class='section-heading'>Board Settings</h2>
+          <h2 class='section-heading'>Board Options</h2>
           <div class='settings-fields'>
             <div class='field-row'>
               <FieldContainer @label='Group By' @tag='label' @vertical={{true}}>
                 <@fields.groupBy />
               </FieldContainer>
-              <FieldContainer @label='Hide Empty Columns' @inline={{true}}>
+              <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
                 <Switch
                   @isEnabled={{@model.hideEmptyColumns}}
                   @onChange={{this.toggleHideEmptyColumns}}
@@ -2701,17 +2693,7 @@ class IssueTrackerEdit extends Component<typeof IssueTracker> {
                 />
               </FieldContainer>
             </div>
-            <FieldContainer
-              @label='Fallback Column Key'
-              @tag='label'
-              @vertical={{true}}
-            >
-              <div class='field-hint'>
-                Optional. Issues with no matching column land here. Leave blank
-                to use the first column.
-              </div>
-              <@fields.groupByFallbackKey />
-            </FieldContainer>
+
           </div>
         </div>
       </div>
@@ -2734,6 +2716,12 @@ class IssueTrackerEdit extends Component<typeof IssueTracker> {
         grid-template-columns: 1fr 1fr;
         gap: var(--boxel-sp-lg);
         align-items: start;
+      }
+      .field-row > :deep(.boxel-field.vertical) {
+        height: 100%;
+      }
+      .field-row > :deep(.boxel-field.vertical > .content) {
+        align-self: center;
       }
       :deep(.links-to-editor .field-component-card) {
         min-height: 2.5rem;
@@ -2759,12 +2747,6 @@ class IssueTrackerEdit extends Component<typeof IssueTracker> {
         display: grid;
         gap: var(--boxel-sp-lg);
       }
-      .field-hint {
-        margin-bottom: var(--boxel-sp-xs);
-        font-size: 0.75rem;
-        line-height: 1.4;
-        color: var(--muted-foreground, var(--boxel-500));
-      }
 
       @container (width < 480px) {
         .edit-form {
@@ -2786,7 +2768,7 @@ export class IssueTracker extends KanbanBoard {
 
   @field project = linksTo(() => Project);
   @field groupBy = contains(GroupByField);
-  @field groupByFallbackKey = contains(StringField);
+
   @field cards = linksToMany(() => Issue, {
     computeVia: function (this: IssueTracker) {
       return this.project?.issues;

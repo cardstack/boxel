@@ -96,7 +96,6 @@ function makeBoard(
     sortOrder: number;
   }[],
   groupBy?: string,
-  groupByFallbackKey?: string,
 ): Record<string, Record<string, unknown>> {
   return {
     'Boards/test-board.json': {
@@ -106,7 +105,6 @@ function makeBoard(
           boardTitle: 'Test Board',
           ...(columns ? { columns } : {}),
           ...(groupBy !== undefined ? { groupBy } : {}),
-          ...(groupByFallbackKey !== undefined ? { groupByFallbackKey } : {}),
         },
         relationships: { project: { links: { self: projectId } } },
         meta: {
@@ -1286,49 +1284,6 @@ export function runTests() {
             null,
             'priority field is cleared when card is moved to Uncategorized',
           );
-        });
-      });
-
-      module('groupBy=priority with fallback column', function (hooks) {
-        hooks.beforeEach(async function () {
-          await setupAcceptanceTestRealm({
-            realmURL: testRealmURL,
-            mockMatrixUtils,
-            contents: {
-              ...SYSTEM_CARD_FIXTURE_CONTENTS,
-              ...makeProject(),
-              ...makeIssueWithFields(
-                'IT-1',
-                { status: 'backlog', priority: 'critical' },
-                'Issues/issue-1.json',
-              ),
-              ...makeIssueWithFields(
-                'IT-2',
-                { status: 'done' },
-                'Issues/issue-2.json',
-              ),
-              ...makeBoard(undefined, 'priority', 'low'),
-            },
-          });
-        });
-
-        test('issue with no priority falls back to a user-specified column', async function (assert) {
-          await visitOperatorMode({
-            stacks: [[{ id: boardId, format: 'isolated' }]],
-          });
-          await waitFor('[data-test-issue-id]');
-
-          assert
-            .dom('[data-kanban-column="uncategorized"]')
-            .doesNotExist(
-              'no Uncategorized column when a fallback column is configured',
-            );
-          assert
-            .dom('[data-kanban-column="low"] [data-test-issue-id]')
-            .hasText(
-              'IT-2',
-              'IT-2 with no priority lands in the user-specified fallback column (low)',
-            );
         });
       });
 
