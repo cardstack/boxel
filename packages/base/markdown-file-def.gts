@@ -462,7 +462,7 @@ export class MarkdownDef extends FileDef {
 
   // The `boxel:` namespace of the file's YAML frontmatter. When it declares a
   // recognized `kind` (e.g. `boxel.kind: skill`), this holds the matching
-  // subclass instance (e.g. `SkillField`); otherwise it stays a base
+  // subclass instance (e.g. `SkillFrontmatterField`); otherwise it stays a base
   // `BoxelFrontmatterField`. The concrete subclass is recorded in
   // `meta.fields.boxel.adoptsFrom` by `extractAttributes`, so it rehydrates as
   // the right type on read.

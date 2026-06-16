@@ -14,7 +14,7 @@ import { CommandField } from './command-field';
 // upload flow reads `markdownDef.boxel.commands` exactly as it reads
 // `Skill.commands`. `name`/`description` are sourced from the shared top-level
 // frontmatter (see `MarkdownDef.extractAttributes`).
-export class SkillField extends BoxelFrontmatterField {
+export class SkillFrontmatterField extends BoxelFrontmatterField {
   static displayName = 'Skill';
 
   @field name = contains(StringField);

@@ -12,7 +12,8 @@ import StringField from './string';
 // under `boxel:` so generic top-level keys (notably `name`/`description`, which
 // are shared with Claude Code's SKILL.md) never trigger Boxel behavior. When the
 // namespace declares a recognized `kind` (e.g. `kind: skill`), the concrete
-// instance is a subclass (e.g. `SkillField`) selected by the kind registry.
+// instance is a subclass (e.g. `SkillFrontmatterField`) selected by the kind
+// registry.
 export class BoxelFrontmatterField extends FieldDef {
   static displayName = 'Boxel Frontmatter';
 

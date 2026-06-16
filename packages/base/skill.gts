@@ -14,7 +14,7 @@ import { CommandField } from './command-field';
 export const isSkillCard = Symbol.for('is-skill-card');
 
 // Re-exported for back-compat: `CommandField` now lives in its own module so
-// `SkillField` (skill markdown frontmatter) can reuse it without depending on
+// `SkillFrontmatterField` (skill markdown frontmatter) can reuse it without depending on
 // the legacy `Skill` card.
 export { CommandField };
 

@@ -15,7 +15,8 @@ import { buildCommandFunctionName } from '@cardstack/runtime-common';
 
 // A single command attached to a skill: an absolute code reference plus the
 // approval policy the host applies before invoking it. Shared by the legacy
-// `Skill` card (`commands`) and by `SkillField` (skill markdown frontmatter).
+// `Skill` card (`commands`) and by `SkillFrontmatterField` (skill markdown
+// frontmatter).
 export class CommandField extends FieldDef {
   static displayName = 'CommandField';
   static icon = CommandIcon;

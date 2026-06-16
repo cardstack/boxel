@@ -1,12 +1,12 @@
 // CS-11545 — a skill is markdown with `kind: skill` frontmatter, not a SkillDef
-// subclass. These tests exercise the real MarkdownDef + SkillField:
+// subclass. These tests exercise the real MarkdownDef + SkillFrontmatterField:
 //
 //   1. parseFrontmatter pulls the YAML block off the top of the body.
 //   2. MarkdownDef.extractAttributes parses frontmatter, writes a flat
 //      searchable `kind`, carries the nested `frontmatter` value, and routes the
-//      per-field subclass marker (SkillField) via the file-field-meta symbol.
+//      per-field subclass marker (SkillFrontmatterField) via the file-field-meta symbol.
 //   3. The write→read round-trip (extractor lift → buildFileResource →
-//      createFromSerialized) rehydrates `frontmatter` as a SkillField with its
+//      createFromSerialized) rehydrates `frontmatter` as a SkillFrontmatterField with its
 //      commands intact — closing the write-path gap the CS-11568 spike pinned.
 //   4. Plain markdown (no frontmatter) is unaffected.
 //
@@ -68,8 +68,8 @@ module(
       let { MarkdownDef } = await loader.import<any>(
         `${baseRealm.url}markdown-file-def`,
       );
-      let { SkillField } = await loader.import<any>(
-        `${baseRealm.url}skill-field`,
+      let { SkillFrontmatterField } = await loader.import<any>(
+        `${baseRealm.url}skill-frontmatter-field`,
       );
       let { BoxelFrontmatterField } = await loader.import<any>(
         `${baseRealm.url}boxel-frontmatter-field`,
@@ -77,7 +77,7 @@ module(
       let { parseFrontmatter } = await loader.import<any>(
         `${baseRealm.url}frontmatter-parse`,
       );
-      return { MarkdownDef, SkillField, BoxelFrontmatterField, parseFrontmatter };
+      return { MarkdownDef, SkillFrontmatterField, BoxelFrontmatterField, parseFrontmatter };
     }
 
     test('parseFrontmatter splits the YAML block from the body', async function (assert) {
@@ -108,8 +108,8 @@ module(
       );
     });
 
-    test('extractAttributes surfaces flat kind, nested frontmatter, and routes the SkillField marker', async function (assert) {
-      let { MarkdownDef, SkillField } = await loadBase();
+    test('extractAttributes surfaces flat kind, nested frontmatter, and routes the SkillFrontmatterField marker', async function (assert) {
+      let { MarkdownDef, SkillFrontmatterField } = await loadBase();
       let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
       let attrs = await MarkdownDef.extractAttributes(url, streamOf(SKILL_MD), {});
 
@@ -133,13 +133,13 @@ module(
       let routed = (attrs as Record<PropertyKey, any>)[FILE_FIELD_META];
       assert.deepEqual(
         routed?.boxel?.adoptsFrom,
-        identifyCard(SkillField),
-        'routed per-field meta points boxel at SkillField',
+        identifyCard(SkillFrontmatterField),
+        'routed per-field meta points boxel at SkillFrontmatterField',
       );
     });
 
-    test('write -> read round-trip rehydrates frontmatter as SkillField with commands', async function (assert) {
-      let { MarkdownDef, SkillField } = await loadBase();
+    test('write -> read round-trip rehydrates frontmatter as SkillFrontmatterField with commands', async function (assert) {
+      let { MarkdownDef, SkillFrontmatterField } = await loadBase();
       let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
       let attrs = await MarkdownDef.extractAttributes(url, streamOf(SKILL_MD), {});
 
@@ -158,7 +158,7 @@ module(
       );
       assert.deepEqual(
         (resource.meta as any).fields?.boxel?.adoptsFrom,
-        identifyCard(SkillField),
+        identifyCard(SkillFrontmatterField),
         'buildFileResource now threads meta.fields (gap closed)',
       );
 
@@ -168,8 +168,8 @@ module(
         undefined,
       );
       assert.true(
-        instance.boxel instanceof SkillField,
-        'boxel rehydrated as SkillField subclass',
+        instance.boxel instanceof SkillFrontmatterField,
+        'boxel rehydrated as SkillFrontmatterField subclass',
       );
       assert.strictEqual(
         instance.boxel.name,
