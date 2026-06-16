@@ -96,8 +96,12 @@ export async function capturePausedCallStack(
   }
   let client: CDPSession | undefined;
   try {
-    let session = await raceNodeTimeout(page.createCDPSession(), budgetMs);
+    let sessionPromise = page.createCDPSession();
+    let session = await raceNodeTimeout(sessionPromise, budgetMs);
     if (session === TIMED_OUT) {
+      // We gave up waiting, but the create may still resolve later — detach it
+      // then so a slow CDP session isn't orphaned on the page until it closes.
+      void sessionPromise.then((s) => detachQuietly(s)).catch(() => {});
       return empty(null, 'cdp-session-timeout');
     }
     client = session;

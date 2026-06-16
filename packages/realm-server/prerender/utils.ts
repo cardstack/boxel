@@ -1802,6 +1802,7 @@ export async function withTimeout<T>(
     }
 
     let topPending = pendingNetworkRequests?.[0];
+    let pausedStackStr = formatPausedStack(pausedStack);
     log.warn(
       `render of ${id} timed out after ${timeoutMs}ms` +
         ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
@@ -1823,9 +1824,7 @@ export async function withTimeout<T>(
         (pausedStack?.heapUsedMB != null
           ? ` jsHeapUsedMB=${pausedStack.heapUsedMB.toFixed(0)}`
           : '') +
-        (formatPausedStack(pausedStack)
-          ? ` pausedStack: ${formatPausedStack(pausedStack)}`
-          : '') +
+        (pausedStackStr ? ` pausedStack: ${pausedStackStr}` : '') +
         (v8ProfStatus ? ` v8ProfLog: ${v8ProfStatus}` : '') +
         ` DOM:\n${dom?.trim()}`,
     );

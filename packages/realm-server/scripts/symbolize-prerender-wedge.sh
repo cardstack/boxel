@@ -61,7 +61,7 @@ if [[ -z "$KEY" ]]; then
   mapfile -t MATCHES < <(
     "${AWS[@]}" s3api list-objects-v2 --bucket "$BUCKET" --prefix "$ENV/" \
       --query "reverse(sort_by(Contents[?ends_with(Key, '.v8log')], &LastModified))[].Key" \
-      --output text 2>/dev/null | tr '\t' '\n' | grep -i -- "$REALM" || true
+      --output text 2>/dev/null | tr '\t' '\n' | grep -iF -- "$REALM" || true
   )
   [[ ${#MATCHES[@]} -gt 0 ]] || { echo "no .v8log artifact for realm '$REALM' in $BUCKET" >&2; exit 1; }
   if [[ -n "$LIST_ONLY" ]]; then printf '%s\n' "${MATCHES[@]}"; exit 0; fi
