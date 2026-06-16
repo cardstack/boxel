@@ -280,12 +280,11 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
       .picker-before-options__search {
         --boxel-input-search-color: var(--boxel-dark);
         --boxel-input-search-background-color: transparent;
-        --icon-full-length: var(--boxel-icon-xs);
         padding: 0 calc(2 * var(--boxel-sp-2xs));
       }
 
       .picker-before-options__search :deep(.input-container) {
-        --icon-full-length: var(--boxel-icon-xs);
+        --boxel-input-icon-size: var(--boxel-icon-xs);
       }
 
       .picker-before-options__search :deep(.search-icon) {
@@ -295,7 +294,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
       }
 
       .picker-before-options__search :deep(.search) {
-        padding-left: calc(var(--boxel-icon-xs) + var(--boxel-sp-2xs));
+        padding-left: calc(var(--boxel-icon-xs) + var(--boxel-sp-xs));
       }
 
       .picker-before-options__search-input {

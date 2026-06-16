@@ -1041,12 +1041,17 @@ export default class StoreService extends Service implements StoreInterface {
   // the hydration GET) resolves it without a round-trip. A sparse `item` (one
   // carrying `meta.sparseFields`) is never deposited — it would misrepresent
   // the instance and could clobber a correctly-loaded full one — so the call
-  // is a no-op for it; `search-entry`s carry no serialization to deposit.
-  // Idempotent: depositing is skipped when the instance is already resident.
+  // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
+  // which stands in for a card that failed to render and is not a real
+  // instance. `search-entry`s carry no serialization to deposit. Idempotent:
+  // depositing is skipped when the instance is already resident.
   async inflateSearchEntryItem(
     resource: CardResource<Saved> | FileMetaResource,
   ): Promise<void> {
-    if (isSparseItemResource(resource)) {
+    // Read `meta.error` before the guard: `isSparseItemResource`'s negative
+    // narrowing would otherwise reduce `resource` to `never` in the second
+    // operand.
+    if (resource.meta.error != null || isSparseItemResource(resource)) {
       return;
     }
     await this.addResourceFromSearchData(resource);

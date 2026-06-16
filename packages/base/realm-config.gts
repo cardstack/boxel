@@ -5,6 +5,7 @@ import {
   field,
   contains,
   containsMany,
+  getRelationshipMembershipState,
   linksTo,
   realmURL,
 } from './card-api';
@@ -285,6 +286,30 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
+  // Routing rules whose linked target card no longer exists. The
+  // `instance` linksTo resolves to a terminal broken-link state once the
+  // editor has tried to load it ('not-found' for a 404, 'error' for an
+  // upstream failure). Surfacing these lets the owner repair the rule
+  // before publishing — a dangling target otherwise degrades that routed
+  // path to a 404 placeholder on the published site.
+  get danglingRoutingRulePaths(): string[] {
+    let rules = this.args.model.hostRoutingRules ?? [];
+    let paths: string[] = [];
+    for (let rule of rules) {
+      if (!rule) {
+        continue;
+      }
+      let slot = getRelationshipMembershipState(
+        rule as unknown as CardDef,
+        'instance',
+      ).membership?.[0];
+      if (slot?.kind === 'not-found' || slot?.kind === 'error') {
+        paths.push(rule.path ?? '(no path)');
+      }
+    }
+    return paths;
+  }
+
   // CardInfoTemplates.edit insists on a strict `CardDef` for `@model`;
   // the template arg here is `PartialFields<RealmConfig>` (every field
   // optional, including `id`), so cast to the looser shape it actually
@@ -310,6 +335,18 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 >
                   Duplicate paths:
                   {{#each this.duplicatePaths as |p i|}}
+                    {{#if i}}, {{/if}}<code>{{p}}</code>
+                  {{/each}}
+                </div>
+              {{/if}}
+              {{#if this.danglingRoutingRulePaths.length}}
+                <div
+                  class='warning'
+                  role='status'
+                  data-test-dangling-routing-warning
+                >
+                  These paths point to a card that no longer exists:
+                  {{#each this.danglingRoutingRulePaths as |p i|}}
                     {{#if i}}, {{/if}}<code>{{p}}</code>
                   {{/each}}
                 </div>

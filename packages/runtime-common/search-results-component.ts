@@ -2,7 +2,7 @@ import type { ComponentLike } from '@glint/template';
 
 import type { ResolvedCodeRef } from './code-ref.ts';
 import type { SearchEntryCollectionDocument } from './document-types.ts';
-import type { ErrorEntry } from './index.ts';
+import type { ErrorEntry } from './error.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
   CardResource,

@@ -42,6 +42,7 @@ module(
 
     async function renderRealmConfigEdit(
       hostRoutingRules: Array<Record<string, unknown>>,
+      relationships?: Record<string, unknown>,
     ) {
       let loader = getService('loader-service').loader;
       let cardApi: typeof import('https://cardstack.com/base/card-api') =
@@ -74,6 +75,7 @@ module(
             data: {
               type: 'card',
               attributes: { hostRoutingRules },
+              ...(relationships ? { relationships } : {}),
               meta: {
                 adoptsFrom: {
                   module: 'https://cardstack.com/base/realm-config',
@@ -204,6 +206,29 @@ module(
       assert
         .dom('[data-test-duplicate-path-warning]')
         .containsText('/docs', 'the duplicate banner names the repeated path');
+    });
+
+    test('warns when a routing rule points to a card that no longer exists', async function (assert) {
+      // The rule links to a card that was never created in the realm, so
+      // its `instance` linksTo resolves to a 404 (not-found) once the
+      // editor tries to load it. The aggregate warning names the path so
+      // the owner can repair or remove the rule before publishing.
+      await renderRealmConfigEdit([{ path: '/gone' }], {
+        'hostRoutingRules.0.instance': {
+          links: { self: './does-not-exist' },
+        },
+      });
+
+      await waitFor('[data-test-dangling-routing-warning]');
+      assert
+        .dom('[data-test-dangling-routing-warning]')
+        .exists('the dangling-routing banner is shown');
+      assert
+        .dom('[data-test-dangling-routing-warning]')
+        .containsText(
+          '/gone',
+          'the banner names the path with the dead target',
+        );
     });
 
     test('rules with unset paths warn as duplicates of explicit "/" rules', async function (assert) {
