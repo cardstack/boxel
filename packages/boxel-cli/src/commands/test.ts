@@ -125,7 +125,7 @@ async function loadChromium(): Promise<ChromiumApi> {
 // Types
 // ---------------------------------------------------------------------------
 
-interface QunitTestResult {
+export interface QunitTestResult {
   name: string;
   module: string;
   status: 'passed' | 'failed' | 'skipped' | 'todo';
@@ -133,7 +133,7 @@ interface QunitTestResult {
   errors: { message: string; stack?: string }[];
 }
 
-interface QunitRunSummary {
+export interface QunitRunSummary {
   status: 'passed' | 'failed';
   testCounts: {
     passed: number;
@@ -145,7 +145,7 @@ interface QunitRunSummary {
   runtime: number;
 }
 
-interface QunitResults {
+export interface QunitResults {
   tests: QunitTestResult[];
   runEnd: QunitRunSummary | null;
 }
@@ -433,6 +433,27 @@ interface QunitRunnerOptions {
   realmMounts?: RealmMount[];
   hostDistDir?: string;
   debug?: boolean;
+  /**
+   * Explicit realm JWT to inject on requests to the target realm's origin
+   * (remote mode). Takes precedence over `pm.getRealmToken`, letting callers
+   * that hold a token directly (e.g. the software factory, which owns its own
+   * BoxelCLIClient) authenticate without an active CLI profile for the realm.
+   */
+  authorization?: string;
+}
+
+// How long to wait for the in-browser QUnit suite to reach `runEnd` before
+// giving up. A hung test page (boot error, infinite loop, never-resolving
+// promise) otherwise blocks for the full timeout with no signal. Default 60s;
+// override via FACTORY_TEST_TIMEOUT_MS for an unusually heavy suite.
+const DEFAULT_QUNIT_TIMEOUT_MS = 60_000;
+
+function qunitTimeoutMs(): number {
+  let raw = process.env.FACTORY_TEST_TIMEOUT_MS;
+  let parsed = raw != null && raw.trim() !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_QUNIT_TIMEOUT_MS;
 }
 
 async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
@@ -515,7 +536,8 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     // Realm-server auth only applies in remote mode — the local module
     // mounts on this same server don't gate on tokens.
     if (!options.realmMounts) {
-      let realmToken = options.pm.getRealmToken(resolvedTargetRealm);
+      let realmToken =
+        options.authorization ?? options.pm.getRealmToken(resolvedTargetRealm);
       if (realmToken) {
         let realmOrigin = new URL(resolvedTargetRealm).origin;
         await page.route(`${realmOrigin}/**`, (route) => {
@@ -532,13 +554,27 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(
-      () =>
-        (window as unknown as { __qunitResults?: { runEnd: unknown } })
-          .__qunitResults?.runEnd !== null,
-      null,
-      { timeout: 300_000 },
-    );
+    let timeoutMs = qunitTimeoutMs();
+    try {
+      await page.waitForFunction(
+        () =>
+          (window as unknown as { __qunitResults?: { runEnd: unknown } })
+            .__qunitResults?.runEnd !== null,
+        null,
+        { timeout: timeoutMs },
+      );
+    } catch {
+      // Playwright's native "Timeout 60000ms exceeded" doesn't say what timed
+      // out or how long we waited. Replace it with a diagnostic that names the
+      // likely cause and is greppable.
+      let waited = Date.now() - start;
+      throw new Error(
+        `QUnit suite did not reach runEnd within ${timeoutMs}ms (waited ${waited}ms). ` +
+          `The page never set __qunitResults.runEnd — likely an Ember boot error, ` +
+          `a hanging test, or a never-resolving promise. Re-run with --debug for ` +
+          `browser console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
+      );
+    }
 
     let qunitResults = (await page.evaluate(
       () =>
@@ -554,6 +590,41 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       testPageServer.close();
     }
   }
+}
+
+export interface RunRealmQunitOptions {
+  /** Host-app URL (realm-server compat proxy) the browser can reach. */
+  hostAppUrl: string;
+  /** Override the host dist dir; defaults to the CLI's bundled test harness. */
+  hostDistDir?: string;
+  debug?: boolean;
+  /** Realm JWT to inject; lets callers authenticate without a CLI profile. */
+  authorization?: string;
+  profileManager?: ProfileManager;
+}
+
+/**
+ * Run a realm's QUnit suite in a headless browser and return the raw per-test
+ * results plus duration. This is the engine the software factory delegates to
+ * so it no longer maintains its own host-dist-bound QUnit runner (CS-11579):
+ * the test harness lives here, in boxel-cli, alongside the bundled copy.
+ *
+ * Unlike `runTestsForRealm` this returns the unsummarized `QunitResults` (so
+ * callers can build their own TestRun artifacts) and does not require an
+ * active CLI profile — pass `authorization` to inject the realm token.
+ */
+export async function runRealmQunit(
+  realmUrl: string,
+  options: RunRealmQunitOptions,
+): Promise<{ qunitResults: QunitResults; durationMs: number }> {
+  return runQunitInBrowser({
+    pm: options.profileManager ?? getProfileManager(),
+    targetRealm: ensureTrailingSlash(realmUrl),
+    hostAppUrl: ensureTrailingSlash(options.hostAppUrl),
+    hostDistDir: options.hostDistDir,
+    debug: options.debug,
+    authorization: options.authorization,
+  });
 }
 
 // ---------------------------------------------------------------------------

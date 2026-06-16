@@ -25,3 +25,15 @@ export {
 } from './src/lib/profile-manager.ts';
 
 export { setQuiet, isQuiet } from './src/lib/cli-log.ts';
+
+export {
+  runRealmQunit,
+  runTestsForRealm,
+  type RunRealmQunitOptions,
+  type RunTestsOptions,
+  type RunTestsResult,
+  type TestFailure,
+  type QunitResults,
+  type QunitTestResult,
+  type QunitRunSummary,
+} from './src/commands/test.ts';
