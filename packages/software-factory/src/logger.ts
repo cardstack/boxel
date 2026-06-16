@@ -30,8 +30,44 @@ export function configureLogger(serializedLogLevels: string): void {
   createLogger.configure(config);
 }
 
+// Prefix every line with a wall-clock timestamp and the elapsed time since
+// the previous log line (across all channels). A long-running factory:go
+// otherwise emits a flat wall of text with no way to attribute where the
+// time went — the `+Δms` between two lines is the cheapest possible signal
+// for "this step was slow". Disable with FACTORY_LOG_TIMESTAMPS=0 (e.g. when
+// asserting on exact log output).
+const TIMESTAMPS_ENABLED =
+  process.env.FACTORY_LOG_TIMESTAMPS !== '0' &&
+  process.env.FACTORY_LOG_TIMESTAMPS !== 'false';
+
+// Shared across every logger instance so the delta reflects the gap to the
+// previous line on any channel, not per-channel.
+let lastLogTimeMs: number | undefined;
+
+function timestampPrefix(): string {
+  let now = Date.now();
+  let deltaMs = lastLogTimeMs == null ? 0 : now - lastLogTimeMs;
+  lastLogTimeMs = now;
+  let d = new Date(now);
+  let pad = (n: number, width = 2) => String(n).padStart(width, '0');
+  let clock = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  return `[${clock} +${deltaMs}ms]`;
+}
+
+const LOG_METHODS = ['trace', 'debug', 'info', 'warn', 'error', 'log'] as const;
+
+function withTimestamps(raw: Logger): Logger {
+  let wrapped = {} as Logger;
+  for (let method of LOG_METHODS) {
+    wrapped[method] = (message: string, ...args: unknown[]) =>
+      raw[method](`${timestampPrefix()} ${message}`, ...args);
+  }
+  return wrapped;
+}
+
 export function logger(logName: string): Logger {
-  return createLogger(logName);
+  let raw = createLogger(logName);
+  return TIMESTAMPS_ENABLED ? withTimestamps(raw) : raw;
 }
 
 function parseLogConfiguration(
