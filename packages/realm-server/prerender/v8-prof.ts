@@ -79,7 +79,7 @@ export async function prepareV8ProfForLaunch(): Promise<void> {
 // armed. Time-boxed — the log can be large, and the pegged render's
 // samples dominate it, so the top self-time frames name the wedge.
 export async function processV8ProfTopFrames(
-  budgetMs = 20000,
+  budgetMs = 40000,
 ): Promise<string | null> {
   if (!v8ProfEnabled()) {
     return null;
@@ -124,11 +124,21 @@ export async function processV8ProfTopFrames(
     }
     fromThisRun.sort((a, b) => b.size - a.size);
     let logPath = fromThisRun[0].full;
-    let { stdout } = await execFileAsync(
-      process.execPath,
-      ['--prof-process', logPath],
-      { timeout: budgetMs, maxBuffer: 32 * 1024 * 1024 },
-    );
+    let sizeMB = (fromThisRun[0].size / (1024 * 1024)).toFixed(1);
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync(
+        process.execPath,
+        ['--prof-process', logPath],
+        { timeout: budgetMs, maxBuffer: 128 * 1024 * 1024 },
+      ));
+    } catch (e) {
+      // Report the reason + size rather than swallowing it: a large
+      // accumulated log (every render since browser launch) can blow the
+      // time-box or the stdout cap, and we need to SEE that, not get null.
+      let err = e as { code?: string; killed?: boolean; message?: string };
+      return `<prof-process failed on ${path.basename(logPath)} (${sizeMB}MB)${err.killed ? ' [killed: timed out]' : ''}: ${err.code ?? ''} ${String(err.message ?? e).slice(0, 140)}>`;
+    }
     let lines = stdout.split('\n');
     // The bottom-up "[Summary]" section lists self-time by category; the
     // top JS/C++ entries that follow name the hot function.
@@ -137,9 +147,10 @@ export async function processV8ProfTopFrames(
       summaryIdx >= 0
         ? lines.slice(summaryIdx, summaryIdx + 60)
         : lines.slice(0, 60);
-    return slice.join('\n').trim() || '<empty prof summary>';
+    let summary = slice.join('\n').trim();
+    return `[${path.basename(logPath)} ${sizeMB}MB]\n${summary || '<empty prof summary>'}`;
   } catch (e) {
-    log.debug('v8 --prof processing failed:', e);
-    return null;
+    // Never silently null — surface the reason on the timeout line.
+    return `<v8 --prof reader error: ${String((e as { message?: string }).message ?? e).slice(0, 160)}>`;
   }
 }
