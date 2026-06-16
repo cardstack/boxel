@@ -58,7 +58,9 @@ export async function prepareV8ProfForLaunch(): Promise<void> {
     let entries = await fs.readdir(V8_PROF_LOG_DIR);
     await Promise.all(
       entries
-        .filter((e) => e.startsWith(V8_PROF_LOG_PREFIX) && e.endsWith('.log'))
+        // `includes`, not `startsWith`: V8's per-isolate logging prepends
+        // `isolate-<addr>-` to the --logfile name.
+        .filter((e) => e.includes(V8_PROF_LOG_PREFIX) && e.endsWith('.log'))
         .map((e) =>
           fs.rm(path.join(V8_PROF_LOG_DIR, e), { force: true }).catch(() => {}),
         ),
@@ -80,11 +82,16 @@ export async function processV8ProfTopFrames(
   }
   try {
     let entries = await fs.readdir(V8_PROF_LOG_DIR);
+    // `includes`, not `startsWith`: V8's per-isolate logging prepends
+    // `isolate-<addr>-` to the --logfile name, so the file is e.g.
+    // `isolate-0x…-prerender-v8-prof-<pid>.log`.
     let logs = entries.filter(
-      (e) => e.startsWith(V8_PROF_LOG_PREFIX) && e.endsWith('.log'),
+      (e) => e.includes(V8_PROF_LOG_PREFIX) && e.endsWith('.log'),
     );
     if (logs.length === 0) {
-      return '<no v8 --prof log found>';
+      // Name what IS present, so a still-missed pattern is self-diagnosing.
+      let present = entries.filter((e) => e.endsWith('.log')).slice(0, 12);
+      return `<no v8 --prof log found; .log present: ${present.join(', ') || 'none'}>`;
     }
     let withStats = await Promise.all(
       logs.map(async (name) => {
@@ -97,17 +104,21 @@ export async function processV8ProfTopFrames(
         }
       }),
     );
-    // Only this browser run's logs (cleared + stamped at launch), and
-    // among those the most-recently-written one — the renderer that was
-    // still spinning up to the timeout, not an earlier completed render's
-    // larger-but-stale log.
+    // Only this browser run's logs (stale prior-run logs were cleared +
+    // the launch time stamped). Among those pick the LARGEST: the pegged
+    // isolate accumulates by far the most samples over the 60s peg, so its
+    // log dwarfs sibling isolates' and earlier renders' — and the peg's
+    // samples dominate its top frames regardless of what else it rendered.
     let fromThisRun = withStats.filter(
       (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt,
     );
     if (fromThisRun.length === 0) {
-      return '<no v8 --prof log from this run>';
+      let seen = withStats
+        .map((s) => `${path.basename(s.full)}(${s.size}b)`)
+        .slice(0, 8);
+      return `<no v8 --prof log from this run; seen: ${seen.join(', ')}>`;
     }
-    fromThisRun.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    fromThisRun.sort((a, b) => b.size - a.size);
     let logPath = fromThisRun[0].full;
     let { stdout } = await execFileAsync(
       process.execPath,
