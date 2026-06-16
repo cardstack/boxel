@@ -87,6 +87,7 @@ import {
   LooseLinkableResource,
   LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
+  shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   trackRuntimeModuleDependency,
@@ -1252,15 +1253,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // structured read.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
-        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        console.error(
-          '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
-          {
-            fieldName: this.name,
-            ownerType: instance?.constructor?.name,
-            sentinelType: (bucketEntry as { type?: string })?.type,
-          },
-        );
         return undefined;
       }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
@@ -3865,6 +3857,14 @@ function trackRuntimeRelationshipDependency(
   }
   let id = (value as { id?: unknown }).id;
   if (typeof id !== 'string') {
+    return;
+  }
+  if (!shouldTrackRuntimeRelationship(id, dependencyTrackingContext)) {
+    // Already tracked this relationship target this session. A linksTo /
+    // linksToMany getter runs this on every read, and a dense graph re-reads
+    // the same targets combinatorially; a repeat would re-derive the identical
+    // instance/file + module-graph node set, so skipping it — and the
+    // prototype/identity lookups below — is a pure no-op.
     return;
   }
   if (isFileDef(declaredCard)) {
