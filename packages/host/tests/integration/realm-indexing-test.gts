@@ -2029,13 +2029,17 @@ module(`Integration | realm indexing`, function (hooks) {
       undefined,
       getService('network').virtualNetwork,
     );
+    // Compare as a set: the `embedded_html` key order is lexical after
+    // storage round-trip, not semantically meaningful, and the base
+    // CardDef key sorts differently in RRI prefix form (`@cardstack/...`)
+    // than in URL form. Consumers look up by key, never by position.
     assert.deepEqual(
-      Object.keys(embeddedHtml!),
+      [...Object.keys(embeddedHtml!)].sort(),
       [
         `${testRealmURL}fancy-person/FancyPerson`,
         `${testRealmURL}person/Person`,
         cardDefRefURL,
-      ],
+      ].sort(),
       'embedded class hierarchy is correct',
     );
 
@@ -2178,13 +2182,15 @@ module(`Integration | realm indexing`, function (hooks) {
       undefined,
       getService('network').virtualNetwork,
     );
+    // Compare as a set: see the embedded-hierarchy assertion above —
+    // `fitted_html` key order is lexical after storage, not semantic.
     assert.deepEqual(
-      Object.keys(fittedHtml!),
+      [...Object.keys(fittedHtml!)].sort(),
       [
         `${testRealmURL}fancy-person/FancyPerson`,
         `${testRealmURL}person/Person`,
         cardDefRefURL,
-      ],
+      ].sort(),
       'fitted class hierarchy is correct',
     );
 
