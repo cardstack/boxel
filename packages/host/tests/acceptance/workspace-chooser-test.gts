@@ -14,6 +14,7 @@ import { module, test } from 'qunit';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { testRealmInfo } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -32,6 +33,8 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const realmAURL = 'http://test-realm/testuser/workspace-a/';
 const realmBURL = 'http://test-realm/testuser/workspace-b/';
+
+let realmA: Realm;
 
 function withUpdatedRealmInfo(
   realmURL: string,
@@ -72,7 +75,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
     setupUserSubscription();
     setupAuthEndpoints();
 
-    await setupAcceptanceTestRealm({
+    let { realm } = await setupAcceptanceTestRealm({
       realmURL: realmAURL,
       mockMatrixUtils,
       permissions: {
@@ -115,6 +118,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         },
       },
     });
+    realmA = realm;
   });
 
   module('favorites', function () {
@@ -197,6 +201,39 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert
         .dom(`[data-test-stack-card="${realmAURL}realm"]`)
         .exists('realm config card is opened on the stack');
+    });
+  });
+
+  module('realm rename', function () {
+    test('workspace name updates after a re-index without a browser reload', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      assert
+        .dom(
+          `[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-name]`,
+        )
+        .hasText('Workspace A', 'workspace shows its original name');
+
+      // Rename the realm the same way a user would: edit the RealmConfig card
+      // at realm.json. The resulting re-index broadcasts an index event that
+      // should refresh the cached realm info reactively.
+      await realmA.write(
+        'realm.json',
+        realmConfigCardJSON({ name: 'Renamed Workspace A' }),
+      );
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-workspace-list] [data-test-workspace="Renamed Workspace A"] [data-test-workspace-name]`,
+        )
+        .hasText(
+          'Renamed Workspace A',
+          'workspace label reflects the new name without a reload',
+        );
+      assert
+        .dom(`[data-test-workspace-list] [data-test-workspace="Workspace A"]`)
+        .doesNotExist('the stale workspace name is gone');
     });
   });
 

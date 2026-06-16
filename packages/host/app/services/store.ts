@@ -1636,6 +1636,25 @@ export default class StoreService extends Service implements StoreInterface {
         );
       }
     }
+
+    // A realm's name/icon is injected into every card's `meta.realmInfo` at
+    // request time, but changing it (by editing the RealmConfig card at
+    // realm.json) only invalidates the config card itself — not the cards that
+    // display it. The realm index card (CardsGrid) renders the realm name as
+    // its title, so reload it when the config card is re-indexed to refresh
+    // that title without a browser reload. Scoped to the config card so we
+    // don't reload on every unrelated card edit.
+    let realmConfigCardId = `${event.realmURL}realm`;
+    if (invalidations.includes(realmConfigCardId)) {
+      let indexCardId = `${event.realmURL}index`;
+      let indexCard = this.peek(indexCardId);
+      if (indexCard && isCardInstance(indexCard)) {
+        realmEventsLogger.debug(
+          `reloading index card ${indexCardId} because the realm config card was re-indexed`,
+        );
+        this.reloadTask.perform(indexCard);
+      }
+    }
   };
 
   private loadInstanceTask = task(
