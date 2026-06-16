@@ -1,20 +1,16 @@
-// CS-11545 — a skill is markdown with `boxel.kind: skill` frontmatter, not a
-// SkillDef subclass. These tests exercise the real MarkdownDef + the
-// FrontmatterField / SkillFrontmatterField field types:
+// A skill is markdown with `boxel.kind: skill` frontmatter, modeled by the
+// FrontmatterField / SkillFrontmatterField field types on MarkdownDef. These
+// tests exercise the real MarkdownDef:
 //
 //   1. parseFrontmatter pulls the YAML block off the top of the body.
 //   2. MarkdownDef.extractAttributes parses frontmatter, writes a direct
-//      searchable `kind`, captures the whole frontmatter in `frontmatter.rawContent`,
-//      and routes the per-field subclass marker (SkillFrontmatterField) via the
-//      file-field-meta symbol.
+//      searchable `kind`, captures the whole frontmatter in
+//      `frontmatter.rawContent`, and routes the per-field subclass marker
+//      (SkillFrontmatterField) via the file-field-meta symbol.
 //   3. The write→read round-trip (extractor lift → buildFileResource →
 //      createFromSerialized) rehydrates `frontmatter` as a SkillFrontmatterField
-//      with its commands intact — closing the write-path gap the CS-11568 spike
-//      pinned.
+//      with its commands intact.
 //   4. Plain markdown (no frontmatter) is unaffected.
-//
-// NOTE: requires the host test-services stack / CI to run (local host-test boot
-// is documented-broken).
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -54,7 +50,7 @@ boxel:
 Body paragraph.
 `;
 
-module('Integration | CS-11545 | markdown skill frontmatter', function (hooks) {
+module('Integration | markdown skill frontmatter', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);

@@ -1,10 +1,10 @@
-// CS-11545 — verify a search query finds MarkdownDef files whose frontmatter
-// declares `boxel.kind: skill`. The discriminator is projected onto the
-// indexed `MarkdownDef.kind` field at extraction, so it's filterable via the
-// same file-meta query path used for any other FileDef field (cf. the
-// `eq: { url }` file-meta filter in realm-querying-test).
+// A search query finds MarkdownDef files whose frontmatter declares
+// `boxel.kind: skill`. The discriminator is projected onto the indexed
+// `MarkdownDef.kind` field at extraction, so it's filterable via the same
+// file-meta query path used for any other FileDef field (cf. the `eq: { url }`
+// file-meta filter in realm-querying-test).
 //
-// Requires the host test-services stack / CI to run.
+// Runs under the host test-services stack / CI.
 
 import { module, test } from 'qunit';
 
@@ -55,7 +55,7 @@ const markdownRef = {
   name: 'MarkdownDef',
 };
 
-module('Integration | CS-11545 | markdown skill search', function (hooks) {
+module('Integration | markdown skill search', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);

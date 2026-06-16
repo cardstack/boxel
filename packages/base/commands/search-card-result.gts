@@ -35,8 +35,8 @@ interface CardListSignature {
   context?: CardContext;
 }
 
-// JsonField now lives in its own module so non-command code can reuse it.
-// Re-exported here for back-compat with existing importers.
+// `JsonField` lives in its own module so non-command code can reuse it.
+// Re-exported here so it is importable from this module too.
 export { JsonField } from '../json-field';
 
 export class QueryField extends FieldDef {

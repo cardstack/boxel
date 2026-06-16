@@ -555,8 +555,8 @@ export class MarkdownDef extends FileDef {
       body = parsed.body;
     } catch (err) {
       // Invalid YAML: index the markdown without frontmatter rather than fail
-      // the whole file. TODO(CS-11545): surface this via indexing diagnostics
-      // instead of only a console warning (spec Risks — visible parse errors).
+      // the whole file. TODO: surface this via indexing diagnostics rather than
+      // only a console warning, so frontmatter parse errors stay visible.
       console.warn(`[markdown-file-def] frontmatter parse failed for ${url}:`, err);
     }
 
