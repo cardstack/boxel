@@ -65,27 +65,14 @@ export PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-120000}"
 echo "==> Making forwarded ports public..."
 gh codespace ports visibility 4201:public 4206:public 8008:public -c "$CODESPACE_NAME" 2>/dev/null || true
 
-# ── Host app (vite) ──
-# Started first because it's the slowest to warm and both the realm server
-# (distURL smoke test) and the prerenderer depend on it. vite reads the
-# REALM_SERVER_TLS_CERT_FILE that env-vars.sh exported (the self-signed cert)
-# and serves HTTPS on localhost:4200, matching the prerender's expectation.
-# It runs with the PUBLIC realm/matrix/icons URLs so prerendered output
-# references the Codespace's public hostnames (which the S3 reviewer host
-# resolves).
-echo "==> Starting host app (vite) on https://localhost:4200..."
-(
-  cd packages/host
-  REALM_SERVER_DOMAIN="${REALM_SERVER_URL}/" \
-  RESOLVED_BASE_REALM_URL="${REALM_SERVER_URL}/base/" \
-  RESOLVED_CATALOG_REALM_URL="${REALM_SERVER_URL}/catalog/" \
-  RESOLVED_SKILLS_REALM_URL="${REALM_SERVER_URL}/skills/" \
-  RESOLVED_OPENROUTER_REALM_URL="${REALM_SERVER_URL}/openrouter/" \
-  MATRIX_URL="${MATRIX_PUBLIC_URL}" \
-  MATRIX_SERVER_NAME=localhost \
-  ICONS_URL="${ICONS_PUBLIC_URL}" \
-  exec node scripts/vite-serve.js
-) > /tmp/host-vite.log 2>&1 &
+# ── Host app (prebuilt static dist, served via vite preview) ──
+# The dist is built in setup.sh with the public Codespace URLs baked in;
+# serve-dist.js (vite preview) reads REALM_SERVER_TLS_CERT_FILE from
+# env-vars.sh and serves it over HTTPS on localhost:4200. Serving a prebuilt
+# dist (vs vite dev) starts in seconds, so the prerender's /_standby probe
+# and the realm server's distURL smoke test don't blow their timeouts.
+echo "==> Serving prebuilt host app on https://localhost:4200..."
+(cd packages/host && exec node scripts/serve-dist.js) > /tmp/host-vite.log 2>&1 &
 HOST_PID=$!
 
 # ── Postgres (boxel-pg container) + databases ──
@@ -101,29 +88,40 @@ SYNAPSE_PID=$!
 echo "==> Starting SMTP server..."
 (cd packages/matrix && pnpm assert-smtp-running) &
 
-# ── Icons / worker ──
+# ── Icons ──
 echo "==> Starting icons server..."
 pnpm --dir=packages/realm-server run start:icons &
 
-echo "==> Starting worker..."
-pnpm --dir=packages/realm-server run start:worker-development &
-
-# Wait for the host app before starting the prerenderer (its puppeteer
-# standby probe loads the host) and the realm server (its distURL smoke
-# test fetches the host). vite cold-starts the full host dep graph, so
-# allow generous time; a missing host is fatal to the realm server.
-echo "==> Waiting for host app at https://localhost:4200 (vite cold start)..."
-if ! timeout 420 bash -c 'until curl -ksf https://localhost:4200 >/dev/null 2>&1; do
-    kill -0 '"$HOST_PID"' 2>/dev/null || { echo "host vite process died; see /tmp/host-vite.log"; exit 1; }
-    sleep 3
+# Wait for the host before the prerender (its puppeteer /_standby probe loads
+# the host) and the realm server (its distURL smoke test fetches it). With a
+# prebuilt dist this is quick, but allow headroom; a missing host is fatal.
+echo "==> Waiting for host app at https://localhost:4200..."
+if ! timeout 180 bash -c 'until curl -ksf https://localhost:4200 >/dev/null 2>&1; do
+    kill -0 '"$HOST_PID"' 2>/dev/null || { echo "host process died; see /tmp/host-vite.log"; exit 1; }
+    sleep 2
   done'; then
   echo "Warning: host app not reachable; realm smoke test and prerender will likely fail. See /tmp/host-vite.log"
 fi
 
-# ── Prerender (needs the host to be up) ──
+# ── Prerender (needs the host) then worker (depends on the prerender) ──
+# Ordered deliberately: the worker manager only becomes ready after the
+# prerender registers a worker, and the realm server's waitForWorkerManager
+# is a hardcoded 30s — so the realm must start only once the worker manager
+# is already up (see the wait below), and the prerender must precede the worker.
 echo "==> Starting prerender services..."
 pnpm --dir=packages/realm-server run start:prerender-manager-dev &
 pnpm --dir=packages/realm-server run start:prerender-dev &
+
+echo "==> Starting worker..."
+pnpm --dir=packages/realm-server run start:worker-development &
+
+# Gate on the worker manager's own readiness signal before launching the
+# realm server, so its 30s internal wait succeeds immediately. The manager
+# reports {"ready":true} once it has a registered worker (which transitively
+# requires the prerender + host to be up).
+echo "==> Waiting for worker manager at http://localhost:4210 to be ready..."
+timeout 900 bash -c 'until curl -sf http://localhost:4210/ 2>/dev/null | grep -q "\"ready\":true"; do sleep 3; done' \
+  || echo "Warning: worker manager not ready after 900s; realm server will likely fail to start"
 
 # Wait for Synapse before starting the realm server (it registers the
 # realm_server Matrix user during boot).
