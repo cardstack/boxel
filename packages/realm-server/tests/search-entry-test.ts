@@ -699,21 +699,31 @@ module(basename(__filename), function () {
       assert.true(isHtmlResource(resource));
     });
 
-    test('buildIconResource keys on the type internal key and is an icon resource', function (assert) {
+    test('buildIconResource keys on the type internal key and carries the type descriptor', function (assert) {
       let internalKey = `${authorRef.module}/${authorRef.name}`;
       let resource = buildIconResource({
         internalKey,
         iconHtml: '<svg>author</svg>',
+        displayName: 'Author',
+        codeRef: authorRef,
       });
       assert.deepEqual(resource, {
         type: 'icon',
         id: internalKey,
-        attributes: { iconHtml: '<svg>author</svg>' },
+        attributes: {
+          iconHtml: '<svg>author</svg>',
+          displayName: 'Author',
+          codeRef: authorRef,
+        },
       });
       assert.true(isIconResource(resource));
       assert.false(
-        isIconResource({ type: 'icon', id: internalKey, attributes: {} }),
-        'an icon resource without iconHtml is rejected',
+        isIconResource({
+          type: 'icon',
+          id: internalKey,
+          attributes: { iconHtml: '<svg/>' },
+        }),
+        'an icon resource missing displayName / codeRef is rejected',
       );
     });
 

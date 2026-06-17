@@ -116,11 +116,19 @@ class RenderableSearchEntry {
     return this.raw.item;
   }
 
-  // The result's card-type icon HTML, resolved from the deduped `icon`
-  // resource — exposed so a consumer can render a type icon for an item-only
-  // row without loading the live instance.
+  // The result's card-type descriptor, resolved from the deduped `icon`
+  // resource — exposed so a consumer can render a type icon / name (and render
+  // as the right type) for an item-only row without loading the live instance.
   get iconHtml(): string | undefined {
     return this.raw.iconHtml;
+  }
+
+  get displayName(): string | undefined {
+    return this.raw.displayName;
+  }
+
+  get codeRef(): ResolvedCodeRef | undefined {
+    return this.raw.codeRef;
   }
 
   // The error doc carried on the `item` serialization's `meta`. Present => the

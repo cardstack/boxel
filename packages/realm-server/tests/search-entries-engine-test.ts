@@ -193,6 +193,17 @@ module(basename(__filename), function () {
         icons[0].attributes.iconHtml.length > 0,
         'the icon resource carries the icon markup',
       );
+      // the deduped resource carries the full type descriptor
+      assert.strictEqual(
+        icons[0].attributes.displayName,
+        'Person',
+        'the type descriptor carries the card def display name',
+      );
+      assert.deepEqual(
+        icons[0].attributes.codeRef,
+        { module: `${realmHref}person`, name: 'Person' },
+        'the type descriptor carries the card def code ref',
+      );
       // the icon no longer rides on each html rendering
       let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
       assert.false(

@@ -43,10 +43,13 @@ export interface RenderableSearchEntryLike {
   // The card/file identity URL.
   id: string;
   isError: boolean;
-  // The result's card-type icon HTML, resolved from the deduped `icon`
+  // The result's card-type descriptor, resolved from the deduped `icon`
   // resource — present whenever the row's native type has one. Carried on the
-  // entry (not the rendering) so an item-only / no-HTML row exposes it too.
+  // entry (not the rendering) so an item-only / no-HTML row exposes it too:
+  // the type's icon HTML, display name, and code ref.
   iconHtml?: string;
+  displayName?: string;
+  codeRef?: ResolvedCodeRef;
   // The chosen prerendered rendering, when the result carries one.
   html?: SearchEntryRendering;
   // The raw live serialization branch (full or sparse), when present.

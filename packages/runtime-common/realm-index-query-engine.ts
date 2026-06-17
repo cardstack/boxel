@@ -751,6 +751,7 @@ export class RealmIndexQueryEngine {
         fieldset.html
           ? ((row.icon_html as string | null) ?? undefined)
           : undefined,
+        (row.display_names as string[] | null)?.[0] ?? '',
         iconById,
       );
       if (fieldset.html) {
@@ -910,6 +911,7 @@ export class RealmIndexQueryEngine {
       let iconId = collectIconId(
         fieldset.html ? file.types?.[0] : undefined,
         fieldset.html ? (file.iconHtml ?? undefined) : undefined,
+        file.displayNames?.[0] ?? '',
         iconById,
       );
       if (fieldset.html) {
@@ -2432,23 +2434,34 @@ function relativizeResource(
   });
 }
 
-// Resolve a row's `icon` resource id (its native-type internal key) and
-// register the deduped resource. Returns the id to hang the `search-entry` →
-// `icon` relationship on, or undefined when the row has no native type or no
-// `icon_html`. The same internal key collapses every result of that type to
-// one resource in `included`.
+// Resolve a row's `icon` (type-descriptor) resource id — its native-type
+// internal key — and register the deduped resource carrying the type's icon,
+// display name, and code ref. Returns the id to hang the `search-entry` →
+// `icon` relationship on, or undefined when the row has no native type, no
+// `icon_html`, or an unparseable internal key. The same internal key collapses
+// every result of that type to one resource in `included`.
 function collectIconId(
   nativeKey: string | undefined,
   iconHtml: string | undefined,
+  displayName: string,
   iconById: Map<string, IconResource>,
 ): string | undefined {
   if (!nativeKey || !iconHtml) {
     return undefined;
   }
+  let codeRef = codeRefFromInternalKey(nativeKey);
+  if (!codeRef) {
+    return undefined;
+  }
   if (!iconById.has(nativeKey)) {
     iconById.set(
       nativeKey,
-      buildIconResource({ internalKey: nativeKey, iconHtml }),
+      buildIconResource({
+        internalKey: nativeKey,
+        iconHtml,
+        displayName,
+        codeRef,
+      }),
     );
   }
   return nativeKey;

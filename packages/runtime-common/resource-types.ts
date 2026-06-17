@@ -204,17 +204,23 @@ export interface CssResource {
   };
 }
 
-// One card-type icon. A type's `iconHtml` is identical across every result of
-// that type, so it rides as its own deduped resource rather than repeated on
-// each rendering. Its `id` is the type's internal key (the `<module>/<name>`
-// form already carried as a row's `types[0]`), so identical types collapse to
-// one `(type, id)` in `included`. Reached from the `search-entry` (not the
-// `html`) so item-only / no-HTML rows resolve their icon too.
+// A card type's presentation descriptor — the per-type data that is identical
+// across every result of that type (its icon, display name, and code ref), so
+// it rides as its own deduped resource rather than repeated on each rendering.
+// Its `id` is the type's internal key (the `<module>/<name>` form already
+// carried as a row's `types[0]`), so identical types collapse to one
+// `(type, id)` in `included`. Reached from the `search-entry` (not the `html`)
+// so item-only / no-HTML rows resolve their type descriptor too.
 export interface IconResource {
   id: string;
   type: typeof IconResourceType;
   attributes: {
     iconHtml: string;
+    // The card def's display name (e.g. "Author").
+    displayName: string;
+    // The card def's resolved code ref — the structured form of the
+    // `<module>/<name>` the `id` encodes, so consumers needn't re-parse it.
+    codeRef: ResolvedCodeRef;
   };
 }
 

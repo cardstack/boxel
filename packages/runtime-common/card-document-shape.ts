@@ -345,10 +345,15 @@ export function isIconResource(resource: any): resource is IconResource {
   if (typeof resource.id !== 'string') {
     return false;
   }
-  if (typeof resource.attributes !== 'object' || resource.attributes == null) {
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
     return false;
   }
-  return typeof resource.attributes.iconHtml === 'string';
+  return (
+    typeof attributes.iconHtml === 'string' &&
+    typeof attributes.displayName === 'string' &&
+    isResolvedCodeRef(attributes.codeRef)
+  );
 }
 
 export function isSearchEntryResource(

@@ -387,7 +387,11 @@ module('Integration | Component | search-results', function (hooks) {
         {
           type: IconResourceType,
           id: BOOK_ICON_ID,
-          attributes: { iconHtml: BOOK_ICON_HTML },
+          attributes: {
+            iconHtml: BOOK_ICON_HTML,
+            displayName: 'Book',
+            codeRef: bookRef,
+          },
         },
       ],
       meta: {

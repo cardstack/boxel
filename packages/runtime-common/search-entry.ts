@@ -930,19 +930,26 @@ export function buildHtmlResource(args: {
   };
 }
 
-// One card-type `icon` resource (see `IconResource`). Its `id` is the type's
-// internal key — the `<module>/<name>` form a row already carries as
-// `types[0]` — so the same type collapses to one resource in `included`. The
-// `search-entry` → `icon` relationship points here, reachable for item-only
-// rows that carry no `html` rendering.
+// One card-type `icon` resource (see `IconResource`): the per-type descriptor
+// (icon, display name, code ref). Its `id` is the type's internal key — the
+// `<module>/<name>` form a row already carries as `types[0]` — so the same type
+// collapses to one resource in `included`. The `search-entry` → `icon`
+// relationship points here, reachable for item-only rows that carry no `html`
+// rendering.
 export function buildIconResource(args: {
   internalKey: string;
   iconHtml: string;
+  displayName: string;
+  codeRef: ResolvedCodeRef;
 }): IconResource {
   return {
     type: IconResourceType,
     id: args.internalKey,
-    attributes: { iconHtml: args.iconHtml },
+    attributes: {
+      iconHtml: args.iconHtml,
+      displayName: args.displayName,
+      codeRef: args.codeRef,
+    },
   };
 }
 
