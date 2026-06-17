@@ -11,12 +11,14 @@
 # `infra:ensure-dev-cert`), which is why the realm server is launched by hand
 # below rather than via `mise run dev` / `start:development`.
 #
-# Known limitation: card *prerendering* needs a host app for the prerenderer
-# to render against, which is not run in the Codespace. The realm server is
-# therefore started in mount-and-serve mode (REALM_SERVER_SKIP_BOOT_INDEX),
-# so it comes up immediately and serves modules/source; prerendered card
-# rendering and search are degraded until a host is wired up for the
-# prerenderer (follow-up).
+# A host app (vite) IS run locally here, on http://localhost:4200, because
+# the realm server hard-requires a reachable host: main.ts fetches HOST_URL
+# at startup and process.exit(-2)s if it can't (and the prerenderer renders
+# cards against it). This local host is distinct from the reviewer-facing S3
+# build; it exists so the realm server boots and cards can prerender. The
+# realm still starts in mount-and-serve mode (REALM_SERVER_SKIP_BOOT_INDEX)
+# so readiness doesn't block on a full from-scratch index; cards prerender
+# on demand instead.
 set -euo pipefail
 
 cd /workspaces/boxel
@@ -45,14 +47,42 @@ export ICONS_URL="http://localhost:4206"
 export PGPORT=5435
 export PGDATABASE=boxel
 
-# Mount-and-serve: skip the from-scratch boot index (see "Known limitation"
-# above). Without this, a brand-new realm's readiness check blocks on a full
-# index that needs the prerenderer + a host, which the Codespace lacks.
+# Mount-and-serve: skip the from-scratch boot index so readiness doesn't
+# block on a full index of every bootstrap realm; cards prerender on demand.
 export REALM_SERVER_SKIP_BOOT_INDEX=true
+
+# The realm server's distURL and the prerenderer both target the local host
+# over plain HTTP (no dev cert here). main.ts defaults distURL to
+# https://localhost:4200, which would fail against the http vite host, so
+# pin it explicitly. The mise prerender task honours this via ${HOST_URL:-…}.
+export HOST_URL="http://localhost:4200"
+# Give the prerender's puppeteer standby probe headroom for vite's cold start.
+export PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-120000}"
 
 # ── Make forwarded ports public so the S3 preview can reach them ──
 echo "==> Making forwarded ports public..."
 gh codespace ports visibility 4201:public 4206:public 8008:public -c "$CODESPACE_NAME" 2>/dev/null || true
+
+# ── Host app (vite) ──
+# Started first because it's the slowest to warm and both the realm server
+# (distURL smoke test) and the prerenderer depend on it. It runs with the
+# PUBLIC realm/matrix/icons URLs so prerendered output references the
+# Codespace's public hostnames (which the S3 reviewer host resolves), even
+# though it is itself served on plain-HTTP localhost:4200.
+echo "==> Starting host app (vite) on http://localhost:4200..."
+(
+  cd packages/host
+  REALM_SERVER_DOMAIN="${REALM_SERVER_URL}/" \
+  RESOLVED_BASE_REALM_URL="${REALM_SERVER_URL}/base/" \
+  RESOLVED_CATALOG_REALM_URL="${REALM_SERVER_URL}/catalog/" \
+  RESOLVED_SKILLS_REALM_URL="${REALM_SERVER_URL}/skills/" \
+  RESOLVED_OPENROUTER_REALM_URL="${REALM_SERVER_URL}/openrouter/" \
+  MATRIX_URL="${MATRIX_PUBLIC_URL}" \
+  MATRIX_SERVER_NAME=localhost \
+  ICONS_URL="${ICONS_PUBLIC_URL}" \
+  exec node scripts/vite-serve.js
+) > /tmp/host-vite.log 2>&1 &
+HOST_PID=$!
 
 # ── Postgres (boxel-pg container) + databases ──
 echo "==> Ensuring Postgres is running..."
@@ -67,16 +97,29 @@ SYNAPSE_PID=$!
 echo "==> Starting SMTP server..."
 (cd packages/matrix && pnpm assert-smtp-running) &
 
-# ── Icons / prerender / worker (best-effort; see "Known limitation") ──
+# ── Icons / worker ──
 echo "==> Starting icons server..."
 pnpm --dir=packages/realm-server run start:icons &
 
+echo "==> Starting worker..."
+pnpm --dir=packages/realm-server run start:worker-development &
+
+# Wait for the host app before starting the prerenderer (its puppeteer
+# standby probe loads the host) and the realm server (its distURL smoke
+# test fetches the host). vite cold-starts the full host dep graph, so
+# allow generous time; a missing host is fatal to the realm server.
+echo "==> Waiting for host app at http://localhost:4200 (vite cold start)..."
+if ! timeout 420 bash -c 'until curl -sf http://localhost:4200 >/dev/null 2>&1; do
+    kill -0 '"$HOST_PID"' 2>/dev/null || { echo "host vite process died; see /tmp/host-vite.log"; exit 1; }
+    sleep 3
+  done'; then
+  echo "Warning: host app not reachable; realm smoke test and prerender will likely fail. See /tmp/host-vite.log"
+fi
+
+# ── Prerender (needs the host to be up) ──
 echo "==> Starting prerender services..."
 pnpm --dir=packages/realm-server run start:prerender-manager-dev &
 pnpm --dir=packages/realm-server run start:prerender-dev &
-
-echo "==> Starting worker..."
-pnpm --dir=packages/realm-server run start:worker-development &
 
 # Wait for Synapse before starting the realm server (it registers the
 # realm_server Matrix user during boot).
