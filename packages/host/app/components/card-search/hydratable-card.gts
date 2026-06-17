@@ -75,6 +75,9 @@ interface Signature {
   Args: {
     // The card/file identity URL, which is also its `links.self` GET target.
     cardId: string;
+    // The result's display name (realm-local path), surfaced by the host error
+    // component so an error tile identifies which result failed.
+    name?: string;
     // The inert prerendered HTML for an HTML-backed row. Absent for a full
     // live row, which carries no HTML and resolves to its live instance.
     component?: HTMLComponent;
@@ -233,6 +236,7 @@ export default class HydratableCard extends Component<Signature> {
           non-hydratable — no gesture, no GET. }}
       <SearchResultError
         @cardId={{@cardId}}
+        @name={{@name}}
         @error={{@errorDoc}}
         ...attributes
       />

@@ -14,6 +14,7 @@ import FileIcon from '@cardstack/boxel-icons/file';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  isValidPrerenderedHtmlFormat,
   removeFileExtension,
   rri,
   searchEntryWireQueryFromQuery,
@@ -64,11 +65,25 @@ export default class CardList extends Component<Signature> {
   // The default fieldset (no `fields` member) resolves to "html, falling back
   // to the `item` serialization where no rendering matched" — exactly what the
   // grid wants (prerendered HTML for cards; an `item`/`icon` fallback for file
-  // rows). Only read under `{{#if @query}}`.
+  // rows). `@format` binds the prerendered format through the query's
+  // `htmlQuery` (the v2 way to select it); CardsGrid passes `fitted`, which
+  // matches the default, so this is behavior-preserving there while keeping a
+  // non-`fitted` caller working. Only read under `{{#if @query}}`.
   private get searchResultsQuery(): SearchEntryWireQuery {
+    let query = searchEntryWireQueryFromQuery(this.args.query!);
+    if (!isValidPrerenderedHtmlFormat(this.args.format)) {
+      return { ...query, realms: this.args.realms };
+    }
     return {
-      ...searchEntryWireQueryFromQuery(this.args.query!),
+      ...query,
       realms: this.args.realms,
+      filter: {
+        ...query.filter,
+        eq: {
+          ...query.filter?.eq,
+          htmlQuery: { eq: { format: this.args.format } },
+        },
+      },
     };
   }
 
