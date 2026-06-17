@@ -471,6 +471,40 @@ Instructions live in the markdown body.
       );
   });
 
+  test('canceling the skill-file chooser re-enables the add-markdown button', async function (assert) {
+    await renderAiAssistantPanel();
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+
+    await waitFor('[data-test-choose-file-modal]');
+    await click('[data-test-choose-file-modal-cancel-button]');
+
+    // Canceling settles the chooser promise, so the trigger button returns to
+    // its enabled state. A chooser that left its deferred unsettled would hang
+    // the attach task and leave this button stuck disabled.
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+    );
+    assert
+      .dom('[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]')
+      .isNotDisabled('the add-markdown button is re-enabled after canceling');
+
+    // The chooser can be reopened after canceling.
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await waitFor('[data-test-choose-file-modal]');
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('the chooser reopens after canceling');
+  });
+
   test('skill picker excludes already-enabled skills', async function (assert) {
     await renderAiAssistantPanel();
     let enabledSkillId = `${testRealmURL}Skill/example`;

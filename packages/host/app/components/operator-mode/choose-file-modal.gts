@@ -48,7 +48,7 @@ interface Signature {
 }
 
 export default class ChooseFileModal extends Component<Signature> {
-  @tracked deferred?: Deferred<FileDef>;
+  @tracked deferred?: Deferred<FileDef | undefined>;
   @tracked selectedRealm = this.knownRealms[0];
   @tracked selectedFile?: LocalPath;
   @tracked fileTypeFilter?: CodeRef;
@@ -125,21 +125,28 @@ export default class ChooseFileModal extends Component<Signature> {
   }
 
   private pickTask = task(async (path: LocalPath | undefined) => {
+    let deferred = this.deferred;
     try {
-      if (this.deferred && this.selectedRealm && path) {
+      if (deferred && this.selectedRealm && path) {
         let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
         let file = await this.store.get<FileDef>(fileURL.href, {
           type: 'file-meta',
         });
         if (isCardErrorJSONAPI(file)) {
-          this.deferred.reject(
+          deferred.reject(
             new Error(
               `choose-file-modal: failed to load file meta for ${fileURL.href}`,
             ),
           );
           return;
         }
-        this.deferred.fulfill(file);
+        deferred.fulfill(file);
+      } else {
+        // Cancel / Escape / close with no selection: settle the promise with
+        // undefined so callers awaiting chooseFile() resume. Otherwise the
+        // deferred is dropped unsettled by resetState() and the await hangs
+        // forever — leaving a trigger button stuck disabled/loading.
+        deferred?.fulfill(undefined);
       }
     } finally {
       this.resetState();
