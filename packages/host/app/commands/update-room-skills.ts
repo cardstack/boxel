@@ -1,17 +1,24 @@
 import { service } from '@ember/service';
 
-import { isCardErrorJSONAPI, isCardInstance } from '@cardstack/runtime-common';
 import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type {
+  FileDef,
+  SerializedFile,
+} from 'https://cardstack.com/base/file-api';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseCommand from '../lib/host-base-command';
+import {
+  getSkillSourceCommands,
+  loadSkillSource,
+  type SkillSource,
+} from '../lib/skill-commands';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
@@ -71,8 +78,12 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
           }
         }
 
-        let skillCardCache = new Map<string, SkillModule.Skill>();
-        let skillsNeedingUpload: SkillModule.Skill[] = [];
+        let skillSourceCache = new Map<string, SkillSource>();
+        // Skill cards re-upload their serialized card content; skill markdown
+        // files re-upload their file content. Both produce the FileDef stored
+        // in the room's enabled-skills config.
+        let skillCardsNeedingUpload: SkillModule.Skill[] = [];
+        let markdownSkillsNeedingUpload: FileDef[] = [];
         let skillIdsToActivate = new Set(skillCardIdsToActivate);
 
         for (let skillId of skillIdsToActivate) {
@@ -87,18 +98,17 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
           }
 
           try {
-            let maybeSkillCard =
-              await this.store.get<SkillModule.Skill>(skillId);
-            if (
-              isCardInstance(maybeSkillCard) &&
-              Object.prototype.hasOwnProperty.call(maybeSkillCard, isSkillCard)
-            ) {
-              let skillCard = maybeSkillCard as SkillModule.Skill;
-              skillCardCache.set(skillId, skillCard);
-              skillsNeedingUpload.push(skillCard);
+            let source = await loadSkillSource(this.store, skillId);
+            if (source) {
+              skillSourceCache.set(skillId, source);
+              if (isSkillCard in source) {
+                skillCardsNeedingUpload.push(source as SkillModule.Skill);
+              } else {
+                markdownSkillsNeedingUpload.push(source as FileDef);
+              }
             } else {
               console.warn(
-                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": ${describeStoreResult(maybeSkillCard)}`,
+                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": not a skill card or skill markdown file`,
               );
             }
           } catch (err) {
@@ -108,16 +118,24 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
           }
         }
 
-        if (skillsNeedingUpload.length > 0) {
-          let uploadedSkillFileDefs = await this.matrixService.uploadCards(
-            skillsNeedingUpload as CardDef[],
+        let uploadedSkillFileDefs: FileDef[] = [];
+        if (skillCardsNeedingUpload.length > 0) {
+          uploadedSkillFileDefs = uploadedSkillFileDefs.concat(
+            await this.matrixService.uploadCards(
+              skillCardsNeedingUpload as CardDef[],
+            ),
           );
-          for (let uploaded of uploadedSkillFileDefs) {
-            let serialized = uploaded.serialize();
-            if (serialized.sourceUrl) {
-              enabledSkillCardMap.set(serialized.sourceUrl, serialized);
-              disabledSkillCardMap.delete(serialized.sourceUrl);
-            }
+        }
+        if (markdownSkillsNeedingUpload.length > 0) {
+          uploadedSkillFileDefs = uploadedSkillFileDefs.concat(
+            await this.matrixService.uploadFiles(markdownSkillsNeedingUpload),
+          );
+        }
+        for (let uploaded of uploadedSkillFileDefs) {
+          let serialized = uploaded.serialize();
+          if (serialized.sourceUrl) {
+            enabledSkillCardMap.set(serialized.sourceUrl, serialized);
+            disabledSkillCardMap.delete(serialized.sourceUrl);
           }
         }
 
@@ -129,25 +147,17 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
         let enabledSkillIds = Array.from(enabledSkillCardMap.keys());
         let loadedEnabledSkills = await Promise.all(
           enabledSkillIds.map(async (skillId) => {
-            if (skillCardCache.has(skillId)) {
-              return skillCardCache.get(skillId)!;
+            if (skillSourceCache.has(skillId)) {
+              return skillSourceCache.get(skillId)!;
             }
             try {
-              let maybeSkillCard =
-                await this.store.get<SkillModule.Skill>(skillId);
-              if (
-                isCardInstance(maybeSkillCard) &&
-                Object.prototype.hasOwnProperty.call(
-                  maybeSkillCard,
-                  isSkillCard,
-                )
-              ) {
-                let skillCard = maybeSkillCard as SkillModule.Skill;
-                skillCardCache.set(skillId, skillCard);
-                return skillCard;
+              let source = await loadSkillSource(this.store, skillId);
+              if (source) {
+                skillSourceCache.set(skillId, source);
+                return source;
               }
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": ${describeStoreResult(maybeSkillCard)}`,
+                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": not a skill card or skill markdown file`,
               );
             } catch (err) {
               console.warn(
@@ -159,7 +169,7 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
         );
 
         let validEnabledSkills = loadedEnabledSkills.filter(
-          (skill): skill is SkillModule.Skill => Boolean(skill),
+          (skill): skill is SkillSource => Boolean(skill),
         );
 
         let previousCommandDefinitions =
@@ -169,8 +179,8 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
         ];
 
         if (validEnabledSkills.length > 0) {
-          let allCommandDefinitions = validEnabledSkills.flatMap(
-            (skill) => skill.commands ?? [],
+          let allCommandDefinitions = validEnabledSkills.flatMap((skill) =>
+            getSkillSourceCommands(skill),
           );
 
           if (allCommandDefinitions.length > 0) {
@@ -201,26 +211,6 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
       },
     );
   }
-}
-
-// Stable, redaction-safe one-line summary of whatever `store.get` produced for
-// a skill. Avoids dumping the full instance / error payload (which can be
-// large and may carry user content) while still naming the failure mode.
-function describeStoreResult(result: unknown): string {
-  if (result == null) {
-    return `store.get returned ${result === null ? 'null' : 'undefined'}`;
-  }
-  if (isCardErrorJSONAPI(result)) {
-    let status = (result as { status?: number }).status;
-    let title = (result as { title?: string }).title;
-    return `store.get returned a CardErrorJSONAPI (status=${status ?? 'n/a'}, title=${JSON.stringify(title ?? '')})`;
-  }
-  if (isCardInstance(result)) {
-    return `store.get returned a card instance that is not a Skill (id=${
-      (result as { id?: string }).id ?? '<no id>'
-    })`;
-  }
-  return `store.get returned an unrecognized value of type ${typeof result}`;
 }
 
 function errorSummary(err: unknown): string {

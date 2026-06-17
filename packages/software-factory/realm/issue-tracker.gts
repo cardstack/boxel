@@ -62,6 +62,9 @@ import {
   findOptionColor,
   buildIssueOptionFields,
   configuredIssueStatusOptions,
+  configuredIssueTypeOptions,
+  configuredIssuePriorityOptions,
+  configuredProjectStatusOptions,
   IssueStatusField,
   IssueTypeField,
   IssuePriorityField,
@@ -122,6 +125,88 @@ function getIssueStatusColor(
   return getIssueStatusOption(issue, value)?.color;
 }
 
+type IssueTypeProject = {
+  issueTypeOptions?: IssueOptionField[];
+};
+
+type IssueTypeIssue = {
+  project?: IssueTypeProject | null;
+};
+
+function getProjectIssueTypeOptions(
+  project: IssueTypeProject | null | undefined,
+) {
+  return configuredIssueTypeOptions(project);
+}
+
+function getIssueTypeOption(
+  issue: IssueTypeIssue | null | undefined,
+  value: string | null | undefined,
+) {
+  if (!value) {
+    return undefined;
+  }
+
+  return getProjectIssueTypeOptions(issue?.project).find(
+    (option) => option.value === value,
+  );
+}
+
+function getIssueTypeLabel(
+  issue: IssueTypeIssue | null | undefined,
+  value: string | null | undefined,
+) {
+  return getIssueTypeOption(issue, value)?.label ?? value ?? undefined;
+}
+
+function getIssueTypeColor(
+  issue: IssueTypeIssue | null | undefined,
+  value: string | null | undefined,
+) {
+  return getIssueTypeOption(issue, value)?.color;
+}
+
+type IssuePriorityProject = {
+  issuePriorityOptions?: IssueOptionField[];
+};
+
+type IssuePriorityIssue = {
+  project?: IssuePriorityProject | null;
+};
+
+function getProjectIssuePriorityOptions(
+  project: IssuePriorityProject | null | undefined,
+) {
+  return configuredIssuePriorityOptions(project);
+}
+
+function getIssuePriorityOption(
+  issue: IssuePriorityIssue | null | undefined,
+  value: string | null | undefined,
+) {
+  if (!value) {
+    return undefined;
+  }
+
+  return getProjectIssuePriorityOptions(issue?.project).find(
+    (option) => option.value === value,
+  );
+}
+
+function getIssuePriorityLabel(
+  issue: IssuePriorityIssue | null | undefined,
+  value: string | null | undefined,
+) {
+  return getIssuePriorityOption(issue, value)?.label ?? value ?? undefined;
+}
+
+function getIssuePriorityColor(
+  issue: IssuePriorityIssue | null | undefined,
+  value: string | null | undefined,
+) {
+  return getIssuePriorityOption(issue, value)?.color;
+}
+
 class IssueIsolated extends Component<typeof Issue> {
   @tracked showSidebar = true;
   @tracked descriptionOpen = true;
@@ -134,6 +219,22 @@ class IssueIsolated extends Component<typeof Issue> {
 
   get statusLabel(): string {
     return getIssueStatusLabel(this.args.model, this.args.model?.status);
+  }
+
+  get issueTypeLabel(): string | undefined {
+    return getIssueTypeLabel(this.args.model, this.args.model?.issueType);
+  }
+
+  get issueTypeColor(): string | undefined {
+    return getIssueTypeColor(this.args.model, this.args.model?.issueType);
+  }
+
+  get priorityLabel(): string | undefined {
+    return getIssuePriorityLabel(this.args.model, this.args.model?.priority);
+  }
+
+  get priorityColor(): string | undefined {
+    return getIssuePriorityColor(this.args.model, this.args.model?.priority);
   }
 
   toggleSidebar = () => {
@@ -406,9 +507,6 @@ class IssueIsolated extends Component<typeof Issue> {
         overflow-wrap: break-word;
         word-break: break-word;
       }
-      .comments-list {
-        padding: var(--boxel-sp);
-      }
       .section-body :deep(img),
       .section-body :deep(video) {
         max-width: 100%;
@@ -436,6 +534,7 @@ class IssueIsolated extends Component<typeof Issue> {
         border-radius: var(--boxel-border-radius);
       }
       .comments-list {
+        padding: var(--boxel-sp);
         display: grid;
         gap: 0;
       }
@@ -514,10 +613,6 @@ class IssueIsolated extends Component<typeof Issue> {
       }
       .priority-value[data-priority='low'] {
         --_p: var(--muted-foreground, var(--boxel-500));
-      }
-      .meta-date {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, var(--boxel-500));
       }
       .sidebar-section {
         display: grid;
@@ -810,6 +905,14 @@ export class Issue extends CardDef {
       return getIssueStatusLabel(this.args.model, this.args.model?.status);
     }
 
+    get priorityLabel(): string | undefined {
+      return getIssuePriorityLabel(this.args.model, this.args.model?.priority);
+    }
+
+    get priorityColor(): string | undefined {
+      return getIssuePriorityColor(this.args.model, this.args.model?.priority);
+    }
+
     <template>
       <FittedCard class='issue-fitted' @titleTag='h3'>
         <:badgeRight>
@@ -1049,190 +1152,19 @@ export class Issue extends CardDef {
   static isolated = IssueIsolated;
 }
 
-// ── ProjectEdit ────────────────────────────────────────────────────────────
-
-class ProjectEdit extends Component<typeof Project> {
-  @tracked contentOpen = true;
-  @tracked configOpen = true;
-
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    if (!this.args.model?.issueStatusOptions?.length) {
-      scheduleOnce('actions', this, this.initDefaultIssueStatusOptions);
-    }
-  }
-
-  initDefaultIssueStatusOptions() {
-    if (!this.args.model?.issueStatusOptions?.length) {
-      this.args.model.issueStatusOptions =
-        buildIssueOptionFields(issueStatusOptions);
-    }
-  }
-
-  toggleContent = () => {
-    this.contentOpen = !this.contentOpen;
-  };
-  toggleConfig = () => {
-    this.configOpen = !this.configOpen;
-  };
-  @tracked knowledgeBaseOpen = true;
-  toggleKnowledgeBase = () => {
-    this.knowledgeBaseOpen = !this.knowledgeBaseOpen;
-  };
-
-  <template>
-    <div class='project-edit'>
-      <div class='edit-section-body edit-identity'>
-        <div class='field-row'>
-          <FieldContainer @label='Project Name' @tag='label' @vertical={{true}}>
-            <@fields.projectName />
-          </FieldContainer>
-          <FieldContainer @label='Project Code' @tag='label' @vertical={{true}}>
-            <@fields.projectCode />
-          </FieldContainer>
-        </div>
-        <div class='field-row'>
-          <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
-            <@fields.projectStatus />
-          </FieldContainer>
-          <FieldContainer @label='Theme' @tag='label' @vertical={{true}}>
-            <@fields.cardInfo.theme />
-          </FieldContainer>
-        </div>
-      </div>
-
-      <Accordion class='edit-accordion' @displayContainer={{false}} as |A|>
-        <A.Item
-          @id='content'
-          @isOpen={{this.contentOpen}}
-          @onClick={{this.toggleContent}}
-        >
-          <:title>Content</:title>
-          <:content>
-            <div class='edit-section-body'>
-              <FieldContainer
-                @label='Objective'
-                @tag='label'
-                @vertical={{true}}
-              >
-                <@fields.objective />
-              </FieldContainer>
-              <FieldContainer @label='Scope' @tag='label' @vertical={{true}}>
-                <@fields.scope />
-              </FieldContainer>
-              <FieldContainer
-                @label='Technical Context'
-                @tag='label'
-                @vertical={{true}}
-              >
-                <@fields.technicalContext />
-              </FieldContainer>
-              <FieldContainer
-                @label='Success Criteria'
-                @tag='label'
-                @vertical={{true}}
-              >
-                <@fields.successCriteria />
-              </FieldContainer>
-            </div>
-          </:content>
-        </A.Item>
-
-        <A.Item
-          @id='knowledge-base'
-          @isOpen={{this.knowledgeBaseOpen}}
-          @onClick={{this.toggleKnowledgeBase}}
-        >
-          <:title>Knowledge Base</:title>
-          <:content>
-            <div class='edit-section-body'>
-              <FieldContainer @label='Knowledge Base' @vertical={{true}}>
-                <@fields.knowledgeBase />
-              </FieldContainer>
-            </div>
-          </:content>
-        </A.Item>
-
-        <A.Item
-          @id='config'
-          @isOpen={{this.configOpen}}
-          @onClick={{this.toggleConfig}}
-        >
-          <:title>Issue Configuration</:title>
-          <:content>
-            <div class='edit-section-body'>
-              <p class='section-copy'>
-                Define the status options that issues in this project can use.
-              </p>
-              <FieldContainer @label='Issue Status Options' @vertical={{true}}>
-                <@fields.issueStatusOptions />
-              </FieldContainer>
-            </div>
-          </:content>
-        </A.Item>
-      </Accordion>
-    </div>
-    <style scoped>
-      .project-edit {
-        container-type: inline-size;
-      }
-      .edit-accordion {
-        --boxel-accordion-title-font-size: 0.8125rem;
-        --boxel-accordion-title-font-weight: 600;
-        --boxel-accordion-trigger-padding-inline: var(--boxel-sp);
-        --boxel-accordion-trigger-padding-block: var(--boxel-sp-xs);
-        overflow: hidden;
-      }
-      .edit-accordion :deep(.boxel-accordion-item-trigger) {
-        background: var(--muted, var(--boxel-100));
-      }
-      .edit-section-body {
-        display: grid;
-        gap: var(--boxel-sp);
-        padding: var(--boxel-sp-lg);
-      }
-      .field-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp);
-      }
-      .edit-identity :deep(.links-to-editor .field-component-card) {
-        min-height: 2.5rem;
-        max-height: 2.5rem;
-        height: 2.5rem;
-      }
-      .section-copy {
-        margin: 0;
-        font-size: var(--boxel-font-size-xs);
-        line-height: 1.5;
-        color: var(--muted-foreground, var(--boxel-600));
-      }
-      @container (width < 480px) {
-        .edit-section-body {
-          padding: var(--boxel-sp);
-        }
-        .field-row {
-          grid-template-columns: 1fr;
-          gap: var(--boxel-sp-xs);
-        }
-      }
-    </style>
-  </template>
-}
-
 // ── ProjectIsolated ─────────────────────────────────────────────────────────
 
 class ProjectIsolated extends Component<typeof Project> {
   @tracked showSidebar = true;
   @tracked objectiveOpen = true;
-  @tracked scopeOpen = true;
-  @tracked technicalOpen = true;
-  @tracked criteriaOpen = true;
+  @tracked scopeOpen = false;
+  @tracked technicalOpen = false;
+  @tracked criteriaOpen = false;
   @tracked issuesOpen = true;
 
   get statusColor(): string | undefined {
     return findOptionColor(
-      projectStatusOptions,
+      configuredProjectStatusOptions(this.args.model),
       this.args.model?.projectStatus ?? 'planning',
     );
   }
@@ -1273,6 +1205,9 @@ class ProjectIsolated extends Component<typeof Project> {
               Planning
             {{/if}}
           </StatusPill>
+        </div>
+        <div class='header-chips'>
+          <h1 class='project-title'><@fields.cardTitle /></h1>
           <ContextButton
             class='sidebar-toggle'
             @icon={{if
@@ -1287,7 +1222,6 @@ class ProjectIsolated extends Component<typeof Project> {
             {{on 'click' this.toggleSidebar}}
           />
         </div>
-        <h1 class='project-title'><@fields.cardTitle /></h1>
       </header>
 
       <div
@@ -1476,6 +1410,7 @@ class ProjectIsolated extends Component<typeof Project> {
       }
       .project-title {
         margin: 0;
+        flex: 1;
         font-size: 1.375rem;
         font-weight: 600;
         line-height: 1.3;
@@ -1684,10 +1619,575 @@ class ProjectIsolated extends Component<typeof Project> {
   </template>
 }
 
+// ── ProjectEdit ────────────────────────────────────────────────────────────
+
+class ProjectEdit extends Component<typeof Project> {
+  @tracked showSidebar = true;
+  @tracked objectiveOpen = true;
+  @tracked scopeOpen = false;
+  @tracked technicalOpen = false;
+  @tracked criteriaOpen = false;
+  @tracked issuesOpen = true;
+  @tracked projectConfigOpen = false;
+  @tracked issueConfigOpen = false;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    if (!this.args.model?.projectStatusOptions?.length) {
+      scheduleOnce('actions', this, this.initDefaultProjectStatusOptions);
+    }
+    if (!this.args.model?.issueStatusOptions?.length) {
+      scheduleOnce('actions', this, this.initDefaultIssueStatusOptions);
+    }
+    if (!this.args.model?.issueTypeOptions?.length) {
+      scheduleOnce('actions', this, this.initDefaultIssueTypeOptions);
+    }
+    if (!this.args.model?.issuePriorityOptions?.length) {
+      scheduleOnce('actions', this, this.initDefaultIssuePriorityOptions);
+    }
+  }
+
+  initDefaultProjectStatusOptions() {
+    if (!this.args.model?.projectStatusOptions?.length) {
+      this.args.model.projectStatusOptions =
+        buildIssueOptionFields(projectStatusOptions);
+    }
+  }
+
+  initDefaultIssueStatusOptions() {
+    if (!this.args.model?.issueStatusOptions?.length) {
+      this.args.model.issueStatusOptions =
+        buildIssueOptionFields(issueStatusOptions);
+    }
+  }
+
+  initDefaultIssueTypeOptions() {
+    if (!this.args.model?.issueTypeOptions?.length) {
+      this.args.model.issueTypeOptions =
+        buildIssueOptionFields(issueTypeOptions);
+    }
+  }
+
+  initDefaultIssuePriorityOptions() {
+    if (!this.args.model?.issuePriorityOptions?.length) {
+      this.args.model.issuePriorityOptions =
+        buildIssueOptionFields(issuePriorityOptions);
+    }
+  }
+
+  toggleSidebar = () => {
+    this.showSidebar = !this.showSidebar;
+  };
+  toggleObjective = () => {
+    this.objectiveOpen = !this.objectiveOpen;
+  };
+  toggleScope = () => {
+    this.scopeOpen = !this.scopeOpen;
+  };
+  toggleTechnical = () => {
+    this.technicalOpen = !this.technicalOpen;
+  };
+  toggleCriteria = () => {
+    this.criteriaOpen = !this.criteriaOpen;
+  };
+  toggleIssues = () => {
+    this.issuesOpen = !this.issuesOpen;
+  };
+  toggleProjectConfig = () => {
+    this.projectConfigOpen = !this.projectConfigOpen;
+  };
+  toggleIssueConfig = () => {
+    this.issueConfigOpen = !this.issueConfigOpen;
+  };
+
+  @tracked selectedIssueConfig: { key: string; value: string } = {
+    key: defaultColumns[0]!.key,
+    value: defaultColumns[0]!.label,
+  };
+
+  get issueConfigOptions(): Array<{ key: string; value: string }> {
+    return defaultColumns.map((col) => ({ key: col.key, value: col.label }));
+  }
+
+  changeSelectedIssueConfig = (option: {
+    key: string;
+    value: string;
+  }): void => {
+    this.selectedIssueConfig = option;
+  };
+
+  get statusColor(): string | undefined {
+    return findOptionColor(
+      configuredProjectStatusOptions(this.args.model),
+      this.args.model?.projectStatus ?? 'planning',
+    );
+  }
+
+  <template>
+    <div class='project-edit'>
+      <header class='project-header'>
+        <div class='field-row'>
+          <FieldContainer
+            @icon={{Folder}}
+            @label='Project Code'
+            @tag='label'
+            @vertical={{true}}
+          >
+            <@fields.projectCode />
+          </FieldContainer>
+          <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
+            <@fields.projectStatus />
+          </FieldContainer>
+          <FieldContainer @label='Theme' @tag='label' @vertical={{true}}>
+            <@fields.cardInfo.theme />
+          </FieldContainer>
+        </div>
+        <div class='field-row'>
+          <FieldContainer
+            class='project-name-field'
+            @label='Project Name'
+            @tag='label'
+            @vertical={{true}}
+          >
+            <@fields.projectName />
+          </FieldContainer>
+          <ContextButton
+            class='sidebar-toggle'
+            @icon={{if
+              this.showSidebar
+              LayoutSidebarRightCollapse
+              LayoutSidebarRightExpand
+            }}
+            @label={{if this.showSidebar 'Collapse sidebar' 'Expand sidebar'}}
+            @variant='ghost'
+            @isToggle={{true}}
+            @isActive={{this.showSidebar}}
+            {{on 'click' this.toggleSidebar}}
+          />
+        </div>
+      </header>
+
+      <div
+        class='project-body'
+        data-sidebar={{if this.showSidebar 'open' 'closed'}}
+      >
+        <main class='project-main'>
+          <Accordion
+            class='content-accordion'
+            @displayContainer={{false}}
+            as |A|
+          >
+            <A.Item
+              @id='objective'
+              @isOpen={{this.objectiveOpen}}
+              @onClick={{this.toggleObjective}}
+            >
+              <:title>Objective</:title>
+              <:content>
+                <div class='section-body'><@fields.objective /></div>
+              </:content>
+            </A.Item>
+            <A.Item
+              @id='scope'
+              @isOpen={{this.scopeOpen}}
+              @onClick={{this.toggleScope}}
+            >
+              <:title>Scope</:title>
+              <:content>
+                <div class='section-body'><@fields.scope /></div>
+              </:content>
+            </A.Item>
+            <A.Item
+              @id='technical'
+              @isOpen={{this.technicalOpen}}
+              @onClick={{this.toggleTechnical}}
+            >
+              <:title>Technical Context</:title>
+              <:content>
+                <div class='section-body'><@fields.technicalContext /></div>
+              </:content>
+            </A.Item>
+            <A.Item
+              @id='criteria'
+              @isOpen={{this.criteriaOpen}}
+              @onClick={{this.toggleCriteria}}
+            >
+              <:title>Success Criteria</:title>
+              <:content>
+                <div class='section-body'><@fields.successCriteria /></div>
+              </:content>
+            </A.Item>
+            {{#if @model.issues.length}}
+              <A.Item
+                @id='issues'
+                @isOpen={{this.issuesOpen}}
+                @onClick={{this.toggleIssues}}
+              >
+                <:title>
+                  Issues
+                  <span class='count-badge'>{{@model.issues.length}}</span>
+                </:title>
+                <:content>
+                  <div class='issues-list'>
+                    <@fields.issues />
+                  </div>
+                </:content>
+              </A.Item>
+            {{/if}}
+            <A.Item
+              @id='project-config'
+              @isOpen={{this.projectConfigOpen}}
+              @onClick={{this.toggleProjectConfig}}
+            >
+              <:title>Project Configuration</:title>
+              <:content>
+                <div class='edit-section-body'>
+                  <p class='section-copy'>
+                    Define the status options available for this project.
+                  </p>
+                  <div class='issue-config-editor'>
+                    <FieldContainer
+                      @label='Project Statuses'
+                      @vertical={{true}}
+                    >
+                      <@fields.projectStatusOptions />
+                    </FieldContainer>
+                  </div>
+                </div>
+              </:content>
+            </A.Item>
+            <A.Item
+              @id='issue-config'
+              @isOpen={{this.issueConfigOpen}}
+              @onClick={{this.toggleIssueConfig}}
+            >
+              <:title>Issue Configuration</:title>
+              <:content>
+                <div class='edit-section-body'>
+                  <p class='section-copy'>
+                    Define the status, type, and priority options that issues in
+                    this project can use.
+                  </p>
+                  <FieldContainer
+                    @label='Edit issue configurations'
+                    @inline={{true}}
+                  >
+                    <BoxelSelect
+                      class='issue-config-dropdown'
+                      @options={{this.issueConfigOptions}}
+                      @selected={{this.selectedIssueConfig}}
+                      @onChange={{this.changeSelectedIssueConfig}}
+                      as |option|
+                    >
+                      <span
+                        data-test-issue-config-option={{option.key}}
+                      >{{option.value}}</span>
+                    </BoxelSelect>
+                  </FieldContainer>
+                  <div class='issue-config-editor'>
+                    {{#if (eq this.selectedIssueConfig.key 'issueType')}}
+                      <FieldContainer @label='Issue Types' @vertical={{true}}>
+                        <@fields.issueTypeOptions />
+                      </FieldContainer>
+                    {{else if (eq this.selectedIssueConfig.key 'priority')}}
+                      <FieldContainer
+                        @label='Issue Priorities'
+                        @vertical={{true}}
+                      >
+                        <@fields.issuePriorityOptions />
+                      </FieldContainer>
+                    {{else}}
+                      <FieldContainer
+                        @label='Issue Statuses'
+                        @vertical={{true}}
+                      >
+                        <@fields.issueStatusOptions />
+                      </FieldContainer>
+                    {{/if}}
+                  </div>
+                </div>
+              </:content>
+            </A.Item>
+          </Accordion>
+        </main>
+
+        <aside class='project-sidebar'>
+          <div class='project-sidebar-inner'>
+            <dl class='meta-list'>
+              <div class='meta-item'>
+                <dt>Status</dt>
+                <dd>
+                  <StatusPill @color={{this.statusColor}}>
+                    {{#if @model.projectStatus}}
+                      <@fields.projectStatus @format='atom' />
+                    {{else}}
+                      Planning
+                    {{/if}}
+                  </StatusPill>
+                </dd>
+              </div>
+              <div class='meta-item'>
+                <dt>Issues</dt>
+                <dd class='stat-value'>
+                  <CheckboxIcon
+                    class='stat-icon'
+                    width='14'
+                    height='14'
+                    aria-hidden='true'
+                  />
+                  {{@model.issues.length}}
+                </dd>
+              </div>
+              <div class='meta-item'>
+                <dt>Knowledge</dt>
+                <dd class='stat-value'>
+                  <BookOpen
+                    class='stat-icon'
+                    width='14'
+                    height='14'
+                    aria-hidden='true'
+                  />
+                  {{@model.knowledgeBase.length}}
+                </dd>
+              </div>
+            </dl>
+            <div class='sidebar-section'>
+              <h3 class='sidebar-section-title'>Knowledge Base</h3>
+              <div class='related-list'>
+                <@fields.knowledgeBase />
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <style scoped>
+      .project-edit {
+        container-type: inline-size;
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        background: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .project-header {
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-lg);
+        background: var(--muted, var(--boxel-100));
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+        flex-shrink: 0;
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: var(--boxel-sp);
+      }
+      .project-name-field {
+        grid-column: span 2;
+      }
+      .sidebar-toggle {
+        margin-left: auto;
+        flex-shrink: 0;
+        align-self: end;
+      }
+      .project-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+      }
+      .project-main {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+      }
+      .content-accordion {
+        --boxel-accordion-title-font-size: 0.8125rem;
+        --boxel-accordion-title-font-weight: 600;
+        --boxel-accordion-trigger-padding-inline: var(--boxel-sp);
+        --boxel-accordion-trigger-padding-block: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .content-accordion :deep(.boxel-accordion-item-trigger) {
+        background: var(--muted, var(--boxel-100));
+      }
+      .count-badge {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+        background: color-mix(
+          in oklch,
+          var(--muted-foreground, var(--boxel-500)) 15%,
+          transparent
+        );
+        padding: 0.1em 0.5em;
+        border-radius: 999px;
+      }
+      .section-body {
+        padding: var(--boxel-sp);
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--foreground, var(--boxel-dark));
+        max-width: 72ch;
+        overflow-wrap: break-word;
+        word-break: break-word;
+      }
+      .issues-list {
+        padding: var(--boxel-sp);
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .edit-section-body {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp-lg);
+      }
+      .section-copy {
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        line-height: 1.5;
+        color: var(--muted-foreground, var(--boxel-600));
+      }
+      .issue-config-editor {
+        display: grid;
+        gap: var(--boxel-sp-sm);
+        --boxel-field-label-font-size: 0.75rem;
+      }
+      .issue-config-dropdown {
+        min-width: 12.5rem;
+      }
+      .project-sidebar {
+        width: 18rem;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-left: 1px solid var(--border, var(--boxel-border-color));
+        transition: width 0.25s ease;
+      }
+      .project-sidebar-inner {
+        width: 18rem;
+        padding: var(--boxel-sp-lg) var(--boxel-sp);
+        background: var(--sidebar, var(--card, var(--boxel-50)));
+        color: var(
+          --sidebar-foreground,
+          var(--card-foreground, var(--boxel-dark))
+        );
+        display: grid;
+        gap: var(--boxel-sp-lg);
+        align-content: start;
+        overflow-y: auto;
+        overflow-x: hidden;
+        height: 100%;
+        box-sizing: border-box;
+      }
+      .project-body[data-sidebar='closed'] .project-sidebar {
+        width: 0;
+        border-left-width: 0;
+      }
+      .meta-list {
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .meta-item {
+        display: grid;
+        grid-template-columns: 5.5rem 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        min-height: 1.75rem;
+      }
+      .meta-list dt {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
+      .meta-list dd {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .stat-value {
+        display: flex;
+        align-items: center;
+        gap: 0.3em;
+        font-size: 0.8125rem;
+        font-weight: 500;
+      }
+      .stat-icon {
+        color: var(--muted-foreground, var(--boxel-500));
+        flex-shrink: 0;
+      }
+      .sidebar-section {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+      .sidebar-section-title {
+        margin: 0;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--muted-foreground, var(--boxel-500));
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .related-list {
+        display: grid;
+        gap: var(--boxel-sp-2xs);
+      }
+
+      @container (width < 640px) {
+        .project-header {
+          padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
+        }
+        .sidebar-toggle {
+          display: none;
+        }
+        .project-name-field {
+          grid-column: -1 / 1;
+        }
+        .project-body {
+          flex-direction: column;
+          overflow-y: auto;
+        }
+        .project-main {
+          overflow-y: visible;
+        }
+        .project-sidebar {
+          width: 100%;
+          border-left: none;
+          border-top: 1px solid var(--border, var(--boxel-border-color));
+        }
+        .project-body[data-sidebar='closed'] .project-sidebar {
+          width: 100%;
+          border-left-width: 0;
+        }
+        .project-sidebar-inner {
+          width: 100%;
+          overflow-y: visible;
+          height: auto;
+        }
+      }
+
+      @container (width < 420px) {
+        .project-header {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-xs);
+          gap: var(--boxel-sp-xs);
+        }
+        .meta-item {
+          grid-template-columns: 4.5rem 1fr;
+        }
+      }
+    </style>
+  </template>
+}
+
 // ── Project ────────────────────────────────────────────────────────────────
 
 export class Project extends CardDef {
   static displayName = 'Project';
+  static prefersWideFormat = true;
 
   @field projectCode = contains(StringField);
   @field projectName = contains(StringField);
@@ -1695,7 +2195,10 @@ export class Project extends CardDef {
   @field objective = contains(MarkdownField);
   @field scope = contains(MarkdownField);
   @field technicalContext = contains(MarkdownField);
+  @field projectStatusOptions = containsMany(IssueOptionField);
   @field issueStatusOptions = containsMany(IssueOptionField);
+  @field issueTypeOptions = containsMany(IssueOptionField);
+  @field issuePriorityOptions = containsMany(IssueOptionField);
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -1724,7 +2227,7 @@ export class Project extends CardDef {
   static fitted = class Fitted extends Component<typeof Project> {
     get statusColor(): string | undefined {
       return findOptionColor(
-        projectStatusOptions,
+        configuredProjectStatusOptions(this.args.model),
         this.args.model?.projectStatus ?? 'planning',
       );
     }
@@ -1799,7 +2302,6 @@ export class Project extends CardDef {
           --fc-meta-display: none;
           --fc-badge-right-display: none;
           --boxel-heading-font-weight: 600;
-          box-shadow: inset 3px 0 0 var(--project-accent);
         }
         .status-badge-right {
           font-size: 0.6875rem;
@@ -1866,14 +2368,12 @@ export class Project extends CardDef {
         }
         @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
           .project-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card (width >= 150px) and (170px >= height >= 65px) {
           .project-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card ((width >= 150px) and (height > 170px)) {
@@ -1908,10 +2408,8 @@ export class Project extends CardDef {
   };
 
   static embedded = this.fitted;
-
-  static edit = ProjectEdit;
-
   static isolated = ProjectIsolated;
+  static edit = ProjectEdit;
 }
 
 // ── IssueTrackerIsolated ──────────────────────────────────────────────
@@ -1955,9 +2453,9 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   get columns(): KanbanColumnConfig[] {
     let options =
       this.activeGroupBy === 'priority'
-        ? issuePriorityOptions
+        ? configuredIssuePriorityOptions(this.args.model?.project)
         : this.activeGroupBy === 'issueType'
-          ? issueTypeOptions
+          ? configuredIssueTypeOptions(this.args.model?.project)
           : getProjectIssueStatusOptions(this.args.model?.project);
 
     let stored = this.args.model.columns ?? [];
@@ -2000,7 +2498,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       return !v || !optionKeys.has(v);
     });
 
-    if (!hasOrphan) return baseColumns;
+    if (!hasOrphan || this.activeGroupBy === 'status') return baseColumns;
 
     return [
       ...baseColumns,
@@ -2108,6 +2606,34 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             color: col.color ?? opt.color,
           });
         });
+      }
+    } else if (this.activeGroupBy === 'issueType') {
+      let project = this.args.model.project;
+      if (project?.issueTypeOptions?.length) {
+        project.issueTypeOptions = project.issueTypeOptions.map((opt) => {
+          let col = newColumns.find((c) => c.key === opt.value);
+          if (!col) return opt;
+          return Object.assign(new IssueOptionField(), {
+            value: opt.value,
+            label: col.label ?? opt.label,
+            color: col.color ?? opt.color,
+          });
+        });
+      }
+    } else if (this.activeGroupBy === 'priority') {
+      let project = this.args.model.project;
+      if (project?.issuePriorityOptions?.length) {
+        project.issuePriorityOptions = project.issuePriorityOptions.map(
+          (opt) => {
+            let col = newColumns.find((c) => c.key === opt.value);
+            if (!col) return opt;
+            return Object.assign(new IssueOptionField(), {
+              value: opt.value,
+              label: col.label ?? opt.label,
+              color: col.color ?? opt.color,
+            });
+          },
+        );
       }
     }
   };
@@ -2243,6 +2769,9 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       return (
         (fieldValue
           ? this.columns.find((c) => c.key === fieldValue)?.key
+          : undefined) ??
+        (this.activeGroupBy === 'status'
+          ? this.columns.find((c) => c.key === 'backlog')?.key
           : undefined) ??
         this.columns.find((c) => c.key === 'uncategorized')?.key ??
         this.firstColumn?.key ??
@@ -2555,11 +3084,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       .group-by-selector :deep(.ember-power-select-option) {
         white-space: nowrap;
       }
-      .kanban-header-label {
-        font-size: 0.75rem;
-        color: var(--board-muted-fg);
-        white-space: nowrap;
-      }
       .kanban-body {
         flex: 1;
         min-height: 0;
@@ -2852,7 +3376,6 @@ export class IssueTracker extends KanbanBoard {
           --fc-meta-display: none;
           --fc-subtitle-display: none;
           --boxel-heading-font-weight: 600;
-          box-shadow: inset 3px 0 0 oklch(55% 0.18 264);
         }
         .tracker-eyebrow {
           display: flex;
@@ -2880,14 +3403,12 @@ export class IssueTracker extends KanbanBoard {
         }
         @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
           .tracker-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card (width >= 150px) and (65px <= height <= 170px) {
           .tracker-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card (width >= 150px) and (height > 170px) {

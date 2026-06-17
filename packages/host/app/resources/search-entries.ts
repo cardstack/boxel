@@ -16,6 +16,7 @@ import {
   isCssResource,
   isFileMetaResource,
   isHtmlResource,
+  isIconResource,
   logger as runtimeLogger,
   resourceIdentity,
   rri,
@@ -24,6 +25,8 @@ import {
   type ErrorEntry,
   type FileMetaResource,
   type HtmlResource,
+  type IconResource,
+  type ResolvedCodeRef,
   type Saved,
   type SearchEntryCollectionDocument,
   type SearchEntryRendering,
@@ -61,6 +64,13 @@ export interface SearchEntry {
   realmUrl: string;
   html: SearchEntryRendering[];
   item?: CardResource<Saved> | FileMetaResource;
+  // The result's card-type descriptor, resolved from the deduped `icon`
+  // resource (absent when the row's native type carries none). Lives on the
+  // entry, not the rendering, so a no-HTML row still exposes it: the type's
+  // icon HTML, display name, and code ref.
+  iconHtml?: string;
+  displayName?: string;
+  codeRef?: ResolvedCodeRef;
 }
 
 interface Args {
@@ -370,6 +380,7 @@ export class SearchEntriesResource extends Resource<Args> {
   private buildEntries(doc: SearchEntryCollectionDocument): SearchEntry[] {
     let htmlById = new Map<string, HtmlResource>();
     let cssHrefById = new Map<string, string>();
+    let iconById = new Map<string, IconResource['attributes']>();
     let itemsByIdentity = new Map<
       string,
       CardResource<Saved> | FileMetaResource
@@ -379,6 +390,8 @@ export class SearchEntriesResource extends Resource<Args> {
         htmlById.set(resource.id, resource);
       } else if (isCssResource(resource)) {
         cssHrefById.set(resource.id, resource.attributes.href);
+      } else if (isIconResource(resource)) {
+        iconById.set(resource.id, resource.attributes);
       } else if (isCardResource(resource) || isFileMetaResource(resource)) {
         itemsByIdentity.set(
           resourceIdentity(resource.type, resource.id),
@@ -410,11 +423,20 @@ export class SearchEntriesResource extends Resource<Args> {
       let item = itemRef
         ? itemsByIdentity.get(resourceIdentity(itemRef.type, itemRef.id))
         : undefined;
+      let iconRef = entry.relationships.icon?.data;
+      let icon = iconRef ? iconById.get(iconRef.id) : undefined;
       return {
         id: entry.id,
         realmUrl: realmUrlFor(entry.id),
         html: renderings,
         ...(item ? { item } : {}),
+        ...(icon
+          ? {
+              iconHtml: icon.iconHtml,
+              displayName: icon.displayName,
+              codeRef: icon.codeRef,
+            }
+          : {}),
       };
     });
   }
@@ -429,7 +451,6 @@ function buildRendering(
     id: html.id,
     ...(attributes.html !== undefined ? { html: attributes.html } : {}),
     cardType: attributes.cardType,
-    ...(attributes.iconHtml ? { iconHtml: attributes.iconHtml } : {}),
     isError: Boolean(attributes.isError),
     format: attributes.format,
     ...(attributes.renderType ? { renderType: attributes.renderType } : {}),

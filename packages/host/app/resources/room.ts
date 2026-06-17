@@ -56,6 +56,8 @@ import {
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
+import { getSkillSourceCommands, peekSkillSource } from '../lib/skill-commands';
+
 import type { Message } from '../lib/matrix-classes/message';
 
 import type Room from '../lib/matrix-classes/room';
@@ -333,12 +335,16 @@ export class RoomResource extends Resource<Args> {
   }
 
   get commands() {
-    // Usable commands are all commands on *active* skills
+    // Usable commands are all commands on *active* skills, whether the skill is
+    // a Skill card or a skill-bearing markdown file.
     let commands = [];
     for (let skill of this.skills) {
-      let skillCard = this.store.peek<Skill>(skill.cardId);
-      if (skillCard && isCardInstance(skillCard) && skill.isActive) {
-        commands.push(...skillCard.commands);
+      if (!skill.isActive) {
+        continue;
+      }
+      let skillSource = peekSkillSource(this.store, skill.cardId);
+      if (skillSource) {
+        commands.push(...getSkillSourceCommands(skillSource));
       }
     }
     return commands;

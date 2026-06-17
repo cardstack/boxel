@@ -39,6 +39,7 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  testModuleRealm,
   testRealmURL,
   testRRI,
   cardInfo,
@@ -960,7 +961,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let resource = {
       attributes: {
         ref,
@@ -1006,7 +1007,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
       .data.attributes?.ref;
@@ -5864,7 +5865,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/captain'),
+                module: rri(`${testModuleRealm}captain`),
                 name: 'Captain',
               },
             },
@@ -5889,7 +5890,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`https://localhost:4202/test/captain`),
+              module: rri(`${testModuleRealm}captain`),
               name: 'Boat',
             },
           },

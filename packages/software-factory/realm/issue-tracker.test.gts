@@ -68,7 +68,12 @@ function makeIssueWithFields(
 }
 
 function makeProject(
-  issueStatusOptions?: { value: string; label: string }[],
+  issueStatusOptions?: { value: string; label: string; color?: string }[],
+  opts?: {
+    issueTypeOptions?: { value: string; label: string }[];
+    issuePriorityOptions?: { value: string; label: string }[];
+    projectStatusOptions?: { value: string; label: string }[];
+  },
 ): Record<string, Record<string, unknown>> {
   return {
     'Projects/test-project.json': {
@@ -79,6 +84,15 @@ function makeProject(
           projectName: 'Issue Tracker Test',
           projectStatus: 'active',
           ...(issueStatusOptions ? { issueStatusOptions } : {}),
+          ...(opts?.issueTypeOptions
+            ? { issueTypeOptions: opts.issueTypeOptions }
+            : {}),
+          ...(opts?.issuePriorityOptions
+            ? { issuePriorityOptions: opts.issuePriorityOptions }
+            : {}),
+          ...(opts?.projectStatusOptions
+            ? { projectStatusOptions: opts.projectStatusOptions }
+            : {}),
         },
         meta: { adoptsFrom: { module: issueTrackerModule, name: 'Project' } },
       },
@@ -883,7 +897,7 @@ export function runTests() {
         });
       });
 
-      test('issue with unrecognised status is placed in an Uncategorized column', async function (assert) {
+      test('issue with unrecognised status is placed in the Backlog column', async function (assert) {
         await visitOperatorMode({
           stacks: [[{ id: boardId, format: 'isolated' }]],
         });
@@ -891,15 +905,13 @@ export function runTests() {
 
         assert
           .dom('[data-kanban-column="uncategorized"]')
-          .exists(
-            'an Uncategorized column is added for unrecognised status values',
-          );
+          .doesNotExist('no Uncategorized column for status groupBy');
         assert
-          .dom('[data-kanban-column="uncategorized"] [data-test-issue-id]')
-          .hasText(
-            'IT-1',
-            'card with unknown status is placed in Uncategorized',
-          );
+          .dom('[data-kanban-column="backlog"]')
+          .exists('Backlog column is present');
+        assert
+          .dom('[data-kanban-column="backlog"] [data-test-issue-id]')
+          .hasText('IT-1', 'card with unknown status is placed in Backlog');
       });
     });
 
@@ -1147,7 +1159,7 @@ export function runTests() {
         });
       });
 
-      test('a card with an unknown status is placed in an Uncategorized column', async function (assert) {
+      test('a card with an unknown status is placed in the Backlog column', async function (assert) {
         await visitOperatorMode({
           stacks: [[{ id: boardId, format: 'isolated' }]],
         });
@@ -1155,15 +1167,13 @@ export function runTests() {
 
         assert
           .dom('[data-kanban-column="uncategorized"]')
-          .exists(
-            'an Uncategorized column is added for unrecognised status values',
-          );
+          .doesNotExist('no Uncategorized column for status groupBy');
         assert
-          .dom('[data-kanban-column="uncategorized"] [data-test-issue-id]')
-          .hasText(
-            'IT-99',
-            'card with unknown status is placed in Uncategorized',
-          );
+          .dom('[data-kanban-column="backlog"]')
+          .exists('Backlog column is present');
+        assert
+          .dom('[data-kanban-column="backlog"] [data-test-issue-id]')
+          .hasText('IT-99', 'card with unknown status is placed in Backlog');
       });
     });
 
@@ -1332,6 +1342,108 @@ export function runTests() {
           assert
             .dom('[data-kanban-column="bug"] [data-test-issue-id]')
             .hasText('IT-2', 'IT-2 is in the bug column');
+        });
+      });
+
+      module('custom project issueTypeOptions', function (hooks) {
+        hooks.beforeEach(async function () {
+          await setupAcceptanceTestRealm({
+            realmURL: testRealmURL,
+            mockMatrixUtils,
+            contents: {
+              ...SYSTEM_CARD_FIXTURE_CONTENTS,
+              ...makeProject(undefined, {
+                issueTypeOptions: [
+                  { value: 'spike', label: 'Spike' },
+                  { value: 'chore', label: 'Chore' },
+                ],
+              }),
+              ...makeIssueWithFields(
+                'IT-1',
+                { status: 'backlog', issueType: 'spike' },
+                'Issues/issue-spike.json',
+              ),
+              ...makeIssueWithFields(
+                'IT-2',
+                { status: 'in_progress', issueType: 'chore' },
+                'Issues/issue-chore.json',
+              ),
+              ...makeBoard(undefined, 'issueType'),
+            },
+          });
+        });
+
+        test('columns are driven by project issueTypeOptions, not the defaults', async function (assert) {
+          await visitOperatorMode({
+            stacks: [[{ id: boardId, format: 'isolated' }]],
+          });
+          await waitFor('[data-test-issue-id]');
+
+          assert
+            .dom('[data-kanban-column]')
+            .exists({ count: 2 }, 'exactly 2 custom type columns rendered');
+          assert.dom('[data-kanban-column="spike"]').exists();
+          assert.dom('[data-kanban-column="chore"]').exists();
+          assert
+            .dom('[data-kanban-column="feature"]')
+            .doesNotExist('default type columns are not rendered');
+          assert
+            .dom('[data-kanban-column="spike"] [data-test-issue-id]')
+            .hasText('IT-1', 'IT-1 is in the spike column');
+          assert
+            .dom('[data-kanban-column="chore"] [data-test-issue-id]')
+            .hasText('IT-2', 'IT-2 is in the chore column');
+        });
+      });
+
+      module('custom project issuePriorityOptions', function (hooks) {
+        hooks.beforeEach(async function () {
+          await setupAcceptanceTestRealm({
+            realmURL: testRealmURL,
+            mockMatrixUtils,
+            contents: {
+              ...SYSTEM_CARD_FIXTURE_CONTENTS,
+              ...makeProject(undefined, {
+                issuePriorityOptions: [
+                  { value: 'p0', label: 'P0' },
+                  { value: 'p1', label: 'P1' },
+                ],
+              }),
+              ...makeIssueWithFields(
+                'IT-1',
+                { status: 'backlog', priority: 'p0' },
+                'Issues/issue-p0.json',
+              ),
+              ...makeIssueWithFields(
+                'IT-2',
+                { status: 'in_progress', priority: 'p1' },
+                'Issues/issue-p1.json',
+              ),
+              ...makeBoard(undefined, 'priority'),
+            },
+          });
+        });
+
+        test('columns are driven by project issuePriorityOptions, not the defaults', async function (assert) {
+          await visitOperatorMode({
+            stacks: [[{ id: boardId, format: 'isolated' }]],
+          });
+          await waitFor('[data-test-issue-id]');
+
+          assert
+            .dom('[data-kanban-column]')
+            .exists({ count: 2 }, 'exactly 2 custom priority columns rendered');
+          assert.dom('[data-kanban-column="p0"]').exists();
+          assert.dom('[data-kanban-column="p1"]').exists();
+          assert
+            .dom('[data-kanban-column="critical"]')
+            .doesNotExist('default priority columns are not rendered');
+          assert
+            .dom('[data-kanban-column="p0"] [data-test-issue-id]')
+            .hasText('IT-1', 'IT-1 is in the p0 column');
+          assert
+            .dom('[data-kanban-column="p1"] [data-test-issue-id]')
+            .hasText('IT-2', 'IT-2 is in the p1 column');
         });
       });
 

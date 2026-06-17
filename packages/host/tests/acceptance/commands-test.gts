@@ -53,6 +53,7 @@ import {
   addSkillToAiAssistant,
   setupLocalIndexing,
   setupOnSave,
+  testModuleRealm,
   testRealmURL,
   testRRI,
   setupAcceptanceTestRealm,
@@ -399,7 +400,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/ai-command-example',
+                module: `${testModuleRealm}ai-command-example`,
                 name: 'AiCommandExample',
               },
             },

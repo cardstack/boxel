@@ -2,6 +2,7 @@ import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
   extractFileReferenceUrls,
+  identifyCard,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
@@ -23,6 +24,18 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import { FrontmatterField } from './frontmatter-field';
+import {
+  frontmatterFieldForKind,
+  isKnownFrontmatterKind,
+} from './frontmatter-kinds';
+import { parseFrontmatter } from './frontmatter-parse';
+
+// Channel for routing per-field meta (e.g. the concrete subclass of a
+// polymorphic field) from `extractAttributes` to the index resource builder,
+// without it leaking into the flat `search_doc`. The host file extractor reads
+// the same global symbol. See `file-def-attributes-extractor.ts`.
+const fileFieldMetaSymbol = Symbol.for('boxel:file-field-meta');
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const EXCERPT_MAX_LENGTH = 500;
@@ -450,6 +463,18 @@ export class MarkdownDef extends FileDef {
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
 
+  // The frontmatter's `boxel.kind`, surfaced as a direct, indexed field so
+  // skills are findable via `searchFiles({ filter: { eq: { kind: 'skill' } } })`.
+  // Empty for plain markdown.
+  @field kind = contains(StringField);
+
+  // The file's parsed YAML frontmatter. `rawContent` holds the whole thing as
+  // JSON; when `boxel.kind` names a recognized kind (e.g. `skill`) this
+  // rehydrates as the matching `FrontmatterField` subclass (e.g.
+  // `SkillFrontmatterField`) via `meta.fields.frontmatter.adoptsFrom`, set in
+  // `extractAttributes`.
+  @field frontmatter = contains(FrontmatterField);
+
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: MarkdownDef) {
       if (!this.content) {
@@ -524,6 +549,12 @@ export class MarkdownDef extends FileDef {
       content: string;
       cardReferenceUrls: string[];
       fileReferenceUrls: string[];
+      // The frontmatter's `boxel.kind`, as a direct searchable field (e.g.
+      // `searchFiles({ filter: { eq: { kind: 'skill' } } })`).
+      kind?: string;
+      // The `frontmatter` field value: `{ rawContent, … }`, typed by
+      // `boxel.kind` via the registry.
+      frontmatter?: Record<string, unknown>;
     }>
   > {
     let extension = getExtension(url);
@@ -544,21 +575,82 @@ export class MarkdownDef extends FileDef {
     let markdown = new TextDecoder().decode(bytes);
     let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
 
-    return {
+    let frontmatterData: Record<string, unknown> = {};
+    let body = markdown;
+    try {
+      let parsed = parseFrontmatter(normalizeMarkdown(markdown));
+      frontmatterData = parsed.data;
+      body = parsed.body;
+    } catch (err) {
+      // Invalid YAML: index the markdown without frontmatter rather than fail
+      // the whole file. TODO: surface this via indexing diagnostics rather than
+      // only a console warning, so frontmatter parse errors stay visible.
+      console.warn(`[markdown-file-def] frontmatter parse failed for ${url}:`, err);
+    }
+
+    let attributes: SerializedFile<{
+      title: string;
+      excerpt: string;
+      content: string;
+      cardReferenceUrls: string[];
+      fileReferenceUrls: string[];
+      kind?: string;
+      frontmatter?: Record<string, unknown>;
+    }> = {
       ...base,
-      title: extractTitle(markdown, fallbackTitle),
-      excerpt: extractExcerpt(markdown),
-      content: markdown,
+      title: extractTitle(body, fallbackTitle),
+      excerpt: extractExcerpt(body),
+      // The body with any frontmatter block stripped — what the markdown /
+      // isolated / embedded paths render. The parsed frontmatter lives in
+      // `frontmatter.rawContent`, and the verbatim file is always served from
+      // the realm, so nothing is lost.
+      content: body,
       cardReferenceUrls: extractCardReferenceUrls(
-        markdown,
+        body,
         url,
         new VirtualNetwork(),
       ),
       fileReferenceUrls: extractFileReferenceUrls(
-        markdown,
+        body,
         url,
         new VirtualNetwork(),
       ),
     };
+
+    // Boxel-specific frontmatter is namespaced under `boxel:`; generic
+    // top-level keys (shared with Claude Code) never trigger Boxel behavior.
+    let boxelNamespace =
+      frontmatterData.boxel &&
+      typeof frontmatterData.boxel === 'object' &&
+      !Array.isArray(frontmatterData.boxel)
+        ? (frontmatterData.boxel as Record<string, unknown>)
+        : undefined;
+    let kind =
+      typeof boxelNamespace?.kind === 'string'
+        ? boxelNamespace.kind
+        : undefined;
+    if (kind !== undefined) {
+      attributes.kind = kind; // direct, indexed, searchable
+    }
+
+    // `boxel.kind` selects the FrontmatterField subclass; the subclass maps the
+    // parsed frontmatter into its own field value (the base keeps the raw copy).
+    // MarkdownDef stays ignorant of any kind's schema. A recognized kind is
+    // recorded so the field rehydrates as that subclass on read.
+    if (Object.keys(frontmatterData).length > 0) {
+      let frontmatterFieldClass = frontmatterFieldForKind(kind);
+      attributes.frontmatter =
+        frontmatterFieldClass.fromFrontmatter(frontmatterData);
+      if (isKnownFrontmatterKind(kind)) {
+        let adoptsFrom = identifyCard(frontmatterFieldClass);
+        if (adoptsFrom) {
+          (attributes as Record<PropertyKey, unknown>)[fileFieldMetaSymbol] = {
+            frontmatter: { adoptsFrom },
+          };
+        }
+      }
+    }
+
+    return attributes;
   }
 }
