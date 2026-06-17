@@ -16,7 +16,6 @@
     "qunit": "catalog:",
     "stream-chain": "catalog:",
     "stream-json": "catalog:",
-    "ts-node": "^10.9.2",
     "typescript": "catalog:"
   },
   "devDependencies": {
@@ -40,7 +39,7 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "ember-tsc --noEmit",
     "start": "NODE_NO_WARNINGS=1 node main.ts",
-    "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
+    "test": "NODE_NO_WARNINGS=1 node tests/index.ts",
     "get-chat": "NODE_NO_WARNINGS=1 node scripts/get_chat.ts"
   }
 }

@@ -1,4 +1,5 @@
-import { module, test, skip } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, skip } = QUnit;
 import type {
   DBAdapter,
   ExecuteOptions,

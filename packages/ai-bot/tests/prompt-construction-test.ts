@@ -1,4 +1,5 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import {

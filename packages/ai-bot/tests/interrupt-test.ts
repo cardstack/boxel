@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { Responder } from '../lib/responder.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import FakeTimers from '@sinonjs/fake-timers';

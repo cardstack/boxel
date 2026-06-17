@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { createHmac } from 'crypto';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { v4 as uuidv4 } from 'uuid';

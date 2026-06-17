@@ -6,7 +6,8 @@ import type {
   User,
 } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   createTestPgAdapter,
   fetchSubscriptionsByUserId,

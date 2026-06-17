@@ -69,7 +69,6 @@
     "qunit": "catalog:",
     "qunit-dom": "catalog:",
     "tmp": "catalog:",
-    "ts-node": "^10.9.1",
     "typescript": "catalog:",
     "zod": "^4.0.17",
     "zod-from-json-schema": "^0.5.2"

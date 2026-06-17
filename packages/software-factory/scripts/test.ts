@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     await runCommand(
       `LOG_LEVELS=${JSON.stringify(
         logLevels,
-      )} NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts`,
+      )} NODE_NO_WARNINGS=1 node tests/index.ts`,
     );
   }
 

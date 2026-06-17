@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { User } from '@cardstack/runtime-common';

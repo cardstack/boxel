@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { param, query } from '@cardstack/runtime-common';

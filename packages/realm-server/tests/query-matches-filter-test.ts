@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import queryMatchesFilterTests from '@cardstack/runtime-common/tests/query-matches-filter-test';

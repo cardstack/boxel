@@ -84,7 +84,6 @@
     "supertest": "catalog:",
     "testem": "catalog:",
     "tmp": "catalog:",
-    "ts-node": "^10.9.1",
     "typescript": "catalog:",
     "undici": "catalog:",
     "uuid": "catalog:",

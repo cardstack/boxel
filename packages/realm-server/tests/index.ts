@@ -36,6 +36,21 @@ delete process.env.REALM_SERVER_TLS_KEY_FILE;
 }
 
 import QUnit from 'qunit';
+import { createRequire } from 'module';
+
+// `require` doesn't exist in ESM scope; recreate it so the synchronous,
+// order-preserving test-file loader and the lazy cleanup requires below keep
+// working under native node.
+const require = createRequire(import.meta.url);
+
+// The qunit CLI used to provide the TAP reporter, autostart, and a
+// failure-based exit code. Running under `node tests/index.ts` we wire them up
+// here; autostart is disabled so every test file registers before we start.
+QUnit.config.autostart = false;
+QUnit.reporters.tap.init(QUnit);
+QUnit.on('runEnd', (data) => {
+  process.exitCode = data.testCounts.failed > 0 ? 1 : 0;
+});
 
 QUnit.config.testTimeout = 60000;
 const testModules = process.env.TEST_MODULES?.trim();
@@ -60,7 +75,7 @@ if (testModules) {
 // Ctrl+C or an abnormal exit (but not SIGKILL, which bypasses handlers).
 async function runTrackedCleanup(): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const helpers = require('./helpers') as {
+  const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
     destroyTrackedQueueRunners?: () => Promise<void>;
@@ -88,7 +103,7 @@ for (let signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
 
 QUnit.done(() => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const helpers = require('./helpers') as {
+  const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
     destroyTrackedQueueRunners?: () => Promise<void>;
@@ -330,8 +345,11 @@ if (testFilesEnv) {
 }
 
 for (const file of filesToLoad) {
-  require(file);
+  // Explicit `.ts` — native `require` does no extension search for TypeScript.
+  require(`${file}.ts`);
 }
+
+QUnit.start();
 
 function parseTestFiles(value: string): string[] {
   return value

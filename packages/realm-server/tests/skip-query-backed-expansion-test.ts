@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';

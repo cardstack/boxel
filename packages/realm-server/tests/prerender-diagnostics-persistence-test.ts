@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { Prerenderer } from '../prerender/prerenderer.ts';
 import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app.ts';

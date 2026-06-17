@@ -40,7 +40,8 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.t
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
-import { sign as jwtSign } from 'jsonwebtoken';
+import jsonwebtoken from 'jsonwebtoken';
+const { sign: jwtSign } = jsonwebtoken;
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,

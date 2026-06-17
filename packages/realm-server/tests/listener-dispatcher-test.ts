@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { execFileSync } from 'child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { Realm, User } from '@cardstack/runtime-common';

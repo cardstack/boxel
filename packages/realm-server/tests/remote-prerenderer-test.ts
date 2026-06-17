@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { createServer } from 'http';
 import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';

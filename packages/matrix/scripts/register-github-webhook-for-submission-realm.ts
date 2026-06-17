@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env -S node
 import { registerRealmUser } from './register-realm-user-using-api.ts';
 import { realmPassword } from '../helpers/realm-credentials.ts';
 

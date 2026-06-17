@@ -1,6 +1,7 @@
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import '../setup-logger.ts';
 

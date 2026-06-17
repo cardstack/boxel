@@ -4,6 +4,11 @@
   "license": "MIT",
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./api": "./api.ts",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "boxel": "./bin/boxel.js"
   },
@@ -64,7 +69,6 @@
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
     "semver": "^7.7.0",
-    "ts-node": "^10.9.1",
     "vite": "catalog:",
     "vitest": "catalog:"
   },

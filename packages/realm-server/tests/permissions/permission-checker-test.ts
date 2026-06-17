@@ -1,7 +1,8 @@
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import { basename } from 'path';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 let matrixUserProfile: { displayname: string } | undefined = undefined;
 let mockMatrixClient = {

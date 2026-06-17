@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test as SupertestTest } from 'supertest';
 import sinon from 'sinon';
 import { basename } from 'path';

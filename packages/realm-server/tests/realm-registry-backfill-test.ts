@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import fsExtra from 'fs-extra';

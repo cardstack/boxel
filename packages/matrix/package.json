@@ -17,7 +17,6 @@
     "pg": "catalog:",
     "start-server-and-test": "catalog:",
     "tmp": "catalog:",
-    "ts-node": "^10.9.1",
     "typescript": "catalog:",
     "uuid": "catalog:",
     "yaml": "catalog:"

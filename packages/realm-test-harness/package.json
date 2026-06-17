@@ -33,7 +33,6 @@
     "jsonwebtoken": "catalog:",
     "pg": "catalog:",
     "puppeteer": "^25.0.2",
-    "ts-node": "^10.9.1",
     "typescript": "catalog:"
   },
   "volta": {

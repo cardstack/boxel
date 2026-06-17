@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';

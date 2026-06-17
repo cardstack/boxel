@@ -1,4 +1,5 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 import { Responder } from '../lib/responder.ts';
 import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 

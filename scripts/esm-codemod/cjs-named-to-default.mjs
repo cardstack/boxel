@@ -16,6 +16,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 export const CJS_PACKAGES = {
   'fs-extra': 'fsExtra',
   debug: 'createDebug',
+  qunit: 'QUnit',
+  jsonwebtoken: 'jsonwebtoken',
 };
 
 function varName(pkg) {
@@ -27,9 +29,12 @@ export function transform(src) {
   let changed = false;
   let code = src;
   for (const pkg of Object.keys(CJS_PACKAGES)) {
+    // Line-anchored so it only matches a real top-level import statement, never
+    // an import that appears as test-fixture text inside a string/template
+    // literal (those are preceded by a quote/backtick, so never start a line).
     const re = new RegExp(
-      `import\\s*\\{([^}]*)\\}\\s*from\\s*(['"])${pkg.replace(/[/\\^$*+?.()|[\]{}]/g, '\\$&')}\\2;?`,
-      'g',
+      `^[ \\t]*import\\s*\\{([^}]*)\\}\\s*from\\s*(['"])${pkg.replace(/[/\\^$*+?.()|[\]{}]/g, '\\$&')}\\2;?[ \\t]*$`,
+      'gm',
     );
     code = code.replace(re, (_full, names) => {
       const local = varName(pkg);
