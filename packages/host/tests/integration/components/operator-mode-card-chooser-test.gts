@@ -21,7 +21,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { percySnapshot, testRealmURL } from '../../helpers';
+import { percySnapshot, testModuleRealm, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
@@ -363,7 +363,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
         .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
     });
 
-    test('type picker works in card chooser modal with baseFilter', async function (assert) {
+    test('type picker is hidden when baseFilter constrains type', async function (assert) {
       let recentCardsService = getService('recent-cards-service');
       recentCardsService.add(`${testRealmURL}Pet/mango`);
       recentCardsService.add(`${testRealmURL}Person/fadhlan`);
@@ -382,76 +382,25 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       await waitFor('[data-test-card-chooser-modal]');
       await settled();
 
-      // Type picker should exist in the modal
+      // The type picker is redundant when baseFilter already locks the type
       assert
-        .dom('[data-test-type-picker]')
-        .exists('type picker is present in card chooser modal');
-
-      // Open type picker
-      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-      await waitFor('[data-test-boxel-picker-option-row]');
-
-      // Clicking the search input should focus it (CS-10581)
-      await click('[data-test-boxel-picker-search] input');
-      assert
-        .dom('[data-test-boxel-picker-search] input')
-        .isFocused('type picker search input is focusable when clicked');
-      assert
-        .dom('[data-test-boxel-picker-search] input')
-        .hasAttribute(
-          'placeholder',
-          'Search for a type',
-          'type picker has correct search placeholder',
-        );
-
-      // "Any Type" should be present with count
-      assert
-        .dom(
-          '[data-test-boxel-picker-option-row="select-all"][data-test-boxel-picker-option-disabled="true"]',
-        )
-        .exists('"Any Type" is disabled when baseFilter constrains to Pet');
-
-      // Options should be constrained by baseFilter (Pet types only)
-      // Person should NOT appear as a type option since baseFilter constrains to Pet
-      assert
-        .dom('[data-test-boxel-picker-option-label="Person"]')
+        .dom('[data-test-card-chooser-modal] [data-test-type-picker]')
         .doesNotExist(
-          'Person type is not available when baseFilter constrains to Pet',
+          'type picker is not rendered when baseFilter constrains type',
         );
-    });
 
-    test('type picker auto-selects constrained type and disables Any Type when baseFilter specifies a specific type', async function (assert) {
-      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
-      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
-
-      // Open linksTo card picker for Pet field
-      await waitFor(`[data-test-add-new="pet"]`);
-      await click(`[data-test-add-new="pet"]`);
-      await waitFor('[data-test-card-chooser-modal]');
-      await settled();
-
-      // Type picker should auto-select Pet instead of "Any Type"
-      await waitFor('[data-test-boxel-picker-selected-item="Pet"]');
+      // The realm picker still renders so users can narrow by realm
       assert
-        .dom(
-          '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
-        )
-        .exists('Pet type is auto-selected when baseFilter constrains to Pet');
+        .dom('[data-test-card-chooser-modal] [data-test-realm-picker]')
+        .exists('realm picker is still rendered');
 
-      // Open type picker to verify "Any Type" is disabled
-      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-      await waitFor('[data-test-boxel-picker-option-row]');
-
+      // Search results are still constrained to Pet types behind the scenes
       assert
-        .dom(
-          '[data-test-boxel-picker-option-row="select-all"][data-test-boxel-picker-option-disabled="true"]',
-        )
-        .exists('"Any Type" is disabled when baseFilter auto-selects Pet');
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+        .exists('Pet recent card appears in the linksTo picker');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('non-Pet recent cards are filtered out');
     });
   });
 
@@ -1083,10 +1032,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
-    await fillIn(
-      '[data-test-search-field]',
-      'https://localhost:4202/test/nonexistent',
-    );
+    await fillIn('[data-test-search-field]', `${testModuleRealm}nonexistent`);
     await waitFor(`[data-test-search-label]`);
     assert.dom('[data-test-search-sheet-empty]').exists();
     assert

@@ -24,6 +24,7 @@ import {
   type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
+import SearchResults from '@cardstack/host/components/card-search/search-results';
 import HostModeContent from '@cardstack/host/components/host-mode/content';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
 
@@ -148,6 +149,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       store: this.store,
       commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      searchResultsComponent: SearchResults,
       mode: this.hostModeService.isActive ? 'host' : 'operator',
       submode: this.hostModeService.isActive
         ? 'host'

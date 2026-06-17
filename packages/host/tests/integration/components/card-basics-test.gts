@@ -2323,6 +2323,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('');
+      assert.dom('[data-test-thumbnail-select-image]').exists();
       assert.dom('[data-test-links-to-editor="theme"]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
@@ -2608,8 +2609,8 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('The latest novel from John Doe');
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-thumbnail-placeholder] input')
-        .hasValue('http://book/pic.jpg');
+        .dom('[data-test-thumbnail-placeholder]')
+        .hasText('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       assert
         .dom('[data-test-field="cardInfo-theme"]')

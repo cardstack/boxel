@@ -73,6 +73,7 @@ import {
   type getCardCollection,
   type Store,
   type PrerenderedCardComponentSignature,
+  type SearchResultsComponentSignature,
   type ErrorEntry,
   type Query,
   type QueryWithInterpolations,
@@ -86,6 +87,7 @@ import {
   LooseLinkableResource,
   LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
+  shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   trackRuntimeModuleDependency,
@@ -344,7 +346,18 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
+  /**
+   * @deprecated Use {@link CardContext.searchResultsComponent} — the v2
+   * `<SearchResults>` surface. Retained (and still provided) during the
+   * migration window; first-party card source moves to the v2 surface via the
+   * `@context` search codemod, after which this is removed.
+   */
   prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;
+  // The v2 search rendering surface: renders the heterogeneous `search-entry`
+  // stream for a `search-entry`-rooted query — prerendered HTML inert (hydrated
+  // lazily) or a live card — so a card author renders results without ever
+  // branching on prerendered-vs-live. Supersedes `prerenderedCardSearchComponent`.
+  searchResultsComponent: typeof GlimmerComponent<SearchResultsComponentSignature>;
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
@@ -1240,15 +1253,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // structured read.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
-        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        console.error(
-          '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
-          {
-            fieldName: this.name,
-            ownerType: instance?.constructor?.name,
-            sentinelType: (bucketEntry as { type?: string })?.type,
-          },
-        );
         return undefined;
       }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
@@ -2457,7 +2461,18 @@ export class BaseDef {
         return null;
       }
       let valueId = (value as { id?: string }).id;
-      if (stack.includes(value)) {
+      // Cycle guard. `stack.includes(value)` alone is object-identity, which
+      // misses a logical cycle when the same card is re-entered as a DIFFERENT
+      // object instance (re-deserialization / query-resolution producing fresh
+      // objects mid-render) — recursing without bound. Also break by id, the
+      // same id-based `visited` guard `serialize` uses (`visited.has(value.id)`
+      // in the field `serialize` paths), so a fresh-object re-entry degrades to
+      // `{ id }` instead of recursing forever.
+      if (
+        stack.includes(value) ||
+        (valueId != null &&
+          stack.some((s) => (s as { id?: string }).id === valueId))
+      ) {
         return { id: valueId };
       }
       function makeAbsoluteURL(maybeRelativeReference: string) {
@@ -2476,7 +2491,15 @@ export class BaseDef {
             includeComputeds: true,
             usedLinksToFieldsOnly: true,
           }),
-        ).map(([fieldName, field]) => {
+        )
+          // A query-backed field is resolved live from a query; the index has no
+          // way to invalidate it when matching cards change, so its value in the
+          // search doc would always be stale. Skip it entirely rather than
+          // traverse (and deep-resolve) the query closure into the doc — the
+          // host re-resolves these fields at view time, and the indexer records
+          // membership from `relationships.{field}.data` separately.
+          .filter(([, field]) => !field?.queryDefinition)
+          .map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
             return [
@@ -3499,7 +3522,49 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      if (isFileLink) {
+      // Inside an indexing render the store is job-scoped: the prerender tab is
+      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
+      // render of each indexing job, so every instance in it was deserialized
+      // during THIS job, from a realm source that is immutable for the job's
+      // life. So an instance already in the store is current — reuse it directly
+      // instead of re-fetching its card+source and re-running the full field
+      // deserialization on every link edge that points at it. That per-edge
+      // redundancy is what makes a densely cross-linked render quadratic (the
+      // same target reached through many parents is rebuilt once per parent).
+      // The per-consumer dependency is still recorded so invalidation tracks
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
+      // render (the live app) a link may be stale after invalidation and must
+      // reload, and a render with no job id has no job-scoped-store guarantee.
+      let inIndexingRender =
+        typeof globalThis !== 'undefined' &&
+        Boolean((globalThis as any).__boxelRenderContext) &&
+        Boolean((globalThis as any).__boxelJobId);
+      let reusable = inIndexingRender
+        ? isFileLink
+          ? store.getFileMeta(reference)
+          : store.getCard(reference)
+        : undefined;
+      // Only reuse an instance that finished deserializing. The job-scoped
+      // store also holds partially-built, non-tracked instances: a failed
+      // `_updateFromSerialized` leaves its half-built instance behind (the
+      // store keeps it so cyclic deserialization can resolve), with
+      // `isSavedInstance` still false — it flips true only at the end of a
+      // successful deserialize. Reusing such a partial would skip the
+      // load/error path that plants the broken-link sentinel and index an
+      // incomplete target; falling through re-attempts the load and re-plants
+      // the sentinel.
+      if (
+        reusable &&
+        reusable[isSavedInstance] === true &&
+        instanceOf(reusable, field.card)
+      ) {
+        if (isFileLink) {
+          trackRuntimeFileDependency(reference, dependencyTrackingContext);
+        } else {
+          trackRuntimeInstanceDependency(reference, dependencyTrackingContext);
+        }
+        fieldValue = reusable;
+      } else if (isFileLink) {
         let fileMetaDoc = await store.loadFileMetaDocument(reference, {
           dependencyTrackingContext,
         });
@@ -3800,6 +3865,14 @@ function trackRuntimeRelationshipDependency(
   }
   let id = (value as { id?: unknown }).id;
   if (typeof id !== 'string') {
+    return;
+  }
+  if (!shouldTrackRuntimeRelationship(id, dependencyTrackingContext)) {
+    // Already tracked this relationship target this session. A linksTo /
+    // linksToMany getter runs this on every read, and a dense graph re-reads
+    // the same targets combinatorially; a repeat would re-derive the identical
+    // instance/file + module-graph node set, so skipping it — and the
+    // prototype/identity lookups below — is a pure no-op.
     return;
   }
   if (isFileDef(declaredCard)) {

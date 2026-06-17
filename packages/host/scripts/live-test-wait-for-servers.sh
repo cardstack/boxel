@@ -1,8 +1,22 @@
 #! /bin/sh
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-BASE_REALM_READY="https-get://localhost:4201/base/${READY_PATH}"
-SYNAPSE_URL="http://localhost:8008"
+
+# Default to the standard-mode ports; env mode (BOXEL_ENVIRONMENT set)
+# exports REALM_BASE_URL=https://realm-server.<slug>.localhost and
+# MATRIX_URL_VAL=https://matrix.<slug>.localhost via env-vars.sh, so
+# fall back to those when present.
+REALM_BASE_URL="${REALM_BASE_URL:-https://localhost:4201}"
+MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
+realm_host="${REALM_BASE_URL#http://}"
+realm_host="${realm_host#https://}"
+realm_host="${realm_host%/}"
+case "$REALM_BASE_URL" in
+  https://*) realm_scheme="https-get" ;;
+  *)         realm_scheme="http-get"  ;;
+esac
+BASE_REALM_READY="${realm_scheme}://${realm_host}/base/${READY_PATH}"
+SYNAPSE_URL="$MATRIX_URL_VAL"
 SMTP_4_DEV_URL="http://localhost:5001"
 
 # Pick wait-on's protocol prefix from whichever scheme the caller used.
@@ -32,7 +46,7 @@ else
   # passing assert). Skills is small and is hosted by every host CI job
   # already, so waiting on its readiness adds little beyond what base
   # already incurs.
-  SKILLS_REALM_READY="https-get://localhost:4201/skills/${READY_PATH}"
+  SKILLS_REALM_READY="${realm_scheme}://${realm_host}/skills/${READY_PATH}"
   READY_URLS="$BASE_REALM_READY|$SKILLS_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 fi
 

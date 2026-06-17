@@ -99,9 +99,19 @@ export interface DiscoverFilesOptions {
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
   /** Injected for testing — defaults to client.search-based spec discovery. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecExampleInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecExamplesResult>;
+}
+
+export interface SearchSpecExamplesResult {
+  specs: SpecExampleInfo[];
+  error?: string;
+  /**
+   * Raw Spec-card count from the realm search. `undefined` (injected
+   * test doubles) and non-zero counts are final results; only an
+   * affirmative zero indicates the index may not have caught up yet
+   * and is worth polling.
+   */
+  totalSpecCards?: number;
 }
 
 export interface ParseRealmFilesOptions {
@@ -242,10 +252,12 @@ export async function discoverJsonExampleFiles(
   // Realm-side source POST indexing is async, so a newly-uploaded Spec
   // card may not be in the search index by the time we get here. Bounded-
   // poll until even one spec shows up so an agent or test that just
-  // pushed Spec files isn't penalized for indexing latency.
+  // pushed Spec files isn't penalized for indexing latency. Poll ONLY on
+  // affirmative evidence of that race — the search itself returned zero
+  // Spec cards. An injected searchSpecsFn without a raw count is final.
   let result = await retryWithPoll(
     () => searchSpecsFn(options.targetRealm),
-    (r) => !r.error && r.specs.length === 0,
+    (r) => !r.error && r.specs.length === 0 && r.totalSpecCards === 0,
   );
   if (result.error) {
     log.warn(`Failed to discover specs for JSON validation: ${result.error}`);
@@ -858,7 +870,7 @@ export function validateCardDocumentStructure(
 async function defaultSearchSpecs(
   client: BoxelCLIClient,
   realmUrl: string,
-): Promise<{ specs: SpecExampleInfo[]; error?: string }> {
+): Promise<SearchSpecExamplesResult> {
   let searchResult = await client.search(realmUrl, {
     filter: {
       type: specRef,
@@ -869,6 +881,7 @@ async function defaultSearchSpecs(
     return { specs: [], error: searchResult.error };
   }
 
+  let totalSpecCards = (searchResult.data ?? []).length;
   let specs: SpecExampleInfo[] = [];
   for (let card of searchResult.data ?? []) {
     let specId = (card as Record<string, unknown>).id as string | undefined;
@@ -905,7 +918,7 @@ async function defaultSearchSpecs(
     specs.push({ specId, exampleUrls });
   }
 
-  return { specs };
+  return { specs, totalSpecCards };
 }
 
 // ---------------------------------------------------------------------------

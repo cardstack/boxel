@@ -8,6 +8,7 @@ import {
   type CssResource,
   type FileMetaResource,
   type HtmlResource,
+  type IconResource,
   type Realm,
   type SearchEntryCollectionDocument,
   type SearchEntryResource,
@@ -46,6 +47,16 @@ function cssIn(doc: SearchEntryCollectionDocument): CssResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is CssResource => resource.type === 'css',
   );
+}
+
+function iconsIn(doc: SearchEntryCollectionDocument): IconResource[] {
+  return (doc.included ?? []).filter(
+    (resource): resource is IconResource => resource.type === 'icon',
+  );
+}
+
+function iconIdOf(entry: SearchEntryResource): string | undefined {
+  return entry.relationships.icon?.data.id;
 }
 
 function entryFor(
@@ -162,6 +173,43 @@ module(basename(__filename), function () {
       });
       assert.true(normalizedHtml(html).includes('Fitted Card Person: John'));
       assert.strictEqual(html.attributes.cardType, 'Person');
+    });
+
+    test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      // both same-type results point at the one shared icon resource, keyed
+      // by the native-type internal key
+      assert.strictEqual(iconIdOf(entryFor(doc, johnId)!), personKey);
+      assert.strictEqual(iconIdOf(entryFor(doc, janeId)!), personKey);
+      let icons = iconsIn(doc);
+      assert.strictEqual(
+        icons.length,
+        1,
+        'the shared type icon is included exactly once',
+      );
+      assert.strictEqual(icons[0].id, personKey);
+      assert.ok(
+        icons[0].attributes.iconHtml.length > 0,
+        'the icon resource carries the icon markup',
+      );
+      // the deduped resource carries the full type descriptor
+      assert.strictEqual(
+        icons[0].attributes.displayName,
+        'Person',
+        'the type descriptor carries the card def display name',
+      );
+      assert.deepEqual(
+        icons[0].attributes.codeRef,
+        { module: `${realmHref}person`, name: 'Person' },
+        'the type descriptor carries the card def code ref',
+      );
+      // the icon no longer rides on each html rendering
+      let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
+      assert.false(
+        'iconHtml' in html.attributes,
+        'the icon moved off the html resource',
+      );
     });
 
     test('an explicit htmlQuery selects the rendering format', async function (assert) {
@@ -318,6 +366,18 @@ module(basename(__filename), function () {
       assert.deepEqual(jane.relationships.item, {
         data: { type: 'card', id: janeId },
       });
+      // The motivating case: a no-HTML fallback row still resolves its type
+      // icon (entry-level, deduped) — a consumer can paint a placeholder icon
+      // without loading the live instance.
+      assert.strictEqual(
+        iconIdOf(jane),
+        personKey,
+        'a fallback row carries the icon relationship',
+      );
+      assert.ok(
+        iconsIn(doc).some((icon) => icon.id === personKey),
+        'the icon resource is included for the fallback row',
+      );
       let item = itemIn(doc, janeId)!;
       assert.strictEqual(item.attributes?.firstName, 'Jane');
       assert.strictEqual(item.meta.sparseFields, undefined);
@@ -335,21 +395,29 @@ module(basename(__filename), function () {
       assert.strictEqual(pinnedJane.relationships.item, undefined);
     });
 
-    test('an error row with nothing renderable keeps membership with an empty html array', async function (assert) {
+    test('an error row with nothing renderable surfaces a markupless error rendering', async function (assert) {
       // a first indexing attempt that failed: error flagged, no last-known-good
-      // renderings, no serialization to fall back to
+      // renderings, no serialization to fall back to. The indexer ran and
+      // failed, so the rendering surfaces in its failed state — isError, no
+      // html — at the format the htmlQuery names and the row's own type.
       await dbAdapter.execute(
         `UPDATE boxel_index SET has_error = TRUE, pristine_doc = NULL, fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
       );
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
       let jane = entryFor(doc, janeId)!;
-      assert.deepEqual(
-        jane.relationships.html,
-        { data: [] },
-        'membership stays visible through the empty html array',
-      );
+      let htmlId = `${janeId}#fitted#${personKey}`;
+      assert.deepEqual(htmlIdsOf(jane), [htmlId]);
       assert.strictEqual(jane.relationships.item, undefined);
+      let html = htmlIn(doc, htmlId)!;
+      assert.true(html.attributes.isError);
+      assert.false('html' in html.attributes, 'no last-known-good markup');
+      assert.strictEqual(html.attributes.format, 'fitted');
+      assert.deepEqual(html.attributes.renderType, {
+        module: `${realmHref}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(html.attributes.cardType, 'Person');
     });
 
     test('file results flow through the same fieldset semantics', async function (assert) {

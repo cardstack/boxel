@@ -420,9 +420,12 @@ module('Acceptance | host mode tests', function (hooks) {
     gate.fulfill();
 
     await visitPromise;
-    await waitFor('[data-test-card-error]');
-    assert.dom('[data-test-card-error]').exists();
-    assert.dom('[data-test-card-error]').containsText('Card not found');
+    await waitFor('[data-test-host-mode-404]');
+    assert
+      .dom('[data-test-host-mode-404]')
+      .containsText('This page could not be found.');
+    // The collapsible technical detail stays available below the placeholder.
+    assert.dom('[data-test-error-display]').exists();
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,

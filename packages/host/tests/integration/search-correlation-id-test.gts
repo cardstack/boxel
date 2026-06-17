@@ -27,14 +27,14 @@ import { setupRenderingTest } from '../helpers/setup';
 
 // End-to-end coverage for the search correlation id: the in-realm browser
 // (the prerendered host SPA) mints `x-boxel-logging-correlation-id` on its
-// `_federated-search` fetch, and the realm-server's search path emits a
+// `_federated-search-v2` fetch, and the realm-server's search path emits a
 // `realm:search-timing` line keyed by that same id. This proves the id
 // threads all the way from the client that originated it through to the
 // server log a triage would join against.
 //
 // The host test exercises the *real* code on both ends: the SPA's
 // `loggingCorrelationIdHeader()` stamps the header, and the realm-server-mock hands it
-// to the real `searchRealms`, which emits the line. Only the prerender
+// to the real `searchEntryRealms`, which emits the line. Only the prerender
 // context flag is simulated (the host normally sets it inside a prerender
 // tab).
 
@@ -107,7 +107,7 @@ module('Integration | search correlation id', function (hooks) {
     // Capture the correlation id the client actually puts on the wire.
     let sentRequestIds: string[] = [];
     let spy = async (request: Request) => {
-      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+      if (new URL(request.url).pathname.endsWith('/_federated-search-v2')) {
         let id = request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER);
         if (id) {
           sentRequestIds.push(id);
@@ -131,7 +131,7 @@ module('Integration | search correlation id', function (hooks) {
     assert.strictEqual(
       sentRequestIds.length,
       1,
-      'the client stamped exactly one correlation id on its _federated-search fetch',
+      'the client stamped exactly one correlation id on its _federated-search-v2 fetch',
     );
     let sentId = sentRequestIds[0];
     assert.ok(
@@ -169,7 +169,7 @@ module('Integration | search correlation id', function (hooks) {
     let sawHeader = false;
     let spy = async (request: Request) => {
       if (
-        new URL(request.url).pathname.endsWith('/_federated-search') &&
+        new URL(request.url).pathname.endsWith('/_federated-search-v2') &&
         request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)
       ) {
         sawHeader = true;

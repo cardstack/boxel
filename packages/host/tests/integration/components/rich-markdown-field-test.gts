@@ -13,6 +13,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import cmContext from '@cardstack/host/lib/codemirror-context';
+
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -53,6 +55,16 @@ module('Integration | RichMarkdownField', function (hooks) {
     loader = getService('loader-service').loader;
   });
   setupLocalIndexing(hooks);
+
+  // CodeMirrorEditor lazy-loads its context via globalThis.__loadCodeMirror.
+  // Wire it to the real context so the docked toolbar (and its mode selector)
+  // actually render in these tests rather than the loading placeholder.
+  hooks.beforeEach(function () {
+    (globalThis as any).__loadCodeMirror = async () => cmContext;
+  });
+  hooks.afterEach(function () {
+    delete (globalThis as any).__loadCodeMirror;
+  });
 
   setupCardLogs(
     hooks,
@@ -728,9 +740,9 @@ module('Integration | RichMarkdownField', function (hooks) {
       .doesNotExist('no unresolved Pill remains after card resolves (block)');
   });
 
-  // ── Mode switcher tests ──
+  // ── View selector + docked toolbar tests ──
 
-  test('edit template renders mode switcher with Compose, Source, and Preview buttons', async function (assert) {
+  test('edit template renders a docked toolbar with the view selector', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -750,16 +762,25 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
     await renderCard(loader, card, 'edit');
 
-    assert.dom('[data-test-mode-switcher]').exists('mode switcher is rendered');
+    await waitFor('[data-test-markdown-toolbar]');
     assert
-      .dom('[data-test-mode-compose]')
-      .hasText('Compose', 'Compose button is rendered');
+      .dom('[data-test-markdown-toolbar]')
+      .exists('docked toolbar is rendered');
     assert
-      .dom('[data-test-mode-source]')
-      .hasText('Source', 'Source button is rendered');
+      .dom('[data-test-markdown-mode-select]')
+      .exists('view selector is rendered in the toolbar');
+
+    // The view selector exposes all three modes
+    await click('[data-test-markdown-mode-select]');
     assert
-      .dom('[data-test-mode-preview]')
-      .hasText('Preview', 'Preview button is rendered');
+      .dom('[data-test-markdown-mode-option="compose"]')
+      .exists('Compose option');
+    assert
+      .dom('[data-test-markdown-mode-option="source"]')
+      .exists('Source option');
+    assert
+      .dom('[data-test-markdown-mode-option="preview"]')
+      .exists('Preview option');
   });
 
   test('default mode shows editor, not preview', async function (assert) {
@@ -792,7 +813,49 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert.ok(editorOrLoading, 'editor is shown by default (edit mode)');
   });
 
-  test('clicking Preview shows rendered markdown and hides editor', async function (assert) {
+  test('formatting controls start disabled while the view selector stays enabled', async function (assert) {
+    // Note: the enabled-on-focus transition is driven by CodeMirror's
+    // view.hasFocus, which ANDs document.hasFocus(). Headless CI windows aren't
+    // OS-focused, so that path can't be asserted here — it's exercised in the
+    // app. This test covers the reliably-observable side: controls disabled
+    // without focus, and the view selector working regardless of focus.
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await waitFor('[data-test-toolbar="bold"]');
+    assert
+      .dom('[data-test-toolbar="bold"]')
+      .isDisabled('Bold is disabled before the editor gains focus');
+    assert
+      .dom('[data-test-toolbar="blockquote"]')
+      .isDisabled('all formatting controls start disabled');
+
+    // The view selector is always enabled — it opens even without editor focus
+    // (the trigger is a div, so assert behavior rather than the disabled prop).
+    await click('[data-test-markdown-mode-select]');
+    assert
+      .dom('[data-test-markdown-mode-option="source"]')
+      .exists('view selector opens without editor focus');
+    await click('[data-test-markdown-mode-option="compose"]');
+  });
+
+  test('selecting Preview shows rendered markdown and hides editor', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -814,7 +877,9 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
     await renderCard(loader, card, 'edit');
 
-    await click('[data-test-mode-preview]');
+    await waitFor('[data-test-markdown-mode-select]');
+    await click('[data-test-markdown-mode-select]');
+    await click('[data-test-markdown-mode-option="preview"]');
 
     assert
       .dom('[data-test-markdown-preview]')
@@ -823,48 +888,18 @@ module('Integration | RichMarkdownField', function (hooks) {
       .dom('[data-test-codemirror-editor]')
       .doesNotExist('CodeMirror editor is not shown in preview mode');
     assert
-      .dom('[data-test-codemirror-loading]')
-      .doesNotExist('CodeMirror loading is not shown in preview mode');
-    assert
       .dom('[data-test-markdown-preview] h1')
       .hasText('Hello World', 'heading is rendered as HTML');
     assert
       .dom('[data-test-markdown-preview] strong')
       .hasText('bold', 'bold text is rendered as HTML');
-  });
-
-  test('clicking Source hides preview and shows editor', async function (assert) {
-    class TestCard extends CardDef {
-      @field body = contains(RichMarkdownField);
-      static edit = class Edit extends Component<typeof this> {
-        <template><@fields.body /></template>
-      };
-    }
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'test-card.gts': { TestCard },
-      },
-    });
-
-    let card = new TestCard({
-      body: new RichMarkdownField({ content: 'Hello world' }),
-    });
-    await renderCard(loader, card, 'edit');
-
-    await click('[data-test-mode-source]');
-
+    // The view selector remains available in preview mode
     assert
-      .dom('[data-test-markdown-preview]')
-      .doesNotExist('preview is not shown in source mode');
-    let editorOrLoading =
-      document.querySelector('[data-test-codemirror-editor]') ??
-      document.querySelector('[data-test-codemirror-loading]');
-    assert.ok(editorOrLoading, 'editor is shown in source mode');
+      .dom('[data-test-markdown-mode-select]')
+      .exists('view selector is still present in preview mode');
   });
 
-  test('switching from Preview back to Compose restores editor', async function (assert) {
+  test('view selector works in preview mode to switch back to compose', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -884,15 +919,20 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
     await renderCard(loader, card, 'edit');
 
+    await waitFor('[data-test-markdown-mode-select]');
     // Switch to Preview
-    await click('[data-test-mode-preview]');
+    await click('[data-test-markdown-mode-select]');
+    await click('[data-test-markdown-mode-option="preview"]');
     assert.dom('[data-test-markdown-preview]').exists('preview is shown');
 
-    // Switch back to Compose
-    await click('[data-test-mode-compose]');
+    // Switch back to Compose from the standalone preview-mode selector
+    await click('[data-test-markdown-mode-select]');
+    await click('[data-test-markdown-mode-option="compose"]');
     assert
       .dom('[data-test-markdown-preview]')
       .doesNotExist('preview is hidden after switching back');
+
+    await waitFor('[data-test-markdown-toolbar]');
     let editorOrLoading =
       document.querySelector('[data-test-codemirror-editor]') ??
       document.querySelector('[data-test-codemirror-loading]');

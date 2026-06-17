@@ -316,8 +316,10 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }
 
       .boxel-select :deep(.boxel-trigger) {
-        padding: var(--boxel-sp-xs)
-          calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs));
+        padding: var(
+          --boxel-select-trigger-padding,
+          var(--boxel-sp-xs) calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs))
+        );
       }
 
       .variant-default {

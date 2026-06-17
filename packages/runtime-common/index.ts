@@ -4,13 +4,12 @@ import type {
   LinkableResource,
   LooseLinkableResource,
   Meta,
-  Saved,
 } from './resource-types.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
-import type { SerializedError } from './error.ts';
+import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -125,13 +124,9 @@ export interface RenderResponse extends PrerenderMeta {
   error?: RenderError;
 }
 
-export interface ErrorEntry {
-  type: 'instance-error' | 'module-error' | 'file-error';
-  error: SerializedError;
-  types?: string[];
-  searchData?: Record<string, any>;
-  cardType?: string;
-}
+// `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
+// re-exported here so barrel consumers reach it unchanged.
+export type { ErrorEntry } from './error.ts';
 
 // CS-10872: attached to timeout-class RenderErrors so the persisted
 // error document tells operators *where* the time went. All fields
@@ -691,7 +686,7 @@ export interface RealmPrerenderedCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
-import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query.ts';
+import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
@@ -739,6 +734,7 @@ export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
 export * from './unified-search.ts';
 export * from './search-entry.ts';
+export * from './search-compat.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -831,6 +827,7 @@ export type {
   UnifiedSearchIncludedResource,
   SearchEntryCollectionDocument,
   SearchEntryIncludedResource,
+  SearchEntryResults,
 } from './document-types.ts';
 export type {
   CardResource,
@@ -851,6 +848,7 @@ export {
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
   isLinkableCollectionDocument,
+  isSearchEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {
@@ -1024,18 +1022,6 @@ export type getCards<T extends CardDef = CardDef> = (
 {
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
-  isLoading: boolean;
-  meta: QueryResultsMeta;
-};
-
-// Duck type of the SearchDataResource
-export type getSearchData = (
-  parent: object,
-  getQuery: () => DataQuery | undefined,
-  getRealms?: () => string[] | undefined,
-  opts?: { isLive?: boolean },
-) => {
-  resources: (CardResource<Saved> | FileMetaResource)[];
   isLoading: boolean;
   meta: QueryResultsMeta;
 };
@@ -1306,6 +1292,7 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search.ts';
+export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,
