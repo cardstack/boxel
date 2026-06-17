@@ -1,4 +1,5 @@
 import { isDestroyed, registerDestructor } from '@ember/destroyable';
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
@@ -23,10 +24,9 @@ import {
   type ErrorEntry,
   type FileMetaResource,
   type HtmlResource,
-  type PrerenderedHtmlFormat,
-  type ResolvedCodeRef,
   type Saved,
   type SearchEntryCollectionDocument,
+  type SearchEntryRendering,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
@@ -42,25 +42,10 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
 
-// One rendering of an entry: the wire's `html` resource flattened, with its
-// `styles` references resolved to the stylesheets' hrefs (the stylesheets
-// themselves are already imported through the loader by the time entries are
-// exposed). `id` is the (card URL, format, renderType) composite — an opaque
-// cache key; the readable rendering dimensions are the `format`/`renderType`
-// fields.
-export interface SearchEntryRendering {
-  id: string;
-  // Absent only on an error rendering with no last-known-good HTML.
-  html?: string;
-  cardType: string;
-  iconHtml?: string;
-  isError: boolean;
-  format: PrerenderedHtmlFormat;
-  // The type this rendering was rendered as. A file rendering carries none
-  // (files render natively).
-  renderType?: ResolvedCodeRef;
-  cssUrls: string[];
-}
+// `SearchEntryRendering` is the card-facing rendering view-model (it rides the
+// v2 `@context` search surface), so it lives in runtime-common; re-exported
+// here because this resource builds it and call sites import it from here.
+export type { SearchEntryRendering };
 
 // One v2 search result, joined from the wire document: the `search-entry`
 // resource plus the `html` renderings and/or `item` serialization it
@@ -129,6 +114,45 @@ export class SearchEntriesResource extends Resource<Args> {
       this.subscriptions = [];
       this.realmsNeedingRefresh.clear();
     });
+  }
+
+  // The store whose readiness signal the active render context awaits. During a
+  // prerender the render route settles on the *render* store's `loaded()` /
+  // `loadGeneration` (`routes/render.ts` `#waitForRenderLoadStability`), while a
+  // component's injected `store` service is the live SPA store — so the search
+  // fetch and its load-tracking must run against the render store for the
+  // prerender to wait for results before HTML capture. Outside a prerender
+  // (the live SPA) this is the injected store. Mirrors how
+  // `prerendered-card-search` and the v1 `SearchResource` route render-context
+  // work through the render store.
+  private get runtimeStore(): StoreService {
+    // Strict `=== true` to match the prerender header / job-priority helpers
+    // (`prerender-fetch-headers.ts`, `resolveOutboundJobPriority`): store
+    // selection and header emission must agree, so a search routed to the
+    // render store is also sent with prerender headers.
+    if ((globalThis as any).__boxelRenderContext === true) {
+      let renderStore = getOwner(this)?.lookup('service:render-store') as
+        | StoreService
+        | undefined;
+      if (renderStore) {
+        return renderStore;
+      }
+    }
+    return this.store;
+  }
+
+  // Register an in-flight search with the render store's readiness signal. The
+  // prerender settle loop awaits `store.loaded()` and watches `loadGeneration`;
+  // `trackLoad` bumps the generation the moment a search starts and keeps the
+  // load pending until it resolves, so a prerender of a card rendering this
+  // surface waits for results before HTML capture. The html-only branch
+  // deposits nothing into the store, so without this nothing else would move
+  // the generation. Mirrors the v1 `SearchResource`. The `@ember/test-waiter`
+  // inside the task stays — it backs `settled()`, an orthogonal signal. Also
+  // kept on `this.loaded` for the test/internal bookkeeping.
+  #trackSearchLoad(load: Promise<void>): void {
+    this.loaded = load;
+    this.runtimeStore.trackLoad(load);
   }
 
   modify(_positional: never[], named: Args['named']) {
@@ -204,7 +228,7 @@ export class SearchEntriesResource extends Resource<Args> {
             `incremental index event on ${realm}; scheduling partial refresh`,
           );
           this.realmsNeedingRefresh.add(realm);
-          this.search.perform();
+          this.#trackSearchLoad(this.search.perform());
         }),
       }));
     }
@@ -221,7 +245,7 @@ export class SearchEntriesResource extends Resource<Args> {
     // A query/realm change owns the whole result set again.
     this.realmsNeedingRefresh.clear();
     this.hasCompletedFullRun = false;
-    this.loaded = this.search.perform();
+    this.#trackSearchLoad(this.search.perform());
   }
 
   get isLoading() {
@@ -259,7 +283,7 @@ export class SearchEntriesResource extends Resource<Args> {
         : this.realmsToSearch;
 
       try {
-        let doc = await this.store.searchEntries(query, realmsToFetch);
+        let doc = await this.runtimeStore.searchEntries(query, realmsToFetch);
         await this.loadStylesheets(doc);
         let fresh = this.buildEntries(doc);
 

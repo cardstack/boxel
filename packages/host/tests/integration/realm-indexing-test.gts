@@ -9,6 +9,7 @@ import {
   baseRealm,
   baseRealmRRI,
   baseCardRef,
+  ensureTrailingSlash,
   internalKeyFor,
   ri,
   rri,
@@ -21,7 +22,13 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import ENV from '@cardstack/host/config/environment';
 import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
+
+// Standard mode: `http://localhost:4206/`; env mode:
+// `https://icons.<slug>.localhost/`. ENV.iconsURL is the resolved
+// value populated by environment.js from ICONS_URL or BOXEL_ENVIRONMENT.
+const iconsBase = ensureTrailingSlash(ENV.iconsURL);
 
 import {
   testRealmURL,
@@ -329,7 +336,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -377,7 +384,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/person'),
+              module: rri(`${testModuleRealm}person`),
               name: 'Person',
             },
           },
@@ -412,7 +419,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -454,7 +461,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -474,7 +481,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
           },
@@ -510,7 +517,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/pet'),
+            module: rri(`${testModuleRealm}pet`),
             name: 'Pet',
           },
           realmURL: ri('http://test-realm/test/'),
@@ -566,7 +573,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
             realmURL: ri('http://test-realm/test/'),
@@ -604,7 +611,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -624,7 +631,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
           },
@@ -674,7 +681,7 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: { firstName: 'Mango' },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -745,7 +752,7 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: { firstName: 'Mango' },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -776,7 +783,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -795,7 +802,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
           },
@@ -822,7 +829,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -843,7 +850,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -879,7 +886,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/pet'),
+            module: rri(`${testModuleRealm}pet`),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -920,7 +927,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -941,7 +948,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -975,7 +982,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/pet'),
+            module: rri(`${testModuleRealm}pet`),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2383,7 +2390,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/vendor`,
+                module: `${testModuleRealm}vendor`,
                 name: 'Vendor',
               },
             },
@@ -2397,7 +2404,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/chain`,
+                module: `${testModuleRealm}chain`,
                 name: 'Chain',
               },
             },
@@ -2411,7 +2418,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/chain`,
+                module: `${testModuleRealm}chain`,
                 name: 'Chain',
               },
             },
@@ -2478,7 +2485,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`https://localhost:4202/test/vendor`),
+              module: rri(`${testModuleRealm}vendor`),
               name: 'Vendor',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2522,7 +2529,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`https://localhost:4202/test/chain`),
+                module: rri(`${testModuleRealm}chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2562,7 +2569,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`https://localhost:4202/test/chain`),
+                module: rri(`${testModuleRealm}chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2602,7 +2609,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Boom/boom`,
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/card-with-error',
+                module: `${testModuleRealm}card-with-error`,
                 name: 'Boom',
               },
             },
@@ -2616,7 +2623,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2685,7 +2692,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2749,7 +2756,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/post',
+                module: `${testModuleRealm}post`,
                 name: 'Post',
               },
             },
@@ -2769,7 +2776,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/post',
+                module: `${testModuleRealm}post`,
                 name: 'Post',
               },
             },
@@ -2900,7 +2907,7 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: 'Spec for Booking',
               specType: 'card',
               ref: {
-                module: 'https://localhost:4202/test/booking',
+                module: `${testModuleRealm}booking`,
                 name: 'Booking',
               },
             },
@@ -2923,10 +2930,10 @@ module(`Integration | realm indexing`, function (hooks) {
       id: `${testRealmURL}Spec/booking`,
       cardDescription: 'Spec for Booking',
       specType: 'card',
-      moduleHref: 'https://localhost:4202/test/booking',
+      moduleHref: `${testModuleRealm}booking`,
       containedExamples: null,
       linkedExamples: null,
-      ref: 'https://localhost:4202/test/booking/Booking',
+      ref: `${testModuleRealm}booking/Booking`,
       cardTitle: 'Booking',
       isCard: true,
       isComponent: false,
@@ -3446,7 +3453,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3468,7 +3475,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3491,7 +3498,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3527,7 +3534,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/friend'),
+            module: rri(`${testModuleRealm}friend`),
             name: 'Friend',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3609,7 +3616,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3635,7 +3642,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3677,7 +3684,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/friend'),
+              module: rri(`${testModuleRealm}friend`),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3727,7 +3734,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/friend'),
+                module: rri(`${testModuleRealm}friend`),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3823,7 +3830,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/friend'),
+              module: rri(`${testModuleRealm}friend`),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3873,7 +3880,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/friend'),
+                module: rri(`${testModuleRealm}friend`),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3957,7 +3964,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3999,7 +4006,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/friend'),
+              module: rri(`${testModuleRealm}friend`),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -4739,30 +4746,30 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/boxel-ui/helpers',
         '@cardstack/boxel-ui/icons',
         '@cardstack/boxel-ui/modifiers',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/bell',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/clipboard-copy',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file-pencil',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/folder-pen',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/hash',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/image',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/import',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/letter-case',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link-off',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/notepad-text',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/palette',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/trash-2',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/wand',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/x',
-        'https://localhost:4202/test/person',
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
+        `${testModuleRealm}person`,
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
@@ -4798,7 +4805,12 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/lodash',
         'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
-      ],
+        // Sort the expected list so the assertion is robust against
+        // the iconsBase URL scheme/host: standard mode puts icons at
+        // `http://localhost:4206/`, env mode at `https://icons.<slug>.localhost/`,
+        // and the lexical position of those entries among the other
+        // URLs differs accordingly.
+      ].sort(),
       'the card references for the instance are correct',
     );
   });
@@ -4897,38 +4909,38 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/boxel-ui/helpers',
         '@cardstack/boxel-ui/icons',
         '@cardstack/boxel-ui/modifiers',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/apps',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/bell',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/book-open-text',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/box-model',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/clipboard-copy',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file-pencil',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/folder-pen',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/git-branch',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/hash',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/image',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/import',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/layers-subtract',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/layout-list',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/letter-case',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link-off',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/notepad-text',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/palette',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/stack',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/toggle-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/trash-2',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/wand',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/x',
-        'https://localhost:4202/test/person',
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/apps`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/book-open-text`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/box-model`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/git-branch`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/layers-subtract`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/layout-list`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/stack`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/toggle-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
+        `${testModuleRealm}person`,
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
@@ -4966,7 +4978,8 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/lodash',
         'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
-      ],
+        // See note on iconsBase ordering above.
+      ].sort(),
       'the card references for the instance are correct',
     );
   });

@@ -40,10 +40,7 @@ import {
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import {
-  spendUsageCost,
-  fetchGenerationCostWithBackoff,
-} from '@cardstack/billing/ai-billing';
+import { spendUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import { APIUserAbortError } from 'openai/error';
@@ -57,7 +54,10 @@ import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler.ts';
 import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness.ts';
-import { waitForPendingCreditTracking } from './lib/credit-tracking.ts';
+import {
+  waitForPendingCreditTracking,
+  scheduleFallbackCostTracking,
+} from './lib/credit-tracking.ts';
 
 let log = logger('ai-bot');
 
@@ -90,47 +90,6 @@ class Assistant {
     this.client = client;
     this.pgAdapter = new PgAdapter();
     this.aiBotInstanceId = aiBotInstanceId;
-  }
-
-  async trackAiUsageCost(
-    matrixUserId: string,
-    opts: { costInUsd?: number; generationId?: string },
-  ) {
-    if (trackAiUsageCostPromises.has(matrixUserId)) {
-      return;
-    }
-    const promise = (async () => {
-      let { costInUsd, generationId } = opts;
-      if (
-        typeof costInUsd === 'number' &&
-        Number.isFinite(costInUsd) &&
-        costInUsd > 0
-      ) {
-        await spendUsageCost(this.pgAdapter, matrixUserId, costInUsd);
-      } else if (generationId) {
-        log.info(
-          `No inline cost for user ${matrixUserId}, falling back to generation cost API (generationId: ${generationId})`,
-        );
-        const fetchedCost = await fetchGenerationCostWithBackoff(
-          generationId,
-          process.env.OPENROUTER_API_KEY!,
-        );
-        if (fetchedCost !== null) {
-          await spendUsageCost(this.pgAdapter, matrixUserId, fetchedCost);
-        } else {
-          log.warn(
-            `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`,
-          );
-        }
-      } else {
-        log.warn(
-          `No usage cost and no generation ID for user ${matrixUserId}, skipping credit deduction`,
-        );
-      }
-    })().finally(() => {
-      trackAiUsageCostPromises.delete(matrixUserId);
-    });
-    trackAiUsageCostPromises.set(matrixUserId, promise);
   }
 
   getResponse(prompt: PromptParts, senderMatrixUserId?: string) {
@@ -456,136 +415,204 @@ Common issues are:
             return;
           }
 
-          // Do not generate new responses if previous ones' cost is still being reported
-          let { error: creditTrackingError } =
-            await waitForPendingCreditTracking(
-              trackAiUsageCostPromises,
-              senderMatrixUserId!,
-            );
-          if (creditTrackingError) {
-            return responder.onError(
-              'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
-            );
-          }
-
-          const creditValidation = await profTime(
-            eventId,
-            'billing:validateCredits',
-            async () =>
-              validateAICredits(assistant.pgAdapter, senderMatrixUserId),
-          );
-
-          if (!creditValidation.hasEnoughCredits) {
-            // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
-            return responder.onError(
-              `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
-              { reloadBillingData: true },
-            );
-          }
-
+          // Declarations that must outlive the per-user cost lock — read
+          // after it releases to decide whether the fallback debit is needed.
           let chunkHandlingError: string | undefined;
           let generationId: string | undefined;
           let costInUsd: number | undefined;
-          log.info(
-            `[${eventId}] Starting generation with model %s`,
-            promptParts.model,
-          );
-          const requestStart = Date.now();
-          let firstChunkAt: number | undefined;
-          if (profEnabled()) {
-            profNote(eventId, 'llm:request:start', {
-              model: promptParts.model,
-            });
-          }
-          const runner = assistant
-            .getResponse(promptParts, senderMatrixUserId)
-            .on('chunk', async (chunk, snapshot) => {
-              log.info(`[${eventId}] Received chunk %s`, chunk.id);
-              if (profEnabled() && firstChunkAt == null) {
-                firstChunkAt = Date.now();
-                profNote(eventId, 'llm:ttft', {
-                  ms: firstChunkAt - requestStart,
+          let generationCompleted = false;
+
+          // Serialize this user's credit gate → generate → debit across all
+          // rooms and replicas with the per-user cost lock (CS-11128),
+          // mirroring the realm-server proxy paths. The room lock only
+          // serializes per room, so without this a user firing concurrent
+          // requests in N rooms passes the balance gate N times against the
+          // same stale balance and overspends (CS-11504). The inline-cost
+          // debit is awaited inside the lock so the next same-user request
+          // cannot validate against a pre-deduction balance.
+          await assistant.pgAdapter.withUserCostLock(
+            senderMatrixUserId,
+            async () => {
+              // Do not generate new responses if previous ones' cost is still being reported
+              let { error: creditTrackingError } =
+                await waitForPendingCreditTracking(
+                  trackAiUsageCostPromises,
+                  senderMatrixUserId,
+                );
+              if (creditTrackingError) {
+                await responder.onError(
+                  'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+                );
+                return;
+              }
+
+              const creditValidation = await profTime(
+                eventId,
+                'billing:validateCredits',
+                async () =>
+                  validateAICredits(assistant.pgAdapter, senderMatrixUserId),
+              );
+
+              if (!creditValidation.hasEnoughCredits) {
+                // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
+                await responder.onError(
+                  `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+                  { reloadBillingData: true },
+                );
+                return;
+              }
+
+              log.info(
+                `[${eventId}] Starting generation with model %s`,
+                promptParts.model,
+              );
+              const requestStart = Date.now();
+              let firstChunkAt: number | undefined;
+              if (profEnabled()) {
+                profNote(eventId, 'llm:request:start', {
                   model: promptParts.model,
                 });
               }
-              generationId = chunk.id;
-              if (chunk.usage && (chunk.usage as any).cost != null) {
-                costInUsd = (chunk.usage as any).cost;
+              const runner = assistant
+                .getResponse(promptParts, senderMatrixUserId)
+                .on('chunk', async (chunk, snapshot) => {
+                  log.info(`[${eventId}] Received chunk %s`, chunk.id);
+                  if (profEnabled() && firstChunkAt == null) {
+                    firstChunkAt = Date.now();
+                    profNote(eventId, 'llm:ttft', {
+                      ms: firstChunkAt - requestStart,
+                      model: promptParts.model,
+                    });
+                  }
+                  generationId = chunk.id;
+                  if (chunk.usage && (chunk.usage as any).cost != null) {
+                    costInUsd = (chunk.usage as any).cost;
+                  }
+                  let activeGeneration = activeGenerations.get(room.roomId);
+                  if (activeGeneration) {
+                    activeGeneration.lastGeneratedChunkId = generationId;
+                  }
+
+                  let chunkProcessingResult = await profTime(
+                    eventId,
+                    'llm:chunk:onChunk',
+                    async () => responder.onChunk(chunk, snapshot),
+                  );
+                  let chunkProcessingResultError = chunkProcessingResult.find(
+                    (promiseResult) =>
+                      promiseResult &&
+                      'errorMessage' in promiseResult &&
+                      promiseResult.errorMessage != null,
+                  ) as { errorMessage: string } | undefined;
+
+                  if (chunkProcessingResultError) {
+                    chunkHandlingError =
+                      chunkProcessingResultError.errorMessage;
+
+                    // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                    // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                    // where the await responder.finalize() is called (the catch block below will handle this)
+                    runner.abort();
+                  }
+                })
+                .on('error', async (error) => {
+                  await responder.onError(error);
+                });
+
+              activeGenerations.set(room.roomId, {
+                responder,
+                runner,
+                lastGeneratedChunkId: generationId,
+                completionPromise: generationCompletionPromise,
+              });
+
+              try {
+                await profTime(eventId, 'llm:finalChatCompletion', async () =>
+                  runner.finalChatCompletion(),
+                );
+                log.info(`[${eventId}] Generation complete`);
+                await profTime(eventId, 'response:finalize', async () =>
+                  responder.finalize(),
+                );
+                log.info(`[${eventId}] Response finalized`);
+              } catch (error) {
+                // When the cancel handler aborts the runner,
+                // finalChatCompletion() throws APIUserAbortError.
+                // Finalize the responder with the canceled flag and let
+                // the finally block handle credit tracking.
+                if (error instanceof APIUserAbortError) {
+                  log.info(`[${eventId}] Generation was canceled by user`);
+                  await responder.finalize({ isCanceled: true });
+                } else {
+                  log.error(
+                    `[${eventId}] Error during generation or finalization`,
+                  );
+                  log.error(error);
+                  if (chunkHandlingError) {
+                    await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+                  } else {
+                    await responder.onError(error as OpenAIError);
+                  }
+                }
+              } finally {
+                // Debit the inline cost INSIDE the lock so the next same-user
+                // request observes it before validating. This path has the
+                // best data (both costInUsd from inline chunks and
+                // generationId). The user-facing response is already
+                // finalized, so a billing-write failure here must not skip the
+                // activeGenerations cleanup below (a stale entry would make a
+                // later message abort an already-finished run); swallow and log
+                // it, and let the next request surface any billing error via
+                // validateAICredits / waitForPendingCreditTracking.
+                try {
+                  if (
+                    typeof costInUsd === 'number' &&
+                    Number.isFinite(costInUsd) &&
+                    costInUsd > 0
+                  ) {
+                    await spendUsageCost(
+                      assistant.pgAdapter,
+                      senderMatrixUserId,
+                      costInUsd,
+                    );
+                  } else if (generationId) {
+                    // No inline cost: fall back to the slow generation-cost
+                    // API. Register it in the tracking map here (inside the
+                    // lock) so the next same-user request's
+                    // waitForPendingCreditTracking observes it, but let the
+                    // fetch + debit run detached — its backoff can take up to
+                    // 10 minutes and must not pin the lock's connection that
+                    // long.
+                    scheduleFallbackCostTracking({
+                      dbAdapter: assistant.pgAdapter,
+                      matrixUserId: senderMatrixUserId,
+                      generationId,
+                      openRouterApiKey: process.env.OPENROUTER_API_KEY!,
+                      trackAiUsageCostPromises,
+                    });
+                  } else {
+                    log.warn(
+                      `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
+                    );
+                  }
+                } catch (costError) {
+                  log.error(`[${eventId}] Failed to record AI usage cost`);
+                  log.error(costError);
+                  Sentry.captureException(costError, {
+                    extra: { roomId: room.roomId, eventId },
+                  });
+                }
+                activeGenerations.delete(room.roomId);
               }
-              let activeGeneration = activeGenerations.get(room.roomId);
-              if (activeGeneration) {
-                activeGeneration.lastGeneratedChunkId = generationId;
-              }
 
-              let chunkProcessingResult = await profTime(
-                eventId,
-                'llm:chunk:onChunk',
-                async () => responder.onChunk(chunk, snapshot),
-              );
-              let chunkProcessingResultError = chunkProcessingResult.find(
-                (promiseResult) =>
-                  promiseResult &&
-                  'errorMessage' in promiseResult &&
-                  promiseResult.errorMessage != null,
-              ) as { errorMessage: string } | undefined;
+              generationCompleted = true;
+            },
+          );
 
-              if (chunkProcessingResultError) {
-                chunkHandlingError = chunkProcessingResultError.errorMessage;
-
-                // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-                // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-                // where the await responder.finalize() is called (the catch block below will handle this)
-                runner.abort();
-              }
-            })
-            .on('error', async (error) => {
-              await responder.onError(error);
-            });
-
-          activeGenerations.set(room.roomId, {
-            responder,
-            runner,
-            lastGeneratedChunkId: generationId,
-            completionPromise: generationCompletionPromise,
-          });
-
-          try {
-            await profTime(eventId, 'llm:finalChatCompletion', async () =>
-              runner.finalChatCompletion(),
-            );
-            log.info(`[${eventId}] Generation complete`);
-            await profTime(eventId, 'response:finalize', async () =>
-              responder.finalize(),
-            );
-            log.info(`[${eventId}] Response finalized`);
-          } catch (error) {
-            // When the cancel handler aborts the runner,
-            // finalChatCompletion() throws APIUserAbortError.
-            // Finalize the responder with the canceled flag and let
-            // the finally block handle credit tracking.
-            if (error instanceof APIUserAbortError) {
-              log.info(`[${eventId}] Generation was canceled by user`);
-              await responder.finalize({ isCanceled: true });
-            } else {
-              log.error(`[${eventId}] Error during generation or finalization`);
-              log.error(error);
-              if (chunkHandlingError) {
-                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-              } else {
-                await responder.onError(error as OpenAIError);
-              }
-            }
-          } finally {
-            // Always track cost here — this path has the best data
-            // (both costInUsd from inline chunks and generationId).
-            assistant.trackAiUsageCost(senderMatrixUserId, {
-              costInUsd,
-              generationId,
-            });
-            activeGenerations.delete(room.roomId);
-          }
-
-          if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
+          if (
+            generationCompleted &&
+            shouldSetRoomTitle(eventList, aiBotUserId, event)
+          ) {
             // Intentionally do not await setTitle - let it run async so that
             // the room lock gets released asap after finalizing the response.
             // This is important because tool call results may arrive

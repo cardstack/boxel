@@ -1290,6 +1290,7 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search.ts';
+export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,

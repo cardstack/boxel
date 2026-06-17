@@ -1,39 +1,10 @@
 'use strict';
 
-// See the root `.eslintrc.js` — these selectors guard against TypeScript
-// syntax that requires compilation (so it would not work under Node's
-// native `--experimental-strip-types`). This package has `root: true`,
-// so the root config does not apply here.
-const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
-  {
-    selector: 'TSEnumDeclaration',
-    message:
-      'TypeScript `enum` is not erasable and requires compilation. Use a `const` object with `as const` (or a union of string literals) instead.',
-  },
-  {
-    selector: 'TSImportEqualsDeclaration',
-    message:
-      '`import =` syntax requires TypeScript compilation. Use standard ES module `import` instead.',
-  },
-  {
-    selector: 'TSExportAssignment',
-    message:
-      '`export =` syntax requires TypeScript compilation. Use a standard ES module `export default` (or named exports) instead.',
-  },
-  {
-    selector: 'Decorator',
-    message:
-      "Decorators are not erasable and require compilation, so they break under Node's native `--experimental-strip-types`. Avoid decorators here (e.g. replace `@Memoize()` with a manual cache).",
-  },
-  {
-    // Non-ambient `namespace`/`module` blocks emit runtime code. Ambient
-    // declarations (`declare module`, `declare global`, `declare namespace`)
-    // are type-only and erasable, so they are exempt via `:not([declare=true])`.
-    selector: 'TSModuleDeclaration:not([declare=true])',
-    message:
-      'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable. Use standard ES modules instead.',
-  },
-];
+// `root: true` here, so the root config does not apply and the
+// erasable-syntax rule must be re-declared from the shared list.
+const {
+  NO_COMPILATION_REQUIRED_TS_SELECTORS,
+} = require('../../eslint/erasable-syntax-selectors.cjs');
 
 module.exports = {
   root: true,
@@ -80,4 +51,15 @@ module.exports = {
     ],
     'no-restricted-syntax': ['error', ...NO_COMPILATION_REQUIRED_TS_SELECTORS],
   },
+  overrides: [
+    {
+      files: ['./.eslintrc.js'],
+      parserOptions: {
+        sourceType: 'script',
+      },
+      rules: {
+        '@typescript-eslint/no-var-requires': 'off',
+      },
+    },
+  ],
 };

@@ -6,6 +6,7 @@ import {
   fillIn,
   waitUntil,
   triggerEvent,
+  settled,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -559,6 +560,37 @@ module('Acceptance | operator mode tests', function (hooks) {
       submode: Submodes.Interact,
     });
     assert.strictEqual(getPageTitle(), 'Mango');
+  });
+
+  test('renaming a realm updates the index card title without a reload', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Test Workspace B"]');
+
+    assert.dom('[data-test-stack-card-index="0"]').exists();
+    assert.strictEqual(
+      getPageTitle(),
+      'Test Workspace B',
+      'index card title shows the original realm name',
+    );
+
+    // Rename the realm by editing its RealmConfig card; the resulting re-index
+    // should refresh the index card title reactively.
+    await testRealm.write(
+      'realm.json',
+      realmConfigCardJSON({
+        name: 'Renamed Workspace B',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      }),
+    );
+    await settled();
+
+    assert.strictEqual(
+      getPageTitle(),
+      'Renamed Workspace B',
+      'index card title reflects the new realm name without a reload',
+    );
   });
 
   module(

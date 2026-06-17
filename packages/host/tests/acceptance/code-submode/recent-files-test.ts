@@ -21,6 +21,7 @@ import {
   percySnapshot,
   setupLocalIndexing,
   setupRealmCacheTeardown,
+  testModuleRealm,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -318,7 +319,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   test('recent file links are shown', async function (assert) {
     setRecentFiles([
       [testRealmURL, 'index.json'],
-      ['https://localhost:4202/test/', 'français.json'],
+      [`${testModuleRealm}`, 'français.json'],
       // @ts-ignore error on purpose
       'a-non-url-to-ignore',
     ]);
@@ -404,7 +405,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       [testRealmURL, 'index.json', null],
       [testRealmURL, 'français.json', null],
       [testRealmURL, 'Person/1.json', null],
-      ['https://localhost:4202/test/', 'français.json', null],
+      [`${testModuleRealm}`, 'français.json', null],
     ]);
   });
 

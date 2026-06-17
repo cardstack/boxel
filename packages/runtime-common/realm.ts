@@ -4280,6 +4280,12 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          // Per-field subclass overrides for nested polymorphic fields (e.g.
+          // `frontmatter` → SkillFrontmatterField). Without this the field
+          // rehydrates as its declared base type when the document is read.
+          ...(fileEntry.resource?.meta?.fields
+            ? { fields: fileEntry.resource.meta.fields }
+            : {}),
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),

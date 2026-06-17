@@ -11,6 +11,7 @@ import {
   GetCardContextName,
   type ErrorEntry,
   type Format,
+  type HydrationMode,
   type ResolvedCodeRef,
   type StoreReadType,
   type getCard,
@@ -24,11 +25,10 @@ import CardRenderer from '../card-renderer';
 
 import SearchResultError from './search-result-error';
 
-// How an HTML-backed search result becomes a live, running card. `none` stays
-// inert; `hover` / `click` / `touch` fetch the card on the matching gesture and
-// swap the inert HTML for a live `<CardRenderer>`. The mode is a host-side UX
-// choice and never travels on the wire.
-export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
+// `HydrationMode` is the card-facing contract (it rides the v2 `@context`
+// search surface), so it lives in runtime-common; re-exported here because this
+// is where it's consumed and where call sites have long imported it.
+export type { HydrationMode };
 
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
 

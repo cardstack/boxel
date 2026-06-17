@@ -102,7 +102,14 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = ri('https://localhost:4202/test/');
+// The live test realm-server's /test/ realm. Standard mode serves it at
+// `https://localhost:4202/test/`; env mode at the per-environment
+// `https://realm-test.<slug>.localhost/test/`. Sourced from the resolved
+// URL the host config exports (set from `REALM_TEST_URL` by env-vars.sh)
+// so a single test bundle works in both modes.
+export const testModuleRealm = ri(
+  ensureTrailingSlash(ENV.resolvedTestRealmURL),
+);
 
 /**
  * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
@@ -129,8 +136,15 @@ type ModuleHooks = {
   after: (callback: () => void | Promise<void>) => void;
 };
 
+// Matrix homeserver URL. Standard mode: `http://localhost:8008`; env
+// mode: `https://matrix.<slug>.localhost`. ENV.matrixURL is the
+// already-resolved value (set by `environment.js` from BOXEL_ENVIRONMENT
+// or MATRIX_URL). The mock-matrix harness still routes requests to its
+// in-process mock — this URL is what the host code reads as
+// `ENV.matrixURL` and what the matrix-js-sdk gets as its default
+// homeserver, so it has to match whichever stack is actually running.
 const baseTestMatrix = {
-  url: new URL(`http://localhost:8008`),
+  url: new URL(ENV.matrixURL),
   username: 'test_realm',
   password: 'password',
 };

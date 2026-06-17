@@ -22,6 +22,7 @@ import {
   elementIsVisible,
   setupLocalIndexing,
   setupRealmCacheTeardown,
+  testModuleRealm,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -478,7 +479,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     // go to a file with different realm
     await fillIn(
       '[data-test-card-url-bar-input]',
-      `https://localhost:4202/test/mango.png`,
+      `${testModuleRealm}mango.png`,
     );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
@@ -522,7 +523,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await fillIn(
       '[data-test-card-url-bar-input]',
-      `https://localhost:4202/test/mango.png`,
+      `${testModuleRealm}mango.png`,
     );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
@@ -824,7 +825,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await fillIn(
       '[data-test-card-url-bar-input]',
-      `https://localhost:4202/test/mango.png`,
+      `${testModuleRealm}mango.png`,
     );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
