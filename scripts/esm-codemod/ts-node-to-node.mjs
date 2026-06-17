@@ -22,7 +22,10 @@ const KNOWN_EXT = /\.(ts|mts|cts|js|mjs|cjs)$/;
 // `ts-node --transpileOnly <entry>` (entry = next non-flag token). The
 // separator class allows shell line-continuations (`\` + newline + indent),
 // so multi-line `exec ts-node \\\n  --transpileOnly main \\` forms convert too.
-const INVOCATION = /\bts-node[\s\\]+--transpileOnly[\s\\]+([^\s"'\\]+)/g;
+// The entry class excludes shell metacharacters `)`, `;`, `&`, `|` as well as
+// quotes so a `$(ts-node … entry)` command substitution doesn't capture the
+// closing `)` and get a `.ts` appended after it.
+const INVOCATION = /\bts-node[\s\\]+--transpileOnly[\s\\]+([^\s"'\\);&|]+)/g;
 
 export function transform(src) {
   const skipped = [];
