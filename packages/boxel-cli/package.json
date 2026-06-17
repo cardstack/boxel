@@ -80,7 +80,7 @@
     "build:test-harness": "NODE_NO_WARNINGS=1 node scripts/build-test-harness.ts",
     "build:types": "NODE_NO_WARNINGS=1 node scripts/build-types.ts",
     "clean": "rm -rf dist/* bundled-types bundled-test-harness bundled-realms",
-    "start": "NODE_NO_WARNINGS=1 node src/index.ts",
+    "start": "NODE_NO_WARNINGS=1 node dist/index.js",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",

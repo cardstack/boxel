@@ -38,10 +38,13 @@ import { format, resolveConfig } from 'prettier';
 const BOXEL_SKILLS_VERSION = 'v0.0.22';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 
-const PLUGIN_DIR = resolve(__dirname, '..', 'plugin');
+const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
 const PLUGIN_README_PATH = resolve(PLUGIN_DIR, 'README.md');
-const CACHE_DIR = resolve(__dirname, '..', '.boxel-skills-cache');
-const MANIFEST_PATH = resolve(__dirname, '.boxel-skills-manifest.json');
+const CACHE_DIR = resolve(import.meta.dirname, '..', '.boxel-skills-cache');
+const MANIFEST_PATH = resolve(
+  import.meta.dirname,
+  '.boxel-skills-manifest.json',
+);
 
 const README_BEGIN_MARKER =
   '<!-- BEGIN AUTO-GENERATED: boxel-skills (run `pnpm build:skills` to update) -->';
@@ -459,7 +462,7 @@ function writeManifest(plan: EmissionPlan): void {
   };
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
   console.log(
-    `wrote ${relative(resolve(__dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills)`,
+    `wrote ${relative(resolve(import.meta.dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills)`,
   );
 }
 

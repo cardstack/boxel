@@ -58,13 +58,13 @@ async function buildCLI() {
     chmodSync('dist/index.js', 0o755);
 
     // content-tag (pulled in via runtime-common's transpile pipeline)
-    // loads its wasm with `readFileSync(`${__dirname}/content_tag_bg.wasm`)`
+    // loads its wasm with `readFileSync(`${import.meta.dirname}/content_tag_bg.wasm`)`
     // from `pkg/node/`. After esbuild bundles content-tag into
-    // `dist/index.js`, `__dirname` becomes the boxel-cli dist/ dir,
+    // `dist/index.js`, `import.meta.dirname` becomes the boxel-cli dist/ dir,
     // so the wasm has to live next to index.js — otherwise `boxel test`
     // hits ENOENT on the first transpile.
     let wasmSrc = join(
-      __dirname,
+      import.meta.dirname,
       '..',
       'node_modules',
       'content-tag',

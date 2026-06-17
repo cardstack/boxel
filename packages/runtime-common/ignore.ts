@@ -1,8 +1,11 @@
-// `ignore` ships no `types`/`exports` fields, so under nodenext ESM-mode
-// TypeScript types its default export as a non-callable namespace even though
-// the runtime default IS the factory function (verified under native node).
-// Re-export it once with the correct call signature so call sites stay clean.
-import ignoreImport, { type Ignore } from 'ignore';
+// `ignore` ships no `types`/`exports` fields, so its default export resolves
+// inconsistently across toolchains: nodenext types it as a non-callable
+// namespace, and esbuild (bundling downstream consumers) won't synthesize a
+// default at all. Import the namespace and read the CJS default off it — that's
+// the callable factory under native Node, esbuild, and Vite alike.
+import type { Ignore } from 'ignore';
+import * as ignoreNamespace from 'ignore';
 
-export const ignore = ignoreImport as unknown as (options?: object) => Ignore;
+export const ignore = ((ignoreNamespace as { default?: unknown }).default ??
+  ignoreNamespace) as unknown as (options?: object) => Ignore;
 export type { Ignore };
