@@ -7,7 +7,7 @@ import Component from '@glimmer/component';
 import { consume } from 'ember-provide-consume-context';
 import { modifier } from 'ember-modifier';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import FileIcon from '@cardstack/boxel-icons/file';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
@@ -210,18 +210,21 @@ export default class CardList extends Component<Signature> {
                     overlay can still select/label it. Routing these through
                     `<entry.component />` would render the compact
                     `SearchResultError` row, which doesn't fill a grid cell. }}
-                <div class='card-error' data-test-card-error>
-                  <div class='card-error__thumbnail'>
-                    <TriangleAlert
-                      class='card-error__icon'
-                      role='presentation'
-                    />
+                <CardContainer
+                  class='error-tile'
+                  @displayBoundaries={{true}}
+                  data-test-card-error
+                >
+                  <div class='error'>
+                    <div class='thumbnail'>
+                      <TriangleAlert />
+                    </div>
+                    <div
+                      class='name'
+                      data-test-instance-error-name
+                    >{{entry.name}}</div>
                   </div>
-                  <div
-                    class='card-error__name'
-                    data-test-instance-error-name
-                  >{{entry.name}}</div>
-                </div>
+                </CardContainer>
               {{else if (this.shouldRenderFallback entry)}}
                 {{! A file row with no prerendered HTML (currently `.gts`/`.ts`
                     FileDef rows) — render the type icon + name so the row is
@@ -363,54 +366,40 @@ export default class CardList extends Component<Signature> {
         width: 1.5rem;
         height: 1.5rem;
       }
-      .card-error {
+      /* The default error tile, matching the v1 prerendered error component:
+         a bounded card with a centered alert icon + the result's realm-local
+         name. Identical markup + styles, so it renders the same. */
+      .error-tile {
+        width: 100%;
+        height: 100%;
+      }
+      .error {
         display: flex;
         align-content: flex-start;
         justify-content: center;
+        padding: var(--boxel-sp-xs);
         flex-wrap: wrap;
         width: 100%;
         height: 100%;
-        padding: var(--boxel-sp-xs);
         overflow: hidden;
       }
-      .card-error__thumbnail {
+      .thumbnail {
         display: flex;
-        align-items: center;
         justify-content: center;
+        align-items: center;
         height: calc(100% - 64.35px);
       }
-      .card-error__icon {
-        width: 50px;
-        height: 50px;
-        color: var(--boxel-error-300);
-      }
-      .card-error__name {
+      .name {
         width: 100%;
         text-align: center;
         font: 500 var(--boxel-font-sm);
         line-height: 1.23;
         letter-spacing: 0.13px;
         text-overflow: ellipsis;
-        overflow: hidden;
       }
-      .strip-view .card-error {
-        flex-direction: row;
-        flex-wrap: nowrap;
-        align-content: center;
-        align-items: center;
-        justify-content: flex-start;
-        gap: var(--boxel-sp-xs);
-      }
-      .strip-view .card-error__thumbnail {
-        height: auto;
-      }
-      .strip-view .card-error__icon {
-        width: 1.5rem;
-        height: 1.5rem;
-      }
-      .strip-view .card-error__name {
-        width: auto;
-        text-align: left;
+      .error svg {
+        width: 50px;
+        height: 50px;
       }
       .instance-error {
         position: relative;
