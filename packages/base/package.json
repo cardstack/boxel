@@ -24,7 +24,8 @@
     "matrix-js-sdk": "catalog:",
     "super-fast-md5": "catalog:",
     "@floating-ui/dom": "catalog:",
-    "tracked-built-ins": "catalog:"
+    "tracked-built-ins": "catalog:",
+    "yaml": "catalog:"
   },
   "peerDependencies": {
     "ember-provide-consume-context": "^0.7.0",
