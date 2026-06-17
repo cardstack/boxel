@@ -3282,8 +3282,8 @@ importers:
         specifier: ^4.0.17
         version: 4.4.3
       zod-from-json-schema:
-        specifier: ^0.5.2
-        version: 0.5.3
+        specifier: 0.5.2
+        version: 0.5.2
 
   packages/template-lint:
     devDependencies:
@@ -15826,8 +15826,8 @@ packages:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
 
-  zod-from-json-schema@0.5.3:
-    resolution: {integrity: sha512-44YFiuq+WHw9YZQAo/Ad0F7o9c/im0Q6cnHI23BsXhEmZtkNn4cD0bljLMMjkfb/EidopPWdsmKI8EvLHX5ZyA==}
+  zod-from-json-schema@0.5.2:
+    resolution: {integrity: sha512-/dNaicfdhJTOuUd4RImbLUE2g5yrSzzDjI/S6C2vO2ecAGZzn9UcRVgtyLSnENSmAOBRiSpUdzDS6fDWX3Z35g==}
 
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
@@ -19114,7 +19114,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19131,7 +19134,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19167,7 +19173,10 @@ snapshots:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19175,7 +19184,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -31443,7 +31455,7 @@ snapshots:
       compress-commons: 6.0.2
       readable-stream: 4.7.0
 
-  zod-from-json-schema@0.5.3:
+  zod-from-json-schema@0.5.2:
     dependencies:
       zod: 4.4.3
 
