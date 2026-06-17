@@ -30,21 +30,6 @@ import { retryWithPoll } from './retry-with-poll.ts';
 
 let log = logger('issue-loop');
 
-/**
- * Thrown by the `syncWorkspace` wrapper when `--halt-on-sync-error` is set
- * and a sync fails. The loop's per-step `try/catch` blocks normally swallow
- * sync failures (logging a warning and continuing), which is correct for a
- * resilient run but defeats the debug flag. They rethrow this specific error
- * so the run halts immediately — before the next sync's recovery pull mutates
- * the workspace and masks the realm/index inconsistency under investigation.
- */
-export class SyncHaltError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SyncHaltError';
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Validator interface
 // ---------------------------------------------------------------------------
@@ -383,7 +368,6 @@ export async function runIssueLoop(
           );
         }
       } catch (err) {
-        if (err instanceof SyncHaltError) throw err;
         log.warn(
           `  Failed to set issue to in_progress: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -447,7 +431,6 @@ export async function runIssueLoop(
           await issueStore.updateIssue(issue.id, { status: 'blocked' });
           await timedSync();
         } catch (err) {
-          if (err instanceof SyncHaltError) throw err;
           log.warn(
             `  Failed to mark issue as blocked after agent block: ${err instanceof Error ? err.message : String(err)}`,
           );
@@ -537,7 +520,6 @@ export async function runIssueLoop(
             `  Issue marked done (agent called signal_done, validation passed, sync succeeded)`,
           );
         } catch (err) {
-          if (err instanceof SyncHaltError) throw err;
           log.warn(
             `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
           );

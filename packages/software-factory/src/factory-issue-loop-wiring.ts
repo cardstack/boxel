@@ -43,7 +43,6 @@ import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry.ts';
 import {
   runIssueLoop,
   createDefaultPipeline,
-  SyncHaltError,
   type IssueLoopConfig,
   type IssueLoopResult,
 } from './issue-loop.ts';
@@ -104,13 +103,6 @@ export interface IssueLoopWiringConfig {
    * awareness of boxel-ui components. See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
-  /**
-   * Debug flag — when set, the loop halts on the first failed workspace sync
-   * instead of recovering via a pull on the next iteration. The recovery pull
-   * mutates the workspace and can mask a realm/index inconsistency, so this
-   * freezes state at the point of failure for inspection. See CS-11575.
-   */
-  haltOnSyncError?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,27 +183,7 @@ export async function runFactoryIssueLoop(
   let syncGate = new WorkspaceSyncGate(workspaceDir, () =>
     syncWorkspaceToRealm(client, targetRealm, workspaceDir),
   );
-  let baseSyncWorkspace = () => syncGate.sync();
-  // With --halt-on-sync-error, fail loud and stop the run on the first sync
-  // failure — before the next iteration's sync runs its recovery pull, which
-  // would overwrite local state and hide what the realm/index looked like at
-  // the moment of failure. See CS-11575.
-  let syncWorkspace = config.haltOnSyncError
-    ? async () => {
-        let outcome = await baseSyncWorkspace();
-        if (!outcome.ok) {
-          log.error(
-            '--halt-on-sync-error: workspace sync FAILED; halting before the ' +
-              'recovery pull so the realm + index are frozen for inspection.',
-          );
-          log.error(`Sync error: ${outcome.error ?? 'unknown'}`);
-          throw new SyncHaltError(
-            `Halting on sync failure (--halt-on-sync-error): ${outcome.error ?? 'unknown'}`,
-          );
-        }
-        return outcome;
-      }
-    : baseSyncWorkspace;
+  let syncWorkspace = () => syncGate.sync();
   let validationCache = new ValidationRunCache(workspaceDir, { syncGate });
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealm,

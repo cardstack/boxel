@@ -75,7 +75,6 @@ module('factory-entrypoint', function (hooks) {
       debug: undefined,
       retryBlocked: true,
       enableBoxelUiDiscovery: undefined,
-      haltOnSyncError: undefined,
     });
   });
 
