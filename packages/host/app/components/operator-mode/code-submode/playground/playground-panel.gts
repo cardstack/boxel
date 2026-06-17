@@ -965,7 +965,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     return card;
   };
 
-  // sort prerendered-search card results by most recently viewed
+  // sort the instance-chooser card results by most recently viewed
   private getSortedCards = (entries: RenderableSearchEntryLike[]) => {
     if (!this.recentCardIds?.length) {
       return;
@@ -990,7 +990,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private firstResult = (results?: RenderableSearchEntryLike[]) => {
     let card = results?.[0];
-    return [card].filter(Boolean) as RenderableSearchEntryLike[];
+    return card ? [card] : [];
   };
 
   private createNewWhenNoCards = (results?: RenderableSearchEntryLike[]) => {
