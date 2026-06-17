@@ -149,6 +149,14 @@ export interface IssueLoopConfig {
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
   maxOuterCycles?: number;
+  /**
+   * Emit the timing instrumentation — per-phase durations on the agent /
+   * validation lines, the per-issue `Timing:` line, and the end-of-run
+   * summary table. Off by default so normal runs stay clean; the CLI sets it
+   * from `--debug`. (The accompanying per-line timestamps are gated
+   * separately in logger.ts via the same flag.)
+   */
+  debug?: boolean;
 }
 
 export type IssueLoopOutcome =
@@ -264,6 +272,7 @@ export async function runIssueLoop(
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
+    debug = false,
   } = config;
 
   let scheduler = new IssueScheduler(issueStore);
@@ -421,7 +430,7 @@ export async function runIssueLoop(
       allToolCalls.push(...result.toolCalls);
 
       log.info(
-        `  Agent returned ${result.toolCalls.length} tool call(s) in ${fmtSecs(agentMs)}`,
+        `  Agent returned ${result.toolCalls.length} tool call(s)${debug ? ` in ${fmtSecs(agentMs)}` : ''}`,
       );
 
       // The agent itself reports "I cannot proceed" via two paths:
@@ -494,7 +503,7 @@ export async function runIssueLoop(
         validationContext = validationSummary;
       }
       log.info(
-        `  Validation: ${formatValidation(validationResults)} in ${fmtSecs(validationMs)}${
+        `  Validation: ${formatValidation(validationResults)}${debug ? ` in ${fmtSecs(validationMs)}` : ''}${
           syncFailed ? ' (sync failed — ignoring validation pass/fail)' : ''
         }`,
       );
@@ -632,9 +641,11 @@ export async function runIssueLoop(
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
     );
-    log.info(
-      `  Timing: agent ${fmtSecs(issueTiming.agentMs)}, validation ${fmtSecs(issueTiming.validationMs)}, sync ${fmtSecs(issueTiming.syncMs)}, total ${fmtSecs(issueTiming.totalMs)}`,
-    );
+    if (debug) {
+      log.info(
+        `  Timing: agent ${fmtSecs(issueTiming.agentMs)}, validation ${fmtSecs(issueTiming.validationMs)}, sync ${fmtSecs(issueTiming.syncMs)}, total ${fmtSecs(issueTiming.totalMs)}`,
+      );
+    }
 
     issueResults.push({
       issueId: issue.id,
@@ -705,7 +716,9 @@ export async function runIssueLoop(
   }
 
   grand.totalMs = Date.now() - loopStartMs;
-  logTimingSummary(issueResults, grand);
+  if (debug) {
+    logTimingSummary(issueResults, grand);
+  }
 
   return { outcome, outerCycles, issueResults };
 }

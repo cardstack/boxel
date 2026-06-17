@@ -31,14 +31,30 @@ export function configureLogger(serializedLogLevels: string): void {
 }
 
 // Prefix every line with a wall-clock timestamp and the elapsed time since
-// the previous log line (across all channels). A long-running factory:go
-// otherwise emits a flat wall of text with no way to attribute where the
-// time went — the `+Δms` between two lines is the cheapest possible signal
-// for "this step was slow". Disable with FACTORY_LOG_TIMESTAMPS=0 (e.g. when
-// asserting on exact log output).
-const TIMESTAMPS_ENABLED =
-  process.env.FACTORY_LOG_TIMESTAMPS !== '0' &&
-  process.env.FACTORY_LOG_TIMESTAMPS !== 'false';
+// the previous log line (across all channels) — the `+Δms` between two lines
+// is the cheapest signal for "this step was slow". Off by default (clean
+// output for normal runs); the factory CLI turns it on under `--debug` via
+// setLogTimestampsEnabled. An explicit FACTORY_LOG_TIMESTAMPS=1/0 wins over
+// the CLI flag either way.
+function envTimestampOverride(): boolean | undefined {
+  let v = process.env.FACTORY_LOG_TIMESTAMPS;
+  if (v === '1' || v === 'true') return true;
+  if (v === '0' || v === 'false') return false;
+  return undefined;
+}
+
+let timestampsForced = envTimestampOverride();
+let timestampsEnabled = timestampsForced ?? false;
+
+/**
+ * Toggle wall-clock/elapsed prefixes at runtime. The factory CLI calls this
+ * with `true` when `--debug` is passed. A no-op when FACTORY_LOG_TIMESTAMPS
+ * explicitly pins the value.
+ */
+export function setLogTimestampsEnabled(enabled: boolean): void {
+  if (timestampsForced != null) return;
+  timestampsEnabled = enabled;
+}
 
 // Shared across every logger instance so the delta reflects the gap to the
 // previous line on any channel, not per-channel.
@@ -83,11 +99,12 @@ function withTimestamps(raw: Logger): Logger {
   let wrapped = {} as Logger;
   for (let method of LOG_METHODS) {
     wrapped[method] = (message: string, ...args: unknown[]) => {
-      // Only stamp — and only advance the shared delta baseline — for a line
-      // that will actually print. Otherwise a suppressed debug call between
-      // two visible lines would make the next line's +Δms measure from an
-      // invisible point. The suppressed call is still forwarded (it no-ops).
-      if (!willEmit(raw, method)) {
+      // Only stamp — and only advance the shared delta baseline — when
+      // timestamps are enabled AND the line will actually print. Otherwise a
+      // suppressed (or timestamp-disabled) call would make the next visible
+      // line's +Δms measure from an invisible point. The call is still
+      // forwarded either way.
+      if (!timestampsEnabled || !willEmit(raw, method)) {
         return raw[method](message, ...args);
       }
       return raw[method](`${timestampPrefix()} ${message}`, ...args);
@@ -97,8 +114,9 @@ function withTimestamps(raw: Logger): Logger {
 }
 
 export function logger(logName: string): Logger {
-  let raw = createLogger(logName);
-  return TIMESTAMPS_ENABLED ? withTimestamps(raw) : raw;
+  // Always wrap; the wrapper consults `timestampsEnabled` per call so the CLI
+  // can flip timestamps on (under --debug) after these loggers are created.
+  return withTimestamps(createLogger(logName));
 }
 
 function parseLogConfiguration(

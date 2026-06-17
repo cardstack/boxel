@@ -289,6 +289,7 @@ export async function runFactoryIssueLoop(
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
+    debug: config.debug,
   };
 
   try {
