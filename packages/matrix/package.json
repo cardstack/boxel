@@ -2,6 +2,7 @@
   "name": "@cardstack/matrix",
   "version": "1.0.0",
   "license": "MIT",
+  "type": "module",
   "devDependencies": {
     "@aws-crypto/sha256-js": "catalog:",
     "@cardstack/runtime-common": "workspace:*",

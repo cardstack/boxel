@@ -9,18 +9,19 @@ import {
   param,
 } from '@cardstack/runtime-common';
 import { createHash } from 'crypto';
-import nodePgMigrate from 'node-pg-migrate';
+import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
-// node-pg-migrate is CJS and exposes the runner on `.default`; native ESM
-// doesn't unwrap it the way ts-node's esModuleInterop did.
-const migrate =
-  (nodePgMigrate as unknown as { default?: typeof nodePgMigrate }).default ??
-  nodePgMigrate;
+// node-pg-migrate is CJS and exposes the runner on `.default` at runtime; native
+// ESM doesn't unwrap it the way ts-node's esModuleInterop did, and the package's
+// types declare the default as the runner, so cast to its call signature.
+const migrate = ((nodePgMigrate as any).default ?? nodePgMigrate) as (
+  options: RunnerOption,
+) => Promise<unknown>;
 
 // Hash a realm URL to a stable signed int64 (as a string, because JS numbers
 // can't represent the full int64 range). Used as a pg advisory lock key:

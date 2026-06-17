@@ -24,7 +24,7 @@ import type {
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
 import { RealmPaths } from './paths.ts';
-import ignore, { type Ignore } from 'ignore';
+import { ignore, type Ignore } from './ignore.ts';
 
 export class RealmIndexUpdater {
   #realm: Realm;

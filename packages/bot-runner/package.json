@@ -1,5 +1,6 @@
 {
   "name": "@cardstack/bot-runner",
+  "type": "module",
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",

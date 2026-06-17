@@ -523,8 +523,8 @@ catalogs:
       specifier: ^1.8.1
       version: 1.9.2
     magic-string:
-      specifier: 0.25.9
-      version: 0.25.9
+      specifier: ^0.30.21
+      version: 0.30.21
     marked:
       specifier: ^12.0.1
       version: 12.0.2
@@ -3058,7 +3058,7 @@ importers:
         version: 1.9.2
       magic-string:
         specifier: 'catalog:'
-        version: 0.25.9(patch_hash=32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39)
+        version: 0.30.21
       marked:
         specifier: 'catalog:'
         version: 12.0.2

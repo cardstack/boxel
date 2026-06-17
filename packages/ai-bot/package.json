@@ -1,5 +1,6 @@
 {
   "name": "@cardstack/ai-bot",
+  "type": "module",
   "dependencies": {
     "@cardstack/billing": "workspace:*",
     "@cardstack/postgres": "workspace:*",

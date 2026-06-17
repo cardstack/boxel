@@ -7,7 +7,7 @@
 import QUnit from 'qunit';
 
 QUnit.config.autostart = false;
-QUnit.reporters.tap.init(QUnit);
-QUnit.on('runEnd', (data) => {
+(QUnit as any).reporters.tap.init(QUnit); // QUnit 2.x API missing from @types/qunit
+(QUnit as any).on('runEnd', (data: { testCounts: { failed: number } }) => {
   process.exitCode = data.testCounts.failed > 0 ? 1 : 0;
 });
