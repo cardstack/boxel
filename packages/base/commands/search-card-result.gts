@@ -18,7 +18,6 @@ import {
   contains,
   containsMany,
   field,
-  queryableValue,
   type CardContext,
   type Format,
   FieldDef,
@@ -36,12 +35,9 @@ interface CardListSignature {
   context?: CardContext;
 }
 
-export class JsonField extends FieldDef {
-  static [primitive]: Record<string, any>;
-  static [queryableValue](_value: any, _stack: BaseDef[]): null {
-    return null;
-  }
-}
+// `JsonField` lives in its own module so non-command code can reuse it.
+// Re-exported here so it is importable from this module too.
+export { JsonField } from '../json-field';
 
 export class QueryField extends FieldDef {
   static [primitive]: Query;

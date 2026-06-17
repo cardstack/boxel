@@ -954,6 +954,9 @@ importers:
       tracked-built-ins:
         specifier: ^4.1.2
         version: 4.1.2(@babel/core@7.29.0)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
 
   packages/billing:
     dependencies:
@@ -2434,6 +2437,9 @@ importers:
       wtfnode:
         specifier: ^0.10.1
         version: 0.10.1
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
 
   packages/local-types:
     devDependencies:
@@ -10259,7 +10265,7 @@ packages:
         optional: true
 
   eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
+    resolution: {gitHosted: true, integrity: sha512-jRZYHAvECM5EM8ypI2sy7TJzr5B9auRsrUTghrj26o+pXdd0ElHw1ORdKDpICuRFpuGvoT748FVmOpaqswLd1g==, tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
     version: 0.2.0
     engines: {node: 12.* || 14.* || >= 16.*}
     peerDependencies:
@@ -19129,10 +19135,7 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       '@percy/cli-exec': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-build@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19187,10 +19190,7 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.13(typescript@5.9.3)':
     dependencies:
