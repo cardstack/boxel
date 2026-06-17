@@ -175,6 +175,7 @@ const ALL_TEST_FILES: string[] = [
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
   './card-source-endpoints-test',
+  './codemod-context-search-test',
   './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
   './file-watcher-events-test',

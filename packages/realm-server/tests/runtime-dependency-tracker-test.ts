@@ -6,6 +6,7 @@ import {
   endRuntimeDependencyTrackingSession,
   resetRuntimeDependencyTracker,
   shouldTrackRuntimeModuleGraph,
+  shouldTrackRuntimeRelationship,
   snapshotRuntimeDependencies,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
@@ -567,6 +568,81 @@ module(basename(__filename), function (hooks) {
     assert.true(
       shouldTrackRuntimeModuleGraph('relationship', moduleURL, queryContext),
       'reset clears walk markers so a fresh session re-walks',
+    );
+  });
+
+  test('relationship probe permits the walk exactly once per (context, id) per session', function (assert) {
+    let id = 'https://example.com/cards/member-1.json';
+    let queryContext = {
+      mode: 'query' as const,
+      queryField: 'members',
+      source: 'test:rel-probe',
+      consumer: 'https://example.com/root.json',
+      consumerKind: 'instance' as const,
+    };
+
+    assert.false(
+      shouldTrackRuntimeRelationship(id, queryContext),
+      'inactive tracker permits no walk (nothing would record)',
+    );
+
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'rel-probe',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    assert.true(
+      shouldTrackRuntimeRelationship(id, queryContext),
+      'first probe under an active session permits the walk',
+    );
+    assert.false(
+      shouldTrackRuntimeRelationship(id, queryContext),
+      'repeat read of the same target is collapsed',
+    );
+    assert.false(
+      shouldTrackRuntimeRelationship(id, { ...queryContext }),
+      'equivalence is by value, not object identity (the explicit-context combinatorial path)',
+    );
+    assert.false(
+      shouldTrackRuntimeRelationship(id, {
+        ...queryContext,
+        consumerKind: undefined,
+      }),
+      "an omitted consumerKind dedups against the recorded default ('instance')",
+    );
+
+    assert.true(
+      shouldTrackRuntimeRelationship(
+        'https://example.com/cards/member-2.json',
+        queryContext,
+      ),
+      'a different target walks again',
+    );
+    assert.true(
+      shouldTrackRuntimeRelationship(id, {
+        ...queryContext,
+        mode: 'non-query',
+      }),
+      'a different mode walks again (query-only classification must not stick)',
+    );
+    assert.true(
+      shouldTrackRuntimeRelationship(id, {
+        ...queryContext,
+        consumer: 'https://example.com/other-consumer.json',
+      }),
+      'a different consumer walks again',
+    );
+
+    resetRuntimeDependencyTracker();
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'rel-probe',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+    assert.true(
+      shouldTrackRuntimeRelationship(id, queryContext),
+      'reset clears markers so a fresh session re-walks',
     );
   });
 
