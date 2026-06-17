@@ -11,6 +11,7 @@ import {
   type FileMetaResource,
   type HtmlQuery,
   type HtmlResource,
+  type IconResource,
   type PrerenderedCardResource,
   type RenderedHtmlResource,
   type Saved,
@@ -74,6 +75,7 @@ export interface UnifiedSearchCollectionDocument<
 export type SearchEntryIncludedResource =
   | HtmlResource
   | CssResource
+  | IconResource
   | CardResource<Saved>
   | FileMetaResource;
 

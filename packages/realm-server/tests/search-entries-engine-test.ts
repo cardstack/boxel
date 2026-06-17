@@ -8,6 +8,7 @@ import {
   type CssResource,
   type FileMetaResource,
   type HtmlResource,
+  type IconResource,
   type Realm,
   type SearchEntryCollectionDocument,
   type SearchEntryResource,
@@ -46,6 +47,16 @@ function cssIn(doc: SearchEntryCollectionDocument): CssResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is CssResource => resource.type === 'css',
   );
+}
+
+function iconsIn(doc: SearchEntryCollectionDocument): IconResource[] {
+  return (doc.included ?? []).filter(
+    (resource): resource is IconResource => resource.type === 'icon',
+  );
+}
+
+function iconIdOf(entry: SearchEntryResource): string | undefined {
+  return entry.relationships.icon?.data.id;
 }
 
 function entryFor(
@@ -162,6 +173,32 @@ module(basename(__filename), function () {
       });
       assert.true(normalizedHtml(html).includes('Fitted Card Person: John'));
       assert.strictEqual(html.attributes.cardType, 'Person');
+    });
+
+    test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      // both same-type results point at the one shared icon resource, keyed
+      // by the native-type internal key
+      assert.strictEqual(iconIdOf(entryFor(doc, johnId)!), personKey);
+      assert.strictEqual(iconIdOf(entryFor(doc, janeId)!), personKey);
+      let icons = iconsIn(doc);
+      assert.strictEqual(
+        icons.length,
+        1,
+        'the shared type icon is included exactly once',
+      );
+      assert.strictEqual(icons[0].id, personKey);
+      assert.ok(
+        icons[0].attributes.iconHtml.length > 0,
+        'the icon resource carries the icon markup',
+      );
+      // the icon no longer rides on each html rendering
+      let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
+      assert.false(
+        'iconHtml' in html.attributes,
+        'the icon moved off the html resource',
+      );
     });
 
     test('an explicit htmlQuery selects the rendering format', async function (assert) {
@@ -318,6 +355,18 @@ module(basename(__filename), function () {
       assert.deepEqual(jane.relationships.item, {
         data: { type: 'card', id: janeId },
       });
+      // The motivating case: a no-HTML fallback row still resolves its type
+      // icon (entry-level, deduped) — a consumer can paint a placeholder icon
+      // without loading the live instance.
+      assert.strictEqual(
+        iconIdOf(jane),
+        personKey,
+        'a fallback row carries the icon relationship',
+      );
+      assert.ok(
+        iconsIn(doc).some((icon) => icon.id === personKey),
+        'the icon resource is included for the fallback row',
+      );
       let item = itemIn(doc, janeId)!;
       assert.strictEqual(item.attributes?.firstName, 'Jane');
       assert.strictEqual(item.meta.sparseFields, undefined);

@@ -20,6 +20,7 @@ import {
   CssResourceType,
   GetCardContextName,
   HtmlResourceType,
+  IconResourceType,
   SearchEntryResourceType,
   type CardResource,
   type Loader,
@@ -79,6 +80,9 @@ const bookRef = { module: testRRI('book'), name: 'Book' };
 const BOOK_1 = `${testRealmURL}books/1`;
 const BOOK_2 = `${testRealmURL}books/2`;
 const CSS_HREF = `${testRealmURL}book.gts.abc123.glimmer-scoped.css`;
+// The deduped `icon` resource's id — the type's internal key (`<module>/<name>`).
+const BOOK_ICON_ID = `${bookRef.module}/Book`;
+const BOOK_ICON_HTML = '<svg data-test-book-type-icon></svg>';
 
 function renderingIdFor(url: string): string {
   return htmlResourceId({ url, format: 'fitted', renderType: bookRef });
@@ -356,6 +360,66 @@ module('Integration | Component | search-results', function (hooks) {
         isCardInstance(storeService.peek(BOOK_2)),
         'the full item was inflated into the store',
       );
+    } finally {
+      restore();
+    }
+  });
+
+  test('stamps the type icon from the deduped icon resource, shared across rows', async function (assert) {
+    // Two same-type rows reference one `icon` resource via the entry's `icon`
+    // relationship (deduped). The host resolves it to `entry.iconHtml` and
+    // stamps `data-card-type-icon-html` on each inert row — the attribute the
+    // operator-mode overlay / adorn tab reads, sourced without loading the
+    // instance.
+    let withIcon = (url: string): SearchEntryWireResource => ({
+      type: SearchEntryResourceType,
+      id: url,
+      relationships: {
+        html: { data: [{ type: HtmlResourceType, id: renderingIdFor(url) }] },
+        icon: { data: { type: IconResourceType, id: BOOK_ICON_ID } },
+      },
+    });
+    let restore = stubSearchEntries({
+      data: [withIcon(BOOK_1), withIcon(BOOK_2)],
+      included: [
+        ...htmlIncluded(BOOK_1, `<div data-test-inert-book>Mango</div>`),
+        ...htmlIncluded(BOOK_2, `<div data-test-inert-book>Van Gogh</div>`),
+        {
+          type: IconResourceType,
+          id: BOOK_ICON_ID,
+          attributes: { iconHtml: BOOK_ICON_HTML },
+        },
+      ],
+      meta: {
+        page: { total: 2 },
+        htmlQuery: { eq: { format: 'fitted', renderType: bookRef } },
+      },
+    });
+    try {
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await render(
+        <template>
+          <TestContext>
+            <SearchResults @query={{query}} @mode='none' />
+          </TestContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-search-result]')),
+      );
+
+      for (let url of [BOOK_1, BOOK_2]) {
+        assert
+          .dom(`[data-test-hydratable-card="${url}"]`)
+          .hasAttribute(
+            'data-card-type-icon-html',
+            BOOK_ICON_HTML,
+            `${url} carries the deduped type icon as a data attribute`,
+          );
+      }
     } finally {
       restore();
     }

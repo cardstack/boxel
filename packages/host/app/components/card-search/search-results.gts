@@ -40,6 +40,7 @@ import type StoreService from '../../services/store';
 // instance loads — mirrors what the legacy prerendered path stamped.
 function extraAttributesFor(
   rendering: SearchEntryRendering,
+  iconHtml: string | undefined,
 ): Record<string, string> {
   let attrs: Record<string, string> = {};
   if (rendering.isError) {
@@ -48,8 +49,10 @@ function extraAttributesFor(
   if (rendering.cardType) {
     attrs['data-card-type-display-name'] = rendering.cardType;
   }
-  if (rendering.iconHtml) {
-    attrs['data-card-type-icon-html'] = rendering.iconHtml;
+  // The type icon rides as a deduped `icon` resource on the entry, not the
+  // rendering — see `SearchEntry.iconHtml`.
+  if (iconHtml) {
+    attrs['data-card-type-icon-html'] = iconHtml;
   }
   return attrs;
 }
@@ -113,6 +116,13 @@ class RenderableSearchEntry {
     return this.raw.item;
   }
 
+  // The result's card-type icon HTML, resolved from the deduped `icon`
+  // resource — exposed so a consumer can render a type icon for an item-only
+  // row without loading the live instance.
+  get iconHtml(): string | undefined {
+    return this.raw.iconHtml;
+  }
+
   // The error doc carried on the `item` serialization's `meta`. Present => the
   // live item cannot render, so the row falls through to the host error
   // component and the item is never deposited into the Store.
@@ -171,7 +181,7 @@ class RenderableSearchEntry {
       let { html } = this;
       let inert =
         html && html.html != null
-          ? htmlComponent(html.html, extraAttributesFor(html))
+          ? htmlComponent(html.html, extraAttributesFor(html, this.iconHtml))
           : undefined;
       this.#component = hydratableEntryComponent({
         cardId: this.id,

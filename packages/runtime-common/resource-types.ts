@@ -26,6 +26,7 @@ export const RenderedHtmlResourceType = 'rendered-html';
 export const CssResourceType = 'css';
 export const SearchEntryResourceType = 'search-entry';
 export const HtmlResourceType = 'html';
+export const IconResourceType = 'icon';
 // resource
 export type Resource =
   | ModuleResource
@@ -34,7 +35,8 @@ export type Resource =
   | RenderedHtmlResource
   | CssResource
   | SearchEntryResource
-  | HtmlResource;
+  | HtmlResource
+  | IconResource;
 export type ResourceMeta = ModuleMeta | Meta;
 export type LinkableResource = CardResource | FileMetaResource;
 
@@ -202,6 +204,20 @@ export interface CssResource {
   };
 }
 
+// One card-type icon. A type's `iconHtml` is identical across every result of
+// that type, so it rides as its own deduped resource rather than repeated on
+// each rendering. Its `id` is the type's internal key (the `<module>/<name>`
+// form already carried as a row's `types[0]`), so identical types collapse to
+// one `(type, id)` in `included`. Reached from the `search-entry` (not the
+// `html`) so item-only / no-HTML rows resolve their icon too.
+export interface IconResource {
+  id: string;
+  type: typeof IconResourceType;
+  attributes: {
+    iconHtml: string;
+  };
+}
+
 // The synthesized rendering-selection query bound on a `search-entry` (the
 // "htmlQuery"): a boolean sub-query over the rendering dimensions — `eq`
 // leaves composed with `every`/`any`/`not`, with real boolean semantics
@@ -244,6 +260,12 @@ export interface SearchEntryResource {
         id: string;
       };
     };
+    // The result's card-type icon, deduped across entries of the same type.
+    // Present whenever the row carries an `icon_html`; reached here (not on
+    // `html`) so item-only / no-HTML rows resolve it too.
+    icon?: {
+      data: { type: typeof IconResourceType; id: string };
+    };
   };
 }
 
@@ -259,7 +281,6 @@ export interface HtmlResource {
     // Absent only on an error rendering with no last-known-good HTML.
     html?: string;
     cardType: string;
-    iconHtml?: string;
     isError?: boolean;
     format: PrerenderedHtmlFormat;
     // The type this rendering was rendered as — the result's own native type
@@ -326,6 +347,7 @@ export {
   isRelationship,
   isRenderedHtmlResource,
   isCssResource,
+  isIconResource,
   isIdentityOnlyCardResource,
   isIdentityOnlyFileMetaResource,
   isSearchEntryResource,

@@ -26,7 +26,6 @@ export interface SearchEntryRendering {
   // Absent only on an error rendering with no last-known-good HTML.
   html?: string;
   cardType: string;
-  iconHtml?: string;
   isError: boolean;
   format: PrerenderedHtmlFormat;
   // The type this rendering was rendered as. A file rendering carries none
@@ -44,6 +43,10 @@ export interface RenderableSearchEntryLike {
   // The card/file identity URL.
   id: string;
   isError: boolean;
+  // The result's card-type icon HTML, resolved from the deduped `icon`
+  // resource — present whenever the row's native type has one. Carried on the
+  // entry (not the rendering) so an item-only / no-HTML row exposes it too.
+  iconHtml?: string;
   // The chosen prerendered rendering, when the result carries one.
   html?: SearchEntryRendering;
   // The raw live serialization branch (full or sparse), when present.
