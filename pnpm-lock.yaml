@@ -213,9 +213,6 @@ catalogs:
     '@types/koa__router':
       specifier: ^12.0.0
       version: 12.0.5
-    '@types/lodash':
-      specifier: ^4.17.15
-      version: 4.17.24
     '@types/lodash-es':
       specifier: ^4.17.12
       version: 4.17.12
@@ -513,9 +510,6 @@ catalogs:
     loader.js:
       specifier: ^4.7.0
       version: 4.7.0
-    lodash:
-      specifier: ^4.17.21
-      version: 4.18.1
     lodash-es:
       specifier: ^4.17.21
       version: 4.18.1
@@ -896,6 +890,9 @@ importers:
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
+      lodash-es:
+        specifier: 'catalog:'
+        version: 4.18.1
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -1350,7 +1347,7 @@ importers:
       focus-trap:
         specifier: 'catalog:'
         version: 7.8.0
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       pluralize:
@@ -1405,9 +1402,9 @@ importers:
       '@types/dompurify':
         specifier: 'catalog:'
         version: 3.2.0
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/pluralize':
         specifier: 'catalog:'
         version: 0.0.30
@@ -1953,6 +1950,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      lodash-es:
+        specifier: 'catalog:'
+        version: 4.18.1
       tracked-built-ins:
         specifier: ^4.1.2
         version: 4.1.2(@babel/core@7.29.0)

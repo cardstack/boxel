@@ -4,7 +4,15 @@ import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import fsExtra from 'fs-extra';
-const { existsSync, ensureDirSync, copySync, pathExistsSync, readJsonSync, writeJsonSync, removeSync } = fsExtra;
+const {
+  existsSync,
+  ensureDirSync,
+  copySync,
+  pathExistsSync,
+  readJsonSync,
+  writeJsonSync,
+  removeSync,
+} = fsExtra;
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';

@@ -31,7 +31,14 @@ function traefikDynamicDir(): string {
   } catch {
     // Traefik not running — fall back to repo-relative path
   }
-  _traefikDir = resolve(import.meta.dirname, '..', '..', '..', 'traefik', 'dynamic');
+  _traefikDir = resolve(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    'traefik',
+    'dynamic',
+  );
   return _traefikDir;
 }
 

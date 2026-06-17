@@ -1,5 +1,12 @@
 import fsExtra from 'fs-extra';
-const { writeFileSync, writeJSONSync, readdirSync, statSync, ensureDirSync, copySync } = fsExtra;
+const {
+  writeFileSync,
+  writeJSONSync,
+  readdirSync,
+  statSync,
+  ensureDirSync,
+  copySync,
+} = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';

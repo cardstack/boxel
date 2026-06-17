@@ -29,7 +29,8 @@
   },
   "peerDependencies": {
     "ember-provide-consume-context": "^0.7.0",
-    "ember-source": "catalog:"
+    "ember-source": "catalog:",
+    "lodash-es": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

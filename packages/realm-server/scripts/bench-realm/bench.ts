@@ -82,7 +82,11 @@ export const DEFAULT_WARMUP = 5;
 // the bench's instance JSONs `adoptsFrom`. No runtime fileFilter — the
 // glob is materialized in the snapshot itself, so the bench mounts the
 // realm with the default copy-everything semantics.
-const benchSourceRealmDir = pathResolve(import.meta.dirname, 'fixtures', 'source-realm');
+const benchSourceRealmDir = pathResolve(
+  import.meta.dirname,
+  'fixtures',
+  'source-realm',
+);
 
 export interface Scenario {
   name: string;

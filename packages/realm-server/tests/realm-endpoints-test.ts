@@ -5,7 +5,15 @@ import { join, resolve, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { copySync, ensureDirSync, existsSync, readFileSync, readJSONSync, removeSync, writeFileSync } = fsExtra;
+const {
+  copySync,
+  ensureDirSync,
+  existsSync,
+  readFileSync,
+  readJSONSync,
+  removeSync,
+  writeFileSync,
+} = fsExtra;
 import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {

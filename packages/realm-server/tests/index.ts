@@ -74,7 +74,6 @@ if (testModules) {
 // hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
 // Ctrl+C or an abnormal exit (but not SIGKILL, which bypasses handlers).
 async function runTrackedCleanup(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
@@ -102,7 +101,6 @@ for (let signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
 }
 
 QUnit.done(() => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
@@ -118,7 +116,6 @@ QUnit.done(() => {
       await helpers.destroyTrackedQueuePublishers?.();
       await helpers.closeTrackedDbAdapters?.();
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const undici = require('undici') as {
           getGlobalDispatcher?: () => { close?: () => Promise<void> };
         };

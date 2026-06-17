@@ -28,7 +28,13 @@ function homeserverFile(): string {
     }
   }
   return resolve(
-    join(import.meta.dirname, '..', 'matrix', 'synapse-data', 'homeserver.yaml'),
+    join(
+      import.meta.dirname,
+      '..',
+      'matrix',
+      'synapse-data',
+      'homeserver.yaml',
+    ),
   );
 }
 
