@@ -102,12 +102,16 @@ export class RichMarkdownField extends FieldDef {
     },
   });
 
-  /** Files referenced in the markdown, loaded via query. */
+  /**
+   * Files referenced in the markdown, loaded via query. Resolved by `url`
+   * rather than `id`: a FileDef's search doc carries no queryable `id`
+   * (unlike CardDef instances), so `in: { id }` never matches.
+   */
   @field linkedFiles = linksToMany(FileDef, {
     isUsed: true,
     query: {
       filter: {
-        in: { id: '$this.fileReferenceUrls' },
+        in: { url: '$this.fileReferenceUrls' },
       },
     },
   });

@@ -8,6 +8,7 @@ import { scheduleOnce } from '@ember/runloop';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
+  baseRealm,
   trimJsonExtension,
   maybeRelativeReference,
   type VirtualNetwork,
@@ -606,23 +607,33 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this.editorView?.focus();
   };
 
-  // ── Card reference resolution via getCards ────────────────────────────────
-  // The linkedCards linksToMany query on RichMarkdownField returns empty in
-  // edit mode because nested FieldDef instances lack a card store. We bypass
-  // that by using getCards (from CardContext) to resolve cards independently.
+  // ── Reference resolution via getCards ─────────────────────────────────────
+  // The linkedCards/linkedFiles linksToMany queries on RichMarkdownField return
+  // empty in edit mode because nested FieldDef instances lack a card store. We
+  // bypass that by using getCards (from CardContext) to resolve independently.
+  // Cards and files need distinct queries: cards match by `id` (instance
+  // entries), files match by `url` (file-meta search docs carry no `id`), and
+  // the `on: FileDef` ref routes the search to file entries.
 
   private _cardRefResourceCreated = false;
   private _cardRefResource: {
     instances: CardDef[];
     isLoading: boolean;
   } | null = null;
+  private _fileRefResourceCreated = false;
+  private _fileRefResource: {
+    instances: FileDef[];
+    isLoading: boolean;
+  } | null = null;
 
-  get _resolvedCardUrls(): string[] {
+  private resolvedUrlsForRefType(refType: 'card' | 'file'): string[] {
     let baseUrl = this.args.cardReferenceBaseUrl;
     let vn = this.args.cardReferenceVirtualNetwork;
     let urls = new Set<string>();
     for (let target of this._widgetTargets) {
-      urls.add(resolveUrl(target.cardId, baseUrl, vn));
+      if (target.refType === refType) {
+        urls.add(resolveUrl(target.cardId, baseUrl, vn));
+      }
     }
     return [...urls];
   }
@@ -634,7 +645,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       if (typeof getCards === 'function') {
         this._cardRefResource =
           getCards(this, () => {
-            let urls = this._resolvedCardUrls;
+            let urls = this.resolvedUrlsForRefType('card');
             if (!urls.length) return undefined;
             return {
               filter: { in: { id: urls } },
@@ -643,6 +654,30 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       }
     }
     return this._cardRefResource?.instances ?? [];
+  }
+
+  get resolvedFiles(): FileDef[] {
+    if (!this._fileRefResourceCreated) {
+      this._fileRefResourceCreated = true;
+      let getCards = this.args.getCards;
+      if (typeof getCards === 'function') {
+        this._fileRefResource =
+          (getCards(this, () => {
+            let urls = this.resolvedUrlsForRefType('file');
+            if (!urls.length) return undefined;
+            return {
+              filter: {
+                in: { url: urls },
+                on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+              },
+            };
+          }) as unknown as {
+            instances: FileDef[];
+            isLoading: boolean;
+          }) ?? null;
+      }
+    }
+    return this._fileRefResource?.instances ?? [];
   }
 
   // ── Card slot resolution ─────────────────────────────────────────────────
@@ -654,9 +689,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     let vn = this.args.cardReferenceVirtualNetwork;
 
     // Resolve cards and files by URL from every available source. linkedCards /
-    // linkedFiles work when a store is present; the getCards resource resolves
-    // both independently (bypasses FallbackCardStore) — its `in: { id }` query
-    // spans every widget target URL, so it returns cards and file-meta alike.
+    // linkedFiles work when a store is present; the getCards resources resolve
+    // them independently (bypasses FallbackCardStore) — cards via an `id` query
+    // over instance entries, files via a `url` query over file-meta entries.
+    // Both CardDef and FileDef instances carry an `id` equal to their URL, so
+    // one map keyed by URL serves both.
     let instancesByUrl = new Map<string, CardDef | FileDef>();
     let addInstances = (
       instances: (CardDef | FileDef)[] | null | undefined,
@@ -671,6 +708,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     addInstances(this.args.linkedCards);
     addInstances(this.args.linkedFiles);
     addInstances(this.resolvedCards);
+    addInstances(this.resolvedFiles);
 
     return targets.map((target) => {
       let resolvedUrl = resolveUrl(target.cardId, baseUrl, vn);

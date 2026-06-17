@@ -484,10 +484,13 @@ export class MarkdownDef extends FileDef {
     },
   });
 
+  // Resolve by `url` rather than `id`: a FileDef's search doc is its
+  // extractAttributes output ({ url, name, contentType, ... }) and carries no
+  // queryable `id` (unlike CardDef instances), so `in: { id }` never matches.
   @field linkedFiles = linksToMany(FileDef, {
     query: {
       filter: {
-        in: { id: '$this.fileReferenceUrls' },
+        in: { url: '$this.fileReferenceUrls' },
       },
     },
   });
