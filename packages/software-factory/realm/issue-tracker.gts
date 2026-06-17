@@ -2302,7 +2302,6 @@ export class Project extends CardDef {
           --fc-meta-display: none;
           --fc-badge-right-display: none;
           --boxel-heading-font-weight: 600;
-          box-shadow: inset 3px 0 0 var(--project-accent);
         }
         .status-badge-right {
           font-size: 0.6875rem;
@@ -2369,14 +2368,12 @@ export class Project extends CardDef {
         }
         @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
           .project-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card (width >= 150px) and (170px >= height >= 65px) {
           .project-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card ((width >= 150px) and (height > 170px)) {
@@ -2411,9 +2408,6 @@ export class Project extends CardDef {
   };
 
   static embedded = this.fitted;
-
-  // static edit = ProjectEdit;
-
   static isolated = ProjectIsolated;
   static edit = ProjectEdit;
 }
@@ -3382,7 +3376,6 @@ export class IssueTracker extends KanbanBoard {
           --fc-meta-display: none;
           --fc-subtitle-display: none;
           --boxel-heading-font-weight: 600;
-          box-shadow: inset 3px 0 0 oklch(55% 0.18 264);
         }
         .tracker-eyebrow {
           display: flex;
@@ -3410,14 +3403,12 @@ export class IssueTracker extends KanbanBoard {
         }
         @container fitted-card (1.0 < aspect-ratio) and (height < 65px) {
           .tracker-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp-xs);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card (width >= 150px) and (65px <= height <= 170px) {
           .tracker-fitted {
-            --fc-content-padding: var(--boxel-sp-2xs) var(--boxel-sp-2xs)
-              var(--boxel-sp-2xs) var(--boxel-sp);
+            --fc-content-padding: var(--boxel-sp-2xs);
           }
         }
         @container fitted-card (width >= 150px) and (height > 170px) {
