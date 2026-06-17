@@ -11,9 +11,9 @@ cd /workspaces/boxel
 # trust` is required because the repo's .mise.toml has not been trusted in a
 # fresh container. Activate mise for this shell so the pinned tools are on PATH.
 echo "==> Installing pinned toolchain via mise..."
-~/.local/bin/mise trust
-~/.local/bin/mise install
-eval "$(~/.local/bin/mise activate bash)"
+mise trust
+mise install
+eval "$(mise activate bash)"
 
 echo "==> Installing dependencies..."
 mise exec -- pnpm install --frozen-lockfile

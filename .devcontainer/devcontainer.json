@@ -28,6 +28,12 @@
   "postStartCommand": "nohup bash .devcontainer/start-services.sh > /tmp/start-services.log 2>&1 &",
 
   "customizations": {
+    "codespaces": {
+      "repositories": {
+        "cardstack/boxel-catalog": { "permissions": { "contents": "read" } },
+        "cardstack/boxel-skills": { "permissions": { "contents": "read" } }
+      }
+    },
     "vscode": {
       "extensions": [
         "cardstack.boxel-tools",

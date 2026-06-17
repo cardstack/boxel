@@ -22,7 +22,7 @@ set -euo pipefail
 cd /workspaces/boxel
 
 # mise provides the pinned node/pnpm/ts-node toolchain.
-eval "$(~/.local/bin/mise activate bash)"
+eval "$(mise activate bash)"
 
 CODESPACE_NAME="${CODESPACE_NAME:?CODESPACE_NAME must be set}"
 FWD_DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"

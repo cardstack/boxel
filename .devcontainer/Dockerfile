@@ -7,8 +7,12 @@ FROM mcr.microsoft.com/devcontainers/javascript-node:24-bookworm
 
 # mise manages the Node and pnpm versions pinned in the repo's .mise.toml.
 # `mise install` is run by .devcontainer/setup.sh once the repo is checked out.
-RUN curl https://mise.run | sh && \
-    echo 'eval "$(~/.local/bin/mise activate bash)"' >> /home/node/.bashrc
+# Install to a global path: this RUN executes as root, so the default
+# ~/.local/bin/mise would land under /root and be invisible to the 'node' user
+# that Codespaces runs lifecycle commands as. A global binary is on PATH for
+# every user; per-user mise data still lives under each user's home.
+RUN curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh && \
+    echo 'eval "$(mise activate bash)"' >> /etc/bash.bashrc
 
 # System dependencies for node-gyp. Postgres, Matrix/Synapse and SMTP run as
 # Docker containers (via the docker-in-docker feature) started by the repo's
