@@ -200,14 +200,28 @@ export class FileDefAttributesExtractor {
         let displayNames = getDisplayNames(klass);
         let adoptsFrom = typeCodeRefs[0] ?? this.#fileDefCodeRef;
         let queryFieldDefs = await this.extractQueryFieldDefs(klass);
+        // `extractAttributes` may route per-field meta (the concrete subclass
+        // of a nested polymorphic field) via this global symbol. Lift it out so
+        // it lands in the resource's `meta.fields` and never in the flat
+        // `search_doc`. The base FileDef sets the same `Symbol.for` key.
+        let fieldMetaSymbol = Symbol.for('boxel:file-field-meta');
+        let cleanedDoc: Record<string, any> = { ...searchDoc };
+        let cleanedBag = cleanedDoc as Record<PropertyKey, any>;
+        let fieldsMeta = cleanedBag[fieldMetaSymbol] as
+          | NonNullable<FileMetaResource['meta']['fields']>
+          | undefined;
+        if (fieldsMeta) {
+          delete cleanedBag[fieldMetaSymbol];
+        }
         return {
           status: 'ready',
-          searchDoc,
+          searchDoc: cleanedDoc,
           resource: buildFileResource(
             this.#fileURL,
-            searchDoc,
+            cleanedDoc,
             adoptsFrom,
             queryFieldDefs,
+            fieldsMeta,
           ),
           types,
           displayNames,
@@ -401,6 +415,7 @@ export function buildFileResource(
   attributes: Record<string, any>,
   adoptsFrom: CodeRef,
   queryFieldDefs?: Record<string, QueryFieldMeta>,
+  fieldsMeta?: NonNullable<FileMetaResource['meta']['fields']>,
 ): FileMetaResource {
   let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
   let baseAttributes = {
@@ -421,6 +436,10 @@ export function buildFileResource(
     attributes: mergedAttributes,
     meta: {
       adoptsFrom,
+      // Per-field subclass overrides for nested polymorphic fields (e.g.
+      // `frontmatter` → SkillFrontmatterField). Without this the field rehydrates
+      // as its declared base type. Supplied by `extractAttributes` (see below).
+      ...(fieldsMeta ? { fields: fieldsMeta } : {}),
       ...(queryFieldDefs ? { queryFieldDefs } : {}),
     },
     links: { self: fileURL },

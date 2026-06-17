@@ -40,6 +40,25 @@ const stickyNoteBrief: FactoryBrief = {
   tags: ['documents-content', 'sticky', 'note'],
 };
 
+// Mirrors realm/Wiki/adjust-mortgage-test.json: a brief that carries a
+// `sourceCardUrl`, which flips seed creation into the adjust flow.
+const adjustMortgageBrief: FactoryBrief = {
+  title: 'Adjust Mortgage Calculator',
+  sourceUrl:
+    'https://briefs.example.test/software-factory/Wiki/adjust-mortgage-test',
+  sourceCardUrl:
+    'http://localhost:4201/catalog/04868f-mortgage-calculator/mortgage-calculator',
+  content: [
+    '## Adjust the Mortgage Calculator card',
+    '',
+    'Add an extra-monthly-payment input and show its impact on the loan,',
+    'and restyle it to look like a 90s-era corporate insurance app.',
+  ].join('\n'),
+  contentSummary:
+    'Add an extra-monthly-payment input to the catalog Mortgage Calculator and restyle it as a 90s-era corporate insurance app.',
+  tags: ['software-factory-brief', 'adjust', 'mortgage-calculator'],
+};
+
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
 
@@ -161,6 +180,68 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
     expect(seedIssue).toBeDefined();
     expect(seedIssue!.status).toBe('backlog');
     expect(seedIssue!.priority).toBe('critical');
+  } finally {
+    cleanup();
+  }
+});
+
+test('creates an adjust-flavored bootstrap seed when the brief carries a sourceCardUrl', async ({
+  realm,
+}) => {
+  let { client, cleanup, workspaceDir, seedOptions } = buildSeedContext(realm);
+
+  try {
+    let result = await createSeedIssue(adjustMortgageBrief, seedOptions);
+
+    expect(result.issueId).toBe('Issues/bootstrap-seed');
+    expect(result.status).toBe('created');
+
+    let syncResult = await client.sync(realm.realmURL.href, workspaceDir, {
+      preferLocal: true,
+    });
+    expect(syncResult.hasError).toBe(false);
+    let indexed = await client.waitForFile(
+      realm.realmURL.href,
+      'Issues/bootstrap-seed.json',
+      {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      },
+    );
+    expect(indexed).toBe(true);
+
+    let issueResponse = await client.authedFetch(
+      realm.cardURL('Issues/bootstrap-seed'),
+      { headers: { Accept: SupportedMimeType.CardSource } },
+    );
+    expect(issueResponse.ok).toBe(true);
+
+    let issueJson = (await issueResponse.json()) as {
+      data: {
+        attributes: { issueType: string; summary: string; description: string };
+      };
+    };
+
+    // Still a bootstrap issue — the adjust/greenfield fork lives in the
+    // seed's instructions, not in its issueType.
+    expect(issueJson.data.attributes.issueType).toBe('bootstrap');
+
+    // Adjust-specific summary (greenfield is "Process brief and create
+    // project artifacts").
+    expect(issueJson.data.attributes.summary).toBe(
+      'Seed the source card and create adjustment issues',
+    );
+
+    // The seed instructions are the adjust flavor and carry the source card
+    // through to the agent.
+    let { description } = issueJson.data.attributes;
+    expect(description).toContain('Mode: ADJUST EXISTING CARD');
+    expect(description).toContain(
+      `**Source card to adjust:** ${adjustMortgageBrief.sourceCardUrl}`,
+    );
+    expect(description).toContain(
+      `boxel realm ingest-card "${adjustMortgageBrief.sourceCardUrl}"`,
+    );
   } finally {
     cleanup();
   }

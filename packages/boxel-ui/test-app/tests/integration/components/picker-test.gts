@@ -1508,4 +1508,149 @@ module('Integration | Component | picker', function (hooks) {
       .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
       .exists('Select-all remains highlighted after ArrowUp at boundary');
   });
+
+  test('disabled picker hides the search input section', async function (assert) {
+    const selected = [testOptions[0]];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @disabled={{true}}
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+
+    assert
+      .dom('[data-test-boxel-picker-search]')
+      .doesNotExist(
+        'Search section is not rendered when the picker is disabled',
+      );
+  });
+
+  test('picker with @searchEnabled={{false}} hides the search input', async function (assert) {
+    const selected: PickerOption[] = [];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @searchEnabled={{false}}
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-before-options]');
+
+    assert
+      .dom('[data-test-boxel-picker-search]')
+      .doesNotExist(
+        'Search section is not rendered when @searchEnabled is false',
+      );
+    assert
+      .dom('.ember-power-select-options [data-test-boxel-picker-option-row]')
+      .exists({ count: 4 }, 'Main list still renders without the search input');
+  });
+
+  test('keyboard navigation works when @searchEnabled={{false}}', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+          @searchEnabled={{false}}
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-before-options]');
+
+    const focusTarget = '[data-test-boxel-picker-focus-target]';
+
+    // Select-all is highlighted on open via activateFirstItem
+    assert
+      .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
+      .exists('Select-all is highlighted on open even without a search input');
+
+    // ArrowDown should still move the highlight into the main list
+    await triggerKeyEvent(focusTarget, 'keydown', 'ArrowDown');
+
+    assert
+      .dom(
+        '.ember-power-select-options .ember-power-select-option[aria-current="true"]',
+      )
+      .exists(
+        'ArrowDown moves the highlight into the main list when search is hidden',
+      );
+  });
+
+  test('disabled picker marks the trigger with a disabled visual state', async function (assert) {
+    const selected: PickerOption[] = [];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @disabled={{true}}
+        />
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-boxel-picker-trigger]')
+      .hasClass(
+        'is-disabled',
+        'Trigger carries an is-disabled class when the picker is disabled',
+      );
+  });
+
+  test('selected items hide the remove button when picker is disabled', async function (assert) {
+    const selected = [testOptions[0], testOptions[1]];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @disabled={{true}}
+        />
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-boxel-picker-selected-item]')
+      .exists({ count: 2 }, 'Selected pills still render when disabled');
+    assert
+      .dom('[data-test-boxel-picker-remove-button]')
+      .doesNotExist(
+        'Remove buttons are not rendered on selected items when the picker is disabled',
+      );
+  });
 });

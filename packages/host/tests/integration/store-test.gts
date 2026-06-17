@@ -524,6 +524,149 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a render-context load does not set up the autosave change subscription', async function (assert) {
+    // The card-api module's exports are read-only, so we count `subscribeToChanges`
+    // by interposing on `cardService.getAPI()` — which the store re-reads each time
+    // it sets up autosave — and handing back a proxy that tallies the call.
+    let cardService = getService('card-service');
+    let originalGetAPI = cardService.getAPI.bind(cardService);
+    let realApi = await originalGetAPI();
+    let trueSubscribe = realApi.subscribeToChanges;
+    let subscribeCount = 0;
+    (cardService as any).getAPI = async () =>
+      new Proxy(realApi, {
+        get(target, prop, receiver) {
+          if (prop === 'subscribeToChanges') {
+            return (...args: unknown[]) => {
+              subscribeCount++;
+              return (trueSubscribe as any)(...args);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+
+    try {
+      // The live store wires up the change subscription that drives autosave.
+      await storeService.add(new PersonDef({ name: 'Mango' }), {
+        doNotPersist: true,
+      });
+      assert.true(
+        subscribeCount > 0,
+        'the live store subscribes a loaded instance for autosave',
+      );
+
+      // A render store blocks persistence, so autosave can never fire — it must
+      // not pay for the per-instance subscribe/unsubscribe churn that drives it.
+      subscribeCount = 0;
+      (globalThis as any).__boxelRenderContext = true;
+      let renderStore = getService('render-store');
+      await renderStore.add(new PersonDef({ name: 'Van Gogh' }), {
+        doNotPersist: true,
+      });
+      assert.strictEqual(
+        subscribeCount,
+        0,
+        'the render store does not subscribe a loaded instance for autosave',
+      );
+    } finally {
+      (cardService as any).getAPI = originalGetAPI;
+      delete (globalThis as any).__boxelRenderContext;
+    }
+  });
+
+  test('restoring sessions from storage skips the re-walk when the session blob is unchanged', function (assert) {
+    // `restoreSessionsFromStorage` is synchronous, so the walk-count delta
+    // measured immediately around each call is exactly that call's work — other
+    // realm activity can only run at async boundaries, never mid-call. The realms
+    // already in storage (from login) are resolved with their own tokens, so the
+    // walk has no token-setter side effects.
+    let walks = 0;
+    let originalGetOrCreate = (
+      realmService as any
+    ).getOrCreateRealmResource.bind(realmService);
+    (realmService as any).getOrCreateRealmResource = (...args: unknown[]) => {
+      walks++;
+      return originalGetOrCreate(...args);
+    };
+
+    try {
+      (realmService as any).lastRestoredSessionsString = undefined;
+
+      let before = walks;
+      realmService.restoreSessionsFromStorage();
+      assert.true(
+        walks - before > 0,
+        'the first restore walks the stored sessions',
+      );
+
+      before = walks;
+      realmService.restoreSessionsFromStorage();
+      assert.strictEqual(
+        walks - before,
+        0,
+        'a restore with an unchanged blob does not re-walk',
+      );
+
+      // When a newly seeded realm session changes the stored blob, the memo no
+      // longer matches it, so the next restore re-reads and re-walks.
+      (realmService as any).lastRestoredSessionsString = 'stale-sentinel';
+      before = walks;
+      realmService.restoreSessionsFromStorage();
+      assert.true(
+        walks - before > 0,
+        'a restore re-walks once the stored blob no longer matches the memo',
+      );
+    } finally {
+      (realmService as any).getOrCreateRealmResource = originalGetOrCreate;
+    }
+  });
+
+  test('getFields is memoized per instance in the render context and invalidates as the instance grows', function (assert) {
+    let person = new PersonDef({ name: 'Mango' });
+    try {
+      (globalThis as any).__boxelRenderContext = true;
+
+      let first = api.getFields(person, { usedLinksToFieldsOnly: true });
+      let second = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.strictEqual(
+        first,
+        second,
+        'a repeat call in the render context returns the memoized field map',
+      );
+      assert.notOk(
+        'bestFriend' in first,
+        'an unused linksTo field is absent before it is populated',
+      );
+
+      // Populating a linksTo field grows the data bucket, so the memo token no
+      // longer matches and the next call recomputes.
+      (person as any).bestFriend = new PersonDef({ name: 'Van Gogh' });
+      let third = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.notStrictEqual(
+        third,
+        first,
+        'growing the instance invalidates the memo',
+      );
+      assert.ok(
+        'bestFriend' in third,
+        'the now-used linksTo field appears after the bucket grows',
+      );
+
+      // Outside the render context the result is never memoized.
+      delete (globalThis as any).__boxelRenderContext;
+      let live1 = api.getFields(person, { usedLinksToFieldsOnly: true });
+      let live2 = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.notStrictEqual(
+        live1,
+        live2,
+        'the live app always gets a fresh field map',
+      );
+    } finally {
+      delete (globalThis as any).__boxelRenderContext;
+    }
+  });
+
   test('can drop reference to a card url', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();

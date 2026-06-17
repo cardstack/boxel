@@ -67,6 +67,7 @@ function environmentDefaults() {
       catalogRealmURL: 'https://localhost:4201/catalog/',
       skillsRealmURL: 'https://localhost:4201/skills/',
       openRouterRealmURL: 'https://localhost:4201/openrouter/',
+      testRealmURL: 'https://localhost:4202/test/',
     };
   }
   let slug = getEnvSlug();
@@ -87,6 +88,10 @@ function environmentDefaults() {
     catalogRealmURL: `https://${realmHost}/catalog/`,
     skillsRealmURL: `https://${realmHost}/skills/`,
     openRouterRealmURL: `https://${realmHost}/openrouter/`,
+    // mise-tasks/services/test-realms registers the live test realm at
+    // `https://realm-test.${slug}.localhost/test/` in env mode (the
+    // counterpart to standard mode's `https://localhost:4202/test/`).
+    testRealmURL: `https://realm-test.${slug}.localhost/test/`,
   };
 }
 
@@ -165,6 +170,24 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
+    // The live test realm-server's /test/ realm — used by host tests
+    // that load source modules from it via
+    // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via
+    // `defaults.testRealmURL` above (localhost:4202 in standard mode,
+    // realm-test.<slug>.localhost in env mode). Explicit
+    // `REALM_TEST_URL` overrides take precedence for non-CI consumers
+    // that want a custom test realm endpoint. The override accepts
+    // either a base host URL (which gets `/test/` appended) or a value
+    // that already names the `/test` realm — without the latter case
+    // a path like `https://my-host/test/` would become
+    // `https://my-host/test/test/`.
+    resolvedTestRealmURL: (() => {
+      if (!process.env.REALM_TEST_URL) return defaults.testRealmURL;
+      let normalized = process.env.REALM_TEST_URL.replace(/\/$/, '');
+      return normalized.endsWith('/test')
+        ? `${normalized}/`
+        : `${normalized}/test/`;
+    })(),
     featureFlags: {},
   };
 

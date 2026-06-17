@@ -13,6 +13,8 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import {
   getDbAdapter,
   setupLocalIndexing,
@@ -24,6 +26,16 @@ import {
   testRealmInfo,
   realmConfigCardJSON,
 } from '../helpers';
+
+// Per-user published-realm URL host. Standard mode: `localhost:4201`;
+// env mode: `realm-server.<slug>.localhost`. The publishing UI builds
+// URLs of the form `https://<username>.<host>/<realm>/` (or
+// `<custom-subdomain>.<host>/` for boxel-site claims), so the
+// assertions need to derive the host the same way the UI does.
+// publishedRealmBoxelSpaceDomain and publishedRealmBoxelSiteDomain are
+// distinct in the host config, but in this test environment they
+// resolve to the same value, so one const covers both.
+const publishedSpaceHost = ENV.publishedRealmBoxelSpaceDomain;
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
@@ -88,7 +100,7 @@ function stubUnlistedLinkClaim(sourceRealmURL: string): () => void {
 
   realmServer.checkDomainAvailability = async (subdomain: string) => ({
     available: true,
-    hostname: `${subdomain}.localhost:4201`,
+    hostname: `${subdomain}.${publishedSpaceHost}`,
   });
   realmServer.claimBoxelDomain = async (
     _sourceRealmURL: string,
@@ -99,7 +111,7 @@ function stubUnlistedLinkClaim(sourceRealmURL: string): () => void {
       id: '1',
       attributes: {
         hostname,
-        subdomain: hostname.replace(/\.localhost:4201$/, ''),
+        subdomain: hostname.replace(`.${publishedSpaceHost}`, ''),
         sourceRealmURL,
       },
     },
@@ -112,7 +124,7 @@ function stubUnlistedLinkClaim(sourceRealmURL: string): () => void {
 }
 
 // The URL shown in the unlisted-link card after generating, e.g.
-// "https://<random>.localhost:4201/". The subdomain is random per run.
+// "https://<random>.<host>/". The subdomain is random per run.
 function generatedUnlistedUrl(): string {
   let el = document.querySelector('[data-test-unlisted-link-url]');
   return (el?.textContent ?? '').replace(/\s+/g, '');
@@ -736,8 +748,12 @@ module('Acceptance | host submode', function (hooks) {
 
           let unlistedUrl = generatedUnlistedUrl();
           assert.ok(
-            /^https:\/\/[a-z0-9]+\.localhost:4201\/$/.test(unlistedUrl),
-            `generated an obscure URL (${unlistedUrl})`,
+            unlistedUrl.startsWith('https://'),
+            `generated an https URL (${unlistedUrl})`,
+          );
+          assert.ok(
+            unlistedUrl.endsWith(`.${publishedSpaceHost}/`),
+            `generated URL is on the published host (${unlistedUrl})`,
           );
 
           await click('[data-test-publish-button]');
@@ -800,7 +816,7 @@ module('Acceptance | host submode', function (hooks) {
         // A 16-character subdomain from the generated alphabet is recognized as
         // an unlisted link (see isGeneratedSubdomain).
         let generatedSubdomain = 'k7f3qz9pbcdmnpqr';
-        let generatedHost = `${generatedSubdomain}.localhost:4201`;
+        let generatedHost = `${generatedSubdomain}.${publishedSpaceHost}`;
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
@@ -872,7 +888,7 @@ module('Acceptance | host submode', function (hooks) {
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
 
         let generatedSubdomain = 'k7f3qz9pbcdmnpqr';
-        let generatedHost = `${generatedSubdomain}.localhost:4201`;
+        let generatedHost = `${generatedSubdomain}.${publishedSpaceHost}`;
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
@@ -1004,7 +1020,7 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-custom-subdomain-details]')
           .includesText(
-            'https://my-boxel-site.localhost:4201/ Not published yet',
+            `https://my-boxel-site.${publishedSpaceHost}/ Not published yet`,
           );
         assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
         assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
@@ -1079,7 +1095,7 @@ module('Acceptance | host submode', function (hooks) {
         let now = Date.now();
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'https://testuser.localhost:4201/test/': String(now),
+            [`https://testuser.${publishedSpaceHost}/test/`]: String(now),
             'https://another-domain.com/realm/': String(now - 1000),
           },
         });
@@ -1095,7 +1111,7 @@ module('Acceptance | host submode', function (hooks) {
             .dom('[data-test-open-site-button]')
             .hasAttribute(
               'href',
-              'https://testuser.localhost:4201/test/Person/1',
+              `https://testuser.${publishedSpaceHost}/test/Person/1`,
             )
             .hasAttribute('target', '_blank');
 
@@ -1123,7 +1139,7 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom(
-              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"]',
+              `[data-test-published-realm-item="https://testuser.${publishedSpaceHost}/test/Person/1"]`,
             )
             .exists();
           assert
@@ -1135,11 +1151,11 @@ module('Acceptance | host submode', function (hooks) {
           // Check that popover buttons have correct href attributes
           assert
             .dom(
-              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+              `[data-test-published-realm-item="https://testuser.${publishedSpaceHost}/test/Person/1"] [data-test-open-site-button]`,
             )
             .hasAttribute(
               'href',
-              'https://testuser.localhost:4201/test/Person/1',
+              `https://testuser.${publishedSpaceHost}/test/Person/1`,
             )
             .hasAttribute('target', '_blank');
 
@@ -1163,7 +1179,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1192,7 +1208,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'https://custom-site-name.localhost:4201/',
+              `https://custom-site-name.${publishedSpaceHost}/`,
               'shows claimed custom site URL',
             );
           assert
@@ -1223,7 +1239,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'https://custom-site-name.localhost:4201/',
+              `https://custom-site-name.${publishedSpaceHost}/`,
               'displays placeholder custom site URL after unclaim',
             );
           assert
@@ -1240,7 +1256,7 @@ module('Acceptance | host submode', function (hooks) {
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1268,7 +1284,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1357,7 +1373,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
@@ -1400,7 +1416,10 @@ module('Acceptance | host submode', function (hooks) {
           await waitFor('[data-test-open-custom-subdomain-button]');
           assert
             .dom('[data-test-open-custom-subdomain-button]')
-            .hasAttribute('href', 'https://my-custom-site.localhost:4201/')
+            .hasAttribute(
+              'href',
+              `https://my-custom-site.${publishedSpaceHost}/`,
+            )
             .hasAttribute('target', '_blank');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
@@ -1413,7 +1432,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
@@ -1448,14 +1467,14 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['https://my-custom-site.localhost:4201/']: (
+            [`https://my-custom-site.${publishedSpaceHost}/`]: (
               new Date().getTime() -
               2 * 24 * 60 * 60 * 1000
             ).toString(),

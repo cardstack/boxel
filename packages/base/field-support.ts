@@ -346,6 +346,46 @@ export function getFieldOverrides<T extends BaseDef>(
   return overrides;
 }
 
+// A render/indexing pass reads the same instances' field maps over and over —
+// per serialize, per searchDoc, per getDeps/findInstances recursion — and
+// `computeFields` walks the prototype chain and resolves every field on each
+// call. The result is determined by the prototype chain plus, for an instance,
+// its polymorphic field overrides (and, with `usedLinksToFieldsOnly`, its
+// populated field set). A read-only render only ever GROWS those, so their
+// sizes are a sound validity token: an unchanged token means an identical
+// result. Gated to the render context so the live app — where instances mutate
+// freely (same-size override swaps, field clears) — is never served a memoized
+// map. Keyed on the instance/class via a WeakMap so entries fall away with
+// their subjects; the token guards reuse across passes.
+const renderFieldsCache = new WeakMap<
+  object,
+  Map<
+    string,
+    {
+      token: string;
+      fields: { [fieldName: string]: Field<BaseDefConstructor> };
+    }
+  >
+>();
+
+function renderFieldsCacheToken(
+  subject: object,
+  isInstance: boolean,
+  usedLinksToFieldsOnly: boolean,
+): string {
+  if (!isInstance) {
+    // A class's field map is static; a module reload yields a new class object,
+    // which is a fresh WeakMap key, so no token is needed.
+    return '';
+  }
+  let overrideSize = fieldOverrides.get(subject as BaseDef)?.size ?? 0;
+  if (!usedLinksToFieldsOnly) {
+    return `o${overrideSize}`;
+  }
+  let usedSize = deserializedData.get(subject as BaseDef)?.size ?? 0;
+  return `o${overrideSize}:u${usedSize}`;
+}
+
 export function getFields(
   card: typeof BaseDef,
   opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
@@ -355,6 +395,39 @@ export function getFields<T extends BaseDef>(
   opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [P in keyof T]?: Field<BaseDefConstructor> };
 export function getFields(
+  cardInstanceOrClass: BaseDef | typeof BaseDef,
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
+): { [fieldName: string]: Field<BaseDefConstructor> } {
+  if (!(globalThis as any).__boxelRenderContext) {
+    return computeFields(cardInstanceOrClass, opts);
+  }
+  // `cardInstanceOrClass` is a valid WeakMap key whether it's an instance or a
+  // class; an instance keys per-instance so polymorphic overrides aren't shared
+  // across instances of the same class.
+  let subject: object = cardInstanceOrClass;
+  let isInstance = isCardOrField(cardInstanceOrClass);
+  let usedLinksToFieldsOnly = opts?.usedLinksToFieldsOnly ?? false;
+  let optsKey = `${usedLinksToFieldsOnly ? 1 : 0}${opts?.includeComputeds ? 1 : 0}`;
+  let token = renderFieldsCacheToken(
+    subject,
+    isInstance,
+    usedLinksToFieldsOnly,
+  );
+  let perSubject = renderFieldsCache.get(subject);
+  let entry = perSubject?.get(optsKey);
+  if (entry && entry.token === token) {
+    return entry.fields;
+  }
+  let fields = computeFields(cardInstanceOrClass, opts);
+  if (!perSubject) {
+    perSubject = new Map();
+    renderFieldsCache.set(subject, perSubject);
+  }
+  perSubject.set(optsKey, { token, fields });
+  return fields;
+}
+
+function computeFields(
   cardInstanceOrClass: BaseDef | typeof BaseDef,
   opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
@@ -412,7 +485,9 @@ export function getFields(
 }
 
 function getUsedFields(instance: BaseDef): string[] {
-  return [...getDataBucket(instance)?.keys()];
+  // getDataBucket always returns a Map (it creates one if absent), so the spread
+  // is safe without optional chaining.
+  return [...getDataBucket(instance).keys()];
 }
 
 export function isArrayOfCardOrField(
