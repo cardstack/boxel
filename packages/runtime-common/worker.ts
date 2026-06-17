@@ -418,6 +418,13 @@ export function getReader(
         console.warn(
           `mtimes for ${realmURL}_mtimes got ${response.status} from intermediary (no X-Boxel-Realm-Url header), retrying (attempt ${attempt}/${MAX_ATTEMPTS}) after ${attempt * BACKOFF_MS}ms`,
         );
+        // Cancel the body before backing off — undici holds the
+        // underlying connection in a reserved state until the body is
+        // consumed or cancelled, and a 10-attempt loop on each indexed
+        // realm at boot would otherwise pin sockets across the backoff
+        // window for no benefit (the body is Traefik's "404 page not
+        // found" which we never use).
+        await response.body?.cancel().catch(() => {});
         await new Promise((resolve) =>
           setTimeout(resolve, attempt * BACKOFF_MS),
         );
