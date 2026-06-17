@@ -136,6 +136,79 @@ module('Integration | rendered-markdown', function (hooks) {
       .exists('placeholder has card type attribute');
   });
 
+  test('inline :file[URL] creates BFM placeholder element', async function (assert) {
+    let fileUrl = 'http://example.com/docs/report.pdf';
+    let content = `See :file[${fileUrl}] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    assert
+      .dom(`.markdown-content [data-boxel-bfm-inline-ref="${fileUrl}"]`)
+      .exists('placeholder has correct file URL in data attribute');
+    assert
+      .dom(
+        '.markdown-content [data-boxel-bfm-inline-ref][data-boxel-bfm-type="file"]',
+      )
+      .exists('placeholder has file type attribute');
+  });
+
+  test('block ::file[URL] creates BFM placeholder element', async function (assert) {
+    let fileUrl = 'http://example.com/data/sample.csv';
+    let content = `# Summary\n\n::file[${fileUrl}]\n\nMore text.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    assert
+      .dom(`.markdown-content [data-boxel-bfm-block-ref="${fileUrl}"]`)
+      .exists('placeholder has correct file URL in data attribute');
+    assert
+      .dom(
+        '.markdown-content [data-boxel-bfm-block-ref][data-boxel-bfm-type="file"]',
+      )
+      .exists('placeholder has file type attribute');
+  });
+
+  test('unresolved file reference shows fallback with the file name', async function (assert) {
+    // When a file URL can't be loaded, the modifier creates an unresolved slot
+    // labeled with the file name (last path segment), not a card type name.
+    let fileUrl = 'http://nonexistent.example.com/docs/missing.pdf';
+    let content = `See :file[${fileUrl}] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      {
+        timeout: 5000,
+        timeoutMessage: 'unresolved file fallback did not appear',
+      },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute('title', fileUrl, 'fallback has URL as title');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .containsText('missing.pdf', 'fallback shows the file name');
+  });
+
   test('BFM card placeholders have URL text stripped', async function (assert) {
     // The renderedHtml getter strips text from BFM card elements to prevent
     // flashing raw URLs before cards load or pills render.
