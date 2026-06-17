@@ -52,6 +52,7 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked selectedRealm = this.knownRealms[0];
   @tracked selectedFile?: LocalPath;
   @tracked fileTypeFilter?: CodeRef;
+  @tracked fileFieldFilter?: Record<string, unknown>;
   @tracked fileTypeName?: string;
   @tracked acceptTypes?: string;
   @tracked currentUpload?: FileUploadTask;
@@ -89,9 +90,11 @@ export default class ChooseFileModal extends Component<Signature> {
   async chooseFile<T extends FileDef>(opts?: {
     fileType?: CodeRef;
     fileTypeName?: string;
+    fileFieldFilter?: Record<string, unknown>;
   }): Promise<undefined | T> {
     this.deferred = new Deferred();
     this.fileTypeFilter = opts?.fileType;
+    this.fileFieldFilter = opts?.fileFieldFilter;
     this.fileTypeName = opts?.fileTypeName;
     this.acceptTypes = undefined;
     this.currentUpload = undefined;
@@ -247,6 +250,7 @@ export default class ChooseFileModal extends Component<Signature> {
     this.selectedRealm = this.knownRealms[0];
     this.selectedFile = undefined;
     this.fileTypeFilter = undefined;
+    this.fileFieldFilter = undefined;
     this.fileTypeName = undefined;
     this.acceptTypes = undefined;
     this.currentUpload = undefined;
@@ -482,6 +486,7 @@ export default class ChooseFileModal extends Component<Signature> {
               <IndexedFileTree
                 @realmURL={{this.selectedRealm.url.href}}
                 @fileTypeFilter={{this.fileTypeFilter}}
+                @fileFieldFilter={{this.fileFieldFilter}}
                 @onFileSelected={{this.selectFile}}
                 @onFileConfirmed={{perform this.pickTask}}
                 @autoFocus={{true}}
