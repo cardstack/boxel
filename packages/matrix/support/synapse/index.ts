@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as net from 'net';
-import * as fse from 'fs-extra';
+import fse from 'fs-extra';
 import { request } from '@playwright/test';
 import {
   dockerCreateNetwork,

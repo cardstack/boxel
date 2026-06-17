@@ -2,7 +2,7 @@ import {
   AuthenticationError,
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
-import * as jsonwebtoken from 'jsonwebtoken';
+import jsonwebtoken from 'jsonwebtoken';
 const { JsonWebTokenError, sign, TokenExpiredError, verify } = jsonwebtoken;
 
 export interface RealmServerTokenClaim {
