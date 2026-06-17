@@ -4,7 +4,7 @@ import { Responder } from '../lib/responder.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import FakeTimers from '@sinonjs/fake-timers';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import * as Sentry from '@sentry/node';
+import { errorReporter } from '../lib/sentry.ts';
 import { OpenAIError } from 'openai';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
@@ -218,8 +218,8 @@ module('Responder Cancellation', (hooks) => {
 
   test('onError does not report to Sentry after cancellation', async (assert) => {
     let sentryCalls: any[] = [];
-    let originalCaptureException = Sentry.captureException;
-    (Sentry as any).captureException = (...args: any[]) => {
+    let originalCaptureException = errorReporter.captureException;
+    errorReporter.captureException = (...args: any[]) => {
       sentryCalls.push(args);
       return '';
     };
@@ -247,7 +247,7 @@ module('Responder Cancellation', (hooks) => {
         'Sentry should NOT be called after finalize — prevents false alarms from cancellation',
       );
     } finally {
-      (Sentry as any).captureException = originalCaptureException;
+      errorReporter.captureException = originalCaptureException;
     }
   });
 

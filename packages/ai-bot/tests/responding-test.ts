@@ -15,7 +15,7 @@ import {
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { OpenAIError } from 'openai';
-import * as Sentry from '@sentry/node';
+import { errorReporter } from '../lib/sentry.ts';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -1136,8 +1136,8 @@ module('Responding', (hooks) => {
 
   test('onError does not report to Sentry when streaming is already finished', async () => {
     let sentryCalls: any[] = [];
-    let originalCaptureException = Sentry.captureException;
-    (Sentry as any).captureException = (...args: any[]) => {
+    let originalCaptureException = errorReporter.captureException;
+    errorReporter.captureException = (...args: any[]) => {
       sentryCalls.push(args);
       return '';
     };
@@ -1169,14 +1169,14 @@ module('Responding', (hooks) => {
         'No error events should be sent to Matrix',
       );
     } finally {
-      (Sentry as any).captureException = originalCaptureException;
+      errorReporter.captureException = originalCaptureException;
     }
   });
 
   test('onError reports to Sentry when streaming is not finished', async () => {
     let sentryCalls: any[] = [];
-    let originalCaptureException = Sentry.captureException;
-    (Sentry as any).captureException = (...args: any[]) => {
+    let originalCaptureException = errorReporter.captureException;
+    errorReporter.captureException = (...args: any[]) => {
       sentryCalls.push(args);
       return '';
     };
@@ -1193,7 +1193,7 @@ module('Responding', (hooks) => {
         'Sentry should be called when streaming is not finished',
       );
     } finally {
-      (Sentry as any).captureException = originalCaptureException;
+      errorReporter.captureException = originalCaptureException;
     }
   });
 

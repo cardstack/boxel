@@ -2,7 +2,7 @@ import { logger } from '@cardstack/runtime-common';
 import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
-import * as Sentry from '@sentry/node';
+import { errorReporter } from './sentry.ts';
 import type { OpenAIError } from 'openai/error';
 import { throttle } from 'lodash-es';
 import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
@@ -188,7 +188,7 @@ export class Responder {
     if (this.responseState.isStreamingFinished) {
       return;
     }
-    Sentry.captureException(error, {
+    errorReporter.captureException(error, {
       extra: {
         roomId: this.matrixResponsePublisher.roomId,
         agentId: this.matrixResponsePublisher.agentId,
