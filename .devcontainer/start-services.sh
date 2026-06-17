@@ -148,16 +148,33 @@ timeout 300 bash -c \
   'until curl -sf "http://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
   || echo "Warning: realm server readiness check timed out after 5 minutes"
 
-# ── Trigger host preview build via GitHub Actions ──
-echo "==> Triggering host preview build pointed at this Codespace..."
+# ── Record this Codespace as the preview target ──
+# The codespaces-preview workflow triggers on pushes to this branch and reads
+# the committed target file to point the host build at this Codespace's
+# forwarded backend. Committing + pushing it triggers the first build; every
+# later code push then rebuilds against the same backend.
+echo "==> Recording Codespace target for the preview workflow..."
+TARGET_FILE=".devcontainer/codespace-target.env"
+cat > "$TARGET_FILE" <<EOF
+# Written by .devcontainer/start-services.sh when a Codespace boots.
+# The codespaces-preview workflow reads this to point the host build at this
+# Codespace's forwarded backend services. Safe to delete; do not merge to main.
+CODESPACE_NAME=${CODESPACE_NAME}
+CODESPACE_FORWARDING_DOMAIN=${FWD_DOMAIN}
+EOF
+
 BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)"
-gh workflow run codespaces-preview.yml \
-  --ref "$BRANCH_NAME" \
-  -f codespace_name="$CODESPACE_NAME" \
-  -f realm_server_url="$REALM_SERVER_URL" \
-  -f matrix_url="$MATRIX_PUBLIC_URL" \
-  -f icons_url="$ICONS_PUBLIC_URL" \
-  || echo "Warning: could not trigger preview build. Run manually with: gh workflow run codespaces-preview.yml"
+git add "$TARGET_FILE"
+if git diff --cached --quiet -- "$TARGET_FILE"; then
+  echo "Codespace target unchanged; not pushing (preview rebuilds on your next code push)."
+else
+  git \
+    -c user.name="${GIT_AUTHOR_NAME:-Codespace Preview}" \
+    -c user.email="${GIT_AUTHOR_EMAIL:-codespace@users.noreply.github.com}" \
+    commit -m "ci: record Codespace preview target" >/dev/null
+  git push origin "HEAD:${BRANCH_NAME}" \
+    || echo "Warning: could not push Codespace target; the preview build was not triggered."
+fi
 
 echo ""
 echo "============================================"
