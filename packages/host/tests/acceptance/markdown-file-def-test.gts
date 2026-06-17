@@ -442,19 +442,27 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     await settled();
 
+    // documents/notes.txt resolves to a TextFileDef, whose atom/embedded views
+    // render its title — the file name without extension ('notes' / 'spec').
     assert
       .dom('[data-test-markdown-bfm-inline-file]')
       .exists('inline file reference renders a resolved file slot');
     assert
-      .dom('[data-test-markdown-bfm-inline-file]')
-      .hasText('notes.txt', 'inline file slot shows the file name');
+      .dom('[data-test-markdown-bfm-inline-file] [data-test-text-atom]')
+      .containsText(
+        'notes',
+        'inline file slot renders the text file in atom format',
+      );
 
     assert
       .dom('[data-test-markdown-bfm-block-file]')
       .exists('block file reference renders a resolved file slot');
     assert
-      .dom('[data-test-markdown-bfm-block-file]')
-      .hasText('spec.txt', 'block file slot shows the file name');
+      .dom('[data-test-markdown-bfm-block-file] [data-test-text-embedded]')
+      .containsText(
+        'spec',
+        'block file slot renders the text file in embedded format',
+      );
 
     assert
       .dom('[data-boxel-bfm-inline-ref]')
