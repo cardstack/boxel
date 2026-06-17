@@ -522,6 +522,27 @@ Instructions live in the markdown body.
     );
   });
 
+  test('skill pill menu opens the skill markdown file', async function (assert) {
+    await renderAiAssistantPanel();
+
+    let skillId = `${testRealmURL}realm-sync-skill.md`;
+    await addSkillToAiAssistant(skillId);
+
+    assert
+      .dom(`[data-test-stack-card="${skillId}"]`)
+      .doesNotExist('skill file is not open before using the menu');
+
+    await click('[data-test-skill-menu]');
+    await click(`[data-test-skill-options-button="${skillId}"]`);
+    await waitFor('[data-test-boxel-menu-item-text="Open Skill File"]');
+    await click('[data-test-boxel-menu-item-text="Open Skill File"]');
+
+    await waitFor(`[data-test-stack-card="${skillId}"]`);
+    assert
+      .dom(`[data-test-stack-card="${skillId}"]`)
+      .exists('skill markdown file is opened as a stack item');
+  });
+
   test('skill pill menu opens the skill card while in code mode', async function (assert) {
     await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 

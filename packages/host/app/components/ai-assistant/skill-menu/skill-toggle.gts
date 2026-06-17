@@ -23,6 +23,7 @@ import ShowCardCommand from '@cardstack/host/commands/show-card';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isMarkdownSkillId } from '@cardstack/host/lib/skill-commands';
 import type CommandService from '@cardstack/host/services/command-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 interface SkillToggleSignature {
@@ -40,13 +41,18 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @service declare private realm: RealmService;
   @service declare private commandService: CommandService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
+
+  private get isMarkdownSkill(): boolean {
+    return isMarkdownSkillId(this.args.cardId);
+  }
 
   private makeCardResource = () => {
     // A skill markdown file is a `MarkdownDef` file-meta resource, not a card;
     // load it through the file-meta read type. Skill cards load as cards.
     this.cardResource = this.getCard(this, () => this.args.cardId, {
-      type: isMarkdownSkillId(this.args.cardId) ? 'file-meta' : 'card',
+      type: this.isMarkdownSkill ? 'file-meta' : 'card',
     });
   };
 
@@ -78,13 +84,21 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   private get menuItems(): MenuItem[] {
     return [
       new MenuItem({
-        label: 'Open Skill Card',
-        action: this.openSkillCard,
+        label: this.isMarkdownSkill ? 'Open Skill File' : 'Open Skill Card',
+        action: this.openSkill,
       }),
     ];
   }
 
   @action
+  private async openSkill() {
+    if (this.isMarkdownSkill) {
+      await this.openSkillFile();
+    } else {
+      await this.openSkillCard();
+    }
+  }
+
   private async openSkillCard() {
     let showCardCommand = new ShowCardCommand(
       this.commandService.commandContext,
@@ -92,6 +106,26 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });
+  }
+
+  // A skill markdown file is not a card, so `ShowCardCommand` can't open it.
+  // Open it the way any file opens: a file stack item in interact mode, or by
+  // pointing the code editor at it in code mode.
+  private async openSkillFile() {
+    let { operatorModeStateService: om } = this;
+    if (om.state?.submode === 'code') {
+      await om.updateCodePath(new URL(this.args.cardId));
+      return;
+    }
+    let newStackIndex = Math.min(om.numberOfStacks(), 1);
+    let newStackItem = om.createStackItem(
+      this.args.cardId,
+      newStackIndex,
+      'isolated',
+      undefined,
+      'file',
+    );
+    om.addItemToStack(newStackItem);
   }
 
   <template>
