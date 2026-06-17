@@ -140,3 +140,61 @@ module('Unit | fetcher', function () {
     assert.strictEqual(await response.text(), 'OK', 'body text is correct');
   });
 });
+
+module('Unit | VirtualNetwork fetch retries', function (hooks) {
+  let priorEnvironment: unknown;
+  let priorTimeout: unknown;
+
+  hooks.beforeEach(function () {
+    // The per-attempt timeout is armed only in the test environment; pin it
+    // and shrink the deadline so the retry path runs in milliseconds.
+    priorEnvironment = (globalThis as any).__environment;
+    priorTimeout = (globalThis as any).__fetchAttemptTimeoutMs;
+    (globalThis as any).__environment = 'test';
+    (globalThis as any).__fetchAttemptTimeoutMs = 50;
+  });
+
+  hooks.afterEach(function () {
+    (globalThis as any).__environment = priorEnvironment;
+    if (priorTimeout === undefined) {
+      delete (globalThis as any).__fetchAttemptTimeoutMs;
+    } else {
+      (globalThis as any).__fetchAttemptTimeoutMs = priorTimeout;
+    }
+  });
+
+  test('a wedged (never-settling) attempt to a retryable host times out and retries on a fresh stream', async function (assert) {
+    assert.expect(3);
+    let attempts = 0;
+    // Mirror a wedged HTTP/2 stream: the first attempt never resolves on its
+    // own and only settles when its abort signal fires; the retry succeeds.
+    let vn = new VirtualNetwork(async function (input) {
+      attempts++;
+      let request = input as Request;
+      if (attempts === 1) {
+        return await new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener('abort', () =>
+            reject(
+              new DOMException('The operation was aborted.', 'AbortError'),
+            ),
+          );
+        });
+      }
+      return new Response('OK', { status: 200 });
+    });
+
+    // localhost is a retryable host, so withRetries arms the timeout.
+    let response = await vn.fetch('http://localhost:4201/base/_info');
+    assert.strictEqual(
+      attempts,
+      2,
+      'first attempt was aborted by the timeout and the request was retried',
+    );
+    assert.strictEqual(response.status, 200, 'retry resolved successfully');
+    assert.strictEqual(
+      await response.text(),
+      'OK',
+      'body comes from the retry',
+    );
+  });
+});

@@ -408,9 +408,19 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    return withRetries(new URL(request.url), () =>
-      fetcher(this.nativeFetch, handlers, this)(request, init),
-    );
+    return withRetries(new URL(request.url), (signal) => {
+      // `signal` is supplied only on the per-attempt timeout path (test env);
+      // attach it to a fresh clone so aborting one attempt cancels its
+      // underlying fetch without disturbing the template request the next
+      // attempt re-clones. Combine with any caller-supplied signal so an
+      // explicit cancellation still propagates.
+      let attemptRequest = signal
+        ? new Request(request.clone(), {
+            signal: combineAbortSignals(request.signal, signal),
+          })
+        : request;
+      return fetcher(this.nativeFetch, handlers, this)(attemptRequest, init);
+    });
   }
 
   // This method is used to handle the boundary between the real and virtual network,
@@ -497,6 +507,45 @@ const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
+// Per-attempt deadline for retryable fetches in the host/Node test
+// environment. An HTTP/2 *stream* can wedge while its session stays healthy:
+// the session keeps answering the realm server's keepalive PINGs (so the
+// server-side wedged-session teardown never fires) yet one request's response
+// never arrives. That fetch never settles, so withRetries' catch never runs,
+// the `fetcher` test-waiter stays open, and the test hangs until its 60s QUnit
+// timeout. A deadline turns the silent stream wedge into an AbortError the
+// retry loop can act on: it frees the waiter and reissues the request on a
+// fresh stream (or, once a fully-silent session is torn down, a fresh
+// session), comfortably inside the 60s budget. 15s sits well above a healthy
+// base-realm fetch (sub-second even on a loaded CI runner) so a merely slow
+// response is never aborted, while still leaving room for several retries.
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 15_000;
+
+// Read the per-attempt deadline, honoring a test-only override so the retry
+// path can be exercised deterministically without waiting out the real 15s.
+function attemptTimeoutMs(): number {
+  let override = (globalThis as any).__fetchAttemptTimeoutMs;
+  return typeof override === 'number' && override > 0
+    ? override
+    : DEFAULT_ATTEMPT_TIMEOUT_MS;
+}
+
+// Merge a request's own signal with our per-attempt timeout signal so either
+// one aborts the underlying fetch. Defined defensively, but AbortSignal.any is
+// available in every environment this test-only path runs in (Chrome + Node).
+function combineAbortSignals(
+  requestSignal: AbortSignal | undefined,
+  timeoutSignal: AbortSignal,
+): AbortSignal {
+  if (!requestSignal) {
+    return timeoutSignal;
+  }
+  if (typeof (AbortSignal as any).any === 'function') {
+    return (AbortSignal as any).any([requestSignal, timeoutSignal]);
+  }
+  return requestSignal.aborted ? requestSignal : timeoutSignal;
+}
+
 function shouldRetryFetch(url: URL) {
   // Env-mode services live at `<service>.<slug>.localhost` and are
   // reached through a local Traefik. The realm-server worker fetches
@@ -535,15 +584,27 @@ function shouldRetryFetch(url: URL) {
 
 async function withRetries(
   url: URL,
-  fetchFn: () => ReturnType<typeof globalThis.fetch>,
+  fetchFn: (signal?: AbortSignal) => ReturnType<typeof globalThis.fetch>,
 ) {
+  let retryable = shouldRetryFetch(url);
+  // Only arm the per-attempt timeout in the host/Node *test* environment, not
+  // on shouldRetryFetch's production env-mode worker-boot branch above, which
+  // must keep its existing no-deadline behavior.
+  let armTimeout = retryable && (globalThis as any).__environment === 'test';
   let attempt = 0;
   for (;;) {
+    let timeoutController: AbortController | undefined;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let timeoutMs = attemptTimeoutMs();
+    if (armTimeout) {
+      timeoutController = new AbortController();
+      timeoutTimer = setTimeout(() => timeoutController!.abort(), timeoutMs);
+    }
     try {
-      return await fetchFn();
+      return await fetchFn(timeoutController?.signal);
     } catch (err: any) {
-      if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
-        if (shouldRetryFetch(url) && attempt > maxAttempts) {
+      if (!retryable || ++attempt > maxAttempts) {
+        if (retryable && attempt > maxAttempts) {
           // Final-exhaustion log: distinct from the per-attempt warning so
           // CI output can be grepped for the actual cap being hit.
           console.error(
@@ -554,12 +615,22 @@ async function withRetries(
         }
         throw err;
       }
+      // A timed-out attempt is logged distinctly from a rejected one so a
+      // future CI failure shows the deadline firing (and on which URL) rather
+      // than blending into the transient "fetch failed" noise.
+      let timedOut = timeoutController?.signal.aborted ?? false;
       console.error(
-        `Encountered fetch failed for ${
-          url.href
-        } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+        `Encountered fetch ${
+          timedOut ? `timeout (>${timeoutMs}ms)` : 'failed'
+        } for ${url.href} retry attempt #${attempt} in ${
+          attempt * backOffMs
+        }ms`,
       );
       await new Promise((r) => setTimeout(r, attempt * backOffMs));
+    } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
     }
   }
 }
