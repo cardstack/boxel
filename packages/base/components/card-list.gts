@@ -16,9 +16,12 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import {
   removeFileExtension,
   rri,
+  searchEntryWireQueryFromQuery,
   CardCrudFunctionsContextName,
   CardContextName,
   type Query,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -57,8 +60,19 @@ export default class CardList extends Component<Signature> {
   @consume(CardContextName)
   declare cardContext: CardContext | undefined;
 
-  // Tracks the fallback row with the overlay system the same way
-  // PrerenderedCard does for rows that produced HTML. Falls back to a no-op
+  // The v2 `search-entry`-rooted query, adapted from the incoming v1 `Query`.
+  // The default fieldset (no `fields` member) resolves to "html, falling back
+  // to the `item` serialization where no rendering matched" — exactly what the
+  // grid wants (prerendered HTML for cards; an `item`/`icon` fallback for file
+  // rows). Only read under `{{#if @query}}`.
+  private get searchResultsQuery(): SearchEntryWireQuery {
+    return {
+      ...searchEntryWireQueryFromQuery(this.args.query!),
+      realms: this.args.realms,
+    };
+  }
+
+  // Tracks the fallback row with the overlay system. Falls back to a no-op
   // when no context provides one (e.g. CardList used outside operator mode),
   // so applying the modifier is always safe.
   private get cardComponentModifier(): CardComponentModifier {
@@ -66,14 +80,13 @@ export default class CardList extends Component<Signature> {
   }
 
   // Only fallback rows are tracked on the <li> (their visible card is the
-  // <li> itself). HTML rows are tracked by PrerenderedCard on their own
-  // component root, so tracking the <li> too would double-register them and
-  // misplace the overlay — hence the no-op for those.
-  private trackerFor = (card: {
-    hasHtml?: boolean;
-    isError?: boolean;
-  }): CardComponentModifier =>
-    this.shouldRenderFallback(card)
+  // <li> itself). HTML / live rows render through `<entry.component />`
+  // (`HydratableCard`), which tracks its own element with the overlay, so
+  // tracking the <li> too would double-register them — hence the no-op there.
+  private trackerFor = (
+    entry: RenderableSearchEntryLike,
+  ): CardComponentModifier =>
+    this.shouldRenderFallback(entry)
       ? this.cardComponentModifier
       : noopCardModifier;
 
@@ -85,10 +98,10 @@ export default class CardList extends Component<Signature> {
     }
   }
 
-  // Last URL segment, used as a visible label when the prerender pipeline
-  // didn't produce HTML for a file row (CS-11171 — `.gts`/`.ts` FileDef rows
-  // currently skip the FileRender pass, so their `fitted_html` is null and
-  // `<card.component />` renders nothing).
+  // Last URL segment, used as a visible label for a file row the prerender
+  // pipeline produced no HTML for (`.gts`/`.ts` FileDef rows skip the
+  // FileRender pass, so they carry no `html` rendering and fall back to a
+  // `file-meta` `item`).
   fileNameFromUrl(url: string): string {
     try {
       let pathname = new URL(url).pathname;
@@ -100,16 +113,17 @@ export default class CardList extends Component<Signature> {
     }
   }
 
-  // Render the filename fallback only when the prerender pipeline produced
-  // no HTML AND the row is not an error. Error rows have their own
-  // dedicated error component built by PrerenderedCard's constructor, which
-  // also has empty `html`; treating them like file fallbacks would swap a
-  // helpful "rendering error" affordance for a bare filename.
-  shouldRenderFallback(card: {
-    hasHtml?: boolean;
-    isError?: boolean;
-  }): boolean {
-    return card.hasHtml === false && !card.isError;
+  // Render the cheap icon + filename placeholder for a file row that has no
+  // prerendered HTML — it fell back to a `file-meta` `item`. Rendering
+  // `<entry.component />` for such a row would eagerly load the live `FileDef`
+  // instance; the placeholder shows the type icon + name (resolved from the
+  // deduped `icon` resource on the entry) without that load. Error rows and
+  // no-HTML *card* rows are excluded: the former render their error affordance,
+  // the latter resolve live (self-healing) through `<entry.component />`.
+  shouldRenderFallback(entry: RenderableSearchEntryLike): boolean {
+    return (
+      !entry.html && entry.item?.type === 'file-meta' && !entry.isError
+    );
   }
 
   <template>
@@ -123,83 +137,78 @@ export default class CardList extends Component<Signature> {
       ...attributes
     >
       {{#if @query}}
-        <@context.prerenderedCardSearchComponent
-          @query={{@query}}
-          @format={{@format}}
-          @realms={{@realms}}
-          @isLive={{@isLive}}
+        <@context.searchResultsComponent
+          @query={{this.searchResultsQuery}}
+          @mode='none'
+          as |results|
         >
-          <:loading>
-            <div class='loading-container'>
-              <LoadingIndicator />
-            </div>
-          </:loading>
-          <:response as |cards|>
-            {{#each cards key='url' as |card|}}
-              <li
-                class={{cn
-                  'boxel-card-list-item'
-                  instance-error=card.isError
-                  clickable=(if this.cardCrudFunctions.viewCard true false)
-                  fallback=(this.shouldRenderFallback card)
-                }}
-                data-test-instance-error={{card.isError}}
-                data-test-cards-grid-item={{removeFileExtension card.url}}
-                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                data-cards-grid-item={{removeFileExtension card.url}}
-                data-card-type-display-name={{if
-                  (this.shouldRenderFallback card)
-                  card.cardType
-                }}
-                data-card-type-icon-html={{if
-                  (this.shouldRenderFallback card)
-                  card.iconHtml
-                }}
-                role={{if this.cardCrudFunctions.viewCard 'button'}}
-                tabindex={{if this.cardCrudFunctions.viewCard '0'}}
-                {{on 'click' (fn this.handleCardClick card.url)}}
-                {{(this.trackerFor card)
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-              >
-                {{#if (this.shouldRenderFallback card)}}
-                  {{! CS-11171: file rows whose prerender produced no HTML
-                      (currently `.gts`/`.ts` FileDef rows) — render a name
-                      so the row is at least visible and the click handler on
-                      this `<li>` can still route the user into interact-mode
-                      (and from there into Code Mode via the kebab menu).
-                      Error rows are excluded so PrerenderedCard's dedicated
-                      error component still gets rendered for them.
-                      The <li> carries the tracking modifier + type attributes
-                      (see trackerFor) so the overlay system labels and acts on
-                      these rows too, aligned to the visible card. }}
-                  <div class='card-fallback' data-test-card-fallback>
-                    {{#if card.iconHtml}}
-                      <span
-                        class='card-fallback__icon card-fallback__icon--svg'
-                      >{{htmlSafe card.iconHtml}}</span>
-                    {{else}}
-                      <FileIcon
-                        class='card-fallback__icon'
-                        role='presentation'
-                      />
-                    {{/if}}
-                    <div class='card-fallback__name'>
-                      {{this.fileNameFromUrl card.url}}
-                    </div>
+          {{#each results.entries key='id' as |entry|}}
+            <li
+              class={{cn
+                'boxel-card-list-item'
+                instance-error=entry.isError
+                clickable=(if this.cardCrudFunctions.viewCard true false)
+                fallback=(this.shouldRenderFallback entry)
+              }}
+              data-test-instance-error={{entry.isError}}
+              data-test-cards-grid-item={{removeFileExtension entry.id}}
+              {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+              data-cards-grid-item={{removeFileExtension entry.id}}
+              data-card-type-display-name={{if
+                (this.shouldRenderFallback entry)
+                entry.displayName
+              }}
+              data-card-type-icon-html={{if
+                (this.shouldRenderFallback entry)
+                entry.iconHtml
+              }}
+              role={{if this.cardCrudFunctions.viewCard 'button'}}
+              tabindex={{if this.cardCrudFunctions.viewCard '0'}}
+              {{on 'click' (fn this.handleCardClick entry.id)}}
+              {{(this.trackerFor entry)
+                cardId=entry.id
+                format='data'
+                fieldType=undefined
+                fieldName=undefined
+              }}
+            >
+              {{#if (this.shouldRenderFallback entry)}}
+                {{! A file row with no prerendered HTML (currently `.gts`/`.ts`
+                    FileDef rows) — render the type icon + name so the row is
+                    visible and the click handler on this `<li>` can still route
+                    into interact-mode (and from there into Code Mode), without
+                    eagerly loading the live FileDef. The icon + name come from
+                    the entry's deduped `icon` resource. The <li> carries the
+                    tracking modifier + type attributes (see trackerFor) so the
+                    overlay labels and acts on these rows, aligned to the card.
+                    Error rows and no-HTML card rows are excluded — they render
+                    through `<entry.component />`. }}
+                <div class='card-fallback' data-test-card-fallback>
+                  {{#if entry.iconHtml}}
+                    <span
+                      class='card-fallback__icon card-fallback__icon--svg'
+                    >{{htmlSafe entry.iconHtml}}</span>
+                  {{else}}
+                    <FileIcon class='card-fallback__icon' role='presentation' />
+                  {{/if}}
+                  <div class='card-fallback__name'>
+                    {{this.fileNameFromUrl entry.id}}
                   </div>
-                {{else}}
-                  <card.component />
-                {{/if}}
-              </li>
+                </div>
+              {{else}}
+                <entry.component />
+              {{/if}}
+            </li>
+          {{else}}
+            {{#if results.isLoading}}
+              <div class='loading-container'>
+                <LoadingIndicator />
+              </div>
             {{else}}
               <p>No results were found</p>
-            {{/each}}
-          </:response>
-        </@context.prerenderedCardSearchComponent>
+            {{/if}}
+          {{/each}}
+        </@context.searchResultsComponent>
       {{else if @cards}}
         {{#each @cards key='id' as |Card|}}
           <li class='boxel-card-list-item'>
