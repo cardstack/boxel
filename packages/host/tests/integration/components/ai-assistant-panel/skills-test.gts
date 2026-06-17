@@ -278,6 +278,23 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
           },
         },
+        // A skill expressed as a markdown file (`boxel.kind: skill`), at the
+        // realm root so it appears directly in the file chooser's tree.
+        'realm-sync-skill.md': `---
+name: Realm Sync Skill
+description: A skill expressed as a markdown file
+boxel:
+  kind: skill
+  commands:
+    - codeRef:
+        module: '${testRealmURL}placeholder-command'
+        name: default
+      requiresApproval: false
+---
+# Realm Sync Skill
+
+Instructions live in the markdown body.
+`,
         'hello.txt': 'Hello, world!',
         'index.json': new CardsGrid(),
         'realm.json': realmConfigCardJSON({ name: realmName }),
@@ -400,6 +417,58 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       .dom(`[data-test-skill-options-button="${skillId}"]`)
       .exists('selected skill is shown in the skill menu');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
+  });
+
+  test('skill picker can add a skill markdown file through the UI', async function (assert) {
+    const roomId = await renderAiAssistantPanel();
+    let skillId = `${testRealmURL}realm-sync-skill.md`;
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+
+    // The file chooser is scoped to skill markdown files.
+    await waitFor('[data-test-choose-file-modal]');
+    await waitFor('[data-test-file="realm-sync-skill.md"]');
+    await click('[data-test-file="realm-sync-skill.md"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await waitUntil(
+      () =>
+        Boolean(
+          getRoomState(
+            roomId,
+            APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          )?.enabledSkillCards?.some((card: any) => card.sourceUrl === skillId),
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage: `timed out waiting for ${skillId} to be enabled`,
+      },
+    );
+
+    let skillsState = getRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE);
+    assert.ok(
+      skillsState.commandDefinitions?.some((c: any) =>
+        c.sourceUrl?.includes('placeholder-command'),
+      ),
+      "the markdown skill's frontmatter command is uploaded as a command definition",
+    );
+
+    await click('[data-test-skill-menu]');
+    assert
+      .dom(`[data-test-skill-toggle="${skillId}-on"]`)
+      .exists('the attached skill markdown is enabled in the menu');
+    assert
+      .dom('[data-test-skill-menu]')
+      .containsText(
+        'Realm Sync Skill',
+        'the pill is titled from the markdown frontmatter name',
+      );
   });
 
   test('skill picker excludes already-enabled skills', async function (assert) {
