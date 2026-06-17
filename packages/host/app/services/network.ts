@@ -1,6 +1,8 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import {
   VirtualNetwork,
   authorizationMiddleware,
@@ -82,6 +84,25 @@ export default class NetworkService extends Service {
         '@cardstack/openrouter/',
         config.resolvedOpenRouterRealmURL,
       );
+    }
+    // Some test fixture content (JSON card files under tests/cards/, embedded
+    // card ids in test data) refers to the live test realm by its standard-
+    // mode URL `https://localhost:4202/test/`. In environment mode the live
+    // test realm is served at a per-environment Traefik hostname. Mapping
+    // the standard-mode URL onto whatever the running test realm-server
+    // serves lets the same fixture content resolve under either mode.
+    // Gated on isTesting() so the mapping never reaches prod fetches.
+    if (isTesting()) {
+      let hardcodedTestRealmURL = new URL('https://localhost:4202/test/');
+      let resolvedTestRealmURL = new URL(
+        withTrailingSlash(config.resolvedTestRealmURL),
+      );
+      if (resolvedTestRealmURL.href !== hardcodedTestRealmURL.href) {
+        virtualNetwork.addURLMapping(
+          hardcodedTestRealmURL,
+          resolvedTestRealmURL,
+        );
+      }
     }
     return virtualNetwork;
   }
