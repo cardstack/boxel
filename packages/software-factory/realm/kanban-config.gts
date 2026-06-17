@@ -90,12 +90,14 @@ export function buildIssueOptionFields(options: Option[]): IssueOptionField[] {
   return options.map((option) => new IssueOptionField(option));
 }
 
+type IssueOptionArray = Array<{
+  value?: string | null;
+  label?: string | null;
+  color?: string | null;
+}>;
+
 type IssueStatusOptionSource = {
-  issueStatusOptions?: Array<{
-    value?: string | null;
-    label?: string | null;
-    color?: string | null;
-  }>;
+  issueStatusOptions?: IssueOptionArray;
 };
 
 type IssueStatusOwner = { project?: IssueStatusOptionSource | null };
@@ -128,6 +130,40 @@ export function configuredIssueStatusOptions(
   return configured.length ? configured : issueStatusOptions;
 }
 
+type IssueTypeOptionSource = {
+  issueTypeOptions?: IssueOptionArray;
+};
+
+type IssueTypeOwner = { project?: IssueTypeOptionSource | null };
+
+function hasProjectForType(
+  owner: IssueTypeOwner | IssueTypeOptionSource,
+): owner is IssueTypeOwner {
+  return 'project' in owner;
+}
+
+export function configuredIssueTypeOptions(
+  owner: IssueTypeOwner | IssueTypeOptionSource | null | undefined,
+): Option[] {
+  let typeOptions = owner
+    ? hasProjectForType(owner)
+      ? owner.project?.issueTypeOptions
+      : owner.issueTypeOptions
+    : undefined;
+
+  let configured = (typeOptions ?? [])
+    .map(
+      (option): Option => ({
+        value: option.value ?? '',
+        label: option.label ?? '',
+        color: option.color ?? undefined,
+      }),
+    )
+    .filter((option) => option.value && option.label);
+
+  return configured.length ? configured : issueTypeOptions;
+}
+
 export const IssueStatusField = enumField(StringField, {
   options: function (this: {
     project?: { issueStatusOptions?: IssueOptionField[] } | null;
@@ -137,15 +173,79 @@ export const IssueStatusField = enumField(StringField, {
 });
 
 export const IssueTypeField = enumField(StringField, {
-  options: issueTypeOptions,
+  options: function (this: {
+    project?: { issueTypeOptions?: IssueOptionField[] } | null;
+  }) {
+    return configuredIssueTypeOptions(this);
+  },
 });
+
+type IssuePriorityOptionSource = {
+  issuePriorityOptions?: IssueOptionArray;
+};
+
+type IssuePriorityOwner = { project?: IssuePriorityOptionSource | null };
+
+function hasProjectForPriority(
+  owner: IssuePriorityOwner | IssuePriorityOptionSource,
+): owner is IssuePriorityOwner {
+  return 'project' in owner;
+}
+
+export function configuredIssuePriorityOptions(
+  owner: IssuePriorityOwner | IssuePriorityOptionSource | null | undefined,
+): Option[] {
+  let priorityOptions = owner
+    ? hasProjectForPriority(owner)
+      ? owner.project?.issuePriorityOptions
+      : owner.issuePriorityOptions
+    : undefined;
+
+  let configured = (priorityOptions ?? [])
+    .map(
+      (option): Option => ({
+        value: option.value ?? '',
+        label: option.label ?? '',
+        color: option.color ?? undefined,
+      }),
+    )
+    .filter((option) => option.value && option.label);
+
+  return configured.length ? configured : issuePriorityOptions;
+}
 
 export const IssuePriorityField = enumField(StringField, {
-  options: issuePriorityOptions,
+  options: function (this: {
+    project?: { issuePriorityOptions?: IssueOptionField[] } | null;
+  }) {
+    return configuredIssuePriorityOptions(this);
+  },
 });
 
+export function configuredProjectStatusOptions(
+  owner: { projectStatusOptions?: IssueOptionArray | null } | null | undefined,
+): Option[] {
+  let statusOptions = owner?.projectStatusOptions;
+
+  let configured = (statusOptions ?? [])
+    .map(
+      (option): Option => ({
+        value: option.value ?? '',
+        label: option.label ?? '',
+        color: option.color ?? undefined,
+      }),
+    )
+    .filter((option) => option.value && option.label);
+
+  return configured.length ? configured : projectStatusOptions;
+}
+
 export const ProjectStatusField = enumField(StringField, {
-  options: projectStatusOptions,
+  options: function (this: {
+    projectStatusOptions?: IssueOptionField[] | null;
+  }) {
+    return configuredProjectStatusOptions(this);
+  },
 });
 
 export const GroupByField = enumField(StringField, {
