@@ -306,6 +306,24 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '',
             '::card[https://nonexistent.example/BlogPost/gone]',
           ].join('\n'),
+          'documents/notes.txt': 'These are project notes.',
+          'documents/spec.txt': 'Specification details live here.',
+          'bfm-file-test.md': [
+            '# BFM File Test',
+            '',
+            `Inline reference: :file[${testRealmURL}documents/notes.txt]`,
+            '',
+            `::file[${testRealmURL}documents/spec.txt]`,
+            '',
+            'End of document.',
+          ].join('\n'),
+          'bfm-file-fallback.md': [
+            '# File Fallback Test',
+            '',
+            ':file[https://nonexistent.example/missing.pdf]',
+            '',
+            '::file[https://nonexistent.example/gone.pdf]',
+          ].join('\n'),
           'mermaid-test.md': [
             '# Mermaid Test',
             '',
@@ -413,6 +431,70 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         'title',
         'https://nonexistent.example/BlogPost/gone',
         'block Pill title shows the raw URL',
+      );
+  });
+
+  test('renders inline file reference in atom format and block file reference in embedded format', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-test.md`,
+    });
+
+    await settled();
+
+    assert
+      .dom('[data-test-markdown-bfm-inline-file]')
+      .exists('inline file reference renders a resolved file slot');
+    assert
+      .dom('[data-test-markdown-bfm-inline-file]')
+      .hasText('notes.txt', 'inline file slot shows the file name');
+
+    assert
+      .dom('[data-test-markdown-bfm-block-file]')
+      .exists('block file reference renders a resolved file slot');
+    assert
+      .dom('[data-test-markdown-bfm-block-file]')
+      .hasText('spec.txt', 'block file slot shows the file name');
+
+    assert
+      .dom('[data-boxel-bfm-inline-ref]')
+      .doesNotIncludeText(
+        `${testRealmURL}documents/notes.txt`,
+        'inline fallback path is hidden after the file resolves',
+      );
+  });
+
+  test('shows fallback for unresolvable file references', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-fallback.md`,
+    });
+
+    await settled();
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasText(
+        'missing.pdf',
+        'unresolvable inline file ref shows the file name',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/missing.pdf',
+        'inline file fallback title shows the raw URL',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasText('gone.pdf', 'unresolvable block file ref shows the file name');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/gone.pdf',
+        'block file fallback title shows the raw URL',
       );
   });
 

@@ -243,6 +243,20 @@ export function extractCardReferenceUrls(
 }
 
 /**
+ * Convenience wrapper that extracts only `:file[URL]` / `::file[URL]`
+ * references and returns just the resolved URL strings.
+ */
+export function extractFileReferenceUrls(
+  markdown: string,
+  baseUrl: string,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  return extractBfmReferences(markdown, baseUrl, ['file'], virtualNetwork).map(
+    (r) => r.url,
+  );
+}
+
+/**
  * Creates marked v12 extensions for a given BFM keyword.
  *
  * Block: `::keyword[URL]` → `<div data-boxel-bfm-block-ref="URL" data-boxel-bfm-type="keyword">URL</div>`
