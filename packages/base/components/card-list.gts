@@ -10,6 +10,7 @@ import { modifier } from 'ember-modifier';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import FileIcon from '@cardstack/boxel-icons/file';
+import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
@@ -94,14 +95,15 @@ export default class CardList extends Component<Signature> {
     return this.cardContext?.cardComponentModifier ?? noopCardModifier;
   }
 
-  // Only fallback rows are tracked on the <li> (their visible card is the
-  // <li> itself). HTML / live rows render through `<entry.component />`
-  // (`HydratableCard`), which tracks its own element with the overlay, so
-  // tracking the <li> too would double-register them — hence the no-op there.
+  // Fallback rows and error tiles are tracked on the <li> (their visible card
+  // is the <li> itself — they don't render `<entry.component />`). HTML / live
+  // rows render through `<entry.component />` (`HydratableCard`), which tracks
+  // its own element with the overlay, so tracking the <li> too would
+  // double-register them — hence the no-op there.
   private trackerFor = (
     entry: RenderableSearchEntryLike,
   ): CardComponentModifier =>
-    this.shouldRenderFallback(entry)
+    this.shouldRenderFallback(entry) || this.shouldRenderErrorTile(entry)
       ? this.cardComponentModifier
       : noopCardModifier;
 
@@ -139,6 +141,17 @@ export default class CardList extends Component<Signature> {
     return (
       !entry.html && entry.item?.type === 'file-meta' && !entry.isError
     );
+  }
+
+  // Render the full-cell error tile for an error row with no renderable HTML —
+  // no good rendering, no last-known-good rendering, and no live item to fall
+  // back to. `<entry.component />` would route these to `SearchResultError`,
+  // whose compact row layout doesn't fill a grid cell; the grid wants the
+  // centered icon + name tile instead. An error row that still carries
+  // last-known-good HTML (`entry.html.html` present) is excluded — it renders
+  // that HTML inert through `<entry.component />`.
+  shouldRenderErrorTile(entry: RenderableSearchEntryLike): boolean {
+    return entry.isError && !entry.html?.html;
   }
 
   <template>
@@ -187,7 +200,29 @@ export default class CardList extends Component<Signature> {
                 fieldName=undefined
               }}
             >
-              {{#if (this.shouldRenderFallback entry)}}
+              {{#if (this.shouldRenderErrorTile entry)}}
+                {{! An error row with no renderable HTML (no good rendering, no
+                    last-known-good rendering, no live item). Render the
+                    full-cell error tile — centered alert icon + the result's
+                    realm-local name — so the grid cell reads as a card-shaped
+                    error, matching the rest of the grid. The <li> carries the
+                    tracking modifier (see trackerFor) so the operator-mode
+                    overlay can still select/label it. Routing these through
+                    `<entry.component />` would render the compact
+                    `SearchResultError` row, which doesn't fill a grid cell. }}
+                <div class='card-error' data-test-card-error>
+                  <div class='card-error__thumbnail'>
+                    <TriangleAlert
+                      class='card-error__icon'
+                      role='presentation'
+                    />
+                  </div>
+                  <div
+                    class='card-error__name'
+                    data-test-instance-error-name
+                  >{{entry.name}}</div>
+                </div>
+              {{else if (this.shouldRenderFallback entry)}}
                 {{! A file row with no prerendered HTML (currently `.gts`/`.ts`
                     FileDef rows) — render the type icon + name so the row is
                     visible and the click handler on this `<li>` can still route
@@ -196,8 +231,8 @@ export default class CardList extends Component<Signature> {
                     the entry's deduped `icon` resource. The <li> carries the
                     tracking modifier + type attributes (see trackerFor) so the
                     overlay labels and acts on these rows, aligned to the card.
-                    Error rows and no-HTML card rows are excluded — they render
-                    through `<entry.component />`. }}
+                    Error-no-HTML rows render the tile above; no-HTML card rows
+                    render live (self-healing) through `<entry.component />`. }}
                 <div class='card-fallback' data-test-card-fallback>
                   {{#if entry.iconHtml}}
                     <span
@@ -327,6 +362,55 @@ export default class CardList extends Component<Signature> {
       .strip-view .card-fallback__icon {
         width: 1.5rem;
         height: 1.5rem;
+      }
+      .card-error {
+        display: flex;
+        align-content: flex-start;
+        justify-content: center;
+        flex-wrap: wrap;
+        width: 100%;
+        height: 100%;
+        padding: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+      .card-error__thumbnail {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: calc(100% - 64.35px);
+      }
+      .card-error__icon {
+        width: 50px;
+        height: 50px;
+        color: var(--boxel-error-300);
+      }
+      .card-error__name {
+        width: 100%;
+        text-align: center;
+        font: 500 var(--boxel-font-sm);
+        line-height: 1.23;
+        letter-spacing: 0.13px;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .strip-view .card-error {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-content: center;
+        align-items: center;
+        justify-content: flex-start;
+        gap: var(--boxel-sp-xs);
+      }
+      .strip-view .card-error__thumbnail {
+        height: auto;
+      }
+      .strip-view .card-error__icon {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+      .strip-view .card-error__name {
+        width: auto;
+        text-align: left;
       }
       .instance-error {
         position: relative;
