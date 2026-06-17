@@ -176,10 +176,18 @@ module.exports = function (environment) {
     // `defaults.testRealmURL` above (localhost:4202 in standard mode,
     // realm-test.<slug>.localhost in env mode). Explicit
     // `REALM_TEST_URL` overrides take precedence for non-CI consumers
-    // that want a custom test realm endpoint.
-    resolvedTestRealmURL: process.env.REALM_TEST_URL
-      ? `${process.env.REALM_TEST_URL.replace(/\/$/, '')}/test/`
-      : defaults.testRealmURL,
+    // that want a custom test realm endpoint. The override accepts
+    // either a base host URL (which gets `/test/` appended) or a value
+    // that already names the `/test` realm — without the latter case
+    // a path like `https://my-host/test/` would become
+    // `https://my-host/test/test/`.
+    resolvedTestRealmURL: (() => {
+      if (!process.env.REALM_TEST_URL) return defaults.testRealmURL;
+      let normalized = process.env.REALM_TEST_URL.replace(/\/$/, '');
+      return normalized.endsWith('/test')
+        ? `${normalized}/`
+        : `${normalized}/test/`;
+    })(),
     featureFlags: {},
   };
 
