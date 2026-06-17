@@ -103,7 +103,10 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   <template>
-    <div class='boxel-trigger' data-test-boxel-picker-trigger>
+    <div
+      class={{cn 'boxel-trigger' is-disabled=@select.disabled}}
+      data-test-boxel-picker-trigger
+    >
       <div class='boxel-trigger-content'>
         {{#if this.label}}
           <span
@@ -171,6 +174,11 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
         letter-spacing: var(--boxel-lsp-sm);
         outline: none;
         cursor: pointer;
+      }
+
+      .boxel-trigger.is-disabled {
+        cursor: not-allowed;
+        color: var(--boxel-450);
       }
 
       .boxel-trigger-content {
