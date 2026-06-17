@@ -957,29 +957,46 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           {{#in-element target.element insertBefore=null}}
             {{#if target.instance}}
               {{#if (eq target.refType 'file')}}
-                {{#let (this.getCardComponent target.instance) as |FileComponent|}}
-                  {{#if (isInline target.kind)}}
-                    <span
-                      class='codemirror-card-slot codemirror-card-slot--inline'
-                      data-test-codemirror-file-slot-inline
-                    >
-                      <FileComponent
-                        @format={{target.format}}
-                        @displayContainer={{false}}
-                      />
-                    </span>
-                  {{else}}
-                    <div
-                      class='codemirror-card-slot codemirror-card-slot--block'
-                      data-test-codemirror-file-slot-block
-                    >
-                      <FileComponent
-                        @format={{target.format}}
-                        @displayContainer={{false}}
-                      />
-                    </div>
-                  {{/if}}
-                {{/let}}
+                <CardContextConsumer as |context|>
+                  {{#let
+                    (this.getCardComponent target.instance)
+                    as |FileComponent|
+                  }}
+                    {{#if (isInline target.kind)}}
+                      <span
+                        class='codemirror-card-slot codemirror-card-slot--inline'
+                        data-test-codemirror-file-slot-inline
+                        {{context.cardComponentModifier
+                          cardId=target.instance.id
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                      >
+                        <FileComponent
+                          @format={{target.format}}
+                          @displayContainer={{false}}
+                        />
+                      </span>
+                    {{else}}
+                      <div
+                        class='codemirror-card-slot codemirror-card-slot--block'
+                        data-test-codemirror-file-slot-block
+                        {{context.cardComponentModifier
+                          cardId=target.instance.id
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                      >
+                        <FileComponent
+                          @format={{target.format}}
+                          @displayContainer={{false}}
+                        />
+                      </div>
+                    {{/if}}
+                  {{/let}}
+                </CardContextConsumer>
               {{else}}
                 <CardContextConsumer as |context|>
                   {{#let

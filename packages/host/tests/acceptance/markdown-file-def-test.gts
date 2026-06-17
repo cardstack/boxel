@@ -498,6 +498,32 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       );
   });
 
+  test('code mode shows overlays for markdown file references', async function (assert) {
+    // File slots are decorated with the same cardComponentModifier as cards
+    // (mirroring how CardsGrid decorates file rows), so the overlay system
+    // labels and acts on them too.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-test.md`,
+    });
+
+    await settled();
+
+    await triggerEvent('[data-test-markdown-bfm-block-file]', 'mouseenter');
+    assert
+      .dom('[data-test-card-overlay]')
+      .exists(
+        'block markdown file reference gets a hover overlay in code mode',
+      );
+
+    await triggerEvent('[data-test-markdown-bfm-inline-file]', 'mouseenter');
+    assert
+      .dom('[data-test-card-overlay]')
+      .exists(
+        'inline markdown file reference gets a hover overlay in code mode',
+      );
+  });
+
   test('code mode shows overlays for markdown card references and clicking navigates', async function (assert) {
     await visitOperatorMode({
       submode: 'code',

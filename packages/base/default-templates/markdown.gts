@@ -526,31 +526,45 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       {{#in-element slot.element insertBefore=null}}
         {{#if (eq slot.state 'resolved')}}
           {{#if (eq slot.refType 'file')}}
-            {{#let (this.getCardComponent slot.file) as |FileComponent|}}
-              {{#if (eq slot.kind 'inline')}}
-                <span
-                  class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
-                  data-test-markdown-bfm-inline-file
-                >
-                  <FileComponent
-                    @format={{slot.format}}
-                    @displayContainer={{false}}
-                  />
-                </span>
-              {{else}}
-                <div
-                  class='markdown-bfm-card-slot markdown-bfm-card-slot--block
-                    {{if slot.style "markdown-bfm-card-slot--fitted"}}'
-                  style={{slot.style}}
-                  data-test-markdown-bfm-block-file
-                >
-                  <FileComponent
-                    @format={{slot.format}}
-                    @displayContainer={{false}}
-                  />
-                </div>
-              {{/if}}
-            {{/let}}
+            <CardContextConsumer as |context|>
+              {{#let (this.getCardComponent slot.file) as |FileComponent|}}
+                {{#if (eq slot.kind 'inline')}}
+                  <span
+                    class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                    data-test-markdown-bfm-inline-file
+                    {{context.cardComponentModifier
+                      cardId=slot.file.id
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    <FileComponent
+                      @format={{slot.format}}
+                      @displayContainer={{false}}
+                    />
+                  </span>
+                {{else}}
+                  <div
+                    class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                      {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                    style={{slot.style}}
+                    data-test-markdown-bfm-block-file
+                    {{context.cardComponentModifier
+                      cardId=slot.file.id
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    <FileComponent
+                      @format={{slot.format}}
+                      @displayContainer={{false}}
+                    />
+                  </div>
+                {{/if}}
+              {{/let}}
+            </CardContextConsumer>
           {{else}}
             <CardContextConsumer as |context|>
               {{#let (this.getCardComponent slot.card) as |CardComponent|}}

@@ -420,6 +420,12 @@ export default class RenderedMarkdown extends Component<Signature> {
               <span
                 class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
                 data-test-markdown-bfm-inline-file
+                {{this.cardContext.cardComponentModifier
+                  cardId=slot.file.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
               >
                 <CardRenderer
                   @card={{slot.file}}
@@ -433,6 +439,12 @@ export default class RenderedMarkdown extends Component<Signature> {
                   {{if slot.style "markdown-bfm-card-slot--fitted"}}'
                 style={{slot.style}}
                 data-test-markdown-bfm-block-file
+                {{this.cardContext.cardComponentModifier
+                  cardId=slot.file.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
               >
                 <CardRenderer
                   @card={{slot.file}}
