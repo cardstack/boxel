@@ -572,12 +572,17 @@ export async function sendMessage(
   await expect(
     page.locator(`[data-test-message-field="${roomId}"]`),
   ).toHaveValue('');
-  await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
-  ).toHaveCount(0);
+  // The new message bubble is rendered optimistically a moment after the draft
+  // clears. Wait for it to appear before asserting that nothing is pending:
+  // checking for no-pending first can pass in the window before the bubble
+  // exists, returning from this helper while the send is still in flight rather
+  // than after the server has acknowledged it.
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messageCountBeforeSend + 1,
   );
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
   await page.waitForSelector(`[data-test-room-settled]`);
 }
 
