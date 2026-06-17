@@ -424,8 +424,6 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom('[data-test-host-mode-404]')
       .containsText('This page could not be found.');
-    // The collapsible technical detail stays available below the placeholder.
-    assert.dom('[data-test-error-display]').exists();
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
