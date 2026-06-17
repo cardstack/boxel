@@ -19,9 +19,15 @@ echo "==> Installing dependencies..."
 mise exec -- pnpm install --frozen-lockfile
 
 # Source-realm content lives in separate repos that are cloned on first setup.
-# In a Codespace the GitHub token has access to these, so the https clone in
-# each :setup script succeeds. These are also re-run (idempotently) when the
-# realm server starts, but doing them here moves the clone cost into setup.
+# The catalog/skills :setup scripts try an SSH clone (git@github.com:) first,
+# which blocks on an interactive host-key prompt in this non-interactive
+# context. A Codespace has an HTTPS token credential helper but no SSH key,
+# so rewrite SSH GitHub URLs to HTTPS — the clones then authenticate with the
+# token (the repos are granted in devcontainer.json customizations.codespaces).
+# These are also re-run idempotently when the realm server starts; doing them
+# here moves the clone cost into setup.
+git config --global url."https://github.com/".insteadOf "git@github.com:"
+
 echo "==> Setting up skills realm..."
 mise exec -- pnpm --dir=packages/skills-realm skills:setup
 
