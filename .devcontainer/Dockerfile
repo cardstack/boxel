@@ -1,6 +1,9 @@
 # Node major here only needs to be close enough to bootstrap mise; the exact
 # toolchain (node + pnpm) is pinned in /.mise.toml and installed by setup.sh.
-FROM mcr.microsoft.com/devcontainers/javascript-node:24
+# Pinned to bookworm: the floating `:24` tag now resolves to Debian trixie,
+# which several devcontainer features (notably docker-in-docker's Moby
+# packages) don't yet support.
+FROM mcr.microsoft.com/devcontainers/javascript-node:24-bookworm
 
 # mise manages the Node and pnpm versions pinned in the repo's .mise.toml.
 # `mise install` is run by .devcontainer/setup.sh once the repo is checked out.
