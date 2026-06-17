@@ -211,6 +211,14 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
+    get linkedFiles(): FileDef[] | null {
+      try {
+        return this.args.model?.linkedFiles ?? null;
+      } catch {
+        // linksToMany query may fail in environments without a full card store
+        return null;
+      }
+    }
     setMode = (mode: MarkdownEditorMode) => {
       this._modeState.value = mode;
     };
@@ -237,6 +245,7 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
+              @linkedFiles={{this.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
               @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}

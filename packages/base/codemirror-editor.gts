@@ -12,7 +12,12 @@ import {
   maybeRelativeReference,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { type BaseDef, type CardDef, getComponent } from './card-api';
+import {
+  type BaseDef,
+  type CardDef,
+  type FileDef,
+  getComponent,
+} from './card-api';
 import { CardContextConsumer } from './field-component';
 
 import BoldIcon from '@cardstack/boxel-icons/bold';
@@ -35,10 +40,12 @@ interface CardWidgetTarget {
   cardId: string;
   format: 'atom' | 'embedded';
   kind: 'inline' | 'block';
+  // 'card' refs resolve to CardDef instances; 'file' refs to FileDef instances.
+  refType: 'card' | 'file';
 }
 
 interface CardRenderTarget extends CardWidgetTarget {
-  card: CardDef | null;
+  instance: CardDef | FileDef | null;
 }
 
 interface SelectionFormats {
@@ -130,6 +137,7 @@ interface CodeMirrorEditorSignature {
     content: string | null | undefined;
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
+    linkedFiles?: FileDef[] | null;
     cardReferenceBaseUrl?: string | null;
     cardReferenceVirtualNetwork?: VirtualNetwork;
     /** When false, all syntax markers are visible (source mode). Default true. */
@@ -643,35 +651,32 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   get cardRenderTargets(): CardRenderTarget[] {
     let targets = this._widgetTargets;
     let baseUrl = this.args.cardReferenceBaseUrl;
-
-    let cardsByUrl = new Map<string, CardDef>();
-
-    // Use linkedCards if available (works when store is present)
-    let linkedCards = this.args.linkedCards;
-    if (linkedCards?.length) {
-      for (let card of linkedCards) {
-        if (card?.id) {
-          cardsByUrl.set(card.id, card);
-        }
-      }
-    }
-
-    // Also use cards resolved via getCards resource (bypasses FallbackCardStore)
-    let resolved = this.resolvedCards;
-    if (resolved?.length) {
-      for (let card of resolved) {
-        if (card?.id) {
-          cardsByUrl.set(card.id, card);
-        }
-      }
-    }
-
     let vn = this.args.cardReferenceVirtualNetwork;
+
+    // Resolve cards and files by URL from every available source. linkedCards /
+    // linkedFiles work when a store is present; the getCards resource resolves
+    // both independently (bypasses FallbackCardStore) — its `in: { id }` query
+    // spans every widget target URL, so it returns cards and file-meta alike.
+    let instancesByUrl = new Map<string, CardDef | FileDef>();
+    let addInstances = (
+      instances: (CardDef | FileDef)[] | null | undefined,
+    ) => {
+      if (!instances?.length) return;
+      for (let instance of instances) {
+        if (instance?.id) {
+          instancesByUrl.set(trimJsonExtension(instance.id), instance);
+        }
+      }
+    };
+    addInstances(this.args.linkedCards);
+    addInstances(this.args.linkedFiles);
+    addInstances(this.resolvedCards);
+
     return targets.map((target) => {
       let resolvedUrl = resolveUrl(target.cardId, baseUrl, vn);
       return {
         ...target,
-        card: cardsByUrl.get(resolvedUrl) ?? null,
+        instance: instancesByUrl.get(resolvedUrl) ?? null,
       };
     });
   }
@@ -698,6 +703,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         (t, i) =>
           t.cardId === pending[i].cardId &&
           t.kind === pending[i].kind &&
+          t.refType === pending[i].refType &&
           t.element === pending[i].element,
       )
     ) {
@@ -949,21 +955,15 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       {{#if this.livePreview}}
         {{#each this.cardRenderTargets as |target|}}
           {{#in-element target.element insertBefore=null}}
-            {{#if target.card}}
-              <CardContextConsumer as |context|>
-                {{#let (this.getCardComponent target.card) as |CardComponent|}}
+            {{#if target.instance}}
+              {{#if (eq target.refType 'file')}}
+                {{#let (this.getCardComponent target.instance) as |FileComponent|}}
                   {{#if (isInline target.kind)}}
                     <span
                       class='codemirror-card-slot codemirror-card-slot--inline'
-                      data-test-codemirror-card-slot-inline
-                      {{context.cardComponentModifier
-                        card=target.card
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
+                      data-test-codemirror-file-slot-inline
                     >
-                      <CardComponent
+                      <FileComponent
                         @format={{target.format}}
                         @displayContainer={{false}}
                       />
@@ -971,22 +971,57 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                   {{else}}
                     <div
                       class='codemirror-card-slot codemirror-card-slot--block'
-                      data-test-codemirror-card-slot-block
-                      {{context.cardComponentModifier
-                        card=target.card
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
+                      data-test-codemirror-file-slot-block
                     >
-                      <CardComponent
+                      <FileComponent
                         @format={{target.format}}
                         @displayContainer={{false}}
                       />
                     </div>
                   {{/if}}
                 {{/let}}
-              </CardContextConsumer>
+              {{else}}
+                <CardContextConsumer as |context|>
+                  {{#let
+                    (this.getCardComponent target.instance)
+                    as |CardComponent|
+                  }}
+                    {{#if (isInline target.kind)}}
+                      <span
+                        class='codemirror-card-slot codemirror-card-slot--inline'
+                        data-test-codemirror-card-slot-inline
+                        {{context.cardComponentModifier
+                          card=target.instance
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                      >
+                        <CardComponent
+                          @format={{target.format}}
+                          @displayContainer={{false}}
+                        />
+                      </span>
+                    {{else}}
+                      <div
+                        class='codemirror-card-slot codemirror-card-slot--block'
+                        data-test-codemirror-card-slot-block
+                        {{context.cardComponentModifier
+                          card=target.instance
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                      >
+                        <CardComponent
+                          @format={{target.format}}
+                          @displayContainer={{false}}
+                        />
+                      </div>
+                    {{/if}}
+                  {{/let}}
+                </CardContextConsumer>
+              {{/if}}
             {{else}}
               <span class='codemirror-card-fallback'>{{target.cardId}}</span>
             {{/if}}
