@@ -57,6 +57,25 @@ export interface BrokenLinkSummary {
   kind: 'error' | 'not-found';
 }
 
+// A failure to parse a markdown file's leading YAML frontmatter block,
+// recorded as a finding on the (still successful) index entry. The file
+// indexes fine — `extractAttributes` falls back to treating the whole file
+// as body when the frontmatter won't parse — so without this the failure is
+// invisible and any frontmatter-declared behavior (e.g. a skill's `commands`)
+// silently disappears. Surfaced on `diagnostics.frontmatterParseError` so the
+// `/_indexing-errors` surface can flag it the way it flags `brokenLinks`,
+// letting authors see and fix the YAML rather than wonder where their
+// commands went.
+export interface FrontmatterParseError {
+  // The YAML parser's error message.
+  message: string;
+  // 1-based line within the frontmatter block where the parse failed, when
+  // the parser reports a position. Omitted otherwise.
+  line?: number;
+  // 1-based column within that line, when reported.
+  column?: number;
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -336,6 +355,11 @@ export interface FileExtractResponse {
   deps: string[];
   error?: RenderError;
   mismatch?: true;
+  // Set when the file's leading YAML frontmatter block was present but
+  // wouldn't parse. The extract still succeeds (`status: 'ready'`, body-only);
+  // the file indexer merges this onto `diagnostics.frontmatterParseError` so
+  // the failure surfaces via `/_indexing-errors` instead of vanishing.
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 export interface FileRenderResponse {
@@ -432,6 +456,12 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Frontmatter YAML that wouldn't parse during file extraction. The row
+  // still indexes (body-only); this is the only indexed signal that the
+  // file's frontmatter — and anything it declared — was dropped. Merged in
+  // by the file indexer from the extract response. Absent when the
+  // frontmatter parsed (or there was none).
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to

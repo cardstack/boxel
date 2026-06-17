@@ -6240,6 +6240,7 @@ export class Realm {
       `    jsonb_typeof(diagnostics->'brokenLinks') = 'array'`,
       `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
       `  )`,
+      `  OR jsonb_typeof(diagnostics->'frontmatterParseError') = 'object'`,
       `)`,
       `ORDER BY type, url`,
     ])) as {
@@ -6255,15 +6256,28 @@ export class Realm {
           row.diagnostics && Array.isArray(row.diagnostics.brokenLinks)
             ? (row.diagnostics.brokenLinks as unknown[])
             : null;
+        let frontmatterParseError =
+          row.diagnostics &&
+          typeof row.diagnostics.frontmatterParseError === 'object' &&
+          row.diagnostics.frontmatterParseError !== null
+            ? (row.diagnostics.frontmatterParseError as Record<string, unknown>)
+            : null;
         let hasError = row.error_doc != null;
         // 'indexing-error' = row.has_error = TRUE (rendered/indexed badly).
         // 'broken-link' = the index row is healthy but the rendered card has
-        // dead linksTo/linksToMany targets surfaced by render.meta. Both
-        // classes share the (entryType, url) key; the discriminator lets
+        // dead linksTo/linksToMany targets surfaced by render.meta.
+        // 'frontmatter-error' = the index row is healthy but the file's YAML
+        // frontmatter wouldn't parse, so anything it declared was dropped.
+        // All classes share the (entryType, url) key; the discriminator lets
         // consumers branch on which attributes to read.
-        let resourceType: 'indexing-error' | 'broken-link' = hasError
+        let resourceType:
+          | 'indexing-error'
+          | 'broken-link'
+          | 'frontmatter-error' = hasError
           ? 'indexing-error'
-          : 'broken-link';
+          : frontmatterParseError
+            ? 'frontmatter-error'
+            : 'broken-link';
         let attributes: Record<string, unknown> = {
           url: row.url,
           entryType: row.type,
@@ -6274,6 +6288,9 @@ export class Realm {
         }
         if (brokenLinks && brokenLinks.length > 0) {
           attributes.brokenLinks = brokenLinks;
+        }
+        if (frontmatterParseError) {
+          attributes.frontmatterParseError = frontmatterParseError;
         }
         return {
           type: resourceType,

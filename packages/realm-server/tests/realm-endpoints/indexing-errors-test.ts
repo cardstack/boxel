@@ -353,5 +353,88 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         'brokenLinks payload included',
       );
     });
+
+    test('surfaces frontmatter-error rows even when has_error is FALSE', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let fileURL = `${sourceRealm.url}skills/bad/SKILL.md`;
+      let frontmatterParseError = {
+        message: 'Implicit map keys need to be on a single line',
+        line: 4,
+        column: 3,
+      };
+      let diagnostics = { frontmatterParseError };
+
+      // A file row that indexed cleanly (has_error = FALSE) but whose YAML
+      // frontmatter wouldn't parse. Upsert keeps the test re-runnable against
+      // the cached realm.
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index
+           (url, file_alias, type, realm_version, realm_url,
+            has_error, error_doc, diagnostics, is_deleted)
+         VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
+         ON CONFLICT (url, realm_url, type) DO UPDATE
+         SET has_error = FALSE,
+             error_doc = NULL,
+             diagnostics = EXCLUDED.diagnostics,
+             is_deleted = FALSE`,
+        {
+          bind: [
+            fileURL,
+            fileURL.replace(/\.md$/, ''),
+            sourceRealm.url,
+            JSON.stringify(diagnostics),
+          ],
+        },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: {
+            url: string;
+            entryType: string;
+            errorDoc?: unknown;
+            frontmatterParseError?: {
+              message: string;
+              line?: number;
+              column?: number;
+            };
+          };
+        }>
+      ).filter((e) => e.attributes.url === fileURL);
+      assert.strictEqual(
+        entries.length,
+        1,
+        'one frontmatter-error row reported',
+      );
+      let entry = entries[0];
+      assert.strictEqual(entry.type, 'frontmatter-error', 'discriminator');
+      assert.strictEqual(
+        entry.id,
+        `file::${fileURL}`,
+        'id encodes both entry type and URL',
+      );
+      assert.strictEqual(
+        entry.attributes.errorDoc,
+        undefined,
+        'no errorDoc on a healthy-but-unparseable-frontmatter row',
+      );
+      assert.deepEqual(
+        entry.attributes.frontmatterParseError,
+        frontmatterParseError,
+        'frontmatterParseError payload included',
+      );
+    });
   });
 });

@@ -7,9 +7,11 @@ import {
   indexingErrors,
   shortErrorMessage,
   shortBrokenLinks,
+  shortFrontmatterError,
   formatEntry,
   type IndexingErrorEntry,
   type BrokenLinkEntry,
+  type FrontmatterErrorEntry,
 } from '../../src/commands/realm/indexing-errors.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
@@ -192,6 +194,41 @@ describe('realm indexing-errors (integration)', () => {
     expect(formatEntry(entry!)).toContain('1 broken: author→');
   });
 
+  it('surfaces frontmatter-error rows with has_error = FALSE', async () => {
+    let dbAdapter = getTestDbAdapter();
+    let fileURL = `${realmUrl}skills/bad/SKILL.md`;
+    let fileAlias = `${realmUrl}skills/bad/SKILL`;
+    let frontmatterParseError = {
+      message: 'Implicit map keys need to be on a single line',
+      line: 4,
+      column: 3,
+    };
+    let diagnostics = { frontmatterParseError };
+
+    await dbAdapter!.execute(
+      `INSERT INTO boxel_index
+         (url, file_alias, type, realm_version, realm_url,
+          has_error, error_doc, diagnostics, is_deleted)
+       VALUES ($1, $2, 'file', 1, $3,
+               FALSE, NULL, $4::jsonb, FALSE)`,
+      {
+        bind: [fileURL, fileAlias, realmUrl, JSON.stringify(diagnostics)],
+      },
+    );
+
+    let result = await indexingErrors(realmUrl, { profileManager });
+    expect(result.ok).toBe(true);
+    let entry = result.document!.data.find(
+      (e) => e.attributes.url === fileURL,
+    ) as FrontmatterErrorEntry | undefined;
+    expect(entry).toBeDefined();
+    expect(entry!.type).toBe('frontmatter-error');
+    expect(entry!.attributes.frontmatterParseError).toEqual(
+      frontmatterParseError,
+    );
+    expect(formatEntry(entry!)).toContain('frontmatter parse error (line 4:3)');
+  });
+
   it('returns ok=false when the realm is unreachable', async () => {
     let result = await indexingErrors('http://127.0.0.1:1/fake/', {
       profileManager,
@@ -239,5 +276,18 @@ describe('realm indexing-errors (integration)', () => {
         { fieldName: 'd', reference: 'w', kind: 'error' },
       ]),
     ).toBe('4 broken: a→x, b→y, c→z, …+1 more');
+  });
+
+  it('shortFrontmatterError renders message with optional position', () => {
+    expect(shortFrontmatterError(null)).toBe('<no frontmatter error>');
+    expect(shortFrontmatterError({ message: 'bad yaml' })).toBe(
+      'frontmatter parse error: bad yaml',
+    );
+    expect(
+      shortFrontmatterError({ message: 'bad yaml', line: 4, column: 3 }),
+    ).toBe('frontmatter parse error (line 4:3): bad yaml');
+    expect(shortFrontmatterError({ message: 'bad yaml', line: 4 })).toBe(
+      'frontmatter parse error (line 4): bad yaml',
+    );
   });
 });
