@@ -2793,6 +2793,73 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'v2-search.gts': `
+              import { CardDef, Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+
+              export class V2SearchResult extends CardDef {
+                static displayName = 'V2 Search Result';
+                @field label = contains(StringField);
+                static fitted = class extends Component<typeof this> {
+                  <template>
+                    <div class="v2-search-result-sentinel" data-test-v2-result-value>{{@model.label}}</div>
+                    <style scoped>
+                      .v2-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
+                    </style>
+                  </template>
+                };
+                static embedded = this.fitted;
+                static isolated = this.fitted;
+              }
+
+              export class V2SearchInner extends CardDef {
+                static displayName = 'V2 Search Inner';
+                static isolated = class extends Component<typeof this> {
+                  get query() {
+                    return {
+                      filter: {
+                        'item.on': {
+                          module: new URL('./v2-search', import.meta.url).href,
+                          name: 'V2SearchResult',
+                        },
+                      },
+                      realms: [new URL('./', import.meta.url).href],
+                    };
+                  }
+
+                  <template>
+                    <div data-test-v2-search-host-ran>v2 host ran</div>
+                    {{#if @context.searchResultsComponent}}
+                      <@context.searchResultsComponent @query={{this.query}} @mode='none' />
+                    {{else}}
+                      <div data-test-v2-search-component-missing>missing</div>
+                    {{/if}}
+                  </template>
+                };
+              }
+            `,
+              'v2-search-inner.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./v2-search'),
+                      name: 'V2SearchInner',
+                    },
+                  },
+                },
+              },
+              'v2-search-result-1.json': {
+                data: {
+                  attributes: {
+                    label: 'V2_RESULT_VALUE',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./v2-search'),
+                      name: 'V2SearchResult',
+                    },
+                  },
+                },
+              },
               'live-file-search-card.gts': `
               import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
               import { rri } from '@cardstack/runtime-common';
@@ -3010,6 +3077,51 @@ module(basename(__filename), function () {
           assert.ok(
             isolatedHTML.includes('data-test-live-file-search-card'),
             `isolated html includes live FileDef search result wrapper: ${isolatedHTML}`,
+          );
+        } finally {
+          await realmServerPatch.restore();
+        }
+      });
+
+      test('a card rendering the v2 @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
+        // The v2 search resource registers its in-flight fetch with the render
+        // store's readiness signal, so the /render settle loop waits for results
+        // before HTML capture. Without that wiring the search resolves only
+        // after capture and the prerendered html shows an empty result list —
+        // the bug this test guards. Driven through the real prerenderer (the
+        // host test harness can't cover the /render route).
+        const cardURL = `${realmURL}v2-search-inner`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+
+        try {
+          let result = await prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(
+            result.response.error,
+            `prerender succeeds: ${JSON.stringify(result.response.error)}`,
+          );
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+
+          assert.ok(
+            isolatedHTML.includes('data-test-v2-search-host-ran'),
+            `the v2 host template ran: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes('data-test-v2-search-component-missing'),
+            'the v2 searchResultsComponent is provided in the render context',
+          );
+          assert.ok(
+            isolatedHTML.includes('V2_RESULT_VALUE'),
+            `prerendered html includes the v2 search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
           );
         } finally {
           await realmServerPatch.restore();

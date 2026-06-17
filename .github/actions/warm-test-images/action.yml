@@ -1,0 +1,54 @@
+name: Warm test Docker images
+description: >-
+  Pull the test suite's third-party Docker images (synapse, smtp4dev, postgres)
+  from this repo's GHCR mirror and retag them to their canonical Docker Hub
+  names, so the services start from a local image instead of racing an
+  unauthenticated Docker Hub pull. Docker Hub rate-limits / connection timeouts
+  from the shared runner IP pool are the cause of the recurring "Failed to reach
+  Synapse" host-test failures. The mirror is populated by the
+  mirror-test-images workflow. Best-effort: callers should set continue-on-error
+  so a miss falls back to a (hardened-retry) Docker Hub pull.
+
+inputs:
+  registry-prefix:
+    description: GHCR namespace holding the mirrored images.
+    default: ghcr.io/cardstack/boxel
+
+runs:
+  using: composite
+  steps:
+    - name: Pull and retag images from the GHCR mirror
+      shell: bash
+      env:
+        GHCR_PREFIX: ${{ inputs.registry-prefix }}
+        GHCR_TOKEN: ${{ github.token }}
+        GHCR_USER: ${{ github.actor }}
+      run: |
+        set -uo pipefail
+        # Authenticate so the private mirror packages are pullable. Best-effort:
+        # on a fork PR the token can't read them, so the warm misses and the
+        # services fall back to Docker Hub (handled by dockerPull's retry).
+        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
+        # warm <canonical-docker-hub-ref> <ghcr-package-suffix:tag>. These
+        # versions must match what runs at test time and what the mirror
+        # publishes: packages/matrix/support/synapse/index.ts, packages/matrix/
+        # docker/smtp4dev.ts, mise-tasks/infra/ensure-pg, packages/postgres/
+        # scripts/start-pg.sh, and .github/workflows/mirror-test-images.yml.
+        warm() {
+          canonical="$1"
+          mirror="$GHCR_PREFIX/$2"
+          for attempt in 1 2 3 4 5; do
+            if docker pull "$mirror"; then
+              docker tag "$mirror" "$canonical"
+              return 0
+            fi
+            delay=$((attempt * 5))
+            echo "docker pull $mirror failed (attempt $attempt/5); retrying in ${delay}s..."
+            sleep "$delay"
+          done
+          echo "::warning::could not warm $canonical from GHCR mirror; falling back to Docker Hub"
+        }
+
+        warm matrixdotorg/synapse:v1.126.0 synapse:v1.126.0
+        warm rnwood/smtp4dev:v3.1          smtp4dev:v3.1
+        warm postgres:16.3                 postgres:16.3

@@ -102,6 +102,14 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     expect(attrs.properties).toHaveProperty('summary');
     expect(attrs.properties).toHaveProperty('status');
     expect(attrs.properties).toHaveProperty('priority');
+
+    expect(attrs.properties).toHaveProperty('issueType');
+
+    // issueType, priority, and status are all configured per project
+    // (function-form configuration), so none have a static enum in the schema.
+    expect(attrs.properties.issueType.enum).toBeUndefined();
+    expect(attrs.properties.priority.enum).toBeUndefined();
+    expect(attrs.properties.status.enum).toBeUndefined();
   } finally {
     cleanup();
   }

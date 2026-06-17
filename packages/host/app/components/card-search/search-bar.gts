@@ -72,12 +72,14 @@ export default class SearchBar extends Component<Signature> {
           @destination={{@pickerDestination}}
         />
       </div>
-      <div class='search-sheet__search-bar-picker'>
-        <TypePicker
-          @filter={{@typeFilter}}
-          @destination={{@pickerDestination}}
-        />
-      </div>
+      {{#unless @typeFilter.skipTypeFiltering}}
+        <div class='search-sheet__search-bar-picker'>
+          <TypePicker
+            @filter={{@typeFilter}}
+            @destination={{@pickerDestination}}
+          />
+        </div>
+      {{/unless}}
       <div class='search-sheet__search-bar-separator' aria-hidden='true'></div>
       {{! template-lint-disable no-invalid-interactive }}
       <div

@@ -881,9 +881,19 @@ function createSlashCommandSource(
 function wrapWith(marker: string) {
   return (view: EditorView): boolean => {
     let { from, to } = view.state.selection.main;
-    if (from === to) return false;
-    let selected = view.state.sliceDoc(from, to);
     let len = marker.length;
+
+    // No selection: insert an empty pair of markers and drop the cursor
+    // between them so the user can type the content (e.g. **|**).
+    if (from === to) {
+      view.dispatch({
+        changes: { from, insert: marker + marker },
+        selection: { anchor: from + len },
+      });
+      return true;
+    }
+
+    let selected = view.state.sliceDoc(from, to);
 
     // Case 1: Selection includes the markers (source mode selection)
     if (
@@ -928,6 +938,61 @@ function wrapWith(marker: string) {
   };
 }
 
+// Toggle a markdown link around the selection. Uses the syntax tree to detect
+// an enclosing [text](url) — a string scan can match across unrelated brackets
+// and delete text the user never selected.
+function toggleLink(view: EditorView): boolean {
+  let { from, to } = view.state.selection.main;
+
+  let node: any = syntaxTree(view.state).resolveInner(from, 1);
+  let link: any = null;
+  for (let n: any = node; n; n = n.parent) {
+    if (n.name === 'Link') {
+      link = n;
+      break;
+    }
+  }
+  if (link && from >= link.from && to <= link.to) {
+    // Unlink: replace the whole node with just its text (between [ and ]).
+    let marks: { from: number; to: number }[] = [];
+    let c = link.cursor();
+    if (c.firstChild()) {
+      do {
+        if (c.name === 'LinkMark') marks.push({ from: c.from, to: c.to });
+      } while (c.nextSibling());
+    }
+    if (marks.length >= 2) {
+      let text = view.state.sliceDoc(marks[0].to, marks[1].from);
+      view.dispatch({
+        changes: { from: link.from, to: link.to, insert: text },
+      });
+      return true;
+    }
+  }
+
+  if (from === to) {
+    // No selection: insert empty link syntax with the cursor inside the
+    // brackets so the user can type the link text — [|](url).
+    view.dispatch({
+      changes: { from, insert: '[](url)' },
+      selection: { anchor: from + 1 },
+    });
+    return true;
+  }
+
+  // Wrap the selection as link text with a placeholder URL, selecting "url".
+  let selected = view.state.sliceDoc(from, to);
+  let insert = `[${selected}](url)`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: {
+      anchor: from + selected.length + 3,
+      head: from + selected.length + 6,
+    },
+  });
+  return true;
+}
+
 const markdownKeymap = keymap.of([
   { key: 'Mod-b', run: wrapWith('**') },
   { key: 'Mod-i', run: wrapWith('*') },
@@ -938,6 +1003,8 @@ const markdownKeymap = keymap.of([
 
 export interface SelectionInfo {
   hasSelection: boolean;
+  /** Whether the editor currently holds focus. Drives toolbar enablement. */
+  hasFocus: boolean;
   from: number;
   to: number;
   /** Which inline formats are active in the current selection */
@@ -1026,11 +1093,15 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       if (update.docChanged) {
         onDocChange(update.state.doc.toString());
       }
-      if (onSelectionChange && (update.selectionSet || update.docChanged)) {
+      if (
+        onSelectionChange &&
+        (update.selectionSet || update.docChanged || update.focusChanged)
+      ) {
         let { from, to } = update.state.selection.main;
         let hasSelection = from !== to;
         onSelectionChange({
           hasSelection,
+          hasFocus: update.view.hasFocus,
           from,
           to,
           formats: hasSelection
@@ -1065,6 +1136,7 @@ export interface CodeMirrorContext {
   openCardSearchEffect: typeof openCardSearchEffect;
   focusChangeEffect: typeof focusChangeEffect;
   wrapWith: typeof wrapWith;
+  toggleLink: typeof toggleLink;
 }
 
 const codemirrorContext: CodeMirrorContext = {
@@ -1076,6 +1148,7 @@ const codemirrorContext: CodeMirrorContext = {
   openCardSearchEffect,
   focusChangeEffect,
   wrapWith,
+  toggleLink,
 };
 
 export default codemirrorContext;

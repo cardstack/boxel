@@ -194,6 +194,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('uuid'),
   });
   virtualNetwork.shimAsyncModule({
+    id: 'yaml',
+    resolve: () => import('yaml'),
+  });
+  virtualNetwork.shimAsyncModule({
     id: '@cardstack/runtime-common/marked-sync',
     resolve: () => import('@cardstack/runtime-common/marked-sync.ts'),
   });

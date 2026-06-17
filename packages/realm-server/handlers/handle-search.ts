@@ -3,13 +3,10 @@ import {
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
-  isValidPrerenderedHtmlFormat,
-  PRERENDERED_HTML_FORMATS,
-  resolveRenderType,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
   parseSearchRequestPayload,
-  parseUnifiedSearchRequestFromPayload,
+  parseSearchQueryFromPayload,
   sanitizeConsumingRealmHeader,
   SearchRequestError,
   searchRealms,
@@ -17,8 +14,6 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
   emitSearchTiming,
-  type CodeRef,
-  type PrerenderedHtmlFormat,
   type Query,
 } from '@cardstack/runtime-common';
 import {
@@ -61,13 +56,10 @@ export default function handleSearch(opts: {
 
     let { realmList } = getMultiRealmAuthorization(ctxt);
 
-    // Parse the unified request body: the query plus the optional
-    // `render` / `dataOnly` / `cardUrls` members. Prefer-HTML emission is
-    // driven by an explicitly-provided `render` member; a request that omits
-    // it (and `dataOnly`) resolves to the full live-card document, so a
-    // consumer reading only the live-card shape receives exactly that.
-    let parsed;
-    let renderRequested = false;
+    // Parse the plain search query — filter / sort / page (+ realms, already
+    // consumed by the authorization middleware). Any other member is an
+    // unknown field and rejected.
+    let cardsQuery: Query;
     let request = await fetchRequestFromContext(ctxt);
     try {
       let parseRequest = async () => {
@@ -75,21 +67,21 @@ export default function handleSearch(opts: {
         if (payload === undefined) {
           payload = await parseSearchRequestPayload(request);
         }
-        renderRequested =
-          typeof payload === 'object' &&
-          payload !== null &&
-          'render' in payload;
-        return parseUnifiedSearchRequestFromPayload(payload);
+        if (payload && typeof payload === 'object' && 'realms' in payload) {
+          let { realms: _realms, ...rest } = payload as Record<string, unknown>;
+          payload = rest;
+        }
+        return parseSearchQueryFromPayload(payload);
       };
-      parsed = timings
+      cardsQuery = timings
         ? await timings.time('parse', parseRequest)
         : await parseRequest();
     } catch (e) {
       if (e instanceof SearchRequestError) {
-        // `invalid-query` / `invalid-render` are client request-shape errors
-        // → the JSON:API search-error body; anything else (bad method / JSON)
-        // → a plain bad request, the same split as the live parser used.
-        if (e.code === 'invalid-query' || e.code === 'invalid-render') {
+        // `invalid-query` is a client request-shape error → the JSON:API
+        // search-error body; anything else (bad method / JSON) → a plain bad
+        // request, the same split as the live parser used.
+        if (e.code === 'invalid-query') {
           await setContextResponse(ctxt, buildSearchErrorResponse(e.message));
         } else {
           await sendResponseForBadRequest(ctxt, e.message);
@@ -97,36 +89,6 @@ export default function handleSearch(opts: {
         return;
       }
       throw e;
-    }
-    let cardsQuery = parsed.cardsQuery;
-
-    // Resolve the prefer-HTML spec when the caller explicitly asked to render.
-    // `render.renderType` is an optional explicit ancestor-type override (a
-    // CodeRef) that selects the HTML column and is echoed in the response;
-    // omitted, each result renders in its own actual (native) type. `format`
-    // is the HTML column to read.
-    let renderSpec:
-      | { format: PrerenderedHtmlFormat; renderType?: CodeRef }
-      | undefined;
-    if (renderRequested && parsed.render) {
-      // An explicit `render` must name a format backed by prerendered HTML.
-      // A format that's a valid `Format` but not renderable here (e.g.
-      // `isolated` / `edit`) is rejected rather than silently substituted, so
-      // the caller learns their requested format wasn't honored.
-      if (!isValidPrerenderedHtmlFormat(parsed.render.format)) {
-        await setContextResponse(
-          ctxt,
-          buildSearchErrorResponse(
-            `render.format must be one of ${PRERENDERED_HTML_FORMATS.join(', ')}`,
-          ),
-        );
-        return;
-      }
-      let format = parsed.render.format;
-      let renderType = resolveRenderType({
-        renderType: parsed.render.renderType,
-      });
-      renderSpec = { format, ...(renderType ? { renderType } : {}) };
     }
 
     let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
@@ -167,53 +129,20 @@ export default function handleSearch(opts: {
     if (jobPriority !== null) searchOpts.priority = jobPriority;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
-    // The job-scoped cache key folds the request members that change the
-    // response body on top of the live search opts: the resolved prefer-HTML
-    // spec (format + render type), `dataOnly`, and `cardUrls`. A prefer-HTML
-    // response and a live one for the same query are distinct bodies, so the
-    // resolved `render` (present only when the caller asked to render)
-    // segregates them; differing formats / render types segregate further. The
+    // The job-scoped cache inner key folds the live search opts; the
     // prerendered handler keys on its own `htmlFormat` / `cardUrls` /
-    // `renderType`, so the two endpoints can't collide on a shared key.
-    // `dataOnly` is folded only when true and `cardUrls` only when non-empty.
+    // `renderType` and the v2 handler on its fieldset + htmlQuery, so the
+    // endpoints can't collide on a shared key.
     let cacheKeyOpts: Record<string, unknown> = { ...searchOpts };
-    if (renderSpec) {
-      cacheKeyOpts.render = renderSpec;
-    }
-    if (parsed.dataOnly) {
-      cacheKeyOpts.dataOnly = true;
-    }
-    // Only a non-empty `cardUrls` belongs in the key: an empty array is a
-    // no-op filter (the SQL applies the `IN` clause only when there are urls),
-    // so folding `[]` would fragment the cache against an equivalent request
-    // that omits `cardUrls`.
-    if (parsed.cardUrls?.length) {
-      cacheKeyOpts.cardUrls = parsed.cardUrls;
-    }
-    // Run-time opts threaded to `searchRealms` → `Realm.search`. The resolved
-    // `render` spec drives the prefer-HTML resolution there; `dataOnly` rides
-    // alongside it so the run-time opts name the requested mode (live-only vs
-    // prefer-HTML) the same members the cache key folds. Both are also folded
-    // into the cache key above; `loggingCorrelationId` / `timings` are
-    // deliberately kept OUT of the cache-key opts (per-request values would
-    // make every key unique and defeat the cache) and ride here instead, where
-    // `searchRealms` stamps the SQL + loadLinks stages onto the collector this
-    // handler emits.
+    // `loggingCorrelationId` / `timings` are deliberately kept OUT of the
+    // cache-key opts (per-request values would make every key unique and
+    // defeat the cache) and ride the run-time opts instead, where
+    // `searchRealms` stamps the SQL + loadLinks stages onto the collector
+    // this handler emits.
     let runSearchOpts =
-      renderSpec ||
-      parsed.dataOnly ||
-      parsed.cardUrls?.length ||
       loggingCorrelationId !== null
         ? {
             ...(normalizedSearchOpts ?? {}),
-            ...(renderSpec ? { render: renderSpec } : {}),
-            ...(parsed.dataOnly ? { dataOnly: true } : {}),
-            // The SQL-side `IN (...)` filter reads `opts.cardUrls`, so the
-            // requested subset must ride the run-time opts — not only the cache
-            // key. Folded only when non-empty (an empty array is a no-op
-            // filter), matching the cache-key treatment so a subset request is
-            // both keyed and filtered by the same members.
-            ...(parsed.cardUrls?.length ? { cardUrls: parsed.cardUrls } : {}),
             ...(loggingCorrelationId !== null ? { loggingCorrelationId } : {}),
             ...(timings ? { timings } : {}),
           }

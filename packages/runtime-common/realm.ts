@@ -1,6 +1,15 @@
 import { Deferred } from './deferred.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
+import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
+import {
+  parseSearchEntryQueryFromPayload,
+  type SearchEntryQuery,
+} from './search-entry.ts';
+import {
+  prerenderedSearchEntryQuery,
+  searchEntryDocToPrerenderedDoc,
+} from './search-compat.ts';
 import {
   rri,
   type RealmResourceIdentifier,
@@ -13,10 +22,10 @@ import {
 } from './cache/module-cache-invalidation.ts';
 import {
   makeCardTypeSummaryDoc,
-  transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type UnifiedSearchCollectionDocument,
+  type LinkableCollectionDocument,
+  type SearchEntryCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types.ts';
 import type { CardResource, Relationship } from './resource-types.ts';
@@ -958,6 +967,16 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchResponse.bind(this),
+      )
+      .get(
+        '/_search-v2',
+        SupportedMimeType.CardJson,
+        this.searchEntriesResponse.bind(this),
+      )
+      .query(
+        '/_search-v2',
+        SupportedMimeType.CardJson,
+        this.searchEntriesResponse.bind(this),
       )
       .get(
         '/_search-prerendered',
@@ -4257,6 +4276,12 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          // Per-field subclass overrides for nested polymorphic fields (e.g.
+          // `frontmatter` → SkillFrontmatterField). Without this the field
+          // rehydrates as its declared base type when the document is read.
+          ...(fileEntry.resource?.meta?.fields
+            ? { fields: fileEntry.resource.meta.fields }
+            : {}),
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),
@@ -5276,7 +5301,7 @@ export class Realm {
   public async search(
     query: Query,
     opts?: SearchOpts,
-  ): Promise<UnifiedSearchCollectionDocument> {
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     let engineOpts = {
       loadLinks: true as const,
@@ -5289,15 +5314,6 @@ export class Realm {
       // engine opts, so forward it (non-empty only — an empty array is a no-op).
       ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
     };
-    // Prefer-HTML: resolve each result to prerendered HTML where indexed and
-    // fall back to the full live card otherwise. Absent `render` (data-only or
-    // unspecified) keeps the full live-card document.
-    if (opts?.render) {
-      return await this.#realmIndexQueryEngine.searchUnified(query, {
-        ...engineOpts,
-        render: opts.render,
-      });
-    }
     return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
   }
 
@@ -5389,6 +5405,94 @@ export class Realm {
     }
   }
 
+  // The v2 search: the parsed search-entry query (the item. membership
+  // query + the applied htmlQuery + the sparse fieldset) against the
+  // search-entry projection engine. Same opts threading as `search` —
+  // `cardUrls` rides inside the SearchEntryQuery itself.
+  public async searchEntries(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: SearchOpts,
+  ): Promise<SearchEntryCollectionDocument> {
+    let engineOpts = {
+      loadLinks: true as const,
+      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
+      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.timings ? { timings: opts.timings } : {}),
+    };
+    return await this.#realmIndexQueryEngine.searchEntries(
+      searchEntryQuery,
+      engineOpts,
+    );
+  }
+
+  private async searchEntriesResponse(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (request.method !== 'QUERY') {
+      return createResponse({
+        body: JSON.stringify(buildSearchErrorBody('method must be QUERY')),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch (e: any) {
+      return createResponse({
+        body: JSON.stringify(
+          buildSearchErrorBody(
+            `Request body is not valid JSON: ${e?.message ?? e}`,
+          ),
+        ),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    try {
+      let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
+      let duringPrerender = isDuringPrerenderRequest(request);
+      let doc = await this.searchEntries(searchEntryQuery, {
+        cacheOnlyDefinitions: duringPrerender,
+        // Inside a prerender the search skips the `loadLinks`
+        // relationship-assembly pass entirely: the host re-resolves every
+        // result from its raw card+source file, so the transitive
+        // `included[]` expansion is throwaway work in this path.
+        omitIncluded: duringPrerender,
+      });
+      return createResponse({
+        body: JSON.stringify(doc, null, 2),
+        init: {
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    } catch (e) {
+      if (e instanceof SearchRequestError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      throw e;
+    }
+  }
+
   private async lint(
     request: Request,
     requestContext: RequestContext,
@@ -5417,7 +5521,7 @@ export class Realm {
       let job = await this.#queue.publish<LintResult>({
         jobType: `lint-source`,
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
-        timeout: 10,
+        timeout: 30,
         priority: userInitiatedPriority,
         args: { source, filename } satisfies LintArgs,
       });
@@ -5441,14 +5545,22 @@ export class Realm {
     },
   ): Promise<PrerenderedCardCollectionDocument> {
     assertQuery(query);
-    let results = await this.#realmIndexQueryEngine.searchPrerendered(query, {
-      htmlFormat: opts.htmlFormat,
-      cardUrls: opts.cardUrls,
+    // The legacy prerendered search expressed over the search-entry engine:
+    // both branches pinned (the `item` lets the coalescer recover a row's
+    // actual type where no rendering matched), no link expansion. The
+    // coalescer picks the requested ancestor's rendering and falls back to
+    // the native one, then flattens the first-class `css` resources into
+    // `meta.scopedCssUrls`.
+    let isFileMeta = await this.#realmIndexQueryEngine.queryTargetsFileMeta(
+      query.filter,
+    );
+    let doc = await this.#realmIndexQueryEngine.searchEntries(
+      prerenderedSearchEntryQuery(query, opts),
+    );
+    return searchEntryDocToPrerenderedDoc(doc, {
       renderType: opts.renderType,
-      includeErrors: true,
+      isFileMeta,
     });
-
-    return transformResultsToPrerenderedCardsDoc(results);
   }
 
   private async searchPrerenderedResponse(

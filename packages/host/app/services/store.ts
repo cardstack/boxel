@@ -29,8 +29,11 @@ import {
   isFileMetaResource,
   isSingleCardDocument,
   isSingleFileMetaDocument,
-  isLinkableCollectionDocument,
+  isSearchEntryCollectionDocument,
+  isSparseItemResource,
   resolveFileDefCodeRef,
+  searchEntryDocToLinkableDoc,
+  searchEntryWireQueryFromQuery,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
   Deferred,
@@ -50,7 +53,6 @@ import {
   type AddOptions,
   type CreateOptions,
   type Query,
-  type DataQuery,
   type QueryResultsMeta,
   type RuntimeDependencyTrackingContext,
   type PatchData,
@@ -72,6 +74,8 @@ import {
   type StoreReadType,
   type CardResource,
   type LinkableCollectionDocument,
+  type SearchEntryResults,
+  type SearchEntryWireQuery,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -96,10 +100,6 @@ import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
-import {
-  getSearchData,
-  type SearchDataResource,
-} from '../resources/search-data';
 
 import { FileDefAttributesExtractor } from '../utils/file-def-attributes-extractor';
 import {
@@ -139,7 +139,7 @@ const storeLogger = logger('store');
 //    `__boxelJobId` on each visit — a priority of 0 is meaningful
 //    (the originating job is system-initiated background indexing)
 //    and must be preserved, not upgraded. Sub-`prerenderModule`
-//    calls fired by `_federated-search` for a `lookupDefinition`
+//    calls fired by the federated search for a `lookupDefinition`
 //    cache miss inherit this priority so they don't outrun the
 //    parent. If `__boxelJobPriority` is missing here (older
 //    render-runner build, test fixture, etc.) treat as 0 — the
@@ -239,7 +239,7 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
-  // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
+  // Coalesce concurrent same-(realms, query) `_federated-search-v2` HTTP
   // calls during a prerender. Mirrors
   // `RealmIndexQueryEngine.#inFlightSearch` server-side. Gated on
   // `__boxelRenderContext` so live user searches stay uncoalesced —
@@ -247,7 +247,7 @@ export default class StoreService extends Service implements StoreInterface {
   // Entries self-clear on `.finally()` via identity check.
   private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
     new Map();
-  // Resolved-doc cache for same-realm `_federated-search` calls during
+  // Resolved-doc cache for same-realm `_federated-search-v2` calls during
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
   // in-flight Map and the cache is populated on resolve. Keyed by
@@ -981,21 +981,12 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(
-    query: DataQuery,
-    realms?: string[],
-  ): Promise<(CardResource<Saved> | FileMetaResource)[]>;
-  async search(
-    query: DataQuery,
-    realms: string[] | undefined,
-    opts: {
-      includeMeta: true;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-    },
-  ): Promise<{
-    resources: (CardResource<Saved> | FileMetaResource)[];
-    meta: QueryResultsMeta;
-  }>;
+  // Instances only: the query runs against the v2 search requesting full
+  // `item` serializations, the results hydrate into the store, and the caller
+  // gets instances back. For the raw search-entry wire format (HTML
+  // renderings, field-limited serializations, the document itself) use
+  // `searchEntries` — that surface lives on this service only, never on the
+  // `Store` interface cards receive.
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
@@ -1015,35 +1006,17 @@ export default class StoreService extends Service implements StoreInterface {
       includeMeta?: boolean;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
     },
-  ): Promise<
-    | T[]
-    | (CardResource<Saved> | FileMetaResource)[]
-    | { instances: T[]; meta: QueryResultsMeta }
-    | {
-        resources: (CardResource<Saved> | FileMetaResource)[];
-        meta: QueryResultsMeta;
-      }
-  > {
-    let normalizedRealms = (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
-      .filter(Boolean);
-    let searchRealms =
-      normalizedRealms.length > 0
-        ? normalizedRealms
-        : this.realmServer.availableRealmIdentifiers;
+  ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
+    if ('asData' in query && query.asData) {
+      throw new Error(
+        `store.search returns instances only — use store.searchEntries for the raw search-entry wire format`,
+      );
+    }
+    let searchRealms = this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
-      if (query.asData) {
-        return opts?.includeMeta
-          ? { resources: [], meta: { page: { total: 0 } } }
-          : [];
-      }
       return opts?.includeMeta
         ? { instances: [], meta: { page: { total: 0 } } }
         : [];
-    }
-    if (query.asData) {
-      let result = await this.fetchSearchData(query, searchRealms);
-      return opts?.includeMeta ? result : result.resources;
     }
     let result = await this.fetchAndHydrateSearchResults<T>(
       query,
@@ -1051,6 +1024,50 @@ export default class StoreService extends Service implements StoreInterface {
       opts?.dependencyTrackingContext,
     );
     return opts?.includeMeta ? result : result.instances;
+  }
+
+  // The raw v2 wire format: heterogeneous `search-entry` resources with the
+  // `html` / `item` branches the query's `fields[search-entry]` selects.
+  // Nothing is hydrated into the store.
+  async searchEntries(
+    query: SearchEntryWireQuery,
+    realms?: string[],
+  ): Promise<SearchEntryResults> {
+    let searchRealms = this.normalizeSearchRealms(realms);
+    if (searchRealms.length === 0) {
+      return { data: [], meta: { page: { total: 0 } } };
+    }
+    return await this.fetchSearchEntryDoc(query, searchRealms);
+  }
+
+  // Selective inflate for a `<SearchResults>` consumer of `searchEntries`:
+  // deposit one full `item` serialization into the store so a by-URL read (or
+  // the hydration GET) resolves it without a round-trip. A sparse `item` (one
+  // carrying `meta.sparseFields`) is never deposited — it would misrepresent
+  // the instance and could clobber a correctly-loaded full one — so the call
+  // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
+  // which stands in for a card that failed to render and is not a real
+  // instance. `search-entry`s carry no serialization to deposit. Idempotent:
+  // depositing is skipped when the instance is already resident.
+  async inflateSearchEntryItem(
+    resource: CardResource<Saved> | FileMetaResource,
+  ): Promise<void> {
+    // Read `meta.error` before the guard: `isSparseItemResource`'s negative
+    // narrowing would otherwise reduce `resource` to `never` in the second
+    // operand.
+    if (resource.meta.error != null || isSparseItemResource(resource)) {
+      return;
+    }
+    await this.addResourceFromSearchData(resource);
+  }
+
+  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+    let normalizedRealms = (realms ?? [])
+      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .filter(Boolean);
+    return normalizedRealms.length > 0
+      ? normalizedRealms
+      : this.realmServer.availableRealmIdentifiers;
   }
 
   private async fetchAndHydrateSearchResults<
@@ -1085,21 +1102,12 @@ export default class StoreService extends Service implements StoreInterface {
     return { instances, meta: collectionDoc.meta };
   }
 
-  private async fetchSearchData(
-    query: Query,
-    realms: string[],
-  ): Promise<{
-    resources: (CardResource<Saved> | FileMetaResource)[];
-    meta: QueryResultsMeta;
-  }> {
-    let doc = await this.fetchSearchDoc(query, realms);
-    return { resources: doc.data, meta: doc.meta };
-  }
-
-  // Shared HTTP+JSON path for both `fetchSearchData` (raw resources for
-  // data-only callers) and `fetchAndHydrateSearchResults` (instances
-  // hydrated into the store). Sits between `store.search` and
-  // `_federated-search`.
+  // The instances path's resolved-document layer: the legacy `Query` runs
+  // against the v2 search requesting full `item` serializations, and the
+  // search-entry document coalesces back into the legacy collection shape
+  // (`item`s as `data` in entry order, the transitive link expansion as
+  // `included`) that the hydration pipeline and the caches below consume.
+  // Sits between `store.search` and `_federated-search-v2`.
   //
   // Two layers of dedup, both prerender-gated:
   //
@@ -1208,11 +1216,22 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     realms: string[],
   ): Promise<LinkableCollectionDocument> {
+    let doc = await this.fetchSearchEntryDoc(
+      searchEntryWireQueryFromQuery(query, { fields: ['item'] }),
+      realms,
+    );
+    return searchEntryDocToLinkableDoc(doc);
+  }
+
+  private async fetchSearchEntryDoc(
+    query: SearchEntryWireQuery,
+    realms: string[],
+  ): Promise<SearchEntryResults> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_federated-search', realmServerURL);
+    let searchURL = new URL('_federated-search-v2', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetchForRealms(
       searchURL.href,
       realms,
@@ -1241,9 +1260,9 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
-    if (!isLinkableCollectionDocument(json)) {
+    if (!isSearchEntryCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a valid collection document:
+        `The realm search response was not a valid search-entry collection document:
         ${JSON.stringify(json, null, 2)}`,
       );
     }
@@ -1280,24 +1299,6 @@ export default class StoreService extends Service implements StoreInterface {
       ...opts,
       storeService: this,
     }) as unknown as SearchResource<T>;
-  }
-
-  getSearchDataResource(
-    parent: object,
-    getQuery: () => DataQuery | undefined,
-    getRealms?: () => string[] | undefined,
-    opts?: { isLive?: boolean },
-  ): SearchDataResource {
-    if (this.isRenderStore && opts) {
-      opts.isLive = false;
-    }
-    return getSearchData(
-      parent,
-      getOwner(this)!,
-      getQuery,
-      getRealms,
-      opts,
-    ) as unknown as SearchDataResource;
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
@@ -1639,6 +1640,27 @@ export default class StoreService extends Service implements StoreInterface {
         );
       }
     }
+
+    // A realm's name/icon is injected into every card's `meta.realmInfo` at
+    // request time, but changing it (by editing the RealmConfig card at
+    // realm.json) only invalidates the config card itself — not the cards that
+    // display it. The realm index card (CardsGrid) renders the realm name as
+    // its title, so reload it when the config card is re-indexed to refresh
+    // that title without a browser reload. Scoped to the config card so we
+    // don't reload on every unrelated card edit. Instance invalidations carry
+    // the card id without `.json`, so the RealmConfig card at
+    // `<realm>/realm.json` appears here as `<realm>/realm`.
+    let realmConfigCardId = `${event.realmURL}realm`;
+    if (invalidations.includes(realmConfigCardId)) {
+      let indexCardId = `${event.realmURL}index`;
+      let indexCard = this.peek(indexCardId);
+      if (indexCard && isCardInstance(indexCard)) {
+        realmEventsLogger.debug(
+          `reloading index card ${indexCardId} because the realm config card was re-indexed`,
+        );
+        this.reloadTask.perform(indexCard);
+      }
+    }
   };
 
   private loadInstanceTask = task(
@@ -1819,31 +1841,6 @@ export default class StoreService extends Service implements StoreInterface {
       throw new Error('resource must have an id');
     }
 
-    // An identity-only result (HTML-backed) carries no live attributes — they
-    // are withheld on the wire and fetched on demand at hydration. Never
-    // deposit it: an attribute-less stub would misrepresent the instance. But
-    // if the instance is already fully loaded, return that resident instance —
-    // it stays represented in the results and a hydrated row keeps its live
-    // presentation rather than being dropped (and is still never clobbered). A
-    // not-yet-loaded identity-only row is skipped and renders from its HTML.
-    //
-    // The resident lookup is type-aware: a file row peeks (and type-checks) as
-    // a `FileDef`, a card row as a `CardDef`. Without this, an already-loaded
-    // file whose row comes back identity-only would peek against the card type,
-    // fail `isCardInstance`, and drop to HTML — losing its live presentation.
-    if (resource.meta?.identityOnly === true) {
-      if (isFileMetaResource(resource)) {
-        let existingInstance = this.peek(resource.id, { type: 'file-meta' });
-        return existingInstance && isFileDefInstance(existingInstance)
-          ? (existingInstance as T)
-          : undefined;
-      }
-      let existingInstance = this.peek(resource.id);
-      return existingInstance && isCardInstance(existingInstance)
-        ? (existingInstance as T)
-        : undefined;
-    }
-
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
       let existingInstance = this.peek(resource.id, { type: 'file-meta' });
@@ -1876,6 +1873,14 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
     if (!isCardInstance(instanceOrError)) {
+      return;
+    }
+    if (this.renderContextBlocksPersistence()) {
+      // Persistence is blocked in this context, so the change subscription that
+      // drives autosave can never produce a save. Skipping it avoids the
+      // per-instance subscribe/unsubscribe churn — and the `getFields`
+      // dependency-graph walk each one triggers — for every instance a render
+      // loads.
       return;
     }
     let instance = instanceOrError;

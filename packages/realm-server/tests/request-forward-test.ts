@@ -258,6 +258,113 @@ module(basename(__filename), function () {
       );
     });
 
+    test('should reject a URL that merely embeds an allowlisted string but targets another origin', async function (assert) {
+      // The classic substring-smuggling exploit: the allowlisted
+      // destination string appears in the query, but the request origin is
+      // the attacker's. If this were accepted the server would attach the
+      // real OpenRouter key while fetching attacker.example, leaking the
+      // secret. No upstream fetch must happen.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch').callsFake(async () => {
+        throw new Error('fetch should never be called for a rejected URL');
+      });
+
+      try {
+        const jwt = createJWT(testRealm, '@testuser:localhost');
+
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://attacker.example/x?=https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({ model: 'x', messages: [] }),
+          });
+
+        assert.strictEqual(response.status, 400, 'Should return 400 status');
+        assert.true(
+          response.body.errors?.[0]?.includes('not whitelisted'),
+          'Should reject the smuggled URL',
+        );
+        const forwarded = mockFetch.getCalls().some((call) => {
+          const u = call.args[0];
+          const s = typeof u === 'string' ? u : u?.toString();
+          return Boolean(s && s.includes('attacker.example'));
+        });
+        assert.false(forwarded, 'Should not forward to the attacker origin');
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('should reject a look-alike host that has an allowlisted host as a prefix', async function (assert) {
+      const jwt = createJWT(testRealm, '@testuser:localhost');
+
+      const response = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://openrouter.ai.attacker.com/api/v1/chat/completions',
+          method: 'POST',
+          requestBody: JSON.stringify({ model: 'x', messages: [] }),
+        });
+
+      assert.strictEqual(response.status, 400, 'Should return 400 status');
+      assert.true(
+        response.body.errors?.[0]?.includes('not whitelisted'),
+        'Should reject the look-alike host',
+      );
+    });
+
+    test('should reject a path on an allowlisted origin that is not under the allowlisted path', async function (assert) {
+      // openrouter.ai is allowlisted only at /api/v1/chat/completions, so a
+      // different path on the same origin must not inherit the API key.
+      const jwt = createJWT(testRealm, '@testuser:localhost');
+
+      const response = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://openrouter.ai/api/v1/credits',
+          method: 'GET',
+        });
+
+      assert.strictEqual(response.status, 400, 'Should return 400 status');
+      assert.true(
+        response.body.errors?.[0]?.includes('not whitelisted'),
+        'Should reject a path outside the allowlisted prefix',
+      );
+    });
+
+    test('should reject a path that shares a prefix segment but crosses a segment boundary', async function (assert) {
+      // `/customsearch/v1` is allowlisted; `/customsearch/v1-evil` must not
+      // match by raw string prefix.
+      const jwt = createJWT(testRealm, '@testuser:localhost');
+
+      const response = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://www.googleapis.com/customsearch/v1-evil?q=test',
+          method: 'GET',
+        });
+
+      assert.strictEqual(response.status, 400, 'Should return 400 status');
+      assert.true(
+        response.body.errors?.[0]?.includes('not whitelisted'),
+        'Should reject a path crossing a segment boundary',
+      );
+    });
+
     test('should handle streaming requests and deduct credits from inline cost', async function (assert) {
       // Mock external fetch calls
       const originalFetch = global.fetch;
@@ -821,10 +928,8 @@ module(basename(__filename), function () {
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      let capturedInit: RequestInit | undefined;
       mockFetch.callsFake(
-        async (_input: string | URL | Request, init?: RequestInit) => {
-          capturedInit = init;
+        async (_input: string | URL | Request, _init?: RequestInit) => {
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
@@ -865,7 +970,26 @@ module(basename(__filename), function () {
           'Should pass along API response',
         );
 
-        assert.ok(capturedInit, 'fetch init should be captured');
+        // Find the forwarded upload call by URL rather than capturing the most
+        // recent stubbed call — background timers in the shared test prerender
+        // server (heartbeat to prerender-manager, periodic queue snapshots,
+        // etc.) also use `global.fetch` and can fire inside this test's stub
+        // window, so the last call through the stub is not necessarily ours.
+        const uploadCall = mockFetch.getCalls().find((call) => {
+          let raw = call.args[0];
+          let s = typeof raw === 'string' ? raw : raw.toString();
+          return s.includes('api.example.com/upload');
+        });
+        if (!uploadCall) {
+          // Diagnostic for the next failure: show what traffic the stub saw so
+          // the racing fetch can be identified from CI output alone.
+          console.error(
+            'multipart forward call not found; stubbed fetch saw:',
+            mockFetch.getCalls().map((c) => String(c.args[0])),
+          );
+        }
+        assert.ok(uploadCall, 'fetch was invoked against the upload URL');
+        const capturedInit = uploadCall?.args[1];
 
         const headersRecord =
           capturedInit?.headers instanceof Headers

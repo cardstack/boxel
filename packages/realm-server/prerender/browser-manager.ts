@@ -7,6 +7,11 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 
 import { isHttpsLoopback } from '../lib/is-https-loopback.ts';
+import {
+  v8ProfEnabled,
+  v8ProfJsFlags,
+  prepareV8ProfForLaunch,
+} from './v8-prof.ts';
 
 const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
@@ -24,12 +29,16 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    let disableSandbox =
-      process.env.CI === 'true' ||
-      process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
-    if (disableSandbox) {
-      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
-    }
+    // Always launch the prerender renderer with the Chromium sandbox off — it
+    // always has, and we require it to. This task runs only in a container
+    // where the sandbox can't initialize, so Chrome won't start with it on
+    // (and the V8 `--prof` diagnostic needs the renderer able to write its log
+    // to disk, which the sandbox blocks). The security boundary is the task
+    // itself: the prerenderer is a separate, segregated ECS task, isolated
+    // from the realm-server. Forced unconditionally rather than gated on CI /
+    // PUPPETEER_DISABLE_SANDBOX so a missing env var can't silently break the
+    // launch.
+    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf
     // cert), Chromium needs to be told to accept it. mkcert's root CA
@@ -59,6 +68,25 @@ export class BrowserManager {
       process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
     if (extraArgs && extraArgs.length > 0) {
       launchArgs.push(...extraArgs);
+    }
+
+    // Diagnostic (off by default): arm V8's kernel-signal CPU sampler
+    // (`--prof`) in the renderer at launch. The SIGPROF timer preempts the
+    // thread on a schedule it can't refuse, so it samples a CPU-pegged
+    // loop — even one stuck in a non-yielding NATIVE call where
+    // `Debugger.pause` can't get a back-edge — and it never needs the
+    // pegged thread to service a CDP `stop`. The cost: it samples EVERY
+    // render, so it can perturb a timing-sensitive wedge; enable it only
+    // for a run that needs the native-peg fallback. Per-pid logfile so
+    // concurrent renderer processes don't clobber one another; the timeout
+    // path post-processes the log into the prerender-server logs.
+    // Always sweep stale --prof logs from the container's ephemeral /tmp
+    // (no EFS here — the only filesystem is the container's), even when
+    // disabled, so flipping the flag off + restarting cleans up the prior
+    // "on" period's logs. Arm the sampler itself only when enabled.
+    await prepareV8ProfForLaunch();
+    if (v8ProfEnabled()) {
+      launchArgs.push(`--js-flags=${v8ProfJsFlags()}`);
     }
 
     this.#browser = await puppeteer.launch({

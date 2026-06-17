@@ -12,6 +12,18 @@ on:
         required: false
         type: boolean
         default: false
+      boxel_environment:
+        description: |
+          BOXEL_ENVIRONMENT slug to bake into the host dist. Empty for
+          a standard-mode build (URLs like https://localhost:4201);
+          a value like "ci" produces an env-mode build whose realm URLs
+          target the per-environment Traefik hostnames
+          (https://realm-server.ci.localhost, etc.). The slug is folded
+          into the cache key and artifact name so standard-mode and
+          env-mode builds don't collide.
+        required: false
+        type: string
+        default: ""
     outputs:
       artifact_name:
         description: Artifact name containing built test web assets
@@ -46,8 +58,13 @@ jobs:
         run: |
           ref_slug="$(echo "${GITHUB_REF}" | tr '/' '_')"
           skip_catalog="${{ inputs.skip_catalog }}"
-          cache_key="test-web-assets-v2-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}-skip-catalog-${skip_catalog}"
-          artifact_name="test-web-assets-${GITHUB_SHA}-skip-catalog-${skip_catalog}"
+          boxel_env="${{ inputs.boxel_environment }}"
+          # An empty boxel_environment encodes the standard-mode build;
+          # any non-empty slug produces a distinct artifact + cache entry
+          # so env-mode and standard-mode builds for the same SHA coexist.
+          env_suffix="${boxel_env:-std}"
+          cache_key="test-web-assets-v2-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}-skip-catalog-${skip_catalog}-env-${env_suffix}"
+          artifact_name="test-web-assets-${GITHUB_SHA}-skip-catalog-${skip_catalog}-env-${env_suffix}"
           echo "cache_key=$cache_key" >> "$GITHUB_OUTPUT"
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
 
@@ -78,6 +95,10 @@ jobs:
         working-directory: packages/host
         env:
           SKIP_CATALOG: ${{ inputs.skip_catalog }}
+          # When set, environment.js bakes the env-mode realm/matrix/icons
+          # URLs (https://realm-server.<slug>.localhost, etc.) into the
+          # vite chunks. Empty preserves the standard-mode defaults.
+          BOXEL_ENVIRONMENT: ${{ inputs.boxel_environment }}
 
       - name: Write assets manifest
         shell: bash
@@ -94,6 +115,7 @@ jobs:
             cacheKey: process.env.CACHE_KEY,
             cacheHit: process.env.CACHE_HIT === "true",
             skipCatalog: process.env.SKIP_CATALOG === "true",
+            boxelEnvironment: process.env.BOXEL_ENVIRONMENT || null,
             builtAt: new Date().toISOString(),
           };
           fs.writeFileSync(".ci/test-web-assets/manifest.json", JSON.stringify(manifest, null, 2));
@@ -102,6 +124,7 @@ jobs:
           CACHE_KEY: ${{ steps.keys.outputs.cache_key }}
           CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
           SKIP_CATALOG: ${{ inputs.skip_catalog }}
+          BOXEL_ENVIRONMENT: ${{ inputs.boxel_environment }}
 
       - name: Save cached assets
         if: steps.restore.outputs.cache-hit != 'true'
