@@ -100,12 +100,11 @@ These are too package-specific or too coupled for a blind codemod:
   `exports` map, the `@cardstack/logger` createRequire fix (class #11, shared
   with `realm-test-harness`), and the `.eslintrc.cjs` rename (class #14).
 - **realm-server**: the full suite needs the dev services stack to run; the
-  bootstrap is validated on standalone unit tests.
-- **realm-server / runtime-common lazy `require()`** (class #11): a few still
-  unfixed — `runtime-common/fetch-node.ts` (`require('undici')`/`require('dns')`),
-  `realm-server/setup-localhost-resolver.ts`, `realm-server/lib/wtfnode-on-signal.ts`.
-  They're lazy (inside functions), so they only throw when that code path runs;
-  fix with a `createRequire` shim when validating realm-server end-to-end.
+  bootstrap is validated on standalone unit tests. All known bare/lazy
+  `require()` sites in the cluster are now shimmed (`createRequire`) or
+  dual-mode — every remaining `require()` either has a `const require =
+createRequire(import.meta.url)` in its file or is guarded by
+  `typeof require === 'function'`.
 - **realm-server `testem.js`** is CJS under `type:module` but only loaded by the
   (now-unused) testem CLI, so it's dormant rather than broken.
 
