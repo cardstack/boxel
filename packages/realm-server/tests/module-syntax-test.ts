@@ -12,6 +12,7 @@ import {
 import {
   baseCardRef,
   baseFieldRef,
+  baseRealm,
   RealmPaths,
   rri,
 } from '@cardstack/runtime-common';
@@ -19,6 +20,17 @@ import { testRealm } from './helpers/index.ts';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
 const virtualNetwork = new VirtualNetwork();
+// Register the base realm under both its virtual-alias URL and its scoped
+// RRI prefix (as the host/realm-server networks do) so URL↔RRI equivalence
+// is resolvable when merging generated base-module imports.
+virtualNetwork.addURLMapping(
+  new URL(baseRealm.url),
+  new URL('http://localhost:4201/base/'),
+);
+virtualNetwork.addRealmMapping(
+  '@cardstack/base/',
+  'http://localhost:4201/base/',
+);
 import { basename } from 'path';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 

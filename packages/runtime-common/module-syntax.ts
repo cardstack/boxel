@@ -415,17 +415,33 @@ function makeNewField({
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
   //typeof Babel.types
   let importUtil = new ImportUtil(Babel.types, programPath);
+  // The field decorator (`field`) and the field-type helper (`contains`,
+  // `linksTo`, …) both come from base/card-api, which the edited module
+  // already imports (its card extends a base def). Reuse that existing
+  // card-api import — in whatever specifier form the file uses — so the new
+  // identifiers merge into it instead of emitting a second card-api import in
+  // a different form.
+  let cardApiCanonical = virtualNetwork.unresolveURL(
+    `${baseRealm.url}card-api`,
+  );
+  let cardApiSource =
+    findEquivalentImportSource(
+      programPath,
+      cardApiCanonical,
+      undefined,
+      virtualNetwork,
+    ) ?? cardApiCanonical;
   let fieldDecorator = importUtil.import(
     // there is some type of mismatch here--importUtil expects the
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    cardApiSource,
     'field',
   );
 
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    cardApiSource,
     fieldType,
   );
 
