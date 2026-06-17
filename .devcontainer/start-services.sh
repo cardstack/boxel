@@ -188,5 +188,9 @@ echo "  Host preview build triggered — check the"
 echo "  PR for a preview link once it completes."
 echo "============================================"
 
-# Keep the realm server (and this script) in the foreground.
+# This script is launched detached (nohup ... &) from postStartCommand so the
+# Codespace lifecycle hook returns immediately — a blocking postStartCommand
+# wedges the Codespaces agent and SSH never comes up. Blocking on the realm
+# server here keeps this script alive as the parent of all the backgrounded
+# services for the life of the Codespace. Output goes to /tmp/start-services.log.
 wait "$REALM_PID"

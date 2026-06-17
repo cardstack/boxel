@@ -25,7 +25,7 @@
   },
 
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/start-services.sh",
+  "postStartCommand": "nohup bash .devcontainer/start-services.sh > /tmp/start-services.log 2>&1 &",
 
   "customizations": {
     "vscode": {
