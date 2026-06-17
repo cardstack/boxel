@@ -21,6 +21,7 @@ import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import { isMarkdownSkillId } from '@cardstack/host/lib/skill-commands';
 import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -42,11 +43,32 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.cardId);
+    // A skill markdown file is a `MarkdownDef` file-meta resource, not a card;
+    // load it through the file-meta read type. Skill cards load as cards.
+    this.cardResource = this.getCard(this, () => this.args.cardId, {
+      type: isMarkdownSkillId(this.args.cardId) ? 'file-meta' : 'card',
+    });
   };
 
   private get card() {
     return this.cardResource?.card;
+  }
+
+  // Title for either skill source: `cardTitle` for a Skill card, the
+  // frontmatter name / title for a skill markdown file.
+  private get displayTitle(): string | undefined {
+    let card = this.card as
+      | {
+          cardTitle?: string;
+          title?: string;
+          name?: string;
+          frontmatter?: { name?: string };
+        }
+      | undefined;
+    if (!card) {
+      return undefined;
+    }
+    return card.cardTitle ?? card.frontmatter?.name ?? card.title ?? card.name;
   }
 
   private get isCreating() {
@@ -88,8 +110,8 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
           >
             <:default>
               <div class='pill-content'>
-                <div class='card-content' title={{this.card.cardTitle}}>
-                  {{this.card.cardTitle}}
+                <div class='card-content' title={{this.displayTitle}}>
+                  {{this.displayTitle}}
                 </div>
               </div>
             </:default>
@@ -119,7 +141,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
             class='toggle'
             @isEnabled={{@isEnabled}}
             @onChange={{@onToggle}}
-            @label={{this.card.cardTitle}}
+            @label={{this.displayTitle}}
             data-test-skill-toggle='{{@cardId}}-{{if @isEnabled "on" "off"}}'
           />
         </div>

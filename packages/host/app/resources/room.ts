@@ -56,7 +56,12 @@ import {
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
-import { getSkillSourceCommands, peekSkillSource } from '../lib/skill-commands';
+import {
+  getSkillSourceCommands,
+  isMarkdownSkillId,
+  loadSkillSource,
+  peekSkillSource,
+} from '../lib/skill-commands';
 
 import type { Message } from '../lib/matrix-classes/message';
 
@@ -607,11 +612,24 @@ export class RoomResource extends Resource<Args> {
   private async loadSkills(skillCardFileDefs: SerializedFile[]) {
     let skillIds: string[] = [];
     for (let skillCardFileDef of skillCardFileDefs) {
-      let cardDoc =
-        await this.matrixService.downloadCardFileDef(skillCardFileDef);
-      let skill = await this.loadSkill(cardDoc);
-      if (skill?.id) {
-        skillIds.push(skill.id);
+      if (isMarkdownSkillId(skillCardFileDef.sourceUrl)) {
+        // A skill markdown file loads as a file-meta resource (not a card doc
+        // downloaded from Matrix). Keep its instance in the store so the menu
+        // pill renders and the room's usable commands resolve.
+        let source = await loadSkillSource(
+          this.store,
+          skillCardFileDef.sourceUrl,
+        );
+        if (source) {
+          skillIds.push(skillCardFileDef.sourceUrl);
+        }
+      } else {
+        let cardDoc =
+          await this.matrixService.downloadCardFileDef(skillCardFileDef);
+        let skill = await this.loadSkill(cardDoc);
+        if (skill?.id) {
+          skillIds.push(skill.id);
+        }
       }
     }
     let oldReferences = [...(this.#skillIds ?? [])];
@@ -623,7 +641,10 @@ export class RoomResource extends Resource<Args> {
     }
     let referencesToAdd = difference(newReferences, oldReferences);
     for (let id of referencesToAdd) {
-      this.store.addReference(id);
+      this.store.addReference(
+        id,
+        isMarkdownSkillId(id) ? { type: 'file-meta' } : undefined,
+      );
     }
   }
 
