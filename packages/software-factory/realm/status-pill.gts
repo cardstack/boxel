@@ -13,7 +13,7 @@ interface Signature {
 
 const StatusPill: TemplateOnlyComponent<Signature> = <template>
   <Pill
-    class='boxel-ellipsize status-pill'
+    class='status-pill'
     @size='extra-small'
     @pillFontColor={{@color}}
     ...attributes
@@ -28,6 +28,8 @@ const StatusPill: TemplateOnlyComponent<Signature> = <template>
         currentColor 12%,
         transparent
       );
+      min-height: var(--boxel-button-mini);
+      height: unset;
       border: none;
       font-weight: 600;
       text-transform: uppercase;
