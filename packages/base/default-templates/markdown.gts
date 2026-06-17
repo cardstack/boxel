@@ -266,14 +266,13 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           if (!rawUrl) continue;
           let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
 
-          // Files render in atom (inline) / embedded (block) — no fitted size
-          // specifiers. Cards derive their block format/size from the BFM
-          // size attributes.
+          // Inline refs render in atom format. Block refs (card and file
+          // alike) derive their format and any fitted sizing from the BFM size
+          // attributes, so `::file[./photo.jpg | 400x300]` is honored the same
+          // way `::card[... | 400x300]` is.
           let format: CardSlotFormat;
           let sizeStyle: string | undefined;
-          if (refType === 'file') {
-            format = isInline ? 'atom' : 'embedded';
-          } else if (isInline) {
+          if (isInline) {
             format = 'atom';
           } else {
             let derived = bfmBlockFormatAndSize(
@@ -283,6 +282,15 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             );
             format = derived.format;
             sizeStyle = derived.sizeStyle;
+          }
+
+          // Fitted slots carry an inline width/height plus `overflow: hidden`
+          // so the resolved instance occupies the requested footprint.
+          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined;
+          if (format === 'fitted') {
+            resolvedStyle = htmlSafe(
+              sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
+            );
           }
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl, virtualNetwork);
@@ -297,20 +305,13 @@ export default class MarkDownTemplate extends GlimmerComponent<{
                 state: 'resolved',
                 format,
                 file,
+                style: resolvedStyle,
               });
               continue;
             }
           } else {
             let card = cardsByUrl.get(resolvedUrl);
             if (card) {
-              let style: ReturnType<typeof htmlSafe> | undefined;
-              if (format === 'fitted') {
-                style = htmlSafe(
-                  sizeStyle
-                    ? `${sizeStyle}; overflow: hidden`
-                    : 'overflow: hidden',
-                );
-              }
               slots.push({
                 element: el,
                 refType,
@@ -318,7 +319,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
                 state: 'resolved',
                 format,
                 card,
-                style,
+                style: resolvedStyle,
               });
               continue;
             }
@@ -538,7 +539,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
                 </span>
               {{else}}
                 <div
-                  class='markdown-bfm-card-slot markdown-bfm-card-slot--block'
+                  class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                    {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                  style={{slot.style}}
                   data-test-markdown-bfm-block-file
                 >
                   <FileComponent

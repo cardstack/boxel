@@ -321,6 +321,40 @@ module('Unit | bfm-card-references', function () {
       );
     });
 
+    test('block file ref with size spec emits format and dimension attributes', function (assert) {
+      let markdown = '::file[https://example.com/images/photo.png | 400x200]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-block-ref="https://example.com/images/photo.png"',
+        ),
+        'URL excludes the pipe and specifier',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'file block ref honors fitted format',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="400"'), 'width=400');
+      assert.true(html.includes('data-boxel-bfm-height="200"'), 'height=200');
+    });
+
+    test('block file ref with named size constant emits dimension attributes', function (assert) {
+      let markdown = '::file[https://example.com/images/photo.png | strip]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-width="250"'),
+        'width from strip constant',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-height="40"'),
+        'height from strip constant',
+      );
+    });
+
     test('DOMPurify preserves file BFM placeholders', function (assert) {
       let markdown =
         'Text :file[https://example.com/files/1.pdf] and more.\n\n::file[https://example.com/files/2.pdf]\n';

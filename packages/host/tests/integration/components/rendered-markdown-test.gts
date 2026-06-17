@@ -471,6 +471,68 @@ module('Integration | rendered-markdown', function (hooks) {
     );
   });
 
+  test('block ::file with a size spec is honored the same way ::card is', async function (assert) {
+    let fileUrl = 'http://example.com/images/photo.png';
+    let content = `::file[${fileUrl} | 400x200]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    let el = document.querySelector(
+      `.markdown-content [data-boxel-bfm-block-ref="${fileUrl}"]`,
+    );
+    assert.ok(el, 'block file placeholder exists');
+    assert.strictEqual(
+      el?.getAttribute('data-boxel-bfm-format'),
+      'fitted',
+      'file size spec sets fitted format',
+    );
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-width'), '400');
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-height'), '200');
+  });
+
+  test('unresolved fitted block ::file carries inline width/height matching the footprint', async function (assert) {
+    let fileUrl = 'http://nonexistent.example.com/images/missing.png';
+    let content = `::file[${fileUrl} | 400x200]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved file block did not appear' },
+    );
+
+    let brokenBlock = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-block]',
+    ) as HTMLElement | null;
+    assert.ok(brokenBlock, 'broken-link block exists');
+    assert
+      .dom(brokenBlock)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted file ref carries the fitted footprint class',
+      );
+    let style = brokenBlock?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
   test('loading placeholder appears before unresolved card ref settles', async function (assert) {
     // The modifier emits a loading shimmer on its first run (before
     // loadReferencedCards has settled) and only transitions to the broken-link
