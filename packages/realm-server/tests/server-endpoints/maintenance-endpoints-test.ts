@@ -54,7 +54,7 @@ async function ensureMatrixAdminUser(): Promise<void> {
   });
 }
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {

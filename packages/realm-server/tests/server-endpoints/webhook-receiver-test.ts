@@ -10,7 +10,7 @@ import {
   extractBranchNameFromPayload,
 } from '../../handlers/webhook-filter-handlers.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Webhook Receiver Endpoint', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
 

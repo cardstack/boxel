@@ -57,7 +57,7 @@ async function fetchReservation(
   return rows[0];
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('finalizeOrphanedReservations', function (hooks) {
     let adapter: PgAdapter;
 

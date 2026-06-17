@@ -17,6 +17,5 @@ echo "[start-prerender-production] pid=$$ ppid=$PPID about to exec ts-node at $(
 NODE_ENV=production \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL=https://app.boxel.ai \
-  exec ts-node \
-  --transpileOnly prerender/prerender-server \
+  exec node prerender/prerender-server.ts \
   --port=${PRERENDER_PORT:-4221}

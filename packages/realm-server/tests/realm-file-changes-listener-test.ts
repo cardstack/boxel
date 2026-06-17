@@ -53,7 +53,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('parsePayload', function () {
     test('parses url:path with a port in the url', function (assert) {
       assert.deepEqual(

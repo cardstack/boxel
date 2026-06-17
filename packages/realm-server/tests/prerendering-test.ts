@@ -226,7 +226,7 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
   return { pool, contextsCreated, contextsClosed };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('prerender - mutating tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/test/';
     let prerenderServerURL = new URL(realmURL).origin;

@@ -79,7 +79,7 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('skipQueryBackedExpansion', function (hooks) {
     let realm: Realm;
 

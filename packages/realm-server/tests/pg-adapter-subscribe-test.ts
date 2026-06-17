@@ -48,7 +48,7 @@ async function notify(
   ]);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('PgAdapter.subscribe', function (hooks) {
     let dbAdapter: PgAdapter;
 

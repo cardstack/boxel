@@ -12,7 +12,7 @@
     "@types/qunit": "catalog:",
     "@universal-ember/test-support": "catalog:",
     "@cardstack/view-transitions": "catalog:",
-    "@types/lodash": "catalog:",
+    "@types/lodash-es": "catalog:",
     "ember-animated": "catalog:",
     "chess.js": "catalog:",
     "concurrently": "catalog:",

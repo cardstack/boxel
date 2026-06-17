@@ -12,7 +12,7 @@ import {
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 import { setupDB } from './helpers/index.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('fetchUserPermissions', function (hooks) {
     let dbAdapter: PgAdapter;
 

@@ -22,7 +22,7 @@ const explicitRef: ResolvedCodeRef = {
   name: 'Contact',
 };
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('render-type resolution', function () {
     test('an explicit renderType CodeRef wins', function (assert) {
       assert.deepEqual(

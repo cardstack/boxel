@@ -1,5 +1,5 @@
-import flatten from 'lodash/flatten.js';
-import flattenDeep from 'lodash/flattenDeep.js';
+import { flatten } from 'lodash-es';
+import { flattenDeep } from 'lodash-es';
 import {
   type CardResource,
   type JobInfo,

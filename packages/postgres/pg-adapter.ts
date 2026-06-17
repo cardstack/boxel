@@ -14,7 +14,7 @@ import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
 import { postgresConfig } from './pg-config.ts';
-import migrationNameFixes from './scripts/migration-name-fixes.js';
+import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
 // Hash a realm URL to a stable signed int64 (as a string, because JS numbers
 // can't represent the full int64 range). Used as a pg advisory lock key:

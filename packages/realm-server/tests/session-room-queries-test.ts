@@ -10,7 +10,7 @@ import {
 } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { setupDB, insertUser } from './helpers/index.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('fetchRealmSessionRooms', function (hooks) {
     let dbAdapter: PgAdapter;
     const realmURL = new URL('http://127.0.0.1:4444/test/');

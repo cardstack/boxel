@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import '../setup-logger.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('virtual-network', function () {
     test('will respond with real (not virtual) url when handler makes a redirect', async function (assert) {
       let virtualNetwork = new VirtualNetwork();

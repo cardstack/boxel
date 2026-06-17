@@ -216,6 +216,9 @@ catalogs:
     '@types/lodash':
       specifier: ^4.17.15
       version: 4.17.24
+    '@types/lodash-es':
+      specifier: ^4.17.12
+      version: 4.17.12
     '@types/matrix-js-sdk':
       specifier: ^11.0.1
       version: 11.1.0
@@ -513,6 +516,9 @@ catalogs:
     lodash:
       specifier: ^4.17.21
       version: 4.18.1
+    lodash-es:
+      specifier: ^4.17.21
+      version: 4.18.1
     loglevel:
       specifier: ^1.8.1
       version: 1.9.2
@@ -808,9 +814,9 @@ importers:
       '@sentry/node':
         specifier: 'catalog:'
         version: 8.55.2
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
@@ -823,7 +829,7 @@ importers:
       debug:
         specifier: ^4.4.3
         version: 4.4.3(supports-color@8.1.1)
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       matrix-js-sdk:
@@ -918,9 +924,9 @@ importers:
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       awesome-phonenumber:
         specifier: 'catalog:'
         version: 7.8.0
@@ -1737,9 +1743,9 @@ importers:
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
@@ -1788,7 +1794,7 @@ importers:
       eslint-plugin-prettier:
         specifier: 'catalog:'
         version: 5.5.5(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.3)
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       prettier:
@@ -1920,9 +1926,9 @@ importers:
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7)
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
@@ -2110,9 +2116,9 @@ importers:
       '@types/indefinite':
         specifier: 'catalog:'
         version: 2.3.4
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/matrix-js-sdk':
         specifier: 'catalog:'
         version: 11.1.0
@@ -2344,7 +2350,7 @@ importers:
       katex:
         specifier: 'catalog:'
         version: 0.16.45
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       loglevel:
@@ -2663,9 +2669,9 @@ importers:
       '@types/koa__router':
         specifier: 'catalog:'
         version: 12.0.5
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/mime-types':
         specifier: 'catalog:'
         version: 2.1.4
@@ -2771,7 +2777,7 @@ importers:
       koa-proxies:
         specifier: 'catalog:'
         version: 0.12.4(koa@2.16.4)
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       loglevel:
@@ -2972,9 +2978,9 @@ importers:
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/pluralize':
         specifier: 'catalog:'
         version: 0.0.30
@@ -3044,7 +3050,7 @@ importers:
       json-typescript:
         specifier: 'catalog:'
         version: 1.1.2
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       loglevel:
@@ -6914,6 +6920,9 @@ packages:
 
   '@types/koa__router@12.0.5':
     resolution: {integrity: sha512-1HeLxuDn4n5it1yZYCSyOYXo++73zT0ffoviXnPxbwbxLbvDFEvWD9ZzpRiIpK4oKR0pi+K+Mk/ZjyROjW3HSw==}
+
+  '@types/lodash-es@4.17.12':
+    resolution: {integrity: sha512-0NgftHUcV4v34VhXm8QBSftKVXtbkBG3ViCjs6+eJ5a6y6Mi/jiFGPc1sC7QK+9BFhWrURE3EOggmWaSxL9OzQ==}
 
   '@types/lodash@4.17.24':
     resolution: {integrity: sha512-gIW7lQLZbue7lRSWEFql49QJJWThrTFFeIMJdp3eH4tKoxm1OvEPg02rm4wCCSHS0cL3/Fizimb35b7k8atwsQ==}
@@ -20146,6 +20155,10 @@ snapshots:
   '@types/koa__router@12.0.5':
     dependencies:
       '@types/koa': 2.15.0
+
+  '@types/lodash-es@4.17.12':
+    dependencies:
+      '@types/lodash': 4.17.24
 
   '@types/lodash@4.17.24': {}
 

@@ -17,6 +17,5 @@ echo "[start-prerender-staging] pid=$$ ppid=$PPID about to exec ts-node at $(dat
 NODE_ENV=production \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL=https://realms-staging.stack.cards \
-  exec ts-node \
-  --transpileOnly prerender/prerender-server \
+  exec node prerender/prerender-server.ts \
   --port=${PRERENDER_PORT:-4221}

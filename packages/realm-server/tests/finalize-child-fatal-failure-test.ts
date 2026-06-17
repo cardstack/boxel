@@ -47,7 +47,7 @@ async function fetchReservation(
   return rows[0];
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('finalizeChildReservationAsFailure', function (hooks) {
     let adapter: PgAdapter;
 

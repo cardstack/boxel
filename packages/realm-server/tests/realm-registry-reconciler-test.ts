@@ -51,7 +51,7 @@ async function deleteRow(dbAdapter: PgAdapter, url: string) {
   ]);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('RealmRegistryReconciler', function (hooks) {
     let dbAdapter: PgAdapter;
     let mountCalls: string[];

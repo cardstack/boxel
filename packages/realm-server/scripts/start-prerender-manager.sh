@@ -15,6 +15,5 @@ echo "[start-prerender-manager] pid=$$ ppid=$PPID about to exec ts-node at $(dat
 
 NODE_ENV=production \
   NODE_NO_WARNINGS=1 \
-  exec ts-node \
-  --transpileOnly prerender/manager-server \
+  exec node prerender/manager-server.ts \
   --port=${PRERENDER_MANAGER_PORT:-4222}

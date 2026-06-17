@@ -5,7 +5,7 @@ import { ri, rri } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { relativizeDocument } from '@cardstack/runtime-common/realm-index-query-engine';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   // Regression test for CS-10498: cards in prefix-mapped realms (like the
   // openrouter realm) threw TypeError: Invalid URL when served.
   //

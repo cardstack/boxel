@@ -10,7 +10,7 @@ import { join, resolve } from 'path';
 
 import * as prettier from 'prettier';
 
-import { transformContextSearch } from './transform';
+import { transformContextSearch } from './transform.ts';
 
 // Format the migrated source through the repo's prettier config (with
 // prettier-plugin-ember-template-tag for `.gts`) so the structural edits land as

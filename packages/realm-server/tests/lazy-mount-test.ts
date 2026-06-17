@@ -91,7 +91,7 @@ function buildServer(opts: {
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Phase 3 lazy mount', function (hooks) {
     let dbAdapter: PgAdapter;
     let mountCalls: string[];

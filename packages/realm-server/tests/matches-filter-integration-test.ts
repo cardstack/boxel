@@ -86,7 +86,7 @@ async function countBoxelIndexRows(dbAdapter: PgAdapter): Promise<number> {
   return rows[0].total;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('MatchesFilter (Postgres integration)', function (hooks) {
     let dbAdapter: PgAdapter;
     let engine: IndexQueryEngine;

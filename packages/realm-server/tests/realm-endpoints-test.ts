@@ -4,15 +4,8 @@ import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
-import {
-  copySync,
-  ensureDirSync,
-  existsSync,
-  readFileSync,
-  readJSONSync,
-  removeSync,
-  writeFileSync,
-} from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { copySync, ensureDirSync, existsSync, readFileSync, readJSONSync, removeSync, writeFileSync } = fsExtra;
 import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
@@ -72,7 +65,7 @@ import type {
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
@@ -2008,7 +2001,7 @@ module(basename(__filename), function () {
     let testRealm: Realm;
 
     let virtualNetwork = createVirtualNetwork();
-    const basePath = resolve(join(__dirname, '..', '..', 'base'));
+    const basePath = resolve(join(import.meta.dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
       'realm.json': readJSONSync(join(fixtureDir('realistic'), 'realm.json')),
       'person.gts': readFileSync(

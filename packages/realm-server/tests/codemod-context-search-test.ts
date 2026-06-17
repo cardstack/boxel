@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 
-import { transformContextSearch } from '../scripts/codemod/context-search/transform';
+import { transformContextSearch } from '../scripts/codemod/context-search/transform.ts';
 
 // A clean, mechanically-transformable usage: the `:response` body is a direct
 // `{{#each}}` over the result array that renders `<card.component />`, the query
@@ -184,7 +184,7 @@ export class Plain extends GlimmerComponent {
 }
 `;
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('transforms a representative card: renames the component, reshapes the blocks, adds the query getter + import', function (assert) {
     let { status, output, reasons } = transformContextSearch(TRANSFORMABLE, {
       filename: 'grid.gts',

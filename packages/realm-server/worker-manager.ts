@@ -55,7 +55,7 @@ import {
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
-import flattenDeep from 'lodash/flattenDeep';
+import { flattenDeep } from 'lodash-es';
 import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
@@ -822,10 +822,9 @@ async function startWorker(
   urlMappings: [URL | string, URL][],
 ) {
   let worker = spawn(
-    'ts-node',
+    'node',
     [
-      '--transpileOnly',
-      'worker',
+      'worker.ts',
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,

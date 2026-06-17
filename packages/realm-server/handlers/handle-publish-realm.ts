@@ -18,14 +18,8 @@ import {
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import { join } from 'path';
-import {
-  copySync,
-  readJsonSync,
-  writeJsonSync,
-  removeSync,
-  existsSync,
-  moveSync,
-} from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { copySync, readJsonSync, writeJsonSync, removeSync, existsSync, moveSync } = fsExtra;
 
 import {
   fetchRequestFromContext,

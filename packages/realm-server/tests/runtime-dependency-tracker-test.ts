@@ -14,7 +14,7 @@ import {
   withRuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   hooks.afterEach(() => {
     endRuntimeDependencyTrackingSession();
     resetRuntimeDependencyTracker();

@@ -22,7 +22,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 // Postgres advisory lock to serialize critical sections that pre-CS-11125
 // raced. Without the lock applied to PATCH and /_atomic, the assertions
 // below detect the lost update / TOCTOU directly.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('CS-11125: data-plane write serialization', function () {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;

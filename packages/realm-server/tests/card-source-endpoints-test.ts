@@ -3,7 +3,8 @@ import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { existsSync, readFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readFileSync } = fsExtra;
 import {
   cardSrc,
   compiledCard,
@@ -30,9 +31,9 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | card source requests', function () {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;

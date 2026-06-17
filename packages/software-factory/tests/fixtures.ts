@@ -90,7 +90,7 @@ type SharedRealmHandle = {
 };
 
 const packageRoot = resolve(process.cwd());
-const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
+const nodeBin = process.execPath;
 const defaultRealmDir = resolve(
   packageRoot,
   process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
@@ -278,9 +278,8 @@ async function startRealmProcess(
   };
   try {
     child = spawn(
-      tsNodeBin,
+      nodeBin,
       [
-        '--transpileOnly',
         'src/cli/serve-realm.ts',
         realmDir,
         `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,

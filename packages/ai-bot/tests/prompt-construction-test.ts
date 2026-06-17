@@ -25,7 +25,8 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { readFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { readFileSync } = fsExtra;
 import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import {
@@ -1932,7 +1933,7 @@ Attached Files (files with newer versions don't show their content):
 
   test('should include instructions in system prompt for skill cards', async () => {
     const rawEvents = readFileSync(
-      path.join(__dirname, 'resources/chats/added-skill.json'),
+      path.join(import.meta.dirname, 'resources/chats/added-skill.json'),
       'utf-8',
     );
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
@@ -2011,7 +2012,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-skill-and-attached-card.json',
         ),
         'utf-8',
@@ -2129,7 +2130,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-two-skills-removed-one-skill.json',
         ),
         'utf-8',
@@ -2205,7 +2206,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-two-skills-removed-two-skills.json',
         ),
         'utf-8',
@@ -2232,7 +2233,7 @@ Attached Files (files with newer versions don't show their content):
     // handle that.
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/skill-card-no-id.json'),
+        path.join(import.meta.dirname, 'resources/chats/skill-card-no-id.json'),
         'utf-8',
       ),
     );
@@ -2293,7 +2294,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-messages-with-same-skill-card.json',
         ),
         'utf-8',
@@ -2341,7 +2342,10 @@ Attached Files (files with newer versions don't show their content):
   test('if tool calls are required, ensure they are set', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/forced-function-call.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/forced-function-call.json',
+        ),
         'utf-8',
       ),
     );
@@ -2717,7 +2721,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tools-multiple-messages.json',
         ),
         'utf-8',
@@ -2743,7 +2747,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tools-multiple-messages.json',
         ),
         'utf-8',
@@ -2762,7 +2766,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
         'utf-8',
@@ -2786,7 +2790,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/connect-tool-calls-to-results.json',
         ),
         'utf-8',
@@ -2836,7 +2840,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/invoke-submode-swith-command.json',
         ),
         'utf-8',
@@ -2960,7 +2964,10 @@ Attached Files (files with newer versions don't show their content):
   test('Does not respond to first tool call result when two tool calls were made', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-tool-calls-one-result.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-tool-calls-one-result.json',
+        ),
         'utf-8',
       ),
     );
@@ -3002,7 +3009,10 @@ Attached Files (files with newer versions don't show their content):
   test('Responds to second tool call result when two tool calls were made', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-tool-calls-two-results.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-tool-calls-two-results.json',
+        ),
         'utf-8',
       ),
     );
@@ -3080,7 +3090,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/enabled-skill-with-commands.json',
         ),
         'utf-8',
@@ -3224,7 +3234,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/disabled-skill-with-commands.json',
         ),
         'utf-8',
@@ -3256,7 +3266,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/updated-skill-command-definitions.json',
         ),
         'utf-8',
@@ -3394,7 +3404,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
@@ -3428,7 +3438,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // m.replace messages, relying on server side aggregation
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/server-side-aggregations.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/server-side-aggregations.json',
+        ),
         'utf-8',
       ),
     );
@@ -3533,7 +3546,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Responds to successful completion of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-success.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-success.json',
+        ),
         'utf-8',
       ),
     );
@@ -3558,7 +3574,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Does not respond to first code patch result when two patches were proposed', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-code-blocks-one-result.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-code-blocks-one-result.json',
+        ),
         'utf-8',
       ),
     );
@@ -3578,7 +3597,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
@@ -3605,7 +3624,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-one-result.json',
         ),
         'utf-8',
@@ -3627,7 +3646,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-two-results-a.json',
         ),
         'utf-8',
@@ -3694,7 +3713,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-two-results-b.json',
         ),
         'utf-8',
@@ -3760,7 +3779,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Responds to failure of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-failure.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
         'utf-8',
       ),
     );
@@ -3785,7 +3807,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed before last user message when just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-single.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-single.json',
+        ),
         'utf-8',
       ),
     );
@@ -3803,7 +3828,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed before last user message when multiple user messages', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-multiple.json',
+        ),
         'utf-8',
       ),
     );
@@ -3823,7 +3851,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed after the last tool call if the last message is a tool call', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/tool-call-last.json'),
+        path.join(import.meta.dirname, 'resources/chats/tool-call-last.json'),
         'utf-8',
       ),
     );
@@ -3847,7 +3875,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed after the last user message if the last message is an assistant message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/assistant-message-last.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/assistant-message-last.json',
+        ),
         'utf-8',
       ),
     );
@@ -3866,7 +3897,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message contains the current date and time', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-multiple.json',
+        ),
         'utf-8',
       ),
     );
@@ -3889,7 +3923,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('tool call messages include attached files when command result does', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/read-gts-file.json'),
+        path.join(import.meta.dirname, 'resources/chats/read-gts-file.json'),
         'utf-8',
       ),
     );
@@ -3928,7 +3962,7 @@ Attached Files (files with newer versions don't show their content):
   test('tool call messages include attached cards when command result does', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/read-card.json'),
+        path.join(import.meta.dirname, 'resources/chats/read-card.json'),
         'utf-8',
       ),
     );
@@ -3973,7 +4007,7 @@ Attached Cards (cards with newer versions don't show their content):
   test('getPromptParts collects patched files from code patch result attachments', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/patched-gts.json'),
+        path.join(import.meta.dirname, 'resources/chats/patched-gts.json'),
         'utf-8',
       ),
     );
@@ -6540,7 +6574,7 @@ module('set model in prompt', (hooks) => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
         'utf-8',
@@ -6558,7 +6592,7 @@ module('set model in prompt', (hooks) => {
   test('use latest active llm', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/set-active-llm.json'),
+        path.join(import.meta.dirname, 'resources/chats/set-active-llm.json'),
         'utf-8',
       ),
     );

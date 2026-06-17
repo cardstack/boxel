@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import bfmCardReferencesTests from '@cardstack/runtime-common/tests/bfm-card-references-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('cardTypeName', function () {
     test('cardTypeName extracts type from absolute URL', async function (assert) {
       await runSharedTest(bfmCardReferencesTests, assert, {});

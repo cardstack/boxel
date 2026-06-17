@@ -29,7 +29,7 @@ function args(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'computeBatchClearCacheGate — clearCache batch ownership (CS-10758 step 3)',
     function () {

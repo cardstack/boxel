@@ -19,7 +19,7 @@ import {
 // registry-row delete AND the permissions delete. Pre-CS-10898 the handler
 // ran each helper through the shared dbAdapter, so each DELETE committed in
 // its own auto-tx and a mid-cleanup throw left the realm half-deleted.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('CS-10898: realm cleanup transactionality', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {

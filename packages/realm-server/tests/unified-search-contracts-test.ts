@@ -105,7 +105,7 @@ function css(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('unified search contracts', function () {
     // --- predicates ---------------------------------------------------------
 

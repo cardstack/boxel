@@ -44,7 +44,7 @@ if [ "${SKIP_CATALOG:-}" != "true" ]; then
 fi
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
-  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  MATRIX_REGISTRATION_SHARED_SECRET=$(node "$SCRIPTS_DIR/matrix-registration-secret.ts").ts
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
@@ -93,8 +93,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ENABLE_FILE_WATCHER=true \
-  ts-node \
-  --transpileOnly main \
+  node main.ts \
   --port="${REALM_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALMS_ROOT}" \

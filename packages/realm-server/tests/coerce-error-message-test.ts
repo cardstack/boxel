@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import coerceErrorMessageTests from '@cardstack/runtime-common/tests/coerce-error-message-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('coerceErrorMessage', function () {
     test('returns the existing non-empty message', async function (assert) {
       await runSharedTest(coerceErrorMessageTests, assert, {});

@@ -258,7 +258,7 @@ function withEnv<T>(
   }
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   hooks.before(function () {
     tmpCertDir = mkdtempSync(join(tmpdir(), 'realm-listener-test-'));
     let pair = makeCert(tmpCertDir);

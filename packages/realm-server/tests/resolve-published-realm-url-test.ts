@@ -5,7 +5,7 @@ import {
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('resolve-published-realm-url', function () {
     // deriveRealmName
     test('deriveRealmName returns the last path segment, lowercased', async function (assert) {

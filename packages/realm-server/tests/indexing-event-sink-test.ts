@@ -44,7 +44,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('tracks active indexing from start through file visits to finish', function (assert) {
     let sink = new IndexingEventSink();
 

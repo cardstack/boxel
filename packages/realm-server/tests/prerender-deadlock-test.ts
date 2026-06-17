@@ -140,7 +140,7 @@ function makeStubPagePool(opts: {
   return { pool, stub };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('CS-10976: deadlock-safety reservation', function (hooks) {
     let prevTabMax: string | undefined;
 

@@ -6,7 +6,7 @@ configureLogger(process.env.LOG_LEVELS || '*=error');
 
 let log = logger('test');
 
-const packageRoot = resolve(__dirname, '..');
+const packageRoot = resolve(import.meta.dirname, '..');
 
 type TestRunnerOptions = {
   nodeOnly: boolean;

@@ -73,7 +73,7 @@ function makeRoutingFixture(): Record<
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutingMap', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-unit/');
     let testRealm: Realm;

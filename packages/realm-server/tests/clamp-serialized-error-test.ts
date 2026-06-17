@@ -39,7 +39,7 @@ function isOmittedSentinel(entry: any): boolean {
   );
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('returns the input unchanged when the doc fits the budget', function (assert) {
     let input: SerializedError = {
       message: 'boom',

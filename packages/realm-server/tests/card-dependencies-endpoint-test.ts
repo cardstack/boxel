@@ -12,7 +12,7 @@ import {
 } from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | card dependencies requests', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;

@@ -5,7 +5,7 @@ import { realmSecretSeed, insertUser } from '../helpers/index.ts';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {

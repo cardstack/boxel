@@ -39,7 +39,7 @@ import { logger } from '../../src/logger.ts';
 // ---------------------------------------------------------------------------
 
 let log = logger('smoke-factory-scenarios');
-let packageRoot = resolve(__dirname, '../..');
+let packageRoot = resolve(import.meta.dirname, '../..');
 
 const DEFAULT_BRIEF_URL =
   'http://localhost:4201/software-factory/Wiki/sticky-note';

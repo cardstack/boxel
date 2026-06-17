@@ -38,8 +38,7 @@ NODE_NO_WARNINGS=1 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='boxel.space' \
   PUBLISHED_REALM_BOXEL_SITE_DOMAIN='boxel.site' \
-  exec ts-node \
-  --transpileOnly main \
+  exec node main.ts \
   --port=3000 \
   --matrixURL='https://matrix.boxel.ai' \
   --realmsRootPath='/persistent/realms' \

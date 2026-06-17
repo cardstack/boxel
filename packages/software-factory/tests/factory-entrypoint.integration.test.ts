@@ -13,9 +13,9 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-const packageRoot = resolve(__dirname, '..');
+const packageRoot = resolve(import.meta.dirname, '..');
 const stickyNoteFixture = readFileSync(
-  resolve(__dirname, '../realm/Wiki/sticky-note.json'),
+  resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
   'utf8',
 );
 

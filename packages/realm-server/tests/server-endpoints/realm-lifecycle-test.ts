@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
-import { existsSync, readJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readJSONSync } = fsExtra;
 import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -26,7 +27,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {

@@ -24,10 +24,11 @@ import {
   waitUntil,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {

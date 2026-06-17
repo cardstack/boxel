@@ -71,7 +71,7 @@ async function seedBootstrapRow(dbAdapter: PgAdapter, url: string) {
   );
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('upsertPublishedRealmInRegistry', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {

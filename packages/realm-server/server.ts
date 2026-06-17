@@ -14,7 +14,8 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
-import { ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   ecsMetadata,

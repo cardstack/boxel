@@ -25,7 +25,7 @@ function binaryParser(
   });
 }
 
-module(`server-endpoints/${basename(__filename)}`, function (hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   // Use the `simple` fixture so the realm has real card files to assert
   // the archive contains; the `blank` fixture has no card content.
   let context = setupServerEndpointsTest(hooks, { fixture: 'simple' });

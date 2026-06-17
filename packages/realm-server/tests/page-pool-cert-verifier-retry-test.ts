@@ -117,7 +117,7 @@ function makeBrowserStub(opts: BrowserStubOptions) {
   return browserManager;
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let pools: PagePool[] = [];
 
   hooks.afterEach(async () => {

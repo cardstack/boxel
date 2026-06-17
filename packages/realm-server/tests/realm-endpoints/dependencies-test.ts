@@ -6,7 +6,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { RealmHttpServer as Server } from '../../server.ts';
 import { closeServer, setupPermissionedRealmCached } from '../helpers/index.ts';
 
-module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;

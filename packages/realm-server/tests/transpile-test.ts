@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Transpile', function () {
     test('can rewrite fetch()', async function (assert) {
       let transpiled = await transpileJS(

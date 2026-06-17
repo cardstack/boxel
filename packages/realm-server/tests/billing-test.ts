@@ -101,7 +101,7 @@ function buildDailyCreditGrantTaskArgs(dbAdapter: PgAdapter): TaskArgs {
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('billing', function (hooks) {
     let dbAdapter: PgAdapter;
 

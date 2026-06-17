@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import packageShimHandlerTests from '@cardstack/runtime-common/tests/package-shim-handler-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Strict named-export check (CS-10860 follow-up)', function () {
     test('wrapWithStrictNamespace returns existing exports unchanged', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});

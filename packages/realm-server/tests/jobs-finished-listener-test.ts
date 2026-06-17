@@ -50,7 +50,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('JobsFinishedListener (sweep dispatch)', function () {
     test('clears every cached key whose job has finalized', async function (assert) {
       let cache = new FakeSearchCache(['5.1', '9.1']);

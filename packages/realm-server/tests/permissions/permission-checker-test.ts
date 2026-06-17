@@ -10,7 +10,7 @@ let mockMatrixClient = {
   },
 } as MatrixClient;
 
-module(`permissions/${basename(__filename)}`, function () {
+module(`permissions/${basename(import.meta.filename)}`, function () {
   module('world-readable realm', function () {
     let permissionsChecker = new RealmPermissionChecker(
       {

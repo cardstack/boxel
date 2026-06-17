@@ -118,7 +118,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('parseModuleCacheInvalidationPayload', function () {
     test('parses a module payload carrying a single URL', function (assert) {
       assert.deepEqual(

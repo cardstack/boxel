@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import normalizeRealmMetaValueTests from '@cardstack/runtime-common/tests/normalize-realm-meta-value-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('normalizeRealmMetaValue', function () {
     test('undefined value normalizes to empty groups', async function (assert) {
       await runSharedTest(normalizeRealmMetaValueTests, assert, {});

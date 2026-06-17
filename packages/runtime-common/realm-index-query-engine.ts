@@ -1,5 +1,5 @@
 import { isScopedCSSRequest } from './scoped-css.ts';
-import cloneDeep from 'lodash/cloneDeep.js';
+import { cloneDeep } from 'lodash-es';
 import {
   SupportedMimeType,
   isJsonContentType,

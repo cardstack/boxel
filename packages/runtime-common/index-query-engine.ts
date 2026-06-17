@@ -1,5 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import flatten from 'lodash/flatten.js';
+import { flatten } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
 import type { ResolvedCodeRef } from './index.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';

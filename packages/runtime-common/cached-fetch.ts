@@ -1,4 +1,4 @@
-import merge from 'lodash/merge.js';
+import { merge } from 'lodash-es';
 
 import { isNode } from './index.ts';
 

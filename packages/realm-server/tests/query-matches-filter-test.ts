@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import queryMatchesFilterTests from '@cardstack/runtime-common/tests/query-matches-filter-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('MatchesFilter', function () {
     test('isMatchesFilter returns true for a MatchesFilter', async function (assert) {
       await runSharedTest(queryMatchesFilterTests, assert, {});

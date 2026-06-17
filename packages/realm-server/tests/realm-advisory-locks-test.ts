@@ -19,7 +19,7 @@ function timeline(events: string[], startedAt: number, eventTimes: number[]) {
     .join(',');
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('hashRealmUrlForAdvisoryLock', function () {
     test('is deterministic', function (assert) {
       const url = 'http://localhost:4201/luke/my-realm/';

@@ -7,7 +7,7 @@ import type {
 } from '../tasks/indexer.ts';
 import type { PgPrimitive } from '../expression.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
-import isObjectLike from 'lodash/isObjectLike.js';
+import { isObjectLike } from 'lodash-es';
 
 export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 

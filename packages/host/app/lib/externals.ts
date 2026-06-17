@@ -43,7 +43,7 @@ import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consum
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
-import * as lodash from 'lodash';
+import * as lodash from 'lodash-es';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';
 import * as superFastMD5 from 'super-fast-md5';

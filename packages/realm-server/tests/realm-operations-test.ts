@@ -53,7 +53,7 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('realm-operations', function () {
     test('publishRealm POSTs normalized URLs and maps the 202 response', async function (assert) {
       let { client, calls } = makeClient(() =>

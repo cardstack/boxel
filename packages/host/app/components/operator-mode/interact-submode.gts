@@ -13,7 +13,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
 
-import get from 'lodash/get';
+import { get } from 'lodash-es';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';

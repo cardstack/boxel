@@ -4,7 +4,7 @@ import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
 import { executableExtensions, logger } from './index.ts';
 
 import { CardError, iconNotFoundMessage } from './error.ts';
-import flatMap from 'lodash/flatMap.js';
+import { flatMap } from 'lodash-es';
 import {
   shouldTrackRuntimeModuleGraph,
   trackRuntimeModuleDependency,

@@ -39,7 +39,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('RealmIndexUpdatedListener (dispatch)', function () {
     test('handleNotification forwards to the mounted realm', function (assert) {
       let cleared = 0;

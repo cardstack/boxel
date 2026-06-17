@@ -82,7 +82,7 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
 // cards each linking to 5 targets, the original implementation would have
 // fired 250 sequential `WHERE i.url = $1` lookups. The new BFS path issues
 // one batched `WHERE i.url IN (...)` per recursion depth.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('loadLinks batching', function (hooks) {
     let realm: Realm;
 

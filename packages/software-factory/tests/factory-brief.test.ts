@@ -12,12 +12,15 @@ import {
 } from '../src/factory-brief.ts';
 
 const stickyNoteFixture = JSON.parse(
-  readFileSync(resolve(__dirname, '../realm/Wiki/sticky-note.json'), 'utf8'),
+  readFileSync(
+    resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
+    'utf8',
+  ),
 ) as unknown;
 const darkfactoryIssueFixture = JSON.parse(
   readFileSync(
     resolve(
-      __dirname,
+      import.meta.dirname,
       '../test-fixtures/darkfactory-adopter/Issues/issue-001.json',
     ),
     'utf8',

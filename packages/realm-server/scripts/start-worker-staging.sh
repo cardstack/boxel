@@ -21,8 +21,7 @@ NODE_NO_WARNINGS=1 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
   OPENROUTER_REALM_URL='https://realms-staging.stack.cards/openrouter/' \
-  exec ts-node \
-  --transpileOnly worker-manager \
+  exec node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \

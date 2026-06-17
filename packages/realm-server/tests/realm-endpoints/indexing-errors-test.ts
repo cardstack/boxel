@@ -20,7 +20,7 @@ import {
 
 const ownerUserId = '@mango:localhost';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('with a clean realm', function (hooks) {
     let realmURL = testRealmURLFor('test/');
     let request: RealmRequest;

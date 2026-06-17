@@ -280,7 +280,7 @@ const CACHE_CARD_UPDATED_GTS = `
   }
 `;
 
-module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;

@@ -10,7 +10,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _search-prerendered', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;

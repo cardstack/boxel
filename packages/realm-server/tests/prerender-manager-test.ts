@@ -17,7 +17,7 @@ import { toAffinityKey } from '../prerender/affinity.ts';
 import { Deferred } from '@cardstack/runtime-common';
 import { testCreatePrerenderAuth } from './helpers/index.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Prerender manager', function (hooks) {
     let previousMultiplex: string | undefined;
     let previousHeartbeatTimeout: string | undefined;

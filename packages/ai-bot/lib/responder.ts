@@ -4,8 +4,8 @@ import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
 import type { OpenAIError } from 'openai/error';
-import throttle from 'lodash/throttle';
-import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
+import { throttle } from 'lodash-es';
+import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';

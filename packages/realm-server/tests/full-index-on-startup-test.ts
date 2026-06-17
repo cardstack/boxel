@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { resolveFullIndexOnStartup } from '../lib/full-index-on-startup.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('default behavior (env var unset)', function () {
     test('bootstrap realms full-index on startup', function (assert) {
       assert.true(resolveFullIndexOnStartup('bootstrap', undefined));

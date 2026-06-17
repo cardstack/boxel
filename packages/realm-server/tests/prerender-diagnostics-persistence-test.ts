@@ -80,7 +80,7 @@ function buildFakeSuccessVisitResponse(): FakeVisitResponse {
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('render diagnostics persistence — consolidated channel', function () {
     test('Prerenderer.decorateRenderErrorsWithTimings lifts outer RenderError.diagnostics onto response.meta and leaves the inner SerializedError clean', function (assert) {
       let response = buildFakeVisitResponseWithTimeoutError();

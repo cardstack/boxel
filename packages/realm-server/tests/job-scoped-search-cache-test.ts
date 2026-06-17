@@ -30,7 +30,7 @@ function makeDoc(label: string): string {
   );
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;
 
   setupDB(hooks, {

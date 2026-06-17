@@ -17,7 +17,7 @@ function createJWT(
   return jwt.sign(payload, 'secret', { expiresIn });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('realm-auth-client', function (assert) {
     let client: RealmAuthClient;
     let sessionHandler: (request: Request) => Promise<Response>;

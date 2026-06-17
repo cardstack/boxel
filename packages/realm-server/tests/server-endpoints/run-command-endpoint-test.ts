@@ -4,7 +4,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { realmSecretSeed, insertUser } from '../helpers/index.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('/_run-command endpoint', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
 

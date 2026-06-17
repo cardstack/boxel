@@ -3,7 +3,8 @@ import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { copySync, ensureDirSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
@@ -24,7 +25,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | GET _types', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;

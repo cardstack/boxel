@@ -5,7 +5,8 @@ import supertest from 'supertest';
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { copySync, ensureDirSync } = fsExtra;
 import {
   setupDB,
   runTestRealmServer,
@@ -25,7 +26,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm-specific Endpoints | _openrouter/chat/completions',
     function (hooks) {

@@ -15,7 +15,7 @@ import {
 } from '../helpers/index.ts';
 import type { PgAdapter as TestPgAdapter } from '@cardstack/postgres';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm-specific Endpoints | POST _cancel-indexing-job',
     function (hooks) {

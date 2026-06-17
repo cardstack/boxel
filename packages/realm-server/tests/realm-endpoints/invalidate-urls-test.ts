@@ -6,7 +6,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common';
 import { createJWT, setupPermissionedRealmCached } from '../helpers/index.ts';
 import type { PgAdapter as TestPgAdapter } from '@cardstack/postgres';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | POST _invalidate', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;

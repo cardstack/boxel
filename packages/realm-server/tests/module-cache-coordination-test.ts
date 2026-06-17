@@ -152,7 +152,7 @@ function makeLookup(
   return lookup;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('ModuleCacheCoordinator unit', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {

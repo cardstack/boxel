@@ -16,7 +16,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
 import type { RealmServer } from '../server.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('realm auth handler', function (hooks) {
     let dbAdapter: PgAdapter;
     let request: SuperTest<SupertestTest>;

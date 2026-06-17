@@ -32,7 +32,7 @@ interface FederatedTypesResponse {
   };
 }
 
-module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
   module('Realm Server Endpoints | /_federated-types', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;

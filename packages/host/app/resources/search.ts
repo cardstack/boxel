@@ -8,8 +8,8 @@ import { tracked, cached } from '@glimmer/tracking';
 import { didCancel, restartableTask, task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import difference from 'lodash/difference';
-import isEqual from 'lodash/isEqual';
+import { difference } from 'lodash-es';
+import { isEqual } from 'lodash-es';
 import { TrackedArray } from 'tracked-built-ins';
 
 import type {

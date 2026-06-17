@@ -79,7 +79,7 @@ const universe: RenderingCandidate[] = [
   { format: 'head' },
 ];
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('search-entry query parser', function () {
     test('translates the canonical search-entry query', function (assert) {
       let htmlQuery: HtmlQuery = {

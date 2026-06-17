@@ -107,11 +107,11 @@ import {
 } from './index.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
-import merge from 'lodash/merge.js';
-import mergeWith from 'lodash/mergeWith.js';
-import cloneDeep from 'lodash/cloneDeep.js';
-import isEqual from 'lodash/isEqual.js';
-import isPlainObject from 'lodash/isPlainObject.js';
+import { merge } from 'lodash-es';
+import { mergeWith } from 'lodash-es';
+import { cloneDeep } from 'lodash-es';
+import { isEqual } from 'lodash-es';
+import { isPlainObject } from 'lodash-es';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type.ts';
 import {

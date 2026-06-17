@@ -9,7 +9,7 @@ import {
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | GET directory path', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;

@@ -124,7 +124,7 @@ function buildExceptionThrownEvent(opts: {
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('records Runtime.exceptionThrown into the recorder', async function (assert) {
     let client = new FakeCDPClient();
     let page = new FakePage(client);

@@ -95,7 +95,7 @@ const ARTICLE_INSTANCE = JSON.stringify({
   },
 });
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm-specific Endpoints | POST _reindex and _full-reindex',
     function (hooks) {

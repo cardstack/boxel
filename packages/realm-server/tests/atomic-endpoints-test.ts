@@ -95,7 +95,7 @@ async function readIndexSnapshot(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm-specific Endpoints: can make request to post /_atomic',
     function () {
