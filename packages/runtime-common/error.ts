@@ -36,6 +36,18 @@ export interface SerializedError {
   diagnostics?: Record<string, unknown>;
 }
 
+// A persisted error document: the `SerializedError` plus the index metadata
+// that rode with the row that failed. Stored in the `error_doc` column and
+// carried on the wire by anything that stands in for a card/module/file that
+// failed to render or index.
+export interface ErrorEntry {
+  type: 'instance-error' | 'module-error' | 'file-error';
+  error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
+  cardType?: string;
+}
+
 // Postgres `jsonb` containers store child offsets in 28 bits, so a
 // single jsonb array's elements must total < 256 MiB — a format-level
 // constraint baked into jsonb, not a column setting we can raise.

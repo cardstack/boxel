@@ -20,6 +20,7 @@ export interface BeforeOptionsWithSearchSignature {
       ) => PickerOption[];
       isSelectAllActive?: boolean;
       onSearchTermChange?: (term: string) => void;
+      searchEnabled?: boolean;
       searchPlaceholder?: string;
       searchTerm?: string;
       selectAllOption?: PickerOption;
@@ -56,6 +57,10 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
   get searchPlaceholder() {
     return this.args.extra?.searchPlaceholder || 'Search...';
+  }
+
+  get showSearch() {
+    return this.args.extra?.searchEnabled ?? true;
   }
 
   get selectAllOption() {
@@ -225,19 +230,38 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
   }
 
   <template>
-    <div class='picker-before-options' data-test-boxel-picker-before-options>
-      <div class='picker-before-options__search' data-test-boxel-picker-search>
-        <BoxelInput
-          @type='search'
-          @value={{this.searchTerm}}
-          @onInput={{this.updateSearchTerm}}
-          @placeholder={{this.searchPlaceholder}}
-          @autocomplete='off'
-          class='picker-before-options__search-input'
+    {{! Keydown lives on the wrapper so navigation works even when the
+        search input is hidden — events bubble from the input or the
+        focus-target div. }}
+    <div
+      class='picker-before-options'
+      data-test-boxel-picker-before-options
+      tabindex='-1'
+      {{on 'keydown' this.handleKeydown}}
+    >
+      {{#if this.showSearch}}
+        <div
+          class='picker-before-options__search'
+          data-test-boxel-picker-search
+        >
+          <BoxelInput
+            @type='search'
+            @value={{this.searchTerm}}
+            @onInput={{this.updateSearchTerm}}
+            @placeholder={{this.searchPlaceholder}}
+            @autocomplete='off'
+            class='picker-before-options__search-input'
+            {{autoFocus}}
+          />
+        </div>
+      {{else}}
+        <div
+          class='picker-before-options__focus-target'
+          tabindex='-1'
+          data-test-boxel-picker-focus-target
           {{autoFocus}}
-          {{on 'keydown' this.handleKeydown}}
-        />
-      </div>
+        ></div>
+      {{/if}}
 
       <div
         class='picker-before-options__selected-summary'
@@ -280,12 +304,11 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
       .picker-before-options__search {
         --boxel-input-search-color: var(--boxel-dark);
         --boxel-input-search-background-color: transparent;
-        --icon-full-length: var(--boxel-icon-xs);
         padding: 0 calc(2 * var(--boxel-sp-2xs));
       }
 
       .picker-before-options__search :deep(.input-container) {
-        --icon-full-length: var(--boxel-icon-xs);
+        --boxel-input-icon-size: var(--boxel-icon-xs);
       }
 
       .picker-before-options__search :deep(.search-icon) {
@@ -295,7 +318,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
       }
 
       .picker-before-options__search :deep(.search) {
-        padding-left: calc(var(--boxel-icon-xs) + var(--boxel-sp-2xs));
+        padding-left: calc(var(--boxel-icon-xs) + var(--boxel-sp-xs));
       }
 
       .picker-before-options__search-input {
@@ -305,6 +328,17 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
       .picker-before-options__search-input:focus-visible,
       .search {
+        outline: none;
+      }
+
+      .picker-before-options__focus-target {
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        outline: none;
+      }
+
+      .picker-before-options:focus-visible {
         outline: none;
       }
 

@@ -30,6 +30,7 @@ import {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isSearchEntryCollectionDocument,
+  isSparseItemResource,
   resolveFileDefCodeRef,
   searchEntryDocToLinkableDoc,
   searchEntryWireQueryFromQuery,
@@ -1035,6 +1036,27 @@ export default class StoreService extends Service implements StoreInterface {
     return await this.fetchSearchEntryDoc(query, searchRealms);
   }
 
+  // Selective inflate for a `<SearchResults>` consumer of `searchEntries`:
+  // deposit one full `item` serialization into the store so a by-URL read (or
+  // the hydration GET) resolves it without a round-trip. A sparse `item` (one
+  // carrying `meta.sparseFields`) is never deposited — it would misrepresent
+  // the instance and could clobber a correctly-loaded full one — so the call
+  // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
+  // which stands in for a card that failed to render and is not a real
+  // instance. `search-entry`s carry no serialization to deposit. Idempotent:
+  // depositing is skipped when the instance is already resident.
+  async inflateSearchEntryItem(
+    resource: CardResource<Saved> | FileMetaResource,
+  ): Promise<void> {
+    // Read `meta.error` before the guard: `isSparseItemResource`'s negative
+    // narrowing would otherwise reduce `resource` to `never` in the second
+    // operand.
+    if (resource.meta.error != null || isSparseItemResource(resource)) {
+      return;
+    }
+    await this.addResourceFromSearchData(resource);
+  }
+
   private normalizeSearchRealms(realms: string[] | undefined): string[] {
     let normalizedRealms = (realms ?? [])
       .map((realm) => new RealmPaths(new URL(realm)).url)
@@ -1614,6 +1636,27 @@ export default class StoreService extends Service implements StoreInterface {
         );
       }
     }
+
+    // A realm's name/icon is injected into every card's `meta.realmInfo` at
+    // request time, but changing it (by editing the RealmConfig card at
+    // realm.json) only invalidates the config card itself — not the cards that
+    // display it. The realm index card (CardsGrid) renders the realm name as
+    // its title, so reload it when the config card is re-indexed to refresh
+    // that title without a browser reload. Scoped to the config card so we
+    // don't reload on every unrelated card edit. Instance invalidations carry
+    // the card id without `.json`, so the RealmConfig card at
+    // `<realm>/realm.json` appears here as `<realm>/realm`.
+    let realmConfigCardId = `${event.realmURL}realm`;
+    if (invalidations.includes(realmConfigCardId)) {
+      let indexCardId = `${event.realmURL}index`;
+      let indexCard = this.peek(indexCardId);
+      if (indexCard && isCardInstance(indexCard)) {
+        realmEventsLogger.debug(
+          `reloading index card ${indexCardId} because the realm config card was re-indexed`,
+        );
+        this.reloadTask.perform(indexCard);
+      }
+    }
   };
 
   private loadInstanceTask = task(
@@ -1826,6 +1869,14 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
     if (!isCardInstance(instanceOrError)) {
+      return;
+    }
+    if (this.renderContextBlocksPersistence()) {
+      // Persistence is blocked in this context, so the change subscription that
+      // drives autosave can never produce a save. Skipping it avoids the
+      // per-instance subscribe/unsubscribe churn — and the `getFields`
+      // dependency-graph walk each one triggers — for every instance a render
+      // loads.
       return;
     }
     let instance = instanceOrError;

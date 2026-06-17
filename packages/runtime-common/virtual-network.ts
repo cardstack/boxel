@@ -25,6 +25,15 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
   private realmMappings = new Map<string, string>();
+  // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
+  // membership checks) resolve the same identifiers over and over and only
+  // ever need the href STRING, yet toURL pays a native `new URL()` per call —
+  // in large renders that constructor shows up as a top self-time frame, and
+  // the discarded URL objects feed GC pressure. Caching the resolved href
+  // turns every repeat into a Map lookup with zero allocation. Resolution is
+  // a pure function of the realm mappings, so entries stay valid until a
+  // mapping is added or removed (both clear the cache).
+  private toURLHrefCache = new Map<string, string>();
 
   constructor(nativeFetch = createEnvironmentAwareFetch()) {
     this.nativeFetch = nativeFetch;
@@ -84,6 +93,7 @@ export class VirtualNetwork {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
+    this.toURLHrefCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -100,6 +110,7 @@ export class VirtualNetwork {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     this.realmMappings.delete(normalizedId);
     this.importMap.delete(normalizedId);
+    this.toURLHrefCache.clear();
   }
 
   knownRealms(): RealmIdentifier[] {
@@ -184,6 +195,24 @@ export class VirtualNetwork {
     }
     // Not a registered prefix; parse as a plain URL.
     return new URL(rri);
+  }
+
+  /**
+   * `toURL().href` without constructing a URL object on repeats. Same
+   * resolution and same throw-on-unresolvable behavior as `toURL`, but
+   * memoized — for callers that only need the href string this turns the
+   * per-call native URL construction into a Map lookup. Failures are not
+   * cached, so an identifier that becomes resolvable after a mapping is
+   * registered resolves normally.
+   */
+  toURLHref(rri: string): string {
+    let cached = this.toURLHrefCache.get(rri);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let href = this.toURL(rri).href;
+    this.toURLHrefCache.set(rri, href);
+    return href;
   }
 
   /**
@@ -469,6 +498,26 @@ const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
 function shouldRetryFetch(url: URL) {
+  // Env-mode services live at `<service>.<slug>.localhost` and are
+  // reached through a local Traefik. The realm-server worker fetches
+  // its own realm's `_mtimes` via this hostname on boot, and if Traefik
+  // hasn't picked up the dynamic route file yet the first attempt fails
+  // with ECONNRESET. Without a retry, that single failure rejects the
+  // from-scratch-index job and leaves the realm mounted but unindexed.
+  // Gate on `BOXEL_ENVIRONMENT` rather than the `__environment === 'test'`
+  // global below: worker processes don't set that global (only `main.ts`
+  // does), and the standard-mode realm-server tests do set it — those
+  // tests POST to `testuser.localhost:4445` and rely on no-retry
+  // behavior for their publish/unpublish flows, so we must scope this
+  // retry to env-mode runs only.
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.BOXEL_ENVIRONMENT &&
+    url.hostname.endsWith('.localhost')
+  ) {
+    return true;
+  }
+
   if ((globalThis as any).__environment !== 'test') {
     return false;
   }

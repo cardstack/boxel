@@ -66,6 +66,10 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
   private _instances = new TrackedArray<PrerenderedCard>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   #loadedScopedCssModules = new Set<string>();
+  #scopedCssModulesByLoader = new WeakMap<
+    Loader,
+    Map<string, Promise<string[]>>
+  >();
   #previousSignature: string | undefined;
 
   constructor(owner: object) {
@@ -163,11 +167,20 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
   }
 
   private isScopedCssModule(url: string): boolean {
-    try {
-      return isScopedCSSRequest(new URL(url).pathname);
-    } catch {
-      return false;
+    // Suffix check on the path portion only — scoped-css URLs carry the
+    // encoded CSS in the filename, never in a query string or hash, so
+    // trimming those is enough. String ops instead of `new URL()`: this runs
+    // per dependency per type and the URL constructor dominates otherwise.
+    let end = url.length;
+    let queryIdx = url.indexOf('?');
+    if (queryIdx !== -1) {
+      end = queryIdx;
     }
+    let hashIdx = url.indexOf('#');
+    if (hashIdx !== -1 && hashIdx < end) {
+      end = hashIdx;
+    }
+    return isScopedCSSRequest(end === url.length ? url : url.slice(0, end));
   }
 
   private async loadScopedCssForInstance(instance: SearchInstance) {
@@ -175,11 +188,25 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
     if (!identity?.module) {
       return;
     }
-    let deps = await this.loaderService.loader.getConsumedModules(
-      identity.module,
-    );
-    let scopedCssModules = deps.filter((dep) => this.isScopedCssModule(dep));
-    let modulesToLoad = scopedCssModules.filter(
+    let loader = this.loaderService.loader;
+    // A result set holds many instances of few types, but the dependency
+    // walk costs the same for each instance of a type — so compute the
+    // scoped-css module list once per (loader, type module). Keyed by loader
+    // because a loader reset re-transpiles modules and the content-addressed
+    // scoped-css URLs change with the CSS.
+    let byModule = this.#scopedCssModulesByLoader.get(loader);
+    if (!byModule) {
+      byModule = new Map();
+      this.#scopedCssModulesByLoader.set(loader, byModule);
+    }
+    let scopedCssModules = byModule.get(identity.module);
+    if (!scopedCssModules) {
+      scopedCssModules = loader
+        .getConsumedModules(identity.module)
+        .then((deps) => deps.filter((dep) => this.isScopedCssModule(dep)));
+      byModule.set(identity.module, scopedCssModules);
+    }
+    let modulesToLoad = (await scopedCssModules).filter(
       (moduleURL) => !this.#loadedScopedCssModules.has(moduleURL),
     );
     if (modulesToLoad.length === 0) {
@@ -187,7 +214,7 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
     }
     await Promise.all(
       modulesToLoad.map(async (moduleURL) => {
-        await this.loaderService.loader.import(moduleURL);
+        await loader.import(moduleURL);
         this.#loadedScopedCssModules.add(moduleURL);
       }),
     );

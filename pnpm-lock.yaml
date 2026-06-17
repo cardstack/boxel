@@ -2594,6 +2594,9 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
         version: 5.2.0
+      '@babel/parser':
+        specifier: 'catalog:'
+        version: 7.27.0
       '@cardstack/billing':
         specifier: workspace:*
         version: link:../billing
@@ -2729,6 +2732,9 @@ importers:
       ember-eslint-parser:
         specifier: ^0.13.0
         version: 0.13.0(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.28.6(@babel/core@7.29.0)(eslint@8.57.1))(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
+      ember-template-recast:
+        specifier: ^6.1.5
+        version: 6.1.5
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.2.6(eslint@8.57.1)
@@ -2798,6 +2804,9 @@ importers:
       qunit:
         specifier: 'catalog:'
         version: 2.25.0
+      recast:
+        specifier: 'catalog:'
+        version: 0.23.11
       sane:
         specifier: 'catalog:'
         version: 5.0.1
@@ -19132,7 +19141,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19149,7 +19161,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19182,7 +19197,10 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19190,7 +19208,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19823,7 +19844,7 @@ snapshots:
 
   '@types/babel__core@7.20.5':
     dependencies:
-      '@babel/parser': 7.27.0
+      '@babel/parser': 7.29.3
       '@babel/types': 7.29.0
       '@types/babel__generator': 7.27.0
       '@types/babel__template': 7.4.4
@@ -19835,7 +19856,7 @@ snapshots:
 
   '@types/babel__template@7.4.4':
     dependencies:
-      '@babel/parser': 7.27.0
+      '@babel/parser': 7.29.3
       '@babel/types': 7.29.0
 
   '@types/babel__traverse@7.28.0':
@@ -24286,7 +24307,7 @@ snapshots:
 
   ember-router-generator@2.0.0:
     dependencies:
-      '@babel/parser': 7.27.0
+      '@babel/parser': 7.29.3
       '@babel/traverse': 7.27.0
       recast: 0.18.10
     transitivePeerDependencies:

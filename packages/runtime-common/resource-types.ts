@@ -1,4 +1,5 @@
 import { md5 } from 'super-fast-md5';
+import type { ErrorEntry } from './error.ts';
 import type { RealmInfo } from './realm.ts';
 import { type CodeRef, type ResolvedCodeRef, moduleFrom } from './code-ref.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
@@ -25,6 +26,7 @@ export const RenderedHtmlResourceType = 'rendered-html';
 export const CssResourceType = 'css';
 export const SearchEntryResourceType = 'search-entry';
 export const HtmlResourceType = 'html';
+export const IconResourceType = 'icon';
 // resource
 export type Resource =
   | ModuleResource
@@ -33,7 +35,8 @@ export type Resource =
   | RenderedHtmlResource
   | CssResource
   | SearchEntryResource
-  | HtmlResource;
+  | HtmlResource
+  | IconResource;
 export type ResourceMeta = ModuleMeta | Meta;
 export type LinkableResource = CardResource | FileMetaResource;
 
@@ -106,6 +109,11 @@ export type CardResourceMeta = Meta & {
   // the instance and could clobber a correctly-loaded full one). Absence
   // marks the serialization full.
   sparseFields?: string[];
+  // The result's error doc, when this serialization stands in for a card that
+  // failed to render/index. Present => the live `item` cannot render, so a
+  // consumer falls through to the host error component (the terminal rung of
+  // the resolution chain) and never deposits the resource into the Store.
+  error?: ErrorEntry;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -118,6 +126,9 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
+  // See CardResourceMeta.error — a file-meta serialization can likewise carry
+  // the result's error doc when it failed to render.
+  error?: ErrorEntry;
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
@@ -193,6 +204,26 @@ export interface CssResource {
   };
 }
 
+// A card type's presentation descriptor — the per-type data that is identical
+// across every result of that type (its icon, display name, and code ref), so
+// it rides as its own deduped resource rather than repeated on each rendering.
+// Its `id` is the type's internal key (the `<module>/<name>` form already
+// carried as a row's `types[0]`), so identical types collapse to one
+// `(type, id)` in `included`. Reached from the `search-entry` (not the `html`)
+// so item-only / no-HTML rows resolve their type descriptor too.
+export interface IconResource {
+  id: string;
+  type: typeof IconResourceType;
+  attributes: {
+    iconHtml: string;
+    // The card def's display name (e.g. "Author").
+    displayName: string;
+    // The card def's resolved code ref — the structured form of the
+    // `<module>/<name>` the `id` encodes, so consumers needn't re-parse it.
+    codeRef: ResolvedCodeRef;
+  };
+}
+
 // The synthesized rendering-selection query bound on a `search-entry` (the
 // "htmlQuery"): a boolean sub-query over the rendering dimensions — `eq`
 // leaves composed with `every`/`any`/`not`, with real boolean semantics
@@ -235,6 +266,12 @@ export interface SearchEntryResource {
         id: string;
       };
     };
+    // The result's card-type icon, deduped across entries of the same type.
+    // Present whenever the row carries an `icon_html`; reached here (not on
+    // `html`) so item-only / no-HTML rows resolve it too.
+    icon?: {
+      data: { type: typeof IconResourceType; id: string };
+    };
   };
 }
 
@@ -250,7 +287,6 @@ export interface HtmlResource {
     // Absent only on an error rendering with no last-known-good HTML.
     html?: string;
     cardType: string;
-    iconHtml?: string;
     isError?: boolean;
     format: PrerenderedHtmlFormat;
     // The type this rendering was rendered as — the result's own native type
@@ -317,12 +353,22 @@ export {
   isRelationship,
   isRenderedHtmlResource,
   isCssResource,
+  isIconResource,
   isIdentityOnlyCardResource,
   isIdentityOnlyFileMetaResource,
   isSearchEntryResource,
   isHtmlResource,
   isSparseItemResource,
 } from './card-document-shape.ts';
+
+// The map/set key for a JSON:API `(type, id)` identity pair. NUL-separated so
+// one pair can't alias another by concatenation — no resource type or id
+// contains a NUL byte.
+// `id` may be absent on an unsaved resource; the literal "undefined" segment
+// it produces is still a stable, non-aliasing key.
+export function resourceIdentity(type: string, id: string | undefined): string {
+  return `${type}\u0000${id}`;
+}
 
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
 // URL. Server and host compute it through this one helper so identical

@@ -1431,7 +1431,10 @@ module(basename(__filename), function () {
         runner.register('logJob', logJob);
         runner2.register('logJob', logJob);
 
-        let promiseForJob1 = publisher.publish({
+        // Await job1's publish so it is durably enqueued (and picked up by a
+        // worker during the sleep below) before job2 is published — the
+        // assertion below depends on job1 starting first.
+        let job1 = await publisher.publish({
           jobType: 'logJob',
           concurrencyGroup: 'log-group',
           timeout: 5000,
@@ -1439,21 +1442,20 @@ module(basename(__filename), function () {
         });
         // start the 2nd job before the first job finishes
         await new Promise((r) => setTimeout(r, 100));
-        let promiseForJob2 = publisher.publish({
+        let job2 = await publisher.publish({
           jobType: 'logJob',
           concurrencyGroup: 'other-group',
           timeout: 5000,
           args: 2,
         });
-        let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
         await Promise.all([job1.done, job2.done]);
-        assert.deepEqual(events, [
-          'job1 start',
-          'job2 start',
-          'job1 finish',
-          'job2 finish',
-        ]);
+        assert.deepEqual(
+          events,
+          ['job1 start', 'job2 start', 'job1 finish', 'job2 finish'],
+          `different-group jobs overlap; job1=${job1.id} job2=${job2.id}; ` +
+            `events=${JSON.stringify(events)}`,
+        );
       });
 
       test('jobs are processed serially within a particular queue across different queue clients', async function (assert) {
@@ -1468,7 +1470,12 @@ module(basename(__filename), function () {
         runner.register('logJob', logJob);
         runner2.register('logJob', logJob);
 
-        let promiseForJob1 = publisher.publish({
+        // Await each publish so job1 is durably enqueued (its created_at
+        // fixed) before job2 is published. Workers dequeue by (created_at,
+        // id); leaving the publishes unawaited let job1's INSERT race job2's
+        // under load, so the two could share a created_at and run out of
+        // enqueue order.
+        let job1 = await publisher.publish({
           jobType: 'logJob',
           concurrencyGroup: 'log-group',
           timeout: 5000,
@@ -1476,21 +1483,26 @@ module(basename(__filename), function () {
         });
         // start the 2nd job before the first job finishes
         await new Promise((r) => setTimeout(r, 100));
-        let promiseForJob2 = publisher.publish({
+        let job2 = await publisher.publish({
           jobType: 'logJob',
           concurrencyGroup: 'log-group',
           timeout: 5000,
           args: 2,
         });
-        let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
         await Promise.all([job1.done, job2.done]);
-        assert.deepEqual(events, [
-          'job1 start',
-          'job1 finish',
-          'job2 start',
-          'job2 finish',
-        ]);
+        let enqueueOrder = await adapter.execute(
+          `SELECT id, args, created_at FROM jobs WHERE id IN ($1, $2) ORDER BY created_at, id`,
+          { bind: [job1.id, job2.id] },
+        );
+        assert.deepEqual(
+          events,
+          ['job1 start', 'job1 finish', 'job2 start', 'job2 finish'],
+          `same-group jobs run in enqueue order; job1=${job1.id} job2=${job2.id}; ` +
+            `persisted order=${JSON.stringify(enqueueOrder)}; events=${JSON.stringify(
+              events,
+            )}`,
+        );
       });
 
       test('job can timeout; timed out job is picked up by another worker', async function (assert) {

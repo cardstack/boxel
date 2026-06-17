@@ -389,21 +389,56 @@ export function getReader(
     },
 
     mtimes: async () => {
-      let response = await _fetch(`${realmURL}_mtimes`, {
-        headers: {
-          Accept: SupportedMimeType.Mtimes,
-        },
-      });
-      if (!response.ok) {
+      // Env-mode boot race: the realm-server writes its Traefik dynamic
+      // route file in `registerService`, but Traefik picks the file up
+      // via inotify a short moment later. A worker that begins indexing
+      // immediately after the realm-server's `listening` callback fires
+      // can hit Traefik's default "404 page not found" before its own
+      // route is live. With the current handler logging and returning
+      // {} on that response, the from-scratch index finishes with zero
+      // files and the realm stays mounted but unindexed for the rest
+      // of the process's life. Distinguish the intermediary 404 from a
+      // genuine realm-server 404 by checking for the `X-Boxel-Realm-Url`
+      // header (every realm-server response carries it; Traefik's
+      // default response doesn't). Retry with backoff while the header
+      // is absent, so the eventual route-live state resolves naturally
+      // and the index actually walks the realm.
+      const MAX_ATTEMPTS = 10;
+      const BACKOFF_MS = 200;
+      let response: Response | undefined;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        response = await _fetch(`${realmURL}_mtimes`, {
+          headers: {
+            Accept: SupportedMimeType.Mtimes,
+          },
+        });
+        if (response.ok) break;
+        let fromRealmServer = response.headers.has('X-Boxel-Realm-Url');
+        if (fromRealmServer || attempt === MAX_ATTEMPTS) break;
+        console.warn(
+          `mtimes for ${realmURL}_mtimes got ${response.status} from intermediary (no X-Boxel-Realm-Url header), retrying (attempt ${attempt}/${MAX_ATTEMPTS}) after ${attempt * BACKOFF_MS}ms`,
+        );
+        // Cancel the body before backing off — undici holds the
+        // underlying connection in a reserved state until the body is
+        // consumed or cancelled, and a 10-attempt loop on each indexed
+        // realm at boot would otherwise pin sockets across the backoff
+        // window for no benefit (the body is Traefik's "404 page not
+        // found" which we never use).
+        await response.body?.cancel().catch(() => {});
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt * BACKOFF_MS),
+        );
+      }
+      if (!response!.ok) {
         let responseText = '';
         try {
-          responseText = await response.text();
+          responseText = await response!.text();
         } catch {
           responseText = '';
         }
         let details = responseText ? `: ${responseText}` : '';
         console.warn(
-          `mtimes request failed for ${realmURL}_mtimes (${response.status} ${response.statusText})${details}`,
+          `mtimes request failed for ${realmURL}_mtimes (${response!.status} ${response!.statusText})${details}`,
         );
         return {};
       }
@@ -411,7 +446,7 @@ export function getReader(
         data: {
           attributes: { mtimes },
         },
-      } = (await response.json()) as {
+      } = (await response!.json()) as {
         data: { attributes: { mtimes: { [url: string]: number } } };
       };
       return mtimes;

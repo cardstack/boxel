@@ -44,6 +44,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setMonacoContent,
   setupLocalIndexing,
+  testModuleRealm,
   testRealmURL,
   visitOperatorMode,
   setupAuthEndpoints,
@@ -1273,12 +1274,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
     module('with connection to test realm', function (hooks) {
       hooks.beforeEach(function () {
-        setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
+        setActiveRealms([testRealmURL, `${testModuleRealm}`]);
       });
       test('code submode handles binary files', async function (assert) {
         await visitOperatorMode({
           submode: 'code',
-          codePath: `https://localhost:4202/test/mango.png`,
+          codePath: `${testModuleRealm}mango.png`,
         });
 
         await waitFor('[data-test-binary-info]');

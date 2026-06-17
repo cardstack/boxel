@@ -9,6 +9,9 @@ import { consume } from 'ember-provide-consume-context';
 import {
   CardContextName,
   GetCardContextName,
+  type ErrorEntry,
+  type Format,
+  type HydrationMode,
   type ResolvedCodeRef,
   type StoreReadType,
   type getCard,
@@ -20,11 +23,12 @@ import type { BaseDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
 
-// How an HTML-backed search result becomes a live, running card. `none` stays
-// inert; `hover` / `click` / `touch` fetch the card on the matching gesture and
-// swap the inert HTML for a live `<CardRenderer>`. The mode is a host-side UX
-// choice and never travels on the wire.
-export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
+import SearchResultError from './search-result-error';
+
+// `HydrationMode` is the card-facing contract (it rides the v2 `@context`
+// search surface), so it lives in runtime-common; re-exported here because this
+// is where it's consumed and where call sites have long imported it.
+export type { HydrationMode };
 
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
 
@@ -80,10 +84,18 @@ interface Signature {
     // The resource type to resolve — `card` (default) or `file-meta`, so a
     // full live file-meta row renders its `FileDef` instead of nothing.
     type?: StoreReadType;
-    // An error rendering never hydrates.
+    // An error rendering never hydrates. When set and there's no inert HTML to
+    // show (no last-known-good rendering), the row resolves to the host error
+    // component (`SearchResultError`) — the terminal rung of the chain.
     isError?: boolean;
+    // The error doc surfaced by the host error component when this row falls
+    // through to it. Absent => the component shows a generic message.
+    errorDoc?: ErrorEntry;
     // The hydration gesture (defaults to `none`).
     mode?: HydrationMode;
+    // The format the live/hydrated card renders as, so it matches the
+    // prerendered HTML the query selected (defaults to `fitted`).
+    format?: Format;
   };
 }
 
@@ -134,6 +146,10 @@ export default class HydratableCard extends Component<Signature> {
       return 'none';
     }
     return this.args.mode ?? 'none';
+  }
+
+  private get format(): Format {
+    return this.args.format ?? 'fitted';
   }
 
   // The resolved live instance — a `CardDef` or a `FileDef`. Short-circuits
@@ -191,7 +207,7 @@ export default class HydratableCard extends Component<Signature> {
           needed. }}
       <CardRenderer
         @card={{this.liveCard}}
-        @format='fitted'
+        @format={{this.format}}
         @codeRef={{@renderType}}
         @displayContainer={{false}}
         data-hydration={{this.hydrationState}}
@@ -209,6 +225,15 @@ export default class HydratableCard extends Component<Signature> {
         }}
         data-hydration={{this.hydrationState}}
         data-test-hydratable-card={{@cardId}}
+        ...attributes
+      />
+    {{else if @isError}}
+      {{! The terminal rung: an error result with no good html, no
+          last-known-good html, and no renderable live item. Inert and
+          non-hydratable — no gesture, no GET. }}
+      <SearchResultError
+        @cardId={{@cardId}}
+        @error={{@errorDoc}}
         ...attributes
       />
     {{/if}}

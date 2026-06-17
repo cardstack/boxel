@@ -1,13 +1,14 @@
 import type { Query, SparseFieldsets } from './query.ts';
 import { DEFAULT_HTML_QUERY, type SearchEntryQuery } from './search-entry.ts';
-import type {
-  CardResource,
-  FileMetaResource,
-  HtmlQuery,
-  HtmlResource,
-  PrerenderedCardResource,
-  Saved,
-  SearchEntryResource,
+import {
+  resourceIdentity,
+  type CardResource,
+  type FileMetaResource,
+  type HtmlQuery,
+  type HtmlResource,
+  type PrerenderedCardResource,
+  type Saved,
+  type SearchEntryResource,
 } from './resource-types.ts';
 import type {
   LinkableCollectionDocument,
@@ -107,7 +108,7 @@ function itemFor(
   if (!ref) {
     return undefined;
   }
-  return byIdentity.get(`${ref.type}\u0000${ref.id}`);
+  return byIdentity.get(resourceIdentity(ref.type, ref.id));
 }
 
 // Coalesce a search-entry document into the legacy live-search shape: the
@@ -125,7 +126,7 @@ export function searchEntryDocToLinkableDoc(
       (resource.type === 'card' || resource.type === 'file-meta') &&
       resource.id
     ) {
-      byIdentity.set(`${resource.type}\u0000${resource.id}`, resource);
+      byIdentity.set(resourceIdentity(resource.type, resource.id), resource);
     }
   }
 
@@ -138,13 +139,13 @@ export function searchEntryDocToLinkableDoc(
     }
     let fields = opts?.fields?.[item.type === 'card' ? 'card' : 'file-meta'];
     data.push(fields !== undefined ? applySparseFieldset(item, fields) : item);
-    dataIdentities.add(`${item.type}\u0000${item.id}`);
+    dataIdentities.add(resourceIdentity(item.type, item.id));
   }
 
   let included = (doc.included ?? []).filter(
     (resource): resource is CardResource<Saved> | FileMetaResource =>
       (resource.type === 'card' || resource.type === 'file-meta') &&
-      !dataIdentities.has(`${resource.type}\u0000${resource.id}`),
+      !dataIdentities.has(resourceIdentity(resource.type, resource.id)),
   );
 
   let result: LinkableCollectionDocument = {
@@ -205,6 +206,7 @@ export function searchEntryDocToPrerenderedDoc(
   },
 ): PrerenderedCardCollectionDocument {
   let htmlById = new Map<string, HtmlResource>();
+  let iconHtmlById = new Map<string, string>();
   let scopedCssUrls: string[] = [];
   let byIdentity = new Map<string, CardResource<Saved> | FileMetaResource>();
   for (let resource of doc.included ?? []) {
@@ -212,11 +214,13 @@ export function searchEntryDocToPrerenderedDoc(
       htmlById.set(resource.id, resource);
     } else if (resource.type === 'css') {
       scopedCssUrls.push(resource.attributes.href);
+    } else if (resource.type === 'icon') {
+      iconHtmlById.set(resource.id, resource.attributes.iconHtml);
     } else if (
       (resource.type === 'card' || resource.type === 'file-meta') &&
       resource.id
     ) {
-      byIdentity.set(`${resource.type}\u0000${resource.id}`, resource);
+      byIdentity.set(resourceIdentity(resource.type, resource.id), resource);
     }
   }
 
@@ -248,6 +252,13 @@ export function searchEntryDocToPrerenderedDoc(
           sameRef(member.attributes.renderType, nativeRef),
         ))
       : members[0];
+    // The type icon now rides as a deduped `icon` resource rather than on each
+    // rendering; resolve it through the entry's `icon` relationship. Gated on
+    // `picked` to match the legacy shape (a rendered row carries its icon; an
+    // unrendered fallback row carries none).
+    let iconHtml = entry.relationships.icon?.data.id
+      ? iconHtmlById.get(entry.relationships.icon.data.id)
+      : undefined;
 
     let resource: PrerenderedCardResource = {
       type: 'prerendered-card',
@@ -260,9 +271,7 @@ export function searchEntryDocToPrerenderedDoc(
         ...(picked?.attributes.cardType
           ? { cardType: picked.attributes.cardType }
           : {}),
-        ...(picked?.attributes.iconHtml
-          ? { iconHtml: picked.attributes.iconHtml }
-          : {}),
+        ...(picked && iconHtml ? { iconHtml } : {}),
         ...(picked?.attributes.isError ? { isError: true } : {}),
       },
       relationships: {

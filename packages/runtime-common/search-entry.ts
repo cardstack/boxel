@@ -19,14 +19,17 @@ import type {
 import {
   CssResourceType,
   HtmlResourceType,
+  IconResourceType,
   SearchEntryResourceType,
   htmlResourceId,
+  resourceIdentity,
   type CardResource,
   type CardResourceType,
   type FileMetaResource,
   type FileMetaResourceType,
   type HtmlQuery,
   type HtmlResource,
+  type IconResource,
   type Relationship,
   type Saved,
   type SearchEntryResource,
@@ -788,7 +791,7 @@ export function combineSearchEntryResults(
       if (resource.id) {
         // NUL-separated so a `(type, id)` pair can't alias another by
         // concatenation (no resource type or id contains a NUL byte).
-        let identity = `${resource.type}\u0000${resource.id}`;
+        let identity = resourceIdentity(resource.type, resource.id);
         if (includedByIdentity.has(identity)) {
           continue;
         }
@@ -867,8 +870,11 @@ export function buildSearchEntryResource(args: {
   url: string;
   htmlIds?: string[];
   itemType?: typeof CardResourceType | typeof FileMetaResourceType;
+  // The id of the result's `icon` resource (its native-type internal key) —
+  // omitted when the row carries no `icon_html`.
+  iconId?: string;
 }): SearchEntryResource {
-  let { url, htmlIds, itemType } = args;
+  let { url, htmlIds, itemType, iconId } = args;
   let resource: SearchEntryResource = {
     type: SearchEntryResourceType,
     id: url,
@@ -881,6 +887,11 @@ export function buildSearchEntryResource(args: {
   }
   if (itemType !== undefined) {
     resource.relationships.item = { data: { type: itemType, id: url } };
+  }
+  if (iconId !== undefined) {
+    resource.relationships.icon = {
+      data: { type: IconResourceType, id: iconId },
+    };
   }
   return resource;
 }
@@ -897,19 +908,16 @@ export function buildHtmlResource(args: {
   renderType?: ResolvedCodeRef;
   html?: string;
   cardType: string;
-  iconHtml?: string;
   isError?: boolean;
   cssIds: string[];
 }): HtmlResource {
-  let { url, format, renderType, html, cardType, iconHtml, isError, cssIds } =
-    args;
+  let { url, format, renderType, html, cardType, isError, cssIds } = args;
   return {
     type: HtmlResourceType,
     id: htmlResourceId({ url, format, renderType }),
     attributes: {
       ...(html !== undefined ? { html } : {}),
       cardType,
-      ...(iconHtml ? { iconHtml } : {}),
       ...(isError ? { isError: true } : {}),
       format,
       ...(renderType ? { renderType } : {}),
@@ -918,6 +926,29 @@ export function buildHtmlResource(args: {
       styles: {
         data: cssIds.map((id) => ({ type: CssResourceType, id })),
       },
+    },
+  };
+}
+
+// One card-type `icon` resource (see `IconResource`): the per-type descriptor
+// (icon, display name, code ref). Its `id` is the type's internal key — the
+// `<module>/<name>` form a row already carries as `types[0]` — so the same type
+// collapses to one resource in `included`. The `search-entry` → `icon`
+// relationship points here, reachable for item-only rows that carry no `html`
+// rendering.
+export function buildIconResource(args: {
+  internalKey: string;
+  iconHtml: string;
+  displayName: string;
+  codeRef: ResolvedCodeRef;
+}): IconResource {
+  return {
+    type: IconResourceType,
+    id: args.internalKey,
+    attributes: {
+      iconHtml: args.iconHtml,
+      displayName: args.displayName,
+      codeRef: args.codeRef,
     },
   };
 }
