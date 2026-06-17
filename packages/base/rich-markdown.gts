@@ -1,5 +1,6 @@
 import {
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
   fieldSerializer,
   relativeTo,
   VirtualNetwork,
@@ -11,6 +12,7 @@ import {
   CardDef,
   Component,
   FieldDef,
+  FileDef,
   MarkdownField,
   StringField,
   contains,
@@ -80,6 +82,36 @@ export class RichMarkdownField extends FieldDef {
     },
   });
 
+  /** Resolved absolute URLs of `:file[URL]` and `::file[URL]` references. */
+  @field fileReferenceUrls = containsMany(StringField, {
+    computeVia: function (this: RichMarkdownField) {
+      if (!this.content) {
+        return [];
+      }
+      let rel = this[relativeTo];
+      let baseUrl = rel
+        ? typeof rel === 'string'
+          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
+          : rel.href
+        : '';
+      return extractFileReferenceUrls(
+        this.content,
+        baseUrl,
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
+      );
+    },
+  });
+
+  /** Files referenced in the markdown, loaded via query. */
+  @field linkedFiles = linksToMany(FileDef, {
+    isUsed: true,
+    query: {
+      filter: {
+        in: { id: '$this.fileReferenceUrls' },
+      },
+    },
+  });
+
   static embedded = class Embedded extends Component<typeof this> {
     get content() {
       return this.args.model?.content ?? null;
@@ -101,6 +133,7 @@ export class RichMarkdownField extends FieldDef {
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
         @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
@@ -128,6 +161,7 @@ export class RichMarkdownField extends FieldDef {
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
         @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
@@ -192,6 +226,7 @@ export class RichMarkdownField extends FieldDef {
             <MarkdownTemplate
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
+              @linkedFiles={{@model.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
               @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
