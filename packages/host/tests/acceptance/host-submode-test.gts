@@ -74,53 +74,41 @@ function withUpdatedTestRealmInfo(
   };
 }
 
-// Mocks the availability + claim endpoints that the "Unlisted link" flow drives,
-// echoing back whatever generated hostname the modal posts so the resulting
-// claim is classified as a generated (unlisted) link rather than a custom name.
-function mockUnlistedLinkClaim(sourceRealmURL: string) {
-  let network = getService('network');
-  network.mount(
-    async (request: Request) => {
-      if (!request.url.includes('_check-boxel-domain-availability')) {
-        return null;
-      }
-      let subdomain = new URL(request.url).searchParams.get('subdomain') ?? '';
-      return new Response(
-        JSON.stringify({
-          available: true,
-          hostname: `${subdomain}.localhost:4201`,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+// Stubs the realm-server availability + claim methods the "Unlisted link" flow
+// calls, echoing back the generated hostname so the resulting claim is
+// classified as a generated (unlisted) link rather than a custom name. Mirrors
+// how the rest of this module stubs realm-server methods (publishRealm,
+// fetchBoxelClaimedDomain) rather than mocking network traffic; the real
+// generate→claim→publish round-trip is covered by the Matrix publish-realm
+// spec. Returns a restore function to call in a `finally`.
+function stubUnlistedLinkClaim(sourceRealmURL: string): () => void {
+  let realmServer = getService('realm-server') as any;
+  let originalCheck = realmServer.checkDomainAvailability;
+  let originalClaim = realmServer.claimBoxelDomain;
+
+  realmServer.checkDomainAvailability = async (subdomain: string) => ({
+    available: true,
+    hostname: `${subdomain}.localhost:4201`,
+  });
+  realmServer.claimBoxelDomain = async (
+    _sourceRealmURL: string,
+    hostname: string,
+  ) => ({
+    data: {
+      type: 'claimed-domain',
+      id: '1',
+      attributes: {
+        hostname,
+        subdomain: hostname.replace(/\.localhost:4201$/, ''),
+        sourceRealmURL,
+      },
     },
-    { prepend: true },
-  );
-  network.mount(
-    async (request: Request) => {
-      if (
-        request.method !== 'POST' ||
-        !request.url.includes('_boxel-claimed-domains')
-      ) {
-        return null;
-      }
-      let body = (await request.json()) as {
-        data: { attributes: { hostname: string } };
-      };
-      let hostname = body.data.attributes.hostname;
-      let subdomain = hostname.replace(/\.localhost:4201$/, '');
-      return new Response(
-        JSON.stringify({
-          data: {
-            type: 'claimed-domain',
-            id: '1',
-            attributes: { hostname, subdomain, sourceRealmURL },
-          },
-        }),
-        { headers: { 'Content-Type': 'application/vnd.api+json' } },
-      );
-    },
-    { prepend: true },
-  );
+  });
+
+  return () => {
+    realmServer.checkDomainAvailability = originalCheck;
+    realmServer.claimBoxelDomain = originalClaim;
+  };
 }
 
 // The URL shown in the unlisted-link card after generating, e.g.
@@ -720,83 +708,88 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('can publish an unlisted link', async function (assert) {
-        mockUnlistedLinkClaim(testRealmURL);
+        let restoreClaim = stubUnlistedLinkClaim(testRealmURL);
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
-        });
+          assert
+            .dom('[data-test-publish-realm-button]')
+            .hasText('Publish Site');
+          await click('[data-test-publish-realm-button]');
+          assert.dom('[data-test-publish-realm-modal]').exists();
 
-        assert.dom('[data-test-publish-realm-button]').hasText('Publish Site');
-        await click('[data-test-publish-realm-button]');
-        assert.dom('[data-test-publish-realm-modal]').exists();
+          assert.dom('[data-test-last-published-at]').doesNotExist();
+          assert.dom('[data-test-unpublish-button]').doesNotExist();
+          assert.dom('[data-test-open-site-button]').doesNotExist();
+          assert.dom('[data-test-unlisted-link-url]').doesNotExist();
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
 
-        assert.dom('[data-test-last-published-at]').doesNotExist();
-        assert.dom('[data-test-unpublish-button]').doesNotExist();
-        assert.dom('[data-test-open-site-button]').doesNotExist();
-        assert.dom('[data-test-unlisted-link-url]').doesNotExist();
-        assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
-        assert.dom('[data-test-publish-button]').isDisabled();
+          // Generating an unlisted link claims a random subdomain and selects it.
+          await click('[data-test-generate-unlisted-link-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
 
-        // Generating an unlisted link claims a random subdomain and selects it.
-        await click('[data-test-generate-unlisted-link-button]');
-        await waitFor('[data-test-unlisted-link-url]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
-        assert.dom('[data-test-publish-button]').isNotDisabled();
-
-        let unlistedUrl = generatedUnlistedUrl();
-        assert.ok(
-          /^https:\/\/[a-z0-9]+\.localhost:4201\/$/.test(unlistedUrl),
-          `generated an obscure URL (${unlistedUrl})`,
-        );
-
-        await click('[data-test-publish-button]');
-        assert.dom('[data-test-publish-button]').hasText('Publishing…');
-        assert.dom('[data-test-publish-button]').hasAttribute('disabled');
-
-        await waitFor('[data-test-publish-realm-button].publishing');
-        assert.dom('[data-test-publish-realm-button]').hasText('Publishing…');
-        assert.dom('[data-test-publish-realm-button]').hasClass('publishing');
-
-        await click('[data-test-publish-realm-button]');
-        await waitFor('.publishing-realm-popover');
-        assert.dom('.publishing-realm-popover').exists();
-        assert
-          .dom('.publishing-realm-popover')
-          .containsText(`Publishing to: ${unlistedUrl}`);
-        assert.dom('.loading-icon').exists();
-
-        publishDeferred.fulfill();
-
-        await waitUntil(() => {
-          return !document.querySelector(
-            '[data-test-publish-realm-button].publishing',
+          let unlistedUrl = generatedUnlistedUrl();
+          assert.ok(
+            /^https:\/\/[a-z0-9]+\.localhost:4201\/$/.test(unlistedUrl),
+            `generated an obscure URL (${unlistedUrl})`,
           );
-        });
 
-        assert
-          .dom('[data-test-publish-realm-button]')
-          .hasText('Republish Site');
-        assert
-          .dom('[data-test-publish-realm-button]')
-          .doesNotHaveClass('publishing');
-        assert.dom('.publishing-realm-popover').doesNotExist();
+          await click('[data-test-publish-button]');
+          assert.dom('[data-test-publish-button]').hasText('Publishing…');
+          assert.dom('[data-test-publish-button]').hasAttribute('disabled');
 
-        await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-button].publishing');
+          assert.dom('[data-test-publish-realm-button]').hasText('Publishing…');
+          assert.dom('[data-test-publish-realm-button]').hasClass('publishing');
 
-        assert.dom('[data-test-last-published-at]').exists();
-        assert.dom('[data-test-last-published-at]').containsText('Published');
-        assert.dom('[data-test-unpublish-button]').exists();
-        assert.dom('[data-test-unpublish-button]').containsText('Unpublish');
-        assert.dom('[data-test-open-site-button]').exists();
-        assert.dom('[data-test-open-site-button]').containsText('Open Site');
+          await click('[data-test-publish-realm-button]');
+          await waitFor('.publishing-realm-popover');
+          assert.dom('.publishing-realm-popover').exists();
+          assert
+            .dom('.publishing-realm-popover')
+            .containsText(`Publishing to: ${unlistedUrl}`);
+          assert.dom('.loading-icon').exists();
 
-        assert
-          .dom(
-            '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
-          )
-          .hasAttribute('href', unlistedUrl)
-          .hasAttribute('target', '_blank');
+          publishDeferred.fulfill();
+
+          await waitUntil(() => {
+            return !document.querySelector(
+              '[data-test-publish-realm-button].publishing',
+            );
+          });
+
+          assert
+            .dom('[data-test-publish-realm-button]')
+            .hasText('Republish Site');
+          assert
+            .dom('[data-test-publish-realm-button]')
+            .doesNotHaveClass('publishing');
+          assert.dom('.publishing-realm-popover').doesNotExist();
+
+          await click('[data-test-publish-realm-button]');
+
+          assert.dom('[data-test-last-published-at]').exists();
+          assert.dom('[data-test-last-published-at]').containsText('Published');
+          assert.dom('[data-test-unpublish-button]').exists();
+          assert.dom('[data-test-unpublish-button]').containsText('Unpublish');
+          assert.dom('[data-test-open-site-button]').exists();
+          assert.dom('[data-test-open-site-button]').containsText('Open Site');
+
+          assert
+            .dom(
+              '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+            )
+            .hasAttribute('href', unlistedUrl)
+            .hasAttribute('target', '_blank');
+        } finally {
+          restoreClaim();
+        }
       });
 
       test('preselects a previously published unlisted link on refresh', async function (assert) {
@@ -843,32 +836,35 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('unlisted link checkbox can be checked and unchecked', async function (assert) {
-        mockUnlistedLinkClaim(testRealmURL);
+        let restoreClaim = stubUnlistedLinkClaim(testRealmURL);
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
-        });
+          await click('[data-test-publish-realm-button]');
 
-        await click('[data-test-publish-realm-button]');
+          // Before generating, the checkbox is disabled and nothing is selected.
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-unlisted-link-checkbox]').isDisabled();
+          assert.dom('[data-test-publish-button]').isDisabled();
 
-        // Before generating, the checkbox is disabled and nothing is selected.
-        assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
-        assert.dom('[data-test-unlisted-link-checkbox]').isDisabled();
-        assert.dom('[data-test-publish-button]').isDisabled();
+          await click('[data-test-generate-unlisted-link-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
 
-        await click('[data-test-generate-unlisted-link-button]');
-        await waitFor('[data-test-unlisted-link-url]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
-        assert.dom('[data-test-publish-button]').isNotDisabled();
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
 
-        await click('[data-test-unlisted-link-checkbox]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
-        assert.dom('[data-test-publish-button]').isDisabled();
-
-        await click('[data-test-unlisted-link-checkbox]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
-        assert.dom('[data-test-publish-button]').isNotDisabled();
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          restoreClaim();
+        }
       });
 
       test('can unpublish an unlisted link', async function (assert) {
@@ -1302,7 +1298,7 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('shows inline error when publishing to a domain fails', async function (assert) {
-        mockUnlistedLinkClaim(testRealmURL);
+        let restoreClaim = stubUnlistedLinkClaim(testRealmURL);
 
         let publishError = new Deferred<void>();
 
@@ -1313,40 +1309,46 @@ module('Acceptance | host submode', function (hooks) {
 
         getService('realm-server').publishRealm = publishRealm;
 
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
-        });
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await click('[data-test-publish-realm-button]');
-        assert.dom('[data-test-publish-realm-modal]').exists();
+          await click('[data-test-publish-realm-button]');
+          assert.dom('[data-test-publish-realm-modal]').exists();
 
-        await click('[data-test-generate-unlisted-link-button]');
-        await waitFor('[data-test-unlisted-link-url]');
-        let unlistedUrl = generatedUnlistedUrl();
+          await click('[data-test-generate-unlisted-link-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+          let unlistedUrl = generatedUnlistedUrl();
 
-        assert
-          .dom(`[data-test-domain-publish-error="${unlistedUrl}"]`)
-          .doesNotExist();
+          assert
+            .dom(`[data-test-domain-publish-error="${unlistedUrl}"]`)
+            .doesNotExist();
 
-        await click('[data-test-publish-button]');
+          await click('[data-test-publish-button]');
 
-        publishError.reject(
-          new Error('Network error: Failed to publish realm'),
-        );
+          publishError.reject(
+            new Error('Network error: Failed to publish realm'),
+          );
 
-        await waitFor(`[data-test-domain-publish-error="${unlistedUrl}"]`);
+          await waitFor(`[data-test-domain-publish-error="${unlistedUrl}"]`);
 
-        // Error should appear inline on the domain option
-        assert
-          .dom(`[data-test-domain-publish-error="${unlistedUrl}"]`)
-          .exists();
-        assert
-          .dom(`[data-test-domain-publish-error="${unlistedUrl}"] .error-text`)
-          .hasText('Network error: Failed to publish realm');
+          // Error should appear inline on the domain option
+          assert
+            .dom(`[data-test-domain-publish-error="${unlistedUrl}"]`)
+            .exists();
+          assert
+            .dom(
+              `[data-test-domain-publish-error="${unlistedUrl}"] .error-text`,
+            )
+            .hasText('Network error: Failed to publish realm');
 
-        // Verify the modal stays open when there's an error
-        assert.dom('[data-test-publish-realm-modal]').exists();
+          // Verify the modal stays open when there's an error
+          assert.dom('[data-test-publish-realm-modal]').exists();
+        } finally {
+          restoreClaim();
+        }
       });
 
       test('can publish a claimed custom domain', async function (assert) {
