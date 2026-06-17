@@ -362,7 +362,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

@@ -554,7 +554,7 @@ async function main(): Promise<void> {
 }
 
 // Run main only when invoked directly, not when imported from tests.
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

@@ -274,7 +274,7 @@ async function main() {
   console.log('='.repeat(70));
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main()
     .then(() => {
       console.log('✓ GitHub webhook registration complete');
