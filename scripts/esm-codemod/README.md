@@ -88,6 +88,32 @@ These are too package-specific or too coupled for a blind codemod:
    #12) — the latter is genuine per-test work (e.g. ai-bot's Sentry/locking
    tests fail because they reassign a sealed namespace binding).
 
+## Type-checking (`lint:types`)
+
+All nine node-cluster packages type-check clean under `ember-tsc` (nodenext).
+`"type":"module"` flips nodenext from CJS-mode to ESM-mode resolution, which is
+what surfaces the type errors. Decision: stay on **nodenext** (not `bundler`) so
+the type layer models the native-node runtime; the friction was bounded. Classes
+fixed (see also #11/#13):
+
+- **Base-realm alias** (class #15): under ESM-mode nodenext the extensionless
+  `"https://cardstack.com/base/*": ["../base/*"]` mapping stops resolving. Expand
+  every tsconfig's mapping to `["../base/*.gts","../base/*.ts","../base/*.d.ts","../base/*"]`.
+  Applies to consumers too (host, catalog, …) — they re-type-check runtime-common's
+  now-ESM sources, so the cascade lands there as well.
+- **`import.meta` rejected (TS1470/TS1343)**: a `type:module` (or import.meta-using)
+  package must type-check in ESM-mode — set `module`/`moduleResolution` to
+  `nodenext` and add `skipLibCheck`. Flip ai-bot/bot-runner/software-factory/matrix
+  to `type:module` (they already run as ESM).
+- **CJS interop the nodenext type layer can't model** (runtime is fine): bump the
+  mispackaged dep when a properly-packaged version exists (magic-string
+  0.25→0.30), else re-export once with the right signature (`runtime-common/ignore.ts`)
+  or cast (`node-pg-migrate` via `RunnerOption`).
+- **Types missing from a dep** (`@types/qunit` lacks `.reporters`/`.on`): cast the
+  call site (`(QUnit as any)`), typing any callback param to avoid noImplicitAny.
+
+`@types/lodash` was swapped to `@types/lodash-es` alongside the runtime dep.
+
 ## Remaining known gaps
 
 - **ai-bot**: full suite passes (170/170) — the 5 prior failures were class #12
@@ -105,6 +131,12 @@ These are too package-specific or too coupled for a blind codemod:
   dual-mode — every remaining `require()` either has a `const require =
 createRequire(import.meta.url)` in its file or is guarded by
   `typeof require === 'function'`.
+- **host**: configured for the migration (nodenext + skipLibCheck + the base-path
+  fix, same as catalog which type-checks clean); its full `lint:types` is slow, so
+  CI is the practical confirmation.
+- **experiments-realm**: pre-existing `lint:types` debt unrelated to the migration
+  (`node16` tsconfig, no `skipLibCheck`, ~568 source errors); only its base-path
+  mapping was touched here.
 - **realm-server `testem.js`** is CJS under `type:module` but only loaded by the
   (now-unused) testem CLI, so it's dormant rather than broken.
 
