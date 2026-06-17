@@ -5,20 +5,21 @@
 # (.github/workflows/codespaces-preview.yml) builds it and deploys it to S3
 # with URLs pointing back at this Codespace's forwarded ports.
 #
-# The services run plain HTTP locally; GitHub's port forwarding terminates
-# TLS at the edge (https://<name>-<port>.app.github.dev). This deliberately
-# bypasses the repo's standard local-dev HTTPS path (mkcert + the mandatory
-# `infra:ensure-dev-cert`), which is why the realm server is launched by hand
-# below rather than via `mise run dev` / `start:development`.
+# Services run HTTPS locally (realm server :4201, vite host :4200) using the
+# self-signed cert generated in setup.sh — the repo's prerender pipeline is
+# HTTPS-only, so a plain-HTTP host yields ERR_SSL_PROTOCOL_ERROR. GitHub's
+# port forwarding tunnels those https services out at the edge
+# (https://<name>-<port>.app.github.dev). The realm server is launched by
+# hand (not `mise run dev`) only so its realm toUrls can be the public
+# Codespace URLs; it still picks up the HTTPS cert via env-vars.sh.
 #
-# A host app (vite) IS run locally here, on http://localhost:4200, because
-# the realm server hard-requires a reachable host: main.ts fetches HOST_URL
-# at startup and process.exit(-2)s if it can't (and the prerenderer renders
-# cards against it). This local host is distinct from the reviewer-facing S3
-# build; it exists so the realm server boots and cards can prerender. The
-# realm still starts in mount-and-serve mode (REALM_SERVER_SKIP_BOOT_INDEX)
-# so readiness doesn't block on a full from-scratch index; cards prerender
-# on demand instead.
+# A host app (vite) IS run locally because the realm server hard-requires a
+# reachable host: main.ts fetches HOST_URL at startup and process.exit(-2)s
+# if it can't (and the prerenderer renders cards against it). This local host
+# is distinct from the reviewer-facing S3 build; it exists so the realm server
+# boots and cards can prerender. The realm starts in mount-and-serve mode
+# (REALM_SERVER_SKIP_BOOT_INDEX) so readiness doesn't block on a full
+# from-scratch index; cards prerender on demand instead.
 set -euo pipefail
 
 cd /workspaces/boxel
@@ -36,26 +37,27 @@ export REALM_SERVER_URL="https://${CODESPACE_NAME}-4201.${FWD_DOMAIN}"
 export MATRIX_PUBLIC_URL="https://${CODESPACE_NAME}-8008.${FWD_DOMAIN}"
 export ICONS_PUBLIC_URL="https://${CODESPACE_NAME}-4206.${FWD_DOMAIN}"
 
-# Internal service-to-service wiring is plain HTTP on the standard ports.
-# Exported so the repo's mise service tasks (which source
-# mise-tasks/lib/env-vars.sh) target HTTP localhost rather than the default
-# https://localhost:4201 — there is no dev cert here, so HTTPS would fail.
-export REALM_BASE_URL="http://localhost:4201"
+# Internal wiring runs over HTTPS, matching the repo's standard dev stack.
+# env-vars.sh (sourced by `mise activate` below and by every mise service)
+# detects the self-signed cert generated in setup.sh and sets
+# REALM_SERVER_TLS_CERT_FILE + HOST_URL=https + REALM_BASE_URL=https
+# automatically — we deliberately do NOT override those to http, because the
+# prerender pipeline is HTTPS-only and a mismatch yields ERR_SSL_PROTOCOL_ERROR.
+# Matrix/icons stay http (Synapse/icons don't terminate TLS locally).
 export MATRIX_URL="http://localhost:8008"
-export MATRIX_URL_VAL="http://localhost:8008"
 export ICONS_URL="http://localhost:4206"
 export PGPORT=5435
 export PGDATABASE=boxel
+
+# Trust the self-signed cert in Node clients (the realm server's distURL fetch,
+# the worker's realm reads). env-vars.sh only wires this via mkcert, which we
+# don't use, so point it at the cert directly. Inherited by the mise services.
+export NODE_EXTRA_CA_CERTS="$HOME/.local/share/boxel/dev-certs/localhost.pem"
 
 # Mount-and-serve: skip the from-scratch boot index so readiness doesn't
 # block on a full index of every bootstrap realm; cards prerender on demand.
 export REALM_SERVER_SKIP_BOOT_INDEX=true
 
-# The realm server's distURL and the prerenderer both target the local host
-# over plain HTTP (no dev cert here). main.ts defaults distURL to
-# https://localhost:4200, which would fail against the http vite host, so
-# pin it explicitly. The mise prerender task honours this via ${HOST_URL:-…}.
-export HOST_URL="http://localhost:4200"
 # Give the prerender's puppeteer standby probe headroom for vite's cold start.
 export PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-120000}"
 
@@ -65,11 +67,13 @@ gh codespace ports visibility 4201:public 4206:public 8008:public -c "$CODESPACE
 
 # ── Host app (vite) ──
 # Started first because it's the slowest to warm and both the realm server
-# (distURL smoke test) and the prerenderer depend on it. It runs with the
-# PUBLIC realm/matrix/icons URLs so prerendered output references the
-# Codespace's public hostnames (which the S3 reviewer host resolves), even
-# though it is itself served on plain-HTTP localhost:4200.
-echo "==> Starting host app (vite) on http://localhost:4200..."
+# (distURL smoke test) and the prerenderer depend on it. vite reads the
+# REALM_SERVER_TLS_CERT_FILE that env-vars.sh exported (the self-signed cert)
+# and serves HTTPS on localhost:4200, matching the prerender's expectation.
+# It runs with the PUBLIC realm/matrix/icons URLs so prerendered output
+# references the Codespace's public hostnames (which the S3 reviewer host
+# resolves).
+echo "==> Starting host app (vite) on https://localhost:4200..."
 (
   cd packages/host
   REALM_SERVER_DOMAIN="${REALM_SERVER_URL}/" \
@@ -108,8 +112,8 @@ pnpm --dir=packages/realm-server run start:worker-development &
 # standby probe loads the host) and the realm server (its distURL smoke
 # test fetches the host). vite cold-starts the full host dep graph, so
 # allow generous time; a missing host is fatal to the realm server.
-echo "==> Waiting for host app at http://localhost:4200 (vite cold start)..."
-if ! timeout 420 bash -c 'until curl -sf http://localhost:4200 >/dev/null 2>&1; do
+echo "==> Waiting for host app at https://localhost:4200 (vite cold start)..."
+if ! timeout 420 bash -c 'until curl -ksf https://localhost:4200 >/dev/null 2>&1; do
     kill -0 '"$HOST_PID"' 2>/dev/null || { echo "host vite process died; see /tmp/host-vite.log"; exit 1; }
     sleep 3
   done'; then
@@ -134,11 +138,13 @@ if [ -z "${MATRIX_REGISTRATION_SHARED_SECRET:-}" ]; then
 fi
 
 # ── Realm server ──
-# Launched by hand (not via mise) to run plain HTTP and skip the dev-cert
-# requirement. toUrls are the public Codespace URLs so the S3 host resolves
-# realms back to this backend. Realm layout matches mise-tasks/services/
-# realm-server: base, catalog, skills, openrouter (experiments / homepage /
-# submission / software-factory are skipped to keep the preview lean).
+# Launched by hand (not via mise) so we can point its toUrls at the public
+# Codespace URLs (so the S3 host resolves realms back to this backend) while
+# everything else matches mise-tasks/services/realm-server. It inherits
+# REALM_SERVER_TLS_CERT_FILE / HOST_URL (https) / NODE_EXTRA_CA_CERTS from the
+# env-vars.sh that `mise activate` sourced, so it serves HTTPS and trusts the
+# vite host's cert. Realm layout: base, catalog, skills, openrouter
+# (experiments / homepage / submission / software-factory skipped to stay lean).
 echo "==> Starting realm server..."
 SKIP_EXPERIMENTS=true \
 SKIP_BOXEL_HOMEPAGE=true \
@@ -188,9 +194,11 @@ REALM_SERVER_SKIP_BOOT_INDEX=true \
 REALM_PID=$!
 
 # ── Wait for realm server readiness ──
+# The realm server now serves HTTPS on 4201 (self-signed cert), so probe with
+# https + -k.
 echo "==> Waiting for realm server to be ready..."
 timeout 300 bash -c \
-  'until curl -sf "http://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
+  'until curl -ksf "https://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
   || echo "Warning: realm server readiness check timed out after 5 minutes"
 
 # ── Record this Codespace as the preview target ──

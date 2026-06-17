@@ -35,6 +35,25 @@ echo "==> Setting up catalog realm..."
 mise exec -- pnpm --dir=packages/catalog catalog:setup
 mise exec -- pnpm --dir=packages/catalog catalog:update
 
+# The realm server, vite host and prerenderer all speak HTTPS in this repo
+# (browsers only do HTTP/2 over TLS, which the prerender pipeline assumes).
+# Generate a self-signed cert at the path env-vars.sh probes
+# (~/.local/share/boxel/dev-certs) so it sets REALM_SERVER_TLS_CERT_FILE and
+# HOST_URL=https for every mise service, and vite serves HTTPS too. The
+# prerender's puppeteer ignores cert errors; Node trusts it via
+# NODE_EXTRA_CA_CERTS (set in start-services.sh). mkcert isn't used — nothing
+# here needs the cert in a browser/system trust store.
+echo "==> Generating self-signed dev TLS cert..."
+CERT_DIR="$HOME/.local/share/boxel/dev-certs"
+mkdir -p "$CERT_DIR"
+if [ ! -f "$CERT_DIR/localhost.pem" ]; then
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "$CERT_DIR/localhost-key.pem" \
+    -out "$CERT_DIR/localhost.pem" \
+    -days 365 -subj "/CN=localhost" \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+fi
+
 # Database schema is created on demand: infra:ensure-pg starts the boxel-pg
 # container and creates the databases, and the realm server runs with
 # --migrateDB to apply migrations. Both happen in start-services.sh.
