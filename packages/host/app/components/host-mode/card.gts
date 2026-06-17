@@ -124,9 +124,6 @@ export default class HostModeCard extends Component<Signature> {
     >
       {{#if this.cardError}}
         {{#if this.isNotFound}}
-          {{! A 404 (e.g. a routing rule pointing at a deleted card) gets a
-              friendly centered placeholder, while the collapsible technical
-              detail stays available below for the realm owner debugging it. }}
           <div class='not-found' data-test-host-mode-404>
             <p class='not-found-code'>404</p>
             <p class='not-found-message'>This page could not be found.</p>
