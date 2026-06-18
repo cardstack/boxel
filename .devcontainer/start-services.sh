@@ -65,47 +65,14 @@ export PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-120000}"
 echo "==> Making forwarded ports public..."
 gh codespace ports visibility 4201:public 4206:public 8008:public -c "$CODESPACE_NAME" 2>/dev/null || true
 
-# ── Record this Codespace as the preview target (triggers the CI host build) ──
-# Done up-front: the codespaces-preview workflow builds the host with THIS
-# Codespace's URLs and deploys it to S3, and the realm server (distURL) + the
-# prerenderer point at that S3 host. Pushing the target file rebuilds it for
-# this Codespace; the already-deployed S3 host stays usable in the meantime.
-echo "==> Recording Codespace target for the preview workflow..."
-TARGET_FILE=".devcontainer/codespace-target.env"
+# ── Host bundle (generic CI/S3 build; config injected at serve time) ──
+# No per-Codespace rebuild or target-file push: the codespaces-preview
+# workflow builds the host generically and deploys it to S3, and the realm
+# server rewrites the Ember config (Matrix / realm-server / resolved-realm
+# URLs) into it at serve time for THIS Codespace (serve-index.ts). The realm
+# fetches this bundle as its distURL and serves it; the prerenderer renders
+# against it. Bucket prefix = the branch name sanitized as the workflow does.
 BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)"
-
-# Incorporate any commits pushed since this Codespace was created, so the
-# target-file commit fast-forwards instead of being rejected (which would
-# silently leave the S3 host built for a previous Codespace). Rebase BEFORE
-# writing the target file so there's no same-file conflict with origin's copy.
-git pull --rebase --autostash origin "$BRANCH_NAME" 2>/dev/null \
-  || echo "Warning: could not rebase onto origin; target push may be rejected."
-
-cat > "$TARGET_FILE" <<EOF
-# Written by .devcontainer/start-services.sh when a Codespace boots.
-# The codespaces-preview workflow reads this to point the host build at this
-# Codespace's forwarded backend services. Safe to delete; do not merge to main.
-CODESPACE_NAME=${CODESPACE_NAME}
-CODESPACE_FORWARDING_DOMAIN=${FWD_DOMAIN}
-EOF
-
-git add "$TARGET_FILE"
-if git diff --cached --quiet -- "$TARGET_FILE"; then
-  echo "Codespace target unchanged; using the already-deployed S3 host."
-else
-  git \
-    -c user.name="${GIT_AUTHOR_NAME:-Codespace Preview}" \
-    -c user.email="${GIT_AUTHOR_EMAIL:-codespace@users.noreply.github.com}" \
-    commit -m "ci: record Codespace preview target" >/dev/null
-  if git push origin "HEAD:${BRANCH_NAME}"; then
-    echo "Pushed Codespace target; the preview host is rebuilding for this Codespace."
-  else
-    echo "Warning: could not push Codespace target; the preview build was not retriggered."
-  fi
-fi
-
-# The host the realm + prerenderer use is the CI/S3 build. The bucket prefix
-# is the branch name sanitized exactly as the workflow does (PR_BRANCH_NAME).
 PR_BRANCH_NAME="$(echo "$BRANCH_NAME" | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60)"
 export BOXEL_HOST_URL="https://${PR_BRANCH_NAME}.boxel-host-preview.stack.cards"
 echo "==> Host (for realm distURL + prerender): ${BOXEL_HOST_URL}"

@@ -1,115 +1,47 @@
 name: Codespaces Preview
 
+# Builds the boxel-host app and deploys it to S3. The build is GENERIC — it
+# does not bake in any Codespace's URLs, because the realm server rewrites the
+# host's Ember config (Matrix / realm-server / resolved-realm URLs) at serve
+# time (see packages/realm-server/handlers/serve-index.ts). A Codespace's
+# start-services.sh points the realm's distURL at this S3 bundle and serves it
+# with this Codespace's endpoints injected, so one generic build per code
+# change serves every Codespace — no per-Codespace rebuild.
 on:
-  # Pushes to the preview branch rebuild the host preview against whatever
-  # Codespace is currently recorded in .devcontainer/codespace-target.env.
-  # That file is written + committed by .devcontainer/start-services.sh when
-  # a Codespace boots, so the Codespace's own startup push triggers the first
-  # build and every subsequent code push rebuilds against the same backend.
-  # Add other branches here to enable Codespace previews on them.
   push:
     branches:
       - codespaces-10255
-  # Manual fallback — supply the Codespace name directly.
-  workflow_dispatch:
-    inputs:
-      codespace_name:
-        description: "Codespace name (used to derive forwarded port URLs)"
-        required: true
-        type: string
-      forwarding_domain:
-        description: "Codespaces port-forwarding domain"
-        required: false
-        default: app.github.dev
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: read
-  issues: write
-  checks: write
-  pull-requests: write
   id-token: write
-  statuses: write
 
 jobs:
   deploy-codespaces-preview:
-    name: Build and deploy host preview for Codespaces
+    name: Build and deploy the generic host bundle for Codespace previews
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Resolve Codespace target
-        shell: bash
-        run: |
-          # Determine the Codespace name from the dispatch input or the
-          # committed target file, then derive the forwarded backend URLs.
-          # If neither is available (e.g. a code push before any Codespace
-          # has booted), skip the rest of the job cleanly.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            NAME="${{ inputs.codespace_name }}"
-            DOMAIN="${{ inputs.forwarding_domain }}"
-          elif [ -f .devcontainer/codespace-target.env ]; then
-            # shellcheck disable=SC1091
-            . .devcontainer/codespace-target.env
-            NAME="${CODESPACE_NAME:-}"
-            DOMAIN="${CODESPACE_FORWARDING_DOMAIN:-}"
-          else
-            NAME=""
-          fi
-          DOMAIN="${DOMAIN:-app.github.dev}"
-          if [ -z "$NAME" ]; then
-            echo "No Codespace target recorded; skipping preview build."
-            echo "SHOULD_RUN=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          {
-            echo "SHOULD_RUN=true"
-            echo "CODESPACE_NAME=$NAME"
-            echo "REALM_SERVER_URL=https://$NAME-4201.$DOMAIN"
-            echo "MATRIX_PUBLIC_URL=https://$NAME-8008.$DOMAIN"
-            echo "ICONS_PUBLIC_URL=https://$NAME-4206.$DOMAIN"
-          } >> "$GITHUB_ENV"
-
       - uses: ./.github/actions/init
-        if: env.SHOULD_RUN == 'true'
 
       - name: Configure AWS credentials
-        if: env.SHOULD_RUN == 'true'
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
           role-to-assume: arn:aws:iam::680542703984:role/boxel-host
           aws-region: us-east-1
 
-      - name: Load staging app environment variables as a base
-        if: env.SHOULD_RUN == 'true'
+      - name: Load staging app environment variables (overridden at serve time)
         shell: bash
         run: cat packages/host/config/staging.env >> $GITHUB_ENV
 
-      - name: Override backend URLs to point at the Codespace
-        if: env.SHOULD_RUN == 'true'
+      - name: Set branch name for the S3 prefix
         shell: bash
         run: |
-          # These override the staging.env values loaded above (last write
-          # wins in $GITHUB_ENV) so the host build talks to this Codespace's
-          # forwarded backend services instead of staging.
-          echo "REALM_SERVER_DOMAIN=${REALM_SERVER_URL}/" >> $GITHUB_ENV
-          echo "RESOLVED_BASE_REALM_URL=${REALM_SERVER_URL}/base/" >> $GITHUB_ENV
-          echo "RESOLVED_CATALOG_REALM_URL=${REALM_SERVER_URL}/catalog/" >> $GITHUB_ENV
-          echo "RESOLVED_SKILLS_REALM_URL=${REALM_SERVER_URL}/skills/" >> $GITHUB_ENV
-          echo "RESOLVED_OPENROUTER_REALM_URL=${REALM_SERVER_URL}/openrouter/" >> $GITHUB_ENV
-          echo "MATRIX_URL=${MATRIX_PUBLIC_URL}" >> $GITHUB_ENV
-          echo "MATRIX_SERVER_NAME=localhost" >> $GITHUB_ENV
-          echo "ICONS_URL=${ICONS_PUBLIC_URL}" >> $GITHUB_ENV
+          echo "PR_BRANCH_NAME=$(echo "${GITHUB_REF_NAME}" | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60)" >> $GITHUB_ENV
 
-      - name: Set PR branch name for S3 prefix
-        if: env.SHOULD_RUN == 'true'
-        shell: bash
-        run: |
-          RAW_BRANCH="${GITHUB_REF_NAME}"
-          echo "PR_BRANCH_NAME=$(echo "${RAW_BRANCH}" | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60)" >> $GITHUB_ENV
-
-      - name: Build and deploy preview
-        if: env.SHOULD_RUN == 'true'
+      - name: Build and deploy host bundle
         shell: bash
         env:
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
@@ -117,40 +49,3 @@ jobs:
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
         run: pnpm deploy:boxel-host:preview-staging
-
-      - name: Store preview URL
-        if: env.SHOULD_RUN == 'true'
-        shell: bash
-        run: echo "PREVIEW_HOST=https://${PR_BRANCH_NAME}.boxel-host-preview.stack.cards/" >> $GITHUB_ENV
-
-      - name: Post status check with preview link
-        if: env.SHOULD_RUN == 'true'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          curl \
-            -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA" \
-            -d '{"context":"Preview boxel-host codespaces","description":"Host preview connected to Codespace backend","target_url":"'"$PREVIEW_HOST"'","state":"success"}'
-
-      - name: Find associated PR and comment
-        if: env.SHOULD_RUN == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_NUMBER=$(gh pr list --head "${GITHUB_REF_NAME}" --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "$PR_NUMBER" ]; then
-            gh pr comment "$PR_NUMBER" --body "### Codespaces Preview
-
-          - [Host preview (connected to Codespace)]($PREVIEW_HOST)
-          - Realm server: ${REALM_SERVER_URL}
-          - Matrix: ${MATRIX_PUBLIC_URL}
-
-          > This preview build is connected to the Codespace \`${CODESPACE_NAME}\`. The preview will stop working when the Codespace is stopped."
-          fi
