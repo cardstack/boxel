@@ -274,32 +274,31 @@ export default class RealmServerService extends Service {
     // TODO: remove once multi-realm-server federation lands.
     this.assertOwnRealmServer(trustedServerURLs);
     await this.login();
-    let realmURLs = new Set<string>();
-    for (let serverURL of trustedServerURLs) {
-      let normalizedServerURL = ensureTrailingSlash(serverURL);
-      let response = await this.network.fetch(
-        `${normalizedServerURL}_realm-auth`,
-        {
-          method: 'POST',
-          headers: {
-            Accept: SupportedMimeType.JSONAPI,
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.token}`,
+    let perServerRealmURLs = await Promise.all(
+      trustedServerURLs.map(async (serverURL) => {
+        let normalizedServerURL = ensureTrailingSlash(serverURL);
+        let response = await this.network.fetch(
+          `${normalizedServerURL}_realm-auth`,
+          {
+            method: 'POST',
+            headers: {
+              Accept: SupportedMimeType.JSONAPI,
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.token}`,
+            },
           },
-        },
-      );
-      if (!response.ok) {
-        let responseText = await response.text();
-        throw new Error(
-          `Failed to fetch user realms from trusted server ${normalizedServerURL}: ${response.status} - ${responseText}`,
         );
-      }
-      let tokens = (await response.json()) as Record<string, string>;
-      for (let realmURL of Object.keys(tokens)) {
-        realmURLs.add(realmURL);
-      }
-    }
-    return [...realmURLs];
+        if (!response.ok) {
+          let responseText = await response.text();
+          throw new Error(
+            `Failed to fetch user realms from trusted server ${normalizedServerURL}: ${response.status} - ${responseText}`,
+          );
+        }
+        let tokens = (await response.json()) as Record<string, string>;
+        return Object.keys(tokens);
+      }),
+    );
+    return [...new Set(perServerRealmURLs.flat())];
   }
 
   @cached
