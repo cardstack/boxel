@@ -180,7 +180,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   virtualNetwork.shimModule('flat', flat);
   virtualNetwork.shimModule('@floating-ui/dom', floatingUiDom);
-  virtualNetwork.shimModule('lodash', lodash);
+  virtualNetwork.shimModule('lodash-es', lodash);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
   virtualNetwork.shimModule('rsvp', rsvp);
   virtualNetwork.shimModule('super-fast-md5', superFastMD5);
