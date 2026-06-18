@@ -54,7 +54,12 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
+import {
+  SECTION_DISPLAY_LIMIT_FOCUSED,
+  SORT_OPTIONS,
+  VIEW_OPTIONS,
+  type SortOption,
+} from './constants';
 import SearchResultHeader from './search-result-header';
 import SearchResultSection from './search-result-section';
 
@@ -215,6 +220,13 @@ export default class SearchContent extends Component<Signature> {
         ),
       ),
       realms: this.args.realmFilter.selectedURLs,
+      // Cap each realm's results at the focused-section display limit — the
+      // most the sheet ever shows in one section. The v2 search applies
+      // `page.size` per realm (so every realm section is still represented) and
+      // still reports the full match count in `meta.page.total` (which drives
+      // the result-count summary), so this only trims rows the sheet would
+      // never render — a large payload reduction on broad queries.
+      page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     };
   }
 
