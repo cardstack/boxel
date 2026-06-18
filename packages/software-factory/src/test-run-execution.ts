@@ -239,8 +239,13 @@ async function runQunitInBrowserUncached(
   // dependency on a live `packages/host/dist` build. We pass the realm token
   // we already hold so boxel-cli authenticates without needing a CLI profile
   // for the target realm.
+  // boxel-cli matches the realm token by normalized (trailing-slashed) URL and
+  // keys its caches the same way, so normalize before fetching the token AND
+  // running — otherwise a non-normalized realm URL misses auth on a private
+  // realm and splits cache keys.
+  let realmUrl = ensureTrailingSlash(options.targetRealm);
   let authorization =
-    (await options.client.getRealmToken(options.targetRealm)) ?? undefined;
+    (await options.client.getRealmToken(realmUrl)) ?? undefined;
   // The factory owns the timeout value (boxel-cli only exposes the knob) so a
   // hung test page fails fast instead of blocking the full 300s default.
   let timeoutMs = qunitTimeoutMs();
@@ -248,28 +253,31 @@ async function runQunitInBrowserUncached(
   let qunitResults: QunitResults;
   let durationMs: number;
   try {
-    let run = await runRealmQunit(options.targetRealm, {
+    let run = await runRealmQunit(realmUrl, {
       hostAppUrl: options.hostAppUrl,
       timeoutMs,
       ...(options.hostDistDir ? { hostDistDir: options.hostDistDir } : {}),
       ...(options.debug ? { debug: options.debug } : {}),
       ...(authorization ? { authorization } : {}),
     });
-    // boxel-cli's QunitResults is structurally identical to the factory's; the
-    // cast keeps the parse/card layer typed against the local definition.
-    qunitResults = run.qunitResults as QunitResults;
+    // Direct assignment (no cast) so the compiler enforces that boxel-cli's
+    // QunitResults stays structurally compatible with the factory's.
+    qunitResults = run.qunitResults;
     durationMs = run.durationMs;
   } catch (err) {
     let message = err instanceof Error ? err.message : String(err);
-    // boxel-cli surfaces a timeout as Playwright's opaque "Timeout <n>ms
-    // exceeded". Replace it with a diagnostic that names the likely cause.
-    if (/Timeout\s+\d+ms exceeded/i.test(message)) {
+    // boxel-cli labels *only* the run-end wait timeout with this marker; a
+    // page.goto / asset-fetch stall surfaces as its own Playwright error and is
+    // rethrown untouched below. Translate just the run-end case into an
+    // actionable diagnostic, preserving the original error as `cause`.
+    if (/did not reach runEnd within/i.test(message)) {
       let waited = Date.now() - start;
       throw new Error(
         `QUnit suite did not finish within ${timeoutMs}ms (waited ${waited}ms). ` +
           `The page never reached runEnd — likely an Ember boot error, a hanging ` +
           `test, or a never-resolving promise. Re-run with --debug for browser ` +
           `console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
+        { cause: err },
       );
     }
     throw err;

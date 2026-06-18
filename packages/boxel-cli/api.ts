@@ -36,4 +36,4 @@ export {
   type QunitResults,
   type QunitTestResult,
   type QunitRunSummary,
-} from './src/commands/test.ts';
+} from './src/lib/test-engine.ts';
