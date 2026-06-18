@@ -27,6 +27,7 @@ import type {
   CssResource,
   FileMetaResource,
   HtmlResource,
+  IconResource,
   Meta,
   Relationship,
   RenderedHtmlResource,
@@ -50,6 +51,7 @@ const RenderedHtmlResourceType: RenderedHtmlResource['type'] = 'rendered-html';
 const CssResourceType: CssResource['type'] = 'css';
 const SearchEntryResourceType: SearchEntryResource['type'] = 'search-entry';
 const HtmlResourceType: HtmlResource['type'] = 'html';
+const IconResourceType: IconResource['type'] = 'icon';
 
 // ---------------------------------------------------------------------------
 // Code refs
@@ -333,6 +335,27 @@ export function isCssResource(resource: any): resource is CssResource {
   return typeof resource.attributes.href === 'string';
 }
 
+export function isIconResource(resource: any): resource is IconResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== IconResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
+    return false;
+  }
+  return (
+    typeof attributes.iconHtml === 'string' &&
+    typeof attributes.displayName === 'string' &&
+    isResolvedCodeRef(attributes.codeRef)
+  );
+}
+
 export function isSearchEntryResource(
   resource: any,
 ): resource is SearchEntryResource {
@@ -349,7 +372,7 @@ export function isSearchEntryResource(
   if (typeof relationships !== 'object' || relationships == null) {
     return false;
   }
-  let { html, item } = relationships;
+  let { html, item, icon } = relationships;
   if (html !== undefined) {
     if (!Array.isArray(html?.data)) {
       return false;
@@ -365,6 +388,14 @@ export function isSearchEntryResource(
       (item?.data?.type !== CardResourceType &&
         item?.data?.type !== FileMetaResourceType) ||
       typeof item.data.id !== 'string'
+    ) {
+      return false;
+    }
+  }
+  if (icon !== undefined) {
+    if (
+      icon?.data?.type !== IconResourceType ||
+      typeof icon.data.id !== 'string'
     ) {
       return false;
     }

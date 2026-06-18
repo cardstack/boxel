@@ -20,6 +20,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  knownFileMetaUrls,
+  clearKnownFileMetaUrls,
+} from '@cardstack/host/lib/known-file-meta-urls';
+import {
   getSearchEntriesResource,
   SearchEntriesResource,
 } from '@cardstack/host/resources/search-entries';
@@ -167,6 +171,78 @@ module('Integration | search-entries resource', function (hooks) {
         undefined,
         'an html-bearing entry has no item fallback',
       );
+    }
+  });
+
+  test('registers file result URLs so clicks/overlay classify them as files', async function (assert) {
+    // A file row's `file-meta` serialization is HTML-only / never stored, so
+    // the operator-mode click + overlay path consults `knownFileMetaUrls` to
+    // classify a clicked URL as a file. The resource must register both an
+    // item-only file row and an html-backed file row (whose rendering carries
+    // no render type — files render natively).
+    let itemFileUrl = `${testRealmURL}notes.txt`;
+    let htmlFileUrl = `${testRealmURL}readme.md`;
+    let renderingId = htmlResourceId({ url: htmlFileUrl, format: 'fitted' });
+    let doc: SearchEntryResults = {
+      data: [
+        {
+          type: SearchEntryResourceType,
+          id: itemFileUrl,
+          relationships: {
+            item: { data: { type: 'file-meta', id: itemFileUrl } },
+          },
+        },
+        {
+          type: SearchEntryResourceType,
+          id: htmlFileUrl,
+          relationships: {
+            html: { data: [{ type: HtmlResourceType, id: renderingId }] },
+          },
+        },
+      ],
+      // The item-only file row registers off its `item` relationship's
+      // `file-meta` type — the resolved serialization need not ride in
+      // `included`. The html-backed file row needs its rendering (no render
+      // type → a file rendering).
+      included: [
+        {
+          type: HtmlResourceType,
+          id: renderingId,
+          attributes: {
+            html: '<div>readme</div>',
+            cardType: '',
+            format: 'fitted',
+          },
+          relationships: { styles: { data: [] } },
+        },
+      ],
+      meta: { page: { total: 2 } },
+    };
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => doc;
+    clearKnownFileMetaUrls();
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL],
+          },
+        },
+      }));
+      await search.loaded;
+
+      assert.true(
+        knownFileMetaUrls.has(itemFileUrl),
+        'the item-only file row is registered',
+      );
+      assert.true(
+        knownFileMetaUrls.has(htmlFileUrl),
+        'the html-backed file row (no render type) is registered',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+      clearKnownFileMetaUrls();
     }
   });
 

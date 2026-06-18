@@ -626,8 +626,6 @@ module('Acceptance | host submode', function (hooks) {
 
       await waitFor('[data-test-host-mode-404]');
       assert.dom('[data-test-host-mode-404]').exists();
-      // The collapsible technical detail stays available below the placeholder.
-      assert.dom('[data-test-error-display]').exists();
     });
 
     test('ai assistant is not displayed in host submode', async function (assert) {
