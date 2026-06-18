@@ -122,7 +122,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           config = merge({}, config, {
             hostsOwnAssets: false,
             assetsURL: assetsURL.href,
-            matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
+            // The browser-facing Matrix URL can differ from the realm
+            // server's own backend connection (e.g. in a Codespace the
+            // backend talks to Synapse on localhost while the browser must
+            // use the public forwarded URL). RESOLVED_MATRIX_URL lets a
+            // deployment inject the browser-facing URL without rerouting the
+            // realm's own Matrix client. Falls back to the backend URL.
+            matrixURL: (
+              process.env.RESOLVED_MATRIX_URL ?? matrixClient.matrixURL.href
+            ).replace(/\/$/, ''),
             matrixServerName:
               process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
             realmServerURL: serverURL.href,

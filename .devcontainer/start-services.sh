@@ -167,6 +167,14 @@ if [ -z "${MATRIX_REGISTRATION_SHARED_SECRET:-}" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+# Seed a reviewer login (user / password) on this Codespace's own Synapse so
+# the preview is loginnable. This is the same dev user local development uses;
+# it's only as exposed as the forwarded Matrix port (see the abuse note in the
+# PR / README — gate port visibility if that matters for a given preview).
+echo "==> Seeding reviewer Matrix user (user/password)..."
+(cd packages/matrix && MATRIX_URL=http://localhost:8008 pnpm register-test-user) \
+  || echo "Note: reviewer user seeding skipped (it may already exist)."
+
 # ── Realm server ──
 # Launched by hand (not via mise) so we can point its toUrls at the public
 # Codespace URLs (so the S3 host resolves realms back to this backend) and its
@@ -191,6 +199,8 @@ GRAFANA_SECRET="shhh! it's a secret" \
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
 HOST_URL="$BOXEL_HOST_URL" \
 MATRIX_URL=http://localhost:8008 \
+RESOLVED_MATRIX_URL="${MATRIX_PUBLIC_URL}" \
+MATRIX_SERVER_NAME=localhost \
 REALM_SERVER_MATRIX_USERNAME=realm_server \
 ENABLE_FILE_WATCHER=true \
 REALM_SERVER_SKIP_BOOT_INDEX=true \
@@ -237,10 +247,15 @@ echo ""
 echo "============================================"
 echo "  Backend services running!"
 echo ""
-echo "  Realm server:  ${REALM_SERVER_URL}"
-echo "  Matrix:        ${MATRIX_PUBLIC_URL}"
-echo "  Icons:         ${ICONS_PUBLIC_URL}"
-echo "  Host preview:  ${BOXEL_HOST_URL}"
+echo "  Open the preview at the REALM SERVER URL — it serves the host app"
+echo "  with this Codespace's endpoints injected (see serve-index.ts):"
+echo ""
+echo "    ${REALM_SERVER_URL}"
+echo ""
+echo "  Log in with:  user / password"
+echo ""
+echo "  (Assets are served from ${BOXEL_HOST_URL};"
+echo "   Matrix ${MATRIX_PUBLIC_URL})"
 echo "============================================"
 
 # This script is launched detached from postStartCommand so the Codespace
