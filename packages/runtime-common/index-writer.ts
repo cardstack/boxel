@@ -598,6 +598,24 @@ export class Batch {
       ];
     }
 
+    // Canonicalize dependency URLs to their portable RRI prefix form (e.g.
+    // `@cardstack/base/foo`) before persisting. Index paths arrive here with
+    // base deps in mixed forms: the instance render path already unresolves to
+    // the prefix form, but the file-extract path records the virtual-alias URL
+    // form. Normalizing here keeps one canonical form on disk; dependency
+    // invalidation already searches both the real and prefix forms.
+    if (preparedEntry.deps) {
+      preparedEntry.deps = preparedEntry.deps.map((d: string) =>
+        this.unresolveURL(d),
+      );
+    }
+    if (preparedEntry.last_known_good_deps) {
+      preparedEntry.last_known_good_deps =
+        preparedEntry.last_known_good_deps.map((d: string) =>
+          this.unresolveURL(d),
+        );
+    }
+
     let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
       jsonFields: [...Object.entries(coerceTypes)]
         .filter(([_, type]) => type === 'JSON')
