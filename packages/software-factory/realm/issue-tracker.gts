@@ -54,6 +54,7 @@ import { KanbanBoard } from './kanban-board';
 import { KanbanColumnField } from './kanban-column';
 import { KanbanBoardPlacement } from './kanban-board-placement';
 import {
+  type Option,
   issueStatusOptions,
   issuePriorityOptions,
   issueTypeOptions,
@@ -61,10 +62,10 @@ import {
   defaultColumns,
   findOptionColor,
   buildIssueOptionFields,
-  configuredIssueStatusOptions,
-  configuredIssueTypeOptions,
-  configuredIssuePriorityOptions,
-  configuredProjectStatusOptions,
+  getIssueStatusOptions,
+  getIssueTypeOptions,
+  getIssuePriorityOptions,
+  getProjectStatusOptions,
   IssueStatusField,
   IssueTypeField,
   IssuePriorityField,
@@ -84,124 +85,75 @@ const issueCodeRef: ResolvedCodeRef = {
 };
 
 // ── Issue ──────────────────────────────────────────────────────────────────
-type IssueStatusProject = {
-  issueStatusOptions?: IssueOptionField[];
+type IssueWithProject = {
+  project?: {
+    issueStatusOptions?: IssueOptionField[];
+    issueTypeOptions?: IssueOptionField[];
+    issuePriorityOptions?: IssueOptionField[];
+  } | null;
 };
-
-type IssueStatusIssue = {
-  project?: IssueStatusProject | null;
-};
-
-function getProjectIssueStatusOptions(
-  project: IssueStatusProject | null | undefined,
-) {
-  return configuredIssueStatusOptions(project);
-}
 
 function getIssueStatusOption(
-  issue: IssueStatusIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
-) {
-  if (!value) {
-    return undefined;
-  }
-
-  return getProjectIssueStatusOptions(issue?.project).find(
-    (option) => option.value === value,
-  );
+): Option | undefined {
+  if (!value) return undefined;
+  return getIssueStatusOptions(issue?.project).find((o) => o.value === value);
 }
 
 function getIssueStatusLabel(
-  issue: IssueStatusIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
 ) {
   return getIssueStatusOption(issue, value)?.label ?? value ?? 'Backlog';
 }
 
 function getIssueStatusColor(
-  issue: IssueStatusIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
 ) {
   return getIssueStatusOption(issue, value)?.color;
 }
 
-type IssueTypeProject = {
-  issueTypeOptions?: IssueOptionField[];
-};
-
-type IssueTypeIssue = {
-  project?: IssueTypeProject | null;
-};
-
-function getProjectIssueTypeOptions(
-  project: IssueTypeProject | null | undefined,
-) {
-  return configuredIssueTypeOptions(project);
-}
-
 function getIssueTypeOption(
-  issue: IssueTypeIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
-) {
-  if (!value) {
-    return undefined;
-  }
-
-  return getProjectIssueTypeOptions(issue?.project).find(
-    (option) => option.value === value,
-  );
+): Option | undefined {
+  if (!value) return undefined;
+  return getIssueTypeOptions(issue?.project).find((o) => o.value === value);
 }
 
 function getIssueTypeLabel(
-  issue: IssueTypeIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
 ) {
   return getIssueTypeOption(issue, value)?.label ?? value ?? undefined;
 }
 
 function getIssueTypeColor(
-  issue: IssueTypeIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
 ) {
   return getIssueTypeOption(issue, value)?.color;
 }
 
-type IssuePriorityProject = {
-  issuePriorityOptions?: IssueOptionField[];
-};
-
-type IssuePriorityIssue = {
-  project?: IssuePriorityProject | null;
-};
-
-function getProjectIssuePriorityOptions(
-  project: IssuePriorityProject | null | undefined,
-) {
-  return configuredIssuePriorityOptions(project);
-}
-
 function getIssuePriorityOption(
-  issue: IssuePriorityIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
-) {
-  if (!value) {
-    return undefined;
-  }
-
-  return getProjectIssuePriorityOptions(issue?.project).find(
-    (option) => option.value === value,
-  );
+): Option | undefined {
+  if (!value) return undefined;
+  return getIssuePriorityOptions(issue?.project).find((o) => o.value === value);
 }
 
 function getIssuePriorityLabel(
-  issue: IssuePriorityIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
 ) {
   return getIssuePriorityOption(issue, value)?.label ?? value ?? undefined;
 }
 
 function getIssuePriorityColor(
-  issue: IssuePriorityIssue | null | undefined,
+  issue: IssueWithProject | null | undefined,
   value: string | null | undefined,
 ) {
   return getIssuePriorityOption(issue, value)?.color;
@@ -1419,7 +1371,7 @@ class ProjectIsolated extends Component<typeof Project> {
 
   get statusColor(): string | undefined {
     return findOptionColor(
-      configuredProjectStatusOptions(this.args.model),
+      getProjectStatusOptions(this.args.model),
       this.args.model?.projectStatus ?? 'planning',
     );
   }
@@ -1977,7 +1929,7 @@ class ProjectEdit extends Component<typeof Project> {
 
   get statusColor(): string | undefined {
     return findOptionColor(
-      configuredProjectStatusOptions(this.args.model),
+      getProjectStatusOptions(this.args.model),
       this.args.model?.projectStatus ?? 'planning',
     );
   }
@@ -2500,7 +2452,7 @@ export class Project extends CardDef {
   static fitted = class Fitted extends Component<typeof Project> {
     get statusColor(): string | undefined {
       return findOptionColor(
-        configuredProjectStatusOptions(this.args.model),
+        getProjectStatusOptions(this.args.model),
         this.args.model?.projectStatus ?? 'planning',
       );
     }
@@ -2729,10 +2681,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   get columns(): KanbanColumnConfig[] {
     let options =
       this.activeGroupBy === 'priority'
-        ? configuredIssuePriorityOptions(this.args.model?.project)
+        ? getIssuePriorityOptions(this.args.model?.project)
         : this.activeGroupBy === 'issueType'
-          ? configuredIssueTypeOptions(this.args.model?.project)
-          : getProjectIssueStatusOptions(this.args.model?.project);
+          ? getIssueTypeOptions(this.args.model?.project)
+          : getIssueStatusOptions(this.args.model?.project);
 
     let stored = this.args.model.columns ?? [];
     let optionKeys = new Set(options.map((o) => o.value));

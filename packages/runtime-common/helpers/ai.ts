@@ -333,6 +333,17 @@ function getStaticEnumValues(
   def: typeof CardAPI.BaseDef,
 ): unknown[] | undefined {
   let configuration = (def as { configuration?: unknown }).configuration;
+  if (typeof configuration === 'function') {
+    let defaultOptions = (def as { defaultOptions?: unknown[] }).defaultOptions;
+    if (Array.isArray(defaultOptions) && defaultOptions.length > 0) {
+      return defaultOptions.map((option) =>
+        option !== null && typeof option === 'object' && 'value' in option
+          ? (option as { value: unknown }).value
+          : option,
+      );
+    }
+    return undefined;
+  }
   if (!configuration || typeof configuration !== 'object') {
     return undefined;
   }
