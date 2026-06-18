@@ -2862,12 +2862,10 @@ export class ExportedCard extends ExportedCardParent {
       .dom('[data-test-create-listing-modal]')
       .exists('confirmation modal appears after clicking Create Listing');
 
-    await waitFor(
-      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
-    );
+    await waitFor(`[data-test-selected-example="${testRealmURL}Pet/mango"]`);
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .exists('the opened instance is pre-selected');
     assert
       .dom('[data-test-selected-examples] [data-test-card-format="atom"]')

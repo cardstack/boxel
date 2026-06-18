@@ -7,6 +7,7 @@ import {
   isResolvedCodeRef,
   isValidPrerenderedHtmlFormat,
   logger as runtimeLogger,
+  RealmPaths,
   type CardResource,
   type ErrorEntry,
   type FileMetaResource,
@@ -40,6 +41,7 @@ import type StoreService from '../../services/store';
 // instance loads — mirrors what the legacy prerendered path stamped.
 function extraAttributesFor(
   rendering: SearchEntryRendering,
+  iconHtml: string | undefined,
 ): Record<string, string> {
   let attrs: Record<string, string> = {};
   if (rendering.isError) {
@@ -48,8 +50,10 @@ function extraAttributesFor(
   if (rendering.cardType) {
     attrs['data-card-type-display-name'] = rendering.cardType;
   }
-  if (rendering.iconHtml) {
-    attrs['data-card-type-icon-html'] = rendering.iconHtml;
+  // The type icon rides as a deduped `icon` resource on the entry, not the
+  // rendering — see `SearchEntry.iconHtml`.
+  if (iconHtml) {
+    attrs['data-card-type-icon-html'] = iconHtml;
   }
   return attrs;
 }
@@ -101,6 +105,19 @@ class RenderableSearchEntry {
     return this.raw.id;
   }
 
+  // The result's realm-local path (e.g. `Person/error`), shown by the host
+  // error tile to identify which result failed. Falls back to the bare id when
+  // the id isn't under the entry's realm.
+  get name(): string {
+    try {
+      return new RealmPaths(new URL(this.raw.realmUrl)).local(
+        new URL(this.raw.id),
+      );
+    } catch {
+      return this.raw.id;
+    }
+  }
+
   // The chosen prerendered rendering. The query's htmlQuery selects one
   // format × render type, so the resource's `html` array holds at most the one
   // matching rendering. Absent → an item-only (live) row.
@@ -111,6 +128,21 @@ class RenderableSearchEntry {
   // The raw live serialization branch (full or sparse), when present.
   get item(): CardResource<Saved> | FileMetaResource | undefined {
     return this.raw.item;
+  }
+
+  // The result's card-type descriptor, resolved from the deduped `icon`
+  // resource — exposed so a consumer can render a type icon / name (and render
+  // as the right type) for an item-only row without loading the live instance.
+  get iconHtml(): string | undefined {
+    return this.raw.iconHtml;
+  }
+
+  get displayName(): string | undefined {
+    return this.raw.displayName;
+  }
+
+  get codeRef(): ResolvedCodeRef | undefined {
+    return this.raw.codeRef;
   }
 
   // The error doc carried on the `item` serialization's `meta`. Present => the
@@ -171,10 +203,11 @@ class RenderableSearchEntry {
       let { html } = this;
       let inert =
         html && html.html != null
-          ? htmlComponent(html.html, extraAttributesFor(html))
+          ? htmlComponent(html.html, extraAttributesFor(html, this.iconHtml))
           : undefined;
       this.#component = hydratableEntryComponent({
         cardId: this.id,
+        name: this.name,
         component: inert,
         renderType: this.renderType,
         type: this.type,
