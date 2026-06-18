@@ -35,24 +35,12 @@ echo "==> Setting up catalog realm..."
 mise exec -- pnpm --dir=packages/catalog catalog:setup
 mise exec -- pnpm --dir=packages/catalog catalog:update
 
-# The realm server, vite host and prerenderer all speak HTTPS in this repo
-# (browsers only do HTTP/2 over TLS, which the prerender pipeline assumes).
-# Generate a self-signed cert at the path env-vars.sh probes
-# (~/.local/share/boxel/dev-certs) so it sets REALM_SERVER_TLS_CERT_FILE and
-# HOST_URL=https for every mise service, and vite serves HTTPS too. The
-# prerender's puppeteer ignores cert errors; Node trusts it via
-# NODE_EXTRA_CA_CERTS (set in start-services.sh). mkcert isn't used — nothing
-# here needs the cert in a browser/system trust store.
-echo "==> Generating self-signed dev TLS cert..."
-CERT_DIR="$HOME/.local/share/boxel/dev-certs"
-mkdir -p "$CERT_DIR"
-if [ ! -f "$CERT_DIR/localhost.pem" ]; then
-  openssl req -x509 -newkey rsa:2048 -nodes \
-    -keyout "$CERT_DIR/localhost-key.pem" \
-    -out "$CERT_DIR/localhost.pem" \
-    -days 365 -subj "/CN=localhost" \
-    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-fi
+# No local TLS cert: the realm server serves plain HTTP, and GitHub's port
+# forwarding terminates TLS at its edge (it forwards plain HTTP to the
+# backend). If the realm served HTTPS it would 308-redirect the edge's
+# plain-HTTP request to https://localhost:4201 — bouncing the browser to
+# localhost. The prerender uses the public S3 host (already HTTPS), so
+# nothing here needs a local cert.
 
 # The host app is NOT built here. The realm server requires a reachable host
 # (it fetches distURL at startup) and the prerenderer renders cards against

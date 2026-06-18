@@ -37,29 +37,24 @@ export REALM_SERVER_URL="https://${CODESPACE_NAME}-4201.${FWD_DOMAIN}"
 export MATRIX_PUBLIC_URL="https://${CODESPACE_NAME}-8008.${FWD_DOMAIN}"
 export ICONS_PUBLIC_URL="https://${CODESPACE_NAME}-4206.${FWD_DOMAIN}"
 
-# Internal wiring runs over HTTPS, matching the repo's standard dev stack.
-# env-vars.sh (sourced by `mise activate` below and by every mise service)
-# detects the self-signed cert generated in setup.sh and sets
-# REALM_SERVER_TLS_CERT_FILE + HOST_URL=https + REALM_BASE_URL=https
-# automatically — we deliberately do NOT override those to http, because the
-# prerender pipeline is HTTPS-only and a mismatch yields ERR_SSL_PROTOCOL_ERROR.
-# Matrix/icons stay http (Synapse/icons don't terminate TLS locally).
+# Internal wiring runs over plain HTTP on the standard ports. No dev cert is
+# generated (see setup.sh): the realm server serves plain HTTP and GitHub's
+# port forwarding terminates TLS at its edge. Override the env-vars.sh
+# defaults (which assume https://localhost) so the realm and every mise
+# service agree on http — otherwise the worker/prerender would dial
+# https://localhost:4201 against a plain-HTTP realm. The browser-facing
+# public URLs (REALM_SERVER_URL etc., all https) are injected by the realm
+# at serve time and passed to the host build separately.
+export REALM_BASE_URL="http://localhost:4201"
 export MATRIX_URL="http://localhost:8008"
+export MATRIX_URL_VAL="http://localhost:8008"
 export ICONS_URL="http://localhost:4206"
 export PGPORT=5435
 export PGDATABASE=boxel
 
-# Trust the self-signed cert in Node clients (the realm server's distURL fetch,
-# the worker's realm reads). env-vars.sh only wires this via mkcert, which we
-# don't use, so point it at the cert directly. Inherited by the mise services.
-export NODE_EXTRA_CA_CERTS="$HOME/.local/share/boxel/dev-certs/localhost.pem"
-
 # Mount-and-serve: skip the from-scratch boot index so readiness doesn't
 # block on a full index of every bootstrap realm; cards prerender on demand.
 export REALM_SERVER_SKIP_BOOT_INDEX=true
-
-# Give the prerender's puppeteer standby probe headroom for vite's cold start.
-export PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-120000}"
 
 # ── Make forwarded ports public so the S3 host can reach this backend ──
 echo "==> Making forwarded ports public..."
@@ -143,13 +138,12 @@ echo "==> Seeding reviewer Matrix user (user/password)..."
   || echo "Note: reviewer user seeding skipped (it may already exist)."
 
 # ── Realm server ──
-# Launched by hand (not via mise) so we can point its toUrls at the public
-# Codespace URLs (so the S3 host resolves realms back to this backend) and its
-# distURL (HOST_URL) at the CI/S3 host, while everything else matches
-# mise-tasks/services/realm-server. It inherits REALM_SERVER_TLS_CERT_FILE /
-# NODE_EXTRA_CA_CERTS from the env-vars.sh that `mise activate` sourced, so it
-# serves HTTPS on 4201. Realm layout: base, catalog, skills, openrouter
-# (experiments / homepage / submission / software-factory skipped to stay lean).
+# Launched by hand (not via mise) so we can point its toUrls + serverURL at
+# the public Codespace URLs (so the served host + redirects use the public
+# address, and the S3 host resolves realms back here) and its distURL
+# (HOST_URL) at the CI/S3 host. Serves plain HTTP on 4201; GitHub's edge does
+# TLS. Realm layout: base, catalog, skills, openrouter (experiments /
+# homepage / submission / software-factory skipped to stay lean).
 echo "==> Starting realm server..."
 SKIP_EXPERIMENTS=true \
 SKIP_BOXEL_HOMEPAGE=true \
@@ -203,11 +197,10 @@ REALM_SERVER_SKIP_BOOT_INDEX=true \
 REALM_PID=$!
 
 # ── Wait for realm server readiness ──
-# The realm server now serves HTTPS on 4201 (self-signed cert), so probe with
-# https + -k.
+# The realm server serves plain HTTP on 4201 (GitHub's edge terminates TLS).
 echo "==> Waiting for realm server to be ready..."
 timeout 300 bash -c \
-  'until curl -ksf "https://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
+  'until curl -sf "http://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
   || echo "Warning: realm server readiness check timed out after 5 minutes"
 
 echo ""
