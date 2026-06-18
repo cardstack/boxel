@@ -55,12 +55,10 @@ test.describe('Head tags', () => {
     await page.locator('[data-test-publish-realm-button]').click();
   }
 
-  // Publishes the realm to a generated unlisted link and returns the published
-  // URL (random per run, e.g. "https://<random>.localhost:4205/").
-  async function publishUnlistedLink(
+  async function publishDefaultRealm(
     page: Page,
     opts?: { realmName?: string; displayName?: string },
-  ): Promise<string> {
+  ) {
     let { realmName = 'new-workspace', displayName = '1New Workspace' } =
       opts ?? {};
     await createUserAndRealm(page, {
@@ -69,28 +67,25 @@ test.describe('Head tags', () => {
       displayName,
     });
     await openPublishRealmModal(page, displayName);
-    await page.locator('[data-test-generate-unlisted-link-button]').click();
-    await page.waitForSelector('[data-test-unlisted-link-url]');
-    let publishedURL = (
-      await page.locator('[data-test-unlisted-link-url]').innerText()
-    ).replace(/\s+/g, '');
+    await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
 
     await page.waitForSelector('[data-test-unpublish-button]');
     await expect(
       page.locator(
-        '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
       ),
     ).toBeVisible();
-    return publishedURL;
   }
 
   test('the HTML response from a published realm has relevant meta tags', async ({
     page,
   }) => {
-    let publishedURL = await publishUnlistedLink(page);
+    await publishDefaultRealm(page);
 
-    await page.goto(`${publishedURL}index`);
+    let publishedRealmURLString = `https://${user.username}.localhost:4205/new-workspace/index`;
+
+    await page.goto(publishedRealmURLString);
 
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
       'content',
@@ -272,14 +267,11 @@ test.describe('Head tags', () => {
     );
 
     await openPublishRealmModal(page, displayName);
-    await page.locator('[data-test-generate-unlisted-link-button]').click();
-    await page.waitForSelector('[data-test-unlisted-link-url]');
-    let publishedRealmURL = (
-      await page.locator('[data-test-unlisted-link-url]').innerText()
-    ).replace(/\s+/g, '');
+    await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
     await page.waitForSelector('[data-test-unpublish-button]');
 
+    let publishedRealmURL = `https://${user.username}.localhost:4205/${realmName}/`;
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
 
     // Publishing returns before the published realm finishes re-indexing

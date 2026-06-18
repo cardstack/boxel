@@ -93,20 +93,19 @@ function normalizeProtocol(protocol: string): string {
   return protocol.replace(/:\/*$/, '');
 }
 
-// Character set for machine-generated "unlisted link" subdomains. Restricted to
-// lowercase letters and digits (so the result always satisfies
-// `validateSubdomain`) with the visually ambiguous characters removed
-// (i, l, o, 0, 1) so a link read aloud or copied by hand is less error-prone.
-const OBSCURE_SUBDOMAIN_ALPHABET = 'abcdefghjkmnpqrstuvwxyz';
-const OBSCURE_SUBDOMAIN_DIGITS = '23456789';
-const OBSCURE_SUBDOMAIN_CHARSET =
-  OBSCURE_SUBDOMAIN_ALPHABET + OBSCURE_SUBDOMAIN_DIGITS;
+// Character set for the machine-generated path segment of an "unlisted link"
+// publish target (`<username>.<spaceDomain>/<slug>/`). Lowercase letters and
+// digits only — safe as a URL path segment with no escaping — with the visually
+// ambiguous characters removed (i, l, o, 0, 1) so a link read aloud or copied by
+// hand is less error-prone.
+const OBSCURE_SLUG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz';
+const OBSCURE_SLUG_DIGITS = '23456789';
+const OBSCURE_SLUG_CHARSET = OBSCURE_SLUG_ALPHABET + OBSCURE_SLUG_DIGITS;
 
-// Length of a generated subdomain. 16 characters over a 31-symbol alphabet is
-// ~79 bits of entropy — unguessable in the "even if the page is public, the URL
-// is the secret" sense (a la a Google Doc link) — and is also the signal used
-// to tell a generated subdomain apart from a user-chosen custom site name.
-export const OBSCURE_SUBDOMAIN_LENGTH = 16;
+// Length of a generated slug. 16 characters over a 31-symbol alphabet is ~79
+// bits of entropy — unguessable in the "even if the page is public, the URL is
+// the secret" sense (a la a Google Doc link).
+export const OBSCURE_SLUG_LENGTH = 16;
 
 function randomBytes(length: number): Uint8Array {
   let cryptoObj = (
@@ -140,34 +139,11 @@ function randomChars(charset: string, count: number): string {
   return out;
 }
 
-// Generates an unguessable subdomain for an "unlisted link" publish target. The
-// first character is always a letter so the result can never be the pure-number
-// form `validateSubdomain` rejects, and the whole string is drawn from a
-// subdomain-safe alphabet so the claim/availability check accepts it as-is.
-export function generateObscureSubdomain(): string {
-  let first = randomChars(OBSCURE_SUBDOMAIN_ALPHABET, 1);
-  let rest = randomChars(
-    OBSCURE_SUBDOMAIN_CHARSET,
-    OBSCURE_SUBDOMAIN_LENGTH - 1,
-  );
-  return first + rest;
-}
-
-// Whether a subdomain looks like one `generateObscureSubdomain` produced. Used
-// to decide which publish-modal card (unlisted link vs. custom site name) owns
-// a realm's single claimed `boxel.site` domain. A user-chosen name of the same
-// length drawn from the same alphabet would be misclassified, but that only
-// affects which card displays the claim, not correctness of publishing.
-export function isGeneratedSubdomain(subdomain: string): boolean {
-  if (subdomain.length !== OBSCURE_SUBDOMAIN_LENGTH) {
-    return false;
-  }
-  if (!OBSCURE_SUBDOMAIN_ALPHABET.includes(subdomain[0])) {
-    return false;
-  }
-  return [...subdomain].every((char) =>
-    OBSCURE_SUBDOMAIN_CHARSET.includes(char),
-  );
+// Generates an unguessable path-segment slug for an "unlisted link" publish
+// target. The whole string is drawn from a URL-path-safe alphabet so it needs no
+// escaping in the published-realm URL.
+export function generateObscureSlug(): string {
+  return randomChars(OBSCURE_SLUG_CHARSET, OBSCURE_SLUG_LENGTH);
 }
 
 export function resolvePublishedRealmUrl(

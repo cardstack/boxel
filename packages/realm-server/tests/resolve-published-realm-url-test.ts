@@ -2,12 +2,10 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
   deriveRealmName,
-  generateObscureSubdomain,
-  isGeneratedSubdomain,
-  OBSCURE_SUBDOMAIN_LENGTH,
+  generateObscureSlug,
+  OBSCURE_SLUG_LENGTH,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
-import { validateSubdomain } from '../lib/user-subdomain-validation.ts';
 
 module(basename(__filename), function () {
   module('resolve-published-realm-url', function () {
@@ -217,53 +215,27 @@ module(basename(__filename), function () {
       );
     });
 
-    // generateObscureSubdomain / isGeneratedSubdomain
-    test('generateObscureSubdomain produces a fixed-length subdomain-safe string', async function (assert) {
+    // generateObscureSlug
+    test('generateObscureSlug produces a fixed-length URL-path-safe string', async function (assert) {
       for (let i = 0; i < 50; i++) {
-        let subdomain = generateObscureSubdomain();
+        let slug = generateObscureSlug();
         assert.strictEqual(
-          subdomain.length,
-          OBSCURE_SUBDOMAIN_LENGTH,
+          slug.length,
+          OBSCURE_SLUG_LENGTH,
           'has the expected length',
         );
         assert.ok(
-          /^[a-z][a-z0-9]*$/.test(subdomain),
-          `"${subdomain}" starts with a letter and is lowercase alphanumeric`,
+          /^[a-z0-9]+$/.test(slug),
+          `"${slug}" is lowercase alphanumeric (safe as a URL path segment)`,
         );
       }
     });
 
-    test('generated subdomains pass realm-server subdomain validation', async function (assert) {
-      for (let i = 0; i < 50; i++) {
-        let subdomain = generateObscureSubdomain();
-        let result = validateSubdomain(subdomain);
-        assert.true(
-          result.valid,
-          `"${subdomain}" is accepted (${result.error ?? 'no error'})`,
-        );
-      }
-    });
-
-    test('generateObscureSubdomain is not deterministic', async function (assert) {
+    test('generateObscureSlug is not deterministic', async function (assert) {
       let values = new Set(
-        Array.from({ length: 20 }, () => generateObscureSubdomain()),
+        Array.from({ length: 20 }, () => generateObscureSlug()),
       );
       assert.strictEqual(values.size, 20, 'all generated values are distinct');
-    });
-
-    test('isGeneratedSubdomain recognizes its own output', async function (assert) {
-      for (let i = 0; i < 20; i++) {
-        assert.true(isGeneratedSubdomain(generateObscureSubdomain()));
-      }
-    });
-
-    test('isGeneratedSubdomain rejects typical custom site names', async function (assert) {
-      for (let name of ['mysite', 'game-mechanics', 'mike', 'a', 'blog-2025']) {
-        assert.false(
-          isGeneratedSubdomain(name),
-          `"${name}" is not treated as a generated link`,
-        );
-      }
     });
   });
 });

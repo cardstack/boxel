@@ -32,32 +32,65 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-publish-realm-button]').click();
   }
 
-  // Generates + claims a random unlisted-link subdomain, publishes to it, and
-  // returns the published URL (random per run, e.g.
-  // "https://<random>.localhost:4205/").
-  async function publishUnlistedLink(page: Page): Promise<string> {
+  async function publishDefaultRealm(page: Page) {
     await openPublishRealmModal(page);
-    await page.locator('[data-test-generate-unlisted-link-button]').click();
-    await page.waitForSelector('[data-test-unlisted-link-url]');
-    let publishedURL = (
-      await page.locator('[data-test-unlisted-link-url]').innerText()
-    ).replace(/\s+/g, '');
+    await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
 
     await page.waitForSelector('[data-test-unpublish-button]');
     await expect(
       page.locator(
-        '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
       ),
     ).toBeVisible();
-    return publishedURL;
   }
 
-  test('it can publish an unlisted link', async ({ page }) => {
-    let publishedURL = await publishUnlistedLink(page);
+  test('it can publish a realm to a subdirectory', async ({ page }) => {
+    await publishDefaultRealm(page);
 
     let newTabPromise = page.waitForEvent('popup');
 
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+      )
+      .click();
+
+    let newTab = await newTabPromise;
+    await newTab.waitForLoadState();
+
+    await expect(newTab).toHaveURL(
+      `https://${user.username}.localhost:4205/new-workspace/`,
+    );
+    await expect(
+      newTab.locator(
+        `[data-test-card="https://${user.username}.localhost:4205/new-workspace/index"]`,
+      ),
+    ).toBeVisible();
+    await newTab.close();
+    await page.bringToFront();
+  });
+
+  test('it can publish an unlisted link', async ({ page }) => {
+    await openPublishRealmModal(page);
+
+    await page.waitForSelector('[data-test-unlisted-link-url]');
+    let publishedURL = (
+      await page.locator('[data-test-unlisted-link-url]').innerText()
+    ).replace(/\s+/g, '');
+
+    // The unlisted link is the user's own space subdomain with a random path.
+    expect(publishedURL).toMatch(
+      new RegExp(`^https://${user.username}\\.localhost:4205/[a-z0-9]+/$`),
+    );
+
+    await page.locator('[data-test-unlisted-link-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+    await page.waitForSelector(
+      '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+    );
+
+    let newTabPromise = page.waitForEvent('popup');
     await page
       .locator(
         '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
@@ -316,8 +349,7 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
     await page.locator('[data-test-publish-realm-button]').click();
-    await page.locator('[data-test-generate-unlisted-link-button]').click();
-    await page.waitForSelector('[data-test-unlisted-link-url]');
+    await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
     await page.waitForSelector('[data-test-unpublish-button]');
 
@@ -325,7 +357,7 @@ test.describe('Publish realm', () => {
     let firstTabPromise = page.waitForEvent('popup');
     await page
       .locator(
-        '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
       )
       .click();
     let firstTab = await firstTabPromise;
@@ -385,14 +417,13 @@ test.describe('Publish realm', () => {
       'source index.json should contain the updated sentinel after postCardSource',
     ).toBeTruthy();
 
-    // Re-open the publish modal and re-trigger publish. The existing
-    // unlisted-link claim loads asynchronously; wait for it, then ensure
-    // its checkbox is selected — it can lose its selection on modal close,
-    // and otherwise the publish button is disabled
-    // (`!hasSelectedPublishedRealmURLs`) and the click silently no-ops.
+    // Re-open the publish modal and re-trigger publish. The
+    // default-domain checkbox can lose its selection on modal close,
+    // so check its state and click only when needed — otherwise the
+    // publish button is disabled (`!hasSelectedPublishedRealmURLs`)
+    // and the click silently no-ops.
     await page.locator('[data-test-publish-realm-button]').click();
-    await page.waitForSelector('[data-test-unlisted-link-url]');
-    let domainCheckbox = page.locator('[data-test-unlisted-link-checkbox]');
+    let domainCheckbox = page.locator('[data-test-default-domain-checkbox]');
     if (!(await domainCheckbox.isChecked())) {
       await domainCheckbox.click();
     }
@@ -427,7 +458,7 @@ test.describe('Publish realm', () => {
     let secondTabPromise = page.waitForEvent('popup');
     await page
       .locator(
-        '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
       )
       .click();
     let secondTab = await secondTabPromise;
@@ -447,7 +478,7 @@ test.describe('Publish realm', () => {
   });
 
   test('open site popover opens with shift-click', async ({ page }) => {
-    let publishedURL = await publishUnlistedLink(page);
+    await publishDefaultRealm(page);
 
     let newTabPromise = page.waitForEvent('popup');
 
@@ -457,7 +488,9 @@ test.describe('Publish realm', () => {
     let newTab = await newTabPromise;
     await newTab.waitForLoadState();
 
-    await expect(newTab).toHaveURL(publishedURL);
+    await expect(newTab).toHaveURL(
+      `https://${user.username}.localhost:4205/new-workspace/`,
+    );
     await newTab.close();
     await page.bringToFront();
 
@@ -485,7 +518,9 @@ test.describe('Publish realm', () => {
     newTab = await newTabPromise;
     await newTab.waitForLoadState();
 
-    await expect(newTab).toHaveURL(publishedURL);
+    await expect(newTab).toHaveURL(
+      `https://${user.username}.localhost:4205/new-workspace/`,
+    );
     await newTab.close();
     await page.bringToFront();
   });
