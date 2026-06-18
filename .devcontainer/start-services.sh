@@ -56,9 +56,32 @@ export PGDATABASE=boxel
 # block on a full index of every bootstrap realm; cards prerender on demand.
 export REALM_SERVER_SKIP_BOOT_INDEX=true
 
-# ── Make forwarded ports public so the S3 host can reach this backend ──
-echo "==> Making forwarded ports public..."
-gh codespace ports visibility 4201:public 4206:public 8008:public -c "$CODESPACE_NAME" 2>/dev/null || true
+# ── Forwarded ports must be public so the reviewer's browser can reach the
+#    realm (4201), the icons server (4206) and Matrix/Synapse (8008) ──
+# These start cross-origin to each other, and a *private* forwarded port
+# auth-gates cross-origin XHR at the GitHub edge (302 on navigation, 401 on
+# fetch) — that's what 401s the browser's Matrix login. They must be public.
+#
+# This can't be automated from inside the Codespace: the ambient GITHUB_TOKEN
+# lacks the `codespace` scope, so `gh codespace ports visibility` fails here
+# (exit 4). Port visibility can only be set from OUTSIDE — either the VS Code
+# "Ports" panel (right-click → Port Visibility → Public) or `gh codespace
+# ports visibility 4201:public 4206:public 8008:public -c <name>` from a
+# machine whose gh has the codespace scope. Visibility persists per-codespace
+# once set, so it's a one-time step. We still attempt it (harmless, and it
+# works in setups where a scoped token is present) and warn clearly if not.
+echo "==> Attempting to make forwarded ports public..."
+PORTS_PUBLIC_OK=1
+for p in 4201 4206 8008; do
+  gh codespace ports visibility "${p}:public" -c "$CODESPACE_NAME" >/dev/null 2>&1 || PORTS_PUBLIC_OK=0
+done
+if [ "$PORTS_PUBLIC_OK" = 1 ]; then
+  echo "==> Forwarded ports set public."
+else
+  echo "Warning: could not set forwarded ports public from inside the Codespace."
+  echo "         Set ports 4201, 4206 and 8008 to Public in the VS Code Ports"
+  echo "         panel (or via gh from outside), or reviewer login will 401."
+fi
 
 # ── Host bundle (generic CI/S3 build; config injected at serve time) ──
 # No per-Codespace rebuild or target-file push: the codespaces-preview
@@ -223,8 +246,13 @@ echo "    ${REALM_SERVER_URL}"
 echo ""
 echo "  Log in with:  user / password"
 echo ""
-echo "  (Assets are served from ${BOXEL_HOST_URL};"
-echo "   Matrix ${MATRIX_PUBLIC_URL})"
+if [ "${PORTS_PUBLIC_OK:-0}" != 1 ]; then
+  echo "  IF LOGIN 401s: ports 4201, 4206 and 8008 must be Public. Set them"
+  echo "  in the VS Code Ports panel (right-click → Port Visibility → Public)."
+  echo ""
+fi
+echo "  (Assets are proxied through the realm origin; Matrix is at"
+echo "   ${MATRIX_PUBLIC_URL}; host bundle ${BOXEL_HOST_URL})"
 echo "============================================"
 
 # This script is launched detached from postStartCommand so the Codespace
