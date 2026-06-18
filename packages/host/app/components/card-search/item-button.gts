@@ -394,6 +394,7 @@ export default class ItemButton extends Component<Signature> {
 
         box-sizing: content-box;
         text-align: start;
+        display: block;
       }
       .item-button :deep(*) {
         box-sizing: border-box;
