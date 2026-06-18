@@ -1031,17 +1031,19 @@ export class RealmServer {
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(async (ctx, next) => {
-        // When a TLS-terminating proxy forwards plain HTTP without an
-        // x-forwarded-proto header (GitHub Codespaces port forwarding does
-        // this), the realm sees every request as http and builds realm
-        // content URLs as http://… (see fullRequestURL). Those match none of
-        // the realms registered under their https identities, so every
-        // card/module request 404s while path-based control endpoints still
-        // work. REALM_SERVER_ASSUME_HTTPS asserts the real external scheme so
-        // URL resolution matches. Off by default; production load balancers
-        // set x-forwarded-proto themselves, so this never fires there.
+        // GitHub Codespaces port forwarding terminates TLS at the edge and
+        // forwards to the backend over plain HTTP with `Host: localhost:<port>`
+        // and no x-forwarded-proto. The realm then builds realm-content URLs
+        // as http://localhost/… (see fullRequestURL), which match none of the
+        // realms registered under their https://<codespace> identities — so
+        // every card/module request 404s while path-based control endpoints
+        // (login, _server-session, assets) still work. REALM_SERVER_ASSUME_HTTPS
+        // pins the scheme and host to the realm's own serverURL so URL
+        // resolution matches. Off by default; production load balancers set
+        // these headers correctly, so this never fires there.
         if (process.env.REALM_SERVER_ASSUME_HTTPS === 'true') {
           ctx.req.headers['x-forwarded-proto'] = 'https';
+          ctx.req.headers['host'] = this.serverURL.host;
         }
         await next();
       })
