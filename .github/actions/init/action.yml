@@ -35,7 +35,8 @@ runs:
     # (a no-op when the cached version is already present).
     - name: Ensure puppeteer Chrome is installed
       shell: bash
-      run: pnpm --filter @cardstack/realm-server exec puppeteer browsers install chrome
+      working-directory: packages/realm-server
+      run: pnpm exec puppeteer browsers install chrome
 
     - name: Prune pnpm store
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
