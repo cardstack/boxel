@@ -61,19 +61,43 @@ export REALM_SERVER_SKIP_BOOT_INDEX=true
 # Give the prerender's puppeteer standby probe headroom for vite's cold start.
 export PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-120000}"
 
-# ── Make forwarded ports public so the S3 preview can reach them ──
+# ── Make forwarded ports public so the S3 host can reach this backend ──
 echo "==> Making forwarded ports public..."
 gh codespace ports visibility 4201:public 4206:public 8008:public -c "$CODESPACE_NAME" 2>/dev/null || true
 
-# ── Host app (prebuilt static dist, served via vite preview) ──
-# The dist is built in setup.sh with the public Codespace URLs baked in;
-# serve-dist.js (vite preview) reads REALM_SERVER_TLS_CERT_FILE from
-# env-vars.sh and serves it over HTTPS on localhost:4200. Serving a prebuilt
-# dist (vs vite dev) starts in seconds, so the prerender's /_standby probe
-# and the realm server's distURL smoke test don't blow their timeouts.
-echo "==> Serving prebuilt host app on https://localhost:4200..."
-(cd packages/host && exec node scripts/serve-dist.js) > /tmp/host-vite.log 2>&1 &
-HOST_PID=$!
+# ── Record this Codespace as the preview target (triggers the CI host build) ──
+# Done up-front: the codespaces-preview workflow builds the host with THIS
+# Codespace's URLs and deploys it to S3, and the realm server (distURL) + the
+# prerenderer point at that S3 host. Pushing the target file rebuilds it for
+# this Codespace; the already-deployed S3 host stays usable in the meantime.
+echo "==> Recording Codespace target for the preview workflow..."
+TARGET_FILE=".devcontainer/codespace-target.env"
+cat > "$TARGET_FILE" <<EOF
+# Written by .devcontainer/start-services.sh when a Codespace boots.
+# The codespaces-preview workflow reads this to point the host build at this
+# Codespace's forwarded backend services. Safe to delete; do not merge to main.
+CODESPACE_NAME=${CODESPACE_NAME}
+CODESPACE_FORWARDING_DOMAIN=${FWD_DOMAIN}
+EOF
+
+BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)"
+git add "$TARGET_FILE"
+if git diff --cached --quiet -- "$TARGET_FILE"; then
+  echo "Codespace target unchanged; using the already-deployed S3 host."
+else
+  git \
+    -c user.name="${GIT_AUTHOR_NAME:-Codespace Preview}" \
+    -c user.email="${GIT_AUTHOR_EMAIL:-codespace@users.noreply.github.com}" \
+    commit -m "ci: record Codespace preview target" >/dev/null
+  git push origin "HEAD:${BRANCH_NAME}" \
+    || echo "Warning: could not push Codespace target; the preview build was not retriggered."
+fi
+
+# The host the realm + prerenderer use is the CI/S3 build. The bucket prefix
+# is the branch name sanitized exactly as the workflow does (PR_BRANCH_NAME).
+PR_BRANCH_NAME="$(echo "$BRANCH_NAME" | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60)"
+export BOXEL_HOST_URL="https://${PR_BRANCH_NAME}.boxel-host-preview.stack.cards"
+echo "==> Host (for realm distURL + prerender): ${BOXEL_HOST_URL}"
 
 # ── Postgres (boxel-pg container) + databases ──
 echo "==> Ensuring Postgres is running..."
@@ -92,16 +116,13 @@ echo "==> Starting SMTP server..."
 echo "==> Starting icons server..."
 pnpm --dir=packages/realm-server run start:icons &
 
-# Wait for the host before the prerender (its puppeteer /_standby probe loads
-# the host) and the realm server (its distURL smoke test fetches it). With a
-# prebuilt dist this is quick, but allow headroom; a missing host is fatal.
-echo "==> Waiting for host app at https://localhost:4200..."
-if ! timeout 180 bash -c 'until curl -ksf https://localhost:4200 >/dev/null 2>&1; do
-    kill -0 '"$HOST_PID"' 2>/dev/null || { echo "host process died; see /tmp/host-vite.log"; exit 1; }
-    sleep 2
-  done'; then
-  echo "Warning: host app not reachable; realm smoke test and prerender will likely fail. See /tmp/host-vite.log"
-fi
+# Wait for the S3 host to be live before the prerender (its puppeteer /_standby
+# probe loads it) and the realm server (its distURL smoke test fetches it).
+# Usually already live from a prior build; the long timeout covers a
+# first-ever build that has to wait for CI.
+echo "==> Waiting for S3 host at ${BOXEL_HOST_URL}/_standby..."
+timeout 900 bash -c 'until curl -sf "'"$BOXEL_HOST_URL"'/_standby" >/dev/null 2>&1; do sleep 5; done' \
+  || echo "Warning: S3 host not reachable; realm smoke test and prerender will likely fail."
 
 # ── Prerender (needs the host) then worker (depends on the prerender) ──
 # Ordered deliberately: the worker manager only becomes ready after the
@@ -137,11 +158,11 @@ fi
 
 # ── Realm server ──
 # Launched by hand (not via mise) so we can point its toUrls at the public
-# Codespace URLs (so the S3 host resolves realms back to this backend) while
-# everything else matches mise-tasks/services/realm-server. It inherits
-# REALM_SERVER_TLS_CERT_FILE / HOST_URL (https) / NODE_EXTRA_CA_CERTS from the
-# env-vars.sh that `mise activate` sourced, so it serves HTTPS and trusts the
-# vite host's cert. Realm layout: base, catalog, skills, openrouter
+# Codespace URLs (so the S3 host resolves realms back to this backend) and its
+# distURL (HOST_URL) at the CI/S3 host, while everything else matches
+# mise-tasks/services/realm-server. It inherits REALM_SERVER_TLS_CERT_FILE /
+# NODE_EXTRA_CA_CERTS from the env-vars.sh that `mise activate` sourced, so it
+# serves HTTPS on 4201. Realm layout: base, catalog, skills, openrouter
 # (experiments / homepage / submission / software-factory skipped to stay lean).
 echo "==> Starting realm server..."
 SKIP_EXPERIMENTS=true \
@@ -157,6 +178,7 @@ REALM_SERVER_SECRET_SEED="mum's the word" \
 REALM_SECRET_SEED="shhh! it's a secret" \
 GRAFANA_SECRET="shhh! it's a secret" \
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
+HOST_URL="$BOXEL_HOST_URL" \
 MATRIX_URL=http://localhost:8008 \
 REALM_SERVER_MATRIX_USERNAME=realm_server \
 ENABLE_FILE_WATCHER=true \
@@ -199,34 +221,6 @@ timeout 300 bash -c \
   'until curl -ksf "https://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
   || echo "Warning: realm server readiness check timed out after 5 minutes"
 
-# ── Record this Codespace as the preview target ──
-# The codespaces-preview workflow triggers on pushes to this branch and reads
-# the committed target file to point the host build at this Codespace's
-# forwarded backend. Committing + pushing it triggers the first build; every
-# later code push then rebuilds against the same backend.
-echo "==> Recording Codespace target for the preview workflow..."
-TARGET_FILE=".devcontainer/codespace-target.env"
-cat > "$TARGET_FILE" <<EOF
-# Written by .devcontainer/start-services.sh when a Codespace boots.
-# The codespaces-preview workflow reads this to point the host build at this
-# Codespace's forwarded backend services. Safe to delete; do not merge to main.
-CODESPACE_NAME=${CODESPACE_NAME}
-CODESPACE_FORWARDING_DOMAIN=${FWD_DOMAIN}
-EOF
-
-BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)"
-git add "$TARGET_FILE"
-if git diff --cached --quiet -- "$TARGET_FILE"; then
-  echo "Codespace target unchanged; not pushing (preview rebuilds on your next code push)."
-else
-  git \
-    -c user.name="${GIT_AUTHOR_NAME:-Codespace Preview}" \
-    -c user.email="${GIT_AUTHOR_EMAIL:-codespace@users.noreply.github.com}" \
-    commit -m "ci: record Codespace preview target" >/dev/null
-  git push origin "HEAD:${BRANCH_NAME}" \
-    || echo "Warning: could not push Codespace target; the preview build was not triggered."
-fi
-
 echo ""
 echo "============================================"
 echo "  Backend services running!"
@@ -234,14 +228,12 @@ echo ""
 echo "  Realm server:  ${REALM_SERVER_URL}"
 echo "  Matrix:        ${MATRIX_PUBLIC_URL}"
 echo "  Icons:         ${ICONS_PUBLIC_URL}"
-echo ""
-echo "  Host preview build triggered — check the"
-echo "  PR for a preview link once it completes."
+echo "  Host preview:  ${BOXEL_HOST_URL}"
 echo "============================================"
 
-# This script is launched detached (nohup ... &) from postStartCommand so the
-# Codespace lifecycle hook returns immediately — a blocking postStartCommand
-# wedges the Codespaces agent and SSH never comes up. Blocking on the realm
-# server here keeps this script alive as the parent of all the backgrounded
-# services for the life of the Codespace. Output goes to /tmp/start-services.log.
+# This script is launched detached from postStartCommand so the Codespace
+# lifecycle hook returns immediately — a blocking postStartCommand wedges the
+# Codespaces agent. Blocking on the realm server here keeps this script alive
+# as the parent of all the backgrounded services for the life of the
+# Codespace. Output goes to /tmp/start-services.log.
 wait "$REALM_PID"

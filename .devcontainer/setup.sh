@@ -54,35 +54,12 @@ if [ ! -f "$CERT_DIR/localhost.pem" ]; then
     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 fi
 
-# Build the host app once into a static dist. The realm server requires a
-# reachable host (it fetches distURL at startup) and the prerenderer renders
-# cards against it. Serving a prebuilt dist (vite preview) avoids vite dev's
-# multi-minute cold-start compile, whose slowness blew the prerender/worker/
-# realm readiness timeouts. Built with the PUBLIC Codespace URLs so the
-# served app and prerendered output reference hostnames the S3 reviewer host
-# resolves. start-services.sh serves this dist on https://localhost:4200.
-if [ -n "${CODESPACE_NAME:-}" ]; then
-  FWD_DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
-  REALM_SERVER_URL="https://${CODESPACE_NAME}-4201.${FWD_DOMAIN}"
-  echo "==> Building host app (static dist) pointed at ${REALM_SERVER_URL}..."
-  # boxel-ui addon must be built before the host build can resolve it
-  # (the dev server does this inline; the build script does not).
-  sh packages/boxel-ui/addon/bin/conditional-build.sh
-  (
-    cd packages/host
-    REALM_SERVER_DOMAIN="${REALM_SERVER_URL}/" \
-    RESOLVED_BASE_REALM_URL="${REALM_SERVER_URL}/base/" \
-    RESOLVED_CATALOG_REALM_URL="${REALM_SERVER_URL}/catalog/" \
-    RESOLVED_SKILLS_REALM_URL="${REALM_SERVER_URL}/skills/" \
-    RESOLVED_OPENROUTER_REALM_URL="${REALM_SERVER_URL}/openrouter/" \
-    MATRIX_URL="https://${CODESPACE_NAME}-8008.${FWD_DOMAIN}" \
-    MATRIX_SERVER_NAME=localhost \
-    ICONS_URL="https://${CODESPACE_NAME}-4206.${FWD_DOMAIN}" \
-    pnpm build
-  )
-else
-  echo "==> CODESPACE_NAME unset; skipping host build (not in a Codespace)."
-fi
+# The host app is NOT built here. The realm server requires a reachable host
+# (it fetches distURL at startup) and the prerenderer renders cards against
+# it, but rather than build a second copy in the Codespace, start-services.sh
+# points both at the host the codespaces-preview workflow already builds and
+# deploys to S3 (a production, CloudFront-served bundle that loads far faster
+# than a local dev build).
 
 # Database schema is created on demand: infra:ensure-pg starts the boxel-pg
 # container and creates the databases, and the realm server runs with
