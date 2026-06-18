@@ -142,6 +142,14 @@ export interface IssueLoopConfig {
    * separately in logger.ts via the same flag.)
    */
   debug?: boolean;
+  /**
+   * Cumulative milliseconds spent in `syncWorkspace()` across the whole run,
+   * read on demand. Must time EVERY sync — both the loop's own syncs and the
+   * realm-touching `run_*` tool syncs that fire inside `agent.run` — so the
+   * loop can attribute tool-triggered sync time to sync rather than agent time
+   * in the debug timing summary. Defaults to a no-op (0) when not wired.
+   */
+  getSyncElapsedMs?: () => number;
 }
 
 export type IssueLoopOutcome =
@@ -258,6 +266,7 @@ export async function runIssueLoop(
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
     debug = false,
+    getSyncElapsedMs = () => 0,
   } = config;
 
   let scheduler = new IssueScheduler(issueStore);
@@ -269,9 +278,14 @@ export async function runIssueLoop(
 
   // Wall-clock attribution. `grand`/`cur` accumulate the three cost buckets
   // across the whole run and within the current outer cycle respectively;
-  // `cur` is reset when each issue is picked up. Sync time is captured by
-  // routing every syncWorkspace() call through `timedSync`.
+  // `cur` is reset when each issue is picked up. Sync time is read from the
+  // shared `getSyncElapsedMs` counter (a delta around each window), which times
+  // EVERY `syncWorkspace()` call — both the loop's own syncs and the realm-
+  // touching `run_*` tool syncs that fire inside `agent.run`. Tracking sync
+  // centrally lets us subtract tool-sync time from `agentMs`, so the timing
+  // summary doesn't blame the model for sync/index work a tool triggered.
   let loopStartMs = Date.now();
+  let loopSyncStartMs = getSyncElapsedMs();
   let grand: IssueTiming = {
     agentMs: 0,
     validationMs: 0,
@@ -279,16 +293,6 @@ export async function runIssueLoop(
     totalMs: 0,
   };
   let cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
-  let timedSync = async () => {
-    let start = Date.now();
-    try {
-      return await syncWorkspace();
-    } finally {
-      let elapsed = Date.now() - start;
-      cur.syncMs += elapsed;
-      grand.syncMs += elapsed;
-    }
-  };
 
   log.info(
     `Starting issue loop: targetRealm=${targetRealm}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
@@ -328,9 +332,10 @@ export async function runIssueLoop(
     }
 
     // Reset per-issue timing accumulators; `cycleStartMs` anchors this
-    // issue's total wall clock.
+    // issue's total wall clock and `cycleSyncStartMs` its sync baseline.
     cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
     let cycleStartMs = Date.now();
+    let cycleSyncStartMs = getSyncElapsedMs();
 
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
@@ -344,7 +349,7 @@ export async function runIssueLoop(
     if (issue.status !== 'in_progress') {
       try {
         await issueStore.updateIssue(issue.id, { status: 'in_progress' });
-        let pickupSync = await timedSync();
+        let pickupSync = await syncWorkspace();
         if (!pickupSync.ok) {
           // The status flip is local until sync lands. If the sync
           // failed, the realm is still showing `backlog` and a
@@ -405,10 +410,15 @@ export async function runIssueLoop(
         briefUrl,
       });
 
-      // Run the agent — it calls tools during its turn
+      // Run the agent — it calls tools during its turn. Realm-touching `run_*`
+      // tools sync the workspace before executing, so subtract that tool-sync
+      // time from the agent's wall clock: it's attributed to sync (via the
+      // shared counter), not to the model.
       let agentStartMs = Date.now();
+      let agentSyncStartMs = getSyncElapsedMs();
       let result = await agent.run(context, tools);
-      let agentMs = Date.now() - agentStartMs;
+      let toolSyncMs = getSyncElapsedMs() - agentSyncStartMs;
+      let agentMs = Math.max(0, Date.now() - agentStartMs - toolSyncMs);
       cur.agentMs += agentMs;
       grand.agentMs += agentMs;
       allToolCalls.push(...result.toolCalls);
@@ -429,7 +439,7 @@ export async function runIssueLoop(
         log.info(`  Agent reported blocked: ${blockMessage}`);
         try {
           await issueStore.updateIssue(issue.id, { status: 'blocked' });
-          await timedSync();
+          await syncWorkspace();
         } catch (err) {
           log.warn(
             `  Failed to mark issue as blocked after agent block: ${err instanceof Error ? err.message : String(err)}`,
@@ -442,7 +452,7 @@ export async function runIssueLoop(
       // Push the agent's workspace writes to the realm so the prerenderer-
       // backed validators (eval / instantiate / test-step's QUnit run) see
       // the latest source when they execute against the realm.
-      let preValidationSync = await timedSync();
+      let preValidationSync = await syncWorkspace();
 
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
@@ -456,7 +466,7 @@ export async function runIssueLoop(
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they
       // appear in the Boxel UI.
-      let postValidationSync = await timedSync();
+      let postValidationSync = await syncWorkspace();
 
       let syncFailed = !preValidationSync.ok || !postValidationSync.ok;
       let syncError = preValidationSync.error ?? postValidationSync.error;
@@ -510,7 +520,7 @@ export async function runIssueLoop(
           // the loop reads stale `in_progress` and runs another inner
           // iteration (or, with a low maxIterationsPerIssue, exits as
           // max_iterations instead of done).
-          let doneSync = await timedSync();
+          let doneSync = await syncWorkspace();
           if (!doneSync.ok) {
             log.warn(
               `  Marked issue done locally but sync failed (${doneSync.error ?? 'unknown'}); refresh may still see prior status`,
@@ -613,6 +623,9 @@ export async function runIssueLoop(
       exhaustedIssues.add(issue.id);
     }
 
+    // All syncs during this issue (loop-owned + tool-triggered) accrued to the
+    // shared counter; the delta is this issue's sync time.
+    cur.syncMs = getSyncElapsedMs() - cycleSyncStartMs;
     let issueTiming: IssueTiming = {
       agentMs: cur.agentMs,
       validationMs: cur.validationMs,
@@ -681,7 +694,7 @@ export async function runIssueLoop(
         // (catalog UI shows it as ACTIVE even after every issue is
         // marked done). Same syncWorkspace the orchestrator uses
         // elsewhere; failure logs but doesn't block.
-        let projectSync = await timedSync();
+        let projectSync = await syncWorkspace();
         if (!projectSync.ok) {
           log.warn(
             `Failed to sync project status update: ${projectSync.error ?? 'unknown error'}`,
@@ -697,6 +710,9 @@ export async function runIssueLoop(
     }
   }
 
+  // Total sync across the whole run (per-issue syncs + loop-level syncs such
+  // as the post-loop project-status sync), read from the shared counter.
+  grand.syncMs = getSyncElapsedMs() - loopSyncStartMs;
   grand.totalMs = Date.now() - loopStartMs;
   if (debug) {
     logTimingSummary(issueResults, grand);
