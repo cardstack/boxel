@@ -44,7 +44,10 @@ export default class HostModeCard extends Component<Signature> {
   // visit to a missing card, resolves to a 404. Rather than surfacing the
   // raw card-error/debug treatment on a public page, render a friendly
   // not-found placeholder so one dangling reference degrades gracefully
-  // instead of taking the page down.
+  // instead of taking the page down. A card that exists but is in an error
+  // state — e.g. because one of its dependencies is missing — does not get
+  // this treatment: the store reports it with its real (non-404) status, so
+  // its error is surfaced instead of a bare 404.
   get isNotFound() {
     return this.cardError?.status === 404;
   }
