@@ -4,16 +4,19 @@
 // exiting cleanly — mimicking what a real `realm watch start` does on
 // shutdown.
 
-require('ts-node').register({ transpileOnly: true });
+// Node (>=22.18 / 24) strips TypeScript types natively, so the registry .ts
+// loads via a plain require — no ts-node needed after the ESM migration.
 const path = require('path');
-const registry = require(path.resolve(
-  __dirname,
-  '..',
-  '..',
-  'src',
-  'lib',
-  'watch-process-registry.ts',
-));
+const registry = require(
+  path.resolve(
+    __dirname,
+    '..',
+    '..',
+    'src',
+    'lib',
+    'watch-process-registry.ts',
+  ),
+);
 
 async function main() {
   const workspace = process.env.WATCHER_WORKSPACE || '/tmp/fake-watcher';
