@@ -7,6 +7,7 @@ import {
   isResolvedCodeRef,
   isValidPrerenderedHtmlFormat,
   logger as runtimeLogger,
+  RealmPaths,
   type CardResource,
   type ErrorEntry,
   type FileMetaResource,
@@ -104,6 +105,19 @@ class RenderableSearchEntry {
     return this.raw.id;
   }
 
+  // The result's realm-local path (e.g. `Person/error`), shown by the host
+  // error tile to identify which result failed. Falls back to the bare id when
+  // the id isn't under the entry's realm.
+  get name(): string {
+    try {
+      return new RealmPaths(new URL(this.raw.realmUrl)).local(
+        new URL(this.raw.id),
+      );
+    } catch {
+      return this.raw.id;
+    }
+  }
+
   // The chosen prerendered rendering. The query's htmlQuery selects one
   // format × render type, so the resource's `html` array holds at most the one
   // matching rendering. Absent → an item-only (live) row.
@@ -193,6 +207,7 @@ class RenderableSearchEntry {
           : undefined;
       this.#component = hydratableEntryComponent({
         cardId: this.id,
+        name: this.name,
         component: inert,
         renderType: this.renderType,
         type: this.type,

@@ -35,6 +35,7 @@ import {
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
+import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
@@ -425,6 +426,20 @@ export class SearchEntriesResource extends Resource<Args> {
         : undefined;
       let iconRef = entry.relationships.icon?.data;
       let icon = iconRef ? iconById.get(iconRef.id) : undefined;
+      // Remember which result URLs are files. A file row's `file-meta`
+      // serialization is HTML-only / never stored, so the operator-mode
+      // click + overlay path (`lib/stack-item.ts`,
+      // `operator-mode-overlays.gts`) can't classify it as a file from the
+      // Store — it consults this registry instead. A file is an `item` of
+      // type `file-meta`, or an html-backed row whose rendering carries no
+      // render type (files render natively; card renderings always name one).
+      // Mirrors what the v1 `PrerenderedCard` wrapper registered.
+      let isFile =
+        itemRef?.type === 'file-meta' ||
+        (renderings.length > 0 && !renderings[0].renderType);
+      if (isFile) {
+        knownFileMetaUrls.add(entry.id);
+      }
       return {
         id: entry.id,
         realmUrl: realmUrlFor(entry.id),

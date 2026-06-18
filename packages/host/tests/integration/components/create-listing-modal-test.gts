@@ -126,20 +126,16 @@ module('Integration | components | create-listing-modal', function (hooks) {
     });
 
     await waitFor('[data-test-create-listing-modal]');
-    await waitFor(
-      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
-    );
+    await waitFor(`[data-test-selected-example="${testRealmURL}Pet/mango"]`);
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .exists();
     assert
       .dom('[data-test-selected-examples] [data-test-card-format="atom"]')
       .exists({ count: 1 });
     assert
-      .dom(
-        `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
-      )
+      .dom(`[data-test-selected-example-remove="${testRealmURL}Pet/mango"]`)
       .exists();
     assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
@@ -163,15 +159,15 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     await waitFor('[data-test-create-listing-modal]');
     await waitFor(
-      `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+      `[data-test-selected-example-remove="${testRealmURL}Pet/mango"]`,
     );
 
     await click(
-      `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+      `[data-test-selected-example-remove="${testRealmURL}Pet/mango"]`,
     );
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .doesNotExist();
     assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
