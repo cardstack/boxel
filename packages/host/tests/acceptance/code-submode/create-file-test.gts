@@ -1,11 +1,25 @@
-import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
 
-import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  rri,
+  baseRRI,
+  Deferred,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   percySnapshot,
@@ -1529,4 +1543,241 @@ export class TestCard extends Animal {
       });
     },
   );
+
+  // When the AI assistant (or any external writer) creates a new .gts and
+  // then updates the code-submode codePath to the just-written URL, the
+  // host's FileResource (packages/host/app/resources/file.ts) can lose the
+  // race against the realm's index pipeline. The first authedFetch returns
+  // 404 and `read` transitions into `state: 'not-found'`. The realm later
+  // broadcasts `index/incremental` for the new URL, and the FileResource
+  // must react to that event and recover — otherwise the URL bar stays
+  // stuck on "This resource does not exist" until the user re-navigates.
+  //
+  // This test simulates the external write by navigating to a non-existent
+  // URL, confirming the URL bar shows the not-found error, then performing
+  // the write via the realm directly (mirroring what the realm-server does
+  // when a card+source PUT lands). After the realm broadcasts the matching
+  // `index/incremental` event, the URL bar must recover.
+  module('when an external write creates a new file', function (hooks) {
+    hooks.beforeEach(function () {
+      setRealmPermissions({
+        [baseRealm.url]: ['read'],
+        [testRealmURL]: ['read', 'write'],
+      });
+    });
+
+    test('code submode recovers when a newly-created file arrives via a realm index/incremental event', async function (assert) {
+      let newFilePath = 'ai-created-card.gts';
+      let newFileUrl = `${testRealmURL}${newFilePath}`;
+      let newFileSource = `
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export default class AiCreatedCard extends CardDef {
+          static displayName = 'Ai Created Card';
+        }
+      `;
+
+      // Simulate the AI assistant updating the codePath to a file that does
+      // not yet exist in the realm. The host has not seen this URL before,
+      // so FileResource.read will hit 404.
+      await visitOperatorMode(newFileUrl);
+
+      await waitFor('[data-test-card-url-bar-error]');
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .containsText(
+          'This resource does not exist',
+          'URL bar surfaces the not-found error on initial 404',
+        );
+
+      // The realm broadcasts the incremental invalidation event over matrix
+      // once indexing of the newly-written file completes. Subscribe so we
+      // can await its arrival deterministically before asserting recovery.
+      let incrementalEvent = new Deferred<void>();
+      let unsubscribe = getService('message-service').subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
+          if (
+            ev.eventName === 'index' &&
+            ev.indexType === 'incremental' &&
+            Array.isArray(ev.invalidations) &&
+            (ev.invalidations as string[]).includes(newFileUrl)
+          ) {
+            unsubscribe();
+            incrementalEvent.fulfill();
+          }
+        },
+      );
+
+      // Mirror WriteTextFileCommand exactly. `cardService.saveSource` with
+      // saveType 'create-file' POSTs the new source to the realm and tags
+      // the request with `X-Boxel-Client-Request-Id: create-file:<uuid>`,
+      // which the realm echoes back in the `index/incremental` event.
+      // This shape — saveType 'create-file' and that clientRequestId
+      // prefix — is what the AI assistant produces and what the
+      // invalidation handler must treat as reload-worthy even though the
+      // id is in `cardService.clientRequestIds`.
+      let cardService = getService('card-service');
+      await cardService.saveSource(
+        new URL(newFileUrl),
+        newFileSource,
+        'create-file',
+      );
+      await incrementalEvent.promise;
+      await settled();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .doesNotExist(
+          'URL bar error clears after the realm broadcasts the index/incremental event for the new file',
+        );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          newFileUrl,
+          'code submode stays on the new file URL after recovery',
+        );
+      assert.ok(
+        getMonacoContent().includes('AiCreatedCard'),
+        'monaco loads the recovered file body, not a stale buffer',
+      );
+    });
+
+    // When `updateCodePath` runs `FileResource.modify` for a URL whose
+    // file is about to be created, the modify-driven read can still be
+    // in flight when the realm broadcasts the matching `index/incremental`
+    // event. The handler then calls `read.perform({force: true})`, which
+    // restartableTask treats as cancel-and-restart. The cancelled task's
+    // awaited fetch eventually resolves, raising TaskCancelation at the
+    // `await`. If the catch block treated cancellation as a real fetch
+    // failure, it would call `updateState({ state: 'not-found' })`
+    // AFTER the restart already landed `state: 'ready'`, leaving the
+    // URL bar permanently stuck on the not-found error.
+    //
+    // This test gates the two fetches independently so the cancelled
+    // (older) read can be released AFTER the fresh read has already set
+    // state to ready — pinning the ordering that requires the
+    // `didCancel` guard in `file.ts` to survive.
+    test('cancelled read does not overwrite a fresh ready state with not-found', async function (assert) {
+      let newFilePath = 'cancellation-race-card.gts';
+      let newFileUrl = `${testRealmURL}${newFilePath}`;
+      let newFileSource = `
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export default class CancellationRaceCard extends CardDef {
+          static displayName = 'Cancellation Race Card';
+        }
+      `;
+
+      // Land on an EXISTING file first so FileResource is in state
+      // 'ready' with a realm subscription already established. This
+      // matches Buck's flow (he was viewing a prior file when he
+      // clicked New Card Definition) and is required for the race —
+      // the bug only fires when modify is called on an already-subscribed
+      // FileResource and the indexing event lands during the read.
+      await visitOperatorMode(`${testRealmURL}index.json`);
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      // Per-call gating: each request for newFileUrl awaits its own
+      // Deferred so the test can release the cancelled read AFTER the
+      // fresh read has already updated state to 'ready'. A single
+      // shared gate would force both reads to resolve in mount order,
+      // which doesn't reproduce the race.
+      let pendingReads: Deferred<void>[] = [];
+      let network = getService('network');
+      let readGate = async (request: Request) => {
+        if (
+          request.method === 'GET' &&
+          request.url === newFileUrl &&
+          request.headers.get('Accept') === SupportedMimeType.CardSource
+        ) {
+          let gate = new Deferred<void>();
+          pendingReads.push(gate);
+          await gate.promise;
+        }
+        return null;
+      };
+      network.virtualNetwork.mount(readGate, { prepend: true });
+
+      try {
+        // Write the file BEFORE navigating so the realm broadcasts the
+        // incremental event during the modify-driven read. The handler
+        // matches the in-flight URL and triggers read.perform({force:true}),
+        // which cancels the in-flight task and starts a fresh one.
+        let incrementalEvent = new Deferred<void>();
+        let unsubscribe = getService('message-service').subscribe(
+          testRealmURL,
+          (ev: RealmEventContent) => {
+            if (
+              ev.eventName === 'index' &&
+              ev.indexType === 'incremental' &&
+              Array.isArray(ev.invalidations) &&
+              (ev.invalidations as string[]).includes(newFileUrl)
+            ) {
+              unsubscribe();
+              incrementalEvent.fulfill();
+            }
+          },
+        );
+
+        let cardService = getService('card-service');
+        let opState = getService('operator-mode-state-service');
+
+        // Fire updateCodePath without awaiting so the test can observe
+        // the modify-driven read sitting at the gate. Awaiting would
+        // block until the read resolves, defeating the point of the
+        // gate.
+        let codePathChange = opState.updateCodePath(new URL(newFileUrl));
+
+        // Wait until the modify-driven read (read#1) is parked behind
+        // the gate before triggering the write. Without this barrier
+        // the saveSource POST and its incremental event could land
+        // before modify fires — the handler would then run with the
+        // PRIOR `_url` and drop the event, never reaching the
+        // restart-driven cancellation that this test exists to pin.
+        await waitUntil(() => pendingReads.length >= 1);
+
+        await cardService.saveSource(
+          new URL(newFileUrl),
+          newFileSource,
+          'create-file',
+        );
+        await incrementalEvent.promise;
+
+        // Wait until the restart spawned by the incremental event has
+        // also parked at the gate; only with both reads in flight can
+        // we choose the release order that reproduces the race.
+        await waitUntil(() => pendingReads.length >= 2);
+
+        // Release the FRESH read first. Its 200 response lands and
+        // sets state to 'ready'. Then release the ORIGINAL (now
+        // cancelled) read so its TaskCancelation throws at its `await`
+        // — without the didCancel guard, the catch block overwrites
+        // the ready state with 'not-found'.
+        pendingReads[1].fulfill();
+        await settled();
+        pendingReads[0].fulfill();
+        await codePathChange;
+        await settled();
+        await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+        assert
+          .dom('[data-test-card-url-bar-error]')
+          .doesNotExist(
+            'cancelled read must not overwrite the fresh ready state with not-found',
+          );
+        assert
+          .dom('[data-test-card-url-bar-input]')
+          .hasValue(
+            newFileUrl,
+            'code submode stays on the new file URL after the cancellation race',
+          );
+        assert.ok(
+          getMonacoContent().includes('CancellationRaceCard'),
+          'monaco shows the new file body once the fresh read wins',
+        );
+      } finally {
+        network.virtualNetwork.unmount(readGate);
+      }
+    });
+  });
 });
