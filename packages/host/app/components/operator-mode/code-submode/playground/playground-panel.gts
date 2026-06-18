@@ -50,10 +50,12 @@ import {
   trimJsonExtension,
   uuidv4,
   realmURL,
+  searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
-  type PrerenderedCardLike,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
@@ -88,7 +90,7 @@ import type {
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
-import PrerenderedCardSearch from '../../../prerendered-card-search';
+import SearchResults from '../../../card-search/search-results';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
@@ -142,7 +144,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   @tracked private fieldChooserIsOpen = false;
   @tracked private newCardNonce = 0;
 
-  @tracked private cardOptions: PrerenderedCardLike[] = [];
+  @tracked private cardOptions: RenderableSearchEntryLike[] = [];
   @tracked private selectedFileMetaId: string | undefined;
   @use private moduleChangeTracker = resource(() => {
     let moduleId = internalKeyFor(
@@ -565,6 +567,29 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
+  // The v2 `search-entry` queries for the instance chooser, adapted from the
+  // legacy `Query` getters above. The default fieldset resolves to fitted HTML
+  // (the format these searches used), so no `htmlQuery` override is needed.
+  private get searchResultsQuery(): SearchEntryWireQuery | undefined {
+    if (!this.query) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery(this.query),
+      realms: this.recentRealms,
+    };
+  }
+
+  private get expandedSearchResultsQuery(): SearchEntryWireQuery | undefined {
+    if (!this.expandedQuery) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery(this.expandedQuery),
+      realms: this.realmServer.availableRealmIdentifiers,
+    };
+  }
+
   private get fieldInstances(): FieldOption[] | undefined {
     if (!this.args.isFieldDef || !this.specCard) {
       return undefined;
@@ -620,7 +645,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
-  @action private onSelect(item: PrerenderedCardLike | FieldOption | FileDef) {
+  @action private onSelect(
+    item: RenderableSearchEntryLike | FieldOption | FileDef,
+  ) {
     if (this.args.isFileDef) {
       let fileId = (item as FileDef).id!;
       this.selectedFileMetaId = fileId;
@@ -632,7 +659,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections((item as PrerenderedCardLike).url);
+      this.persistSelections((item as RenderableSearchEntryLike).id);
     }
   }
 
@@ -894,23 +921,23 @@ export default class PlaygroundPanel extends Component<Signature> {
     });
   }
 
-  private processSearchResults = (prerenderedCards?: PrerenderedCardLike[]) => {
-    this.cardOptions = prerenderedCards ?? [];
-    this.findSelectedCard(prerenderedCards);
+  private processSearchResults = (entries?: RenderableSearchEntryLike[]) => {
+    this.cardOptions = entries ?? [];
+    this.findSelectedCard(entries);
   };
 
-  private showResults = (cards: PrerenderedCardLike[] | undefined) => {
+  private showResults = (entries: RenderableSearchEntryLike[] | undefined) => {
     return (
       !this.args.isFieldDef &&
-      (cards?.length ||
+      (entries?.length ||
         this.persistedCardId ||
         this.createNewIsRunning ||
         this.isBaseCardModule) // means we do not conduct the expanded search for baseCardModule
     );
   };
 
-  private findSelectedCard = (prerenderedCards?: PrerenderedCardLike[]) => {
-    if (!prerenderedCards?.length) {
+  private findSelectedCard = (entries?: RenderableSearchEntryLike[]) => {
+    if (!entries?.length) {
       // it is possible that there's a persisted cardId in playground-selections local storage
       // but that the card is no longer in recent-files local storage
       // if that is the case, the card title will appear in dropdown menu but
@@ -925,27 +952,27 @@ export default class PlaygroundPanel extends Component<Signature> {
         // not displaying card preview for base card module unless user selects it specifically
         return;
       }
-      let recentCard = prerenderedCards[0];
+      let recentCard = entries[0];
       // if there's no selected card, choose the most recent card as selected
-      this.persistSelections(recentCard.url, 'isolated');
+      this.persistSelections(recentCard.id, 'isolated');
       return recentCard;
     }
 
     let selectedCardId = this.dropdownSelection.card.id;
-    let card = prerenderedCards.find(
-      (c) => trimJsonExtension(c.url) === selectedCardId,
-    );
+    // `entry.id` is the bare card URL already (the v2 identity strips the
+    // `.json` the dropdown selection also omits), so they compare directly.
+    let card = entries.find((c) => c.id === selectedCardId);
     return card;
   };
 
-  // sort prerendered-search card results by most recently viewed
-  private getSortedCards = (cards: PrerenderedCardLike[]) => {
+  // sort the instance-chooser card results by most recently viewed
+  private getSortedCards = (entries: RenderableSearchEntryLike[]) => {
     if (!this.recentCardIds?.length) {
       return;
     }
-    let sortedCards: PrerenderedCardLike[] = [];
+    let sortedCards: RenderableSearchEntryLike[] = [];
     for (let id of this.recentCardIds) {
-      let card = cards.find((c) => trimJsonExtension(c.url) === id);
+      let card = entries.find((c) => c.id === id);
       if (card) {
         sortedCards.push(card);
       }
@@ -961,12 +988,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
   }
 
-  private firstResult = (results?: PrerenderedCardLike[]) => {
+  private firstResult = (results?: RenderableSearchEntryLike[]) => {
     let card = results?.[0];
-    return [card].filter(Boolean) as PrerenderedCardLike[];
+    return card ? [card] : [];
   };
 
-  private createNewWhenNoCards = (results?: PrerenderedCardLike[]) => {
+  private createNewWhenNoCards = (results?: RenderableSearchEntryLike[]) => {
     if (!results?.length) {
       if (
         this.#creationError ||
@@ -988,35 +1015,34 @@ export default class PlaygroundPanel extends Component<Signature> {
     {{consumeContext this.makeCardResource}}
     {{consumeContext this.searchFileMeta}}
 
-    {{#if this.query}}
-      <PrerenderedCardSearch
-        @query={{this.query}}
-        @format='fitted'
-        @realms={{this.recentRealms}}
-        @isLive={{true}}
+    {{#if this.searchResultsQuery}}
+      <SearchResults
+        @query={{this.searchResultsQuery}}
+        @mode='none'
+        as |results|
       >
-        <:response as |cards|>
-          {{#if (this.showResults cards)}}
-            {{#let (this.getSortedCards cards) as |sortedCards|}}
+        {{#unless results.isLoading}}
+          {{#if (this.showResults results.entries)}}
+            {{#let (this.getSortedCards results.entries) as |sortedCards|}}
               {{afterRender (fn this.processSearchResults sortedCards)}}
             {{/let}}
-          {{else if this.expandedQuery}}
-            <PrerenderedCardSearch
-              @query={{this.expandedQuery}}
-              @format='fitted'
-              @realms={{this.realmServer.availableRealmIdentifiers}}
+          {{else if this.expandedSearchResultsQuery}}
+            <SearchResults
+              @query={{this.expandedSearchResultsQuery}}
+              @mode='none'
+              as |expandedResults|
             >
-              <:response as |maybeCards|>
+              {{#unless expandedResults.isLoading}}
                 {{! TODO: remove side-effects for instance chooser in CS-8746 }}
-                {{this.createNewWhenNoCards maybeCards}}
-                {{#let (this.firstResult maybeCards) as |cards|}}
+                {{this.createNewWhenNoCards expandedResults.entries}}
+                {{#let (this.firstResult expandedResults.entries) as |cards|}}
                   {{afterRender (fn this.processSearchResults cards)}}
                 {{/let}}
-              </:response>
-            </PrerenderedCardSearch>
+              {{/unless}}
+            </SearchResults>
           {{/if}}
-        </:response>
-      </PrerenderedCardSearch>
+        {{/unless}}
+      </SearchResults>
     {{/if}}
 
     {{#if this.fieldChooserIsOpen}}
