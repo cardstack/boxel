@@ -265,6 +265,14 @@ export default class SearchContent extends Component<Signature> {
         cardUrls: this.recentCardUrls,
       };
     }
+    // No selected realm hosts a recent card. The v2 search treats an empty
+    // `realms` array as "search every realm", which — with the `cardUrls`
+    // constraint still matching them — would resurface recents from realms the
+    // user filtered out. Suppress the recents query instead, matching the
+    // legacy behavior.
+    if (this.recentsSearchRealms.length === 0) {
+      return undefined;
+    }
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
       internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );

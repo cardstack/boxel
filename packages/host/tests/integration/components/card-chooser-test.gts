@@ -499,29 +499,22 @@ module('Integration | card-chooser', function (hooks) {
       ) as HTMLInputElement | null;
       assert.ok(field, 'the search field is rendered');
       field = field!;
-      let fieldId = field.id;
       await focus('[data-test-search-field]');
 
       // Type one keystroke at a time. Each keystroke updates the search key,
       // which re-runs the v2 search resource and re-renders the result
       // sections. If that churned the field — a resource rebuilt per render, or
-      // non-memoized view-models re-mounting an ancestor — the field would be
-      // replaced and lose focus mid-typing. Element identity (===) is the
-      // definitive proof it was never re-mounted.
+      // non-memoized view-models re-mounting an ancestor — Glimmer would
+      // replace the field with a new element and it would lose focus
+      // mid-typing. DOM-node identity (===) is the definitive proof the field
+      // was never re-mounted: a re-rendered element is always a new node.
       await typeIn('[data-test-search-field]', 'ornithologists');
 
-      let after = document.querySelector(
-        '[data-test-search-field]',
-      ) as HTMLInputElement | null;
+      let after = document.querySelector('[data-test-search-field]');
       assert.strictEqual(
         after,
         field,
         'the search field is the same DOM node after typing (never re-mounted)',
-      );
-      assert.strictEqual(
-        after?.id,
-        fieldId,
-        'the search field element id is unchanged across the re-renders',
       );
       assert.strictEqual(
         document.activeElement,
