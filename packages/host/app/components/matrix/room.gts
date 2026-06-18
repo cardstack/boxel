@@ -296,6 +296,7 @@ export default class Room extends Component<Signature> {
                     class='skill-menu'
                     @skills={{this.sortedSkills}}
                     @onChooseCard={{perform this.attachSkillTask}}
+                    @onChooseSkillMarkdown={{perform this.attachSkillTask}}
                     @onUpdateSkillIsActive={{perform
                       this.updateSkillIsActiveTask
                     }}
