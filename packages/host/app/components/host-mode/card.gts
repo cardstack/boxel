@@ -202,19 +202,6 @@ export default class HostModeCard extends Component<Signature> {
         font: var(--boxel-font);
       }
 
-      /* Anchor the technical-detail box to the bottom of the card, the same
-         way CardError positions its own detail, so the centered 404 message
-         sits above it. */
-      .not-found-detail {
-        position: absolute;
-        bottom: var(--boxel-sp);
-        left: var(--boxel-sp);
-        right: var(--boxel-sp);
-        max-height: calc(100% - calc(var(--boxel-sp) * 2));
-        z-index: 10;
-        margin: 0;
-      }
-
       .non-publishable-message {
         display: flex;
         flex-direction: column;
