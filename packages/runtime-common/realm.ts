@@ -6251,7 +6251,7 @@ export class Realm {
     }[];
 
     let doc = {
-      data: rows.map((row) => {
+      data: rows.flatMap((row) => {
         let brokenLinks =
           row.diagnostics && Array.isArray(row.diagnostics.brokenLinks)
             ? (row.diagnostics.brokenLinks as unknown[])
@@ -6263,43 +6263,67 @@ export class Realm {
             ? (row.diagnostics.frontmatterParseError as Record<string, unknown>)
             : null;
         let hasError = row.error_doc != null;
+        // A single boxel_index row can carry more than one independent
+        // finding — e.g. a markdown skill with both unparseable frontmatter
+        // and a broken card reference in its body. We emit one resource per
+        // finding so a consumer filtering by `type` (the JSON CLI, or anyone
+        // selecting only 'broken-link') never loses a signal just because it
+        // co-occurs with another.
+        //
         // 'indexing-error' = row.has_error = TRUE (rendered/indexed badly).
+        //   Any brokenLinks ride along as an attribute since the row's
+        //   headline is the render failure, not the dead targets.
         // 'broken-link' = the index row is healthy but the rendered card has
-        // dead linksTo/linksToMany targets surfaced by render.meta.
+        //   dead linksTo/linksToMany targets surfaced by render.meta.
         // 'frontmatter-error' = the index row is healthy but the file's YAML
-        // frontmatter wouldn't parse, so anything it declared was dropped.
+        //   frontmatter wouldn't parse, so anything it declared was dropped.
         // All classes share the (entryType, url) key; the discriminator lets
         // consumers branch on which attributes to read.
-        let resourceType:
-          | 'indexing-error'
-          | 'broken-link'
-          | 'frontmatter-error' = hasError
-          ? 'indexing-error'
-          : frontmatterParseError
-            ? 'frontmatter-error'
-            : 'broken-link';
-        let attributes: Record<string, unknown> = {
+        let baseAttributes = {
           url: row.url,
           entryType: row.type,
           diagnostics: row.diagnostics,
         };
+        let findings: {
+          type: 'indexing-error' | 'broken-link' | 'frontmatter-error';
+          attributes: Record<string, unknown>;
+        }[] = [];
         if (hasError) {
-          attributes.errorDoc = row.error_doc;
+          let attributes: Record<string, unknown> = {
+            ...baseAttributes,
+            errorDoc: row.error_doc,
+          };
+          if (brokenLinks && brokenLinks.length > 0) {
+            attributes.brokenLinks = brokenLinks;
+          }
+          findings.push({ type: 'indexing-error', attributes });
+        } else {
+          if (frontmatterParseError) {
+            findings.push({
+              type: 'frontmatter-error',
+              attributes: { ...baseAttributes, frontmatterParseError },
+            });
+          }
+          if (brokenLinks && brokenLinks.length > 0) {
+            findings.push({
+              type: 'broken-link',
+              attributes: { ...baseAttributes, brokenLinks },
+            });
+          }
         }
-        if (brokenLinks && brokenLinks.length > 0) {
-          attributes.brokenLinks = brokenLinks;
-        }
-        if (frontmatterParseError) {
-          attributes.frontmatterParseError = frontmatterParseError;
-        }
-        return {
-          type: resourceType,
+        return findings.map((finding) => ({
+          type: finding.type,
           // `(type, url)` is the boxel_index PK partition; encoding both
           // keeps the JSON:API resource id unique when the same URL fails
-          // as both 'instance' and 'file'.
-          id: `${row.type}::${row.url}`,
-          attributes,
-        };
+          // as both 'instance' and 'file'. When a single row yields more
+          // than one finding we append the finding class too, so the two
+          // resources don't collide on a shared id.
+          id:
+            findings.length > 1
+              ? `${row.type}::${row.url}::${finding.type}`
+              : `${row.type}::${row.url}`,
+          attributes: finding.attributes,
+        }));
       }),
     };
 

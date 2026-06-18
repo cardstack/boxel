@@ -436,5 +436,104 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         'frontmatterParseError payload included',
       );
     });
+
+    test('emits both findings when a healthy row has broken links AND a frontmatter parse error', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let fileURL = `${sourceRealm.url}skills/both/SKILL.md`;
+      let frontmatterParseError = {
+        message: 'Implicit map keys need to be on a single line',
+        line: 4,
+        column: 3,
+      };
+      let brokenLinks = [
+        {
+          fieldName: 'related',
+          reference: 'https://example.com/missing',
+          kind: 'not-found',
+        },
+      ];
+      let diagnostics = { frontmatterParseError, brokenLinks };
+
+      // A healthy file row (has_error = FALSE) that carries two independent
+      // findings at once. Neither should mask the other.
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index
+           (url, file_alias, type, realm_version, realm_url,
+            has_error, error_doc, diagnostics, is_deleted)
+         VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
+         ON CONFLICT (url, realm_url, type) DO UPDATE
+         SET has_error = FALSE,
+             error_doc = NULL,
+             diagnostics = EXCLUDED.diagnostics,
+             is_deleted = FALSE`,
+        {
+          bind: [
+            fileURL,
+            fileURL.replace(/\.md$/, ''),
+            sourceRealm.url,
+            JSON.stringify(diagnostics),
+          ],
+        },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: {
+            url: string;
+            entryType: string;
+            errorDoc?: unknown;
+            brokenLinks?: Array<{ fieldName: string }>;
+            frontmatterParseError?: { message: string };
+          };
+        }>
+      ).filter((e) => e.attributes.url === fileURL);
+      assert.strictEqual(
+        entries.length,
+        2,
+        'one finding per class for the same row',
+      );
+      let byType = Object.fromEntries(entries.map((e) => [e.type, e]));
+
+      let frontmatterEntry = byType['frontmatter-error'];
+      assert.ok(frontmatterEntry, 'frontmatter-error finding present');
+      assert.strictEqual(
+        frontmatterEntry.id,
+        `file::${fileURL}::frontmatter-error`,
+        'multi-finding ids append the finding class to stay unique',
+      );
+      assert.deepEqual(
+        frontmatterEntry.attributes.frontmatterParseError,
+        frontmatterParseError,
+        'frontmatterParseError payload on the frontmatter-error finding',
+      );
+
+      let brokenLinkEntry = byType['broken-link'];
+      assert.ok(
+        brokenLinkEntry,
+        'broken-link finding is not hidden by the frontmatter error',
+      );
+      assert.strictEqual(
+        brokenLinkEntry.id,
+        `file::${fileURL}::broken-link`,
+        'broken-link finding gets its own unique id',
+      );
+      assert.deepEqual(
+        brokenLinkEntry.attributes.brokenLinks?.map((l) => l.fieldName),
+        ['related'],
+        'brokenLinks payload on the broken-link finding',
+      );
+    });
   });
 });
