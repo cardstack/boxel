@@ -16,9 +16,10 @@ import { Pool, Client, type Notification } from 'pg';
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
-// node-pg-migrate is CJS and exposes the runner on `.default` at runtime; native
-// ESM doesn't unwrap it the way ts-node's esModuleInterop did, and the package's
-// types declare the default as the runner, so cast to its call signature.
+// node-pg-migrate is CJS and exposes the runner as its default export. Under
+// native ESM the default import binds the module's namespace object, so the
+// callable lives on `.default`; the package's types declare the default as the
+// runner, so cast to its call signature.
 const migrate = ((nodePgMigrate as any).default ?? nodePgMigrate) as (
   options: RunnerOption,
 ) => Promise<unknown>;

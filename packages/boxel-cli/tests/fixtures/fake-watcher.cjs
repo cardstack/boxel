@@ -5,7 +5,7 @@
 // shutdown.
 
 // Node (>=22.18 / 24) strips TypeScript types natively, so the registry .ts
-// loads via a plain require — no ts-node needed after the ESM migration.
+// loads via a plain require with no extra loader.
 const path = require('path');
 const registry = require(
   path.resolve(
