@@ -186,6 +186,7 @@ REALM_SERVER_SKIP_BOOT_INDEX=true \
   pnpm --dir=packages/realm-server exec ts-node \
     --transpileOnly main \
     --port=4201 \
+    --serverURL="${REALM_SERVER_URL}" \
     --matrixURL=http://localhost:8008 \
     --realmsRootPath=./realms/codespaces \
     --prerendererUrl=http://localhost:4222 \
