@@ -28,15 +28,18 @@ runs:
       run: pnpm install --frozen-lockfile
 
     # Ensure puppeteer's Chrome is present. actions/cache caches the pnpm
-    # store but not ~/.cache/puppeteer, and on a store cache hit puppeteer's
-    # postinstall can skip the browser download — which leaves the prerender
-    # unable to launch Chrome in env-mode CI (where PUPPETEER_EXECUTABLE_PATH
-    # isn't pointed at a system Chrome). Installing explicitly is idempotent
-    # (a no-op when the cached version is already present).
+    # store but not ~/.cache/puppeteer, and puppeteer's postinstall can leave
+    # an empty browser folder (download skipped) — which makes the prerender
+    # fail with "Could not find Chrome" in env-mode CI (where
+    # PUPPETEER_EXECUTABLE_PATH isn't pointed at a system Chrome) and makes a
+    # plain `browsers install` refuse with "folder exists but executable is
+    # missing". Clear any partial install, then download cleanly.
     - name: Ensure puppeteer Chrome is installed
       shell: bash
       working-directory: packages/realm-server
-      run: pnpm exec puppeteer browsers install chrome
+      run: |
+        rm -rf "${PUPPETEER_CACHE_DIR:-$HOME/.cache/puppeteer}/chrome"
+        pnpm exec puppeteer browsers install chrome
 
     - name: Prune pnpm store
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
