@@ -146,6 +146,16 @@ interface Signature {
   Blocks: {};
 }
 
+/**
+ * @deprecated Root of the legacy search-results tree (`SearchContent` →
+ * `SearchResultSection` → `ItemButton`). Favor the v2 `<SearchResults>`
+ * component, which renders the heterogeneous `search-entry` stream (prerendered
+ * HTML inert or live card) for a `search-entry`-rooted query. This sheet now
+ * sources its data from the v2 `getSearchEntriesResource` (via
+ * `getRenderableSearchEntries`); the bespoke section / multiselect / adorn
+ * rendering is why it isn't yet folded into `<SearchResults>`. Removed once
+ * every consumer is on v2.
+ */
 export default class SearchContent extends Component<Signature> {
   @service declare network: NetworkService;
   @service declare realm: RealmService;

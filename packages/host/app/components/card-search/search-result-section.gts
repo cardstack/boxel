@@ -99,6 +99,11 @@ interface Signature {
   Blocks: {};
 }
 
+/**
+ * @deprecated Mid-tier of the legacy `SearchContent` → `SearchResultSection` →
+ * `ItemButton` search-results tree. Favor the v2 `<SearchResults>` component.
+ * Removed once every consumer is on v2.
+ */
 export default class SearchResultSection extends Component<Signature> {
   @service declare realm: RealmService;
 
