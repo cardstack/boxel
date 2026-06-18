@@ -211,7 +211,7 @@ class IssueIsolated extends Component<typeof Issue> {
   @tracked showSidebar = true;
   @tracked descriptionOpen = true;
   @tracked acceptanceCriteriaOpen = true;
-  @tracked commentsOpen = true;
+  @tracked commentsOpen = false;
 
   get statusColor(): string | undefined {
     return getIssueStatusColor(this.args.model, this.args.model?.status);
@@ -704,7 +704,7 @@ class IssueEdit extends Component<typeof Issue> {
   @tracked showSidebar = true;
   @tracked descriptionOpen = true;
   @tracked acceptanceCriteriaOpen = true;
-  @tracked commentsOpen = true;
+  @tracked commentsOpen = false;
 
   get statusColor(): string | undefined {
     return getIssueStatusColor(this.args.model, this.args.model?.status);
@@ -1397,10 +1397,10 @@ export class Issue extends CardDef {
 class ProjectIsolated extends Component<typeof Project> {
   @tracked showSidebar = true;
   @tracked objectiveOpen = true;
-  @tracked scopeOpen = false;
-  @tracked technicalOpen = false;
-  @tracked criteriaOpen = false;
-  @tracked issuesOpen = true;
+  @tracked scopeOpen = true;
+  @tracked technicalOpen = true;
+  @tracked criteriaOpen = true;
+  @tracked issuesOpen = false;
 
   get statusColor(): string | undefined {
     return findOptionColor(
@@ -1864,10 +1864,10 @@ class ProjectIsolated extends Component<typeof Project> {
 class ProjectEdit extends Component<typeof Project> {
   @tracked showSidebar = true;
   @tracked objectiveOpen = true;
-  @tracked scopeOpen = false;
-  @tracked technicalOpen = false;
-  @tracked criteriaOpen = false;
-  @tracked issuesOpen = true;
+  @tracked scopeOpen = true;
+  @tracked technicalOpen = true;
+  @tracked criteriaOpen = true;
+  @tracked issuesOpen = false;
   @tracked projectConfigOpen = false;
   @tracked issueConfigOpen = false;
 
