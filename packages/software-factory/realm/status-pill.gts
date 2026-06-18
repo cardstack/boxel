@@ -18,7 +18,7 @@ const StatusPill: TemplateOnlyComponent<Signature> = <template>
     @pillFontColor={{@color}}
     ...attributes
   >
-    {{yield}}
+    <span class='pill-label'>{{yield}}</span>
   </Pill>
 
   <style scoped>
@@ -33,6 +33,13 @@ const StatusPill: TemplateOnlyComponent<Signature> = <template>
       border: none;
       font-weight: 600;
       text-transform: uppercase;
+      overflow: hidden;
+    }
+    .pill-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
   </style>
 </template>;

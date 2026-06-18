@@ -356,7 +356,7 @@ class IssueIsolated extends Component<typeof Issue> {
               <div class='meta-item'>
                 <dt>Status</dt>
                 <dd>
-                  <StatusPill @color={{this.statusColor}}>
+                  <StatusPill class='meta-pill' @color={{this.statusColor}}>
                     {{this.statusLabel}}
                   </StatusPill>
                 </dd>
@@ -482,6 +482,7 @@ class IssueIsolated extends Component<typeof Issue> {
         flex: 1;
         min-width: 0;
         overflow-y: auto;
+        padding-bottom: var(--boxel-sp-3xl);
       }
       .content-accordion {
         --boxel-accordion-title-font-size: 0.8125rem;
@@ -594,6 +595,9 @@ class IssueIsolated extends Component<typeof Issue> {
         align-items: center;
         gap: var(--boxel-sp-2xs);
         min-height: 1.75rem;
+      }
+      .meta-pill :deep(.pill-label) {
+        white-space: unset;
       }
       .meta-list dt {
         font-size: 0.75rem;
@@ -847,7 +851,7 @@ class IssueEdit extends Component<typeof Issue> {
               <div class='meta-item'>
                 <dt>Status</dt>
                 <dd>
-                  <StatusPill @color={{this.statusColor}}>
+                  <StatusPill class='meta-pill' @color={{this.statusColor}}>
                     {{this.statusLabel}}
                   </StatusPill>
                 </dd>
@@ -937,6 +941,7 @@ class IssueEdit extends Component<typeof Issue> {
         flex: 1;
         min-width: 0;
         overflow-y: auto;
+        padding-bottom: var(--boxel-sp-3xl);
       }
       .content-accordion {
         --boxel-accordion-title-font-size: 0.8125rem;
@@ -1004,6 +1009,9 @@ class IssueEdit extends Component<typeof Issue> {
         align-items: center;
         gap: var(--boxel-sp-2xs);
         min-height: 1.75rem;
+      }
+      .meta-pill :deep(.pill-label) {
+        white-space: unset;
       }
       .meta-list dt {
         font-size: 0.75rem;
@@ -1200,7 +1208,10 @@ export class Issue extends CardDef {
         </:meta>
         <:footer>
           {{#if @model.priority}}
-            <span class='priority' data-priority={{@model.priority}}>
+            <span
+              class='priority boxel-ellipsize'
+              data-priority={{@model.priority}}
+            >
               <@fields.priority @format='atom' />
             </span>
           {{/if}}
@@ -1219,6 +1230,9 @@ export class Issue extends CardDef {
           --boxel-heading-font-weight: 500;
           --fc-subtitle-line-clamp: 1;
           --fc-badge-right-display: none;
+        }
+        :deep(.fc-badge-right) {
+          max-width: 50%;
         }
         .status-badge-right {
           font-size: 0.6875rem;
@@ -1252,6 +1266,7 @@ export class Issue extends CardDef {
           flex-shrink: 0;
         }
         .priority {
+          max-width: 40%;
           font-size: 0.625rem;
           font-weight: 700;
           letter-spacing: 0.05em;
@@ -1555,7 +1570,7 @@ class ProjectIsolated extends Component<typeof Project> {
               <div class='meta-item'>
                 <dt>Status</dt>
                 <dd>
-                  <StatusPill @color={{this.statusColor}}>
+                  <StatusPill class='meta-pill' @color={{this.statusColor}}>
                     {{#if @model.projectStatus}}
                       <@fields.projectStatus @format='atom' />
                     {{else}}
@@ -1662,6 +1677,7 @@ class ProjectIsolated extends Component<typeof Project> {
         flex: 1;
         min-width: 0;
         overflow-y: auto;
+        padding-bottom: var(--boxel-sp-3xl);
       }
       .content-accordion {
         --boxel-accordion-title-font-size: 0.8125rem;
@@ -1769,6 +1785,9 @@ class ProjectIsolated extends Component<typeof Project> {
         align-items: center;
         gap: var(--boxel-sp-2xs);
         min-height: 1.75rem;
+      }
+      .meta-pill :deep(.pill-label) {
+        white-space: unset;
       }
       .meta-list dt {
         font-size: 0.75rem;
@@ -2152,7 +2171,7 @@ class ProjectEdit extends Component<typeof Project> {
               <div class='meta-item'>
                 <dt>Status</dt>
                 <dd>
-                  <StatusPill @color={{this.statusColor}}>
+                  <StatusPill class='meta-pill' @color={{this.statusColor}}>
                     {{#if @model.projectStatus}}
                       <@fields.projectStatus @format='atom' />
                     {{else}}
@@ -2240,6 +2259,7 @@ class ProjectEdit extends Component<typeof Project> {
         flex: 1;
         min-width: 0;
         overflow-y: auto;
+        padding-bottom: var(--boxel-sp-3xl);
       }
       .content-accordion {
         --boxel-accordion-title-font-size: 0.8125rem;
@@ -2337,6 +2357,9 @@ class ProjectEdit extends Component<typeof Project> {
         align-items: center;
         gap: var(--boxel-sp-2xs);
         min-height: 1.75rem;
+      }
+      .meta-pill :deep(.pill-label) {
+        white-space: unset;
       }
       .meta-list dt {
         font-size: 0.75rem;
@@ -2537,7 +2560,7 @@ export class Project extends CardDef {
           </StatusPill>
         </:badgeRight>
         <:footer>
-          <StatusPill class='status-pill' @color={{this.statusColor}}>
+          <StatusPill class='footer-status-pill' @color={{this.statusColor}}>
             {{#if @model.projectStatus}}
               <@fields.projectStatus @format='atom' />
             {{else}}
@@ -2552,6 +2575,9 @@ export class Project extends CardDef {
           --fc-meta-display: none;
           --fc-badge-right-display: none;
           --boxel-heading-font-weight: 600;
+        }
+        :deep(.fc-badge-right) {
+          max-width: 50%;
         }
         .status-badge-right {
           font-size: 0.6875rem;
@@ -3072,7 +3098,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           <div class='kanban-heading'>
             <h2 class='kanban-title'>
               <SquareKanban />
-              <@fields.cardTitle />
+              <span class='kanban-title-text'><@fields.cardTitle /></span>
             </h2>
             {{#if @model.project}}
               <div class='kanban-project' data-test-issue-tracker-project-link>
@@ -3287,6 +3313,17 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         font-weight: 600;
         margin: 0;
         letter-spacing: -0.01em;
+        min-width: 0;
+      }
+      .kanban-title svg {
+        flex-shrink: 0;
+      }
+      .kanban-title-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-width: 0;
       }
       .kanban-card-count {
         font-size: 0.75rem;
