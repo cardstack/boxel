@@ -86,11 +86,21 @@ function withUpdatedTestRealmInfo(
   };
 }
 
-// The URL shown in the unlisted-link card, e.g.
-// "https://testuser.<host>/<random>/". The path segment is random per run.
-function unlistedLinkUrlFromDom(): string {
-  let el = document.querySelector('[data-test-unlisted-link-url]');
-  return (el?.textContent ?? '').replace(/\s+/g, '');
+// Stubs the realm-server `allocateUnlistedPath` method (which normally hits the
+// server that owns the random slug), returning the given slug(s) — successive
+// calls walk the list and then stick on the last entry, so passing two slugs
+// covers the initial load + a "New link" regenerate. Returns a restore function.
+function stubUnlistedPath(slugs: string | string[]): () => void {
+  let realmServer = getService('realm-server') as any;
+  let original = realmServer.allocateUnlistedPath;
+  let queue = Array.isArray(slugs) ? [...slugs] : [slugs];
+  realmServer.allocateUnlistedPath = async (sourceRealmURL: string) => {
+    let slug = queue.length > 1 ? queue.shift()! : queue[0];
+    return { sourceRealmURL, slug };
+  };
+  return () => {
+    realmServer.allocateUnlistedPath = original;
+  };
 }
 
 module('Acceptance | host submode', function (hooks) {
@@ -812,99 +822,115 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('can publish an unlisted link', async function (assert) {
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
-        });
+        // The server owns the random slug; the modal just renders what the
+        // `_unlisted-realm-path` endpoint returns.
+        let restoreUnlisted = stubUnlistedPath('k7f3qz9pbcdmnpqr');
+        let unlistedUrl = `https://testuser.${publishedSpaceHost}/k7f3qz9pbcdmnpqr/`;
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await click('[data-test-publish-realm-button]');
-        await waitFor('[data-test-publish-realm-modal]');
-        await waitFor('[data-test-unlisted-link-url]');
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+          await waitFor('[data-test-unlisted-link-url]');
 
-        // The unlisted link is the user's own space subdomain with a random
-        // path segment instead of the realm name.
-        let unlistedUrl = unlistedLinkUrlFromDom();
-        let spacePrefix = `https://testuser.${publishedSpaceHost}/`;
-        assert.ok(
-          unlistedUrl.startsWith(spacePrefix),
-          `unlisted link is on the user's space (${unlistedUrl})`,
-        );
-        assert.ok(unlistedUrl.endsWith('/'), 'unlisted link is a realm root');
-        let slug = unlistedUrl.slice(spacePrefix.length, -1);
-        assert.ok(/^[a-z0-9]+$/.test(slug), `random path segment (${slug})`);
-        assert.notStrictEqual(slug, 'test', 'path is not the realm name');
+          // The unlisted link is the user's own space subdomain with the
+          // server-issued slug as the path, not the realm name.
+          assert.dom('[data-test-unlisted-link-url]').hasText(unlistedUrl);
 
-        assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
-        await click('[data-test-unlisted-link-checkbox]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
-        assert.dom('[data-test-publish-button]').isNotDisabled();
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
 
-        await click('[data-test-publish-button]');
-        publishDeferred.fulfill();
-        await waitUntil(() => {
-          return !document.querySelector(
-            '[data-test-publish-realm-button].publishing',
-          );
-        });
+          await click('[data-test-publish-button]');
+          publishDeferred.fulfill();
+          await waitUntil(() => {
+            return !document.querySelector(
+              '[data-test-publish-realm-button].publishing',
+            );
+          });
 
-        await click('[data-test-publish-realm-button]');
-        assert
-          .dom(
-            '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
-          )
-          .hasAttribute('href', unlistedUrl)
-          .hasAttribute('target', '_blank');
+          await click('[data-test-publish-realm-button]');
+          assert
+            .dom(
+              '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+            )
+            .hasAttribute('href', unlistedUrl)
+            .hasAttribute('target', '_blank');
+        } finally {
+          restoreUnlisted();
+        }
       });
 
       test('unlisted link checkbox can be checked and unchecked', async function (assert) {
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
-        });
+        let restoreUnlisted = stubUnlistedPath('k7f3qz9pbcdmnpqr');
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await click('[data-test-publish-realm-button]');
-        await waitFor('[data-test-unlisted-link-url]');
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-unlisted-link-url]');
 
-        assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
-        assert.dom('[data-test-publish-button]').isDisabled();
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
 
-        await click('[data-test-unlisted-link-checkbox]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
-        assert.dom('[data-test-publish-button]').isNotDisabled();
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
 
-        await click('[data-test-unlisted-link-checkbox]');
-        assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
-        assert.dom('[data-test-publish-button]').isDisabled();
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
+        } finally {
+          restoreUnlisted();
+        }
       });
 
       test('can regenerate the unlisted link before publishing', async function (assert) {
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
-        });
+        let restoreUnlisted = stubUnlistedPath([
+          'firstslug00000000',
+          'secondslug0000000',
+        ]);
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await click('[data-test-publish-realm-button]');
-        await waitFor('[data-test-unlisted-link-url]');
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-unlisted-link-url]');
 
-        let firstUrl = unlistedLinkUrlFromDom();
-        await click('[data-test-regenerate-unlisted-link-button]');
-        let secondUrl = unlistedLinkUrlFromDom();
+          assert
+            .dom('[data-test-unlisted-link-url]')
+            .hasText(
+              `https://testuser.${publishedSpaceHost}/firstslug00000000/`,
+            );
 
-        assert.notStrictEqual(
-          secondUrl,
-          firstUrl,
-          'regenerating produces a different link',
-        );
-        assert.ok(
-          secondUrl.startsWith(`https://testuser.${publishedSpaceHost}/`),
-          `regenerated link is still on the user's space (${secondUrl})`,
-        );
+          await click('[data-test-regenerate-unlisted-link-button]');
+
+          assert
+            .dom('[data-test-unlisted-link-url]')
+            .hasText(
+              `https://testuser.${publishedSpaceHost}/secondslug0000000/`,
+            );
+        } finally {
+          restoreUnlisted();
+        }
       });
 
       test('preselects a previously published unlisted link on refresh', async function (assert) {
         let now = Date.now();
-        let unlistedUrl = `https://testuser.${publishedSpaceHost}/k7f3qz9pbcdmnpqr/`;
+        let slug = 'k7f3qz9pbcdmnpqr';
+        let unlistedUrl = `https://testuser.${publishedSpaceHost}/${slug}/`;
 
+        // The server returns the realm's existing slug, so the modal shows the
+        // same URL that was previously published.
+        let restoreUnlisted = stubUnlistedPath(slug);
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
             [unlistedUrl]: String(now),
@@ -919,12 +945,14 @@ module('Acceptance | host submode', function (hooks) {
 
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
+          await waitFor('[data-test-unlisted-link-url]');
 
           assert.dom('[data-test-unlisted-link-url]').hasText(unlistedUrl);
           assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
           assert.dom('[data-test-publish-button]').isNotDisabled();
         } finally {
           restoreRealmInfo();
+          restoreUnlisted();
         }
       });
 

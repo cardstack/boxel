@@ -27,7 +27,6 @@ import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 import {
   deriveRealmName,
   ensureTrailingSlash,
-  generateObscureSlug,
   isCardErrorJSONAPI,
   isCardInstance,
   resolvePublishedRealmUrl,
@@ -102,11 +101,12 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
-  // Random path segment for the "Unlisted Link" target
-  // (`<username>.<spaceDomain>/<unlistedPathSegment>/`). Seeded with a fresh
-  // slug so the URL is always well-formed; replaced by a prior publish's slug
-  // during init when one exists.
-  @tracked private unlistedPathSegment: string = generateObscureSlug();
+  // Server-issued random path segment for the "Unlisted Link" target
+  // (`<username>.<spaceDomain>/<unlistedPathSegment>/`). Loaded from the
+  // realm-server on open (`loadUnlistedPathTask`) — the server owns the slug so
+  // it can't be hand-picked — and replaced via "New link"
+  // (`regenerateUnlistedLinkTask`). Null while loading.
+  @tracked private unlistedPathSegment: string | null = null;
 
   @tracked private privateDependencyCheckError: string | null = null;
   @tracked private privateDependencyViolations:
@@ -125,6 +125,7 @@ export default class PublishRealmModal extends Component<Signature> {
     super(owner, args);
     this.ensureInitialSelectionsTask.perform();
     this.fetchBoxelClaimedDomain.perform();
+    this.loadUnlistedPathTask.perform();
     this.checkPrivateDependenciesTask.perform();
     this.checkDanglingRoutingRulesTask.perform();
   }
@@ -255,7 +256,10 @@ export default class PublishRealmModal extends Component<Signature> {
   // path segment instead of the realm name, e.g.
   // `https://<username>.<spaceDomain>/<random>/`. Like the Boxel Space target
   // it is namespaced to the owner, so it needs no claim/availability check.
-  get unlistedRealmUrl(): string {
+  get unlistedRealmUrl(): string | null {
+    if (!this.unlistedPathSegment) {
+      return null;
+    }
     return resolvePublishedRealmUrl(
       { type: 'subdirectory', name: this.unlistedPathSegment },
       {
@@ -269,23 +273,47 @@ export default class PublishRealmModal extends Component<Signature> {
   get unlistedRealmParts() {
     return {
       baseUrl: `${this.getProtocol()}://${this.getMatrixUsername()}.${this.getDefaultPublishedRealmDomain()}/`,
-      pathSegment: this.unlistedPathSegment,
+      pathSegment: this.unlistedPathSegment ?? '',
     };
   }
 
+  get isLoadingUnlistedLink() {
+    return this.loadUnlistedPathTask.isRunning || !this.unlistedPathSegment;
+  }
+
+  get isRegeneratingUnlistedLink() {
+    return this.regenerateUnlistedLinkTask.isRunning;
+  }
+
+  get isUnlistedCheckboxDisabled() {
+    return this.isLoadingUnlistedLink || this.isUnpublishingAnyRealms;
+  }
+
   get isUnlistedRealmSelected() {
-    return this.selectedPublishedRealmURLs.includes(this.unlistedRealmUrl);
+    return (
+      !!this.unlistedRealmUrl &&
+      this.selectedPublishedRealmURLs.includes(this.unlistedRealmUrl)
+    );
   }
 
   get isUnlistedRealmPublished() {
-    return this.hostModeService.isPublished(this.unlistedRealmUrl);
+    return (
+      !!this.unlistedRealmUrl &&
+      this.hostModeService.isPublished(this.unlistedRealmUrl)
+    );
   }
 
   get unlistedLastPublishedTime() {
+    if (!this.unlistedRealmUrl) {
+      return null;
+    }
     return this.getFormattedLastPublishedTime(this.unlistedRealmUrl);
   }
 
   get publishErrorForUnlistedLink() {
+    if (!this.unlistedRealmUrl) {
+      return null;
+    }
     return this.getPublishErrorForUrl(this.unlistedRealmUrl);
   }
 
@@ -628,59 +656,53 @@ export default class PublishRealmModal extends Component<Signature> {
 
   @action
   toggleUnlistedDomain(event: Event) {
+    const unlistedUrl = this.unlistedRealmUrl;
+    if (!unlistedUrl) {
+      return;
+    }
     const input = event.target as HTMLInputElement;
     if (input.checked) {
-      this.addPublishedRealmUrl(this.unlistedRealmUrl);
+      this.addPublishedRealmUrl(unlistedUrl);
     } else {
-      this.removePublishedRealmUrl(this.unlistedRealmUrl);
+      this.removePublishedRealmUrl(unlistedUrl);
     }
   }
 
-  // Roll a fresh unlisted link. Only meaningful before it is published — once
-  // published the URL is fixed and recovered on reopen.
-  @action
-  regenerateUnlistedLink() {
+  // Loads the realm's server-issued unlisted-link slug, allocating one if none
+  // exists yet. The server owns the slug, so the client never generates it.
+  private loadUnlistedPathTask = restartableTask(async () => {
+    try {
+      let { slug } = await this.realmServer.allocateUnlistedPath(
+        this.currentRealmURL,
+      );
+      this.unlistedPathSegment = slug;
+    } catch (error) {
+      console.error('Failed to load unlisted link', error);
+    }
+  });
+
+  // Roll a fresh unlisted link via the server. Only meaningful before it is
+  // published — once published the URL is fixed.
+  private regenerateUnlistedLinkTask = restartableTask(async () => {
     if (this.isUnlistedRealmPublished) {
       return;
     }
     const wasSelected = this.isUnlistedRealmSelected;
-    this.removePublishedRealmUrl(this.unlistedRealmUrl);
-    this.unlistedPathSegment = generateObscureSlug();
-    if (wasSelected) {
-      this.addPublishedRealmUrl(this.unlistedRealmUrl);
-    }
-  }
-
-  // If the realm already has a published unlisted link (a space-subdomain URL
-  // whose path segment isn't the realm name), reuse its slug so reopening the
-  // modal shows the same link instead of the freshly-seeded one.
-  private recoverPublishedUnlistedPath() {
-    const recovered = this.findPublishedUnlistedPathSegment();
-    if (recovered) {
-      this.unlistedPathSegment = recovered;
-    }
-  }
-
-  private findPublishedUnlistedPathSegment(): string | null {
-    const spaceBaseUrl = this.subdirectoryRealmParts.baseUrl;
-    const boxelSpaceUrl = this.subdirectoryRealmUrl;
-    for (const publishedUrl of this.hostModeService.publishedRealmURLs) {
-      if (publishedUrl === boxelSpaceUrl) {
-        continue;
+    const previousUrl = this.unlistedRealmUrl;
+    try {
+      let { slug } = await this.realmServer.allocateUnlistedPath(
+        this.currentRealmURL,
+        { regenerate: true },
+      );
+      this.removePublishedRealmUrl(previousUrl ?? undefined);
+      this.unlistedPathSegment = slug;
+      if (wasSelected && this.unlistedRealmUrl) {
+        this.addPublishedRealmUrl(this.unlistedRealmUrl);
       }
-      if (!publishedUrl.startsWith(spaceBaseUrl)) {
-        continue;
-      }
-      const segments = publishedUrl
-        .slice(spaceBaseUrl.length)
-        .split('/')
-        .filter(Boolean);
-      if (segments.length === 1) {
-        return segments[0];
-      }
+    } catch (error) {
+      console.error('Failed to regenerate unlisted link', error);
     }
-    return null;
-  }
+  });
 
   @action
   toggleCustomSubdomain(event: Event) {
@@ -890,7 +912,6 @@ export default class PublishRealmModal extends Component<Signature> {
   ensureInitialSelectionsTask = restartableTask(
     async (claim: ClaimedDomain | null = null) => {
       await this.realm.ensureRealmMeta(this.currentRealmURL);
-      this.recoverPublishedUnlistedPath();
       this.applyInitialSelections(claim);
     },
   );
@@ -1130,7 +1151,7 @@ export default class PublishRealmModal extends Component<Signature> {
               {{on 'change' this.toggleUnlistedDomain}}
               class='domain-checkbox'
               data-test-unlisted-link-checkbox
-              disabled={{this.isUnpublishingAnyRealms}}
+              disabled={{this.isUnlistedCheckboxDisabled}}
             />
             <label class='option-title' for='unlisted-link-checkbox'>Unlisted
               Link</label>
@@ -1139,66 +1160,86 @@ export default class PublishRealmModal extends Component<Signature> {
               <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
                 <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
               </WithLoadedRealm>
-              <div class='domain-url-container'>
-                <span class='domain-url' data-test-unlisted-link-url>
-                  <span
-                    class='url-part'
-                  >{{this.unlistedRealmParts.baseUrl}}</span><span
-                    class='url-part-bold'
-                  >{{this.unlistedRealmParts.pathSegment}}/</span>
+              {{#if this.unlistedRealmUrl}}
+                <div class='domain-url-container'>
+                  <span class='domain-url' data-test-unlisted-link-url>
+                    <span
+                      class='url-part'
+                    >{{this.unlistedRealmParts.baseUrl}}</span><span
+                      class='url-part-bold'
+                    >{{this.unlistedRealmParts.pathSegment}}/</span>
+                  </span>
+                  {{#if this.isUnlistedRealmPublished}}
+                    <div class='domain-info'>
+                      <span class='last-published-at'>Published
+                        {{this.unlistedLastPublishedTime}}</span>
+                      <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
+                        @disabled={{this.isUnpublishingRealm
+                          this.unlistedRealmUrl
+                        }}
+                        class='unpublish-button'
+                        {{on
+                          'click'
+                          (fn @handleUnpublish this.unlistedRealmUrl)
+                        }}
+                        data-test-unpublish-unlisted-link-button
+                      >
+                        {{#if (this.isUnpublishingRealm this.unlistedRealmUrl)}}
+                          <LoadingIndicator />
+                          Unpublishing…
+                        {{else}}
+                          <Undo2
+                            width='11'
+                            height='11'
+                            class='unpublish-icon'
+                          />
+                          Unpublish
+                        {{/if}}
+                      </BoxelButton>
+                    </div>
+                  {{/if}}
+                </div>
+              {{else}}
+                <span class='domain-url' data-test-unlisted-link-loading>
+                  Generating link…
                 </span>
-                {{#if this.isUnlistedRealmPublished}}
-                  <div class='domain-info'>
-                    <span class='last-published-at'>Published
-                      {{this.unlistedLastPublishedTime}}</span>
-                    <BoxelButton
-                      @kind='text-only'
-                      @size='extra-small'
-                      @disabled={{this.isUnpublishingRealm
-                        this.unlistedRealmUrl
-                      }}
-                      class='unpublish-button'
-                      {{on 'click' (fn @handleUnpublish this.unlistedRealmUrl)}}
-                      data-test-unpublish-unlisted-link-button
-                    >
-                      {{#if (this.isUnpublishingRealm this.unlistedRealmUrl)}}
-                        <LoadingIndicator />
-                        Unpublishing…
-                      {{else}}
-                        <Undo2 width='11' height='11' class='unpublish-icon' />
-                        Unpublish
-                      {{/if}}
-                    </BoxelButton>
-                  </div>
-                {{/if}}
-              </div>
+              {{/if}}
             </div>
-            {{#if this.isUnlistedRealmPublished}}
-              <BoxelButton
-                @as='anchor'
-                @kind='secondary-light'
-                @size='small'
-                @href={{this.unlistedRealmUrl}}
-                @disabled={{this.isUnpublishingAnyRealms}}
-                class='action'
-                target='_blank'
-                rel='noopener noreferrer'
-                data-test-open-unlisted-link-button
-              >
-                <ExternalLink width='16' height='16' class='button-icon' />
-                Open Site
-              </BoxelButton>
-            {{else}}
-              <BoxelButton
-                @kind='text-only'
-                @size='small'
-                class='action'
-                @disabled={{this.isUnpublishingAnyRealms}}
-                {{on 'click' this.regenerateUnlistedLink}}
-                data-test-regenerate-unlisted-link-button
-              >
-                New link
-              </BoxelButton>
+            {{#if this.unlistedRealmUrl}}
+              {{#if this.isUnlistedRealmPublished}}
+                <BoxelButton
+                  @as='anchor'
+                  @kind='secondary-light'
+                  @size='small'
+                  @href={{this.unlistedRealmUrl}}
+                  @disabled={{this.isUnpublishingAnyRealms}}
+                  class='action'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  data-test-open-unlisted-link-button
+                >
+                  <ExternalLink width='16' height='16' class='button-icon' />
+                  Open Site
+                </BoxelButton>
+              {{else}}
+                <BoxelButton
+                  @kind='text-only'
+                  @size='small'
+                  class='action'
+                  @disabled={{this.isRegeneratingUnlistedLink}}
+                  {{on 'click' (perform this.regenerateUnlistedLinkTask)}}
+                  data-test-regenerate-unlisted-link-button
+                >
+                  {{#if this.isRegeneratingUnlistedLink}}
+                    <LoadingIndicator />
+                    Generating…
+                  {{else}}
+                    New link
+                  {{/if}}
+                </BoxelButton>
+              {{/if}}
             {{/if}}
             {{#if this.publishErrorForUnlistedLink}}
               <div
