@@ -191,7 +191,8 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
-  // @deprecated Legacy federated live-card search. Prefer the v2 `search-entry`
+  // Deprecated: legacy federated live-card search (the bound `handleSearch`
+  // carries the `@deprecated` tag). Prefer the v2 `search-entry`
   // endpoint `/_federated-search-v2` (`handleSearchV2`), which returns one
   // heterogeneous result stream — prerendered HTML or live serialization. Kept
   // as a compat layer over the shared search engine; removed once every
@@ -222,7 +223,8 @@ export function createRoutes(args: CreateRoutesArgs) {
       reconciler: args.reconciler,
     }),
   );
-  // @deprecated Legacy federated prerendered-HTML search. Prefer the v2
+  // Deprecated: legacy federated prerendered-HTML search (the bound
+  // `handleSearchPrerendered` carries the `@deprecated` tag). Prefer the v2
   // `search-entry` endpoint `/_federated-search-v2` (`handleSearchV2`), which
   // carries prerendered HTML and the live serialization in one heterogeneous
   // result rather than a dedicated prerendered shape. Kept as a compat layer

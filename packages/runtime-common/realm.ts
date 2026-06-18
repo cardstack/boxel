@@ -958,7 +958,8 @@ export class Realm {
       )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
-      // @deprecated Legacy single-realm live-card search. Prefer the v2
+      // Deprecated: legacy single-realm live-card search (the bound
+      // `searchResponse` carries the `@deprecated` tag). Prefer the v2
       // `search-entry` endpoint `/_search-v2` (`searchEntriesResponse`), which
       // returns one heterogeneous result stream — prerendered HTML or live
       // serialization, the engine decides per row. Kept as a compat layer over
@@ -983,7 +984,8 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
       )
-      // @deprecated Legacy single-realm prerendered-HTML search. Prefer the v2
+      // Deprecated: legacy single-realm prerendered-HTML search (the bound
+      // `searchPrerenderedResponse` carries the `@deprecated` tag). Prefer the v2
       // `search-entry` endpoint `/_search-v2` (`searchEntriesResponse`), which
       // carries the prerendered HTML and the live serialization in one
       // heterogeneous result rather than a dedicated prerendered shape. Kept as
