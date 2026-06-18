@@ -24,6 +24,39 @@ export function inferDarkfactoryModuleUrl(targetRealm: string): string {
 
 let log = logger('factory-seed');
 
+// Phrases that read like "modify a card that already exists" rather than
+// "build a new one". Kept deliberately narrow — these don't naturally appear
+// in a greenfield "build a new X" brief, so a match on one of them while
+// `sourceCardUrl` is unset is a strong signal the brief author meant to set it.
+const ADJUST_PROSE_SIGNALS = [
+  'adjust the existing',
+  'adjust an existing',
+  'adjusting the existing',
+  'existing card',
+  'rather than rebuild',
+  'rather than build',
+  'instead of rebuilding',
+  'ingest-card',
+  'source card',
+];
+
+function briefProseLooksLikeAdjust(brief: FactoryBrief): boolean {
+  let text = `${brief.title}\n${brief.content}`.toLowerCase();
+  return ADJUST_PROSE_SIGNALS.some((signal) => text.includes(signal));
+}
+
+/**
+ * The factory's adjust-existing-card flow is triggered by the brief's
+ * structured `sourceCardUrl` attribute, NOT by its prose. A brief that
+ * describes adjusting an existing card only in prose but leaves `sourceCardUrl`
+ * unset silently falls through to the greenfield path — the agent never
+ * ingests the source and rebuilds from scratch. Return true when that mismatch
+ * is detected so the caller can warn the operator. Exported for unit testing.
+ */
+export function shouldWarnMissingSourceCardUrl(brief: FactoryBrief): boolean {
+  return !brief.sourceCardUrl && briefProseLooksLikeAdjust(brief);
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -112,6 +145,16 @@ function buildSeedIssueDocument(
 ) {
   let now = new Date().toISOString();
   let adjust = Boolean(brief.sourceCardUrl);
+
+  if (shouldWarnMissingSourceCardUrl(brief)) {
+    log.warn(
+      `Brief "${brief.title}" reads like an "adjust existing card" task but its ` +
+        `\`sourceCardUrl\` attribute is unset — the factory will treat this as a ` +
+        `greenfield build and the agent will NOT ingest a source card. Set the ` +
+        `brief's \`sourceCardUrl\` to the absolute source card URL to trigger the ` +
+        `adjust flow.`,
+    );
+  }
 
   let briefHeader = [
     `## Brief`,
