@@ -17,6 +17,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -97,6 +98,10 @@ export class MockClient implements ExtendedClient {
     } else if (_eventType === APP_BOXEL_REALMS_EVENT_TYPE) {
       return {
         realms: this.sdkOpts.activeRealms ?? [],
+      } as unknown as K;
+    } else if (_eventType === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      return {
+        realmServers: this.sdkOpts.activeRealmServers ?? [],
       } as unknown as K;
     } else if (_eventType === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
       return (this.sdkOpts.systemCardAccountData ?? null) as unknown as K;
@@ -230,6 +235,8 @@ export class MockClient implements ExtendedClient {
   ): Promise<{}> {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
+    } else if (type === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      this.sdkOpts.activeRealmServers = (data as any).realmServers;
     } else if (type === 'm.direct') {
       this.sdkOpts.directRooms = (data as any)[this.loggedInAs!];
     } else if (type === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
@@ -655,6 +662,7 @@ export class MockClient implements ExtendedClient {
   private eventHandlerType(type: string) {
     switch (type) {
       case APP_BOXEL_REALMS_EVENT_TYPE:
+      case APP_BOXEL_REALM_SERVERS_EVENT_TYPE:
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
       case 'm.direct':
