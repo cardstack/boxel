@@ -152,6 +152,18 @@ if [ -z "${MATRIX_REGISTRATION_SHARED_SECRET:-}" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+# Register the realm server's own Matrix users (realm_server plus the
+# per-realm users: base_realm, catalog_realm, skills_realm, openrouter_realm,
+# …). The realm server authenticates to Synapse as `realm_server` to mint
+# `/_server-session` tokens, logging in with a password derived from
+# REALM_SECRET_SEED (passwordFromSeed). If that user doesn't exist Synapse
+# returns 403 and every login 500s at /_server-session. register-realm-users
+# registers them with the matching seed-derived password, so the seed here
+# MUST equal the one the realm server runs with (REALM_SECRET_SEED below).
+echo "==> Registering realm Matrix users (realm_server, base/catalog/skills/openrouter)..."
+(cd packages/matrix && REALM_SECRET_SEED="shhh! it's a secret" MATRIX_URL=http://localhost:8008 pnpm register-realm-users) \
+  || echo "Warning: realm Matrix user registration failed; login will 500 at /_server-session."
+
 # Seed a reviewer login (user / password) on this Codespace's own Synapse so
 # the preview is loginnable. This is the same dev user local development uses;
 # it's only as exposed as the forwarded Matrix port (see the abuse note in the
