@@ -23,9 +23,9 @@ cleanup_icons_server() {
   fi
 }
 # EXIT runs cleanup unconditionally. INT/TERM additionally exit 0 so that the
-# 143-on-Ctrl-C from the ts-node pipeline below isn't reported by mise /
+# 143-on-Ctrl-C from the node pipeline below isn't reported by mise /
 # run-p as "task failed" — see mise-tasks/services/worker for the broader
-# rationale. Real crashes still propagate (ts-node faulting on its own
+# rationale. Real crashes still propagate (node faulting on its own
 # leaves the trap unfired, so pipefail's 143-aware exit code wins).
 # The signal handler clears the EXIT trap before exiting so cleanup doesn't
 # run twice in succession.

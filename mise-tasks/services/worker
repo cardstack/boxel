@@ -13,7 +13,7 @@ set -o pipefail
 # SIGTERM this script during Ctrl-C; without this trap the pipefail-aware
 # pipe below exits 143, mise reports it as "task failed", and run-p prints
 # `ERROR: "start:worker-development" exited with 143` — pure shutdown
-# noise. Real crashes (ts-node faulting on its own) still propagate, since
+# noise. Real crashes (node faulting on its own) still propagate, since
 # the trap only fires when *we* receive the signal.
 trap 'exit 0' INT TERM
 

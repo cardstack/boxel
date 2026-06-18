@@ -3,7 +3,7 @@
 // usages it can transform mechanically, and reports the ones it can't so they
 // can be migrated by hand.
 //
-//   ts-node --transpileOnly scripts/codemod/context-search/run.ts <path…> [--write]
+//   node scripts/codemod/context-search/run.ts <path…> [--write]
 
 import { readFileSync, writeFileSync, statSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   let paths = args.filter((a) => !a.startsWith('--'));
   if (paths.length === 0) {
     console.error(
-      'usage: ts-node scripts/codemod/context-search/run.ts <file-or-dir>… [--write]',
+      'usage: node scripts/codemod/context-search/run.ts <file-or-dir>… [--write]',
     );
     process.exit(2);
   }

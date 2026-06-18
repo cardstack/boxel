@@ -125,7 +125,7 @@ jobs:
           PR_BODY: ${{ steps.pr.outputs.body }}
         run: |
           set -euo pipefail
-          RESULT=$(NODE_NO_WARNINGS=1 pnpm exec ts-node --transpileOnly scripts/compute-release.ts)
+          RESULT=$(NODE_NO_WARNINGS=1 pnpm exec node scripts/compute-release.ts)
           echo "Compute result: $RESULT"
           {
             echo "json<<__REL_EOF__"
@@ -205,7 +205,7 @@ jobs:
           RELEASE_BODY_FILE="$BODY_FILE" \
           CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
           NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
-            ts-node --transpileOnly scripts/generate-release-notes.ts
+            node scripts/generate-release-notes.ts
           echo "has=true" >> "$GITHUB_OUTPUT"
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
@@ -441,7 +441,7 @@ jobs:
           RELEASE_BODY_FILE="$BODY_FILE" \
           CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
           NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
-            ts-node --transpileOnly scripts/generate-release-notes.ts
+            node scripts/generate-release-notes.ts
           FRAG_FILE="$FRAGMENT_FILE" node -e '
             const fs = require("fs");
             const path = "packages/boxel-cli/CHANGELOG.md";

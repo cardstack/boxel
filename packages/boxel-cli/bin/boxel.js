@@ -67,13 +67,18 @@ function mkcertRootCAPath() {
 
 maybeReExecWithMkcertCA();
 
-// Use the built dist version if available, otherwise fall back to ts-node
+// Use the built dist version if available, otherwise run the TS source directly.
 const distEntry = path.resolve(__dirname, '..', 'dist', 'index.js');
 
 if (fs.existsSync(distEntry)) {
   require(distEntry);
 } else {
-  // Development fallback: run from TypeScript source via ts-node
-  require('ts-node').register({ transpileOnly: true });
-  require('../src/index.ts');
+  // The CLI ships as a built CJS bundle (the TypeScript source uses
+  // CommonJS-only globals like __dirname and isn't runnable as native ESM).
+  // Build it first.
+  console.error(
+    'boxel-cli: dist/index.js not found. Build the CLI first:\n' +
+      '  pnpm --filter @cardstack/boxel-cli build',
+  );
+  process.exit(1);
 }

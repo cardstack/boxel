@@ -346,7 +346,7 @@ async function startRealmProcess(
 
     // Race the metadata-file poll against an early `'error'` from the
     // child. Without this, a spawn-level failure (e.g. ENOENT on the
-    // ts-node binary) leaves waitForMetadataFile polling until its
+    // node binary) leaves waitForMetadataFile polling until its
     // 300-second timeout before the startup error surfaces.
     let earlyError = new Promise<never>((_, reject) => {
       child!.once('error', reject);
