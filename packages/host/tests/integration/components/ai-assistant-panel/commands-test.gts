@@ -1733,6 +1733,39 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       );
   });
 
+  test('CS-11647: per-command Apply button does not flash Run before auto-execute starts', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // The per-command Apply button (rendered next to each tool-call message)
+    // has the same race as the Accept All bar: between "message lands"
+    // and "command-service starts the run", a ready Run button would
+    // briefly render. The fix presents the applying-spinner immediately
+    // for any auto-executable command.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'checking correctness',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cs-11647-apply-button',
+          name: 'checkCorrectness',
+          arguments: '{}',
+        },
+      ],
+    });
+
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .doesNotExist(
+        'per-command Apply button must not show the ready/Run state for an auto-executed command',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="applying"]')
+      .exists('per-command Apply button shows the applying spinner instead');
+  });
+
   test('CS-11647: Accept All bar still renders for a command that requires user approval', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 

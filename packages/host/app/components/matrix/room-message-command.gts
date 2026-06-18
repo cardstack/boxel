@@ -26,6 +26,7 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
+import { isAutoExecutableCommand } from '@cardstack/host/lib/command-auto-execute';
 import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
@@ -77,7 +78,27 @@ export default class RoomMessageCommand extends Component<Signature> {
     if (this.didFailCorrectnessCheck) {
       return 'applied-with-error';
     }
-    return this.args.messageCommand?.status ?? 'ready';
+    let status = this.args.messageCommand?.status;
+    // Mirror the Accept All bar fix: for any command the host will
+    // auto-execute (checkCorrectness, requiresApproval=false, LLM mode
+    // 'act'), present the applying spinner immediately on message-landed
+    // instead of the clickable Run button. Without this, the per-command
+    // Apply button flashes through 'ready' for the ~100ms debounce window
+    // before command-service starts the run. If validation later fails
+    // in the drain, command-service dispatches an `invalid` commandResult
+    // event and the button transitions to its invalid state — no risk of
+    // the spinner sticking.
+    if ((status === 'ready' || status === undefined) && this.willAutoExecute) {
+      return 'applying';
+    }
+    return status ?? 'ready';
+  }
+
+  private get willAutoExecute() {
+    let activeMode = this.args.roomResource.getActiveLLMModeForMessage(
+      this.args.messageCommand.eventId,
+    );
+    return isAutoExecutableCommand(this.args.messageCommand, activeMode);
   }
 
   @use private commandResultCard = resource(() => {
