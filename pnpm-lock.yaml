@@ -699,8 +699,6 @@ overrides:
   jsesc: ^3.0.0
   ember-modifier: ^4.1.0
   tracked-built-ins: ^4.1.2
-  ember-elsewhere: github:backspace/ember-elsewhere#fix-injection-imports
-  ember-set-body-class: github:johanrd/ember-set-body-class#deprecate-import-inject-as-service
 
 pnpmfileChecksum: sha256-4aYtIGLH5VZ7602JwdeiRO9eMz2VW/CY+BbwLNpu1Bw=
 
@@ -1338,8 +1336,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1(@babel/core@7.29.0)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2)
       ember-set-body-class:
-        specifier: github:johanrd/ember-set-body-class#deprecate-import-inject-as-service
-        version: https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1
+        specifier: ^1.0.2
+        version: 1.0.2
       ember-sortable:
         specifier: ^5.3.1
         version: 5.3.3(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@ember/test-waiters@4.1.1(@glint/template@1.7.7))(@glint/template@1.7.7)(ember-modifier@4.3.0(@babel/core@7.29.0))
@@ -2248,8 +2246,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
       ember-elsewhere:
-        specifier: github:backspace/ember-elsewhere#fix-injection-imports
-        version: https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
+        specifier: ^2.0.0
+        version: 2.0.0(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-exam:
         specifier: ^10.1.0
         version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.0.4(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)(qunit@2.25.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.25.0)(webpack@5.106.2)
@@ -9716,9 +9714,8 @@ packages:
     resolution: {integrity: sha512-3slTltQV5ke53t3YVP2GYoswsQ6y+lhuVzKmt09tbEx91DapG8I/xa8W5OA0StvcQlavL3/vHrz/vCQEFs8bBA==}
     engines: {node: 14.* || 16.* || >= 18}
 
-  ember-elsewhere@https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3:
-    resolution: {gitHosted: true, integrity: sha512-wIFkZ0jyQDDQ5TYRdWLv4HeLA0iO+JLiU5BReZ00fWEgZWhHu9+PMO7uD7FJ9OUSmUP3S3deXbaZCcmMnD+e9Q==, tarball: https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3}
-    version: 2.0.0
+  ember-elsewhere@2.0.0:
+    resolution: {integrity: sha512-663e57ghtYCZsqIWpmfa9o2XfbI9vHt8qAiVWOFsdRuFF1FDVKZr3moAY2xNTQ2u2FH0ELh6ResCDUIiyh1d+A==}
     engines: {node: 12.* || 14.* || >= 16}
 
   ember-eslint-parser@0.13.0:
@@ -9872,9 +9869,8 @@ packages:
     resolution: {integrity: sha512-89oVHVJwmLDvGvAUWgS87KpBoRhy3aZ6U0Ql6HOmU4TrPkyaa8pM0W81wj9cIwjYprcQtN9EwzZMHnq46+oUyw==}
     engines: {node: 8.* || 10.* || >= 12}
 
-  ember-set-body-class@https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1:
-    resolution: {gitHosted: true, integrity: sha512-UYb2VgCRZsh2AxkWCW7Crz7VzJF8KgiHhDvcr0EnfOw/ozzQbueOzFvTRsNDbO+wr/+lqLevETMHHdYzwIaupw==, tarball: https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1}
-    version: 1.0.2
+  ember-set-body-class@1.0.2:
+    resolution: {integrity: sha512-SEsTwFp9SHTg4LgebhkUuLgYWg1VZD7I1QcrV2sTY583wu216OThoSs5szvS/KgSc1xD1Z22TFvOb848t2hGfw==}
     engines: {node: 10.* || 12.* || >= 14.*}
 
   ember-sortable@5.3.3:
@@ -23922,7 +23918,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-elsewhere@https://codeload.github.com/backspace/ember-elsewhere/tar.gz/c7ba1b2dfbc79cd50213625eb3c664878ae6fae3(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
+  ember-elsewhere@2.0.0(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
     dependencies:
       '@embroider/util': 1.13.1(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-cli-babel: 7.26.11
@@ -24213,7 +24209,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-set-body-class@https://codeload.github.com/johanrd/ember-set-body-class/tar.gz/4d558d73922537f1a0418ddbd46e4d444dce64a1:
+  ember-set-body-class@1.0.2:
     dependencies:
       ember-cli-babel: 7.26.11
     transitivePeerDependencies:
