@@ -198,6 +198,7 @@ PGPORT=5435 \
 PGDATABASE=boxel \
 LOG_LEVELS='*=info' \
 ASSETS_URL_OVERRIDE="${REALM_SERVER_URL}" \
+REALM_SERVER_ASSUME_HTTPS=true \
 REALM_SERVER_SECRET_SEED="mum's the word" \
 REALM_SECRET_SEED="shhh! it's a secret" \
 GRAFANA_SECRET="shhh! it's a secret" \
