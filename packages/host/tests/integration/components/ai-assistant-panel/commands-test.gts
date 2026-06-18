@@ -1642,15 +1642,16 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  test('CS-11647: Accept All bar does not flash for an auto-executed checkCorrectness command', async function (assert) {
+  test('CS-11647: Accept All bar does not flash for an always-auto-executed command (checkCorrectness)', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    // checkCorrectness is on the always-auto-execute list, so the host runs
-    // it without asking. Before the fix, the manual approval bar painted
-    // for the ~100ms debounce window before command-service flipped
-    // `acceptingAllRoomIds`; the user saw Accept All / Cancel briefly
-    // appear then disappear. The bar must never paint in its manual-approval
-    // branch for this command.
+    // checkCorrectness is on the always-auto-execute list (one of three
+    // branches in isAutoExecutableCommand). Before the fix, the manual
+    // approval bar painted for the ~100ms debounce window before
+    // command-service flipped `acceptingAllRoomIds`; the user saw
+    // Accept All / Cancel briefly appear then disappear. The bar must
+    // never paint in its manual-approval branch for any auto-executed
+    // command, regardless of which condition triggers auto-execute.
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'checking correctness',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1680,6 +1681,58 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       );
   });
 
+  test('CS-11647: Accept All bar does not flash for a requiresApproval=false command', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'auto-exec via skill',
+    });
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="auto-exec via skill"]', {
+      timeout: 10000,
+    });
+
+    // The boxel-environment skill declares read-file-for-ai-assistant with
+    // requiresApproval=false (see the skill JSON earlier in this module),
+    // so MessageCommand.requiresApproval is false here — the second
+    // isAutoExecutableCommand branch. The fix must also suppress the
+    // Accept All bar for this path.
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
+
+    let roomId = document
+      .querySelector('[data-test-room]')!
+      .getAttribute('data-test-room')!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading hello file',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cs-11647-no-approval',
+          name: 'read-file-for-ai-assistant_a831',
+          arguments: JSON.stringify({
+            attributes: { fileIdentifier: `${testRealmURL}hello.txt` },
+          }),
+        },
+      ],
+    });
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-accept-all]')
+      .doesNotExist(
+        'Accept All button suppressed for requiresApproval=false commands',
+      );
+  });
+
   test('CS-11647: Accept All bar still renders for a command that requires user approval', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
@@ -1706,7 +1759,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-accept-all]')
       .exists(
-        'manual approval bar still renders for commands that require user approval',
+        'manual approval bar still renders for commands that need user approval',
       );
   });
 });
