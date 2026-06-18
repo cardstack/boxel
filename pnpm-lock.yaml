@@ -707,7 +707,6 @@ pnpmfileChecksum: sha256-4aYtIGLH5VZ7602JwdeiRO9eMz2VW/CY+BbwLNpu1Bw=
 patchedDependencies:
   '@embroider/compat@3.9.4': db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2
   '@embroider/webpack': 3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff
-  ember-animated@2.2.0: de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475
   ember-basic-dropdown@8.0.4: 19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428
   ember-css-url@1.0.0: 0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d
   ember-eslint-parser: 364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425
@@ -1301,7 +1300,7 @@ importers:
         version: 3.4.2
       ember-animated:
         specifier: 'catalog:'
-        version: 2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
+        version: 2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
       ember-basic-dropdown:
         specifier: 8.0.4
         version: 8.0.4(patch_hash=19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glimmer/component@2.1.1)(@glimmer/tracking@1.1.2)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
@@ -1949,7 +1948,7 @@ importers:
         version: 8.2.2
       ember-animated:
         specifier: 'catalog:'
-        version: 2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
+        version: 2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
       ember-concurrency:
         specifier: 'catalog:'
         version: 5.2.0(@babel/core@7.29.0)(@glint/template@1.7.7)
@@ -2196,7 +2195,7 @@ importers:
         version: 2.3.2(@babel/core@7.29.0)
       ember-animated:
         specifier: 'catalog:'
-        version: 2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
+        version: 2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7)
       ember-async-data:
         specifier: ^1.0.3
         version: 1.0.3(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
@@ -19089,7 +19088,10 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       '@percy/cli-exec': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-build@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -19144,7 +19146,10 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -23133,7 +23138,7 @@ snapshots:
       - '@babel/core'
       - supports-color
 
-  ember-animated@2.2.0(patch_hash=de744005910b0fb697ef6f2af7e4b6489d30f6f42a50fad87f43013e3bc60475)(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7):
+  ember-animated@2.2.0(@babel/core@7.29.0)(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glint/template@1.7.7):
     dependencies:
       '@embroider/addon-shim': 1.10.2
       '@embroider/macros': 1.16.13(@glint/template@1.7.7)

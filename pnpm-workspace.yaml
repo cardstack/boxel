@@ -286,7 +286,6 @@ patchedDependencies:
   "@embroider/webpack": patches/@embroider__webpack.patch
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
-  ember-animated@2.2.0: patches/ember-animated@2.2.0.patch
 allowBuilds:
   "@percy/core": true
   "@vscode/vsce-sign": true
