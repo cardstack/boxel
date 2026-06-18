@@ -175,6 +175,13 @@ export default class MatrixService extends Service {
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
+  // CS-11658: when true, `app.boxel.realm-servers` is the authoritative
+  // source of the user's realm list and `app.boxel.realms` events are
+  // ignored for `setAvailableRealmIdentifiers`. Set during boot based on
+  // the new key's presence; flipped on by the realm-servers listener if
+  // the key gains content at runtime. Login-related side effects
+  // (`loginToRealms`, `loadMoreAuthRooms`) still run regardless.
+  private trustedRealmServersAuthoritative = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
@@ -394,16 +401,43 @@ export default class MatrixService extends Service {
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           switch (e.event.type) {
-            case APP_BOXEL_REALMS_EVENT_TYPE:
-              await this.realmServer.setAvailableRealmIdentifiers(
-                (e.event.content.realms as string[]).map(ri),
-              );
+            case APP_BOXEL_REALMS_EVENT_TYPE: {
+              let legacyRealms = e.event.content.realms as string[];
+              // CS-11658: when `app.boxel.realm-servers` is the source of
+              // truth, ignore the realm-list payload here — otherwise the
+              // initial-sync re-emission of this event would overwrite the
+              // trusted-servers boot result. Side effects below still run
+              // so post-login realm authentication isn't dropped.
+              if (!this.trustedRealmServersAuthoritative) {
+                await this.realmServer.setAvailableRealmIdentifiers(
+                  legacyRealms.map(ri),
+                );
+              }
               // Only do this after we've completed our overall login
               if (this.postLoginCompleted) {
                 await this.loginToRealms();
-                await this.loadMoreAuthRooms(e.event.content.realms);
+                await this.loadMoreAuthRooms(legacyRealms);
               }
               break;
+            }
+            case APP_BOXEL_REALM_SERVERS_EVENT_TYPE: {
+              let realmServers = e.event.content.realmServers as string[];
+              this.trustedRealmServersAuthoritative = realmServers.length > 0;
+              if (this.trustedRealmServersAuthoritative) {
+                let realmURLs =
+                  await this.realmServer.fetchUserRealmsFromTrustedServers(
+                    realmServers,
+                  );
+                await this.realmServer.setAvailableRealmIdentifiers(
+                  realmURLs.map(ri),
+                );
+                if (this.postLoginCompleted) {
+                  await this.loginToRealms();
+                  await this.loadMoreAuthRooms(realmURLs);
+                }
+              }
+              break;
+            }
             case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
               await this.setSystemCard(e.event.content.id);
               break;
@@ -854,6 +888,11 @@ export default class MatrixService extends Service {
         // the new key for existing users. Remove the fallback once that
         // migration has run on all active accounts.
         let trustedServers = realmServersData?.realmServers ?? [];
+        // The legacy `app.boxel.realms` AccountData event is re-emitted by
+        // the matrix sync that runs inside `startClient()` below. Setting
+        // this flag here makes that re-emission a no-op for the available-
+        // realms list — the realm-servers path is the authoritative source.
+        this.trustedRealmServersAuthoritative = trustedServers.length > 0;
         let userRealmURLs: string[];
         if (trustedServers.length > 0) {
           if (isTesting())

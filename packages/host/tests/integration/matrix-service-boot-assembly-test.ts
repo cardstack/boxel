@@ -87,6 +87,54 @@ module(
 );
 
 module(
+  'Integration | matrix-service | trusted-servers result survives legacy event',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    // The mock matrix client's `startClient` re-emits a synthetic
+    // `app.boxel.realms` AccountData event with `activeRealms` content.
+    // With the new key authoritative, that re-emission must NOT overwrite
+    // the realms the trusted-servers boot path discovered. The setup
+    // below deliberately diverges activeRealms from realmPermissions so
+    // the bug (if reintroduced) shows up as a missing realm from the
+    // _realm-auth response.
+    const otherRealmURL = 'http://test-realm/test-other/';
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [], // synthetic legacy event would clear availableRealms
+      activeRealmServers: [testRealmServerURL],
+      realmPermissions: {
+        [testRealmURL]: ['read', 'write'],
+        [otherRealmURL]: ['read', 'write'],
+      },
+      autostart: true,
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      });
+    });
+
+    test('legacy realms event does not overwrite the trusted-servers boot result', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'testRealmURL from _realm-auth survives the legacy event',
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(otherRealmURL)),
+        'otherRealmURL from _realm-auth survives the legacy event (regression guard)',
+      );
+    });
+  },
+);
+
+module(
   'Integration | matrix-service | boot assembly fallback to legacy realms',
   function (hooks) {
     setupRenderingTest(hooks);
