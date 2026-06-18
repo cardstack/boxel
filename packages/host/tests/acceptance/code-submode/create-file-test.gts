@@ -1655,8 +1655,23 @@ export class TestCard extends Animal {
         }
       `;
 
+      // Load an existing file first so FileResource is in state 'ready'
+      // and subscribed to the realm before the navigation that triggers
+      // the bug.
       await visitOperatorMode(`${testRealmURL}index.json`);
       await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      // Re-visit the new (not-yet-existent) URL through code mode. This
+      // drives a second `FileResource.modify` from the already-ready
+      // state — the exact transition Buck reported.
+      await visitOperatorMode(newFileUrl);
+      await waitFor('[data-test-card-url-bar-error]');
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .containsText(
+          'This resource does not exist',
+          'URL bar surfaces the not-found error on initial 404 after navigation',
+        );
 
       let incrementalEvent = new Deferred<void>();
       let unsubscribe = getService('message-service').subscribe(
@@ -1675,9 +1690,6 @@ export class TestCard extends Animal {
       );
 
       let cardService = getService('card-service');
-      let opState = getService('operator-mode-state-service');
-
-      await opState.updateCodePath(new URL(newFileUrl));
       await cardService.saveSource(
         new URL(newFileUrl),
         newFileSource,
