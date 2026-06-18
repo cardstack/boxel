@@ -153,6 +153,13 @@ interface Signature {
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
+/**
+ * @deprecated Root of the legacy live search-results tree (`SearchContent` →
+ * `SearchResultSection` → `ItemButton`). Favor the v2 `<SearchResults>`
+ * component, which renders the heterogeneous `search-entry` stream (prerendered
+ * HTML inert or live card) for a `search-entry`-rooted query. Removed once every
+ * consumer is on v2.
+ */
 export default class SearchContent extends Component<Signature> {
   @service declare network: NetworkService;
   @service declare realm: RealmService;
