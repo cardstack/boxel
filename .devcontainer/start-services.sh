@@ -13,13 +13,13 @@
 # hand (not `mise run dev`) only so its realm toUrls can be the public
 # Codespace URLs; it still picks up the HTTPS cert via env-vars.sh.
 #
-# A host app (vite) IS run locally because the realm server hard-requires a
-# reachable host: main.ts fetches HOST_URL at startup and process.exit(-2)s
-# if it can't (and the prerenderer renders cards against it). This local host
-# is distinct from the reviewer-facing S3 build; it exists so the realm server
-# boots and cards can prerender. The realm starts in mount-and-serve mode
-# (REALM_SERVER_SKIP_BOOT_INDEX) so readiness doesn't block on a full
-# from-scratch index; cards prerender on demand instead.
+# The realm server hard-requires a reachable host app: main.ts fetches
+# HOST_URL at startup and process.exit(-2)s if it can't, and the prerenderer
+# renders cards against it. Rather than build a second host here, HOST_URL
+# points at the CI/S3 preview bundle (see below). The bootstrap realms (base,
+# catalog, skills, openrouter) full-index on boot so their card instances are
+# queryable — the AI system card, skills and catalog browsing all read from
+# that index, so readiness waits for the index to finish.
 set -euo pipefail
 
 cd /workspaces/boxel
@@ -65,10 +65,6 @@ export MATRIX_URL_VAL="http://localhost:8008"
 export ICONS_URL="http://localhost:4206"
 export PGPORT=5435
 export PGDATABASE=boxel
-
-# Mount-and-serve: skip the from-scratch boot index so readiness doesn't
-# block on a full index of every bootstrap realm; cards prerender on demand.
-export REALM_SERVER_SKIP_BOOT_INDEX=true
 
 # ── Forwarded ports must be public so the reviewer's browser can reach the
 #    realm (4201), the icons server (4206) and Matrix/Synapse (8008) ──
@@ -224,7 +220,6 @@ RESOLVED_MATRIX_URL="${MATRIX_PUBLIC_URL}" \
 MATRIX_SERVER_NAME=localhost \
 REALM_SERVER_MATRIX_USERNAME=realm_server \
 ENABLE_FILE_WATCHER=true \
-REALM_SERVER_SKIP_BOOT_INDEX=true \
   pnpm --dir=packages/realm-server exec ts-node \
     --transpileOnly main \
     --port=4201 \
@@ -257,11 +252,16 @@ REALM_SERVER_SKIP_BOOT_INDEX=true \
 REALM_PID=$!
 
 # ── Wait for realm server readiness ──
-# The realm server serves plain HTTP on 4201 (GitHub's edge terminates TLS).
-echo "==> Waiting for realm server to be ready..."
-timeout 300 bash -c \
-  'until curl -sf "http://localhost:4201/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 2; done' \
-  || echo "Warning: realm server readiness check timed out after 5 minutes"
+# _readiness-check is a per-realm endpoint that reports ready once the realm
+# has finished indexing, so probe the base realm specifically (not the server
+# root, which 404s). The realm serves plain HTTP on 4201 and REALM_SERVER_ASSUME_HTTPS
+# rewrites this localhost probe's host to the public realm URL so it resolves
+# to the mounted realm. The long timeout covers the bootstrap from-scratch
+# index (base is large); the realm still serves modules while it indexes.
+echo "==> Waiting for realm server (and bootstrap index) to be ready..."
+timeout 900 bash -c \
+  'until curl -sf "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; do sleep 3; done' \
+  || echo "Warning: realm server readiness check timed out"
 
 echo ""
 echo "============================================"
