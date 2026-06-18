@@ -13,6 +13,7 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
   adminImpersonateUser,
+  appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
   loginAsMatrixAdmin,
   logoutMatrixAccessToken,
@@ -192,6 +193,19 @@ export default function handleUpsertRealmUserPermission({
             realmURL: normalizedRealmHref,
           });
           appendedToAccountData = !alreadyPresent;
+          // Keep `app.boxel.realm-servers` in lockstep with `app.boxel.realms`
+          // during the source-of-truth transition (CS-11655). Derive the
+          // realm-server origin from the realm URL — the host normalises the
+          // same way via the JWT's `realmServerURL` claim, but JWTs aren't
+          // in scope on this admin-impersonate path.
+          await appendRealmServerToUserAccountData({
+            matrixURL: matrixClient.matrixURL,
+            userId: user,
+            userAccessToken: userToken,
+            realmServerURL: ensureTrailingSlash(
+              new URL(normalizedRealmHref).origin,
+            ),
+          });
         } catch (e: any) {
           matrixAccountDataWarning = `account_data sync failed: ${e?.message ?? String(e)}`;
           log.warn(

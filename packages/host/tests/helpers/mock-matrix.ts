@@ -24,6 +24,7 @@ export interface Config {
   loggedInAs?: string;
   displayName?: string;
   activeRealms?: string[];
+  activeRealmServers?: string[];
   realmPermissions?: Record<string, string[]>;
   expiresInSec?: number;
   autostart?: boolean;

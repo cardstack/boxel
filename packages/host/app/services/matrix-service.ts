@@ -55,6 +55,7 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
@@ -709,6 +710,44 @@ export default class MatrixService extends Service {
       realms: newRealms,
     });
     await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
+  }
+
+  public async getRealmServersFromAccountData(): Promise<string[]> {
+    let { realmServers = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+      )) as { realmServers: string[] }) ?? {};
+    return realmServers;
+  }
+
+  public async setRealmServersInAccountData(
+    realmServers: string[],
+  ): Promise<void> {
+    await this.client.setAccountData(APP_BOXEL_REALM_SERVERS_EVENT_TYPE, {
+      realmServers,
+    });
+  }
+
+  public async appendRealmServerToAccountData(
+    realmServerURLString: string,
+  ): Promise<void> {
+    let realmServers = await this.getRealmServersFromAccountData();
+    if (realmServers.includes(realmServerURLString)) {
+      return;
+    }
+    await this.setRealmServersInAccountData([
+      ...realmServers,
+      realmServerURLString,
+    ]);
+  }
+
+  public async removeRealmServerFromAccountData(
+    realmServerURLString: string,
+  ): Promise<void> {
+    let realmServers = await this.getRealmServersFromAccountData();
+    await this.setRealmServersInAccountData(
+      realmServers.filter((s) => s !== realmServerURLString),
+    );
   }
 
   public async getWorkspaceFavorites(): Promise<string[]> {
