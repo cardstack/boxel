@@ -17,14 +17,29 @@ type PingCallback = (
   payload?: Buffer,
 ) => void;
 
+// Minimal stand-in for the Http2Session.socket proxy: the teardown only reads
+// these fields for its diagnostics (the real proxy forbids mutators).
+class FakeSocket {
+  destroyed = false;
+  writable = true;
+  writableLength = 0;
+  bytesRead = 0;
+  bytesWritten = 0;
+}
+
 // Minimal stand-in for an Http2Session: only the surface startSessionKeepalive
-// touches (ping/close/destroy + the close/error events + closed/destroyed).
+// touches (ping/close/destroy + socket + the close/error events +
+// closed/destroyed).
 class FakeSession extends EventEmitter {
   closed = false;
   destroyed = false;
   closeCount = 0;
   destroyCount = 0;
   pingCount = 0;
+  socket = new FakeSocket();
+  // When true, destroy() releases the peer cleanly by emitting 'close' on the
+  // next tick — the success path the confirm window should observe.
+  emitCloseOnDestroy = false;
   // Default: a healthy peer that pongs immediately.
   pingImpl: (cb: PingCallback) => boolean = (cb) => {
     setTimeout(() => cb(null, 1), 0);
@@ -44,6 +59,9 @@ class FakeSession extends EventEmitter {
   destroy() {
     this.destroyCount++;
     this.destroyed = true;
+    if (this.emitCloseOnDestroy) {
+      setTimeout(() => this.emit('close'), 0);
+    }
   }
 }
 
@@ -53,12 +71,32 @@ function asSession(fake: FakeSession): http2.Http2Session {
 
 const log = logger('test:h2-keepalive');
 
+// A logger that records its warnings so a test can assert which teardown
+// branch fired. startSessionKeepalive only emits via warn().
+function recordingLog(): {
+  log: ReturnType<typeof logger>;
+  warnings: string[];
+} {
+  let warnings: string[] = [];
+  let noop = () => {};
+  let log = {
+    warn: (...args: unknown[]) => warnings.push(args.join(' ')),
+    info: noop,
+    error: noop,
+    debug: noop,
+    trace: noop,
+    setLevel: noop,
+  } as unknown as ReturnType<typeof logger>;
+  return { log, warnings };
+}
+
 // Fast tuning so a 2-miss teardown completes well under the QUnit timeout.
 const FAST = {
   intervalMs: 20,
   pongTimeoutMs: 15,
   maxMissedPings: 2,
   graceMsBeforeDestroy: 10,
+  postDestroyConfirmMs: 20,
 };
 
 function wait(ms: number) {
@@ -101,6 +139,57 @@ module(basename(__filename), function () {
       assert.ok(
         fake.destroyCount >= 1,
         'wedged session is force-destroyed after the grace period',
+      );
+    } finally {
+      stopKeepalive();
+    }
+  });
+
+  // The unreachable warning ("STILL not closed …") and the success line
+  // ("closed Nms after force-destroy") both end in "after force-destroy", so
+  // match the success path by that suffix while excluding the unreachable one.
+  let isUnreachable = (w: string) => w.includes('STILL not closed');
+  let isCloseSuccess = (w: string) =>
+    w.includes('after force-destroy') && !isUnreachable(w);
+
+  test('a wedged session that never emits close is reported as unreachable', async function (assert) {
+    let fake = new FakeSession();
+    // Never pong, and never emit 'close' from destroy() — the transport-wedge
+    // signature where session.destroy() leaves a zombie.
+    fake.pingImpl = () => true;
+    let { log: recLog, warnings } = recordingLog();
+    let stopKeepalive = startSessionKeepalive(asSession(fake), recLog, FAST);
+    try {
+      await wait(200);
+      assert.ok(fake.destroyCount >= 1, 'wedged session is force-destroyed');
+      assert.ok(
+        warnings.some(isUnreachable),
+        'logs that the teardown did not reach the peer',
+      );
+      assert.notOk(
+        warnings.some(isCloseSuccess),
+        'does not log the success path',
+      );
+    } finally {
+      stopKeepalive();
+    }
+  });
+
+  test('a session that closes after force-destroy logs the success path', async function (assert) {
+    let fake = new FakeSession();
+    fake.pingImpl = () => true; // wedge → triggers teardown
+    fake.emitCloseOnDestroy = true; // but destroy() releases the peer
+    let { log: recLog, warnings } = recordingLog();
+    let stopKeepalive = startSessionKeepalive(asSession(fake), recLog, FAST);
+    try {
+      await wait(200);
+      assert.ok(
+        warnings.some(isCloseSuccess),
+        'logs that the session closed after force-destroy',
+      );
+      assert.notOk(
+        warnings.some(isUnreachable),
+        'does not log the transport-wedge-unreachable warning',
       );
     } finally {
       stopKeepalive();

@@ -1,4 +1,4 @@
-import { fn, hash } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -25,11 +25,12 @@ import {
   rri,
   type CommandContext,
   type ResolvedCodeRef,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import SearchResults from '@cardstack/host/components/card-search/search-results';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -106,6 +107,20 @@ export default class CreateListingModal extends Component<Signature> {
       }
     });
     return [...new Set(realms)];
+  }
+
+  // The v2 `search-entry` query for the selected example cards: scoped to the
+  // chosen card URLs (matched by index file URL, hence the `.json`-suffixed
+  // `selectedExampleCardUrls`) and their realms, with the `atom` rendering
+  // bound through the filter's `htmlQuery` (the v2 way to select a prerendered
+  // format). The eq carries only that binding, which the engine lifts out,
+  // leaving the result set scoped purely by `cardUrls`.
+  private get exampleSearchQuery(): SearchEntryWireQuery {
+    return {
+      cardUrls: this.selectedExampleCardUrls,
+      realms: this.selectedExampleRealms,
+      filter: { eq: { htmlQuery: { eq: { format: 'atom' } } } },
+    };
   }
 
   private chooseExamples = task(async () => {
@@ -263,26 +278,23 @@ export default class CreateListingModal extends Component<Signature> {
                     class='selected-examples-list'
                     data-test-selected-examples
                   >
-                    <PrerenderedCardSearch
-                      @query={{hash}}
-                      @cardUrls={{this.selectedExampleCardUrls}}
-                      @format='atom'
-                      @realms={{this.selectedExampleRealms}}
-                      @isLive={{false}}
+                    <SearchResults
+                      @query={{this.exampleSearchQuery}}
+                      @mode='none'
+                      as |results|
                     >
-                      <:loading>
+                      {{#if results.isLoading}}
                         <div class='selected-example-loading'>
                           <LoadingIndicator />
                         </div>
-                      </:loading>
-                      <:response as |cards|>
-                        {{#each cards key='url' as |card|}}
+                      {{else}}
+                        {{#each results.entries key='id' as |entry|}}
                           <div
                             class='selected-example-atom'
-                            data-test-selected-example={{card.url}}
+                            data-test-selected-example={{entry.id}}
                             data-test-card-format='atom'
                           >
-                            <card.component />
+                            <entry.component />
                             <IconButton
                               class='selected-example-remove-button'
                               @icon={{IconX}}
@@ -291,14 +303,14 @@ export default class CreateListingModal extends Component<Signature> {
                               aria-label='Remove example'
                               {{on
                                 'click'
-                                (fn this.removeSelectedExample card.url)
+                                (fn this.removeSelectedExample entry.id)
                               }}
-                              data-test-selected-example-remove={{card.url}}
+                              data-test-selected-example-remove={{entry.id}}
                             />
                           </div>
                         {{/each}}
-                      </:response>
-                    </PrerenderedCardSearch>
+                      {{/if}}
+                    </SearchResults>
                   </div>
                 {{else}}
                   <span class='no-examples-message'>No examples selected</span>
