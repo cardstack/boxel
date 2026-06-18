@@ -55,6 +55,7 @@ import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-consta
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import ENV from '@cardstack/host/config/environment';
+import { isAutoExecutableCommand } from '@cardstack/host/lib/command-auto-execute';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -1861,13 +1862,23 @@ export default class Room extends Component<Signature> {
     if (!lastMessage || !lastMessage.commands) {
       return [];
     }
+    let roomResource = this.matrixService.roomResources.get(this.args.roomId);
+    let activeMode = roomResource?.getActiveLLMModeForMessage(
+      lastMessage.eventId,
+    );
     return lastMessage.commands.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&
         !this.commandService.currentlyExecutingCommandRequestIds.has(
           command.id!,
         ) &&
-        !this.commandService.executedCommandRequestIds.has(command.id!),
+        !this.commandService.executedCommandRequestIds.has(command.id!) &&
+        // Commands destined for auto-execution must not surface the manual
+        // Accept All / Cancel bar, even during the ~100ms debounce before
+        // command-service flips `acceptingAllRoomIds`. Without this filter,
+        // the bar paints and then yanks itself once auto-execution starts,
+        // which is the CS-11647 glitch.
+        !isAutoExecutableCommand(command, activeMode),
     );
   }
 

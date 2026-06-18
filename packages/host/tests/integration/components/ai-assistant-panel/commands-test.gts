@@ -1641,4 +1641,72 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       'commandResult should not reference the original/streaming event_id once a later event in room.events owns the commandRequest',
     );
   });
+
+  test('CS-11647: Accept All bar does not flash for an auto-executed checkCorrectness command', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // checkCorrectness is on the always-auto-execute list, so the host runs
+    // it without asking. Before the fix, the manual approval bar painted
+    // for the ~100ms debounce window before command-service flipped
+    // `acceptingAllRoomIds`; the user saw Accept All / Cancel briefly
+    // appear then disappear. The bar must never paint in its manual-approval
+    // branch for this command.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'checking correctness',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cs-11647-check-correctness',
+          name: 'checkCorrectness',
+          arguments: '{}',
+        },
+      ],
+    });
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-accept-all]')
+      .doesNotExist(
+        'Accept All button must not paint in the debounce window before auto-execute starts',
+      );
+
+    await settled();
+    assert
+      .dom('[data-test-accept-all]')
+      .doesNotExist(
+        'Accept All button still hidden after the auto-execute debounce window elapses',
+      );
+  });
+
+  test('CS-11647: Accept All bar still renders for a command that requires user approval', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'patching',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cs-11647-patch',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Dave' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    await waitFor('[data-test-accept-all]');
+    assert
+      .dom('[data-test-accept-all]')
+      .exists(
+        'manual approval bar still renders for commands that require user approval',
+      );
+  });
 });

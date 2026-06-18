@@ -36,6 +36,10 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import {
+  CHECK_CORRECTNESS_COMMAND_NAME,
+  isAutoExecutableCommand,
+} from '../lib/command-auto-execute';
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
@@ -50,7 +54,6 @@ import type MessageCommand from '../lib/matrix-classes/message-command';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
-const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -379,26 +382,13 @@ export default class CommandService extends Service {
             continue;
           }
 
-          // Get the LLM mode that was active when this message was created
           let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
             message.eventId,
           );
 
-          // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
-          // or if requiresApproval is false
-          let shouldAutoExecute = false;
-          let isCheckCorrectnessCommand =
-            messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
-
           if (
-            isCheckCorrectnessCommand ||
-            messageCommand.requiresApproval === false ||
-            activeModeAtMessageTime === 'act'
+            isAutoExecutableCommand(messageCommand, activeModeAtMessageTime)
           ) {
-            shouldAutoExecute = true;
-          }
-
-          if (shouldAutoExecute) {
             readyCommands.push(messageCommand);
           }
         }
