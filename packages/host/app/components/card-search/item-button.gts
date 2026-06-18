@@ -138,6 +138,12 @@ function isNewCardArgs(item: ItemType): item is NewCardArgs {
   return typeof item === 'object' && 'realmURL' in item;
 }
 
+/**
+ * @deprecated Leaf of the legacy `SearchContent` → `SearchResultSection` →
+ * `ItemButton` search-results tree (renders a single result, prerendered or
+ * live). Favor the v2 `<SearchResults>` component, whose entries render
+ * prerendered-vs-live transparently. Removed once every consumer is on v2.
+ */
 export default class ItemButton extends Component<Signature> {
   @service declare realm: RealmService;
 
