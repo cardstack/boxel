@@ -53,7 +53,9 @@ type RefType = 'card' | 'file';
 interface RenderSlot {
   element: HTMLElement;
   // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
-  // (`:file[URL]`) resolve to FileDef instances rendered without card overlays.
+  // (`:file[URL]`) resolve to FileDef instances. Both slot kinds are wired to
+  // `cardContext.cardComponentModifier` so operator-mode overlays can target
+  // them (the overlay layer distinguishes card vs. file targets).
   refType: RefType;
   kind: 'inline' | 'block';
   state: SlotState;
