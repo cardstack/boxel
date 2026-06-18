@@ -27,6 +27,7 @@ import {
   cardTypeName,
   extractCardReferenceUrls,
   extractFileReferenceUrls,
+  fileNameFromUrl,
   isCardErrorJSONAPI,
   rri,
   trimJsonExtension,
@@ -65,21 +66,6 @@ interface RenderSlot {
   file?: FileDef; // present when refType === 'file' && state === 'resolved'
   url?: string; // present when state === 'loading' | 'unresolved'
   typeName?: string; // present when state === 'unresolved'
-}
-
-// For a `:file[URL]` ref the human-readable label is the file name (the last
-// path segment), unlike card refs whose type name is the second-to-last
-// segment (`<base>/<TypeName>/<id>`).
-function fileNameFromUrl(url: string): string {
-  let path = url;
-  try {
-    path = new URL(url).pathname;
-  } catch {
-    // Not an absolute URL; treat as a path/reference string.
-  }
-  let cleaned = path.split(/[?#]/, 1)[0].replace(/\/+$/, '');
-  let segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
-  return segments.length ? segments[segments.length - 1] : 'File';
 }
 
 function resolveUrl(

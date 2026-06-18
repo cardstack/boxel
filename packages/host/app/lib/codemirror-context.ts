@@ -152,7 +152,7 @@ class CardWidget extends WidgetType {
     let el = document.createElement(tag);
     el.setAttribute('data-card-id', this.cardId);
     el.setAttribute('data-card-kind', this.kind);
-    el.setAttribute('data-card-type', this.refType);
+    el.setAttribute('data-bfm-ref-type', this.refType);
     el.className = `cm-card-widget cm-card-widget--${this.kind}`;
     el.contentEditable = 'false';
     return el;
@@ -845,7 +845,8 @@ function createCardTargetNotifier(
             let cardId = el.getAttribute('data-card-id');
             let kind = el.getAttribute('data-card-kind') as 'inline' | 'block';
             let refType =
-              (el.getAttribute('data-card-type') as 'card' | 'file') ?? 'card';
+              (el.getAttribute('data-bfm-ref-type') as 'card' | 'file') ??
+              'card';
             if (cardId) {
               targets.push({
                 element: el as HTMLElement,

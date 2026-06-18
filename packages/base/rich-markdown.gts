@@ -52,21 +52,30 @@ export class RichMarkdownField extends FieldDef {
   /** The raw markdown text. Uses MarkdownField for textarea edit UI. */
   @field content = contains(MarkdownField);
 
+  /**
+   * Absolute base URL that relative `:card`/`:file` refs resolve against,
+   * derived from this field's `relativeTo` location. Empty string when the
+   * field has no location yet.
+   */
+  private get refBaseUrl(): string {
+    let rel = this[relativeTo];
+    if (!rel) {
+      return '';
+    }
+    return typeof rel === 'string'
+      ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
+      : rel.href;
+  }
+
   /** Resolved absolute URLs of `:card[URL]` and `::card[URL]` references. */
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: RichMarkdownField) {
       if (!this.content) {
         return [];
       }
-      let rel = this[relativeTo];
-      let baseUrl = rel
-        ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
-          : rel.href
-        : '';
       return extractCardReferenceUrls(
         this.content,
-        baseUrl,
+        this.refBaseUrl,
         virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },
@@ -88,15 +97,9 @@ export class RichMarkdownField extends FieldDef {
       if (!this.content) {
         return [];
       }
-      let rel = this[relativeTo];
-      let baseUrl = rel
-        ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
-          : rel.href
-        : '';
       return extractFileReferenceUrls(
         this.content,
-        baseUrl,
+        this.refBaseUrl,
         virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },

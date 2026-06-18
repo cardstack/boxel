@@ -403,6 +403,32 @@ export function cardTypeName(url: string): string {
   return 'Card';
 }
 
+/**
+ * Extracts a human-readable file name from a `:file[URL]` reference.
+ *
+ * Unlike card URLs (`<base>/<TypeName>/<id>`, whose human-readable label is the
+ * second-to-last segment), a file reference's label is its file name — the last
+ * path segment.
+ *
+ * Examples:
+ *  - `https://example.com/path/photo.jpg` → `"photo.jpg"`
+ *  - `./assets/data.csv`                  → `"data.csv"`
+ *  - `""`                                 → `"File"`
+ */
+export function fileNameFromUrl(url: string): string {
+  let path = url;
+
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // Not an absolute URL; treat as a path/reference string.
+  }
+
+  let cleaned = path.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  let segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
+  return segments.length ? segments[segments.length - 1] : 'File';
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

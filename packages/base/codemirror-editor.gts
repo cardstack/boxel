@@ -133,6 +133,19 @@ function labelFromUrl(url: string): string {
   return parts[parts.length - 1] || cleaned;
 }
 
+// `getCards` is typed to return CardDef instances (its generic is constrained to
+// `T extends CardDef`, and FileDef extends BaseDef — not CardDef). A query routed
+// through `on: FileDef` actually yields FileDef instances, so we reinterpret the
+// resource. Localizing the cast to one named helper keeps the unsafety
+// documented and out of the call site.
+function asFileResource(
+  resource: { instances: CardDef[]; isLoading: boolean } | undefined,
+): { instances: FileDef[]; isLoading: boolean } | undefined {
+  return resource as unknown as
+    | { instances: FileDef[]; isLoading: boolean }
+    | undefined;
+}
+
 interface CodeMirrorEditorSignature {
   Args: {
     content: string | null | undefined;
@@ -662,19 +675,18 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       let getCards = this.args.getCards;
       if (typeof getCards === 'function') {
         this._fileRefResource =
-          (getCards(this, () => {
-            let urls = this.resolvedUrlsForRefType('file');
-            if (!urls.length) return undefined;
-            return {
-              filter: {
-                in: { url: urls },
-                on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
-              },
-            };
-          }) as unknown as {
-            instances: FileDef[];
-            isLoading: boolean;
-          }) ?? null;
+          asFileResource(
+            getCards(this, () => {
+              let urls = this.resolvedUrlsForRefType('file');
+              if (!urls.length) return undefined;
+              return {
+                filter: {
+                  in: { url: urls },
+                  on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+                },
+              };
+            }),
+          ) ?? null;
       }
     }
     return this._fileRefResource?.instances ?? [];
@@ -994,89 +1006,63 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         {{#each this.cardRenderTargets as |target|}}
           {{#in-element target.element insertBefore=null}}
             {{#if target.instance}}
-              {{#if (eq target.refType 'file')}}
-                <CardContextConsumer as |context|>
-                  {{#let
-                    (this.getCardComponent target.instance)
-                    as |FileComponent|
-                  }}
-                    {{#if (isInline target.kind)}}
-                      <span
-                        class='codemirror-card-slot codemirror-card-slot--inline'
-                        data-test-codemirror-file-slot-inline
-                        {{context.cardComponentModifier
-                          cardId=target.instance.id
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                      >
-                        <FileComponent
-                          @format={{target.format}}
-                          @displayContainer={{false}}
-                        />
-                      </span>
-                    {{else}}
-                      <div
-                        class='codemirror-card-slot codemirror-card-slot--block'
-                        data-test-codemirror-file-slot-block
-                        {{context.cardComponentModifier
-                          cardId=target.instance.id
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                      >
-                        <FileComponent
-                          @format={{target.format}}
-                          @displayContainer={{false}}
-                        />
-                      </div>
-                    {{/if}}
-                  {{/let}}
-                </CardContextConsumer>
-              {{else}}
-                <CardContextConsumer as |context|>
-                  {{#let
-                    (this.getCardComponent target.instance)
-                    as |CardComponent|
-                  }}
-                    {{#if (isInline target.kind)}}
-                      <span
-                        class='codemirror-card-slot codemirror-card-slot--inline'
-                        data-test-codemirror-card-slot-inline
-                        {{context.cardComponentModifier
-                          card=target.instance
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                      >
-                        <CardComponent
-                          @format={{target.format}}
-                          @displayContainer={{false}}
-                        />
-                      </span>
-                    {{else}}
-                      <div
-                        class='codemirror-card-slot codemirror-card-slot--block'
-                        data-test-codemirror-card-slot-block
-                        {{context.cardComponentModifier
-                          card=target.instance
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                      >
-                        <CardComponent
-                          @format={{target.format}}
-                          @displayContainer={{false}}
-                        />
-                      </div>
-                    {{/if}}
-                  {{/let}}
-                </CardContextConsumer>
-              {{/if}}
+              {{! Card and file refs render identically — a `getComponent`-
+                  rendered instance registered by `id`. Only the test hook
+                  differs (card vs file). }}
+              <CardContextConsumer as |context|>
+                {{#let
+                  (this.getCardComponent target.instance)
+                  as |RefComponent|
+                }}
+                  {{#if (isInline target.kind)}}
+                    <span
+                      class='codemirror-card-slot codemirror-card-slot--inline'
+                      data-test-codemirror-file-slot-inline={{if
+                        (eq target.refType 'file')
+                        ''
+                      }}
+                      data-test-codemirror-card-slot-inline={{if
+                        (eq target.refType 'card')
+                        ''
+                      }}
+                      {{context.cardComponentModifier
+                        cardId=target.instance.id
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                    >
+                      <RefComponent
+                        @format={{target.format}}
+                        @displayContainer={{false}}
+                      />
+                    </span>
+                  {{else}}
+                    <div
+                      class='codemirror-card-slot codemirror-card-slot--block'
+                      data-test-codemirror-file-slot-block={{if
+                        (eq target.refType 'file')
+                        ''
+                      }}
+                      data-test-codemirror-card-slot-block={{if
+                        (eq target.refType 'card')
+                        ''
+                      }}
+                      {{context.cardComponentModifier
+                        cardId=target.instance.id
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                    >
+                      <RefComponent
+                        @format={{target.format}}
+                        @displayContainer={{false}}
+                      />
+                    </div>
+                  {{/if}}
+                {{/let}}
+              </CardContextConsumer>
             {{else}}
               <span class='codemirror-card-fallback'>{{target.cardId}}</span>
             {{/if}}

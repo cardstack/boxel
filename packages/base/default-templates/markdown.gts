@@ -12,6 +12,7 @@ import {
   bfmBlockFormatAndSize,
   buildWaiter,
   cardTypeName,
+  fileNameFromUrl,
   extractMermaidBlocks,
   processKatexPlaceholders,
   replaceMermaidSvgs,
@@ -69,25 +70,11 @@ interface RenderSlot {
   // eventual card's footprint; also carries `overflow: hidden` for resolved
   // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
-  card?: CardDef; // present when refType === 'card' && state === 'resolved'
-  file?: FileDef; // present when refType === 'file' && state === 'resolved'
+  // Present when state === 'resolved': a CardDef for 'card' refs, a FileDef for
+  // 'file' refs. Both render via `getComponent` and register by `id`.
+  instance?: CardDef | FileDef;
   url?: string; // present when state === 'loading' | 'unresolved'
   typeName?: string; // present when state === 'unresolved'
-}
-
-// For a `:file[URL]` ref the human-readable label is the file name (the last
-// path segment), unlike card refs whose type name is the second-to-last
-// segment (`<base>/<TypeName>/<id>`).
-function fileNameFromUrl(url: string): string {
-  let path = url;
-  try {
-    path = new URL(url).pathname;
-  } catch {
-    // Not an absolute URL; treat as a path/reference string.
-  }
-  let cleaned = path.split(/[?#]/, 1)[0].replace(/\/+$/, '');
-  let segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
-  return segments.length ? segments[segments.length - 1] : 'File';
 }
 
 function resolveUrl(
@@ -295,34 +282,21 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl, virtualNetwork);
 
-          if (refType === 'file') {
-            let file = filesByUrl.get(resolvedUrl);
-            if (file) {
-              slots.push({
-                element: el,
-                refType,
-                kind,
-                state: 'resolved',
-                format,
-                file,
-                style: resolvedStyle,
-              });
-              continue;
-            }
-          } else {
-            let card = cardsByUrl.get(resolvedUrl);
-            if (card) {
-              slots.push({
-                element: el,
-                refType,
-                kind,
-                state: 'resolved',
-                format,
-                card,
-                style: resolvedStyle,
-              });
-              continue;
-            }
+          let instance =
+            refType === 'file'
+              ? filesByUrl.get(resolvedUrl)
+              : cardsByUrl.get(resolvedUrl);
+          if (instance) {
+            slots.push({
+              element: el,
+              refType,
+              kind,
+              state: 'resolved',
+              format,
+              instance,
+              style: resolvedStyle,
+            });
+            continue;
           }
 
           // No matching instance yet: show the sized loading shimmer until the
@@ -379,8 +353,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               if (current.kind !== slot.kind) return true;
               if (current.state !== slot.state) return true;
               if (current.format !== slot.format) return true;
-              if (current.card !== slot.card) return true;
-              if (current.file !== slot.file) return true;
+              if (current.instance !== slot.instance) return true;
               if (current.url !== slot.url) return true;
               return String(current.style ?? '') !== String(slot.style ?? '');
             });
@@ -518,94 +491,69 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   <template>
     <div
       class='markdown-content'
-      {{this.captureCardSlots this.renderedHtml @linkedCards}}
+      {{this.captureCardSlots this.renderedHtml @linkedCards @linkedFiles}}
     >
       {{this.renderedHtml}}
     </div>
     {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
         {{#if (eq slot.state 'resolved')}}
-          {{#if (eq slot.refType 'file')}}
-            <CardContextConsumer as |context|>
-              {{#let (this.getCardComponent slot.file) as |FileComponent|}}
-                {{#if (eq slot.kind 'inline')}}
-                  <span
-                    class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
-                    data-test-markdown-bfm-inline-file
-                    {{context.cardComponentModifier
-                      cardId=slot.file.id
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <FileComponent
-                      @format={{slot.format}}
-                      @displayContainer={{false}}
-                    />
-                  </span>
-                {{else}}
-                  <div
-                    class='markdown-bfm-card-slot markdown-bfm-card-slot--block
-                      {{if slot.style "markdown-bfm-card-slot--fitted"}}'
-                    style={{slot.style}}
-                    data-test-markdown-bfm-block-file
-                    {{context.cardComponentModifier
-                      cardId=slot.file.id
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <FileComponent
-                      @format={{slot.format}}
-                      @displayContainer={{false}}
-                    />
-                  </div>
-                {{/if}}
-              {{/let}}
-            </CardContextConsumer>
-          {{else}}
-            <CardContextConsumer as |context|>
-              {{#let (this.getCardComponent slot.card) as |CardComponent|}}
-                {{#if (eq slot.kind 'inline')}}
-                  <span
-                    class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
-                    data-test-markdown-bfm-inline-card
-                    {{context.cardComponentModifier
-                      card=slot.card
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <CardComponent
-                      @format={{slot.format}}
-                      @displayContainer={{false}}
-                    />
-                  </span>
-                {{else}}
-                  <div
-                    class='markdown-bfm-card-slot markdown-bfm-card-slot--block
-                      {{if slot.style "markdown-bfm-card-slot--fitted"}}'
-                    style={{slot.style}}
-                    data-test-markdown-bfm-block-card
-                    {{context.cardComponentModifier
-                      card=slot.card
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <CardComponent
-                      @format={{slot.format}}
-                      @displayContainer={{false}}
-                    />
-                  </div>
-                {{/if}}
-              {{/let}}
-            </CardContextConsumer>
-          {{/if}}
+          {{! Card and file refs render identically: both resolve to a
+              `getComponent`-rendered instance registered by `id`. Only the
+              test hook differs (card vs file). }}
+          <CardContextConsumer as |context|>
+            {{#let (this.getCardComponent slot.instance) as |RefComponent|}}
+              {{#if (eq slot.kind 'inline')}}
+                <span
+                  class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                  data-test-markdown-bfm-inline-file={{if
+                    (eq slot.refType 'file')
+                    ''
+                  }}
+                  data-test-markdown-bfm-inline-card={{if
+                    (eq slot.refType 'card')
+                    ''
+                  }}
+                  {{context.cardComponentModifier
+                    cardId=slot.instance.id
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                >
+                  <RefComponent
+                    @format={{slot.format}}
+                    @displayContainer={{false}}
+                  />
+                </span>
+              {{else}}
+                <div
+                  class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                    {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                  style={{slot.style}}
+                  data-test-markdown-bfm-block-file={{if
+                    (eq slot.refType 'file')
+                    ''
+                  }}
+                  data-test-markdown-bfm-block-card={{if
+                    (eq slot.refType 'card')
+                    ''
+                  }}
+                  {{context.cardComponentModifier
+                    cardId=slot.instance.id
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                >
+                  <RefComponent
+                    @format={{slot.format}}
+                    @displayContainer={{false}}
+                  />
+                </div>
+              {{/if}}
+            {{/let}}
+          </CardContextConsumer>
         {{else if (eq slot.state 'loading')}}
           {{#if (eq slot.kind 'inline')}}
             <span
