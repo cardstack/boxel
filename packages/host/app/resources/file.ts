@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { parse } from 'date-fns';
-import { didCancel, restartableTask } from 'ember-concurrency';
+import { keepLatestTask, restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import {
@@ -222,7 +222,16 @@ class _FileResource extends Resource<Args> {
     }
   }
 
-  private read = restartableTask(async (opts?: { force?: boolean }) => {
+  // `keepLatestTask`, not `restartableTask`: when an invalidation event
+  // arrives while a read is in flight, we want the in-flight read to
+  // complete and the event-driven reload to run AFTER it. Restarting
+  // here would cancel the in-flight task, and the cancelled task's
+  // awaited fetch would later throw TaskCancelation at the `await` —
+  // catching that as a real fetch failure would overwrite the fresh
+  // task's `state: 'ready'` with `state: 'not-found'` whenever the
+  // cancelled response happened to land after the restart's response.
+  // Queuing the latest extra perform keeps state writes sequential.
+  private read = keepLatestTask(async (opts?: { force?: boolean }) => {
     let response;
     try {
       response = await this.network.authedFetch(this._url, {
@@ -243,17 +252,6 @@ class _FileResource extends Resource<Args> {
         return;
       }
     } catch (err: any) {
-      // `read` is restartable: when an invalidation event arrives while
-      // a read is in flight, `read.perform({force: true})` cancels this
-      // instance and starts a fresh one. ember-concurrency surfaces the
-      // cancel as a TaskCancelation thrown at the awaited fetch. The
-      // fresh task's `updateState({ state: 'ready' })` can land before
-      // the cancelled task's awaited promise resolves; treating the
-      // cancellation as a real fetch failure would then overwrite that
-      // ready state with `not-found`.
-      if (didCancel(err)) {
-        return;
-      }
       log.error(`Could not get file ${this._url}, err: ${err.message}`);
       this.updateState({ state: 'not-found', url: rri(this._url) });
       return;
