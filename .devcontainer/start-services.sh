@@ -27,6 +27,20 @@ cd /workspaces/boxel
 # mise provides the pinned node/pnpm/ts-node toolchain.
 eval "$(mise activate bash)"
 
+# Tear down any prior service instances before (re)starting. On a fresh
+# Codespace this is a no-op, but on a re-run (after a code pull, or a manual
+# restart) a still-running realm holds port 4201, so the new realm would hit
+# EADDRINUSE, exit, and leave the *old* (pre-change) realm serving — silently
+# masking the very change being tested. Kill the node service chain first;
+# Postgres/Synapse run in Docker and are re-asserted idempotently below.
+echo "==> Stopping any previously running services..."
+pkill -9 -f 'ts-node.*main' 2>/dev/null || true
+pkill -9 -f 'start:prerender' 2>/dev/null || true
+pkill -9 -f 'start:worker' 2>/dev/null || true
+pkill -9 -f 'start:icons' 2>/dev/null || true
+pkill -9 -f 'prerender-manager' 2>/dev/null || true
+sleep 2
+
 CODESPACE_NAME="${CODESPACE_NAME:?CODESPACE_NAME must be set}"
 FWD_DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
 
