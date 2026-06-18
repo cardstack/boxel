@@ -144,6 +144,14 @@ echo "==> Seeding reviewer Matrix user (user/password)..."
 # (HOST_URL) at the CI/S3 host. Serves plain HTTP on 4201; GitHub's edge does
 # TLS. Realm layout: base, catalog, skills, openrouter (experiments /
 # homepage / submission / software-factory skipped to stay lean).
+#
+# ASSETS_URL_OVERRIDE points the host app's asset URLs at the realm server's
+# OWN origin instead of the S3 host. The reviewer's browser loads the app from
+# the realm origin (4201), so loading ES-module scripts from the S3 host would
+# be cross-origin and fail CORS (the preview bucket sends no
+# Access-Control-Allow-Origin). With the override, asset URLs are same-origin
+# and the realm proxies /assets, /@embroider and the favicons through to the
+# S3 bundle (HOST_URL) — see proxyAssetPaths in packages/realm-server.
 echo "==> Starting realm server..."
 SKIP_EXPERIMENTS=true \
 SKIP_BOXEL_HOMEPAGE=true \
@@ -154,6 +162,7 @@ NODE_NO_WARNINGS=1 \
 PGPORT=5435 \
 PGDATABASE=boxel \
 LOG_LEVELS='*=info' \
+ASSETS_URL_OVERRIDE="${REALM_SERVER_URL}" \
 REALM_SERVER_SECRET_SEED="mum's the word" \
 REALM_SECRET_SEED="shhh! it's a secret" \
 GRAFANA_SECRET="shhh! it's a secret" \

@@ -583,6 +583,10 @@ const smokeTestHostApp = async () => {
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
       : dist,
+    // The actual host bundle, used to proxy static assets when assetsURL is
+    // overridden to the realm's own origin (so same-origin asset requests are
+    // forwarded to the real bundle). Equals assetsURL when not overridden.
+    hostDistURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,

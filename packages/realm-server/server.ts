@@ -20,6 +20,7 @@ import {
   ecsMetadata,
   methodOverrideSupport,
   proxyAsset,
+  proxyAssetPaths,
 } from './middleware/index.ts';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
 
@@ -877,6 +878,7 @@ export class RealmServer {
   private queue: QueuePublisher;
   private definitionLookup: DefinitionLookup;
   private assetsURL: URL;
+  private hostDistURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
@@ -912,6 +914,7 @@ export class RealmServer {
     queue,
     definitionLookup,
     assetsURL,
+    hostDistURL,
     getIndexHTML,
     matrixRegistrationSecret,
     matrixAdminUsername,
@@ -934,6 +937,12 @@ export class RealmServer {
     queue: QueuePublisher;
     definitionLookup: DefinitionLookup;
     assetsURL: URL;
+    // Upstream for proxying host-app static assets (`/assets/…`,
+    // `/@embroider/…`, favicons) when the served HTML points them at the
+    // realm server's own origin — see `proxyAssetPaths`. Defaults to
+    // `assetsURL`; only differs when assets are rewritten to be same-origin
+    // (Codespace previews) while the actual bundle still lives elsewhere.
+    hostDistURL?: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
@@ -976,6 +985,7 @@ export class RealmServer {
     this.queue = queue;
     this.definitionLookup = definitionLookup;
     this.assetsURL = assetsURL;
+    this.hostDistURL = hostDistURL ?? assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
@@ -1096,11 +1106,28 @@ export class RealmServer {
         }),
       )
       .use(
-        proxyAsset('/auth-service-worker.js', this.assetsURL, {
+        proxyAsset('/auth-service-worker.js', this.hostDistURL, {
           requestHeaders: {
             'accept-encoding': 'identity',
           },
         }),
+      )
+      // When the served HTML rewrites asset URLs to the realm server's own
+      // origin (Codespace previews, where assetsURL === serverURL so the
+      // browser stays same-origin and avoids cross-origin CORS on ES-module
+      // scripts), proxy those static host-app requests through to the real
+      // bundle. Dormant in normal deployments: there the HTML points assets
+      // straight at the host CDN, so these paths are never requested here.
+      .use(
+        proxyAssetPaths(
+          [
+            '/assets/',
+            '/@embroider/',
+            '/boxel-favicon.png',
+            '/boxel-webclip.png',
+          ],
+          this.hostDistURL,
+        ),
       )
       .use(serveIndex)
       .use(serveFromRealm);
