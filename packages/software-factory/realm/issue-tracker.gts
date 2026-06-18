@@ -579,6 +579,8 @@ class IssueIsolated extends Component<typeof Issue> {
       .issue-body[data-sidebar='closed'] .issue-sidebar {
         width: 0;
         border-left-width: 0;
+        visibility: hidden;
+        pointer-events: none;
       }
       .meta-list {
         margin: 0;
@@ -671,6 +673,8 @@ class IssueIsolated extends Component<typeof Issue> {
         .issue-body[data-sidebar='closed'] .issue-sidebar {
           width: 100%;
           border-left-width: 0;
+          visibility: visible;
+          pointer-events: auto;
         }
         .issue-sidebar-inner {
           width: 100%;
@@ -985,6 +989,8 @@ class IssueEdit extends Component<typeof Issue> {
       .issue-body[data-sidebar='closed'] .issue-sidebar {
         width: 0;
         border-left-width: 0;
+        visibility: hidden;
+        pointer-events: none;
       }
       .meta-list {
         margin: 0;
@@ -1070,6 +1076,8 @@ class IssueEdit extends Component<typeof Issue> {
         .issue-body[data-sidebar='closed'] .issue-sidebar {
           width: 100%;
           border-left-width: 0;
+          visibility: visible;
+          pointer-events: auto;
         }
         .issue-sidebar-inner {
           width: 100%;
@@ -1746,6 +1754,8 @@ class ProjectIsolated extends Component<typeof Project> {
       .project-body[data-sidebar='closed'] .project-sidebar {
         width: 0;
         border-left-width: 0;
+        visibility: hidden;
+        pointer-events: none;
       }
       .meta-list {
         margin: 0;
@@ -1823,6 +1833,8 @@ class ProjectIsolated extends Component<typeof Project> {
         .project-body[data-sidebar='closed'] .project-sidebar {
           width: 100%;
           border-left-width: 0;
+          visibility: visible;
+          pointer-events: auto;
         }
         .project-sidebar-inner {
           width: 100%;
@@ -2310,6 +2322,8 @@ class ProjectEdit extends Component<typeof Project> {
       .project-body[data-sidebar='closed'] .project-sidebar {
         width: 0;
         border-left-width: 0;
+        visibility: hidden;
+        pointer-events: none;
       }
       .meta-list {
         margin: 0;
@@ -2389,6 +2403,8 @@ class ProjectEdit extends Component<typeof Project> {
         .project-body[data-sidebar='closed'] .project-sidebar {
           width: 100%;
           border-left-width: 0;
+          visibility: visible;
+          pointer-events: auto;
         }
         .project-sidebar-inner {
           width: 100%;
