@@ -836,16 +836,40 @@ export default class MatrixService extends Service {
           this.startedAtTs = 0;
         }
         if (isTesting())
-          console.warn('[start-phase] getAccountData(realms,favorites)');
-        let [accountDataContent, favoritesData] = await Promise.all([
+          console.warn('[start-phase] getAccountData(realm-servers,favorites)');
+        let [realmServersData, favoritesData] = await Promise.all([
           this.client.getAccountDataFromServer(
-            APP_BOXEL_REALMS_EVENT_TYPE,
-          ) as Promise<{ realms: string[] } | null>,
+            APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+          ) as Promise<{ realmServers: string[] } | null>,
           this.client.getAccountDataFromServer(
             APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
           ) as Promise<{ favorites: string[] } | null>,
         ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
+
+        // CS-11658: boot assembles the realm list from trusted servers via
+        // `_realm-auth`. The transition fallback below reads the legacy
+        // `app.boxel.realms` key when `app.boxel.realm-servers` is absent
+        // or empty — necessary until CS-11659's lazy migration populates
+        // the new key for existing users. Remove the fallback once that
+        // migration has run on all active accounts.
+        let trustedServers = realmServersData?.realmServers ?? [];
+        let userRealmURLs: string[];
+        if (trustedServers.length > 0) {
+          if (isTesting())
+            console.warn('[start-phase] fetchUserRealmsFromTrustedServers');
+          userRealmURLs =
+            await this.realmServer.fetchUserRealmsFromTrustedServers(
+              trustedServers,
+            );
+        } else {
+          if (isTesting())
+            console.warn('[start-phase] getAccountData(realms-legacy)');
+          let legacyRealmsData = (await this.client.getAccountDataFromServer(
+            APP_BOXEL_REALMS_EVENT_TYPE,
+          )) as { realms: string[] } | null;
+          userRealmURLs = legacyRealmsData?.realms ?? [];
+        }
 
         let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
           ([_url, realmResource]) => !realmResource.isLoggedIn,
@@ -857,9 +881,7 @@ export default class MatrixService extends Service {
           );
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
-          this.realmServer.setAvailableRealmIdentifiers(
-            (accountDataContent?.realms ?? []).map(ri),
-          ),
+          this.realmServer.setAvailableRealmIdentifiers(userRealmURLs.map(ri)),
         ]);
 
         if (isTesting()) console.warn('[start-phase] prefetchRealmInfos');
@@ -868,7 +890,7 @@ export default class MatrixService extends Service {
         );
 
         if (isTesting()) console.warn('[start-phase] initSlidingSync');
-        await this.initSlidingSync(accountDataContent);
+        await this.initSlidingSync({ realms: userRealmURLs });
         if (isTesting()) console.warn('[start-phase] startClient');
         await this.client.startClient({ slidingSync: this.slidingSync });
         if (isTesting())
