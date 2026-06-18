@@ -8,10 +8,7 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import {
-  compareCurrentBoxelUIChecksum,
-  writeCurrentBoxelUIChecksum,
-} from '../lib/boxel-ui-change-checker.ts';
+import { boxelUIChecker } from '../lib/boxel-ui-change-checker.ts';
 import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
 
 export default function handlePostDeployment({
@@ -39,7 +36,7 @@ export default function handlePostDeployment({
     await definitionLookup.clearAllDefinitions();
 
     let boxelUiChangeCheckerResult =
-      await compareCurrentBoxelUIChecksum(assetsURL);
+      await boxelUIChecker.compareCurrentBoxelUIChecksum(assetsURL);
 
     if (
       boxelUiChangeCheckerResult.currentChecksum !==
@@ -57,7 +54,9 @@ export default function handlePostDeployment({
         },
       });
 
-      writeCurrentBoxelUIChecksum(boxelUiChangeCheckerResult.currentChecksum);
+      boxelUIChecker.writeCurrentBoxelUIChecksum(
+        boxelUiChangeCheckerResult.currentChecksum,
+      );
     }
 
     await setContextResponse(
