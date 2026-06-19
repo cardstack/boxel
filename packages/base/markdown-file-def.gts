@@ -1,6 +1,7 @@
 import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
   identifyCard,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -149,6 +150,7 @@ class Isolated extends Component<typeof MarkdownDef> {
         <MarkdownTemplate
           @content={{this.content}}
           @linkedCards={{@model.linkedCards}}
+          @linkedFiles={{@model.linkedFiles}}
           @cardReferenceBaseUrl={{@model.id}}
         />
       {{else}}
@@ -211,6 +213,7 @@ class Embedded extends Component<typeof MarkdownDef> {
         <MarkdownTemplate
           @content={{this.content}}
           @linkedCards={{@model.linkedCards}}
+          @linkedFiles={{@model.linkedFiles}}
           @cardReferenceBaseUrl={{@model.id}}
         />
       </div>
@@ -493,6 +496,30 @@ export class MarkdownDef extends FileDef {
     },
   });
 
+  @field fileReferenceUrls = containsMany(StringField, {
+    computeVia: function (this: MarkdownDef) {
+      if (!this.content) {
+        return [];
+      }
+      return extractFileReferenceUrls(
+        this.content,
+        this.id ?? '',
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
+      );
+    },
+  });
+
+  // Resolve by `url` rather than `id`: a FileDef's search doc is its
+  // extractAttributes output ({ url, name, contentType, ... }) and carries no
+  // queryable `id` (unlike CardDef instances), so `in: { id }` never matches.
+  @field linkedFiles = linksToMany(FileDef, {
+    query: {
+      filter: {
+        in: { url: '$this.fileReferenceUrls' },
+      },
+    },
+  });
+
   static isolated: BaseDefComponent = Isolated;
   static embedded: BaseDefComponent = Embedded;
   static fitted: BaseDefComponent = Fitted;
@@ -521,6 +548,7 @@ export class MarkdownDef extends FileDef {
       excerpt: string;
       content: string;
       cardReferenceUrls: string[];
+      fileReferenceUrls: string[];
       // The frontmatter's `boxel.kind`, as a direct searchable field (e.g.
       // `searchFiles({ filter: { eq: { kind: 'skill' } } })`).
       kind?: string;
@@ -565,6 +593,7 @@ export class MarkdownDef extends FileDef {
       excerpt: string;
       content: string;
       cardReferenceUrls: string[];
+      fileReferenceUrls: string[];
       kind?: string;
       frontmatter?: Record<string, unknown>;
     }> = {
@@ -577,6 +606,11 @@ export class MarkdownDef extends FileDef {
       // the realm, so nothing is lost.
       content: body,
       cardReferenceUrls: extractCardReferenceUrls(
+        body,
+        url,
+        new VirtualNetwork(),
+      ),
+      fileReferenceUrls: extractFileReferenceUrls(
         body,
         url,
         new VirtualNetwork(),
