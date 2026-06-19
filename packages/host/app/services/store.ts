@@ -2647,22 +2647,38 @@ function processCardError(
   url: string | undefined,
   error: any,
 ): CardErrorsJSONAPI {
+  let httpStatus = typeof error?.status === 'number' ? error.status : undefined;
+  let errorResponse: CardErrorsJSONAPI;
   try {
-    let errorResponse = JSON.parse(error.responseText);
-    return formattedError(url, error, errorResponse.errors?.[0]);
+    let parsed = JSON.parse(error.responseText);
+    errorResponse = formattedError(url, error, parsed.errors?.[0]);
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return formattedError(url, error, {
+        errorResponse = formattedError(url, error, {
           status: 404,
           title: 'Card Not Found',
           message: `The card ${url} does not exist`,
         });
+        break;
       default:
-        return formattedError(url, error, undefined);
+        errorResponse = formattedError(url, error, undefined);
     }
   }
+  // The realm server responds with an HTTP 404 only when the card document
+  // itself is missing. A card that exists but can't be served — e.g. because a
+  // module it imports is missing — comes back as a 5xx whose JSON:API body
+  // still carries the dependency's propagated 404. Trust the HTTP status as
+  // the authoritative not-found signal so a broken dependency surfaces as the
+  // error it is rather than masquerading as a missing card.
+  if (httpStatus != null && httpStatus !== 404) {
+    let cardError = errorResponse.errors[0];
+    if (cardError?.status === 404) {
+      cardError.status = httpStatus;
+    }
+  }
+  return errorResponse;
 }
 
 function needsServerStateMerge(

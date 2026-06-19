@@ -54,6 +54,14 @@ export interface Args {
   };
 }
 
+/**
+ * @deprecated The resource backing the legacy `<PrerenderedCardSearch>`
+ * component; fetches the prerendered-card document from
+ * `/_federated-search-prerendered`. Favor the v2 search-entry resource
+ * `SearchEntriesResource` / `getSearchEntriesResource`
+ * (`resources/search-entries`), which fetches `search-entry`s from `/_search-v2`
+ * and backs `<SearchResults>`. Removed once every consumer is on v2.
+ */
 export class PrerenderedSearchResource extends Resource<Args> {
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
@@ -430,6 +438,10 @@ export class PrerenderedSearchResource extends Resource<Args> {
 /**
  * Creates a PrerenderedSearchResource that fetches prerendered card HTML
  * from the realm server and manages live updates.
+ *
+ * @deprecated Favor the v2 search-entry resource `getSearchEntriesResource`
+ * (`resources/search-entries`), which fetches `search-entry`s from `/_search-v2`
+ * and backs `<SearchResults>`. Removed once every consumer is on v2.
  *
  * @param parent - The component or object that owns this resource
  * @param owner - The Ember owner for dependency injection

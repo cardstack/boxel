@@ -26,7 +26,6 @@ export interface SearchEntryRendering {
   // Absent only on an error rendering with no last-known-good HTML.
   html?: string;
   cardType: string;
-  iconHtml?: string;
   isError: boolean;
   format: PrerenderedHtmlFormat;
   // The type this rendering was rendered as. A file rendering carries none
@@ -43,7 +42,20 @@ export interface SearchEntryRendering {
 export interface RenderableSearchEntryLike {
   // The card/file identity URL.
   id: string;
+  // The URL of the realm hosting this result — used to group results by realm.
+  realmUrl: string;
+  // The result's realm-local path (e.g. `Person/error`) — a readable label a
+  // consumer shows on an error tile to identify which result failed. Falls back
+  // to the bare id when the id isn't under the entry's realm.
+  name: string;
   isError: boolean;
+  // The result's card-type descriptor, resolved from the deduped `icon`
+  // resource — present whenever the row's native type has one. Carried on the
+  // entry (not the rendering) so an item-only / no-HTML row exposes it too:
+  // the type's icon HTML, display name, and code ref.
+  iconHtml?: string;
+  displayName?: string;
+  codeRef?: ResolvedCodeRef;
   // The chosen prerendered rendering, when the result carries one.
   html?: SearchEntryRendering;
   // The raw live serialization branch (full or sparse), when present.

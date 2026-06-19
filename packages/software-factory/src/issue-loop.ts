@@ -134,6 +134,22 @@ export interface IssueLoopConfig {
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
   maxOuterCycles?: number;
+  /**
+   * Emit the timing instrumentation — per-phase durations on the agent /
+   * validation lines, the per-issue `Timing:` line, and the end-of-run
+   * summary table. Off by default so normal runs stay clean; the CLI sets it
+   * from `--debug`. (The accompanying per-line timestamps are gated
+   * separately in logger.ts via the same flag.)
+   */
+  debug?: boolean;
+  /**
+   * Cumulative milliseconds spent in `syncWorkspace()` across the whole run,
+   * read on demand. Must time EVERY sync — both the loop's own syncs and the
+   * realm-touching `run_*` tool syncs that fire inside `agent.run` — so the
+   * loop can attribute tool-triggered sync time to sync rather than agent time
+   * in the debug timing summary. Defaults to a no-op (0) when not wired.
+   */
+  getSyncElapsedMs?: () => number;
 }
 
 export type IssueLoopOutcome =
@@ -148,6 +164,26 @@ export interface IssueIterationResult {
   innerIterations: number;
   toolCallLog: ToolCallEntry[];
   lastValidation?: ValidationResults;
+  /** Wall-clock attribution for this issue. See {@link IssueTiming}. */
+  timing?: IssueTiming;
+}
+
+/**
+ * Per-issue wall-clock attribution. The factory's runtime is dominated by
+ * three buckets — LLM agent turns, the validation pipeline (esp. browser
+ * test runs), and workspace↔realm syncs — and a run otherwise gives no way
+ * to tell which one cost the hour. `totalMs` is the issue's wall clock; the
+ * gap between it and (agent+validation+sync) is scheduler/index-poll overhead.
+ */
+export interface IssueTiming {
+  agentMs: number;
+  validationMs: number;
+  syncMs: number;
+  totalMs: number;
+}
+
+function fmtSecs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export interface IssueLoopResult {
@@ -229,6 +265,8 @@ export async function runIssueLoop(
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
+    debug = false,
+    getSyncElapsedMs = () => 0,
   } = config;
 
   let scheduler = new IssueScheduler(issueStore);
@@ -237,6 +275,24 @@ export async function runIssueLoop(
   let issueResults: IssueIterationResult[] = [];
   let outerCycles = 0;
   let exhaustedIssues = new Set<string>();
+
+  // Wall-clock attribution. `grand`/`cur` accumulate the three cost buckets
+  // across the whole run and within the current outer cycle respectively;
+  // `cur` is reset when each issue is picked up. Sync time is read from the
+  // shared `getSyncElapsedMs` counter (a delta around each window), which times
+  // EVERY `syncWorkspace()` call — both the loop's own syncs and the realm-
+  // touching `run_*` tool syncs that fire inside `agent.run`. Tracking sync
+  // centrally lets us subtract tool-sync time from `agentMs`, so the timing
+  // summary doesn't blame the model for sync/index work a tool triggered.
+  let loopStartMs = Date.now();
+  let loopSyncStartMs = getSyncElapsedMs();
+  let grand: IssueTiming = {
+    agentMs: 0,
+    validationMs: 0,
+    syncMs: 0,
+    totalMs: 0,
+  };
+  let cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
 
   log.info(
     `Starting issue loop: targetRealm=${targetRealm}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
@@ -274,6 +330,12 @@ export async function runIssueLoop(
       log.info('No unblocked issues remain — exiting outer loop');
       break;
     }
+
+    // Reset per-issue timing accumulators; `cycleStartMs` anchors this
+    // issue's total wall clock and `cycleSyncStartMs` its sync baseline.
+    cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
+    let cycleStartMs = Date.now();
+    let cycleSyncStartMs = getSyncElapsedMs();
 
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
@@ -348,11 +410,22 @@ export async function runIssueLoop(
         briefUrl,
       });
 
-      // Run the agent — it calls tools during its turn
+      // Run the agent — it calls tools during its turn. Realm-touching `run_*`
+      // tools sync the workspace before executing, so subtract that tool-sync
+      // time from the agent's wall clock: it's attributed to sync (via the
+      // shared counter), not to the model.
+      let agentStartMs = Date.now();
+      let agentSyncStartMs = getSyncElapsedMs();
       let result = await agent.run(context, tools);
+      let toolSyncMs = getSyncElapsedMs() - agentSyncStartMs;
+      let agentMs = Math.max(0, Date.now() - agentStartMs - toolSyncMs);
+      cur.agentMs += agentMs;
+      grand.agentMs += agentMs;
       allToolCalls.push(...result.toolCalls);
 
-      log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
+      log.info(
+        `  Agent returned ${result.toolCalls.length} tool call(s)${debug ? ` in ${fmtSecs(agentMs)}` : ''}`,
+      );
 
       // The agent itself reports "I cannot proceed" via two paths:
       // calling `request_clarification` (clarification.message), or
@@ -384,7 +457,11 @@ export async function runIssueLoop(
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
+      let validationStartMs = Date.now();
       validationResults = await validator.validate(targetRealm, iteration);
+      let validationMs = Date.now() - validationStartMs;
+      cur.validationMs += validationMs;
+      grand.validationMs += validationMs;
 
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they
@@ -419,7 +496,7 @@ export async function runIssueLoop(
         validationContext = validationSummary;
       }
       log.info(
-        `  Validation: ${formatValidation(validationResults)}${
+        `  Validation: ${formatValidation(validationResults)}${debug ? ` in ${fmtSecs(validationMs)}` : ''}${
           syncFailed ? ' (sync failed — ignoring validation pass/fail)' : ''
         }`,
       );
@@ -546,9 +623,24 @@ export async function runIssueLoop(
       exhaustedIssues.add(issue.id);
     }
 
+    // All syncs during this issue (loop-owned + tool-triggered) accrued to the
+    // shared counter; the delta is this issue's sync time.
+    cur.syncMs = getSyncElapsedMs() - cycleSyncStartMs;
+    let issueTiming: IssueTiming = {
+      agentMs: cur.agentMs,
+      validationMs: cur.validationMs,
+      syncMs: cur.syncMs,
+      totalMs: Date.now() - cycleStartMs,
+    };
+
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
     );
+    if (debug) {
+      log.info(
+        `  Timing: agent ${fmtSecs(issueTiming.agentMs)}, validation ${fmtSecs(issueTiming.validationMs)}, sync ${fmtSecs(issueTiming.syncMs)}, total ${fmtSecs(issueTiming.totalMs)}`,
+      );
+    }
 
     issueResults.push({
       issueId: issue.id,
@@ -557,6 +649,7 @@ export async function runIssueLoop(
       innerIterations,
       toolCallLog: allToolCalls,
       lastValidation: validationResults,
+      timing: issueTiming,
     });
 
     // Reload issues to pick up new issues the agent may have created
@@ -617,5 +710,51 @@ export async function runIssueLoop(
     }
   }
 
+  // Total sync across the whole run (per-issue syncs + loop-level syncs such
+  // as the post-loop project-status sync), read from the shared counter.
+  grand.syncMs = getSyncElapsedMs() - loopSyncStartMs;
+  grand.totalMs = Date.now() - loopStartMs;
+  if (debug) {
+    logTimingSummary(issueResults, grand);
+  }
+
   return { outcome, outerCycles, issueResults };
+}
+
+/**
+ * Log a per-issue + grand-total wall-clock attribution table at the end of a
+ * run. Answers "where did the hour go" by splitting time across agent turns,
+ * the validation pipeline, and workspace syncs. The unattributed remainder
+ * (total minus the three buckets) is scheduler + index-poll overhead.
+ */
+function logTimingSummary(
+  issueResults: IssueIterationResult[],
+  grand: IssueTiming,
+): void {
+  let timed = issueResults.filter(
+    (r): r is IssueIterationResult & { timing: IssueTiming } =>
+      r.timing != null,
+  );
+  if (timed.length === 0) {
+    return;
+  }
+
+  log.info('Run timing summary (where the time went):');
+  log.info(
+    `  ${'issue'.padEnd(36)} ${'agent'.padStart(8)} ${'valid'.padStart(8)} ${'sync'.padStart(8)} ${'total'.padStart(8)}`,
+  );
+  for (let r of timed) {
+    let label = (r.issueSummary || r.issueId).slice(0, 36).padEnd(36);
+    log.info(
+      `  ${label} ${fmtSecs(r.timing.agentMs).padStart(8)} ${fmtSecs(r.timing.validationMs).padStart(8)} ${fmtSecs(r.timing.syncMs).padStart(8)} ${fmtSecs(r.timing.totalMs).padStart(8)}`,
+    );
+  }
+  let attributed = grand.agentMs + grand.validationMs + grand.syncMs;
+  let overheadMs = Math.max(0, grand.totalMs - attributed);
+  log.info(
+    `  ${'TOTAL'.padEnd(36)} ${fmtSecs(grand.agentMs).padStart(8)} ${fmtSecs(grand.validationMs).padStart(8)} ${fmtSecs(grand.syncMs).padStart(8)} ${fmtSecs(grand.totalMs).padStart(8)}`,
+  );
+  log.info(
+    `  Unattributed (scheduling + index polling): ${fmtSecs(overheadMs)} of ${fmtSecs(grand.totalMs)} wall clock`,
+  );
 }

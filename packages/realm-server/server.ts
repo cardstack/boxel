@@ -77,6 +77,12 @@ const HTTP2_KEEPALIVE_MAX_MISSED_PINGS = 3;
 // so force the session down to actually RST the browser's hung fetch.
 const HTTP2_KEEPALIVE_GRACE_MS = 3000;
 const HTTP2_KEEPALIVE_TCP_INITIAL_DELAY_MS = 15000;
+// How long after the force-destroy to check whether the session actually
+// emitted 'close'. A transport-wedged session can swallow `session.destroy()`
+// — no 'close' fires, the session lingers, and its streams never RST — so this
+// confirm window records whether the forced teardown reached the peer or the
+// wedge is unreachable from the server.
+const HTTP2_KEEPALIVE_POST_DESTROY_CONFIRM_MS = 2000;
 
 // Per-session liveness recorded by the PING keepalive and read by the h2
 // diagnostics, so diagnostic dumps can say whether the underlying session was
@@ -342,6 +348,7 @@ interface KeepaliveOptions {
   pongTimeoutMs?: number;
   maxMissedPings?: number;
   graceMsBeforeDestroy?: number;
+  postDestroyConfirmMs?: number;
 }
 
 // Ping a single h2 session on an interval; if it misses `maxMissedPings`
@@ -362,6 +369,8 @@ export function startSessionKeepalive(
     options.maxMissedPings ?? HTTP2_KEEPALIVE_MAX_MISSED_PINGS;
   let graceMsBeforeDestroy =
     options.graceMsBeforeDestroy ?? HTTP2_KEEPALIVE_GRACE_MS;
+  let postDestroyConfirmMs =
+    options.postDestroyConfirmMs ?? HTTP2_KEEPALIVE_POST_DESTROY_CONFIRM_MS;
 
   let stopped = false;
   let misses = 0;
@@ -423,17 +432,55 @@ export function startSessionKeepalive(
       // already closing/closed
     }
     let hard = setTimeout(() => {
+      if (session.destroyed) {
+        return;
+      }
+      // Record the socket-level state that characterizes the wedge. Reads go
+      // through the guarded Http2Session.socket proxy, which permits property
+      // gets but throws ERR_HTTP2_NO_SOCKET_MANIPULATION on mutators — so this
+      // can observe the socket but cannot tear it down directly; session
+      // teardown is `session.destroy()`'s job (it targets the socket itself).
+      let socket = session.socket as net.Socket | undefined;
+      let socketState = socket
+        ? `socket(destroyed=${socket.destroyed} writable=${socket.writable} ` +
+          `writableLength=${socket.writableLength} ` +
+          `bytesRead=${socket.bytesRead} bytesWritten=${socket.bytesWritten})`
+        : 'socket=<none>';
+      log.warn(
+        `[h2-keepalive] session ${sessionLabel()} still up after ` +
+          `${graceMsBeforeDestroy}ms grace — force-destroying; ${socketState}`,
+      );
+      let destroyAt = Date.now();
+      let closeFired = false;
+      session.once('close', () => {
+        closeFired = true;
+        log.warn(
+          `[h2-keepalive] session ${sessionLabel()} closed ` +
+            `${Date.now() - destroyAt}ms after force-destroy`,
+        );
+      });
       try {
-        if (!session.destroyed) {
-          log.warn(
-            `[h2-keepalive] session ${sessionLabel()} still up after ` +
-              `${graceMsBeforeDestroy}ms grace — force-destroying`,
-          );
-          session.destroy();
-        }
+        session.destroy();
       } catch {
         // already destroyed
       }
+      // Whether destroy() actually releases the peer is the open question. If
+      // 'close' never fires, the streams never RST and the browser's fetch
+      // never rejects — no server-side teardown reached the wedged transport,
+      // which is the signal that distinguishes a fixable server-side issue
+      // from a hang only the client can recover from.
+      let confirm = setTimeout(() => {
+        if (!closeFired) {
+          log.warn(
+            `[h2-keepalive] session ${sessionLabel()} STILL not closed ` +
+              `${postDestroyConfirmMs}ms after force-destroy ` +
+              `(destroyed=${session.destroyed} ` +
+              `socketDestroyed=${session.socket?.destroyed ?? '<none>'}) — ` +
+              `transport-level wedge unreachable from the server`,
+          );
+        }
+      }, postDestroyConfirmMs);
+      confirm.unref?.();
     }, graceMsBeforeDestroy);
     hard.unref?.();
   }
@@ -755,6 +802,19 @@ function installHttp2Diagnostics(
     // server stream exists, connection-level flow-control stall, dead transport).
     let healthyPongs = 0;
     for (let [session, srec] of sessions) {
+      // A force-destroyed session that never emitted 'close' (the keepalive
+      // logs this transport-wedge case) is only ever removed on the 'close'
+      // event — so without this it would linger here for minutes, inflating
+      // liveSessions and re-reporting a dead connection every sweep. Once we
+      // can see it's destroyed, drop it so the counts reflect reality.
+      if (session.destroyed) {
+        sessions.delete(session);
+        log.warn(
+          `[h2-diag] session #${srec.id} destroyed without 'close' — ` +
+            `dropping from live set (live sessions=${sessions.size})`,
+        );
+        continue;
+      }
       let inFlight: { rec: TrackedStream; age: number }[] = [];
       for (let [stream, rec] of open) {
         if (stream.session === session) {
@@ -894,6 +954,7 @@ export class RealmServer {
       }
     | undefined;
   private prerenderer: Prerenderer | undefined;
+  private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
@@ -919,6 +980,7 @@ export class RealmServer {
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
+    reportHostShell,
     searchCache,
   }: {
     serverURL: URL;
@@ -945,6 +1007,10 @@ export class RealmServer {
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
+    // Reports the current host-shell token to the prerender manager. main.ts
+    // wires this so the post-deployment hook can re-report once the service is
+    // stable (the boot-time report fires as soon as this server starts serving).
+    reportHostShell?: () => Promise<void>;
     // Optional so test harnesses that construct a RealmServer directly get a
     // private cache for free. main.ts passes a shared instance so the
     // JobsFinishedListener can evict the same cache the handlers populate.
@@ -989,6 +1055,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
+    this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
@@ -1091,6 +1158,7 @@ export class RealmServer {
           matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
+          reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,
           searchCache: this.searchCache,
         }),
