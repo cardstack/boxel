@@ -357,7 +357,13 @@ class RealmCardIngester extends RealmSyncBase {
     );
     if (!res.ok) {
       this.hasError = true;
-      console.warn(`  search failed: HTTP ${res.status}`);
+      // Include statusText + a body snippet so auth errors, malformed queries,
+      // etc. are diagnosable from the CLI output, not just a bare status code.
+      let body = await res.text().catch(() => '');
+      console.warn(
+        `  search failed: HTTP ${res.status} ${res.statusText}`.trimEnd() +
+          (body ? ` — ${body.slice(0, 300)}` : ''),
+      );
       return [];
     }
     let json = (await res.json()) as SearchResponse;
