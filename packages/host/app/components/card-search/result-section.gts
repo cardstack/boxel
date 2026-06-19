@@ -31,7 +31,7 @@ import {
 } from '@cardstack/host/utils/card-search/types';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
-import ItemButton from './item-button';
+import ResultTile from './result-tile';
 import SearchSheetSectionHeader from './section-header';
 
 import type { ModifierLike } from '@glint/template';
@@ -58,7 +58,7 @@ const warnPlaceholderModifier = modifier(
     if (placeholderWarnedFor.has(realmUrl)) return;
     placeholderWarnedFor.add(realmUrl);
     console.warn(
-      `search-result-section: rendering with placeholder realm name for ${realmUrl} — realm.info() returned "${UNKNOWN_REALM_NAME}" because fetchInfo has not resolved yet. If a test failed selecting on data-test-realm here, this is the race.`,
+      `result-section: rendering with placeholder realm name for ${realmUrl} — realm.info() returned "${UNKNOWN_REALM_NAME}" because fetchInfo has not resolved yet. If a test failed selecting on data-test-realm here, this is the race.`,
     );
   },
 );
@@ -82,15 +82,15 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
-    // When true, ItemButton renders the Adorn visual treatment (teal hover
-    // type-label tab + teal selection chip) rather than the legacy grey
+    // When true, the tiles render the Adorn visual treatment (teal hover
+    // type-label tab + selection chip) rather than the plain grey
     // hover/selection visuals.
     adorn?: boolean;
-    // The outline class yielded by the enclosing <AdornContext>,
-    // threaded down to each ItemButton.
+    // The outline class yielded by the enclosing <AdornContext>, threaded
+    // down to each tile.
     adornStrokeClass?: string;
-    // The pre-wired label positioner yielded by the enclosing
-    // <AdornContext>, threaded down to each ItemButton.
+    // The pre-wired label positioner yielded by the enclosing <AdornContext>,
+    // threaded down to each tile.
     adornPositionLabel?: ModifierLike<{
       Element: HTMLElement;
       Args: { Positional: [cardEl: HTMLElement | undefined] };
@@ -99,12 +99,12 @@ interface Signature {
   Blocks: {};
 }
 
-/**
- * @deprecated Mid-tier of the legacy `SearchContent` → `SearchResultSection` →
- * `ItemButton` search-results tree. Favor the v2 `<SearchResults>` component.
- * Removed once every consumer is on v2.
- */
-export default class SearchResultSection extends Component<Signature> {
+// One section of the search-results pane — a realm group, the URL-paste row, or
+// the recents row. Lays its rows out into a grid of `ResultTile`s; each tile
+// renders through the unified search-entry rendering surface (a search-entry's
+// `entry.component`, or a live `CardDef` for the URL paste / live-recents
+// fallback).
+export default class ResultSection extends Component<Signature> {
   @service declare realm: RealmService;
 
   recentsIcon = HistoryIcon;
@@ -340,8 +340,8 @@ export default class SearchResultSection extends Component<Signature> {
           data-test-search-cards-result
         >
           {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
-            <ItemButton
-              @item={{this.newCardArgs this.realmSection.realmUrl}}
+            <ResultTile
+              @newCard={{this.newCardArgs this.realmSection.realmUrl}}
               @isSelected={{this.isCreateNewSelected}}
               @multiSelect={{@multiSelect}}
               @onSelect={{@handleSelect}}
@@ -353,9 +353,8 @@ export default class SearchResultSection extends Component<Signature> {
           {{/if}}
           {{#each this.displayedRealmCards as |card i|}}
             {{#unless card.isError}}
-              <ItemButton
-                @item={{card.component}}
-                @itemId={{card.id}}
+              <ResultTile
+                @entry={{card}}
                 @isSelected={{this.isCardSelected card.id}}
                 @multiSelect={{@multiSelect}}
                 @onSelect={{@handleSelect}}
@@ -396,9 +395,8 @@ export default class SearchResultSection extends Component<Signature> {
           @viewFormat={{this.viewFormat}}
           @size={{this.cardSize}}
         >
-          <ItemButton
-            @item={{this.urlSection.card}}
-            @itemId={{this.urlSection.card.id}}
+          <ResultTile
+            @card={{this.urlSection.card}}
             @isSelected={{this.isCardSelected this.urlSection.card.id}}
             @multiSelect={{@multiSelect}}
             @onSelect={{@handleSelect}}
@@ -432,9 +430,8 @@ export default class SearchResultSection extends Component<Signature> {
           >
             <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
               <:default>
-                <ItemButton
-                  @item={{card.component}}
-                  @itemId={{card.id}}
+                <ResultTile
+                  @entry={{card}}
                   @isSelected={{this.isCardSelected card.id}}
                   @multiSelect={{@multiSelect}}
                   @onSelect={{@handleSelect}}
@@ -473,9 +470,8 @@ export default class SearchResultSection extends Component<Signature> {
           >
             <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
               <:default>
-                <ItemButton
-                  @item={{card}}
-                  @itemId={{card.id}}
+                <ResultTile
+                  @card={{card}}
                   @isSelected={{this.isCardSelected card.id}}
                   @multiSelect={{@multiSelect}}
                   @onSelect={{@handleSelect}}
