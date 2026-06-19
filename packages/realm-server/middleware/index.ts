@@ -166,6 +166,70 @@ async function pipeUpstreamAsset(
   ctxt.body = upstreamRes;
 }
 
+// Reverse-proxy any request whose path begins with one of `prefixes` to a
+// backend, preserving method, path+query, request body, and streaming the
+// response back. Unlike proxyAsset/proxyAssetPaths (GET-only), this forwards
+// the request body, so it handles POST/PUT and long-poll responses (Matrix
+// sync). Used in Codespace previews to fold Matrix (`/_matrix`,
+// `/.well-known/matrix`) and the icons server (`/@cardstack/boxel-icons`)
+// onto the realm server's own origin, so the browser only ever talks to the
+// one forwarded port — no separate cross-origin ports to make public. Must
+// run before any body-consuming middleware so `ctxt.req` is still unread.
+// Dormant in normal deployments (those paths aren't routed here).
+export function proxyRequest(
+  prefixes: string[],
+  upstreamURL: URL,
+): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
+  let client = upstreamURL.protocol === 'https:' ? https : http;
+  let base = upstreamURL.pathname.replace(/\/$/, '');
+  return async (ctxt, next) => {
+    let path = ctxt.path;
+    if (!prefixes.some((p) => path === p || path.startsWith(p))) {
+      return next();
+    }
+
+    let forwardedHeaders: Record<string, string> = {};
+    for (let [name, value] of Object.entries(ctxt.req.headers)) {
+      if (name.startsWith(':')) continue;
+      if (name === 'host') continue;
+      if (typeof value === 'string') {
+        forwardedHeaders[name] = value;
+      } else if (Array.isArray(value)) {
+        forwardedHeaders[name] = value.join(', ');
+      }
+    }
+
+    let upstreamRes = await new Promise<http.IncomingMessage>(
+      (resolve, reject) => {
+        let upstreamReq = client.request(
+          {
+            method: ctxt.method,
+            hostname: upstreamURL.hostname,
+            port: upstreamURL.port || (client === https ? 443 : 80),
+            path: `${base}${ctxt.originalUrl}`,
+            headers: forwardedHeaders,
+          },
+          resolve,
+        );
+        upstreamReq.on('error', reject);
+        // Forward the request body for POST/PUT/etc.; for bodyless methods the
+        // piped request stream simply ends right away.
+        ctxt.req.pipe(upstreamReq);
+      },
+    );
+
+    ctxt.status = upstreamRes.statusCode ?? 502;
+    for (let [name, value] of Object.entries(upstreamRes.headers)) {
+      if (value == null) continue;
+      if (H2_FORBIDDEN_RESPONSE_HEADERS.has(name.toLowerCase())) {
+        continue;
+      }
+      ctxt.set(name, Array.isArray(value) ? value.map(String) : String(value));
+    }
+    ctxt.body = upstreamRes;
+  };
+}
+
 // Add middleware to handle method override for QUERY
 export function methodOverrideSupport(ctxt: Koa.Context, next: Koa.Next) {
   const methodOverride = ctxt.request.headers['x-http-method-override'];

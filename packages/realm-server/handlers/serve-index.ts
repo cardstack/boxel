@@ -119,20 +119,32 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             config.publishedRealmBoxelSiteDomain = serverURL.host;
           }
 
+          // Codespace single-origin: when the realm server reverse-proxies
+          // Matrix and the icons server onto its own origin (see
+          // proxyRequest in server.ts), point the host at this origin for
+          // both, so the browser only ever talks to the one forwarded port.
+          let proxyMatrixIcons =
+            process.env.REALM_SERVER_PROXY_MATRIX_ICONS === 'true';
+
           config = merge({}, config, {
             hostsOwnAssets: false,
             assetsURL: assetsURL.href,
             // The browser-facing Matrix URL can differ from the realm
             // server's own backend connection (e.g. in a Codespace the
             // backend talks to Synapse on localhost while the browser must
-            // use the public forwarded URL). RESOLVED_MATRIX_URL lets a
-            // deployment inject the browser-facing URL without rerouting the
-            // realm's own Matrix client. Falls back to the backend URL.
-            matrixURL: (
-              process.env.RESOLVED_MATRIX_URL ?? matrixClient.matrixURL.href
-            ).replace(/\/$/, ''),
+            // use the public forwarded URL). When proxying Matrix through
+            // this origin, point the browser here; otherwise RESOLVED_MATRIX_URL
+            // (or the backend URL) is the browser-facing Matrix URL.
+            matrixURL: proxyMatrixIcons
+              ? serverURL.origin
+              : (
+                  process.env.RESOLVED_MATRIX_URL ?? matrixClient.matrixURL.href
+                ).replace(/\/$/, ''),
             matrixServerName:
               process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
+            // Icons are fetched as `${iconsURL}/@cardstack/boxel-icons/...`;
+            // when proxied, serve them from this origin too.
+            ...(proxyMatrixIcons ? { iconsURL: serverURL.origin } : {}),
             realmServerURL: serverURL.href,
             resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
             resolvedCatalogRealmURL: rewriteRealmURL(
