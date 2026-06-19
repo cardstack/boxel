@@ -106,7 +106,7 @@ describe('searchEntryRequestBody — card-rooted query → search-entry wire gra
 });
 
 describe('itemsFromSearchEntryDoc — flatten a data-only search-entry doc to items', () => {
-  it('resolves each entry`s item from included, in entry order', () => {
+  it("resolves each entry's item from included, in entry order", () => {
     let doc = {
       data: [
         {

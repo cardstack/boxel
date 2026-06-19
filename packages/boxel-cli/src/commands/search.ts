@@ -5,6 +5,7 @@ import {
   type ProfileManager,
 } from '../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { resourceIdentity } from '@cardstack/runtime-common/resource-identity';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 
@@ -148,8 +149,12 @@ export function searchEntryRequestBody(
   return body;
 }
 
-// A search-entry result links its serialization through `item`; the
-// `card`/`file-meta` resource itself travels in `included`.
+// A data-only search-entry document, narrowed to the shape this client reads:
+// each entry links its serialization through `item`, and the `card`/`file-meta`
+// resource itself travels in `included`. A structural local type rather than
+// runtime-common's `SearchEntryCollectionDocument` — that one transitively
+// pulls the index's `https://cardstack.com/base/*` imports, which don't resolve
+// in a plain Node CLI (the same boundary the query helpers above note).
 interface SearchEntryDoc {
   data?: {
     relationships?: {
@@ -171,10 +176,8 @@ export function itemsFromSearchEntryDoc(
   let byIdentity = new Map<string, Record<string, unknown>>();
   for (let resource of doc.included ?? []) {
     if (resource.type === 'card' || resource.type === 'file-meta') {
-      // NUL-separated so a (type, id) pair can't alias another by
-      // concatenation (no type or id contains a NUL byte).
       byIdentity.set(
-        `${resource.type}\u0000${resource.id}`,
+        resourceIdentity(resource.type, resource.id),
         resource as Record<string, unknown>,
       );
     }
@@ -185,7 +188,7 @@ export function itemsFromSearchEntryDoc(
     if (!ref) {
       continue;
     }
-    let item = byIdentity.get(`${ref.type}\u0000${ref.id}`);
+    let item = byIdentity.get(resourceIdentity(ref.type, ref.id));
     if (item) {
       items.push(item);
     }
