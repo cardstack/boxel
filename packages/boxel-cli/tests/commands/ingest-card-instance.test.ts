@@ -7,9 +7,9 @@ import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.js';
 import type { ProfileManager } from '../../src/lib/profile-manager.js';
 
 // Ingesting a single *instance* URL should copy that record + its module graph
-// + the records it links to (transitively) — NOT every instance of its type
-// (CS-11682). Fixture: a Garage links to two Tools; a second Garage and a third
-// Tool are unrelated siblings that must be left behind.
+// + the records it links to (transitively) — NOT every instance of its type.
+// Fixture: a Garage links to two Tools; a second Garage and a third Tool are
+// unrelated siblings that must be left behind.
 //
 //   garage.gts            Garage (linksToMany Tool)
 //   tool.gts              Tool
@@ -119,7 +119,7 @@ function makeFakeProfileManager(): ProfileManager {
   } as unknown as ProfileManager;
 }
 
-describe('ingest-card from an instance URL (CS-11682)', () => {
+describe('ingest-card from an instance URL', () => {
   let localDir: string;
   let result: { files: string[]; error?: string };
 
