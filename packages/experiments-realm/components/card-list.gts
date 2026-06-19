@@ -40,9 +40,9 @@ export class CardList extends GlimmerComponent<CardListSignature> {
     <ul class='card-list' ...attributes>
       {{#let
         (component @context.searchResultsComponent)
-        as |PrerenderedCardSearch|
+        as |SearchResults|
       }}
-        <PrerenderedCardSearch @query={{this.searchResultsQuery}} as |results|>
+        <SearchResults @query={{this.searchResultsQuery}} as |results|>
           {{#if results.isLoading}}
             Loading...
           {{/if}}
@@ -54,7 +54,7 @@ export class CardList extends GlimmerComponent<CardListSignature> {
               {{/if}}
             </li>
           {{/each}}
-        </PrerenderedCardSearch>
+        </SearchResults>
       {{/let}}
     </ul>
     <style scoped>
