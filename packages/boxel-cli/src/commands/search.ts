@@ -151,10 +151,10 @@ export function searchErrorHint(
     return [
       'The filter could not be classified. Valid shapes:',
       '  • all cards in the realm: omit --query (or pass {})',
-      '  • by type:   {"filter":{"type":{"module":"<https card module url>","name":"<CardName>"}}}',
-      '  • by field:  {"filter":{"on":{"module":"<url>","name":"<CardName>"},"eq":{"<field>":"<value>"}}}',
+      '  • by type:   {"filter":{"type":{"module":"<https-module-url>","name":"<CardName>"}}}',
+      '  • by field:  {"filter":{"on":{"module":"<https-module-url>","name":"<CardName>"},"eq":{"<field>":"<value>"}}}',
       '  • combine:   "any" (OR) / "every" (AND); also "contains", "range", "not"',
-      'Field filters (eq/contains/range) require an "on" type scope, and "module" must be the full HTTPS URL of the card definition (no relative paths).',
+      '"<https-module-url>" is the full HTTPS URL of the card definition (no relative paths); field filters (eq/contains/range) must be wrapped in an "on" type scope.',
     ].join('\n');
   }
   return undefined;

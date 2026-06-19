@@ -60,7 +60,7 @@ Federated search across realms using a JSON query
 **Options:**
 
 - `--realm <realm-url>` — Realm URL to search (repeatable)
-- `--query <json>` — JSON query object (as a string)
+- `--query <json>` — JSON query object (as a string). Omit to list every card in the realm(s).
 - `--json` — Output raw JSON response
 
 <!-- generated:commands:end -->
