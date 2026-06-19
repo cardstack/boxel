@@ -27,6 +27,19 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile
 
+    # Provision the Chrome build the prerender service drives via puppeteer.
+    # puppeteer's postinstall is not a reliable source of the browser: it only
+    # downloads into ~/.cache/puppeteer when it decides the binary is absent,
+    # and that decision can silently skip the download, leaving the prerender
+    # to fail at launch with "Could not find Chrome (ver. <pinned>)". Installing
+    # it explicitly from the puppeteer that's actually resolved in the workspace
+    # pins the browser to the version puppeteer-core launches at runtime,
+    # independent of the postinstall heuristic. chrome-headless-shell is fetched
+    # alongside chrome so both launch modes resolve.
+    - name: Ensure prerender Chrome is installed
+      shell: bash
+      run: pnpm --filter @cardstack/realm-server exec puppeteer browsers install chrome chrome-headless-shell
+
     - name: Prune pnpm store
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       shell: bash
