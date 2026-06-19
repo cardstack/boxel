@@ -108,23 +108,16 @@ module('Integration | mini-card-chooser', function (hooks) {
     await getService('realm').login(testRealmURL);
   });
 
-  test('renders the search bar and result sections from the active realm', async function (assert) {
-    const selections: string[] = [];
-    const onSelect = (url: string) => selections.push(url);
-
+  test('mounts in isolation with a search input and no filter chips', async function (assert) {
     await render(
       <template>
         <HostContextProvider>
-          <MiniCardChooser @onSelect={{onSelect}} />
+          <MiniCardChooser @onSelect={{noop}} />
         </HostContextProvider>
       </template>,
     );
 
     await waitFor('[data-test-mini-card-chooser] [data-test-search-field]');
-    await waitFor(
-      `[data-test-mini-card-chooser] [data-test-realm="Unnamed Workspace"]`,
-      { timeout: 5000 },
-    ).catch(() => {});
 
     assert
       .dom('[data-test-mini-card-chooser]')
@@ -132,14 +125,16 @@ module('Integration | mini-card-chooser', function (hooks) {
     assert
       .dom('[data-test-mini-card-chooser] [data-test-search-field]')
       .exists('the search input is rendered');
-
     // The realm/type chips are deliberately suppressed in the mini variant.
     assert
       .dom('[data-test-mini-card-chooser] .search-sheet__search-bar-picker')
       .doesNotExist('realm/type filter chips are hidden in the mini variant');
   });
 
-  test('selecting a card invokes onSelect with the canonical URL (no .json suffix)', async function (assert) {
+  test('shows recents in the empty state, and selecting one fires onSelect with the canonical URL', async function (assert) {
+    let recent = getService('recent-cards-service') as RecentCardsService;
+    recent.add(`${testRealmURL}books/mango`);
+
     const selections: string[] = [];
     const onSelect = (url: string) => selections.push(url);
 
@@ -153,10 +148,8 @@ module('Integration | mini-card-chooser', function (hooks) {
 
     const cardUrl = `${testRealmURL}books/mango`;
     await waitFor(
-      `[data-test-mini-card-chooser] [data-test-item-button="${cardUrl}"]`,
-      {
-        timeout: 5000,
-      },
+      `[data-test-mini-card-chooser] [data-section-sid="recents"] [data-test-item-button="${cardUrl}"]`,
+      { timeout: 5000 },
     );
 
     await click(
@@ -167,11 +160,11 @@ module('Integration | mini-card-chooser', function (hooks) {
     assert.deepEqual(
       selections,
       [cardUrl],
-      'onSelect receives the canonical URL exactly once',
+      'onSelect receives the canonical URL exactly once (no .json suffix)',
     );
   });
 
-  test('typing in the search input narrows the result set', async function (assert) {
+  test('typing in the search input renders matching results from the realm', async function (assert) {
     await render(
       <template>
         <HostContextProvider>
@@ -180,14 +173,10 @@ module('Integration | mini-card-chooser', function (hooks) {
       </template>,
     );
 
-    const mango = `${testRealmURL}books/mango`;
+    await waitFor('[data-test-mini-card-chooser] [data-test-search-field]');
+
     const vincent = `${testRealmURL}books/vincent`;
-    await waitFor(
-      `[data-test-mini-card-chooser] [data-test-item-button="${mango}"]`,
-      {
-        timeout: 5000,
-      },
-    );
+    const mango = `${testRealmURL}books/mango`;
 
     await fillIn(
       '[data-test-mini-card-chooser] [data-test-search-field]',
@@ -195,42 +184,14 @@ module('Integration | mini-card-chooser', function (hooks) {
     );
     await waitFor(
       `[data-test-mini-card-chooser] [data-test-item-button="${vincent}"]`,
-      {
-        timeout: 5000,
-      },
+      { timeout: 5000 },
     );
 
     assert
       .dom(`[data-test-mini-card-chooser] [data-test-item-button="${vincent}"]`)
-      .exists('the matching card remains visible');
+      .exists('the matching card surfaces');
     assert
       .dom(`[data-test-mini-card-chooser] [data-test-item-button="${mango}"]`)
-      .doesNotExist('the non-matching card is filtered out');
-  });
-
-  test('the recents section renders when RecentCardsService has entries', async function (assert) {
-    let recent = getService('recent-cards-service') as RecentCardsService;
-    recent.add(`${testRealmURL}books/mango`);
-
-    await render(
-      <template>
-        <HostContextProvider>
-          <MiniCardChooser @onSelect={{noop}} />
-        </HostContextProvider>
-      </template>,
-    );
-
-    await waitFor(
-      '[data-test-mini-card-chooser] [data-test-search-result-section="recent-cards"], ' +
-        '[data-test-mini-card-chooser] [data-section-sid="recent-cards"]',
-      { timeout: 5000 },
-    );
-    assert.ok(
-      document.querySelector(
-        '[data-test-mini-card-chooser] [data-section-sid="recent-cards"], ' +
-          '[data-test-mini-card-chooser] [data-test-search-result-section="recent-cards"]',
-      ),
-      'the recents section is rendered when recents service has entries',
-    );
+      .doesNotExist('non-matching cards are filtered out');
   });
 });

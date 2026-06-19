@@ -54,6 +54,7 @@ export default class MiniCardChooser extends Component<Signature> {
           <Bar
             @onInput={{this.setSearchKey}}
             @placeholder='Search for a card'
+            @hidePickers={{true}}
           />
         </header>
         <div class='mini-card-chooser__results'>
@@ -84,10 +85,6 @@ export default class MiniCardChooser extends Component<Signature> {
         min-height: 0;
         display: flex;
         flex-direction: column;
-      }
-      .mini-card-chooser :deep(.search-sheet__search-bar-picker),
-      .mini-card-chooser :deep(.search-sheet__search-bar-separator) {
-        display: none;
       }
     </style>
   </template>
