@@ -9,14 +9,16 @@ import type { ProfileManager } from '../../src/lib/profile-manager.js';
 // Ingesting a single *instance* URL should copy that record + its module graph
 // + the records it links to (transitively) — NOT every instance of its type.
 // Fixture: a Garage links to two Tools; a second Garage and a third Tool are
-// unrelated siblings that must be left behind.
+// unrelated siblings that must be left behind. g1 also carries a decoy link to
+// a *different realm* whose URL shares this realm's path tail (`/garage/`) and
+// points at a path that exists locally — it must NOT be followed (cross-realm).
 //
 //   garage.gts            Garage (linksToMany Tool)
 //   tool.gts              Tool
-//   Garage/g1.json        entry — links to Tool/t1, Tool/t2
+//   Garage/g1.json        entry — links to Tool/t1, Tool/t2 (+ cross-realm decoy → Tool/t3)
 //   Garage/g2.json        sibling Garage — links to Tool/t3   (NOT ingested)
 //   Tool/t1.json, t2.json linked from g1                      (ingested)
-//   Tool/t3.json          linked only from g2                 (NOT ingested)
+//   Tool/t3.json          only via g2 / the decoy             (NOT ingested)
 
 const ROOT = 'https://realms.example.test/garage/';
 
@@ -42,6 +44,11 @@ export class Tool extends CardDef {
       relationships: {
         'tools.0': { links: { self: '../Tool/t1' } },
         'tools.1': { links: { self: '../Tool/t2' } },
+        // Cross-realm decoy: different host, same `/garage/` path tail, path
+        // resolves to a file that exists locally. Must be skipped, not copied.
+        decoy: {
+          links: { self: 'https://other-host.example.test/garage/Tool/t3' },
+        },
       },
     },
   }),

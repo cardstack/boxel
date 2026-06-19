@@ -375,19 +375,34 @@ class RealmCardIngester extends RealmSyncBase {
   }
 
   /**
-   * Resolve a relationship `links.self` (relative `../Foo/x`, alias, or absolute
-   * https — and without a `.json` extension) to a same-realm instance file that
-   * exists in `fileSet`, or null for cross-realm / missing links.
+   * Resolve a relationship `links.self` (relative `../Foo/x`, published alias
+   * `@cardstack/<realm>/…`, or absolute https — and without a `.json` extension)
+   * to a same-realm instance file that exists in `fileSet`, or null for
+   * cross-realm / missing links.
    */
   private resolveLinkedInstanceRel(
     self: string,
     fromRel: string,
     fileSet: Set<string>,
   ): string | null {
-    let rel =
-      /^https?:\/\//.test(self) || self.startsWith('@')
-        ? this.relativize(self)
-        : this.relativize(new URL(self, this.relToAbs(fromRel)).href);
+    let rel: string;
+    if (self.startsWith('@')) {
+      // Published-alias form — map onto this realm by its path tail. A tail
+      // that isn't ours (another realm's alias) won't resolve to a local file.
+      rel = this.relativize(self);
+    } else {
+      // Relative or absolute https: resolve to an absolute URL and require it
+      // to live under THIS realm's served root. A link into another realm —
+      // even one whose URL happens to share our path tail — is left as a
+      // runtime reference, not copied (mirrors resolveSameRealmFile).
+      let absUrl = /^https?:\/\//.test(self)
+        ? self
+        : new URL(self, this.relToAbs(fromRel)).href;
+      if (!absUrl.startsWith(this.realmRoot)) {
+        return null;
+      }
+      rel = absUrl.slice(this.realmRoot.length).replace(/^\/+/, '');
+    }
     let candidate = rel.endsWith('.json') ? rel : `${rel}.json`;
     return fileSet.has(candidate) ? candidate : null;
   }
