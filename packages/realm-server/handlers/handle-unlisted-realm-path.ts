@@ -15,8 +15,8 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
-  getUnlistedSlug,
-  upsertUnlistedSlug,
+  allocateUnlistedSlug,
+  regenerateUnlistedSlug,
 } from '../lib/unlisted-realm-path.ts';
 
 // Returns the server-issued random path segment ("slug") for a source realm's
@@ -71,14 +71,21 @@ export default function handleUnlistedRealmPathRequest({
         return;
       }
 
-      let slug = regenerate
-        ? null
-        : await getUnlistedSlug(dbAdapter, sourceRealmURL);
-      if (!slug) {
+      let slug: string;
+      if (regenerate) {
+        // Explicit "New link" — overwrite any existing slug.
         slug = generateObscureSlug();
-        await upsertUnlistedSlug(dbAdapter, {
+        await regenerateUnlistedSlug(dbAdapter, {
           sourceRealmURL,
           slug,
+          ownerUserId,
+        });
+      } else {
+        // First-time/idempotent allocation — insert a fresh slug, or return the
+        // one already stored, so concurrent requests can't clobber each other.
+        slug = await allocateUnlistedSlug(dbAdapter, {
+          sourceRealmURL,
+          candidateSlug: generateObscureSlug(),
           ownerUserId,
         });
       }

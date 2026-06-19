@@ -140,6 +140,33 @@ module(basename(__filename), function () {
       );
     });
 
+    test('concurrent first-time allocations converge on one slug', async function (assert) {
+      // Two overlapping first-time requests must not clobber each other: both
+      // get the slug that committed first, and only one row is persisted.
+      let [a, b] = await Promise.all([
+        post(defaultToken, { sourceRealmURL }),
+        post(defaultToken, { sourceRealmURL }),
+      ]);
+      assert.strictEqual(a.status, 200, 'first request succeeds');
+      assert.strictEqual(b.status, 200, 'second request succeeds');
+      assert.strictEqual(
+        b.body.data.attributes.slug,
+        a.body.data.attributes.slug,
+        'both requests return the same slug',
+      );
+
+      let rows = (await query(dbAdapter, [
+        `SELECT slug FROM unlisted_realm_paths WHERE source_realm_url =`,
+        param(sourceRealmURL),
+      ])) as { slug: string }[];
+      assert.strictEqual(rows.length, 1, 'only one row is persisted');
+      assert.strictEqual(
+        rows[0].slug,
+        a.body.data.attributes.slug,
+        'the persisted slug matches what both requests returned',
+      );
+    });
+
     test('regenerate mints a new slug', async function (assert) {
       let first = await post(defaultToken, { sourceRealmURL });
       let regenerated = await post(defaultToken, {

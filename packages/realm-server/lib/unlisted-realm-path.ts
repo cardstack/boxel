@@ -17,7 +17,33 @@ export async function getUnlistedSlug(
   return rows[0]?.slug ?? null;
 }
 
-export async function upsertUnlistedSlug(
+// Allocates the realm's unlisted slug without clobbering an existing one: insert
+// `candidateSlug`, or — if a row already exists — return the stored slug
+// unchanged. The no-op `DO UPDATE` makes `RETURNING` yield the existing row on
+// conflict, so two racing first-time allocations both converge on whichever slug
+// committed first (the other's candidate is discarded). This keeps a slug shown
+// in one tab from being silently replaced by a concurrent allocation in another
+// — which would otherwise make `handle-publish-realm` reject the first link.
+export async function allocateUnlistedSlug(
+  dbAdapter: DBAdapter,
+  args: { sourceRealmURL: string; candidateSlug: string; ownerUserId: string },
+): Promise<string> {
+  let rows = (await query(dbAdapter, [
+    `INSERT INTO unlisted_realm_paths (source_realm_url, slug, owner_user_id) VALUES (`,
+    param(args.sourceRealmURL),
+    `,`,
+    param(args.candidateSlug),
+    `,`,
+    param(args.ownerUserId),
+    `) ON CONFLICT (source_realm_url) DO UPDATE SET source_realm_url = EXCLUDED.source_realm_url RETURNING slug`,
+  ])) as { slug: string }[];
+  return rows[0].slug;
+}
+
+// Overwrites the realm's unlisted slug. Used only for an explicit "New link"
+// regeneration — never for first-time allocation, which must not clobber a slug
+// a concurrent request may already be displaying (see allocateUnlistedSlug).
+export async function regenerateUnlistedSlug(
   dbAdapter: DBAdapter,
   args: { sourceRealmURL: string; slug: string; ownerUserId: string },
 ): Promise<void> {
