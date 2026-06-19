@@ -20,6 +20,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  knownFileMetaUrls,
+  clearKnownFileMetaUrls,
+} from '@cardstack/host/lib/known-file-meta-urls';
+import {
   getSearchEntriesResource,
   SearchEntriesResource,
 } from '@cardstack/host/resources/search-entries';
@@ -170,6 +174,78 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
+  test('registers file result URLs so clicks/overlay classify them as files', async function (assert) {
+    // A file row's `file-meta` serialization is HTML-only / never stored, so
+    // the operator-mode click + overlay path consults `knownFileMetaUrls` to
+    // classify a clicked URL as a file. The resource must register both an
+    // item-only file row and an html-backed file row (whose rendering carries
+    // no render type — files render natively).
+    let itemFileUrl = `${testRealmURL}notes.txt`;
+    let htmlFileUrl = `${testRealmURL}readme.md`;
+    let renderingId = htmlResourceId({ url: htmlFileUrl, format: 'fitted' });
+    let doc: SearchEntryResults = {
+      data: [
+        {
+          type: SearchEntryResourceType,
+          id: itemFileUrl,
+          relationships: {
+            item: { data: { type: 'file-meta', id: itemFileUrl } },
+          },
+        },
+        {
+          type: SearchEntryResourceType,
+          id: htmlFileUrl,
+          relationships: {
+            html: { data: [{ type: HtmlResourceType, id: renderingId }] },
+          },
+        },
+      ],
+      // The item-only file row registers off its `item` relationship's
+      // `file-meta` type — the resolved serialization need not ride in
+      // `included`. The html-backed file row needs its rendering (no render
+      // type → a file rendering).
+      included: [
+        {
+          type: HtmlResourceType,
+          id: renderingId,
+          attributes: {
+            html: '<div>readme</div>',
+            cardType: '',
+            format: 'fitted',
+          },
+          relationships: { styles: { data: [] } },
+        },
+      ],
+      meta: { page: { total: 2 } },
+    };
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => doc;
+    clearKnownFileMetaUrls();
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL],
+          },
+        },
+      }));
+      await search.loaded;
+
+      assert.true(
+        knownFileMetaUrls.has(itemFileUrl),
+        'the item-only file row is registered',
+      );
+      assert.true(
+        knownFileMetaUrls.has(htmlFileUrl),
+        'the html-backed file row (no render type) is registered',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+      clearKnownFileMetaUrls();
+    }
+  });
+
   test('exposes raw item serializations per the fieldset, without touching the store', async function (assert) {
     let search = getResourceForTest(storeService, () => ({
       named: {
@@ -201,6 +277,62 @@ module('Integration | search-entries resource', function (hooks) {
       search.entries.map((entry) => entry.item!.attributes?.title).sort(),
       ['Mango', 'Van Gogh'],
     );
+  });
+
+  // Orthogonal to the /render route (which host tests don't exercise — that's
+  // the server prerendering suite): this drives the resource directly with the
+  // prerender signal set by hand and asserts it registers its search with the
+  // render store's readiness mechanism. The end-to-end "/render waits for the
+  // search before HTML capture" behavior is covered server-side.
+  test('registers the in-flight search with the render store readiness signal during a prerender', async function (assert) {
+    let renderStore = getService('render-store');
+    let trackedLoads: Promise<unknown>[] = [];
+    let originalTrackLoad = renderStore.trackLoad.bind(renderStore);
+    renderStore.trackLoad = (load: Promise<unknown>) => {
+      trackedLoads.push(load);
+      originalTrackLoad(load);
+    };
+    let generationBefore = renderStore.loadGeneration;
+    (globalThis as any).__boxelRenderContext = true;
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL],
+          },
+        },
+      }));
+      // Reading a resource property runs modify(), which performs the search
+      // and registers it — synchronously, before the fetch resolves.
+      let load = search.loaded;
+      assert.strictEqual(
+        trackedLoads.length,
+        1,
+        'the search registers exactly one load with the render store',
+      );
+      assert.strictEqual(
+        trackedLoads[0],
+        load,
+        'the registered load is the in-flight v2 search',
+      );
+      assert.true(
+        renderStore.loadGeneration > generationBefore,
+        'registering the search advances the render store load generation, so the settle loop waits for it',
+      );
+
+      await load;
+      assert.strictEqual(
+        search.entries.length,
+        2,
+        'the tracked load is the real search and it produced results',
+      );
+    } finally {
+      // `trackLoad` is a StoreService prototype method, so the spy is an own
+      // property; deleting it restores the inherited method.
+      delete (renderStore as any).trackLoad;
+      delete (globalThis as any).__boxelRenderContext;
+    }
   });
 
   test('re-runs the search on an incremental index event', async function (assert) {

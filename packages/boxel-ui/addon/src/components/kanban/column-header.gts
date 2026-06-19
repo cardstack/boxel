@@ -23,11 +23,10 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
   <div class={{cn 'col-header' is-target=@isTarget}} ...attributes>
     <div class='col-header-left'>
       <span class='col-dot' style={{cssVar col-dot-bg=@column.color}}></span>
-      <span class='col-name' data-test-boxel-kanban-col-name>{{if
-          @column.label
-          @column.label
-          'Untitled'
-        }}</span>
+      <span
+        class='col-name boxel-ellipsize'
+        data-test-boxel-kanban-col-name
+      >{{if @column.label @column.label 'Untitled'}}</span>
       <span class='col-count'>{{@cardCount}}</span>
     </div>
     <div class='col-header-right'>
@@ -94,6 +93,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      overflow: hidden;
     }
     .col-dot {
       width: 0.625rem;

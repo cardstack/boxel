@@ -18,6 +18,12 @@ import {
 import { fromAffinityKey } from './affinity.ts';
 import { captureTraceStream } from './trace-capture.ts';
 import {
+  capturePausedCallStack,
+  formatPausedStack,
+  type PausedStackCapture,
+} from './pause-capture.ts';
+import { v8ProfEnabled, uploadV8ProfLog } from './v8-prof.ts';
+import {
   ensureHeapSampling,
   captureHeapSamplingProfile,
 } from './heap-sampler.ts';
@@ -1538,12 +1544,13 @@ async function runWithAffinityProfile<T>(
     maxRunMs: timeoutMs,
     run: observe,
     onRawProfile: wantCpuProfile
-      ? (rawProfile) =>
-          uploadArtifact({
+      ? async (rawProfile) => {
+          await uploadArtifact({
             ...keyParts,
             kind: 'cpuprofile',
             body: Buffer.from(JSON.stringify(rawProfile), 'utf8'),
-          })
+          });
+        }
       : undefined,
   })
     .then(async (summary) => {
@@ -1686,6 +1693,28 @@ export async function withTimeout<T>(
       });
       cpuProfileTopFrames = formatTopFrames(summary);
     }
+    // One-shot stack capture of the still-pegged renderer via
+    // `Debugger.pause`. Where the CPU profiler above structurally can't
+    // capture a hard wedge (its `stop` needs the pegged thread to
+    // serialize the profile), a debugger pause lands inside the
+    // synchronous loop at the next V8 interrupt check and reports the
+    // call frames directly — and it adds zero overhead until the single
+    // pause, so it can't mask a timing-sensitive wedge the way continuous
+    // sampling can. Out-of-process (CDP), so it survives a pegged JS
+    // thread; only on the timeout path, so it's free on a healthy render.
+    let pausedStack: PausedStackCapture | null = null;
+    if (!page.isClosed()) {
+      pausedStack = await capturePausedCallStack(page, { budgetMs: 8000 });
+    }
+    // Hard-peg capture (armed only when `PRERENDER_V8_PROF=true`): ship the
+    // pegged isolate's raw kernel-sampled V8 `--prof` log to the artifact
+    // bucket, keyed by this render's realm/card/job, to be symbolized offline.
+    // This is the capture that survives a peg so hard it starves CDP — i.e.
+    // exactly when `pausedStack` comes back `debugger-enable-timeout`.
+    let v8ProfStatus: string | null = null;
+    if (v8ProfEnabled()) {
+      v8ProfStatus = await uploadV8ProfLog(artifactKeyPartsFor(profileContext));
+    }
     // Out-of-band CDP view of fetches still outstanding — survives a
     // wedged JS thread, so it's available even when the in-page hooks
     // below are skipped. The longest-lived entry is what a waiting
@@ -1773,6 +1802,7 @@ export async function withTimeout<T>(
     }
 
     let topPending = pendingNetworkRequests?.[0];
+    let pausedStackStr = formatPausedStack(pausedStack);
     log.warn(
       `render of ${id} timed out after ${timeoutMs}ms` +
         ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
@@ -1791,6 +1821,11 @@ export async function withTimeout<T>(
         (topPending ? `(top: ${topPending.url} ${topPending.ageMs}ms)` : '') +
         ` concurrentRenders=${concurrentRenders}` +
         (cpuProfileTopFrames ? ` cpuTopFrames: ${cpuProfileTopFrames}` : '') +
+        (pausedStack?.heapUsedMB != null
+          ? ` jsHeapUsedMB=${pausedStack.heapUsedMB.toFixed(0)}`
+          : '') +
+        (pausedStackStr ? ` pausedStack: ${pausedStackStr}` : '') +
+        (v8ProfStatus ? ` v8ProfLog: ${v8ProfStatus}` : '') +
         ` DOM:\n${dom?.trim()}`,
     );
     // Diagnostics ride on the outer `RenderError.diagnostics` as a

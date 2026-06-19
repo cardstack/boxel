@@ -34,7 +34,7 @@ async function dockerPull(
         ['pull', image],
         { encoding: 'utf8' },
         (err, _stdout, stderr) =>
-          resolve(err ? (stderr.trim() || err.message) : null),
+          resolve(err ? stderr.trim() || err.message : null),
       );
     });
     if (stderr === null) {

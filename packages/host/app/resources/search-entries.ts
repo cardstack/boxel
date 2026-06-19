@@ -1,4 +1,5 @@
 import { isDestroyed, registerDestructor } from '@ember/destroyable';
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
@@ -15,6 +16,7 @@ import {
   isCssResource,
   isFileMetaResource,
   isHtmlResource,
+  isIconResource,
   logger as runtimeLogger,
   resourceIdentity,
   rri,
@@ -23,15 +25,17 @@ import {
   type ErrorEntry,
   type FileMetaResource,
   type HtmlResource,
-  type PrerenderedHtmlFormat,
+  type IconResource,
   type ResolvedCodeRef,
   type Saved,
   type SearchEntryCollectionDocument,
+  type SearchEntryRendering,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
+import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
@@ -42,25 +46,10 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
 
-// One rendering of an entry: the wire's `html` resource flattened, with its
-// `styles` references resolved to the stylesheets' hrefs (the stylesheets
-// themselves are already imported through the loader by the time entries are
-// exposed). `id` is the (card URL, format, renderType) composite — an opaque
-// cache key; the readable rendering dimensions are the `format`/`renderType`
-// fields.
-export interface SearchEntryRendering {
-  id: string;
-  // Absent only on an error rendering with no last-known-good HTML.
-  html?: string;
-  cardType: string;
-  iconHtml?: string;
-  isError: boolean;
-  format: PrerenderedHtmlFormat;
-  // The type this rendering was rendered as. A file rendering carries none
-  // (files render natively).
-  renderType?: ResolvedCodeRef;
-  cssUrls: string[];
-}
+// `SearchEntryRendering` is the card-facing rendering view-model (it rides the
+// v2 `@context` search surface), so it lives in runtime-common; re-exported
+// here because this resource builds it and call sites import it from here.
+export type { SearchEntryRendering };
 
 // One v2 search result, joined from the wire document: the `search-entry`
 // resource plus the `html` renderings and/or `item` serialization it
@@ -76,6 +65,13 @@ export interface SearchEntry {
   realmUrl: string;
   html: SearchEntryRendering[];
   item?: CardResource<Saved> | FileMetaResource;
+  // The result's card-type descriptor, resolved from the deduped `icon`
+  // resource (absent when the row's native type carries none). Lives on the
+  // entry, not the rendering, so a no-HTML row still exposes it: the type's
+  // icon HTML, display name, and code ref.
+  iconHtml?: string;
+  displayName?: string;
+  codeRef?: ResolvedCodeRef;
 }
 
 interface Args {
@@ -129,6 +125,45 @@ export class SearchEntriesResource extends Resource<Args> {
       this.subscriptions = [];
       this.realmsNeedingRefresh.clear();
     });
+  }
+
+  // The store whose readiness signal the active render context awaits. During a
+  // prerender the render route settles on the *render* store's `loaded()` /
+  // `loadGeneration` (`routes/render.ts` `#waitForRenderLoadStability`), while a
+  // component's injected `store` service is the live SPA store — so the search
+  // fetch and its load-tracking must run against the render store for the
+  // prerender to wait for results before HTML capture. Outside a prerender
+  // (the live SPA) this is the injected store. Mirrors how
+  // `prerendered-card-search` and the v1 `SearchResource` route render-context
+  // work through the render store.
+  private get runtimeStore(): StoreService {
+    // Strict `=== true` to match the prerender header / job-priority helpers
+    // (`prerender-fetch-headers.ts`, `resolveOutboundJobPriority`): store
+    // selection and header emission must agree, so a search routed to the
+    // render store is also sent with prerender headers.
+    if ((globalThis as any).__boxelRenderContext === true) {
+      let renderStore = getOwner(this)?.lookup('service:render-store') as
+        | StoreService
+        | undefined;
+      if (renderStore) {
+        return renderStore;
+      }
+    }
+    return this.store;
+  }
+
+  // Register an in-flight search with the render store's readiness signal. The
+  // prerender settle loop awaits `store.loaded()` and watches `loadGeneration`;
+  // `trackLoad` bumps the generation the moment a search starts and keeps the
+  // load pending until it resolves, so a prerender of a card rendering this
+  // surface waits for results before HTML capture. The html-only branch
+  // deposits nothing into the store, so without this nothing else would move
+  // the generation. Mirrors the v1 `SearchResource`. The `@ember/test-waiter`
+  // inside the task stays — it backs `settled()`, an orthogonal signal. Also
+  // kept on `this.loaded` for the test/internal bookkeeping.
+  #trackSearchLoad(load: Promise<void>): void {
+    this.loaded = load;
+    this.runtimeStore.trackLoad(load);
   }
 
   modify(_positional: never[], named: Args['named']) {
@@ -204,7 +239,7 @@ export class SearchEntriesResource extends Resource<Args> {
             `incremental index event on ${realm}; scheduling partial refresh`,
           );
           this.realmsNeedingRefresh.add(realm);
-          this.search.perform();
+          this.#trackSearchLoad(this.search.perform());
         }),
       }));
     }
@@ -221,7 +256,7 @@ export class SearchEntriesResource extends Resource<Args> {
     // A query/realm change owns the whole result set again.
     this.realmsNeedingRefresh.clear();
     this.hasCompletedFullRun = false;
-    this.loaded = this.search.perform();
+    this.#trackSearchLoad(this.search.perform());
   }
 
   get isLoading() {
@@ -259,7 +294,7 @@ export class SearchEntriesResource extends Resource<Args> {
         : this.realmsToSearch;
 
       try {
-        let doc = await this.store.searchEntries(query, realmsToFetch);
+        let doc = await this.runtimeStore.searchEntries(query, realmsToFetch);
         await this.loadStylesheets(doc);
         let fresh = this.buildEntries(doc);
 
@@ -346,6 +381,7 @@ export class SearchEntriesResource extends Resource<Args> {
   private buildEntries(doc: SearchEntryCollectionDocument): SearchEntry[] {
     let htmlById = new Map<string, HtmlResource>();
     let cssHrefById = new Map<string, string>();
+    let iconById = new Map<string, IconResource['attributes']>();
     let itemsByIdentity = new Map<
       string,
       CardResource<Saved> | FileMetaResource
@@ -355,6 +391,8 @@ export class SearchEntriesResource extends Resource<Args> {
         htmlById.set(resource.id, resource);
       } else if (isCssResource(resource)) {
         cssHrefById.set(resource.id, resource.attributes.href);
+      } else if (isIconResource(resource)) {
+        iconById.set(resource.id, resource.attributes);
       } else if (isCardResource(resource) || isFileMetaResource(resource)) {
         itemsByIdentity.set(
           resourceIdentity(resource.type, resource.id),
@@ -386,11 +424,34 @@ export class SearchEntriesResource extends Resource<Args> {
       let item = itemRef
         ? itemsByIdentity.get(resourceIdentity(itemRef.type, itemRef.id))
         : undefined;
+      let iconRef = entry.relationships.icon?.data;
+      let icon = iconRef ? iconById.get(iconRef.id) : undefined;
+      // Remember which result URLs are files. A file row's `file-meta`
+      // serialization is HTML-only / never stored, so the operator-mode
+      // click + overlay path (`lib/stack-item.ts`,
+      // `operator-mode-overlays.gts`) can't classify it as a file from the
+      // Store — it consults this registry instead. A file is an `item` of
+      // type `file-meta`, or an html-backed row whose rendering carries no
+      // render type (files render natively; card renderings always name one).
+      // Mirrors what the v1 `PrerenderedCard` wrapper registered.
+      let isFile =
+        itemRef?.type === 'file-meta' ||
+        (renderings.length > 0 && !renderings[0].renderType);
+      if (isFile) {
+        knownFileMetaUrls.add(entry.id);
+      }
       return {
         id: entry.id,
         realmUrl: realmUrlFor(entry.id),
         html: renderings,
         ...(item ? { item } : {}),
+        ...(icon
+          ? {
+              iconHtml: icon.iconHtml,
+              displayName: icon.displayName,
+              codeRef: icon.codeRef,
+            }
+          : {}),
       };
     });
   }
@@ -405,7 +466,6 @@ function buildRendering(
     id: html.id,
     ...(attributes.html !== undefined ? { html: attributes.html } : {}),
     cardType: attributes.cardType,
-    ...(attributes.iconHtml ? { iconHtml: attributes.iconHtml } : {}),
     isError: Boolean(attributes.isError),
     format: attributes.format,
     ...(attributes.renderType ? { renderType: attributes.renderType } : {}),

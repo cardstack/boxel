@@ -23,6 +23,7 @@ import {
   getDataBucket,
   getQueryableValue,
   linksTo,
+  linksToMany,
   setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
@@ -128,6 +129,56 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
     assert.notOk(
       json.includes('A-DUPLICATE-FRESH-OBJECT'),
       'the fresh-object re-entry of A collapses to {id} — not expanded; without the id-based guard the object-identity check would miss the cycle and expand it',
+    );
+  });
+
+  // A query-backed field is resolved live from a query and the index has no way
+  // to invalidate it when matching cards change, so its value in the search doc
+  // would always be stale — and traversing the query closure to build it is what
+  // wedges a dense realm. The search-doc builder must skip query-backed fields
+  // entirely, while keeping ordinary contains / linksTo(Many) fields.
+  test('a query-backed field is omitted from the search doc; ordinary fields are kept', async function (assert) {
+    class Member extends CardDef {
+      static displayName = 'Member';
+      @field firstName = contains(StringField);
+    }
+    class Team extends CardDef {
+      static displayName = 'Team';
+      @field teamName = contains(StringField);
+      @field roster = linksToMany(() => Member);
+      @field matchingMembers = linksToMany(() => Member, {
+        query: { filter: { eq: { firstName: 'anything' } } },
+      });
+    }
+    loader.shimModule(`${testRealmURL}team-cards`, { Member, Team });
+
+    let member = new Member({ firstName: 'Mango' });
+    let team = new Team({ teamName: 'Engineering' });
+    await saveCard(member, `${testRealmURL}Member/mango`, loader);
+    await saveCard(team, `${testRealmURL}Team/eng`, loader);
+
+    // Mark both relationship fields as used (populate the bucket) so each would
+    // be a search-doc candidate were it not for the query-backed filter.
+    getDataBucket(team).set('roster', [member]);
+    getDataBucket(team).set('matchingMembers', [member]);
+
+    let doc = getQueryableValue(
+      team.constructor as typeof CardDef,
+      team,
+    ) as Record<string, any>;
+
+    assert.notOk(
+      'matchingMembers' in doc,
+      'the query-backed field is absent from the search doc',
+    );
+    assert.strictEqual(
+      doc.teamName,
+      'Engineering',
+      'an ordinary contains field is still present',
+    );
+    assert.ok(
+      'roster' in doc,
+      'an ordinary (non-query) linksToMany field is still present',
     );
   });
 });

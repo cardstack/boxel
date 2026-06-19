@@ -958,6 +958,12 @@ export class Realm {
       )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
+      // Deprecated: legacy single-realm live-card search (the bound
+      // `searchResponse` carries the `@deprecated` tag). Prefer the v2
+      // `search-entry` endpoint `/_search-v2` (`searchEntriesResponse`), which
+      // returns one heterogeneous result stream — prerendered HTML or live
+      // serialization, the engine decides per row. Kept as a compat layer over
+      // the shared search engine; removed once every consumer is on v2.
       .get(
         '/_search',
         SupportedMimeType.CardJson,
@@ -978,6 +984,13 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
       )
+      // Deprecated: legacy single-realm prerendered-HTML search (the bound
+      // `searchPrerenderedResponse` carries the `@deprecated` tag). Prefer the v2
+      // `search-entry` endpoint `/_search-v2` (`searchEntriesResponse`), which
+      // carries the prerendered HTML and the live serialization in one
+      // heterogeneous result rather than a dedicated prerendered shape. Kept as
+      // a compat layer over the shared search engine; removed once every
+      // consumer is on v2.
       .get(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
@@ -4276,6 +4289,12 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          // Per-field subclass overrides for nested polymorphic fields (e.g.
+          // `frontmatter` → SkillFrontmatterField). Without this the field
+          // rehydrates as its declared base type when the document is read.
+          ...(fileEntry.resource?.meta?.fields
+            ? { fields: fileEntry.resource.meta.fields }
+            : {}),
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),
@@ -5311,6 +5330,13 @@ export class Realm {
     return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
   }
 
+  /**
+   * @deprecated Backs the legacy `/_search` endpoint. Prefer the v2
+   * `search-entry` path — {@link Realm.searchEntriesResponse} / `/_search-v2` —
+   * which returns one heterogeneous result stream (prerendered HTML or live
+   * serialization). Retained as a compat layer over the shared search engine;
+   * removed once every consumer is on v2.
+   */
   private async searchResponse(
     request: Request,
     requestContext: RequestContext,
@@ -5557,6 +5583,13 @@ export class Realm {
     });
   }
 
+  /**
+   * @deprecated Backs the legacy `/_search-prerendered` endpoint. Prefer the v2
+   * `search-entry` path — {@link Realm.searchEntriesResponse} / `/_search-v2` —
+   * which carries prerendered HTML and the live serialization in one
+   * heterogeneous result. Retained as a compat layer over the shared search
+   * engine; removed once every consumer is on v2.
+   */
   private async searchPrerenderedResponse(
     request: Request,
     requestContext: RequestContext,

@@ -1636,6 +1636,27 @@ export default class StoreService extends Service implements StoreInterface {
         );
       }
     }
+
+    // A realm's name/icon is injected into every card's `meta.realmInfo` at
+    // request time, but changing it (by editing the RealmConfig card at
+    // realm.json) only invalidates the config card itself — not the cards that
+    // display it. The realm index card (CardsGrid) renders the realm name as
+    // its title, so reload it when the config card is re-indexed to refresh
+    // that title without a browser reload. Scoped to the config card so we
+    // don't reload on every unrelated card edit. Instance invalidations carry
+    // the card id without `.json`, so the RealmConfig card at
+    // `<realm>/realm.json` appears here as `<realm>/realm`.
+    let realmConfigCardId = `${event.realmURL}realm`;
+    if (invalidations.includes(realmConfigCardId)) {
+      let indexCardId = `${event.realmURL}index`;
+      let indexCard = this.peek(indexCardId);
+      if (indexCard && isCardInstance(indexCard)) {
+        realmEventsLogger.debug(
+          `reloading index card ${indexCardId} because the realm config card was re-indexed`,
+        );
+        this.reloadTask.perform(indexCard);
+      }
+    }
   };
 
   private loadInstanceTask = task(
@@ -1848,6 +1869,14 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
     if (!isCardInstance(instanceOrError)) {
+      return;
+    }
+    if (this.renderContextBlocksPersistence()) {
+      // Persistence is blocked in this context, so the change subscription that
+      // drives autosave can never produce a save. Skipping it avoids the
+      // per-instance subscribe/unsubscribe churn — and the `getFields`
+      // dependency-graph walk each one triggers — for every instance a render
+      // loads.
       return;
     }
     let instance = instanceOrError;
@@ -2614,22 +2643,38 @@ function processCardError(
   url: string | undefined,
   error: any,
 ): CardErrorsJSONAPI {
+  let httpStatus = typeof error?.status === 'number' ? error.status : undefined;
+  let errorResponse: CardErrorsJSONAPI;
   try {
-    let errorResponse = JSON.parse(error.responseText);
-    return formattedError(url, error, errorResponse.errors?.[0]);
+    let parsed = JSON.parse(error.responseText);
+    errorResponse = formattedError(url, error, parsed.errors?.[0]);
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return formattedError(url, error, {
+        errorResponse = formattedError(url, error, {
           status: 404,
           title: 'Card Not Found',
           message: `The card ${url} does not exist`,
         });
+        break;
       default:
-        return formattedError(url, error, undefined);
+        errorResponse = formattedError(url, error, undefined);
     }
   }
+  // The realm server responds with an HTTP 404 only when the card document
+  // itself is missing. A card that exists but can't be served — e.g. because a
+  // module it imports is missing — comes back as a 5xx whose JSON:API body
+  // still carries the dependency's propagated 404. Trust the HTTP status as
+  // the authoritative not-found signal so a broken dependency surfaces as the
+  // error it is rather than masquerading as a missing card.
+  if (httpStatus != null && httpStatus !== 404) {
+    let cardError = errorResponse.errors[0];
+    if (cardError?.status === 404) {
+      cardError.status = httpStatus;
+    }
+  }
+  return errorResponse;
 }
 
 function needsServerStateMerge(

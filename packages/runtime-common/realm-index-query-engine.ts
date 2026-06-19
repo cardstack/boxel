@@ -65,6 +65,7 @@ import type {
   CardResource,
   CssResource,
   FileMetaResource,
+  IconResource,
   QueryFieldMeta,
   Saved,
   SearchEntryResource,
@@ -80,6 +81,7 @@ import {
 } from './unified-search.ts';
 import {
   buildHtmlResource,
+  buildIconResource,
   buildSearchEntryResource,
   buildSparseItemResource,
   htmlQueryFormats,
@@ -725,6 +727,7 @@ export class RealmIndexQueryEngine {
     let htmlResources: SearchEntryIncludedResource[] = [];
     let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
     let cssById = new Map<string, CssResource>();
+    let iconById = new Map<string, IconResource>();
     let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
 
     for (let row of results) {
@@ -739,6 +742,18 @@ export class RealmIndexQueryEngine {
       let hasError = Boolean(row.has_error);
 
       let htmlIds: string[] | undefined;
+      // The result's type icon, deduped by native-type internal key. Resolved
+      // alongside the html branch (a consumer that asks for renderings is the
+      // one that paints icons), but emitted on the `search-entry` itself so a
+      // fallback row with no matching rendering still carries it.
+      let iconId = collectIconId(
+        fieldset.html ? (row.types as string[] | null)?.[0] : undefined,
+        fieldset.html
+          ? ((row.icon_html as string | null) ?? undefined)
+          : undefined,
+        (row.display_names as string[] | null)?.[0] ?? '',
+        iconById,
+      );
       if (fieldset.html) {
         let nativeKey = (row.types as string[] | null)?.[0];
         let candidates = enumerateRowRenderings(row);
@@ -773,7 +788,6 @@ export class RealmIndexQueryEngine {
               | undefined,
             html: candidate.html,
             cardType: (row.display_names as string[] | null)?.[0] ?? '',
-            iconHtml: (row.icon_html as string | null) ?? undefined,
             isError: hasError || undefined,
             cssIds,
           });
@@ -792,7 +806,6 @@ export class RealmIndexQueryEngine {
                 | ResolvedCodeRef
                 | undefined,
               cardType: (row.display_names as string[] | null)?.[0] ?? '',
-              iconHtml: (row.icon_html as string | null) ?? undefined,
               isError: true,
               cssIds: [],
             });
@@ -831,7 +844,9 @@ export class RealmIndexQueryEngine {
         itemType = CardResourceType;
       }
 
-      data.push(buildSearchEntryResource({ url: cardUrl, htmlIds, itemType }));
+      data.push(
+        buildSearchEntryResource({ url: cardUrl, htmlIds, itemType, iconId }),
+      );
     }
 
     let metaWithEcho: SearchEntryCollectionDocument['meta'] = fieldset.html
@@ -839,7 +854,7 @@ export class RealmIndexQueryEngine {
       : meta;
     return await this.assembleSearchEntryDoc(
       { data, meta: metaWithEcho },
-      { htmlResources, cssById, itemResources, fullItemRoots },
+      { htmlResources, cssById, iconById, itemResources, fullItemRoots },
       opts,
     );
   }
@@ -880,6 +895,7 @@ export class RealmIndexQueryEngine {
     let htmlResources: SearchEntryIncludedResource[] = [];
     let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
     let cssById = new Map<string, CssResource>();
+    let iconById = new Map<string, IconResource>();
     let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
 
     for (let file of files) {
@@ -889,6 +905,15 @@ export class RealmIndexQueryEngine {
       }
 
       let htmlIds: string[] | undefined;
+      // A file's type icon, deduped by its native-type internal key — carried
+      // on the `search-entry` so a no-HTML file row (e.g. a `.gts`/`.ts`
+      // FileDef with no fitted rendering) still resolves its icon.
+      let iconId = collectIconId(
+        fieldset.html ? file.types?.[0] : undefined,
+        fieldset.html ? (file.iconHtml ?? undefined) : undefined,
+        file.displayNames?.[0] ?? '',
+        iconById,
+      );
       if (fieldset.html) {
         let matched = enumerateFileRenderings(file).filter((candidate) =>
           htmlQueryMatches(resolvedHtmlQuery, candidate),
@@ -910,7 +935,6 @@ export class RealmIndexQueryEngine {
             format: candidate.format,
             html: candidate.html,
             cardType: file.displayNames?.[0] ?? '',
-            iconHtml: file.iconHtml ?? undefined,
             cssIds,
           });
           htmlResources.push(htmlResource);
@@ -941,6 +965,7 @@ export class RealmIndexQueryEngine {
           url,
           htmlIds,
           itemType: itemEmitted ? FileMetaResourceType : undefined,
+          iconId,
         }),
       );
     }
@@ -950,7 +975,7 @@ export class RealmIndexQueryEngine {
       : meta;
     return await this.assembleSearchEntryDoc(
       { data, meta: metaWithEcho },
-      { htmlResources, cssById, itemResources, fullItemRoots },
+      { htmlResources, cssById, iconById, itemResources, fullItemRoots },
       opts,
     );
   }
@@ -966,15 +991,18 @@ export class RealmIndexQueryEngine {
     resources: {
       htmlResources: SearchEntryIncludedResource[];
       cssById: Map<string, CssResource>;
+      iconById: Map<string, IconResource>;
       itemResources: (CardResource<Saved> | FileMetaResource)[];
       fullItemRoots: (CardResource<Saved> | FileMetaResource)[];
     },
     opts?: Options,
   ): Promise<SearchEntryCollectionDocument> {
-    let { htmlResources, cssById, itemResources, fullItemRoots } = resources;
+    let { htmlResources, cssById, iconById, itemResources, fullItemRoots } =
+      resources;
     let included: SearchEntryIncludedResource[] = [
       ...htmlResources,
       ...cssById.values(),
+      ...iconById.values(),
       ...itemResources,
     ];
 
@@ -2404,6 +2432,39 @@ function relativizeResource(
       ) as RealmResourceIdentifier,
     );
   });
+}
+
+// Resolve a row's `icon` (type-descriptor) resource id — its native-type
+// internal key — and register the deduped resource carrying the type's icon,
+// display name, and code ref. Returns the id to hang the `search-entry` →
+// `icon` relationship on, or undefined when the row has no native type, no
+// `icon_html`, or an unparseable internal key. The same internal key collapses
+// every result of that type to one resource in `included`.
+function collectIconId(
+  nativeKey: string | undefined,
+  iconHtml: string | undefined,
+  displayName: string,
+  iconById: Map<string, IconResource>,
+): string | undefined {
+  if (!nativeKey || !iconHtml) {
+    return undefined;
+  }
+  let codeRef = codeRefFromInternalKey(nativeKey);
+  if (!codeRef) {
+    return undefined;
+  }
+  if (!iconById.has(nativeKey)) {
+    iconById.set(
+      nativeKey,
+      buildIconResource({
+        internalKey: nativeKey,
+        iconHtml,
+        displayName,
+        codeRef,
+      }),
+    );
+  }
+  return nativeKey;
 }
 
 // One candidate rendering of a row, with its markup: a (format, renderType)

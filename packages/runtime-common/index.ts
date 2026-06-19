@@ -929,6 +929,9 @@ export interface FileChooser {
   chooseFile<T>(opts?: {
     fileType?: CodeRef;
     fileTypeName?: string;
+    // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
+    // narrowing the chooser beyond the file type.
+    fileFieldFilter?: Record<string, unknown>;
   }): Promise<undefined | T>;
 }
 
@@ -967,6 +970,7 @@ export async function chooseCard(
 export async function chooseFile<T extends FileDef>(opts?: {
   fileType?: CodeRef;
   fileTypeName?: string;
+  fileFieldFilter?: Record<string, unknown>;
 }): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
@@ -1292,6 +1296,7 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search.ts';
+export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,

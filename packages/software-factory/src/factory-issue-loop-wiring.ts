@@ -183,7 +183,20 @@ export async function runFactoryIssueLoop(
   let syncGate = new WorkspaceSyncGate(workspaceDir, () =>
     syncWorkspaceToRealm(client, targetRealm, workspaceDir),
   );
-  let syncWorkspace = () => syncGate.sync();
+  // Time every sync through one stopwatch. Both the loop's own syncs and the
+  // realm-touching `run_*` tool syncs (which fire inside `agent.run`) go
+  // through this `syncWorkspace`, so the loop can read `getSyncElapsedMs()` to
+  // attribute tool-triggered sync time to sync rather than agent time.
+  let syncElapsedMs = 0;
+  let syncWorkspace = async () => {
+    let start = Date.now();
+    try {
+      return await syncGate.sync();
+    } finally {
+      syncElapsedMs += Date.now() - start;
+    }
+  };
+  let getSyncElapsedMs = () => syncElapsedMs;
   let validationCache = new ValidationRunCache(workspaceDir, { syncGate });
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealm,
@@ -261,6 +274,8 @@ export async function runFactoryIssueLoop(
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
+    debug: config.debug,
+    getSyncElapsedMs,
   };
 
   try {
@@ -414,16 +429,35 @@ export async function syncWorkspaceToRealm(
     let result = await withStdoutRedirected(() =>
       client.sync(targetRealm, workspaceDir, { preferLocal: true }),
     );
-    if (result.error) {
-      log.warn(`Workspace sync error: ${result.error}`);
-      return { ok: false, error: result.error };
-    }
-    if (result.hasError) {
-      log.warn('Workspace sync completed with errors — see prior log lines');
+    if (result.error || result.hasError) {
+      // Emit a structured, attributed failure trace so a sync error leaves a
+      // usable record on its own — instead of "see prior log lines", which
+      // means scraping the CLI's interleaved progress output after the fact.
+      let counts =
+        `pushed=${result.pushed.length}, pulled=${result.pulled.length}, ` +
+        `remoteDeleted=${result.remoteDeleted.length}, ` +
+        `localDeleted=${result.localDeleted.length}, ` +
+        `skippedConflicts=${result.skippedConflicts.length}`;
+      log.warn(`Workspace sync FAILED — ${counts}`);
+      if (result.error) {
+        // The realm-server's JSON:API error payload (e.g. the 500 "Write
+        // Error" body), not just the HTTP status line.
+        log.warn(`  realm-server response: ${result.error}`);
+      }
+      if (result.skippedConflicts.length > 0) {
+        log.warn(
+          `  skipped (conflicting) paths: ${result.skippedConflicts.join(', ')}`,
+        );
+      }
+      // Note: the attempted-batch manifest isn't in SyncResult — on a fatal
+      // atomic upload nothing lands in `pushed`. The attempted paths appear in
+      // the CLI progress lines (routed to stderr above); surfacing them in the
+      // result itself is a boxel-cli follow-up.
       return {
         ok: false,
         error:
-          'Workspace sync completed with per-file errors — see prior log lines for the failing paths and the realm-server response.',
+          result.error ??
+          `Workspace sync completed with per-file errors (${counts}).`,
       };
     }
     return { ok: true };

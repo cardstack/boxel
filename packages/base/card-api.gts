@@ -73,6 +73,7 @@ import {
   type getCardCollection,
   type Store,
   type PrerenderedCardComponentSignature,
+  type SearchResultsComponentSignature,
   type ErrorEntry,
   type Query,
   type QueryWithInterpolations,
@@ -86,6 +87,7 @@ import {
   LooseLinkableResource,
   LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
+  shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   trackRuntimeModuleDependency,
@@ -344,7 +346,18 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
+  /**
+   * @deprecated Use {@link CardContext.searchResultsComponent} — the v2
+   * `<SearchResults>` surface. Retained (and still provided) during the
+   * migration window; first-party card source moves to the v2 surface via the
+   * `@context` search codemod, after which this is removed.
+   */
   prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;
+  // The v2 search rendering surface: renders the heterogeneous `search-entry`
+  // stream for a `search-entry`-rooted query — prerendered HTML inert (hydrated
+  // lazily) or a live card — so a card author renders results without ever
+  // branching on prerendered-vs-live. Supersedes `prerenderedCardSearchComponent`.
+  searchResultsComponent: typeof GlimmerComponent<SearchResultsComponentSignature>;
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
@@ -1240,15 +1253,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // structured read.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
-        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        console.error(
-          '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
-          {
-            fieldName: this.name,
-            ownerType: instance?.constructor?.name,
-            sentinelType: (bucketEntry as { type?: string })?.type,
-          },
-        );
         return undefined;
       }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
@@ -2487,7 +2491,15 @@ export class BaseDef {
             includeComputeds: true,
             usedLinksToFieldsOnly: true,
           }),
-        ).map(([fieldName, field]) => {
+        )
+          // A query-backed field is resolved live from a query; the index has no
+          // way to invalidate it when matching cards change, so its value in the
+          // search doc would always be stale. Skip it entirely rather than
+          // traverse (and deep-resolve) the query closure into the doc — the
+          // host re-resolves these fields at view time, and the indexer records
+          // membership from `relationships.{field}.data` separately.
+          .filter(([, field]) => !field?.queryDefinition)
+          .map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
             return [
@@ -3853,6 +3865,14 @@ function trackRuntimeRelationshipDependency(
   }
   let id = (value as { id?: unknown }).id;
   if (typeof id !== 'string') {
+    return;
+  }
+  if (!shouldTrackRuntimeRelationship(id, dependencyTrackingContext)) {
+    // Already tracked this relationship target this session. A linksTo /
+    // linksToMany getter runs this on every read, and a dense graph re-reads
+    // the same targets combinatorially; a repeat would re-derive the identical
+    // instance/file + module-graph node set, so skipping it — and the
+    // prototype/identity lookups below — is a pure no-op.
     return;
   }
   if (isFileDef(declaredCard)) {

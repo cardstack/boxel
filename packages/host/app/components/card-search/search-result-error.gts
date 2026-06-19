@@ -9,6 +9,9 @@ interface Signature {
   Args: {
     // The result's identity URL — the diagnostic / test hook for the row.
     cardId: string;
+    // The result's display name (its realm-local path, e.g. `Person/error`),
+    // shown so the tile identifies which result failed. Absent → no name line.
+    name?: string;
     // The result's error doc, when one rode along on the wire (the `item`'s
     // `meta.error`). Absent for an error rendering that carried no last-known-
     // good HTML and no item — the tile then shows a generic message.
@@ -40,6 +43,11 @@ export default class SearchResultError extends Component<Signature> {
       <ExclamationCircle class='icon' role='presentation' />
       <div class='content'>
         <div class='title'>{{this.title}}</div>
+        {{#if @name}}
+          <div class='name' data-test-instance-error-name title={{@name}}>
+            {{@name}}
+          </div>
+        {{/if}}
         <div class='message' title={{this.message}}>{{this.message}}</div>
       </div>
     </div>
@@ -64,6 +72,13 @@ export default class SearchResultError extends Component<Signature> {
       .title {
         font: 600 var(--boxel-font-sm);
         line-height: 1.2;
+      }
+      .name {
+        font: 500 var(--boxel-font-xs);
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .message {
         font: var(--boxel-font-xs);

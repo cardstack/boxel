@@ -175,6 +175,23 @@ export class DoThing extends Command {
                 }),
               ],
             }),
+            // A skill expressed as a markdown file: `boxel.kind: skill`
+            // frontmatter carries the same command shape as a Skill card.
+            'skills/markdown-skill/SKILL.md': `---
+name: Markdown Skill
+description: A skill expressed as a markdown file
+boxel:
+  kind: skill
+  commands:
+    - codeRef:
+        module: '${testRealmURL}test-command.gts'
+        name: DoThing
+      requiresApproval: false
+---
+# Markdown Skill
+
+Instructions live in the markdown body.
+`,
           },
         }),
       );
@@ -352,6 +369,73 @@ export class DoThing extends Command {
         commandDefJson.codeRef.name,
         'DoThing',
         'only valid command definition is uploaded',
+      );
+    });
+
+    test('activates a skill markdown file and uploads its command definitions', async function (assert) {
+      let command = new UpdateRoomSkillsCommand(
+        getService('command-service').commandContext,
+      );
+      let skillId = `${testRealmURL}skills/markdown-skill/SKILL.md`;
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [skillId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
+        [skillId],
+        'skill markdown file added to enabled list (not dropped as a non-card)',
+      );
+      assert.strictEqual(
+        skillsRoomState.disabledSkillCards.length,
+        0,
+        'no skills are disabled',
+      );
+
+      let commandDefSourceUrls = skillsRoomState.commandDefinitions.map(
+        (def: any) => def.sourceUrl,
+      );
+      assert.deepEqual(
+        commandDefSourceUrls,
+        [`${testRealmURL}test-command.gts/DoThing`],
+        "the markdown skill's frontmatter command is uploaded as a command definition",
+      );
+    });
+
+    test('gathers commands from both a skill card and a skill markdown file', async function (assert) {
+      let command = new UpdateRoomSkillsCommand(
+        getService('command-service').commandContext,
+      );
+      let cardSkillId = `${testRealmURL}Skill/boxel-environment`;
+      let markdownSkillId = `${testRealmURL}skills/markdown-skill/SKILL.md`;
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [cardSkillId, markdownSkillId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skillsRoomState.enabledSkillCards
+          .map((card: any) => card.sourceUrl)
+          .sort(),
+        [cardSkillId, markdownSkillId].sort(),
+        'both the skill card and the skill markdown file are enabled',
+      );
+      // Both skills point at the same command; deduped by functionName to one.
+      assert.deepEqual(
+        skillsRoomState.commandDefinitions.map((def: any) => def.sourceUrl),
+        [`${testRealmURL}test-command.gts/DoThing`],
+        'the shared command is uploaded once across both skill sources',
       );
     });
   });
