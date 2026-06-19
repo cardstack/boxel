@@ -148,10 +148,23 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
   };
 }
 
-// Answers the two search shapes the ingester issues: instances of the entry
-// card's exported classes, and all base-realm Spec cards (filtered by
-// specType + ref in the ingester itself).
+// Answers the two search shapes the ingester issues — instances of the entry
+// card's exported classes, and all base-realm Spec cards — as v2 data-only
+// `search-entry` documents: each entry links its `item` serialization, which
+// rides in `included`. The ingester filters Specs (specType + ref) itself. The
+// type anchor arrives `item.`-addressed (`filter['item.on']`), the search-entry
+// query grammar `_federated-search-v2` speaks.
 function makeFakeProfileManager(): ProfileManager {
+  // Wrap card resources as a data-only search-entry document: one entry per
+  // card linking its `item`, with the card resources themselves in `included`.
+  let searchEntryDoc = (cards: { id: string; attributes?: unknown }[]) => ({
+    data: cards.map((card) => ({
+      id: card.id,
+      relationships: { item: { data: { type: 'card', id: card.id } } },
+    })),
+    included: cards.map((card) => ({ type: 'card', ...card })),
+    meta: { page: { total: cards.length } },
+  });
   return {
     getActiveProfile() {
       return {
@@ -160,12 +173,16 @@ function makeFakeProfileManager(): ProfileManager {
     },
     async authedRealmServerFetch(_url: string, init?: RequestInit) {
       let body = JSON.parse(String(init?.body ?? '{}')) as {
-        filter?: { type?: { module?: string; name?: string } };
+        filter?: { 'item.on'?: { module?: string; name?: string } };
+        fields?: unknown;
       };
-      let type = body.filter?.type;
-      let data: unknown[] = [];
-      if (type?.module === 'https://cardstack.com/base/spec') {
-        data = [
+      // Data-only consumers must request the item fieldset — that's what keeps
+      // prerendered html/css off the wire.
+      expect(body.fields).toEqual({ 'search-entry': ['item'] });
+      let on = body.filter?.['item.on'];
+      let cards: { id: string; attributes?: unknown }[] = [];
+      if (on?.module === 'https://cardstack.com/base/spec') {
+        cards = [
           {
             id: `${ROOT}Spec/gadget`,
             attributes: {
@@ -191,13 +208,12 @@ function makeFakeProfileManager(): ProfileManager {
             },
           },
         ];
-      } else if (
-        type?.module === GADGET_MODULE_ABS &&
-        type?.name === 'Gadget'
-      ) {
-        data = [{ id: `${ROOT}Gadget/g1` }];
+      } else if (on?.module === GADGET_MODULE_ABS && on?.name === 'Gadget') {
+        cards = [{ id: `${ROOT}Gadget/g1` }];
       }
-      return new Response(JSON.stringify({ data }), { status: 200 });
+      return new Response(JSON.stringify(searchEntryDoc(cards)), {
+        status: 200,
+      });
     },
   } as unknown as ProfileManager;
 }
