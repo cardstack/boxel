@@ -248,6 +248,17 @@ else
       export PUPPETEER_EXECUTABLE_PATH="/Applications/Chromium.app/Contents/MacOS/Chromium"
     fi
   fi
+
+  # Percy bundles its own Chromium and downloads + unzips it on first use
+  # (@percy/core install.js) via extract-zip, whose extraction step hangs
+  # indefinitely on Node 24.x — `percy exec` then never reaches the test
+  # command it wraps, so the host suite never runs and no junit report is
+  # written. @percy/core honors PERCY_BROWSER_EXECUTABLE and skips the
+  # download when it points at an existing binary, so reuse the system
+  # Chrome already resolved above.
+  if [ -z "${PERCY_BROWSER_EXECUTABLE:-}" ] && [ -n "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
+    export PERCY_BROWSER_EXECUTABLE="$PUPPETEER_EXECUTABLE_PATH"
+  fi
 fi
 
 # Trust the mkcert root CA in Node clients regardless of env-mode vs
