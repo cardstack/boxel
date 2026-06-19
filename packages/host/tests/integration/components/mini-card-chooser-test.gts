@@ -1,3 +1,4 @@
+import type { TOC } from '@ember/component/template-only';
 import {
   type RenderingTestContext,
   click,
@@ -8,6 +9,7 @@ import {
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
@@ -16,14 +18,14 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
-  type getCard as GetCardType,
+  rri,
   CardContextName,
   GetCardContextName,
   GetCardCollectionContextName,
   GetCardsContextName,
 } from '@cardstack/runtime-common';
 
-import MiniCardChooser from '@cardstack/host/components/mini-card-chooser';
+import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -45,6 +47,29 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
+// Sized envelope mirroring the chooser's intended hosting context (a narrow
+// side panel, ~360×480). The chooser's layout is fluid (100% of parent), so
+// every behavioral assertion below — single-line rows, show-more wrapping,
+// the recents header sitting flush above its rows — only holds at a
+// realistic width. Rendering unsized would let rows expand to the viewport
+// and quietly mask layout regressions.
+const DesignRatioContainer: TOC<{ Blocks: { default: [] } }> = <template>
+  <div class='design-ratio-container' data-test-design-ratio-container>
+    {{yield}}
+  </div>
+  <style scoped>
+    .design-ratio-container {
+      width: 360px;
+      height: 480px;
+      border: 1px solid var(--boxel-border-color, var(--boxel-300));
+      border-radius: var(--boxel-border-radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+</template>;
+
 // Provides the contexts SearchContent reads via @consume so the
 // chooser can render in isolation, without OperatorMode.
 class HostContextProvider extends GlimmerComponent<{
@@ -52,7 +77,7 @@ class HostContextProvider extends GlimmerComponent<{
 }> {
   @provide(GetCardContextName)
   get getCardFn() {
-    return getCard as unknown as GetCardType;
+    return getCard;
   }
 
   @provide(GetCardsContextName)
@@ -90,9 +115,17 @@ module('Integration | mini-card-chooser', function (hooks) {
 
   const noop = () => {};
 
+  // The Book module path inside the test realm — referenced by the baseFilter
+  // test below to scope results to the Book type only.
+  const bookModule = `${testRealmURL}book`;
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Book extends CardDef {
       static displayName = 'Book';
+      @field title = contains(StringField);
+    }
+    class Movie extends CardDef {
+      static displayName = 'Movie';
       @field title = contains(StringField);
     }
 
@@ -101,19 +134,44 @@ module('Integration | mini-card-chooser', function (hooks) {
       realmURL: testRealmURL,
       contents: {
         'book.gts': { Book },
+        'movie.gts': { Movie },
         'books/mango.json': new Book({ title: 'Mango' }),
         'books/vincent.json': new Book({ title: 'Vincent' }),
+        'movies/casablanca.json': new Movie({ title: 'Casablanca' }),
       },
     });
     await getService('realm').login(testRealmURL);
   });
 
-  test('mounts in isolation with a search input and no filter chips', async function (assert) {
+  test('mounts in isolation with a search input and no filter chips, and renders the mini visual variant', async function (assert) {
+    // Seed a recent so a row actually renders — without one, the empty state
+    // has nothing to click and the design assertions (no show-only, no view
+    // picker) verify the negative case but the screenshot for manual diff
+    // would be blank.
+    let recent = getService('recent-cards-service') as RecentCardsService;
+    recent.add(`${testRealmURL}books/mango`);
+
+    // Round-trip the selection: clicking a row fires onSelect, which sets
+    // tracked state, which feeds back into @selected so the row visibly
+    // highlights. Mirrors what a real consumer (hosting container) does.
+    class SelectionHarness {
+      @tracked selected: string | undefined = undefined;
+      onSelect = (url: string) => {
+        this.selected = url;
+      };
+    }
+    const harness = new SelectionHarness();
+
     await render(
       <template>
-        <HostContextProvider>
-          <MiniCardChooser @onSelect={{noop}} />
-        </HostContextProvider>
+        <DesignRatioContainer>
+          <HostContextProvider>
+            <MiniCardChooser
+              @onSelect={{harness.onSelect}}
+              @selected={{harness.selected}}
+            />
+          </HostContextProvider>
+        </DesignRatioContainer>
       </template>,
     );
 
@@ -129,6 +187,66 @@ module('Integration | mini-card-chooser', function (hooks) {
     assert
       .dom('[data-test-mini-card-chooser] .search-sheet__search-bar-picker')
       .doesNotExist('realm/type filter chips are hidden in the mini variant');
+    // The grid/strip view-mode picker is suppressed; the Sort dropdown stays.
+    assert
+      .dom('[data-test-search-result-header] .view-options-label')
+      .doesNotExist('view-mode picker is hidden under the mini variant');
+    // The per-section show-only toggle is gated off.
+    assert
+      .dom('[data-test-mini-card-chooser] [data-test-search-sheet-show-only]')
+      .doesNotExist('show-only toggle is suppressed in the mini variant');
+
+    // Type a token that the seeded fixtures share — `a` matches Mango,
+    // Casablanca, and (via the Vincent display name) any card whose
+    // title or type label contains an "a". This proves the search wire
+    // is live and gives us every visible row to iterate over.
+    await fillIn('[data-test-mini-card-chooser] [data-test-search-field]', 'a');
+    await waitFor('[data-test-mini-card-chooser] [data-test-item-button]', {
+      timeout: 5000,
+    });
+
+    // Capture the URL of every visible row, then click each in turn and
+    // assert that exactly that row carries the selected marker.
+    const buttonEls = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-test-mini-card-chooser] [data-test-item-button]',
+      ),
+    );
+    const urls = buttonEls
+      .map((el) => el.getAttribute('data-test-item-button'))
+      .filter((u): u is string => Boolean(u));
+
+    assert.ok(
+      urls.length > 0,
+      `at least one row matches "a" (saw ${urls.length})`,
+    );
+
+    for (const url of urls) {
+      await click(
+        `[data-test-mini-card-chooser] [data-test-item-button="${url}"]`,
+      );
+      await waitUntil(() => harness.selected === url);
+
+      // The clicked row carries the selected marker…
+      assert
+        .dom(
+          `[data-test-mini-card-chooser] [data-test-item-button="${url}"][data-test-item-button-selected="true"]`,
+        )
+        .exists(`row ${url} highlights after click`);
+      // …and the visible checkmark icon lands inside it (the mini
+      // variant's @showSelectedCheckmark path).
+      assert
+        .dom(
+          `[data-test-mini-card-chooser] [data-test-item-button="${url}"] [data-test-item-button-selected-checkmark]`,
+        )
+        .exists(`row ${url} shows the CheckMark icon`);
+      // …and no other row is marked selected at the same time.
+      assert
+        .dom(
+          '[data-test-mini-card-chooser] [data-test-item-button-selected="true"]',
+        )
+        .exists({ count: 1 }, `exactly one row selected after clicking ${url}`);
+    }
   });
 
   test('shows recents in the empty state, and selecting one fires onSelect with the canonical URL', async function (assert) {
@@ -140,9 +258,11 @@ module('Integration | mini-card-chooser', function (hooks) {
 
     await render(
       <template>
-        <HostContextProvider>
-          <MiniCardChooser @onSelect={{onSelect}} />
-        </HostContextProvider>
+        <DesignRatioContainer>
+          <HostContextProvider>
+            <MiniCardChooser @onSelect={{onSelect}} />
+          </HostContextProvider>
+        </DesignRatioContainer>
       </template>,
     );
 
@@ -151,6 +271,11 @@ module('Integration | mini-card-chooser', function (hooks) {
       `[data-test-mini-card-chooser] [data-section-sid="recents"] [data-test-item-button="${cardUrl}"]`,
       { timeout: 5000 },
     );
+
+    // The wrapper carries the mini modifier class so the scoped CSS applies.
+    assert
+      .dom('[data-test-mini-card-chooser] .search-result-block--mini')
+      .exists('section wrapper carries the mini modifier class');
 
     await click(
       `[data-test-mini-card-chooser] [data-test-item-button="${cardUrl}"]`,
@@ -167,9 +292,11 @@ module('Integration | mini-card-chooser', function (hooks) {
   test('typing in the search input renders matching results from the realm', async function (assert) {
     await render(
       <template>
-        <HostContextProvider>
-          <MiniCardChooser @onSelect={{noop}} />
-        </HostContextProvider>
+        <DesignRatioContainer>
+          <HostContextProvider>
+            <MiniCardChooser @onSelect={{noop}} />
+          </HostContextProvider>
+        </DesignRatioContainer>
       </template>,
     );
 
@@ -193,5 +320,40 @@ module('Integration | mini-card-chooser', function (hooks) {
     assert
       .dom(`[data-test-mini-card-chooser] [data-test-item-button="${mango}"]`)
       .doesNotExist('non-matching cards are filtered out');
+  });
+
+  test('baseFilter narrows results to the requested card type', async function (assert) {
+    const bookFilter = { type: { module: rri(bookModule), name: 'Book' } };
+
+    await render(
+      <template>
+        <DesignRatioContainer>
+          <HostContextProvider>
+            <MiniCardChooser @onSelect={{noop}} @baseFilter={{bookFilter}} />
+          </HostContextProvider>
+        </DesignRatioContainer>
+      </template>,
+    );
+
+    const mango = `${testRealmURL}books/mango`;
+    const vincent = `${testRealmURL}books/vincent`;
+    const casablanca = `${testRealmURL}movies/casablanca`;
+
+    await waitFor(
+      `[data-test-mini-card-chooser] [data-test-item-button="${mango}"]`,
+      { timeout: 5000 },
+    );
+
+    assert
+      .dom(`[data-test-mini-card-chooser] [data-test-item-button="${mango}"]`)
+      .exists('Book-type cards are included under a Book baseFilter');
+    assert
+      .dom(`[data-test-mini-card-chooser] [data-test-item-button="${vincent}"]`)
+      .exists('all Book-type cards surface');
+    assert
+      .dom(
+        `[data-test-mini-card-chooser] [data-test-item-button="${casablanca}"]`,
+      )
+      .doesNotExist('Movie-type cards are excluded by a Book baseFilter');
   });
 });

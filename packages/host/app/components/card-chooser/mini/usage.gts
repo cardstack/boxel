@@ -13,28 +13,23 @@ export default class MiniCardChooserUsage extends Component {
     this.selectedUrl = url;
   }
 
-  @action onCancel() {
-    this.selectedUrl = undefined;
-  }
-
   <template>
     <FreestyleUsage @name='MiniCardChooser'>
       <:description>
         Compact, inline card picker for side-by-side layouts. Wraps
         <code>SearchPanel</code>
-        with a fluid 100%-of-parent envelope and reuses the existing recents
-        section in
-        <code>SearchContent</code>. The hosting container owns dismissal — this
-        primitive only fires
+        with a fluid 100%-of-parent envelope and renders the mini visual variant
+        of
+        <code>SearchContent</code>: single-line rows, no per-section &quot;show
+        only&quot; toggle, results count visible on every section, and a
+        pill-shaped show-more button. The hosting container owns dismissal —
+        this primitive only fires
         <code>onSelect</code>
         with the selected card URL.
       </:description>
       <:example>
         <div class='example-container'>
-          <MiniCardChooser
-            @onSelect={{this.onSelect}}
-            @onCancel={{this.onCancel}}
-          />
+          <MiniCardChooser @onSelect={{this.onSelect}} />
         </div>
         {{#if this.selectedUrl}}
           <p class='selection-readout' data-test-mini-card-chooser-selection>
@@ -49,13 +44,13 @@ export default class MiniCardChooserUsage extends Component {
           @description='Called with the selected card URL (no .json suffix).'
           @required={{true}}
         />
-        <Args.Action
-          @name='onCancel'
-          @description='Declared for parity with later compositions; the primitive does not render its own cancel trigger.'
+        <Args.String
+          @name='initialSearchKey'
+          @description='Optional initial search term. Read once at mount; subsequent parent updates are ignored.'
         />
         <Args.String
-          @name='searchKey'
-          @description='Optional initial search term.'
+          @name='selected'
+          @description='URL of the currently selected card. The matching row gets the teal selection fill + checkmark.'
         />
       </:api>
     </FreestyleUsage>
