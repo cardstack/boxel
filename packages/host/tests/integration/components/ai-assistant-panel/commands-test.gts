@@ -1642,7 +1642,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  test('CS-11647: Accept All bar does not flash for an always-auto-executed command (checkCorrectness)', async function (assert) {
+  test('Accept All bar does not flash for an always-auto-executed command (checkCorrectness)', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
     // checkCorrectness is on the always-auto-execute list (one of three
@@ -1692,7 +1692,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       );
   });
 
-  test('CS-11647: Accept All bar does not flash for a requiresApproval=false command', async function (assert) {
+  test('Accept All bar does not flash for a requiresApproval=false command', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1749,7 +1749,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       );
   });
 
-  test('CS-11647: per-command Apply button does not flash Run before auto-execute starts', async function (assert) {
+  test('per-command Apply button does not flash Run before auto-execute starts', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
     // The per-command Apply button (rendered next to each tool-call message)
@@ -1785,9 +1785,115 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply="applying"]')
       .exists('per-command Apply button shows the applying spinner instead');
+    // The data-test-command-card-idle attribute is computed from
+    // applyButtonState (not the raw status); while the synthetic 'applying'
+    // is on it must NOT mark the card idle. Glimmer omits an attribute
+    // bound to a falsy expression, so the coherence check is on attribute
+    // presence — the apply button + the card must agree the spinner is
+    // up, not just one of them.
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-card-idle]')
+      .doesNotExist(
+        'data-test-command-card-idle agrees with applyButtonState while the synthetic spinner is on',
+      );
   });
 
-  test('CS-11647: Accept All bar still renders for a command that requires user approval', async function (assert) {
+  test('stuck-processing helper dispatches an invalid commandResult for each auto-executable command', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // Verifies the followup-fix for the synthetic-spinner hang flagged in
+    // the self-review of this branch: drainCommandProcessingQueue must
+    // dispatch an `invalid` commandResult when a room is wedged, so the
+    // synthetic 'applying' state in room-message-command.gts falls through
+    // to the invalidCommandState ("Try Anyway") branch instead of pinning
+    // a spinner that no terminal event ever clears.
+    //
+    // Driving the real wait-loop end-to-end is unstable: roomResource is
+    // an ember-resources proxy so own-property defines for isProcessing /
+    // processingLastStartedAt silently no-op, and there's no public seam
+    // to keep the processRoomTask "running" without rewriting the
+    // resource itself. Instead, exercise the helper directly with a
+    // spied sendCommandResultEvent on matrixService — this proves the
+    // dispatch shape, the per-command iteration, and the failureReason
+    // text without depending on the proxy internals.
+    let matrixService = getService('matrix-service');
+    let commandService = getService('command-service');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'checking correctness',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cs-11647-stuck-auto',
+          name: 'checkCorrectness',
+          arguments: '{}',
+        },
+        {
+          id: 'cs-11647-stuck-manual',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Dave' } },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: matrixService.agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    let roomResource = matrixService.roomResources.get(roomId)!;
+    let message = roomResource.messages.find(
+      (m: any) => m.commands?.length === 2,
+    );
+    assert.ok(message, 'two-command bot message lands in the room resource');
+
+    let captured: Array<{ toolCallId: string; failureReason?: string }> = [];
+    let originalSend = matrixService.sendCommandResultEvent.bind(matrixService);
+    (matrixService as any).sendCommandResultEvent = async (params: any) => {
+      captured.push({
+        toolCallId: params.toolCallId,
+        failureReason: params.failureReason,
+      });
+    };
+    try {
+      await (
+        commandService as any
+      ).invalidateAutoExecutableCommandsForStuckProcessing(
+        roomResource,
+        roomId,
+        message!.eventId,
+      );
+    } finally {
+      (matrixService as any).sendCommandResultEvent = originalSend;
+    }
+
+    assert.strictEqual(
+      captured.length,
+      1,
+      'only the auto-executable command is invalidated; manual-approval command is left in ready',
+    );
+    assert.strictEqual(
+      captured[0]?.toolCallId,
+      'cs-11647-stuck-auto',
+      'the dispatched invalid event targets the auto-executable command',
+    );
+    assert.true(
+      (captured[0]?.failureReason ?? '').startsWith(
+        'Room processing did not finish within',
+      ),
+      'failureReason surfaces the stuck-processing cause for the invalidCommandState alert',
+    );
+  });
+
+  test('Accept All bar still renders for a command that requires user approval', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
