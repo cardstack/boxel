@@ -21,15 +21,15 @@ introduce a new call site on a deprecated surface.**
 
 ## Reach for v2 — quick map
 
-| When you need to… | Use (v2) | Do NOT use (deprecated) |
-| --- | --- | --- |
-| Search from the realm / over HTTP | `/_search-v2`, `/_federated-search-v2` | `/_search`, `/_federated-search`, `/_search-prerendered`, `/_federated-search-prerendered` |
-| Fetch results in a host resource | `getSearchEntriesResource` (`host/app/resources/search-entries`) | `getPrerenderedSearch` (`resources/prerendered-search`) |
-| Render a result list in host UI | `<SearchResults>` (`host/app/components/card-search/search-results`) | `<PrerenderedCardSearch>`; the `SearchContent` → `SearchResultSection` → `ItemButton` tree |
-| Render a result list from a **card** | `@context.searchResultsComponent` | `@context.prerenderedCardSearchComponent` |
-| Type a single result row | `RenderableSearchEntryLike` (`runtime-common/search-results-component`) | `PrerenderedCardLike` / `PrerenderedCardData` (`runtime-common/prerendered-card-search`) |
-| Get instances programmatically | `StoreService.search(query, realms?)` → `CardDef[]` | — |
-| Get raw wire data (host only) | `StoreService.searchEntries(query, realms?)` | — |
+| When you need to…                    | Use (v2)                                                                | Do NOT use (deprecated)                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Search from the realm / over HTTP    | `/_search-v2`, `/_federated-search-v2`                                  | `/_search`, `/_federated-search`, `/_search-prerendered`, `/_federated-search-prerendered` |
+| Fetch results in a host resource     | `getSearchEntriesResource` (`host/app/resources/search-entries`)        | `getPrerenderedSearch` (`resources/prerendered-search`)                                    |
+| Render a result list in host UI      | `<SearchResults>` (`host/app/components/card-search/search-results`)    | `<PrerenderedCardSearch>`; the `SearchContent` → `SearchResultSection` → `ItemButton` tree |
+| Render a result list from a **card** | `@context.searchResultsComponent`                                       | `@context.prerenderedCardSearchComponent`                                                  |
+| Type a single result row             | `RenderableSearchEntryLike` (`runtime-common/search-results-component`) | `PrerenderedCardLike` / `PrerenderedCardData` (`runtime-common/prerendered-card-search`)   |
+| Get instances programmatically       | `StoreService.search(query, realms?)` → `CardDef[]`                     | —                                                                                          |
+| Get raw wire data (host only)        | `StoreService.searchEntries(query, realms?)`                            | —                                                                                          |
 
 ## Realm server / API
 
@@ -85,9 +85,14 @@ get query(): SearchEntryWireQuery {
 ```
 
 ```hbs
-<@context.searchResultsComponent @query={{this.query}} @mode='none' as |results|>
+<@context.searchResultsComponent
+  @query={{this.query}}
+  @mode='none'
+  as |results|
+>
   {{#each results.entries key='id' as |entry|}}
-    <entry.component />   {{!-- html inert | live card; the consumer never branches --}}
+    <entry.component />
+    {{! html inert | live card; the consumer never branches }}
   {{else}}
     {{#if results.isLoading}}<LoadingIndicator />{{else}}<p>No results</p>{{/if}}
   {{/each}}
