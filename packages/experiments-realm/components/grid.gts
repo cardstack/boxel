@@ -2,7 +2,11 @@ import GlimmerComponent from '@glimmer/component';
 
 import { type CardContext } from 'https://cardstack.com/base/card-api';
 
-import { type Query } from '@cardstack/runtime-common';
+import {
+  type Query,
+  searchEntryWireQueryFromQuery,
+  type SearchEntryWireQuery,
+} from '@cardstack/runtime-common';
 
 interface CardsGridSignature {
   Args: {
@@ -14,6 +18,12 @@ interface CardsGridSignature {
   Element: HTMLElement;
 }
 export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
+  get searchResultsQuery(): SearchEntryWireQuery {
+    return {
+      ...searchEntryWireQueryFromQuery(this.args.query),
+      realms: this.args.realms,
+    };
+  }
   <template>
     <ul
       class='cards {{@selectedView}}-view'
@@ -21,25 +31,18 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       ...attributes
     >
       {{#let
-        (component @context.prerenderedCardSearchComponent)
+        (component @context.searchResultsComponent)
         as |PrerenderedCardSearch|
       }}
-        <PrerenderedCardSearch
-          @query={{@query}}
-          @format='fitted'
-          @realms={{@realms}}
-          @isLive={{true}}
-        >
-          <:loading>
+        <PrerenderedCardSearch @query={{this.searchResultsQuery}} as |results|>
+          {{#if results.isLoading}}
             Loading...
-          </:loading>
-          <:response as |cards|>
-            {{#each cards key='url' as |card|}}
-              <li class='{{@selectedView}}-view-container'>
-                <card.component class='card' />
-              </li>
-            {{/each}}
-          </:response>
+          {{/if}}
+          {{#each results.entries key='id' as |card|}}
+            <li class='{{@selectedView}}-view-container'>
+              <card.component class='card' />
+            </li>
+          {{/each}}
         </PrerenderedCardSearch>
       {{/let}}
     </ul>
