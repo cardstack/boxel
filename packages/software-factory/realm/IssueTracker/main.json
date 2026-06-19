@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "boardTitle": "Software Factory"
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/software-factory"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../issue-tracker",
+        "name": "IssueTracker"
+      }
+    }
+  }
+}

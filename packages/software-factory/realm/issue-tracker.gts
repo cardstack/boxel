@@ -3772,7 +3772,7 @@ export class IssueTracker extends KanbanBoard {
     </template>
   };
 
-  static embedded = this.fitted;
+  static embedded = IssueTrackerIsolated;
 
   static edit = IssueTrackerEdit;
   static isolated = IssueTrackerIsolated;

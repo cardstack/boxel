@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "Software Factory" },
+      "projectCode": "SF",
+      "projectName": "Software Factory",
+      "projectStatus": "active",
+      "issueStatusOptions": [
+        { "value": "backlog", "label": "Backlog", "color": "#2b4fff" },
+        { "value": "in_progress", "label": "In Progress", "color": "#b8860b" },
+        { "value": "blocked", "label": "Blocked", "color": "#db1731" },
+        { "value": "review", "label": "In Review", "color": "#285028" },
+        { "value": "done", "label": "Done", "color": "#7a2cf4" }
+      ],
+      "issueTypeOptions": [
+        { "value": "bootstrap", "label": "Bootstrap" },
+        { "value": "feature", "label": "Feature" },
+        { "value": "adjustment", "label": "Adjustment" },
+        { "value": "bug", "label": "Bug" },
+        { "value": "task", "label": "Task" },
+        { "value": "research", "label": "Research" },
+        { "value": "infrastructure", "label": "Infrastructure" }
+      ],
+      "issuePriorityOptions": [
+        { "value": "critical", "label": "Critical" },
+        { "value": "high", "label": "High" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "low", "label": "Low" }
+      ],
+      "projectStatusOptions": [
+        { "value": "planning", "label": "Planning", "color": "#2b4fff" },
+        { "value": "active", "label": "Active", "color": "#285028" },
+        { "value": "on_hold", "label": "On Hold", "color": "#f59f0b" },
+        { "value": "completed", "label": "Completed", "color": "#7a2cf4" },
+        { "value": "archived", "label": "Archived", "color": "#9d9c9d" }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../issue-tracker",
+        "name": "Project"
+      }
+    }
+  }
+}

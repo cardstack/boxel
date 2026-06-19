@@ -1,10 +1,25 @@
 {
   "data": {
     "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "Software Factory" }
+    },
+    "relationships": {
+      "issueTracker": {
+        "links": {
+          "self": "./IssueTracker/main"
+        }
+      },
+      "cardsGrid": {
+        "links": {
+          "self": "./CardsGrid/main"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/cards-grid",
-        "name": "CardsGrid"
+        "module": "./factory-index",
+        "name": "FactoryIndex"
       }
     }
   }

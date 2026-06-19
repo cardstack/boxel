@@ -316,6 +316,13 @@ export async function runFactoryEntrypoint(
 
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
 
+  // Point the factory index board at the active run's target realm so users
+  // can watch live issue progress. This is best-effort — a failure here must
+  // not block the factory run.
+  let factoryRealmUrl = new URL('software-factory/', targetRealm.serverUrl)
+    .href;
+  await setFactoryIndexTargetRealm(client, factoryRealmUrl, targetRealm.url);
+
   // Establish the local workspace for target-realm I/O. Every factory
   // read/write against the target realm happens against this directory;
   // the realm itself is reached only via `client.pull` / `client.sync`.
@@ -514,6 +521,46 @@ async function defaultSyncWorkspaceToRealm(
         'The seed issue and any other workspace state may not have reached the realm, ' +
         'which would cause the issue loop to exit immediately with zero issues.',
     );
+  }
+}
+
+async function setFactoryIndexTargetRealm(
+  client: BoxelCLIClient,
+  factoryRealmUrl: string,
+  targetRealmUrl: string,
+): Promise<void> {
+  let readResult = await client.read(factoryRealmUrl, 'index.json');
+  if (!readResult.ok || !readResult.content) {
+    log.warn(
+      `setFactoryIndexTargetRealm: could not read index.json — ${readResult.error ?? 'no content'}`,
+    );
+    return;
+  }
+
+  let doc: {
+    data: { attributes?: Record<string, unknown>; [k: string]: unknown };
+  };
+  try {
+    doc = JSON.parse(readResult.content) as typeof doc;
+  } catch (err) {
+    log.warn(`setFactoryIndexTargetRealm: could not parse index.json — ${err}`);
+    return;
+  }
+
+  doc.data.attributes ??= {};
+  doc.data.attributes.targetRealmUrl = targetRealmUrl;
+
+  let writeResult = await client.write(
+    factoryRealmUrl,
+    'index.json',
+    JSON.stringify(doc, null, 2),
+  );
+  if (!writeResult.ok) {
+    log.warn(
+      `setFactoryIndexTargetRealm: could not write index.json — ${writeResult.error}`,
+    );
+  } else {
+    log.info(`Factory index targetRealmUrl set to: ${targetRealmUrl}`);
   }
 }
 
