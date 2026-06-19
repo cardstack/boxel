@@ -278,6 +278,20 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
     );
 
+    let unlisted = asExpressions({
+      source_realm_url: realmURL,
+      slug: 'deleteslugexample',
+      owner_user_id: ownerUserId,
+    });
+    await query(
+      context.dbAdapter,
+      insert(
+        'unlisted_realm_paths',
+        unlisted.nameExpressions,
+        unlisted.valueExpressions,
+      ),
+    );
+
     // Phase 3: source realm is mounted lazily. The publish handler
     // above called reconciler.lookupOrMount(sourceRealmURL), so by now
     // the source realm is in realms[].
@@ -601,6 +615,15 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     assert.ok(
       claimedDomains.every((row) => row.removed_at != null),
       'claimed domains are soft deleted',
+    );
+
+    let unlistedPaths = (await context.dbAdapter.execute(
+      `SELECT slug FROM unlisted_realm_paths WHERE source_realm_url = '${realmURL}'`,
+    )) as { slug: string }[];
+    assert.strictEqual(
+      unlistedPaths.length,
+      0,
+      'unlisted-link slug is removed so a recreated realm cannot reuse it',
     );
 
     assert.notOk(
