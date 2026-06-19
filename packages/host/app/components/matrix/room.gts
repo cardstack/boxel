@@ -1866,6 +1866,8 @@ export default class Room extends Component<Signature> {
     let activeMode = roomResource?.getActiveLLMModeForMessage(
       lastMessage.eventId,
     );
+    let isOwnedByCurrentAgent =
+      lastMessage.agentId === this.matrixService.agentId;
     return lastMessage.commands.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&
@@ -1878,7 +1880,7 @@ export default class Room extends Component<Signature> {
         // command-service flips `acceptingAllRoomIds`. Without this filter,
         // the bar paints and then yanks itself once auto-execution starts,
         // which is the CS-11647 glitch.
-        !isAutoExecutableCommand(command, activeMode),
+        !isAutoExecutableCommand(command, activeMode, isOwnedByCurrentAgent),
     );
   }
 

@@ -98,7 +98,13 @@ export default class RoomMessageCommand extends Component<Signature> {
     let activeMode = this.args.roomResource.getActiveLLMModeForMessage(
       this.args.messageCommand.eventId,
     );
-    return isAutoExecutableCommand(this.args.messageCommand, activeMode);
+    let isOwnedByCurrentAgent =
+      this.args.messageCommand.message.agentId === this.matrixService.agentId;
+    return isAutoExecutableCommand(
+      this.args.messageCommand,
+      activeMode,
+      isOwnedByCurrentAgent,
+    );
   }
 
   @use private commandResultCard = resource(() => {

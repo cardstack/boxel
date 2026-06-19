@@ -386,8 +386,16 @@ export default class CommandService extends Service {
             message.eventId,
           );
 
+          // The outer `message.agentId !== this.matrixService.agentId`
+          // gate above already short-circuited the not-our-agent case, so
+          // every command reaching this point is owned by the current
+          // agent.
           if (
-            isAutoExecutableCommand(messageCommand, activeModeAtMessageTime)
+            isAutoExecutableCommand(
+              messageCommand,
+              activeModeAtMessageTime,
+              true,
+            )
           ) {
             readyCommands.push(messageCommand);
           }
