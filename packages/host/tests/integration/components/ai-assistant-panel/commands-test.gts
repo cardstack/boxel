@@ -1652,6 +1652,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // Accept All / Cancel briefly appear then disappear. The bar must
     // never paint in its manual-approval branch for any auto-executed
     // command, regardless of which condition triggers auto-execute.
+    //
+    // agentId must match the host's matrix service so the
+    // agent-ownership gate in isAutoExecutableCommand passes — otherwise
+    // the predicate short-circuits to false (the not-our-agent case
+    // exercised by acceptance/commands-test.gts) and the bar would show
+    // for an unrelated reason.
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'checking correctness',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1664,6 +1670,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: '{}',
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
 
     await waitFor('[data-test-message-idx="0"]');
@@ -1723,6 +1734,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
 
     await waitFor('[data-test-message-idx="0"]');
@@ -1753,6 +1769,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: '{}',
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
 
     await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
