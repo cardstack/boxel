@@ -1,8 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
+import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
 import { SupportedMimeType, type TokenClaims } from '@cardstack/runtime-common';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   aiBotDelegationSecret,
@@ -20,6 +22,37 @@ import {
 const onBehalfOf = '@jane:localhost';
 // A user with no permission rows on the test realm.
 const stranger = '@stranger:localhost';
+
+function signedPost(
+  request: SuperTest<Test>,
+  rawBody: string,
+  opts: {
+    timestamp?: number;
+    secret?: string;
+    signature?: string;
+    omitTimestamp?: boolean;
+    omitSignature?: boolean;
+  } = {},
+) {
+  let timestamp = String(opts.timestamp ?? Date.now());
+  let signature =
+    opts.signature ??
+    delegationSignature(
+      opts.secret ?? aiBotDelegationSecret,
+      timestamp,
+      rawBody,
+    );
+  let req = request
+    .post('/_delegate-session')
+    .set('Content-Type', 'application/json');
+  if (!opts.omitTimestamp) {
+    req = req.set(DELEGATION_TIMESTAMP_HEADER, timestamp);
+  }
+  if (!opts.omitSignature) {
+    req = req.set(DELEGATION_SIGNATURE_HEADER, signature);
+  }
+  return req.send(rawBody);
+}
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('POST /_delegate-session', function (hooks) {
@@ -45,38 +78,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       },
     });
 
-    function postDelegation(
-      rawBody: string,
-      opts: {
-        timestamp?: number;
-        secret?: string;
-        signature?: string;
-        omitTimestamp?: boolean;
-        omitSignature?: boolean;
-      } = {},
-    ) {
-      let timestamp = String(opts.timestamp ?? Date.now());
-      let signature =
-        opts.signature ??
-        delegationSignature(
-          opts.secret ?? aiBotDelegationSecret,
-          timestamp,
-          rawBody,
-        );
-      let req = request
-        .post('/_delegate-session')
-        .set('Content-Type', 'application/json');
-      if (!opts.omitTimestamp) {
-        req = req.set(DELEGATION_TIMESTAMP_HEADER, timestamp);
-      }
-      if (!opts.omitSignature) {
-        req = req.set(DELEGATION_SIGNATURE_HEADER, signature);
-      }
-      return req.send(rawBody);
-    }
-
     test('mints a read-only delegated token scoped to the user and realm', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
       );
 
@@ -115,7 +119,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('minted token authorizes a realm read even though the user is realm-owner', async function (assert) {
-      let mint = await postDelegation(
+      let mint = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
       );
       assert.strictEqual(mint.status, 200, 'token minted');
@@ -132,7 +137,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('minted token cannot write to the realm', async function (assert) {
-      let mint = await postDelegation(
+      let mint = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
       );
       assert.strictEqual(mint.status, 200, 'token minted');
@@ -163,15 +169,44 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
 
+    test('a delegated token scoped to another realm is rejected (single-realm scope)', async function (assert) {
+      // A well-formed delegated token (validly signed with the realm-server
+      // seed) but minted for a different realm must not be accepted here, even
+      // though the bound user has read on this realm.
+      let foreignToken = jwt.sign(
+        {
+          user: onBehalfOf,
+          realm: 'http://some-other-realm.example/',
+          permissions: ['read'],
+          realmServerURL: testRealmURL.href,
+          delegated: true,
+        },
+        realmSecretSeed,
+        { expiresIn: '30m' },
+      );
+
+      let read = await request
+        .get('/friend.gts')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', `Bearer ${foreignToken}`);
+      assert.strictEqual(
+        read.status,
+        401,
+        'token minted for another realm is rejected',
+      );
+    });
+
     test('denies a user with no read access to the realm', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf: stranger, realm: testRealmHref }),
       );
       assert.strictEqual(response.status, 403, 'HTTP 403');
     });
 
     test('rejects a request with no signature or timestamp', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
         { omitSignature: true, omitTimestamp: true },
       );
@@ -179,7 +214,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('rejects a request with an invalid signature', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
         { signature: 'deadbeef'.repeat(8) },
       );
@@ -187,7 +223,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('rejects a request signed with the wrong secret', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
         { secret: 'not-the-shared-secret' },
       );
@@ -195,7 +232,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('rejects a stale timestamp outside the ±60s window', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
         { timestamp: Date.now() - 61_000 },
       );
@@ -203,7 +241,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('rejects a timestamp too far in the future', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ onBehalfOf, realm: testRealmHref }),
         { timestamp: Date.now() + 61_000 },
       );
@@ -211,20 +250,76 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('rejects a body that is not valid JSON (signature still required)', async function (assert) {
-      let response = await postDelegation('this is not json');
+      let response = await signedPost(request, 'this is not json');
       assert.strictEqual(response.status, 400, 'HTTP 400');
     });
 
     test('rejects a body missing onBehalfOf', async function (assert) {
-      let response = await postDelegation(
+      let response = await signedPost(
+        request,
         JSON.stringify({ realm: testRealmHref }),
       );
       assert.strictEqual(response.status, 400, 'HTTP 400');
     });
 
     test('rejects a body missing realm', async function (assert) {
-      let response = await postDelegation(JSON.stringify({ onBehalfOf }));
+      let response = await signedPost(request, JSON.stringify({ onBehalfOf }));
       assert.strictEqual(response.status, 400, 'HTTP 400');
+    });
+  });
+
+  // A realm whose read access comes from the `users` grant (any Matrix user
+  // with a profile) rather than an exact per-user row. The endpoint must mint
+  // for such a user, matching what the realm authorizer would accept.
+  module('POST /_delegate-session — users grant', function (hooks) {
+    let request: SuperTest<Test>;
+    const karl = '@karl:localhost';
+
+    setupPermissionedRealmCached(hooks, {
+      fixture: 'realistic',
+      permissions: {
+        users: ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
+      },
+      realmURL: testRealmURL,
+      onRealmSetup: (args: {
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) => {
+        request = args.request;
+      },
+    });
+
+    hooks.afterEach(function () {
+      sinon.restore();
+    });
+
+    test('mints for a user who can read via a `users` grant (no exact row)', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'getProfile')
+        .resolves({ displayname: 'Karl' });
+
+      let response = await signedPost(
+        request,
+        JSON.stringify({ onBehalfOf: karl, realm: testRealmHref }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      let claims = jwt.verify(
+        response.body.token,
+        realmSecretSeed,
+      ) as TokenClaims;
+      assert.strictEqual(claims.user, karl, 'token is bound to the user');
+      assert.deepEqual(claims.permissions, ['read'], 'token carries only read');
+    });
+
+    test('denies a `users`-grant realm when the user has no Matrix profile', async function (assert) {
+      sinon.stub(MatrixClient.prototype, 'getProfile').resolves(undefined);
+
+      let response = await signedPost(
+        request,
+        JSON.stringify({ onBehalfOf: karl, realm: testRealmHref }),
+      );
+      assert.strictEqual(response.status, 403, 'HTTP 403');
     });
   });
 });

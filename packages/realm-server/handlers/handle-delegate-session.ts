@@ -2,10 +2,11 @@ import type Koa from 'koa';
 import { randomUUID } from 'crypto';
 import {
   ensureTrailingSlash,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   logger,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { createJWT } from '../jwt.ts';
 import {
@@ -44,6 +45,7 @@ function headerValue(
 // couldn't, and can never write.
 export default function handleDelegateSession({
   dbAdapter,
+  matrixClient,
   realmSecretSeed,
   serverURL,
   aiBotDelegationSecret,
@@ -123,12 +125,20 @@ export default function handleDelegateSession({
     // request is logged with a correlation id, requester, and outcome.
     let auditId = randomUUID();
 
-    let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
-      userId: onBehalfOf,
-      onlyOwnRealms: false,
-    });
-    let userPermissions = permissionsForAllRealms[normalizedRealmHref] ?? [];
-    if (!userPermissions.includes('read')) {
+    // Mirror the realm's own authorizer (RealmPermissionChecker): the user can
+    // read if an exact permission row, the public `*` grant, or the `users`
+    // grant (any user with a Matrix profile) gives them read. Using the raw
+    // realm_user_permissions rows alone would 403 a user who can really read
+    // via a `users` grant, diverging from what the realm would accept.
+    let realmPermissions = await fetchRealmPermissions(
+      dbAdapter,
+      new URL(normalizedRealmHref),
+    );
+    let permissionChecker = new RealmPermissionChecker(
+      realmPermissions,
+      matrixClient,
+    );
+    if (!(await permissionChecker.can(onBehalfOf, 'read'))) {
       log.warn(
         `[delegate-session ${auditId}] denied: user ${onBehalfOf} has no read access to ${normalizedRealmHref}`,
       );

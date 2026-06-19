@@ -3713,6 +3713,21 @@ export class Realm {
       // design promises: the session is read-only, and it grants no more than
       // the bound user can already read.
       if (token.delegated) {
+        // Single-realm scope. Delegated tokens are signed with the realm-server
+        // seed shared across every realm on this server and this branch skips
+        // the normal exact-permissions match, so without this check a token
+        // minted for realm A could be replayed against realm B whenever the
+        // bound user also has read on B. Bind the token to the realm it names.
+        if (
+          ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
+        ) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+        }
         if (requiredPermission !== 'read') {
           this.#log.warn(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
