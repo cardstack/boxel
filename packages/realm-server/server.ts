@@ -954,6 +954,7 @@ export class RealmServer {
       }
     | undefined;
   private prerenderer: Prerenderer | undefined;
+  private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
@@ -979,6 +980,7 @@ export class RealmServer {
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
+    reportHostShell,
     searchCache,
   }: {
     serverURL: URL;
@@ -1005,6 +1007,10 @@ export class RealmServer {
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
+    // Reports the current host-shell token to the prerender manager. main.ts
+    // wires this so the post-deployment hook can re-report once the service is
+    // stable (the boot-time report fires as soon as this server starts serving).
+    reportHostShell?: () => Promise<void>;
     // Optional so test harnesses that construct a RealmServer directly get a
     // private cache for free. main.ts passes a shared instance so the
     // JobsFinishedListener can evict the same cache the handlers populate.
@@ -1049,6 +1055,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
+    this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
@@ -1151,6 +1158,7 @@ export class RealmServer {
           matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
+          reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,
           searchCache: this.searchCache,
         }),
