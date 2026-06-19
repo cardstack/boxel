@@ -53,14 +53,25 @@ export default class IssueTrackerBoard extends Component<Signature> {
       this.activeGroupBy === 'status'
         ? (this.args.columns ?? this.selectedGroupByDimension.options)
         : this.selectedGroupByDimension.options;
-    return options.map((opt, i) => ({
-      key: opt.value,
-      label: opt.label,
-      sortOrder: i,
-      collapsed: false,
-      color: opt.color ?? null,
-      wipLimit: null,
-    }));
+    let cards = this.args.cards ?? [];
+    let fieldName = this.selectedGroupByDimension.fieldName;
+    return options.map((opt, i) => {
+      let hasCards =
+        !this.args.hideEmpty ||
+        cards.some(
+          (entry) =>
+            ((entry.item as any)?.attributes?.[fieldName] as string) ===
+            opt.value,
+        );
+      return {
+        key: opt.value,
+        label: opt.label,
+        sortOrder: i,
+        collapsed: !hasCards,
+        color: opt.color ?? null,
+        wipLimit: null,
+      };
+    });
   }
 
   get placements(): KanbanPlacement[] {

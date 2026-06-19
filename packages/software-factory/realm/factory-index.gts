@@ -1,5 +1,4 @@
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
 
 import {
   CardDef,
@@ -18,15 +17,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import LayoutGridPlus from '@cardstack/boxel-icons/layout-grid-plus';
 import Factory from '@cardstack/boxel-icons/factory';
 
-import {
-  searchEntryWireQueryFromQuery,
-  type SearchEntryWireQuery,
-  type RealmResourceIdentifier,
-  type RenderableSearchEntryLike,
-} from '@cardstack/runtime-common';
-
-import IssueTrackerBoard from './issue-tracker-board';
-import { issueStatusOptions as columns } from './kanban-config';
+import { FactoryIssueTracker } from './factory-issue-tracker';
 
 const TABS = [
   { displayName: 'Board', tabId: 'board' },
@@ -35,50 +26,10 @@ const TABS = [
 
 class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
   @tracked activeTabId = 'board';
-  @tracked hideEmpty = false;
 
   setActiveTab = (tabId: string): void => {
     this.activeTabId = tabId;
   };
-
-  toggleHideEmpty = (): void => {
-    this.hideEmpty = !this.hideEmpty;
-  };
-
-  openCard = (entries: RenderableSearchEntryLike[], index: number): void => {
-    let entry = entries[index];
-    if (entry?.id) {
-      this.args.viewCard?.(new URL(entry.id), 'isolated');
-    }
-  };
-
-  // When a factory run is active, query Issues from the target realm so the
-  // board shows live progress as the factory agent creates cards.
-  get factoryRunIssuesQuery(): SearchEntryWireQuery {
-    let targetRealmUrl = this.args.model.targetRealmUrl;
-    if (!targetRealmUrl) {
-      return searchEntryWireQueryFromQuery({});
-    }
-    let origin = new URL(targetRealmUrl).origin;
-    let moduleString =
-      `${origin}/software-factory/issue-tracker` as RealmResourceIdentifier;
-    return {
-      ...searchEntryWireQueryFromQuery(
-        {
-          filter: {
-            type: {
-              module: moduleString,
-              name: 'Issue',
-            },
-          },
-        },
-        // Request fitted HTML for rendering AND the status field so the
-        // board can place each issue in the correct column.
-        { fields: ['html', 'item.status'] },
-      ),
-      realms: [targetRealmUrl],
-    };
-  }
 
   <template>
     <div class='factory-index'>
@@ -97,37 +48,11 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
       <div class='tab-panel'>
         {{#if (eq this.activeTabId 'board')}}
           <div class='board-panel'>
-            {{#if @model.targetRealmUrl}}
-              <div class='live-run-panel'>
-                <@context.searchResultsComponent
-                  @query={{this.factoryRunIssuesQuery}}
-                  @mode='none'
-                  as |results|
-                >
-                  {{#if results.isLoading}}
-                    <p class='empty-state'>Loading issue tracker board…</p>
-                  {{else}}
-                    <div class='preject-board'>
-                      {{#if results.entries}}
-                        <IssueTrackerBoard
-                          @boardTitle={{@model.boardTitle}}
-                          @cards={{results.entries}}
-                          @columns={{columns}}
-                          @hideEmpty={{this.hideEmpty}}
-                          @onToggleHideEmpty={{this.toggleHideEmpty}}
-                          @onOpen={{fn this.openCard results.entries}}
-                        />
-                      {{else}}
-                        <p class='empty-state'>No issues yet. The factory is
-                          starting up…</p>
-                      {{/if}}
-                    </div>
-                  {{/if}}
-                </@context.searchResultsComponent>
-              </div>
+            {{#if @model.board}}
+              <@fields.board @format='isolated' @displayContainer={{false}} />
             {{else}}
-              <p class='empty-state'>No issue tracker linked. Edit this card to
-                connect one.</p>
+              <p class='empty-state'>No board linked. Edit this card to connect
+                one.</p>
             {{/if}}
           </div>
         {{else}}
@@ -169,18 +94,11 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
         height: 100%;
         overflow: hidden;
       }
-      .live-run-panel {
-        height: 100%;
-        overflow-y: auto;
-      }
       .empty-state {
         padding: var(--boxel-sp-xl);
         text-align: center;
         color: var(--muted-foreground, var(--boxel-500));
         font-size: 0.875rem;
-      }
-      .preject-board {
-        height: 100%;
       }
     </style>
   </template>
@@ -193,8 +111,7 @@ export class FactoryIndex extends CardDef {
   static headerColor = '#ffba00';
 
   @field cardsGrid = linksTo(() => CardsGrid);
-  @field targetRealmUrl = contains(StringField);
-  @field boardTitle = contains(StringField);
+  @field board = linksTo(() => FactoryIssueTracker);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: FactoryIndex) {

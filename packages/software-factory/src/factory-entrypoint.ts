@@ -528,29 +528,34 @@ function setFactoryIndexTargetRealm(
   targetRealmUrl: string,
   boardTitle?: string,
 ): void {
-  let indexPath = join(__dirname, '..', 'realm', 'index.json');
+  let boardPath = join(__dirname, '..', 'realm', 'IssueTracker', 'main.json');
 
   let doc: {
     data: { attributes?: Record<string, unknown>; [k: string]: unknown };
   };
   try {
-    doc = JSON.parse(readFileSync(indexPath, 'utf8')) as typeof doc;
+    doc = JSON.parse(readFileSync(boardPath, 'utf8')) as typeof doc;
   } catch (err) {
-    log.warn(`setFactoryIndexTargetRealm: could not read index.json — ${err}`);
+    log.warn(`setFactoryIndexTargetRealm: could not read board card — ${err}`);
     return;
   }
 
   doc.data.attributes ??= {};
   doc.data.attributes.targetRealmUrl = targetRealmUrl;
   if (boardTitle) {
-    doc.data.attributes.boardTitle = boardTitle;
+    let cardInfo = (doc.data.attributes.cardInfo ?? {}) as Record<
+      string,
+      unknown
+    >;
+    cardInfo.name = boardTitle;
+    doc.data.attributes.cardInfo = cardInfo;
   }
 
   try {
-    writeFileSync(indexPath, JSON.stringify(doc, null, 2) + '\n');
-    log.info(`Factory index targetRealmUrl set to: ${targetRealmUrl}`);
+    writeFileSync(boardPath, JSON.stringify(doc, null, 2) + '\n');
+    log.info(`Board card targetRealmUrl set to: ${targetRealmUrl}`);
   } catch (err) {
-    log.warn(`setFactoryIndexTargetRealm: could not write index.json — ${err}`);
+    log.warn(`setFactoryIndexTargetRealm: could not write board card — ${err}`);
   }
 }
 

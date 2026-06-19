@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Activity Log"
+      },
+      "targetRealmUrl": "https://localhost:4201/user/excess-guppy-85/"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../factory-issue-tracker",
+        "name": "FactoryIssueTracker"
+      }
+    }
+  }
+}
