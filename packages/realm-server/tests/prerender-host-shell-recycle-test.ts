@@ -7,7 +7,7 @@ import { decideHostShellRecycle } from '../prerender/prerender-app.ts';
 // every heartbeat: the manager echoes the current host-shell token, and the
 // server recycles its browser when that token differs from the one it warmed
 // against (the host was redeployed). See PRERENDER_HOST_SHELL_HASH_HEADER.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('decideHostShellRecycle', function () {
     test('no token reported yet → no recycle, baseline unchanged', function (assert) {
       assert.deepEqual(decideHostShellRecycle(null, undefined), {
