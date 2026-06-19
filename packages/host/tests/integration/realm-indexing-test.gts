@@ -229,7 +229,7 @@ module(`Integration | realm indexing`, function (hooks) {
       'search doc includes contentHash',
     );
     assert.ok(
-      fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
+      fileEntry?.deps?.includes(`${baseRealmRRI}file-api`),
       'deps include base file-api module',
     );
     let includesSelfFileDependency = fileEntry?.deps?.includes(fileURL.href);
@@ -4769,7 +4769,10 @@ module(`Integration | realm indexing`, function (hooks) {
         `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
-        `${testModuleRealm}person`,
+        // Module deps are stored in canonical (deployment-independent) form,
+        // so the live test realm's module resolves to the standard
+        // `localhost:4202` address even when served at the env-mode hostname.
+        'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
@@ -4940,7 +4943,10 @@ module(`Integration | realm indexing`, function (hooks) {
         `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
-        `${testModuleRealm}person`,
+        // Module deps are stored in canonical (deployment-independent) form,
+        // so the live test realm's module resolves to the standard
+        // `localhost:4202` address even when served at the env-mode hostname.
+        'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
