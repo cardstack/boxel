@@ -35,9 +35,14 @@ const TABS = [
 
 class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
   @tracked activeTabId = 'board';
+  @tracked hideEmpty = false;
 
   setActiveTab = (tabId: string): void => {
     this.activeTabId = tabId;
+  };
+
+  toggleHideEmpty = (): void => {
+    this.hideEmpty = !this.hideEmpty;
   };
 
   openCard = (entries: RenderableSearchEntryLike[], index: number): void => {
@@ -108,6 +113,8 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
                           @boardTitle={{@model.boardTitle}}
                           @cards={{results.entries}}
                           @columns={{columns}}
+                          @hideEmpty={{this.hideEmpty}}
+                          @onToggleHideEmpty={{this.toggleHideEmpty}}
                           @onOpen={{fn this.openCard results.entries}}
                         />
                       {{else}}

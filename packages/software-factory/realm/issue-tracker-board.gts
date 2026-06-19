@@ -1,8 +1,12 @@
 import { get } from '@ember/helper';
+import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
 
 import {
+  BoxelSelect,
+  FieldContainer,
   KanbanPlane,
+  Switch,
   type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
@@ -12,13 +16,15 @@ import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import type { RenderableSearchEntryLike } from '@cardstack/runtime-common';
 
-import type { Option } from './kanban-config';
+import { defaultColumns, type Column, type Option } from './kanban-config';
 
 interface Signature {
   Args: {
     boardTitle?: string;
     columns?: Option[];
     cards?: RenderableSearchEntryLike[];
+    hideEmpty?: boolean;
+    onToggleHideEmpty?: () => void;
     onOpen?: (index: number) => void;
   };
   Blocks: {
@@ -28,8 +34,26 @@ interface Signature {
 }
 
 export default class IssueTrackerBoard extends Component<Signature> {
+  @tracked activeGroupBy = 'status';
+
+  get groupByDimensions(): Column[] {
+    return defaultColumns;
+  }
+
+  get selectedGroupByDimension(): Column {
+    return defaultColumns.find((d) => d.key === this.activeGroupBy) ?? defaultColumns[0]!;
+  }
+
+  updateGroupBy = (dim: Column): void => {
+    this.activeGroupBy = dim.key;
+  };
+
   get kanbanColumns(): KanbanColumnConfig[] {
-    return (this.args.columns ?? []).map((opt, i) => ({
+    let options =
+      this.activeGroupBy === 'status'
+        ? (this.args.columns ?? this.selectedGroupByDimension.options)
+        : this.selectedGroupByDimension.options;
+    return options.map((opt, i) => ({
       key: opt.value,
       label: opt.label,
       sortOrder: i,
@@ -42,13 +66,14 @@ export default class IssueTrackerBoard extends Component<Signature> {
   get placements(): KanbanPlacement[] {
     let cards = this.args.cards ?? [];
     let cols = this.kanbanColumns;
+    let fieldName = this.selectedGroupByDimension.fieldName;
     let fallbackKey =
       cols.find((c) => c.key === 'backlog')?.key ?? cols[0]?.key ?? '';
     return cards.map((entry, idx) => {
-      let status = (entry.item as any)?.attributes?.status as
+      let value = (entry.item as any)?.attributes?.[fieldName] as
         | string
         | undefined;
-      let colKey = cols.find((c) => c.key === status)?.key ?? fallbackKey;
+      let colKey = cols.find((c) => c.key === value)?.key ?? fallbackKey;
       return { columnId: colKey, index: idx, sortOrder: idx };
     });
   }
@@ -65,6 +90,33 @@ export default class IssueTrackerBoard extends Component<Signature> {
           </div>
         </div>
         <div class='toolbar-right'>
+          <FieldContainer
+            @label='Group by'
+            @inline={{true}}
+            class='group-by-field'
+          >
+            <BoxelSelect
+              @options={{this.groupByDimensions}}
+              @selected={{this.selectedGroupByDimension}}
+              @onChange={{this.updateGroupBy}}
+              as |dim|
+            >
+              <span>{{dim.label}}</span>
+            </BoxelSelect>
+          </FieldContainer>
+          {{#if @onToggleHideEmpty}}
+            <FieldContainer
+              @label='Hide empty'
+              @inline={{true}}
+              class='hide-empty-field'
+            >
+              <Switch
+                @isEnabled={{@hideEmpty}}
+                @onChange={{@onToggleHideEmpty}}
+                @label='Hide empty columns'
+              />
+            </FieldContainer>
+          {{/if}}
           <span class='kanban-card-count' data-test-issue-tracker-card-count>
             {{#if (eq @cards.length 1)}}
               1 card
@@ -81,6 +133,7 @@ export default class IssueTrackerBoard extends Component<Signature> {
             @boardLabel={{@boardTitle}}
             @columns={{this.kanbanColumns}}
             @placements={{this.placements}}
+            @hideEmpty={{@hideEmpty}}
             @onOpen={{@onOpen}}
           >
             <:card as |placement|>
@@ -146,10 +199,20 @@ export default class IssueTrackerBoard extends Component<Signature> {
       }
       .toolbar-right {
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: var(--boxel-sp-4xs);
+        flex-direction: row;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
         color: var(--board-muted-fg);
+      }
+      .group-by-field :deep(.label-container),
+      .hide-empty-field :deep(.label-container) {
+        font-size: 0.75rem;
+        color: var(--board-muted-fg);
+      }
+      .group-by-field :deep(.ember-power-select-trigger) {
+        font-size: 0.75rem;
+        min-height: unset;
+        padding: 0.125rem 0.375rem;
       }
       .kanban-title {
         display: flex;
@@ -177,6 +240,7 @@ export default class IssueTrackerBoard extends Component<Signature> {
         padding: 0.125rem 0.5rem;
         background: var(--board-muted-bg);
         border-radius: 4px;
+        white-space: nowrap;
       }
       .kanban-body {
         flex: 1;
@@ -209,7 +273,8 @@ export default class IssueTrackerBoard extends Component<Signature> {
         }
         .toolbar-right {
           flex-shrink: 0;
-          align-items: center;
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
         .kanban-area :deep(.col-collapse-btn) {
           opacity: 0.5;
