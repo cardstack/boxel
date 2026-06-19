@@ -8,11 +8,17 @@ import { scheduleOnce } from '@ember/runloop';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
+  baseRealm,
   trimJsonExtension,
   maybeRelativeReference,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { type BaseDef, type CardDef, getComponent } from './card-api';
+import {
+  type BaseDef,
+  type CardDef,
+  type FileDef,
+  getComponent,
+} from './card-api';
 import { CardContextConsumer } from './field-component';
 
 import BoldIcon from '@cardstack/boxel-icons/bold';
@@ -35,10 +41,12 @@ interface CardWidgetTarget {
   cardId: string;
   format: 'atom' | 'embedded';
   kind: 'inline' | 'block';
+  // 'card' refs resolve to CardDef instances; 'file' refs to FileDef instances.
+  refType: 'card' | 'file';
 }
 
 interface CardRenderTarget extends CardWidgetTarget {
-  card: CardDef | null;
+  instance: CardDef | FileDef | null;
 }
 
 interface SelectionFormats {
@@ -125,11 +133,25 @@ function labelFromUrl(url: string): string {
   return parts[parts.length - 1] || cleaned;
 }
 
+// `getCards` is typed to return CardDef instances (its generic is constrained to
+// `T extends CardDef`, and FileDef extends BaseDef — not CardDef). A query routed
+// through `on: FileDef` actually yields FileDef instances, so we reinterpret the
+// resource. Localizing the cast to one named helper keeps the unsafety
+// documented and out of the call site.
+function asFileResource(
+  resource: { instances: CardDef[]; isLoading: boolean } | undefined,
+): { instances: FileDef[]; isLoading: boolean } | undefined {
+  return resource as unknown as
+    | { instances: FileDef[]; isLoading: boolean }
+    | undefined;
+}
+
 interface CodeMirrorEditorSignature {
   Args: {
     content: string | null | undefined;
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
+    linkedFiles?: FileDef[] | null;
     cardReferenceBaseUrl?: string | null;
     cardReferenceVirtualNetwork?: VirtualNetwork;
     /** When false, all syntax markers are visible (source mode). Default true. */
@@ -598,23 +620,33 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this.editorView?.focus();
   };
 
-  // ── Card reference resolution via getCards ────────────────────────────────
-  // The linkedCards linksToMany query on RichMarkdownField returns empty in
-  // edit mode because nested FieldDef instances lack a card store. We bypass
-  // that by using getCards (from CardContext) to resolve cards independently.
+  // ── Reference resolution via getCards ─────────────────────────────────────
+  // The linkedCards/linkedFiles linksToMany queries on RichMarkdownField return
+  // empty in edit mode because nested FieldDef instances lack a card store. We
+  // bypass that by using getCards (from CardContext) to resolve independently.
+  // Cards and files need distinct queries: cards match by `id` (instance
+  // entries), files match by `url` (file-meta search docs carry no `id`), and
+  // the `on: FileDef` ref routes the search to file entries.
 
   private _cardRefResourceCreated = false;
   private _cardRefResource: {
     instances: CardDef[];
     isLoading: boolean;
   } | null = null;
+  private _fileRefResourceCreated = false;
+  private _fileRefResource: {
+    instances: FileDef[];
+    isLoading: boolean;
+  } | null = null;
 
-  get _resolvedCardUrls(): string[] {
+  private resolvedUrlsForRefType(refType: 'card' | 'file'): string[] {
     let baseUrl = this.args.cardReferenceBaseUrl;
     let vn = this.args.cardReferenceVirtualNetwork;
     let urls = new Set<string>();
     for (let target of this._widgetTargets) {
-      urls.add(resolveUrl(target.cardId, baseUrl, vn));
+      if (target.refType === refType) {
+        urls.add(resolveUrl(target.cardId, baseUrl, vn));
+      }
     }
     return [...urls];
   }
@@ -626,7 +658,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       if (typeof getCards === 'function') {
         this._cardRefResource =
           getCards(this, () => {
-            let urls = this._resolvedCardUrls;
+            let urls = this.resolvedUrlsForRefType('card');
             if (!urls.length) return undefined;
             return {
               filter: { in: { id: urls } },
@@ -637,41 +669,64 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     return this._cardRefResource?.instances ?? [];
   }
 
+  get resolvedFiles(): FileDef[] {
+    if (!this._fileRefResourceCreated) {
+      this._fileRefResourceCreated = true;
+      let getCards = this.args.getCards;
+      if (typeof getCards === 'function') {
+        this._fileRefResource =
+          asFileResource(
+            getCards(this, () => {
+              let urls = this.resolvedUrlsForRefType('file');
+              if (!urls.length) return undefined;
+              return {
+                filter: {
+                  in: { url: urls },
+                  on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+                },
+              };
+            }),
+          ) ?? null;
+      }
+    }
+    return this._fileRefResource?.instances ?? [];
+  }
+
   // ── Card slot resolution ─────────────────────────────────────────────────
 
   @cached
   get cardRenderTargets(): CardRenderTarget[] {
     let targets = this._widgetTargets;
     let baseUrl = this.args.cardReferenceBaseUrl;
-
-    let cardsByUrl = new Map<string, CardDef>();
-
-    // Use linkedCards if available (works when store is present)
-    let linkedCards = this.args.linkedCards;
-    if (linkedCards?.length) {
-      for (let card of linkedCards) {
-        if (card?.id) {
-          cardsByUrl.set(card.id, card);
-        }
-      }
-    }
-
-    // Also use cards resolved via getCards resource (bypasses FallbackCardStore)
-    let resolved = this.resolvedCards;
-    if (resolved?.length) {
-      for (let card of resolved) {
-        if (card?.id) {
-          cardsByUrl.set(card.id, card);
-        }
-      }
-    }
-
     let vn = this.args.cardReferenceVirtualNetwork;
+
+    // Resolve cards and files by URL from every available source. linkedCards /
+    // linkedFiles work when a store is present; the getCards resources resolve
+    // them independently (bypasses FallbackCardStore) — cards via an `id` query
+    // over instance entries, files via a `url` query over file-meta entries.
+    // Both CardDef and FileDef instances carry an `id` equal to their URL, so
+    // one map keyed by URL serves both.
+    let instancesByUrl = new Map<string, CardDef | FileDef>();
+    let addInstances = (
+      instances: (CardDef | FileDef)[] | null | undefined,
+    ) => {
+      if (!instances?.length) return;
+      for (let instance of instances) {
+        if (instance?.id) {
+          instancesByUrl.set(trimJsonExtension(instance.id), instance);
+        }
+      }
+    };
+    addInstances(this.args.linkedCards);
+    addInstances(this.args.linkedFiles);
+    addInstances(this.resolvedCards);
+    addInstances(this.resolvedFiles);
+
     return targets.map((target) => {
       let resolvedUrl = resolveUrl(target.cardId, baseUrl, vn);
       return {
         ...target,
-        card: cardsByUrl.get(resolvedUrl) ?? null,
+        instance: instancesByUrl.get(resolvedUrl) ?? null,
       };
     });
   }
@@ -698,6 +753,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         (t, i) =>
           t.cardId === pending[i].cardId &&
           t.kind === pending[i].kind &&
+          t.refType === pending[i].refType &&
           t.element === pending[i].element,
       )
     ) {
@@ -949,21 +1005,34 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       {{#if this.livePreview}}
         {{#each this.cardRenderTargets as |target|}}
           {{#in-element target.element insertBefore=null}}
-            {{#if target.card}}
+            {{#if target.instance}}
+              {{! Card and file refs render identically — a `getComponent`-
+                  rendered instance registered by `id`. Only the test hook
+                  differs (card vs file). }}
               <CardContextConsumer as |context|>
-                {{#let (this.getCardComponent target.card) as |CardComponent|}}
+                {{#let
+                  (this.getCardComponent target.instance)
+                  as |RefComponent|
+                }}
                   {{#if (isInline target.kind)}}
                     <span
                       class='codemirror-card-slot codemirror-card-slot--inline'
-                      data-test-codemirror-card-slot-inline
+                      data-test-codemirror-file-slot-inline={{if
+                        (eq target.refType 'file')
+                        ''
+                      }}
+                      data-test-codemirror-card-slot-inline={{if
+                        (eq target.refType 'card')
+                        ''
+                      }}
                       {{context.cardComponentModifier
-                        card=target.card
+                        cardId=target.instance.id
                         format='data'
                         fieldType=undefined
                         fieldName=undefined
                       }}
                     >
-                      <CardComponent
+                      <RefComponent
                         @format={{target.format}}
                         @displayContainer={{false}}
                       />
@@ -971,15 +1040,22 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                   {{else}}
                     <div
                       class='codemirror-card-slot codemirror-card-slot--block'
-                      data-test-codemirror-card-slot-block
+                      data-test-codemirror-file-slot-block={{if
+                        (eq target.refType 'file')
+                        ''
+                      }}
+                      data-test-codemirror-card-slot-block={{if
+                        (eq target.refType 'card')
+                        ''
+                      }}
                       {{context.cardComponentModifier
-                        card=target.card
+                        cardId=target.instance.id
                         format='data'
                         fieldType=undefined
                         fieldName=undefined
                       }}
                     >
-                      <CardComponent
+                      <RefComponent
                         @format={{target.format}}
                         @displayContainer={{false}}
                       />
