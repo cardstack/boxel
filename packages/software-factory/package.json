@@ -27,10 +27,10 @@
     "smoke:test-realm": "NODE_NO_WARNINGS=1 node scripts/smoke-tests/smoke-test-realm.ts",
     "test": "NODE_NO_WARNINGS=1 node scripts/test.ts",
     "test:all": "NODE_NO_WARNINGS=1 node scripts/test.ts",
-    "test:node": "NODE_NO_WARNINGS=1 node scripts/test.ts --node-only",
-    "test:playwright": "playwright test",
-    "test:playwright:headed": "playwright test --headed",
-    "test:playwright:shard": "playwright test --shard",
+    "test:node": "pnpm --filter @cardstack/boxel-cli build:api && NODE_NO_WARNINGS=1 node scripts/test.ts --node-only",
+    "test:playwright": "pnpm --filter @cardstack/boxel-cli build:api && playwright test",
+    "test:playwright:headed": "pnpm --filter @cardstack/boxel-cli build:api && playwright test --headed",
+    "test:playwright:shard": "pnpm --filter @cardstack/boxel-cli build:api && playwright test --shard",
     "test:realm": "NODE_NO_WARNINGS=1 node scripts/run-realm-tests.ts"
   },
   "devDependencies": {

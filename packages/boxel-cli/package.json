@@ -6,7 +6,10 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./api": "./api.ts",
+    "./api": {
+      "types": "./api.ts",
+      "default": "./dist/api.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -74,6 +77,7 @@
   },
   "scripts": {
     "build": "pnpm clean && pnpm build:types && pnpm build:test-harness && pnpm build:realms && NODE_NO_WARNINGS=1 node scripts/build.ts",
+    "build:api": "NODE_NO_WARNINGS=1 node scripts/build.ts --api-only",
     "build:plugin": "NODE_NO_WARNINGS=1 node scripts/build-plugin.ts",
     "build:realms": "NODE_NO_WARNINGS=1 node scripts/build-realms.ts",
     "build:skills": "NODE_NO_WARNINGS=1 node scripts/build-skills.ts",

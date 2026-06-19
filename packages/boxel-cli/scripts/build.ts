@@ -89,4 +89,36 @@ async function buildCLI() {
   }
 }
 
-buildCLI();
+// The public `@cardstack/boxel-cli/api` surface, bundled to a single CJS file
+// so cross-package consumers (software-factory) load a normal built module
+// rather than raw `.ts` source — the latter resolves under some loaders
+// (vitest, plain node) but not others (Playwright's worker loader), which
+// failed with "does not provide an export named 'BoxelCLIClient'". esbuild's
+// CJS output keeps named exports detectable by Node's cjs-module-lexer, so ESM
+// consumers can still `import { BoxelCLIClient }`.
+async function buildAPI() {
+  mkdirSync('dist', { recursive: true });
+  console.log('Building api...');
+  try {
+    await build({
+      ...commonConfig,
+      entryPoints: ['api.ts'],
+      outfile: 'dist/api.js',
+    });
+    console.log('Built dist/api.js');
+  } catch (error) {
+    console.error('API build failed:', error);
+    process.exit(1);
+  }
+}
+
+async function main() {
+  // `build:api` passes --api-only to rebuild just the API surface quickly
+  // (consumers' test pipelines do this); a full `build` produces both.
+  if (!process.argv.includes('--api-only')) {
+    await buildCLI();
+  }
+  await buildAPI();
+}
+
+main();
