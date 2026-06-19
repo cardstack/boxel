@@ -2,14 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "cardInfo": { "name": "Software Factory" }
+      "cardInfo": {
+        "name": "Software Factory"
+      },
+      "targetRealmUrl": "https://localhost:4201/user/excess-guppy-85/",
+      "boardTitle": "Activity Log"
     },
     "relationships": {
-      "issueTracker": {
-        "links": {
-          "self": "./IssueTracker/main"
-        }
-      },
       "cardsGrid": {
         "links": {
           "self": "./CardsGrid/main"

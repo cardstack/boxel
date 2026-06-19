@@ -17,8 +17,7 @@ import type { Option } from './kanban-config';
 
 interface Signature {
   Args: {
-    cardTitle?: string;
-    project?: RenderableSearchEntryLike;
+    boardTitle?: string;
     columns?: Option[];
     cards?: RenderableSearchEntryLike[];
   };
@@ -61,17 +60,8 @@ export default class IssueTrackerBoard extends Component<Signature> {
           <div class='kanban-heading'>
             <h2 class='kanban-title'>
               <SquareKanban />
-              <span class='kanban-title-text'>{{@cardTitle}}</span>
+              <span class='kanban-title-text'>{{@boardTitle}}</span>
             </h2>
-            {{#if @project}}
-              <div class='kanban-project' data-test-issue-tracker-project-link>
-                <span class='kanban-project-label'>Project</span>
-                <FittedCardContainer
-                  class='project-badge'
-                  @size='small-badge'
-                ><@project.component /></FittedCardContainer>
-              </div>
-            {{/if}}
           </div>
         </div>
         <div class='toolbar-right'>
@@ -88,7 +78,7 @@ export default class IssueTrackerBoard extends Component<Signature> {
       <div class='kanban-body'>
         <div class='kanban-area'>
           <KanbanPlane
-            @boardLabel={{@cardTitle}}
+            @boardLabel={{@boardTitle}}
             @columns={{this.kanbanColumns}}
             @placements={{this.placements}}
           >
@@ -186,21 +176,6 @@ export default class IssueTrackerBoard extends Component<Signature> {
         padding: 0.125rem 0.5rem;
         background: var(--board-muted-bg);
         border-radius: 4px;
-      }
-      .kanban-project {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-      .kanban-project-label {
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: var(--board-muted-fg);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .project-badge :deep(.project-eyebrow) {
-        display: none;
       }
       .kanban-body {
         flex: 1;

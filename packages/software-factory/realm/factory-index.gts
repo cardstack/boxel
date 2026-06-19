@@ -15,7 +15,7 @@ import { TabbedHeader } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import LayoutGridPlus from '@cardstack/boxel-icons/layout-grid-plus';
-import SquareKanban from '@cardstack/boxel-icons/square-kanban';
+import Factory from '@cardstack/boxel-icons/factory';
 
 import {
   searchEntryWireQueryFromQuery,
@@ -38,27 +38,6 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
   setActiveTab = (tabId: string): void => {
     this.activeTabId = tabId;
   };
-
-  get factoryRunProjectQuery(): SearchEntryWireQuery {
-    let targetRealmUrl = this.args.model.targetRealmUrl;
-    if (!targetRealmUrl) {
-      return searchEntryWireQueryFromQuery({});
-    }
-    let origin = new URL(targetRealmUrl).origin;
-    let moduleString =
-      `${origin}/software-factory/issue-tracker` as RealmResourceIdentifier;
-    return {
-      ...searchEntryWireQueryFromQuery({
-        filter: {
-          type: {
-            module: moduleString,
-            name: 'Project',
-          },
-        },
-      }),
-      realms: [targetRealmUrl],
-    };
-  }
 
   // When a factory run is active, query Issues from the target realm so the
   // board shows live progress as the factory agent creates cards.
@@ -92,16 +71,13 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
     <div class='factory-index'>
       <TabbedHeader
         @headerTitle={{@model.cardTitle}}
+        @headerBackgroundColor={{@model.constructor.headerColor}}
         @tabs={{TABS}}
         @activeTabId={{this.activeTabId}}
         @setActiveTab={{this.setActiveTab}}
       >
         <:headerIcon>
-          {{#if (eq this.activeTabId 'issues')}}
-            <SquareKanban class='header-icon' aria-hidden='true' />
-          {{else}}
-            <LayoutGridPlus class='header-icon' aria-hidden='true' />
-          {{/if}}
+          <Factory class='header-icon' aria-hidden='true' />
         </:headerIcon>
       </TabbedHeader>
 
@@ -111,37 +87,28 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
             {{#if @model.targetRealmUrl}}
               <div class='live-run-panel'>
                 <@context.searchResultsComponent
-                  @query={{this.factoryRunProjectQuery}}
+                  @query={{this.factoryRunIssuesQuery}}
                   @mode='none'
-                  as |projectResults|
+                  as |results|
                 >
-                  <@context.searchResultsComponent
-                    @query={{this.factoryRunIssuesQuery}}
-                    @mode='none'
-                    as |results|
-                  >
-                    {{#if results.isLoading}}
-                      <p class='empty-state'>Loading issue tracker board…</p>
-                    {{else}}
-                      <div class='preject-board'>
-                        {{#if results.entries}}
-                          <IssueTrackerBoard
-                            @cardTitle={{@model.cardTitle}}
-                            @project={{projectResults.entries.[0]}}
-                            @cards={{results.entries}}
-                            @columns={{columns}}
-                          />
-                        {{else}}
-                          <p class='empty-state'>No issues yet. The factory is
-                            starting up…</p>
-                        {{/if}}
-                      </div>
-                    {{/if}}
-                  </@context.searchResultsComponent>
+                  {{#if results.isLoading}}
+                    <p class='empty-state'>Loading issue tracker board…</p>
+                  {{else}}
+                    <div class='preject-board'>
+                      {{#if results.entries}}
+                        <IssueTrackerBoard
+                          @boardTitle={{@model.boardTitle}}
+                          @cards={{results.entries}}
+                          @columns={{columns}}
+                        />
+                      {{else}}
+                        <p class='empty-state'>No issues yet. The factory is
+                          starting up…</p>
+                      {{/if}}
+                    </div>
+                  {{/if}}
                 </@context.searchResultsComponent>
               </div>
-            {{else if @model.issueTracker}}
-              <@fields.issueTracker @format='isolated' />
             {{else}}
               <p class='empty-state'>No issue tracker linked. Edit this card to
                 connect one.</p>
@@ -150,7 +117,10 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
         {{else}}
           <div class='catalog-panel'>
             {{#if @model.cardsGrid}}
-              <@fields.cardsGrid @format='isolated' />
+              <@fields.cardsGrid
+                @format='isolated'
+                @displayContainer={{false}}
+              />
             {{else}}
               <p class='empty-state'>No catalog linked. Edit this card to
                 connect one.</p>
@@ -186,7 +156,6 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
       .live-run-panel {
         height: 100%;
         overflow-y: auto;
-        padding: var(--boxel-sp-lg);
       }
       .empty-state {
         padding: var(--boxel-sp-xl);
@@ -197,12 +166,6 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
       .preject-board {
         height: 100%;
       }
-      .project-container {
-        height: 100%;
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
-        border: 1px solid var(--border, var(--boxel-border-color));
-      }
     </style>
   </template>
 }
@@ -211,10 +174,11 @@ export class FactoryIndex extends CardDef {
   static displayName = 'Factory Index';
   static icon = LayoutGridPlus;
   static prefersWideFormat = true;
+  static headerColor = '#ffba00';
 
-  @field issueTracker = linksTo(() => IssueTracker);
   @field cardsGrid = linksTo(() => CardsGrid);
   @field targetRealmUrl = contains(StringField);
+  @field boardTitle = contains(StringField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: FactoryIndex) {
