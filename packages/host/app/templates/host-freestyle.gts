@@ -23,6 +23,7 @@ import AiAssistantFocusPillUsage from '@cardstack/host/components/ai-assistant/f
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
 import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
+import MiniCardChooserUsage from '@cardstack/host/components/mini-card-chooser/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
@@ -74,6 +75,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       ['AiAssistant::Message', AiAssistantMessageUsage],
       ['AiAssistant::PillMenu', PillMenuUsage],
       ['AiAssistant::SkillMenu', AiAssistantSkillMenuUsage],
+      ['MiniCardChooser', MiniCardChooserUsage],
       ['SearchSheet', SearchSheetUsage],
     ].map(([name, c]) => {
       return {
