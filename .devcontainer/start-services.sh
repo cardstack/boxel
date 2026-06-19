@@ -34,11 +34,27 @@ eval "$(mise activate bash)"
 # masking the very change being tested. Kill the node service chain first;
 # Postgres/Synapse run in Docker and are re-asserted idempotently below.
 echo "==> Stopping any previously running services..."
-pkill -9 -f 'ts-node.*main' 2>/dev/null || true
-pkill -9 -f 'start:prerender' 2>/dev/null || true
-pkill -9 -f 'start:worker' 2>/dev/null || true
-pkill -9 -f 'start:icons' 2>/dev/null || true
-pkill -9 -f 'prerender-manager' 2>/dev/null || true
+# Match the actual ts-node entry-point processes (e.g. the realm is
+# `ts-node … --transpileOnly main`, the prerender manager is `ts-node …
+# prerender/manager-server`), not just the npm-script wrappers. Killing only
+# the wrappers (or a wrong pattern like `prerender-manager`, which matches
+# nothing — the process is `manager-server`) leaves the real service holding
+# its port, so the new one EADDRINUSEs and dies, silently masking the change
+# under test. `transpileOnly worker` matches both the worker and the
+# worker-manager. Postgres/Synapse run in Docker and are re-asserted below.
+for _pat in \
+  'transpileOnly main' \
+  'transpileOnly worker' \
+  'manager-server' \
+  'prerender-server' \
+  'services:prerender' \
+  'services:worker' \
+  'start:prerender' \
+  'start:worker' \
+  'start:icons' \
+  'start-icons'; do
+  pkill -9 -f "$_pat" 2>/dev/null || true
+done
 sleep 2
 
 CODESPACE_NAME="${CODESPACE_NAME:?CODESPACE_NAME must be set}"
