@@ -122,7 +122,8 @@ function enumField<BaseT extends FieldDefConstructor>(
     // JSON schema so agents have guidance without being constrained to the list.
     static defaultOptions =
       typeof (config as any)?.options === 'function' &&
-      Array.isArray((config as any)?.defaultOptions)
+      Array.isArray((config as any)?.defaultOptions) &&
+      (config as any).defaultOptions.length > 0
         ? (config as any).defaultOptions
         : undefined;
     static displayName =
