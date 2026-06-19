@@ -57,24 +57,6 @@ async function buildCLI() {
     console.log('Making CLI file executable...');
     chmodSync('dist/index.js', 0o755);
 
-    // content-tag (pulled in via runtime-common's transpile pipeline)
-    // loads its wasm with `readFileSync(`${import.meta.dirname}/content_tag_bg.wasm`)`
-    // from `pkg/node/`. After esbuild bundles content-tag into
-    // `dist/index.js`, `import.meta.dirname` becomes the boxel-cli dist/ dir,
-    // so the wasm has to live next to index.js — otherwise `boxel test`
-    // hits ENOENT on the first transpile.
-    let wasmSrc = join(
-      import.meta.dirname,
-      '..',
-      'node_modules',
-      'content-tag',
-      'pkg',
-      'node',
-      'content_tag_bg.wasm',
-    );
-    copyFileSync(wasmSrc, 'dist/content_tag_bg.wasm');
-    console.log('Copied content_tag_bg.wasm into dist/');
-
     console.log('Build complete!');
 
     // Log bundle size
@@ -112,6 +94,26 @@ async function buildAPI() {
   }
 }
 
+// content-tag (pulled in via runtime-common's transpile pipeline) loads its
+// wasm with `readFileSync(`${import.meta.dirname}/content_tag_bg.wasm`)` from
+// `pkg/node/`. After esbuild bundles content-tag into `dist/index.js` or
+// `dist/api.js`, `import.meta.dirname` becomes the boxel-cli `dist/` dir, so
+// the wasm has to live next to whichever entry was built — otherwise the first
+// transpile hits ENOENT. Both `build` and `build:api` consumers need it.
+function copyContentTagWasm() {
+  let wasmSrc = join(
+    import.meta.dirname,
+    '..',
+    'node_modules',
+    'content-tag',
+    'pkg',
+    'node',
+    'content_tag_bg.wasm',
+  );
+  copyFileSync(wasmSrc, 'dist/content_tag_bg.wasm');
+  console.log('Copied content_tag_bg.wasm into dist/');
+}
+
 async function main() {
   // `build:api` passes --api-only to rebuild just the API surface quickly
   // (consumers' test pipelines do this); a full `build` produces both.
@@ -119,6 +121,7 @@ async function main() {
     await buildCLI();
   }
   await buildAPI();
+  copyContentTagWasm();
 }
 
 main();
