@@ -106,8 +106,8 @@ catalogs:
       specifier: ^1.6.3
       version: 1.7.6
     '@glint/ember-tsc':
-      specifier: 1.6.2
-      version: 1.6.2
+      specifier: 1.5.0
+      version: 1.5.0
     '@glint/template':
       specifier: ^1.7.7
       version: 1.7.7
@@ -741,7 +741,7 @@ importers:
         version: 1.1.2
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
@@ -853,7 +853,7 @@ importers:
         version: link:../local-types
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@sinonjs/fake-timers':
         specifier: 'catalog:'
         version: 11.3.1
@@ -978,7 +978,7 @@ importers:
         version: link:../local-types
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -1009,7 +1009,7 @@ importers:
         version: link:../local-types
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -1033,7 +1033,7 @@ importers:
         version: 1.1.2
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
@@ -1178,7 +1178,7 @@ importers:
         version: 1.16.13(@glint/template@1.7.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@lucide/lab':
         specifier: ^0.1.2
         version: 0.1.2
@@ -1389,7 +1389,7 @@ importers:
         version: 1.16.13(@glint/template@1.7.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@rollup/plugin-babel':
         specifier: 'catalog:'
         version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)
@@ -1525,7 +1525,7 @@ importers:
         version: 1.1.2
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
@@ -1733,7 +1733,7 @@ importers:
         version: 5.4.3(@babel/core@7.29.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
@@ -2067,7 +2067,7 @@ importers:
         version: 1.1.2
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
@@ -2466,7 +2466,7 @@ importers:
         version: link:../runtime-common
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
@@ -2568,7 +2568,7 @@ importers:
         version: link:../local-types
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2623,7 +2623,7 @@ importers:
         version: link:../runtime-common
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@koa/cors':
         specifier: 'catalog:'
         version: 4.0.0
@@ -3119,7 +3119,7 @@ importers:
         version: 7.29.7(supports-color@8.1.1)
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@types/dompurify':
         specifier: 'catalog:'
         version: 3.2.0
@@ -3199,7 +3199,7 @@ importers:
         version: 5.4.3(@babel/core@7.29.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
@@ -3323,7 +3323,7 @@ importers:
         version: link:../runtime-common
       '@glint/ember-tsc':
         specifier: 'catalog:'
-        version: 1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)
+        version: 1.5.0(typescript@5.9.3)
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
@@ -5225,15 +5225,11 @@ packages:
   '@glimmer/wire-format@0.94.8':
     resolution: {integrity: sha512-A+Cp5m6vZMAEu0Kg/YwU2dJZXyYxVJs2zI57d3CP6NctmX7FsT8WjViiRUmt5abVmMmRH5b8BUovqY6GSMAdrw==}
 
-  '@glint/ember-tsc@1.6.2':
-    resolution: {integrity: sha512-9RH0m6eBooBLXm972JNraG56ASPCFyaZlkxdIDtAQ7RVFWbkrJjaaXIk5F55mR497NWdQycgKKvWRFck6CFk2Q==}
+  '@glint/ember-tsc@1.5.0':
+    resolution: {integrity: sha512-mMAG91QyzKQvklnoQFy5orNA4gYU2LPQlPHUbJnuAHJ0c5pwyUO/rjseudFXAWRA5F8cQmNLqtximnLTvHSMzw==}
     hasBin: true
     peerDependencies:
-      ember-source: '>=3.28.0'
       typescript: '>=5.6.0'
-    peerDependenciesMeta:
-      ember-source:
-        optional: true
 
   '@glint/template@1.7.7':
     resolution: {integrity: sha512-jcPdQ3A6cXo5h9RBi0tK4/o5qNn7868Y8xpkwWQNPAd8xQKuRKmG9dGJwUycXvtqISzfrnL1p3MQr3hYN/Ua6Q==}
@@ -18215,7 +18211,7 @@ snapshots:
     dependencies:
       '@glimmer/interfaces': 0.94.6
 
-  '@glint/ember-tsc@1.6.2(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(typescript@5.9.3)':
+  '@glint/ember-tsc@1.5.0(typescript@5.9.3)':
     dependencies:
       '@glimmer/syntax': 0.95.0
       '@glint/template': 1.7.7
@@ -18234,8 +18230,6 @@ snapshots:
       vscode-languageserver-protocol: 3.18.0
       vscode-languageserver-textdocument: 1.0.12
       vscode-uri: 3.1.0
-    optionalDependencies:
-      ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
     transitivePeerDependencies:
       - supports-color
 
