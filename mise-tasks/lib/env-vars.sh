@@ -233,6 +233,16 @@ else
   # local dev or CI.
   if [ -n "${CODESPACE_NAME:-}" ]; then
     export REALM_BASE_URL="https://${CODESPACE_NAME}-4201.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+    # The worker/prerender reach that URL over the local TLS shim (see
+    # .devcontainer/local-tls-proxy.mjs), which presents a self-signed cert on
+    # a loopback connection. Tell Node (the worker) and Chrome (the prerender)
+    # to skip validation for it. browser-manager.ts only auto-adds the
+    # ignore-cert flags for https-loopback REALM_BASE_URLs, which this is not,
+    # so pass them explicitly via PUPPETEER_CHROME_ARGS (appended in
+    # browser-manager.ts). Safe here: the connection is loopback-only and this
+    # branch only fires inside a Codespace.
+    export NODE_TLS_REJECT_UNAUTHORIZED=0
+    export PUPPETEER_CHROME_ARGS="--ignore-certificate-errors --allow-insecure-localhost"
   fi
 
   # Puppeteer 24.35 (and the lockfile's tree) bundles Chrome 143, which

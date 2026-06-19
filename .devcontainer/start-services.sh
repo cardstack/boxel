@@ -55,6 +55,8 @@ for _pat in \
   'start-icons'; do
   pkill -9 -f "$_pat" 2>/dev/null || true
 done
+# The local TLS shim binds privileged :443 and runs as root, so kill it with sudo.
+sudo pkill -9 -f 'local-tls-proxy.mjs' 2>/dev/null || true
 sleep 2
 
 CODESPACE_NAME="${CODESPACE_NAME:?CODESPACE_NAME must be set}"
@@ -66,6 +68,38 @@ FWD_DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
 export REALM_SERVER_URL="https://${CODESPACE_NAME}-4201.${FWD_DOMAIN}"
 export MATRIX_PUBLIC_URL="https://${CODESPACE_NAME}-8008.${FWD_DOMAIN}"
 export ICONS_PUBLIC_URL="https://${CODESPACE_NAME}-4206.${FWD_DOMAIN}"
+
+# ── Local TLS shim (env-mode's Traefik, rebuilt locally) ──
+# In-codespace clients (the index worker, the prerender's headless Chrome)
+# address the realm at its canonical https forwarded URL. Without this they'd
+# loop back out through the GitHub edge, which requires the port to be public
+# (a manual step we can't set from inside). Instead: map the forwarded realm
+# hostname to 127.0.0.1 in /etc/hosts and run a TLS proxy on :443 that
+# forwards to the plain-HTTP realm on :4201, so those clients reach the realm
+# entirely over loopback — no edge, no public port. The browser is external
+# and still reaches the realm through the edge, unaffected.
+REALM_HOSTNAME="${CODESPACE_NAME}-4201.${FWD_DOMAIN}"
+SHIM_DIR="$HOME/.local/share/boxel/codespace-tls"
+mkdir -p "$SHIM_DIR"
+if [ ! -f "$SHIM_DIR/cert.pem" ]; then
+  echo "==> Generating self-signed cert for the local TLS shim..."
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "$SHIM_DIR/key.pem" -out "$SHIM_DIR/cert.pem" -days 3650 \
+    -subj "/CN=${REALM_HOSTNAME}" \
+    -addext "subjectAltName=DNS:${REALM_HOSTNAME}" 2>/dev/null \
+    || echo "Warning: cert generation failed; the TLS shim won't start."
+fi
+if ! grep -qF "$REALM_HOSTNAME" /etc/hosts 2>/dev/null; then
+  echo "==> Mapping ${REALM_HOSTNAME} -> 127.0.0.1 in /etc/hosts..."
+  echo "127.0.0.1 ${REALM_HOSTNAME}" | sudo tee -a /etc/hosts >/dev/null \
+    || echo "Warning: could not edit /etc/hosts; in-codespace clients will use the edge."
+fi
+echo "==> Starting local TLS shim (:443 -> 127.0.0.1:4201)..."
+sudo env \
+  SHIM_CERT="$SHIM_DIR/cert.pem" SHIM_KEY="$SHIM_DIR/key.pem" \
+  SHIM_PORT=443 SHIM_TARGET_PORT=4201 \
+  "$(command -v node)" /workspaces/boxel/.devcontainer/local-tls-proxy.mjs \
+  > /tmp/local-tls-shim.log 2>&1 &
 
 # Internal wiring runs over plain HTTP on the standard ports. No dev cert is
 # generated (see setup.sh): the realm server serves plain HTTP and GitHub's
