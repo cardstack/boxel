@@ -260,7 +260,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-command-card-idle={{not
-            (eq @messageCommand.status 'applying')
+            (eq this.applyButtonState 'applying')
           }}
           as |codeBlock|
         >
@@ -280,7 +280,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-command-card-idle={{not
-            (eq @messageCommand.status 'applying')
+            (eq this.applyButtonState 'applying')
           }}
           as |codeBlock|
         >
