@@ -23,53 +23,9 @@ runs:
         restore-keys: |
           ${{ runner.os }}-pnpm-store-
 
-    # The Chrome build the prerender service drives via puppeteer lives in
-    # ~/.cache/puppeteer, outside the pnpm store, so it is cached separately to
-    # avoid re-downloading ~150MB on every job. The key tracks the lockfile
-    # because the resolved puppeteer pins the browser version.
-    - uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      name: Restore puppeteer browser cache
-      id: puppeteer-cache
-      with:
-        path: ~/.cache/puppeteer
-        key: ${{ runner.os }}-puppeteer-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-    # PUPPETEER_SKIP_DOWNLOAD keeps puppeteer's postinstall from fetching the
-    # browser; it is provisioned explicitly below so the version is pinned and
-    # the postinstall can't leave a half-written browser folder that later makes
-    # puppeteer treat Chrome as present and skip it, breaking the prerender.
     - name: Install Dependencies
       shell: bash
-      env:
-        PUPPETEER_SKIP_DOWNLOAD: "true"
       run: pnpm install --frozen-lockfile
-
-    # Install from the puppeteer resolved in the workspace, pinning the browser
-    # to the version puppeteer-core launches at runtime. A no-op when the cache
-    # restored a complete browser; downloads on a miss. On a miss any partial
-    # browser folder a postinstall may have left is dropped first so the install
-    # re-downloads rather than erroring on a missing executable. `install` takes
-    # a single browser, so chrome and chrome-headless-shell are installed
-    # separately; both launch modes then resolve.
-    - name: Ensure prerender Chrome is installed
-      shell: bash
-      env:
-        PUPPETEER_CACHE_HIT: ${{ steps.puppeteer-cache.outputs.cache-hit }}
-      run: |
-        if [ "$PUPPETEER_CACHE_HIT" != "true" ]; then
-          rm -rf "$HOME/.cache/puppeteer"
-        fi
-        pnpm --filter @cardstack/realm-server exec puppeteer browsers install chrome
-        pnpm --filter @cardstack/realm-server exec puppeteer browsers install chrome-headless-shell
-
-    # Persist the browser only on a miss and only once the install above
-    # succeeded, so a partial or failed download is never saved into the cache.
-    - uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      name: Save puppeteer browser cache
-      if: ${{ success() && steps.puppeteer-cache.outputs.cache-hit != 'true' }}
-      with:
-        path: ~/.cache/puppeteer
-        key: ${{ runner.os }}-puppeteer-${{ hashFiles('**/pnpm-lock.yaml') }}
 
     - name: Prune pnpm store
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}

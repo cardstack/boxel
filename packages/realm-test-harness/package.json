@@ -26,7 +26,7 @@
     "fs-extra": "catalog:",
     "jsonwebtoken": "catalog:",
     "pg": "catalog:",
-    "puppeteer": "^24.8.2",
+    "puppeteer": "^25.0.2",
     "ts-node": "^10.9.1",
     "typescript": "catalog:"
   },
