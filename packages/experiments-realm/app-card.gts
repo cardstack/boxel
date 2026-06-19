@@ -177,11 +177,14 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
             @query={{this.searchResultsQuery}}
             as |results|
           >
-            {{#if results.isLoading}}Loading...{{/if}}
-            {{#if @activeTab.isTable}}
-              <TableView @cards={{results.entries}} @context={{@context}} />
-            {{else}}
-              <CardsGrid @cards={{results.entries}} @context={{@context}} />
+            {{#if results.entries.length}}
+              {{#if @activeTab.isTable}}
+                <TableView @cards={{results.entries}} @context={{@context}} />
+              {{else}}
+                <CardsGrid @cards={{results.entries}} @context={{@context}} />
+              {{/if}}
+            {{else if results.isLoading}}
+              Loading...
             {{/if}}
           </@context.searchResultsComponent>
         {{/if}}
