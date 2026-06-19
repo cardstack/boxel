@@ -688,6 +688,13 @@ module('Acceptance | host submode', function (hooks) {
 
         getService('realm-server').publishRealm = publishRealm;
         getService('realm-server').unpublishRealm = unpublishRealm;
+        // The publish modal asks the server for the unlisted-link slug on open;
+        // default it so the unlisted card renders a URL (not a stuck "Generating
+        // link…") in tests that don't exercise it. Tests that do use
+        // `stubUnlistedPath` to control the slug.
+        getService('realm-server').allocateUnlistedPath = async (
+          sourceRealmURL: string,
+        ) => ({ sourceRealmURL, slug: 'defaultunlistedab' });
       });
 
       test('can publish realm', async function (assert) {
@@ -1256,7 +1263,7 @@ module('Acceptance | host submode', function (hooks) {
           await waitFor('[data-test-publish-realm-modal]');
 
           let customDomainOption =
-            '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)';
+            '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)';
           await waitFor(`${customDomainOption} .realm-icon`);
 
           assert
@@ -1543,7 +1550,7 @@ module('Acceptance | host submode', function (hooks) {
             .containsText('Published');
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)',
             )
             .containsText('Published');
 
@@ -1590,7 +1597,7 @@ module('Acceptance | host submode', function (hooks) {
           assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)',
             )
             .containsText('Not published yet');
 
@@ -1634,7 +1641,7 @@ module('Acceptance | host submode', function (hooks) {
           // Custom subdomain should show as published
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2) .last-published-at',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3) .last-published-at',
             )
             .containsText('Published 2 days ago');
 
@@ -1656,12 +1663,12 @@ module('Acceptance | host submode', function (hooks) {
           // Should show "Not published yet" after unpublishing
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2) .not-published-yet',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3) .not-published-yet',
             )
             .exists();
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)',
             )
             .containsText('Not published yet');
         } finally {
