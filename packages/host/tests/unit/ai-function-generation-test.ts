@@ -187,7 +187,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
-  test(`surfaces defaultOptions for function-form enumField config`, async function (assert) {
+  test(`surfaces defaultOptions as description hint (not enum constraint) for function-form enumField config`, async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
     let { default: enumField } = enumModule;
@@ -230,9 +230,45 @@ module('Unit | ai-function-generation-test', function (hooks) {
         type: 'object',
         properties: {
           ...cardDefAttributesProperties,
-          richDefault: { type: 'string', enum: ['critical', 'high'] },
-          bareDefault: { type: 'string', enum: ['a', 'b'] },
+          richDefault: {
+            type: 'string',
+            description: 'Typical values: "critical", "high"',
+          },
+          bareDefault: {
+            type: 'string',
+            description: 'Typical values: "a", "b"',
+          },
           emptyDefault: { type: 'string' },
+        },
+      },
+      relationships: cardDefRelationships,
+    });
+  });
+
+  test(`ignores defaultOptions when options is a static array (emits hard enum, not hint)`, async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: enumField } = enumModule;
+
+    // defaultOptions is silently ignored when options is a static array —
+    // static options are always resolved at schema-generation time, so a hard
+    // enum constraint is correct and defaultOptions would be redundant.
+    const StaticWithDefault = enumField(StringField, {
+      options: ['x', 'y'],
+      defaultOptions: ['x', 'y'],
+    });
+
+    class TestCard extends CardDef {
+      @field staticWithDefault = contains(StaticWithDefault);
+    }
+
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
+    assert.deepEqual(schema, {
+      attributes: {
+        type: 'object',
+        properties: {
+          ...cardDefAttributesProperties,
+          staticWithDefault: { type: 'string', enum: ['x', 'y'] },
         },
       },
       relationships: cardDefRelationships,

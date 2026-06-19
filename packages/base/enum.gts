@@ -118,6 +118,8 @@ function enumField<BaseT extends FieldDefConstructor>(
           } as EnumConfiguration);
     // defaultOptions is the static fallback for function-form options, which
     // cannot be resolved at schema-generation time without a model instance.
+    // ai.ts reads it to emit a description hint ("Typical values: …") in the
+    // JSON schema so agents have guidance without being constrained to the list.
     static defaultOptions =
       typeof (config as any)?.options === 'function' &&
       Array.isArray((config as any)?.defaultOptions)
