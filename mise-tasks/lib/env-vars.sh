@@ -219,6 +219,22 @@ else
   fi
   unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
 
+  # GitHub Codespaces (outside env mode): the realm server is reached at the
+  # forwarded edge URL (https://<name>-4201.<domain>), not localhost — GitHub
+  # terminates TLS at the edge while the realm serves plain HTTP and asserts
+  # the external scheme via REALM_SERVER_ASSUME_HTTPS. The worker and prerender
+  # address realms by REALM_BASE_URL, so it must be that forwarded URL or every
+  # from-scratch index fails (the default https://localhost:4201 yields a TLS
+  # error against the plain-HTTP realm for base, and the host SPA's HTML
+  # instead of realm JSON for the rest). Mirrors the env-mode branch's single
+  # REALM_BASE_URL, with the forwarded edge in place of Traefik; internal
+  # services (matrix, worker manager, prerender, icons) stay on localhost.
+  # CODESPACE_NAME is set by the Codespaces platform, so this never fires in
+  # local dev or CI.
+  if [ -n "${CODESPACE_NAME:-}" ]; then
+    export REALM_BASE_URL="https://${CODESPACE_NAME}-4201.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+  fi
+
   # Puppeteer 24.35 (and the lockfile's tree) bundles Chrome 143, which
   # has a known h2 stream-window bug that hangs the dev prerender forever
   # on the first cold-start fetch of vite's large pre-optimized
