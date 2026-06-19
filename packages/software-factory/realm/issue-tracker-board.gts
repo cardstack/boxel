@@ -2,7 +2,6 @@ import { get } from '@ember/helper';
 import Component from '@glimmer/component';
 
 import {
-  FittedCardContainer,
   KanbanPlane,
   type KanbanColumnConfig,
   type KanbanPlacement,
@@ -20,6 +19,7 @@ interface Signature {
     boardTitle?: string;
     columns?: Option[];
     cards?: RenderableSearchEntryLike[];
+    onOpen?: (index: number) => void;
   };
   Blocks: {
     default: [];
@@ -81,6 +81,7 @@ export default class IssueTrackerBoard extends Component<Signature> {
             @boardLabel={{@boardTitle}}
             @columns={{this.kanbanColumns}}
             @placements={{this.placements}}
+            @onOpen={{@onOpen}}
           >
             <:card as |placement|>
               {{#let (get @cards placement.index) as |entry|}}

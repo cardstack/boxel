@@ -1,4 +1,5 @@
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 
 import {
   CardDef,
@@ -21,22 +22,29 @@ import {
   searchEntryWireQueryFromQuery,
   type SearchEntryWireQuery,
   type RealmResourceIdentifier,
+  type RenderableSearchEntryLike,
 } from '@cardstack/runtime-common';
 
-import { IssueTracker } from './issue-tracker';
 import IssueTrackerBoard from './issue-tracker-board';
 import { issueStatusOptions as columns } from './kanban-config';
 
 const TABS = [
-  { displayName: 'Issues', tabId: 'issues' },
+  { displayName: 'Board', tabId: 'board' },
   { displayName: 'Catalog', tabId: 'catalog' },
 ];
 
 class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
-  @tracked activeTabId = 'issues';
+  @tracked activeTabId = 'board';
 
   setActiveTab = (tabId: string): void => {
     this.activeTabId = tabId;
+  };
+
+  openCard = (entries: RenderableSearchEntryLike[], index: number): void => {
+    let entry = entries[index];
+    if (entry?.id) {
+      this.args.viewCard?.(new URL(entry.id), 'isolated');
+    }
   };
 
   // When a factory run is active, query Issues from the target realm so the
@@ -82,7 +90,7 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
       </TabbedHeader>
 
       <div class='tab-panel'>
-        {{#if (eq this.activeTabId 'issues')}}
+        {{#if (eq this.activeTabId 'board')}}
           <div class='board-panel'>
             {{#if @model.targetRealmUrl}}
               <div class='live-run-panel'>
@@ -100,6 +108,7 @@ class FactoryIndexIsolated extends Component<typeof FactoryIndex> {
                           @boardTitle={{@model.boardTitle}}
                           @cards={{results.entries}}
                           @columns={{columns}}
+                          @onOpen={{fn this.openCard results.entries}}
                         />
                       {{else}}
                         <p class='empty-state'>No issues yet. The factory is
