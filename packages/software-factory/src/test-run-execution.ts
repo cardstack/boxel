@@ -30,6 +30,25 @@ import {
 
 let log = logger('test-run-execution');
 
+// How long to wait for the in-browser QUnit suite to reach `runEnd` before
+// giving up. A hung test page (boot error, infinite loop, never-resolving
+// promise) used to block for the full 5 minutes with no signal — far longer
+// than any legitimate card suite needs. Default to 60s and let an operator
+// override via FACTORY_TEST_TIMEOUT_MS for an unusually heavy suite.
+const DEFAULT_QUNIT_TIMEOUT_MS = 60_000;
+
+function qunitTimeoutMs(): number {
+  let raw = process.env.FACTORY_TEST_TIMEOUT_MS;
+  let parsed = raw != null && raw.trim() !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_QUNIT_TIMEOUT_MS;
+}
+
+function fmtMs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 // ---------------------------------------------------------------------------
 // Resume Logic
 // ---------------------------------------------------------------------------
@@ -547,19 +566,42 @@ async function runQunitInBrowserUncached(
     // Wait for QUnit to finish (results collected via inline script hooks).
     // Note: waitForFunction(fn, arg, options) — pass null as arg so the
     // timeout option is correctly in the third position.
-    await page.waitForFunction(
-      () => (window as any).__qunitResults?.runEnd !== null,
-      null,
-      { timeout: 300_000 },
-    );
+    let timeoutMs = qunitTimeoutMs();
+    let waitStart = Date.now();
+    try {
+      await page.waitForFunction(
+        () => (window as any).__qunitResults?.runEnd !== null,
+        null,
+        { timeout: timeoutMs },
+      );
+    } catch (err) {
+      // Only rewrite Playwright's timeout — its native message ("Timeout
+      // 60000ms exceeded") doesn't say what timed out or how long we waited.
+      // Any other error (execution context destroyed, page crash, etc.) is a
+      // genuine failure and must surface unchanged, not be masked as a timeout.
+      if (!(err instanceof Error && err.name === 'TimeoutError')) {
+        throw err;
+      }
+      // Measure the wait itself, not the whole run (which includes server +
+      // browser startup and page navigation before we began waiting).
+      let waited = Date.now() - waitStart;
+      throw new Error(
+        `QUnit suite did not reach runEnd within ${timeoutMs}ms (waited ${waited}ms). ` +
+          `The page never set __qunitResults.runEnd — likely an Ember boot error, ` +
+          `a hanging test, or a never-resolving promise. Re-run with --debug to see ` +
+          `browser console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
+      );
+    }
 
     let qunitResults: QunitResults = await page.evaluate(
       () => (window as any).__qunitResults,
     );
 
     let durationMs = Date.now() - start;
+    // Debug-gated like the rest of the observability output, so a normal run
+    // stays clean (the timing summary surfaces this duration under --debug).
     log.debug(
-      `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
+      `QUnit completed in ${fmtMs(durationMs)}: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
     );
 
     return { qunitResults, durationMs };
