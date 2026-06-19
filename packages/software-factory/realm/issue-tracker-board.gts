@@ -41,7 +41,10 @@ export default class IssueTrackerBoard extends Component<Signature> {
   }
 
   get selectedGroupByDimension(): Column {
-    return defaultColumns.find((d) => d.key === this.activeGroupBy) ?? defaultColumns[0]!;
+    return (
+      defaultColumns.find((d) => d.key === this.activeGroupBy) ??
+      defaultColumns[0]!
+    );
   }
 
   updateGroupBy = (dim: Column): void => {
@@ -215,15 +218,33 @@ export default class IssueTrackerBoard extends Component<Signature> {
         gap: var(--boxel-sp-sm);
         color: var(--board-muted-fg);
       }
-      .group-by-field :deep(.label-container),
-      .hide-empty-field :deep(.label-container) {
-        font-size: 0.75rem;
-        color: var(--board-muted-fg);
+      .group-by-field,
+      .hide-empty-field {
+        --boxel-field-label-font-size: 0.75rem;
+        --boxel-field-label-color: var(--board-muted-fg);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        white-space: nowrap;
+      }
+      .group-by-field :deep(.label-container) {
+        padding-top: unset;
       }
       .group-by-field :deep(.ember-power-select-trigger) {
-        font-size: 0.75rem;
-        min-height: unset;
-        padding: 0.125rem 0.375rem;
+        width: 7rem;
+      }
+      .group-by-field :deep(.ember-power-select-trigger),
+      .group-by-field :deep(.boxel-trigger-content),
+      .group-by-field :deep(.boxel-trigger-content > span) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .group-by-field :deep(.ember-power-select-dropdown) {
+        min-width: max-content;
+      }
+      .group-by-field :deep(.ember-power-select-option) {
+        white-space: nowrap;
       }
       .kanban-title {
         display: flex;
