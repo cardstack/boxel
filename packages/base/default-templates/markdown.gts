@@ -60,8 +60,10 @@ type RefType = 'card' | 'file';
 interface RenderSlot {
   element: HTMLElement;
   // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
-  // (`:file[URL]`) resolve to FileDef instances. Cards carry card-mode overlays
-  // and size specifiers; files render in atom (inline) / embedded (block).
+  // (`:file[URL]`) resolve to FileDef instances. Both kinds share the same
+  // slot pipeline — they're wired to `cardContext.cardComponentModifier` so
+  // operator-mode overlays can target them, both honor BFM size specifiers,
+  // and both render via the instance's `getComponent`.
   refType: RefType;
   kind: 'inline' | 'block';
   state: SlotState;
