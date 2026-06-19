@@ -42,6 +42,8 @@ export interface SearchEntryRendering {
 export interface RenderableSearchEntryLike {
   // The card/file identity URL.
   id: string;
+  // The URL of the realm hosting this result — used to group results by realm.
+  realmUrl: string;
   // The result's realm-local path (e.g. `Person/error`) — a readable label a
   // consumer shows on an error tile to identify which result failed. Falls back
   // to the bare id when the id isn't under the entry's realm.

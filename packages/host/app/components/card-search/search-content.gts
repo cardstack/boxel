@@ -1,6 +1,4 @@
-import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
-import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -17,17 +15,18 @@ import {
   type Filter,
   type getCard,
   type getCardCollection,
-  CardContextName,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
   GetCardContextName,
   GetCardCollectionContextName,
   internalKeyFor,
+  searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common';
 
 import AdornContext from '@cardstack/host/components/adorn/adorn-context';
-import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
-import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import { getRenderableSearchEntries } from '@cardstack/host/resources/renderable-search-entries';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -53,9 +52,14 @@ import {
   resolveSearchKeyAsURL,
 } from '@cardstack/host/utils/card-search/url';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
+import {
+  SECTION_DISPLAY_LIMIT_FOCUSED,
+  SORT_OPTIONS,
+  VIEW_OPTIONS,
+  type SortOption,
+} from './constants';
 import SearchResultHeader from './search-result-header';
 import SearchResultSection from './search-result-section';
 
@@ -147,12 +151,16 @@ interface Signature {
   Blocks: {};
 }
 
-// The owner-destroyed error message, matched as a substring so a card-context
-// read during teardown (realm refresh / unmount) is swallowed rather than
-// surfaced.
-const OWNER_DESTROYED_ERROR =
-  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
-
+/**
+ * @deprecated Root of the legacy search-results tree (`SearchContent` →
+ * `SearchResultSection` → `ItemButton`). Favor the v2 `<SearchResults>`
+ * component, which renders the heterogeneous `search-entry` stream (prerendered
+ * HTML inert or live card) for a `search-entry`-rooted query. This sheet now
+ * sources its data from the v2 `getSearchEntriesResource` (via
+ * `getRenderableSearchEntries`); the bespoke section / multiselect / adorn
+ * rendering is why it isn't yet folded into `<SearchResults>`. Removed once
+ * every consumer is on v2.
+ */
 export default class SearchContent extends Component<Signature> {
   @service declare network: NetworkService;
   @service declare realm: RealmService;
@@ -164,9 +172,6 @@ export default class SearchContent extends Component<Signature> {
   private pagination = new SectionPagination(this.args.initialFocusedSection);
 
   @consume(GetCardContextName) declare private getCard: getCard;
-  @consume(CardContextName) declare private cardContext:
-    | CardContext
-    | undefined;
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
 
@@ -194,50 +199,57 @@ export default class SearchContent extends Component<Signature> {
     return this.cardResource?.isLoaded ?? false;
   }
 
-  // -- Card component modifier --
-
-  private get cardComponentModifier() {
-    if (isDestroying(this) || isDestroyed(this)) {
+  // The v2 `search-entry` query for the main realm search, adapted from the
+  // legacy `Query` builder. Fitted is the default rendering, so no `htmlQuery`
+  // override is needed; realms ride alongside. Undefined leaves the search idle
+  // (the skip cases: empty search key or a URL paste, handled separately).
+  private get mainSearchQuery(): SearchEntryWireQuery | undefined {
+    if (shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)) {
       return undefined;
     }
-    try {
-      return this.cardContext?.cardComponentModifier;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes(OWNER_DESTROYED_ERROR)
-      ) {
-        return undefined;
-      }
-      throw error;
-    }
-  }
-
-  private searchResource = getPrerenderedSearch(this, getOwner(this)!, () => {
-    // Consume selectedTypeIds outside the ternary so the tracking
-    // dependency is always established, even when the query is skipped.
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
       internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );
     return {
-      query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
-        ? undefined
-        : buildSearchQuery(
-            this.args.searchKey,
-            this.args.activeSort,
-            this.args.baseFilter,
-            selectedTypeIds,
-          ),
-      format: 'fitted' as const,
+      ...searchEntryWireQueryFromQuery(
+        buildSearchQuery(
+          this.args.searchKey,
+          this.args.activeSort,
+          this.args.baseFilter,
+          selectedTypeIds,
+        ),
+      ),
       realms: this.args.realmFilter.selectedURLs,
-      isLive: true,
-      cardComponentModifier: this.cardComponentModifier,
+      // Cap each realm's results at the focused-section display limit — the
+      // most the sheet ever shows in one section. The v2 search applies
+      // `page.size` per realm (so every realm section is still represented) and
+      // still reports the full match count in `meta.page.total` (which drives
+      // the result-count summary), so this only trims rows the sheet would
+      // never render — a large payload reduction on broad queries.
+      page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     };
-  });
+  }
+
+  // Created once: the resource owns its realm subscriptions and re-runs through
+  // the reactive query thunk. Rows render inert (`mode='none'`); the
+  // operator-mode overlay attaches via each HydratableCard's own card context.
+  private searchEntries = getRenderableSearchEntries(
+    this,
+    () => this.mainSearchQuery,
+    () => 'none',
+  );
 
   private get recentCardUrls(): string[] {
     return this.recentCardsService.recentCardIds.map((id) =>
       id.endsWith('.json') ? id : `${id}.json`,
+    );
+  }
+
+  // The recent card ids stripped of any `.json` extension, used to order the
+  // recents results most-recent-first against the bare `entry.id`.
+  private get recentCardBareIds(): string[] {
+    return this.recentCardsService.recentCardIds.map((id) =>
+      id.replace(/\.json$/, ''),
     );
   }
 
@@ -258,56 +270,52 @@ export default class SearchContent extends Component<Signature> {
     return [...realms];
   }
 
-  // Recents always render as prerendered HTML to avoid fetching card
-  // modules when the search sheet opens. Compact mode uses an empty query
-  // and reorders results client-side to localStorage timestamp order;
-  // full mode reuses the realm-section query so sort, type filter, and
-  // search-term filter all happen server-side alongside the cardUrls
-  // constraint.
-  private prerenderedRecentsResource = getPrerenderedSearch(
-    this,
-    getOwner(this)!,
-    () => {
-      if (this.recentCardUrls.length === 0) {
-        return {
-          query: undefined,
-          format: undefined,
-          realms: this.realms,
-          cardUrls: undefined,
-          isLive: false,
-          cardComponentModifier: this.cardComponentModifier,
-        };
-      }
-      if (this.args.isCompact) {
-        return {
-          query: {},
-          format: 'fitted' as const,
-          realms: this.realms,
-          cardUrls: this.recentCardUrls,
-          isLive: false,
-          cardComponentModifier: this.cardComponentModifier,
-        };
-      }
-      const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-        internalKeyFor(ref, undefined, this.network.virtualNetwork),
-      );
+  // Recents always render as prerendered HTML to avoid fetching card modules
+  // when the search sheet opens. Compact mode uses an empty query scoped to the
+  // recent card URLs and reorders client-side to most-recent-first; full mode
+  // reuses the realm-section query so sort, type filter, and search-term filter
+  // all apply server-side alongside the cardUrls constraint. Undefined (no
+  // recents) leaves the resource idle.
+  private get recentsSearchQuery(): SearchEntryWireQuery | undefined {
+    if (this.recentCardUrls.length === 0) {
+      return undefined;
+    }
+    if (this.args.isCompact) {
       return {
-        query: buildRecentsQuery(
+        ...searchEntryWireQueryFromQuery({}),
+        realms: this.realms,
+        cardUrls: this.recentCardUrls,
+      };
+    }
+    // No selected realm hosts a recent card. The v2 search treats an empty
+    // `realms` array as "search every realm", which — with the `cardUrls`
+    // constraint still matching them — would resurface recents from realms the
+    // user filtered out. Suppress the recents query instead, matching the
+    // legacy behavior.
+    if (this.recentsSearchRealms.length === 0) {
+      return undefined;
+    }
+    const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
+      internalKeyFor(ref, undefined, this.network.virtualNetwork),
+    );
+    return {
+      ...searchEntryWireQueryFromQuery(
+        buildRecentsQuery(
           this.searchTerm,
           this.args.activeSort,
           this.args.baseFilter,
           selectedTypeIds,
         ),
-        format: 'fitted' as const,
-        realms: this.recentsSearchRealms,
-        cardUrls: this.recentCardUrls,
-        // Recents refetch on mount; don't add per-realm live subscriptions
-        // on top of the main searchResource, which already subscribes for
-        // incremental index updates.
-        isLive: false,
-        cardComponentModifier: this.cardComponentModifier,
-      };
-    },
+      ),
+      realms: this.recentsSearchRealms,
+      cardUrls: this.recentCardUrls,
+    };
+  }
+
+  private recentsEntries = getRenderableSearchEntries(
+    this,
+    () => this.recentsSearchQuery,
+    () => 'none',
   );
 
   private get shouldSkipQuery() {
@@ -347,7 +355,7 @@ export default class SearchContent extends Component<Signature> {
       return '';
     }
 
-    if (this.searchResource.isLoading) {
+    if (this.searchEntries.isLoading) {
       return 'Searching…';
     }
 
@@ -360,7 +368,7 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Query search results
-    const total = this.searchResource.meta.page?.total ?? 0;
+    const total = this.searchEntries.meta.page?.total ?? 0;
     const realms = this.realms;
 
     // Default: all results across all realms
@@ -412,7 +420,7 @@ export default class SearchContent extends Component<Signature> {
     // resurrect cards the user filtered out.
     return (
       this.recentCardUrls.length > 0 &&
-      this.prerenderedRecentsResource.lastSearchErrored
+      (this.recentsEntries.errors?.length ?? 0) > 0
     );
   }
 
@@ -423,7 +431,7 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get recentCardsSection() {
-    const instances = this.prerenderedRecentsResource.instances;
+    const instances = this.recentsEntries.entries;
 
     if (this.needsLiveRecentsFallback) {
       return buildLiveRecentsSection(this.liveRecentCards);
@@ -432,13 +440,14 @@ export default class SearchContent extends Component<Signature> {
     if (this.args.isCompact) {
       // Preserve most-recent-first order from RecentCardsService rather
       // than the arbitrary order the server returns for an unsorted query.
-      let byUrl = new Map<string, PrerenderedCard>();
-      for (let card of instances) {
-        byUrl.set(card.url, card);
+      // `entry.id` is the bare card URL, so we order by the bare recent ids.
+      let byId = new Map<string, RenderableSearchEntryLike>();
+      for (let entry of instances) {
+        byId.set(entry.id, entry);
       }
-      let ordered = this.recentCardUrls
-        .map((url) => byUrl.get(url))
-        .filter((c): c is PrerenderedCard => c !== undefined);
+      let ordered = this.recentCardBareIds
+        .map((id) => byId.get(id))
+        .filter((e): e is RenderableSearchEntryLike => e !== undefined);
       return buildRecentsSection(ordered);
     }
     // Full mode: server already applied sort/filter/search, use the
@@ -456,7 +465,7 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get cardsByQuerySection() {
-    return buildQuerySections(this.searchResource.instances, {
+    return buildQuerySections(this.searchEntries.entries, {
       isURL: this.searchKeyIsURL,
       isSearchKeyEmpty: this.isSearchKeyEmpty,
       hasBaseFilter: !!this.args.baseFilter,
@@ -483,14 +492,14 @@ export default class SearchContent extends Component<Signature> {
   private get allCards(): string[] {
     const urls: string[] = [];
     // Cards from search results (realm sections) - respects type filter
-    for (const card of this.searchResource.instances) {
-      if (card.url) {
-        urls.push(card.url.replace(/\.json$/, ''));
+    for (const entry of this.searchEntries.entries) {
+      if (entry.id) {
+        urls.push(entry.id.replace(/\.json$/, ''));
       }
     }
     // Cards from recents
-    for (const card of this.prerenderedRecentsResource.instances) {
-      urls.push(card.url.replace(/\.json$/, ''));
+    for (const entry of this.recentsEntries.entries) {
+      urls.push(entry.id.replace(/\.json$/, ''));
     }
     // Card from URL section
     if (this.resolvedCard?.id) {
@@ -502,7 +511,7 @@ export default class SearchContent extends Component<Signature> {
   private get hasNoResults(): boolean {
     return (
       this.sections.length === 0 &&
-      !this.searchResource.isLoading &&
+      !this.searchEntries.isLoading &&
       !this.shouldSkipQuery
     );
   }

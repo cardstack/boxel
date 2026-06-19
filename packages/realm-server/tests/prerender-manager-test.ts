@@ -8,6 +8,7 @@ import type { RealmHttpServer as Server } from '../server.ts';
 import http, { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app.ts';
 import {
+  PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
@@ -95,6 +96,59 @@ module(basename(__filename), function () {
         0,
         'no servers registered',
       );
+    });
+
+    test('reports the host shell token and echoes it on heartbeats', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let headerKey = PRERENDER_HOST_SHELL_HASH_HEADER.toLowerCase();
+      let heartbeat = () =>
+        request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 2, url: serverUrlA },
+          },
+        });
+
+      // No token reported yet → heartbeat carries no host-shell header.
+      let first = await heartbeat();
+      assert.strictEqual(first.status, 204, 'heartbeat accepted');
+      assert.strictEqual(
+        first.headers[headerKey],
+        undefined,
+        'no host-shell header before any report',
+      );
+
+      // Realm server reports a token.
+      let reportA = await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'aaa111' } } });
+      assert.strictEqual(reportA.status, 204, 'host-shell report accepted');
+
+      // Now heartbeats echo it.
+      let second = await heartbeat();
+      assert.strictEqual(
+        second.headers[headerKey],
+        'aaa111',
+        'heartbeat echoes the reported host-shell token',
+      );
+
+      // A changed token is echoed; a repeat of the same token is a no-op.
+      await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'bbb222' } } });
+      let third = await heartbeat();
+      assert.strictEqual(
+        third.headers[headerKey],
+        'bbb222',
+        'heartbeat echoes the updated host-shell token',
+      );
+
+      // A missing hash is rejected.
+      let bad = await request
+        .post('/host-shell')
+        .send({ data: { attributes: {} } });
+      assert.strictEqual(bad.status, 400, 'host-shell report requires a hash');
     });
 
     test('health includes active servers with affinities and last used times', async function (assert) {

@@ -99,6 +99,11 @@ interface Signature {
   Blocks: {};
 }
 
+/**
+ * @deprecated Mid-tier of the legacy `SearchContent` → `SearchResultSection` →
+ * `ItemButton` search-results tree. Favor the v2 `<SearchResults>` component.
+ * Removed once every consumer is on v2.
+ */
 export default class SearchResultSection extends Component<Signature> {
   @service declare realm: RealmService;
 
@@ -350,8 +355,8 @@ export default class SearchResultSection extends Component<Signature> {
             {{#unless card.isError}}
               <ItemButton
                 @item={{card.component}}
-                @itemId={{card.url}}
-                @isSelected={{this.isCardSelected card.url}}
+                @itemId={{card.id}}
+                @isSelected={{this.isCardSelected card.id}}
                 @multiSelect={{@multiSelect}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
@@ -429,15 +434,15 @@ export default class SearchResultSection extends Component<Signature> {
               <:default>
                 <ItemButton
                   @item={{card.component}}
-                  @itemId={{card.url}}
-                  @isSelected={{this.isCardSelected card.url}}
+                  @itemId={{card.id}}
+                  @isSelected={{this.isCardSelected card.id}}
                   @multiSelect={{@multiSelect}}
                   @onSelect={{@handleSelect}}
                   @onSubmit={{@onSubmit}}
                   @adorn={{@adorn}}
                   @adornStrokeClass={{@adornStrokeClass}}
                   @adornPositionLabel={{@adornPositionLabel}}
-                  data-test-recent-card-result={{removeFileExtension card.url}}
+                  data-test-recent-card-result={{removeFileExtension card.id}}
                 />
               </:default>
               <:after>

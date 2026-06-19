@@ -111,6 +111,10 @@ export type CreateRoutesArgs = {
   };
   assetsURL: URL;
   prerenderer?: Prerenderer;
+  // Reports the current host-shell token to the prerender manager. The
+  // post-deployment hook calls it so the fleet's recycle signal is refreshed
+  // once the new code is live and the service is stable.
+  reportHostShell?: () => Promise<void>;
   searchCache: JobScopedSearchCache;
 };
 
@@ -192,6 +196,12 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
+  // Deprecated: legacy federated live-card search (the bound `handleSearch`
+  // carries the `@deprecated` tag). Prefer the v2 `search-entry`
+  // endpoint `/_federated-search-v2` (`handleSearchV2`), which returns one
+  // heterogeneous result stream — prerendered HTML or live serialization. Kept
+  // as a compat layer over the shared search engine; removed once every
+  // consumer is on v2.
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
@@ -218,6 +228,12 @@ export function createRoutes(args: CreateRoutesArgs) {
       reconciler: args.reconciler,
     }),
   );
+  // Deprecated: legacy federated prerendered-HTML search (the bound
+  // `handleSearchPrerendered` carries the `@deprecated` tag). Prefer the v2
+  // `search-entry` endpoint `/_federated-search-v2` (`handleSearchV2`), which
+  // carries prerendered HTML and the live serialization in one heterogeneous
+  // result rather than a dedicated prerendered shape. Kept as a compat layer
+  // over the shared search engine; removed once every consumer is on v2.
   router.all(
     '/_federated-search-prerendered',
     multiRealmAuthorization(args),
