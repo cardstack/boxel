@@ -32,4 +32,4 @@ else
   export PGDATABASE="${PGDATABASE:-boxel}"
 fi
 
-exec ts-node --transpileOnly main
+exec node main.ts

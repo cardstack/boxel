@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   computeBatchClearCacheGate,
@@ -29,7 +30,7 @@ function args(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'computeBatchClearCacheGate — clearCache batch ownership (CS-10758 step 3)',
     function () {

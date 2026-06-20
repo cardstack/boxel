@@ -1,5 +1,6 @@
 /* eslint-env node */
-import { readFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { readFileSync } = fsExtra;
 import { resolve, join } from 'path';
 import { createHmac } from 'crypto';
 import yaml from 'yaml';
@@ -15,7 +16,7 @@ function homeserverFile(): string {
       .replace(/^-|-$/g, '');
     let branchFile = resolve(
       join(
-        __dirname,
+        import.meta.dirname,
         '..',
         'matrix',
         `synapse-data-${slug}`,
@@ -27,7 +28,13 @@ function homeserverFile(): string {
     }
   }
   return resolve(
-    join(__dirname, '..', 'matrix', 'synapse-data', 'homeserver.yaml'),
+    join(
+      import.meta.dirname,
+      '..',
+      'matrix',
+      'synapse-data',
+      'homeserver.yaml',
+    ),
   );
 }
 

@@ -61,7 +61,7 @@ export const PARSEABLE_JSON_EXTENSION = '.json';
  * `packages/software-factory`, alongside `packages/base`,
  * `packages/host`, and `packages/boxel-ui`.
  */
-const PACKAGES_PATH = resolve(__dirname, '..', '..');
+const PACKAGES_PATH = resolve(import.meta.dirname, '..', '..');
 const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');
 const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
 
@@ -650,7 +650,7 @@ export async function runGlintCheck(
     symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
 
     let emberTscBin = resolve(
-      __dirname,
+      import.meta.dirname,
       '..',
       'node_modules',
       '.bin',

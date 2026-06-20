@@ -2,10 +2,10 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Run from the realm-server package directory so `pnpm setup:*` resolves the
 # package's npm scripts (the relative `../base/` paths inside those scripts
-# depend on this CWD) and ts-node can find the package's tsconfig. Previously
+# depend on this CWD). Previously
 # the CMD wrapped pnpm --filter, which set CWD for us; now PID 1 execs into
-# this script directly so we set it ourselves. The PATH prepend gives us the
-# local ts-node binary that `pnpm --filter` used to put on PATH automatically.
+# this script directly so we set it ourselves. The PATH prepend gives us the package's
+# local node_modules/.bin that `pnpm --filter` used to put on PATH automatically.
 cd "$SCRIPTS_DIR/.."
 PATH="./node_modules/.bin:$PATH"
 export PATH
@@ -28,7 +28,7 @@ SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFT
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://app.boxel.ai/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
-echo "[start-production] pid=$$ ppid=$PPID about to exec ts-node at $(date -Iseconds)" >&2
+echo "[start-production] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
 NODE_NO_WARNINGS=1 \
   LOW_CREDIT_THRESHOLD=2000 \
@@ -38,8 +38,7 @@ NODE_NO_WARNINGS=1 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='boxel.space' \
   PUBLISHED_REALM_BOXEL_SITE_DOMAIN='boxel.site' \
-  exec ts-node \
-  --transpileOnly main \
+  exec node main.ts \
   --port=3000 \
   --matrixURL='https://matrix.boxel.ai' \
   --realmsRootPath='/persistent/realms' \

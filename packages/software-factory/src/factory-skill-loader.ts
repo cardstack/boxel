@@ -14,7 +14,7 @@ const log = logger('factory-skill-loader');
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 /**
  * The SDK orchestrator and the new interactive Claude Code path each get

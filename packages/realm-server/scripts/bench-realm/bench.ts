@@ -50,7 +50,7 @@ import { realmSnapshotDir } from './paths.ts';
 // which is correct — a different host produced the cached rows.
 function hostDistFingerprint(): string {
   let indexPath = pathResolve(
-    __dirname,
+    import.meta.dirname,
     '..',
     '..',
     '..',
@@ -82,7 +82,11 @@ export const DEFAULT_WARMUP = 5;
 // the bench's instance JSONs `adoptsFrom`. No runtime fileFilter — the
 // glob is materialized in the snapshot itself, so the bench mounts the
 // realm with the default copy-everything semantics.
-const benchSourceRealmDir = pathResolve(__dirname, 'fixtures', 'source-realm');
+const benchSourceRealmDir = pathResolve(
+  import.meta.dirname,
+  'fixtures',
+  'source-realm',
+);
 
 export interface Scenario {
   name: string;
@@ -358,7 +362,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

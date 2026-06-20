@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 import type { RealmIndexingState } from '../indexing-event-sink.ts';
+
+// `require` doesn't exist in ESM scope; recreate it to resolve the bundled
+// morphdom asset path.
+const require = createRequire(import.meta.url);
 
 // morphdom's UMD build, inlined into the dashboard so the auto-refresh can
 // patch the live DOM in place instead of reloading the page. Read once at

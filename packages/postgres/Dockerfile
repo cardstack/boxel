@@ -20,4 +20,4 @@ RUN CI=1 pnpm install -r --offline
 
 WORKDIR /boxel/packages/postgres
 
-CMD ./node_modules/.bin/ts-node --transpileOnly ./scripts/fix-migration-names.ts && ./node_modules/.bin/node-pg-migrate --check-order false --migrations-table migrations up && sleep infinity
+CMD node ./scripts/fix-migration-names.ts && ./node_modules/.bin/node-pg-migrate --check-order false --migrations-table migrations up && sleep infinity

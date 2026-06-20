@@ -1,8 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
-import {
+import fsExtra from 'fs-extra';
+const {
   existsSync,
   ensureDirSync,
   copySync,
@@ -10,7 +12,7 @@ import {
   readJsonSync,
   writeJsonSync,
   removeSync,
-} from 'fs-extra';
+} = fsExtra;
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
@@ -37,7 +39,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 const testRealm2URL = 'http://127.0.0.1:4445/test/';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
