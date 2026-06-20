@@ -3,6 +3,7 @@ import { isEqual } from 'lodash';
 import {
   baseRef,
   CardError,
+  FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   inferContentType,
   internalKeyFor,
@@ -221,14 +222,11 @@ export class FileDefAttributesExtractor {
         // Same out-of-band lift for a frontmatter parse failure: keep it off
         // the flat `search_doc` and hand it back so the indexer can persist it
         // onto `diagnostics.frontmatterParseError`.
-        let frontmatterParseErrorSymbol = Symbol.for(
-          'boxel:file-frontmatter-parse-error',
-        );
-        let frontmatterParseError = cleanedBag[frontmatterParseErrorSymbol] as
-          | FrontmatterParseError
-          | undefined;
+        let frontmatterParseError = cleanedBag[
+          FRONTMATTER_PARSE_ERROR_SYMBOL
+        ] as FrontmatterParseError | undefined;
         if (frontmatterParseError) {
-          delete cleanedBag[frontmatterParseErrorSymbol];
+          delete cleanedBag[FRONTMATTER_PARSE_ERROR_SYMBOL];
         }
         return {
           status: 'ready',

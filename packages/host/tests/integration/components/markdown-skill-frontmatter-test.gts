@@ -15,7 +15,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, identifyCard } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  FRONTMATTER_PARSE_ERROR_SYMBOL,
+  identifyCard,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { buildFileResource } from '@cardstack/host/utils/file-def-attributes-extractor';
@@ -26,9 +30,6 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const FILE_FIELD_META = Symbol.for('boxel:file-field-meta');
-const FRONTMATTER_PARSE_ERROR = Symbol.for(
-  'boxel:file-frontmatter-parse-error',
-);
 
 let loader: Loader;
 
@@ -232,7 +233,9 @@ Body paragraph.
       {},
     );
 
-    let routed = (attrs as Record<PropertyKey, any>)[FRONTMATTER_PARSE_ERROR];
+    let routed = (attrs as Record<PropertyKey, any>)[
+      FRONTMATTER_PARSE_ERROR_SYMBOL
+    ];
     assert.strictEqual(
       typeof routed?.message,
       'string',

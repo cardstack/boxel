@@ -277,6 +277,54 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       );
     });
 
+    test('surfaces rows with has_error TRUE even when error_doc is NULL', async function (assert) {
+      // The query selects on `has_error = TRUE`, so a row with that flag set
+      // must surface even if its `error_doc` column was never populated. This
+      // locks in that the discriminator follows `has_error`, not `error_doc`.
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let cardURL = `${sourceRealm.url}broken-instance.json`;
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET has_error = TRUE,
+             error_doc = NULL,
+             diagnostics = NULL
+         WHERE url = $1 AND realm_url = $2 AND type = 'instance'`,
+        { bind: [cardURL, sourceRealm.url] },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: { url: string; entryType: string; errorDoc: unknown };
+        }>
+      ).filter(
+        (e) =>
+          e.attributes.url === cardURL && e.attributes.entryType === 'instance',
+      );
+      assert.strictEqual(
+        entries.length,
+        1,
+        'has_error=TRUE row is surfaced even with a NULL error_doc',
+      );
+      assert.strictEqual(entries[0].type, 'indexing-error', 'discriminator');
+      assert.strictEqual(
+        entries[0].attributes.errorDoc,
+        null,
+        'errorDoc passes through as null',
+      );
+    });
+
     test('surfaces broken-link rows even when has_error is FALSE', async function (assert) {
       await sourceRealm.realmIndexUpdater.fullIndex();
 

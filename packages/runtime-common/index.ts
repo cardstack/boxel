@@ -76,6 +76,15 @@ export interface FrontmatterParseError {
   column?: number;
 }
 
+// Global symbol channel used by file-def `extractAttributes` implementations
+// to route a `FrontmatterParseError` back to the host file extractor without
+// it leaking into the flat `search_doc`. Producer and consumer must agree on
+// the exact string key — exported here so callers share one source of truth
+// and a typo can't silently break the handoff.
+export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-parse-error',
+);
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto

@@ -6231,7 +6231,7 @@ export class Realm {
     let sourceRealmURL = ensureTrailingSlash(this.url);
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, type, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
+      `SELECT url, type, has_error, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
       `AND (`,
@@ -6246,6 +6246,7 @@ export class Realm {
     ])) as {
       url: string;
       type: string;
+      has_error: boolean | null;
       error_doc: SerializedError | null;
       diagnostics: Record<string, unknown> | null;
     }[];
@@ -6262,7 +6263,11 @@ export class Realm {
           row.diagnostics.frontmatterParseError !== null
             ? (row.diagnostics.frontmatterParseError as Record<string, unknown>)
             : null;
-        let hasError = row.error_doc != null;
+        // Source of truth is the row's `has_error` column — the SQL above
+        // filters on it, so we mirror that filter when branching. Using
+        // `row.error_doc != null` here would silently drop any row where
+        // `has_error = TRUE` but `error_doc` is NULL.
+        let hasError = row.has_error === true;
         // A single boxel_index row can carry more than one independent
         // finding — e.g. a markdown skill with both unparseable frontmatter
         // and a broken card reference in its body. We emit one resource per

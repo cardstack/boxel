@@ -1,8 +1,10 @@
 import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
+  FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   VirtualNetwork,
+  type FrontmatterParseError,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import {
@@ -36,24 +38,10 @@ import { parseFrontmatter } from './frontmatter-parse';
 // the same global symbol. See `file-def-attributes-extractor.ts`.
 const fileFieldMetaSymbol = Symbol.for('boxel:file-field-meta');
 
-// Channel for routing a frontmatter YAML parse failure out of `extractAttributes`
-// without it leaking into the flat `search_doc`. The host file extractor lifts
-// this off the returned attributes into the extract response, and the indexer
-// persists it onto `boxel_index.diagnostics.frontmatterParseError` so authors
-// see the failure (CS-11548) instead of silently losing whatever the
-// frontmatter declared. Shape matches `FrontmatterParseError` in runtime-common.
-const frontmatterParseErrorSymbol = Symbol.for(
-  'boxel:file-frontmatter-parse-error',
-);
-
 // Best-effort structured view of a YAML parse failure. The `yaml` library
 // throws a `YAMLParseError` carrying `linePos` (`[{ line, col }, …]`); read it
 // defensively so a non-YAMLParseError still yields a usable message.
-function toFrontmatterParseError(err: unknown): {
-  message: string;
-  line?: number;
-  column?: number;
-} {
+function toFrontmatterParseError(err: unknown): FrontmatterParseError {
   let message =
     err instanceof Error ? err.message : `Frontmatter parse failed: ${err}`;
   let pos = (err as { linePos?: Array<{ line?: number; col?: number }> })
@@ -578,9 +566,7 @@ export class MarkdownDef extends FileDef {
 
     let frontmatterData: Record<string, unknown> = {};
     let body = markdown;
-    let frontmatterParseError:
-      | { message: string; line?: number; column?: number }
-      | undefined;
+    let frontmatterParseError: FrontmatterParseError | undefined;
     try {
       let parsed = parseFrontmatter(normalizeMarkdown(markdown));
       frontmatterData = parsed.data;
@@ -590,7 +576,7 @@ export class MarkdownDef extends FileDef {
       // the whole file, but capture the failure so it surfaces via indexing
       // diagnostics (CS-11548) instead of silently dropping whatever the
       // frontmatter declared (e.g. a skill's commands). Routed out-of-band via
-      // `frontmatterParseErrorSymbol`, picked up by the host file extractor.
+      // `FRONTMATTER_PARSE_ERROR_SYMBOL`, picked up by the host file extractor.
       frontmatterParseError = toFrontmatterParseError(err);
       console.warn(
         `[markdown-file-def] frontmatter parse failed for ${url}:`,
@@ -657,7 +643,7 @@ export class MarkdownDef extends FileDef {
 
     if (frontmatterParseError) {
       (attributes as Record<PropertyKey, unknown>)[
-        frontmatterParseErrorSymbol
+        FRONTMATTER_PARSE_ERROR_SYMBOL
       ] = frontmatterParseError;
     }
 
