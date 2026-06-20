@@ -26,7 +26,7 @@
   },
 
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "setsid bash .devcontainer/start-services.sh > /tmp/start-services.log 2>&1 < /dev/null &",
+  "postStartCommand": "nohup setsid bash .devcontainer/start-services.sh > /workspaces/.boxel-start-services.log 2>&1 < /dev/null &",
 
   "customizations": {
     "codespaces": {

@@ -27,6 +27,16 @@ cd /workspaces/boxel
 # mise provides the pinned node/pnpm/ts-node toolchain.
 eval "$(mise activate bash)"
 
+# postStartCommand fires this on every container start/resume, which races
+# docker-in-docker coming up. Postgres and Synapse (below) run in Docker, and
+# under `set -e` the first Docker command would abort the entire start if the
+# daemon isn't ready yet — that's how a fresh Codespace ended up with the host
+# briefly serving but Synapse never up and indexing dead. Wait for the daemon
+# before touching it.
+echo "==> Waiting for the Docker daemon..."
+timeout 180 bash -c 'until docker info >/dev/null 2>&1; do sleep 2; done' \
+  || echo "Warning: Docker daemon not ready after 180s; Postgres/Synapse may fail to start."
+
 # Tear down any prior service instances before (re)starting. On a fresh
 # Codespace this is a no-op, but on a re-run (after a code pull, or a manual
 # restart) a still-running realm holds port 4201, so the new realm would hit
