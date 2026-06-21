@@ -101,7 +101,7 @@ boxel --help
 boxel sync .
 ```
 
-The linked command automatically uses `dist/index.js` if built, or falls back to running TypeScript source via `ts-node`.
+The linked command runs `dist/index.js`, so build the CLI first (`pnpm --filter @cardstack/boxel-cli build`). The TypeScript source isn't run directly.
 
 To unlink:
 

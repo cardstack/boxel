@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
@@ -79,7 +80,7 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('skipQueryBackedExpansion', function (hooks) {
     let realm: Realm;
 

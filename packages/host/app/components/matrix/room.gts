@@ -21,7 +21,7 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import { consume } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
-import max from 'lodash/max';
+import { max } from 'lodash-es';
 
 import pluralize from 'pluralize';
 
@@ -296,6 +296,7 @@ export default class Room extends Component<Signature> {
                     class='skill-menu'
                     @skills={{this.sortedSkills}}
                     @onChooseCard={{perform this.attachSkillTask}}
+                    @onChooseSkillMarkdown={{perform this.attachSkillTask}}
                     @onUpdateSkillIsActive={{perform
                       this.updateSkillIsActiveTask
                     }}

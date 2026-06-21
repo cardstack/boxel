@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -6,7 +7,7 @@ import { insertJob, setupPermissionedRealmCached } from '../helpers/index.ts';
 import { monitoringAuthToken } from '../../utils/monitoring.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm Server Endpoints (not specific to one realm)', function () {
     module('_queue-status', function (hooks) {
       let request: SuperTest<Test>;

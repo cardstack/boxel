@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import type { CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 import {
   getFieldIcon,
   getField,

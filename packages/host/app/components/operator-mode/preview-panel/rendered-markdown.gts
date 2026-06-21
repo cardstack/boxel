@@ -26,6 +26,8 @@ import {
   CardContextName,
   cardTypeName,
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
+  fileNameFromUrl,
   isCardErrorJSONAPI,
   rri,
   trimJsonExtension,
@@ -38,13 +40,23 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 import type NetworkService from '@cardstack/host/services/network';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  FileDef,
+} from 'https://cardstack.com/base/card-api';
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type SlotState = 'resolved' | 'loading' | 'unresolved';
+type RefType = 'card' | 'file';
 
 interface RenderSlot {
   element: HTMLElement;
+  // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
+  // (`:file[URL]`) resolve to FileDef instances. Both slot kinds are wired to
+  // `cardContext.cardComponentModifier` so operator-mode overlays can target
+  // them (the overlay layer distinguishes card vs. file targets).
+  refType: RefType;
   kind: 'inline' | 'block';
   state: SlotState;
   format: CardSlotFormat;
@@ -52,7 +64,8 @@ interface RenderSlot {
   // eventual card's footprint; also carries `overflow: hidden` for resolved
   // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
-  card?: CardDef; // present when state === 'resolved'
+  card?: CardDef; // present when refType === 'card' && state === 'resolved'
+  file?: FileDef; // present when refType === 'file' && state === 'resolved'
   url?: string; // present when state === 'loading' | 'unresolved'
   typeName?: string; // present when state === 'unresolved'
 }
@@ -116,6 +129,7 @@ export default class RenderedMarkdown extends Component<Signature> {
 
   @tracked renderSlots: RenderSlot[] = [];
   @tracked private loadedCards = new Map<string, CardDef>();
+  @tracked private loadedFiles = new Map<string, FileDef>();
   private _modifierHasRun = false;
 
   // ── HTML rendering ──
@@ -125,11 +139,15 @@ export default class RenderedMarkdown extends Component<Signature> {
     let html = markdownToHtml(this.args.content);
     html = wrapTablesHtml(html);
 
-    let hasCardRefs = html.includes('data-boxel-bfm-type="card"');
-    if (typeof DOMParser !== 'undefined' && hasCardRefs) {
+    // Strip text from BFM refs (card and file) so raw URLs don't flash before
+    // the referenced instance loads.
+    let hasBfmRefs = html.includes('data-boxel-bfm-type=');
+    if (typeof DOMParser !== 'undefined' && hasBfmRefs) {
       let doc = new DOMParser().parseFromString(html, 'text/html');
       doc
-        .querySelectorAll('[data-boxel-bfm-type="card"]')
+        .querySelectorAll(
+          '[data-boxel-bfm-inline-ref], [data-boxel-bfm-block-ref]',
+        )
         .forEach((el) => (el.textContent = ''));
       html = doc.body.innerHTML;
     }
@@ -137,12 +155,22 @@ export default class RenderedMarkdown extends Component<Signature> {
     return htmlSafe(html);
   }
 
-  // ── Card loading ──
+  // ── Reference loading ──
 
   @cached
   private get cardReferenceUrls(): string[] {
     if (!this.args.content) return [];
     return extractCardReferenceUrls(
+      this.args.content,
+      this.args.cardReferenceBaseUrl ?? '',
+      this.network.virtualNetwork,
+    );
+  }
+
+  @cached
+  private get fileReferenceUrls(): string[] {
+    if (!this.args.content) return [];
+    return extractFileReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
       this.network.virtualNetwork,
@@ -169,6 +197,28 @@ export default class RenderedMarkdown extends Component<Signature> {
     this.loadedCards = cards;
   });
 
+  private loadReferencedFiles = task({ restartable: true }, async () => {
+    let urls = this.fileReferenceUrls;
+    if (!urls.length) return;
+
+    let files = new Map<string, FileDef>();
+    await Promise.all(
+      urls.map(async (url) => {
+        try {
+          let result = await this.store.get<FileDef>(url, {
+            type: 'file-meta',
+          });
+          if (!isCardErrorJSONAPI(result)) {
+            files.set(url, result as FileDef);
+          }
+        } catch {
+          // skip files that can't be loaded
+        }
+      }),
+    );
+    this.loadedFiles = files;
+  });
+
   // ── Slot capture modifier ──
 
   captureCardSlots = modifier(
@@ -176,28 +226,43 @@ export default class RenderedMarkdown extends Component<Signature> {
       let baseUrl = this.args.cardReferenceBaseUrl ?? undefined;
       let pendingUpdate = false;
 
-      let showFallback = this._modifierHasRun || this.loadedCards.size > 0;
+      let showFallback =
+        this._modifierHasRun ||
+        this.loadedCards.size > 0 ||
+        this.loadedFiles.size > 0;
       this._modifierHasRun = true;
 
-      // Trigger card loading when content changes
+      // Trigger card + file loading when content changes
       this.loadReferencedCards.perform();
+      this.loadReferencedFiles.perform();
 
       let collectSlots = (): RenderSlot[] => {
         let cardsByUrl = this.loadedCards;
+        let filesByUrl = this.loadedFiles;
         let slots: RenderSlot[] = [];
 
         for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-type="card"], [data-boxel-bfm-type="file"]',
+          ),
         )) {
+          let refType: RefType =
+            el.dataset.boxelBfmType === 'file' ? 'file' : 'card';
           let isInline = !!el.dataset.boxelBfmInlineRef;
           let rawUrl =
             el.dataset.boxelBfmInlineRef ?? el.dataset.boxelBfmBlockRef ?? '';
           if (!rawUrl) continue;
           let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
 
-          let format: CardSlotFormat = 'atom';
+          // Inline refs render in atom format. Block refs (card and file alike)
+          // derive their format and any fitted sizing from the BFM size
+          // attributes, so `::file[./photo.jpg | 400x300]` is honored the same
+          // way `::card[... | 400x300]` is.
+          let format: CardSlotFormat;
           let sizeStyle: string | undefined;
-          if (!isInline) {
+          if (isInline) {
+            format = 'atom';
+          } else {
             let derived = bfmBlockFormatAndSize(
               el.dataset.boxelBfmFormat,
               el.dataset.boxelBfmWidth,
@@ -207,35 +272,58 @@ export default class RenderedMarkdown extends Component<Signature> {
             sizeStyle = derived.sizeStyle;
           }
 
-          let card = cardsByUrl.get(
-            resolveUrl(rawUrl, baseUrl, this.network.virtualNetwork),
-          );
-          if (card) {
-            let style: ReturnType<typeof htmlSafe> | undefined;
-            if (format === 'fitted') {
-              style = htmlSafe(
-                sizeStyle
-                  ? `${sizeStyle}; overflow: hidden`
-                  : 'overflow: hidden',
-              );
-            }
-            slots.push({
-              element: el,
-              kind,
-              state: 'resolved',
-              format,
-              card,
-              style,
-            });
-            continue;
+          // Fitted slots carry an inline width/height plus `overflow: hidden`
+          // so the resolved instance occupies the requested footprint.
+          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined;
+          if (format === 'fitted') {
+            resolvedStyle = htmlSafe(
+              sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
+            );
           }
 
-          // No card yet: show the sized loading shimmer until linkedCards has
-          // settled (showFallback), then fall back to the broken-link box.
+          let resolvedUrl = resolveUrl(
+            rawUrl,
+            baseUrl,
+            this.network.virtualNetwork,
+          );
+
+          if (refType === 'file') {
+            let file = filesByUrl.get(resolvedUrl);
+            if (file) {
+              slots.push({
+                element: el,
+                refType,
+                kind,
+                state: 'resolved',
+                format,
+                file,
+                style: resolvedStyle,
+              });
+              continue;
+            }
+          } else {
+            let card = cardsByUrl.get(resolvedUrl);
+            if (card) {
+              slots.push({
+                element: el,
+                refType,
+                kind,
+                state: 'resolved',
+                format,
+                card,
+                style: resolvedStyle,
+              });
+              continue;
+            }
+          }
+
+          // No matching instance yet: show the sized loading shimmer until the
+          // load settles (showFallback), then fall back to the broken-link box.
           let style = sizeStyle ? htmlSafe(sizeStyle) : undefined;
           if (!showFallback) {
             slots.push({
               element: el,
+              refType,
               kind,
               state: 'loading',
               format,
@@ -245,12 +333,16 @@ export default class RenderedMarkdown extends Component<Signature> {
           } else {
             slots.push({
               element: el,
+              refType,
               kind,
               state: 'unresolved',
               format,
               style,
               url: rawUrl,
-              typeName: cardTypeName(rawUrl),
+              typeName:
+                refType === 'file'
+                  ? fileNameFromUrl(rawUrl)
+                  : cardTypeName(rawUrl),
             });
           }
         }
@@ -266,10 +358,12 @@ export default class RenderedMarkdown extends Component<Signature> {
           nextSlots.some((slot, index) => {
             let current = this.renderSlots[index];
             if (!current || current.element !== slot.element) return true;
+            if (current.refType !== slot.refType) return true;
             if (current.kind !== slot.kind) return true;
             if (current.state !== slot.state) return true;
             if (current.format !== slot.format) return true;
             if (current.card !== slot.card) return true;
+            if (current.file !== slot.file) return true;
             if (current.url !== slot.url) return true;
             return String(current.style ?? '') !== String(slot.style ?? '');
           });
@@ -298,14 +392,56 @@ export default class RenderedMarkdown extends Component<Signature> {
   <template>
     <div
       class='markdown-content'
-      {{this.captureCardSlots this.renderedHtml this.loadedCards}}
+      {{this.captureCardSlots
+        this.renderedHtml
+        this.loadedCards
+        this.loadedFiles
+      }}
     >
       {{this.renderedHtml}}
     </div>
     {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
         {{#if (eq slot.state 'resolved')}}
-          {{#if (eq slot.kind 'inline')}}
+          {{#if (eq slot.refType 'file')}}
+            {{#if (eq slot.kind 'inline')}}
+              <span
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                data-test-markdown-bfm-inline-file
+                {{this.cardContext.cardComponentModifier
+                  cardId=slot.file.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardRenderer
+                  @card={{slot.file}}
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </span>
+            {{else}}
+              <div
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                  {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                style={{slot.style}}
+                data-test-markdown-bfm-block-file
+                {{this.cardContext.cardComponentModifier
+                  cardId=slot.file.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardRenderer
+                  @card={{slot.file}}
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </div>
+            {{/if}}
+          {{else if (eq slot.kind 'inline')}}
             <span
               class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
               data-test-markdown-bfm-inline-card

@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 
 import { createServeIndex } from '../handlers/serve-index.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('prefers MATRIX_SERVER_NAME over matrix URL hostname in host config', async function (assert) {
     let originalMatrixServerName = process.env.MATRIX_SERVER_NAME;
 

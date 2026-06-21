@@ -9,13 +9,14 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-const packageRoot = resolve(__dirname, '..');
+const packageRoot = resolve(import.meta.dirname, '..');
 const stickyNoteFixture = readFileSync(
-  resolve(__dirname, '../realm/Wiki/sticky-note.json'),
+  resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
   'utf8',
 );
 

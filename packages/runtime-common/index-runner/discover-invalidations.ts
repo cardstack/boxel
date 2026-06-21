@@ -1,4 +1,4 @@
-import ignore, { type Ignore } from 'ignore';
+import { ignore, type Ignore } from '../ignore.ts';
 
 import {
   jobIdentity,

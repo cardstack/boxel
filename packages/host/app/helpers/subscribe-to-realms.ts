@@ -1,6 +1,6 @@
 import Helper from '@ember/component/helper';
 
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 
 import { subscribeToRealm } from '@cardstack/runtime-common';
 

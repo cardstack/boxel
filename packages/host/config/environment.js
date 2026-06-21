@@ -241,13 +241,18 @@ function getLatestSchemaFile() {
     path.join(__dirname, '..', '..', 'postgres', 'migrations'),
   );
   let migrations = fs.readdirSync(migrationsDir);
+  // Only timestamped migration files — ignores non-migration entries in the dir
+  // such as `package.json` (pins the dir to type:commonjs) and `.eslintrc.js`.
   let lastMigration = migrations
-    .filter((f) => f !== '.eslintrc.js')
+    .filter((f) => /^\d+_/.test(f))
     .sort()
     .pop();
   const schemaDir = path.join(__dirname, 'schema');
   let files = fs.readdirSync(schemaDir);
-  let latestSchemaFile = files.sort().pop();
+  let latestSchemaFile = files
+    .filter((f) => /^\d+_schema\.sql$/.test(f))
+    .sort()
+    .pop();
   if (
     lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '') &&
     ['development', 'test'].includes(process.env.EMBER_ENV)

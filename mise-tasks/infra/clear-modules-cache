@@ -6,4 +6,4 @@
 echo "Clearing modules cache..."
 PGPORT="${PGPORT:-5435}" PGDATABASE="${PGDATABASE:-boxel}" \
   NODE_NO_WARNINGS=1 \
-  ts-node --transpileOnly scripts/clear-modules-cache.ts
+  node scripts/clear-modules-cache.ts

@@ -19,7 +19,8 @@ import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
 import type { ReadStream } from 'fs-extra';
-import {
+import fsExtra from 'fs-extra';
+const {
   readdirSync,
   existsSync,
   writeFileSync,
@@ -28,7 +29,7 @@ import {
   ensureFileSync,
   createReadStream,
   removeSync,
-} from 'fs-extra';
+} = fsExtra;
 import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {

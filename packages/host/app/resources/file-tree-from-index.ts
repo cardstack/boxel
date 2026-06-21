@@ -6,7 +6,7 @@ import { cached } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
@@ -27,6 +27,9 @@ interface Args {
   named: {
     realmURL: string;
     fileTypeFilter?: CodeRef;
+    // Optional equality constraints on indexed file fields (e.g.
+    // `{ kind: 'skill' }`), narrowing the tree beyond the type anchor.
+    fileFieldFilter?: Record<string, unknown>;
   };
 }
 
@@ -44,6 +47,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   // "You attempted to update `realmURL` but it had already been used previously in the same computation"
   #realmURL: string | undefined;
   #fileTypeFilter: CodeRef | undefined;
+  #fileFieldFilter: Record<string, unknown> | undefined;
   #subscription: { realmURL: string; unsubscribe: () => void } | undefined;
   // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
@@ -57,12 +61,14 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { realmURL, fileTypeFilter } = named;
+    let { realmURL, fileTypeFilter, fileFieldFilter } = named;
     let normalizedURL = ensureTrailingSlash(realmURL);
     let unchanged =
       this.#realmURL === normalizedURL &&
-      isEqual(this.#fileTypeFilter, fileTypeFilter);
+      isEqual(this.#fileTypeFilter, fileTypeFilter) &&
+      isEqual(this.#fileFieldFilter, fileFieldFilter);
     this.#fileTypeFilter = fileTypeFilter;
+    this.#fileFieldFilter = fileFieldFilter;
     this.#realmURL = normalizedURL;
 
     if (this.#subscription?.realmURL !== normalizedURL) {
@@ -113,9 +119,21 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   // ids. The fieldset pins the leanest projection the wire grammar offers (a
   // single-field sparse item) rather than full serializations or renderings.
   private get query(): SearchEntryWireQuery {
+    let fieldFilter = this.#fileFieldFilter;
+    let eq =
+      fieldFilter && Object.keys(fieldFilter).length > 0
+        ? Object.fromEntries(
+            // Field paths in the search-entry wire grammar are `item.`-prefixed.
+            Object.entries(fieldFilter).map(([field, value]) => [
+              `item.${field}`,
+              value,
+            ]),
+          )
+        : undefined;
     return {
       filter: {
         'item.on': this.#fileTypeFilter ?? baseFileRef,
+        ...(eq ? { eq } : {}),
       },
       fields: { 'search-entry': ['item.name'] },
     };
@@ -207,9 +225,11 @@ export function fileTreeFromIndex(
   parent: object,
   realmURL: () => string,
   fileTypeFilter?: () => CodeRef | undefined,
+  fileFieldFilter?: () => Record<string, unknown> | undefined,
 ) {
   return FileTreeFromIndexResource.from(parent, () => ({
     realmURL: realmURL(),
     fileTypeFilter: fileTypeFilter?.(),
+    fileFieldFilter: fileFieldFilter?.(),
   })) as FileTreeFromIndexResource;
 }
