@@ -487,12 +487,16 @@ module('Integration | Component | hydratable-card', function (hooks) {
     }
   });
 
-  // Open question for this ticket: residency hydration ignores the gesture
-  // `mode`, since it never triggers a load — so even a `none` row renders live
-  // when its instance is already resident. Documented here as the chosen
-  // behavior so a future change to it is a deliberate, test-breaking decision.
-  test('residency — a none-mode row still renders live when already resident', async function (assert) {
+  // `none` is an explicit "stay inert" opt-out (e.g. create-listing-modal's
+  // deliberately cheap prerendered atoms), so residency must NOT flip a `none`
+  // row to live even when its instance is already resident — residency only
+  // brings forward the hydration a gesture mode would have performed anyway.
+  test('residency — a none-mode row stays inert even when its instance is resident', async function (assert) {
     await storeService.get(HASSAN);
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: resident',
+    );
     let inert = htmlComponent(INERT_HTML);
     await render(
       <template>
@@ -507,8 +511,11 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
 
     assert
+      .dom('[data-test-inert-card]')
+      .exists('a none row stays inert despite residency (explicit opt-out)');
+    assert
       .dom('[data-test-live-card]')
-      .hasText('Live: Hassan', 'residency overrides none (no load needed)');
+      .doesNotExist('residency does not override the none opt-out');
   });
 
   // No leak: residency hydration adds no subscription — it reads the Store's

@@ -151,7 +151,11 @@ export default class HydratableCard extends Component<Signature> {
     if (this.hydrated) {
       return this.args.cardId;
     }
-    if (!this.inPrerender && this.isResident) {
+    // `none` is an explicit author opt-out: the surface stays inert on purpose
+    // (e.g. a deliberately cheap prerendered list, or create-listing-modal's
+    // atom examples), so residency must not flip it to live. Residency only
+    // brings forward the hydration a gesture mode would have done anyway.
+    if (this.mode !== 'none' && !this.inPrerender && this.isResident) {
       return this.args.cardId;
     }
     return undefined;
