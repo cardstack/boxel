@@ -3,12 +3,14 @@ import { isEqual } from 'lodash-es';
 import {
   baseRef,
   CardError,
+  FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   inferContentType,
   internalKeyFor,
   SupportedMimeType,
   type CodeRef,
   type FileMetaResource,
+  type FrontmatterParseError,
   type QueryFieldMeta,
   type RealmResourceIdentifier,
   type RenderError,
@@ -44,6 +46,10 @@ export type FileDefExtractResult = {
   deps: string[];
   error?: RenderError;
   mismatch?: true;
+  // The frontmatter YAML wouldn't parse. The extract still succeeds (the file
+  // indexes body-only); lifted out of the searchDoc here so the indexer can
+  // persist it onto `diagnostics.frontmatterParseError`. See markdown-file-def.
+  frontmatterParseError?: FrontmatterParseError;
 };
 
 export class FileDefAttributesExtractor {
@@ -213,6 +219,15 @@ export class FileDefAttributesExtractor {
         if (fieldsMeta) {
           delete cleanedBag[fieldMetaSymbol];
         }
+        // Same out-of-band lift for a frontmatter parse failure: keep it off
+        // the flat `search_doc` and hand it back so the indexer can persist it
+        // onto `diagnostics.frontmatterParseError`.
+        let frontmatterParseError = cleanedBag[
+          FRONTMATTER_PARSE_ERROR_SYMBOL
+        ] as FrontmatterParseError | undefined;
+        if (frontmatterParseError) {
+          delete cleanedBag[FRONTMATTER_PARSE_ERROR_SYMBOL];
+        }
         return {
           status: 'ready',
           searchDoc: cleanedDoc,
@@ -228,6 +243,7 @@ export class FileDefAttributesExtractor {
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
+          ...(frontmatterParseError ? { frontmatterParseError } : {}),
         };
       }
     }
