@@ -44,7 +44,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index.ts';
-import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import { rri } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
@@ -456,18 +456,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        let canonicalCodeRef =
-          canonicalModuleURL === codeRef.module
-            ? codeRef
-            : {
-                ...codeRef,
-                module: canonicalModuleURL as RealmResourceIdentifier,
-              };
-        let moduleId = internalKeyFor(
-          canonicalCodeRef,
-          undefined,
-          this.#virtualNetwork,
-        );
+        let moduleId = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
         let entry = cached.definitions[moduleId];
         if (entry && 'definition' in entry) {
           return entry.definition;
@@ -880,10 +869,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       undefined,
       this.#virtualNetwork,
     );
-    let canonicalCodeRef =
-      canonicalModuleURL === codeRef.module
-        ? codeRef
-        : { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier };
     let context = await this.buildLookupContext(
       canonicalModuleURL,
       contextOpts,
@@ -923,11 +908,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    const moduleId = internalKeyFor(
-      canonicalCodeRef,
-      undefined,
-      this.#virtualNetwork,
-    );
+    const moduleId = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
     let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
       if (codeRef.name === 'CardInfoField' || codeRef.module.includes('card-api')) {
