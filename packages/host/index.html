@@ -56,6 +56,13 @@
     <script>
       globalThis.process = {
         env: {},
+        browser: true,
+        version: '',
+        versions: {},
+        platform: 'browser',
+        nextTick(fn, ...args) {
+          Promise.resolve().then(() => fn(...args));
+        },
         cwd() {
           return '';
         },
