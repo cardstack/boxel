@@ -1,11 +1,13 @@
 import {
   type RenderingTestContext,
   render,
+  settled,
   triggerEvent,
   click,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
@@ -70,6 +72,12 @@ class TestContext extends GlimmerComponent<TestContextSignature> {
 
 const HASSAN = `${testRealmURL}Person/hassan`;
 const INERT_HTML = `<div class='inert' data-test-inert-card>Inert</div>`;
+
+// Drives a mount/unmount toggle so a teardown test can destroy the rendered
+// HydratableCard and assert it releases its Store reference.
+class Toggle {
+  @tracked show = true;
+}
 
 module('Integration | Component | hydratable-card', function (hooks) {
   let storeService: StoreService;
@@ -480,6 +488,217 @@ module('Integration | Component | hydratable-card', function (hooks) {
     assert.ok(
       isFileDefInstance(storeService.peek(fileUrl, { type: 'file-meta' })),
       'the live FileDef entered the Store',
+    );
+  });
+
+  // --- Residency-driven hydration ------------------------------------------
+  // A prerendered (inert) row whose instance is already resident in the Store
+  // renders the live instance immediately, with no hydration gesture. Residency
+  // is observed reactively (the Store's identity map is a TrackedMap) and never
+  // triggers a load, so it costs nothing the user hasn't already paid.
+  test('residency — an already-resident instance renders live immediately, no gesture', async function (assert) {
+    await storeService.get(HASSAN); // resident by some other means (e.g. navigation)
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: the instance is resident in the Store',
+    );
+
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-live-card]')
+      .hasText('Live: Hassan', 'renders live with no gesture');
+    assert
+      .dom('[data-test-inert-card]')
+      .doesNotExist(
+        'the inert HTML is not shown when the instance is resident',
+      );
+    assert
+      .dom('[data-hydration="hydrated"]')
+      .exists('the diagnostic reflects the live render');
+  });
+
+  // An inert row that is NOT resident stays inert (no GET); when the instance
+  // later lands in the Store by any means, the row flips to live on its own —
+  // no gesture — proving the residency read is reactive.
+  test('residency — an inert row flips to live when its instance lands later', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert.dom('[data-test-inert-card]').exists('starts inert (not resident)');
+    assert.dom('[data-test-live-card]').doesNotExist('no live card yet');
+    assert.notOk(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: not resident, and no GET was triggered',
+    );
+
+    await storeService.get(HASSAN); // lands in the Store out of band
+    await settled();
+
+    assert
+      .dom('[data-test-live-card]')
+      .hasText('Live: Hassan', 'flips to live with no gesture');
+    assert.dom('[data-test-inert-card]').doesNotExist('the inert HTML is gone');
+  });
+
+  // Residency-driven hydration is SPA-only: inside a prerender render
+  // (`__boxelRenderContext`) a resident instance must NOT flip a row to live —
+  // a prerender emits prerendered HTML deterministically, and instances land in
+  // the Store constantly during indexing.
+  test('residency — never flips a row to live inside a prerender render', async function (assert) {
+    await storeService.get(HASSAN);
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: resident',
+    );
+
+    let inert = htmlComponent(INERT_HTML);
+    (globalThis as any).__boxelRenderContext = true;
+    try {
+      await render(
+        <template>
+          <TestContext>
+            <HydratableCard
+              @cardId={{HASSAN}}
+              @component={{inert}}
+              @mode='hover'
+            />
+          </TestContext>
+        </template>,
+      );
+
+      assert
+        .dom('[data-test-inert-card]')
+        .exists('stays inert in a prerender render despite residency');
+      assert
+        .dom('[data-test-live-card]')
+        .doesNotExist('residency does not flip to live during prerender');
+    } finally {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
+  });
+
+  // `none` is an explicit "stay inert" opt-out (e.g. create-listing-modal's
+  // deliberately cheap prerendered atoms), so residency must NOT flip a `none`
+  // row to live even when its instance is already resident — residency only
+  // brings forward the hydration a gesture mode would have performed anyway.
+  test('residency — a none-mode row stays inert even when its instance is resident', async function (assert) {
+    await storeService.get(HASSAN);
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: resident',
+    );
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='none'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-inert-card]')
+      .exists('a none row stays inert despite residency (explicit opt-out)');
+    assert
+      .dom('[data-test-live-card]')
+      .doesNotExist('residency does not override the none opt-out');
+  });
+
+  // No leak: residency hydration adds no subscription — it reads the Store's
+  // TrackedMap reactively, torn down with the component. The only Store
+  // reference is the lazily-created `getCard` resource, which must release on
+  // teardown. Assert the reference count returns to its pre-render baseline once
+  // the component is destroyed.
+  test('teardown — a residency-hydrated row releases its Store reference', async function (assert) {
+    await storeService.get(HASSAN);
+    storeService.addReference(HASSAN); // pin resident across the test (no GC)
+    try {
+      let baseline = storeService.getReferenceCount(HASSAN);
+      let inert = htmlComponent(INERT_HTML);
+      let toggle = new Toggle();
+
+      await render(
+        <template>
+          {{#if toggle.show}}
+            <TestContext>
+              <HydratableCard
+                @cardId={{HASSAN}}
+                @component={{inert}}
+                @mode='hover'
+              />
+            </TestContext>
+          {{/if}}
+        </template>,
+      );
+
+      assert
+        .dom('[data-test-live-card]')
+        .exists('the resident row rendered live');
+      assert.true(
+        storeService.getReferenceCount(HASSAN) > baseline,
+        'the live row holds a Store reference while mounted',
+      );
+
+      toggle.show = false;
+      await settled();
+
+      assert.strictEqual(
+        storeService.getReferenceCount(HASSAN),
+        baseline,
+        'teardown releases exactly the reference the row added (no leak)',
+      );
+    } finally {
+      storeService.dropReference(HASSAN);
+    }
+  });
+
+  // A never-resident inert row creates no resource and holds no Store reference
+  // — residency observation does no eager work.
+  test('residency — a non-resident inert row holds no Store reference', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert.dom('[data-test-inert-card]').exists('stays inert');
+    assert.strictEqual(
+      storeService.getReferenceCount(HASSAN),
+      0,
+      'no resource, no Store reference for a never-resident row',
     );
   });
 

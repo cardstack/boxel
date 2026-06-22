@@ -1,5 +1,6 @@
 import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -10,6 +11,8 @@ import {
   CardContextName,
   GetCardContextName,
   defaultLivenessForFormat,
+  isCardInstance,
+  isFileDefInstance,
   type ErrorEntry,
   type FieldLiveness,
   type Format,
@@ -20,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { BaseDef, CardContext } from 'https://cardstack.com/base/card-api';
 
@@ -112,6 +116,7 @@ export default class HydratableCard extends Component<Signature> {
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
+  @service declare private store: StoreService;
 
   // Flips true once a hydration gesture fires; `getCard` then fetches
   // `links.self`, deposits the instance in the Store, and tracks it live. A
@@ -133,9 +138,9 @@ export default class HydratableCard extends Component<Signature> {
 
   // The row's default liveness. An explicit `@mode` is a per-surface override
   // (always the inert + gesture path); otherwise the default follows the
-  // resolved render format via the format → liveness rule — `embedded` is live,
-  // every other format is prerendered + lazily hydrated. An error rendering
-  // never hydrates, so it is pinned to the inert, gesture-less `none`.
+  // resolved render format via the format → liveness rule — `fitted` is
+  // prerendered + lazily hydrated, every other format is live. An error
+  // rendering never hydrates, so it is pinned to the inert, gesture-less `none`.
   private get liveness(): FieldLiveness {
     if (this.args.isError) {
       return { live: false, mode: 'none' };
@@ -159,13 +164,53 @@ export default class HydratableCard extends Component<Signature> {
     if (this.args.component == null) {
       return this.args.cardId;
     }
-    // A live row (the `embedded` format default) skips the inert stage and
-    // resolves immediately even though inert HTML is present.
+    // A live row (the format default for every format except `fitted`) skips
+    // the inert stage and resolves immediately even though inert HTML is
+    // present.
     if (this.liveness.live) {
       return this.args.cardId;
     }
-    // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired.
-    return this.hydrated ? this.args.cardId : undefined;
+    // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired,
+    // or — in the SPA — as soon as the full instance is already resident in
+    // the Store (residency by any means: navigation, another surface, a full
+    // search result, an edit session). Residency never triggers a load, so an
+    // inert row whose instance is never made resident elsewhere stays inert.
+    if (this.hydrated) {
+      return this.args.cardId;
+    }
+    // `none` is an explicit author opt-out: the surface stays inert on purpose
+    // (e.g. a deliberately cheap prerendered list, or create-listing-modal's
+    // atom examples), so residency must not flip it to live. Residency only
+    // brings forward the hydration a gesture mode would have done anyway.
+    if (this.mode !== 'none' && !this.inPrerender && this.isResident) {
+      return this.args.cardId;
+    }
+    return undefined;
+  }
+
+  // Whether the full live instance for this row is already resident in the
+  // Store. A pure, reactive read: `store.peek` reads the Store's `TrackedMap`
+  // identity map, so this getter re-resolves when the instance lands (or
+  // drops) — there is no subscription and nothing to tear down. It never
+  // triggers a load, so a row whose instance is never made resident elsewhere
+  // stays inert. Only full instances enter the Store (a sparse `item` is never
+  // stored), so a resident hit is unambiguously a full instance; a stale error
+  // doc is not treated as resident.
+  private get isResident(): boolean {
+    let resident =
+      this.args.type === 'file-meta'
+        ? this.store.peek(this.args.cardId, { type: 'file-meta' })
+        : this.store.peek(this.args.cardId);
+    return isCardInstance(resident) || isFileDefInstance(resident);
+  }
+
+  // Residency-driven hydration is SPA-only. Inside a prerender render
+  // (`__boxelRenderContext`; an indexing render — `__boxelJobId` — especially)
+  // instances land in the Store constantly as a normal part of building the
+  // index, and a render must be deterministic and emit prerendered HTML — so
+  // residency must never flip a row to live there.
+  private get inPrerender(): boolean {
+    return Boolean((globalThis as any).__boxelRenderContext);
   }
 
   // The gesture wired onto the inert HTML. A live row resolves immediately and
