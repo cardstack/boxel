@@ -424,16 +424,30 @@ export default class MatrixService extends Service {
               let realmServers = e.event.content.realmServers as string[];
               this.trustedRealmServersAuthoritative = realmServers.length > 0;
               if (this.trustedRealmServersAuthoritative) {
-                let realmURLs =
-                  await this.realmServer.fetchUserRealmsFromTrustedServers(
-                    realmServers,
+                // A server-pushed account-data event must not crash the app:
+                // assembly can reject (e.g. fetchUserRealmsFromTrustedServers
+                // refuses a list that isn't this user's own realm server) and
+                // an async event handler that throws surfaces as an unhandled
+                // rejection. The authoritative, fail-loud assembly runs at
+                // start(); here we log and leave the available-realms list as
+                // it was.
+                try {
+                  let realmURLs =
+                    await this.realmServer.fetchUserRealmsFromTrustedServers(
+                      realmServers,
+                    );
+                  await this.realmServer.setAvailableRealmIdentifiers(
+                    realmURLs.map(ri),
                   );
-                await this.realmServer.setAvailableRealmIdentifiers(
-                  realmURLs.map(ri),
-                );
-                if (this.postLoginCompleted) {
-                  await this.loginToRealms();
-                  await this.loadMoreAuthRooms(realmURLs);
+                  if (this.postLoginCompleted) {
+                    await this.loginToRealms();
+                    await this.loadMoreAuthRooms(realmURLs);
+                  }
+                } catch (err) {
+                  console.error(
+                    'Failed to assemble realms from trusted servers in app.boxel.realm-servers account data',
+                    err,
+                  );
                 }
               }
               break;
