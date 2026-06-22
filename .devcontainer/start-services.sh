@@ -246,7 +246,6 @@ MATRIX_SERVER_NAME=localhost \
 REALM_SERVER_MATRIX_USERNAME=realm_server \
 ENABLE_FILE_WATCHER=true \
 REALM_SERVER_PROXY_MATRIX_ICONS=true \
-ICONS_BACKEND_URL=http://localhost:4206 \
   pnpm --dir=packages/realm-server exec ts-node \
     --transpileOnly main \
     --port=4201 \

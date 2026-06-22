@@ -1075,14 +1075,14 @@ export class RealmServer {
           maxAge: 86400,
         }),
       )
-      // Codespace single-origin: fold Matrix and the icons server onto this
-      // realm server's own origin so the reviewer's browser only ever talks
-      // to the one forwarded port (no separate cross-origin ports to make
-      // public). serve-index points the host's matrixURL/iconsURL here; these
-      // proxies forward to the real backends. Placed before the body-reading
-      // middleware so the request body (Matrix POSTs) is still intact, and
-      // before the realm router so `/_matrix`/`/@cardstack/boxel-icons` never
-      // fall through to realm routing. Off in normal deployments.
+      // Codespace single-origin: fold Matrix onto this realm server's own
+      // origin so the reviewer's browser uses the one forwarded port for
+      // Matrix instead of a separate cross-origin port that would need to be
+      // public. serve-index points the host's matrixURL here. Placed before
+      // the body-reading middleware so Matrix POST bodies are intact, and
+      // before the realm router so `/_matrix` never falls through to realm
+      // routing. Icons are NOT proxied — the host's baked iconsURL is a public
+      // CDN that works cross-origin. Off in normal deployments.
       .use(
         (() => {
           if (process.env.REALM_SERVER_PROXY_MATRIX_ICONS !== 'true') {
@@ -1092,10 +1092,6 @@ export class RealmServer {
             ['/_matrix/', '/.well-known/matrix/'],
             new URL(this.matrixClient.matrixURL.href),
           );
-          let iconsProxy = proxyRequest(
-            ['/@cardstack/boxel-icons/'],
-            new URL(process.env.ICONS_BACKEND_URL ?? 'http://localhost:4206'),
-          );
           return async (ctx: Koa.Context, next: Koa.Next) => {
             let p = ctx.path;
             if (
@@ -1103,9 +1099,6 @@ export class RealmServer {
               p.startsWith('/.well-known/matrix/')
             ) {
               return matrixProxy(ctx, next);
-            }
-            if (p.startsWith('/@cardstack/boxel-icons/')) {
-              return iconsProxy(ctx, next);
             }
             return next();
           };
