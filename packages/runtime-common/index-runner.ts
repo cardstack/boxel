@@ -344,7 +344,15 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      d2(`visit loop COMPLETE (${invalidations.length} invalidations); calling batch.done()`);
+      let totalIndexEntries = 0;
+      try {
+        ({ totalIndexEntries } = await current.batch.done());
+      } catch (e) {
+        d2(`batch.done() THREW: ${(e as Error)?.message}`);
+        throw e;
+      }
+      d2(`batch.done() DONE totalIndexEntries=${totalIndexEntries}`);
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
       );
