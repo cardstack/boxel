@@ -6,7 +6,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import difference from 'lodash/difference';
+import { difference } from 'lodash-es';
 
 import { TrackedMap } from 'tracked-built-ins';
 

@@ -4,8 +4,14 @@
   "version": "1.0.0",
   "license": "MIT",
   "description": "Spin up an isolated boxel realm-server stack (postgres + prerender + worker + realm-server) against a fixture realm directory. Used by integration tests, benchmarks, and CLI dev tools that need a hermetic realm.",
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json",
+    "./*": "./src/*.ts"
+  },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
@@ -26,8 +32,7 @@
     "fs-extra": "catalog:",
     "jsonwebtoken": "catalog:",
     "pg": "catalog:",
-    "puppeteer": "^24.8.2",
-    "ts-node": "^10.9.1",
+    "puppeteer": "^25.0.2",
     "typescript": "catalog:"
   },
   "volta": {

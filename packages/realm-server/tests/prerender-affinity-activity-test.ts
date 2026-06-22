@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { AffinityActivityTracker } from '../prerender/affinity-activity.ts';
 
@@ -11,7 +12,7 @@ import { AffinityActivityTracker } from '../prerender/affinity-activity.ts';
 // `computeBatchClearCacheGate` for CS-10758 — we test the extracted
 // helper directly rather than spinning up a full Prerenderer.
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   const REALM_A = 'realm:http://localhost:4201/user/alpha/';
   const REALM_B = 'realm:http://localhost:4201/user/beta/';
 

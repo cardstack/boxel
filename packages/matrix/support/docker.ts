@@ -1,6 +1,6 @@
 import * as os from 'os';
 import * as childProcess from 'child_process';
-import * as fse from 'fs-extra';
+import fse from 'fs-extra';
 
 function imageExistsLocally(image: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {

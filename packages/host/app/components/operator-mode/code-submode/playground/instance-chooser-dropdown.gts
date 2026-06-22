@@ -12,7 +12,7 @@ import {
   cardTypeDisplayName,
   isFileDefInstance,
   type Format,
-  type PrerenderedCardLike,
+  type RenderableSearchEntryLike,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -135,14 +135,14 @@ interface Signature {
   Args: {
     isFieldDef: boolean;
     isFileDef?: boolean;
-    cardOptions: PrerenderedCardLike[] | undefined;
+    cardOptions: RenderableSearchEntryLike[] | undefined;
     fieldOptions?: FieldOption[];
     fileMetaOptions?: FileDef[];
     findSelectedCard: (
-      cards?: PrerenderedCardLike[],
-    ) => PrerenderedCardLike | SelectedInstance | undefined;
+      cards?: RenderableSearchEntryLike[],
+    ) => RenderableSearchEntryLike | SelectedInstance | undefined;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
+    onSelect: (item: RenderableSearchEntryLike | FieldOption | FileDef) => void;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
     recentCardIds: string[];
@@ -154,10 +154,18 @@ interface OptionsDropdownSignature {
   Args: {
     isField?: boolean;
     isFileMeta?: boolean;
-    options: PrerenderedCardLike[] | FieldOption[] | FileDef[] | undefined;
-    selected?: PrerenderedCardLike | FieldOption | SelectedInstance | FileDef;
+    options:
+      | RenderableSearchEntryLike[]
+      | FieldOption[]
+      | FileDef[]
+      | undefined;
+    selected?:
+      | RenderableSearchEntryLike
+      | FieldOption
+      | SelectedInstance
+      | FileDef;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
+    onSelect: (item: RenderableSearchEntryLike | FieldOption | FileDef) => void;
     afterMenuOptions: MenuItem[];
     beforeOptionsLabel?: string;
     selectedItemLabel?: string;

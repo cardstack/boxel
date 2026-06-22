@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
@@ -23,7 +24,7 @@ import {
 import { toAffinityKey } from '../prerender/affinity.ts';
 import { Deferred } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderer: Prerenderer;

@@ -22,7 +22,7 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { getField } from '@cardstack/runtime-common';
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 
 export class ExperimentsFieldsPreview extends CardDef {
   @field url = contains(UrlField);

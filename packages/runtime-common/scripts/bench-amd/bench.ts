@@ -12,6 +12,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { pathToFileURL } from 'node:url';
 
 import { candidatesDir, fixturesDir } from './paths.ts';
 
@@ -69,9 +70,8 @@ export async function loadCandidates(): Promise<Candidate[]> {
     .sort();
   const candidates: Candidate[] = [];
   for (const f of candidateFiles) {
-    // ts-node intercepts `.ts` so `require()` returns the compiled module.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require(path.join(candidatesDir, f));
+    // Native Node strips types from the `.ts` candidate on import.
+    const mod = await import(pathToFileURL(path.join(candidatesDir, f)).href);
     if (typeof mod.transform === 'function') {
       candidates.push({
         name: mod.name ?? f.replace(/\.ts$/, ''),
@@ -229,7 +229,7 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

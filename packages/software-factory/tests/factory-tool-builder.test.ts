@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type { ToolResult } from '../src/factory-agent/index.ts';
 import {
@@ -30,13 +31,9 @@ const TARGET_REALM = 'https://realms.example.test/user/target/';
 // for anything that slips past, but cleaning per-test is cheaper and
 // keeps the OS tmpdir from growing during the run.
 let pendingWorkspaces: TestWorkspace[] = [];
-declare const QUnit: {
-  testDone: (cb: () => void) => void;
-};
 let testDoneHookInstalled = false;
 function installTestDoneHook() {
   if (testDoneHookInstalled) return;
-  if (typeof QUnit === 'undefined') return;
   testDoneHookInstalled = true;
   QUnit.testDone(() => {
     let toClean = pendingWorkspaces;

@@ -6,7 +6,7 @@
 // to the requested shard (1-based).  Files are sorted alphabetically and
 // distributed round-robin so every shard gets a roughly equal share.
 //
-// Usage:  node shard-test-modules.js <shard> <totalShards>
+// Usage:  node shard-test-modules.cjs <shard> <totalShards>
 // Output: module names joined by "|", suitable for TEST_MODULES.
 
 const fs = require('node:fs'); // eslint-disable-line @typescript-eslint/no-var-requires
@@ -17,7 +17,7 @@ const totalShards = parseInt(process.argv[3], 10);
 
 if (!shard || !totalShards || shard < 1 || shard > totalShards) {
   console.error(
-    `Usage: shard-test-modules.js <shard> <totalShards>  (got shard=${process.argv[2]}, totalShards=${process.argv[3]})`,
+    `Usage: shard-test-modules.cjs <shard> <totalShards>  (got shard=${process.argv[2]}, totalShards=${process.argv[3]})`,
   );
   process.exit(1);
 }
