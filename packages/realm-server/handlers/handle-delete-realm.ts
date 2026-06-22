@@ -208,6 +208,15 @@ export default function handleDeleteRealm({
           ` AND removed_at IS NULL`,
         ]);
 
+        // Server-issued unlisted-link slug for this realm. Hard-delete it so a
+        // realm later recreated at the same endpoint can't reuse the old
+        // unguessable slug — which would expose the new realm to anyone holding
+        // the previous unlisted URL.
+        await q([
+          `DELETE FROM unlisted_realm_paths WHERE source_realm_url = `,
+          param(realmURL),
+        ]);
+
         await removeRealmPermissions(dbAdapter, parsedRealmURL, txQuerier);
         await removeRealmDatabaseArtifacts({
           dbAdapter,

@@ -1016,6 +1016,45 @@ export default class RealmServerService extends Service {
     };
   }
 
+  // Asks the server for this realm's unlisted-link path segment, allocating a
+  // fresh server-generated one when none exists (or when `regenerate` is set).
+  // The slug is always determined by the server so it can't be hand-picked.
+  async allocateUnlistedPath(
+    sourceRealmURL: string,
+    options: { regenerate?: boolean } = {},
+  ): Promise<{ sourceRealmURL: string; slug: string }> {
+    await this.login();
+
+    let response = await this.authedFetch(
+      `${this.url.href}_unlisted-realm-path`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceRealmURL,
+          regenerate: options.regenerate ?? false,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Allocate unlisted link failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    let {
+      data: { attributes },
+    } = (await response.json()) as {
+      data: { attributes: { sourceRealmURL: string; slug: string } };
+    };
+    return { sourceRealmURL: attributes.sourceRealmURL, slug: attributes.slug };
+  }
+
   async deleteBoxelClaimedDomain(claimedDomainId: string): Promise<void> {
     await this.login();
 

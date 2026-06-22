@@ -3,6 +3,8 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   deriveRealmName,
+  generateObscureSlug,
+  OBSCURE_SLUG_LENGTH,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 
@@ -212,6 +214,29 @@ module(basename(import.meta.filename), function () {
           }),
         /Unknown publish target type/,
       );
+    });
+
+    // generateObscureSlug
+    test('generateObscureSlug produces a fixed-length URL-path-safe string', async function (assert) {
+      for (let i = 0; i < 50; i++) {
+        let slug = generateObscureSlug();
+        assert.strictEqual(
+          slug.length,
+          OBSCURE_SLUG_LENGTH,
+          'has the expected length',
+        );
+        assert.ok(
+          /^[a-z0-9]+$/.test(slug),
+          `"${slug}" is lowercase alphanumeric (safe as a URL path segment)`,
+        );
+      }
+    });
+
+    test('generateObscureSlug is not deterministic', async function (assert) {
+      let values = new Set(
+        Array.from({ length: 20 }, () => generateObscureSlug()),
+      );
+      assert.strictEqual(values.size, 20, 'all generated values are distinct');
     });
   });
 });

@@ -41,6 +41,7 @@ import handleRealmAuth from './handlers/handle-realm-auth.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
 import handleSearchV2 from './handlers/handle-search-v2.ts';
@@ -324,6 +325,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_unlisted-realm-path',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnlistedRealmPathRequest(args),
   );
   // Matrix tests don't need the GitHub PR integration, and skipping this route
   // keeps the realm server from loading Octokit's ESM entrypoint during boot.
