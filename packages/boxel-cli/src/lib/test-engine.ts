@@ -372,7 +372,7 @@ function resolveBundledRealms(override: string | undefined): {
       skillsDir: join(override, 'skills'),
     };
   }
-  let cliRoot = findBoxelCliRoot(__dirname);
+  let cliRoot = findBoxelCliRoot(import.meta.dirname);
   let bundled = join(cliRoot, 'bundled-realms');
   if (dirExists(join(bundled, 'base'))) {
     return {
@@ -1048,7 +1048,7 @@ function resolveHostDistDir(): string {
       'dist',
     );
   }
-  let cliRoot = findBoxelCliRoot(__dirname);
+  let cliRoot = findBoxelCliRoot(import.meta.dirname);
   let bundled = join(cliRoot, 'bundled-test-harness');
   if (fileExists(join(bundled, 'tests', 'index.html'))) {
     return bundled;
@@ -1064,7 +1064,7 @@ function resolveHostDistDir(): string {
 }
 
 function findHostDistPackageDir(): string | undefined {
-  let packageRoot = findBoxelCliRoot(__dirname);
+  let packageRoot = findBoxelCliRoot(import.meta.dirname);
   let packagesDir = resolve(packageRoot, '..');
   let workspaceRoot = resolve(packagesDir, '..');
   let hostDir = join(packagesDir, 'host');

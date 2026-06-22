@@ -31,6 +31,12 @@ const commonConfig = {
   treeShaking: true,
   define: {
     'process.env.NODE_ENV': '"production"',
+    // Source uses `import.meta.dirname` so it runs as native ESM (e.g. `node
+    // scripts/build-plugin.ts` imports the command modules directly). esbuild
+    // does NOT fill `import.meta.dirname` in CJS output — it resolves to
+    // `undefined` at runtime — so map it to `__dirname`, which the CJS bundle
+    // (this single `dist/*.js` file) provides natively as the `dist/` dir.
+    'import.meta.dirname': '__dirname',
   },
   mainFields: ['module', 'main'],
   conditions: ['import', 'require'],

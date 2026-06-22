@@ -66,7 +66,7 @@ const SPEC_TYPE = {
 const PARSEABLE_GTS_EXTENSIONS = ['.gts', '.gjs', '.ts'] as const;
 const PARSEABLE_JSON_EXTENSION = '.json';
 
-const BOXEL_CLI_PATH = findBoxelCliRoot(__dirname);
+const BOXEL_CLI_PATH = findBoxelCliRoot(import.meta.dirname);
 const PACKAGES_PATH = resolve(BOXEL_CLI_PATH, '..');
 
 // CS-11165: a published `@cardstack/boxel-cli` install vendors the type
