@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 import { baseRealm, ensureTrailingSlash, ri } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
@@ -34,18 +35,27 @@ module(
     setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
+    // Don't autostart Matrix during realm setup: `setupIntegrationTestRealm`
+    // backfills the integration realm URL into `availableRealmIdentifiers`,
+    // which would mask a boot-assembly regression. We clear that backfill and
+    // run `start()` explicitly so the boot path alone populates the list.
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [baseRealm.url, testRealmURL],
       activeRealmServers: [testRealmServerURL],
-      autostart: true,
     });
 
     hooks.beforeEach(async function (this: RenderingTestContext) {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {},
+        startMatrix: false,
       });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
     });
 
     test('boot populates availableRealmIdentifiers when `app.boxel.realm-servers` is set', async function (assert) {
@@ -104,14 +114,22 @@ module(
       loggedInAs: '@testuser:localhost',
       activeRealms: [],
       activeRealmServers: [testRealmServerURL],
-      autostart: true,
     });
 
     hooks.beforeEach(async function (this: RenderingTestContext) {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {},
+        startMatrix: false,
       });
+      // Clear the URL `setupIntegrationTestRealm` backfills so the boot path —
+      // and the `startClient()` legacy-event re-emission it triggers — is
+      // solely responsible for the final list.
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
     });
 
     test('legacy realms event does not overwrite the trusted-servers boot result', async function (assert) {
@@ -137,14 +155,21 @@ module(
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [baseRealm.url, testRealmURL],
-      autostart: true,
     });
 
     hooks.beforeEach(async function (this: RenderingTestContext) {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {},
+        startMatrix: false,
       });
+      // Clear the backfilled URL so the legacy-fallback boot path is what
+      // populates the list, not `setupIntegrationTestRealm`.
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
     });
 
     test('boot still populates realms from `app.boxel.realms`', async function (assert) {
