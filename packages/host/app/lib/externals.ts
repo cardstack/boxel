@@ -43,7 +43,7 @@ import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consum
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
-import * as lodash from 'lodash';
+import * as lodash from 'lodash-es';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';
 import * as superFastMD5 from 'super-fast-md5';
@@ -181,6 +181,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('flat', flat);
   virtualNetwork.shimModule('@floating-ui/dom', floatingUiDom);
   virtualNetwork.shimModule('lodash', lodash);
+  virtualNetwork.shimModule('lodash-es', lodash);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
   virtualNetwork.shimModule('rsvp', rsvp);
   virtualNetwork.shimModule('super-fast-md5', superFastMD5);
@@ -199,7 +200,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   virtualNetwork.shimAsyncModule({
     id: '@cardstack/runtime-common/marked-sync',
-    resolve: () => import('@cardstack/runtime-common/marked-sync.ts'),
+    resolve: () => import('@cardstack/runtime-common/marked-sync'),
   });
 
   shimModulesForLiveTests(virtualNetwork);

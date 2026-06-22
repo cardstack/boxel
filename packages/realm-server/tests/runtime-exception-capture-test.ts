@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { EventEmitter } from 'events';
 import { attachRuntimeExceptionCapture } from '../prerender/runtime-exception-capture.ts';
@@ -124,7 +125,7 @@ function buildExceptionThrownEvent(opts: {
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('records Runtime.exceptionThrown into the recorder', async function (assert) {
     let client = new FakeCDPClient();
     let page = new FakePage(client);

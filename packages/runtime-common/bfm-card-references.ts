@@ -243,6 +243,20 @@ export function extractCardReferenceUrls(
 }
 
 /**
+ * Convenience wrapper that extracts only `:file[URL]` / `::file[URL]`
+ * references and returns just the resolved URL strings.
+ */
+export function extractFileReferenceUrls(
+  markdown: string,
+  baseUrl: string,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  return extractBfmReferences(markdown, baseUrl, ['file'], virtualNetwork).map(
+    (r) => r.url,
+  );
+}
+
+/**
  * Creates marked v12 extensions for a given BFM keyword.
  *
  * Block: `::keyword[URL]` → `<div data-boxel-bfm-block-ref="URL" data-boxel-bfm-type="keyword">URL</div>`
@@ -387,6 +401,32 @@ export function cardTypeName(url: string): string {
     return segments[0];
   }
   return 'Card';
+}
+
+/**
+ * Extracts a human-readable file name from a `:file[URL]` reference.
+ *
+ * Unlike card URLs (`<base>/<TypeName>/<id>`, whose human-readable label is the
+ * second-to-last segment), a file reference's label is its file name — the last
+ * path segment.
+ *
+ * Examples:
+ *  - `https://example.com/path/photo.jpg` → `"photo.jpg"`
+ *  - `./assets/data.csv`                  → `"data.csv"`
+ *  - `""`                                 → `"File"`
+ */
+export function fileNameFromUrl(url: string): string {
+  let path = url;
+
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // Not an absolute URL; treat as a path/reference string.
+  }
+
+  let cleaned = path.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  let segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
+  return segments.length ? segments[segments.length - 1] : 'File';
 }
 
 function capitalize(s: string): string {

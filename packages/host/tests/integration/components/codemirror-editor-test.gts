@@ -230,6 +230,143 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  test('inline :file[URL] produces a file widget target', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Some intro text\n\nSee :file[https://example.com/docs/report.pdf] for details.',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let inlineTarget = targets.find((t) => t.kind === 'inline');
+      assert.ok(inlineTarget, 'has an inline target');
+      assert.strictEqual(
+        inlineTarget?.cardId,
+        'https://example.com/docs/report.pdf',
+        'cardId matches the file URL',
+      );
+      assert.strictEqual(
+        inlineTarget?.refType,
+        'file',
+        'file ref carries refType "file"',
+      );
+      assert.strictEqual(
+        inlineTarget?.format,
+        'atom',
+        'inline files use atom format',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('block ::file[URL] produces a file widget target', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          '# Title\n\n::file[https://example.com/data/sample.csv]\n\nMore text.',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let blockTarget = targets.find((t) => t.kind === 'block');
+      assert.ok(blockTarget, 'has a block target');
+      assert.strictEqual(
+        blockTarget?.cardId,
+        'https://example.com/data/sample.csv',
+        'cardId matches the file URL',
+      );
+      assert.strictEqual(
+        blockTarget?.refType,
+        'file',
+        'file ref carries refType "file"',
+      );
+      assert.strictEqual(
+        blockTarget?.format,
+        'embedded',
+        'block files use embedded format',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('card and file refs coexist with distinct refTypes', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Card: :card[https://example.com/Author/alice]\n\nFile: :file[https://example.com/docs/report.pdf]',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let cardTarget = targets.find(
+        (t) => t.cardId === 'https://example.com/Author/alice',
+      );
+      let fileTarget = targets.find(
+        (t) => t.cardId === 'https://example.com/docs/report.pdf',
+      );
+      assert.strictEqual(
+        cardTarget?.refType,
+        'card',
+        'card ref → refType card',
+      );
+      assert.strictEqual(
+        fileTarget?.refType,
+        'file',
+        'file ref → refType file',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   test('card refs inside fenced code blocks are NOT decorated', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);

@@ -1,10 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
-import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker.ts';
+import { boxelUIChecker } from '../../lib/boxel-ui-change-checker.ts';
 import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
   grafanaSecret,
@@ -54,7 +55,7 @@ async function ensureMatrixAdminUser(): Promise<void> {
   });
 }
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -900,13 +901,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('post-deployment endpoint triggers full reindex when checksums differ', async function (assert: Assert) {
         let compareCurrentBoxelUIChecksumStub = sinon
-          .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+          .stub(boxelUIChecker, 'compareCurrentBoxelUIChecksum')
           .resolves({
             previousChecksum: 'old-checksum-123',
             currentChecksum: 'new-checksum-456',
           });
         let writeCurrentBoxelUIChecksumStub = sinon.stub(
-          boxelUIChangeChecker,
+          boxelUIChecker,
           'writeCurrentBoxelUIChecksum',
         );
         let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
@@ -1030,13 +1031,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('post-deployment endpoint clears modules cache even when checksums match', async function (assert: Assert) {
         let compareCurrentBoxelUIChecksumStub = sinon
-          .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+          .stub(boxelUIChecker, 'compareCurrentBoxelUIChecksum')
           .resolves({
             previousChecksum: 'same-checksum-789',
             currentChecksum: 'same-checksum-789',
           });
         let writeCurrentBoxelUIChecksumStub = sinon.stub(
-          boxelUIChangeChecker,
+          boxelUIChecker,
           'writeCurrentBoxelUIChecksum',
         );
 

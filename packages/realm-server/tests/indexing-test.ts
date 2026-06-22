@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   internalKeyFor,
   rri,
@@ -459,7 +460,7 @@ function makeTestRealmFileSystem(): Record<
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
 

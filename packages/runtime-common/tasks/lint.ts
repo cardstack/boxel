@@ -58,9 +58,9 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // ---------------------------------------------------------------------------
 
 // runtime-common lives at <repo>/packages/runtime-common; host is its sibling.
-const HOST_PKG = resolve(__dirname, '..', '..', 'host');
+const HOST_PKG = resolve(import.meta.dirname, '..', '..', 'host');
 const HOST_ESLINTRC = resolve(HOST_PKG, '.eslintrc.js');
-const REPO_ROOT = resolve(__dirname, '..', '..', '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 const LINT_ANCHOR = resolve(HOST_PKG, '__realm__');
 
 // pnpm doesn't hoist transitive deps, so parsers/plugins host references by

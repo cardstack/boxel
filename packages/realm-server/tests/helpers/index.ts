@@ -1,11 +1,12 @@
-import {
+import fsExtra from 'fs-extra';
+const {
   writeFileSync,
   writeJSONSync,
   readdirSync,
   statSync,
   ensureDirSync,
   copySync,
-} from 'fs-extra';
+} = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
@@ -46,7 +47,8 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.t
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
-import { sign as jwtSign } from 'jsonwebtoken';
+import jsonwebtoken from 'jsonwebtoken';
+const { sign: jwtSign } = jsonwebtoken;
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -1940,7 +1942,7 @@ function realmEventIsIndex(
 export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
 
 export function fixtureDir(name: RealmFixtureName): string {
-  return join(__dirname, '..', 'fixtures', name);
+  return join(import.meta.dirname, '..', 'fixtures', name);
 }
 
 type InternalPermissionedRealmSetupOptions = {

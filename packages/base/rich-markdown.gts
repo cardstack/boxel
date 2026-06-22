@@ -1,5 +1,6 @@
 import {
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
   fieldSerializer,
   relativeTo,
   VirtualNetwork,
@@ -11,6 +12,7 @@ import {
   CardDef,
   Component,
   FieldDef,
+  FileDef,
   MarkdownField,
   StringField,
   contains,
@@ -50,21 +52,30 @@ export class RichMarkdownField extends FieldDef {
   /** The raw markdown text. Uses MarkdownField for textarea edit UI. */
   @field content = contains(MarkdownField);
 
+  /**
+   * Absolute base URL that relative `:card`/`:file` refs resolve against,
+   * derived from this field's `relativeTo` location. Empty string when the
+   * field has no location yet.
+   */
+  private get refBaseUrl(): string {
+    let rel = this[relativeTo];
+    if (!rel) {
+      return '';
+    }
+    return typeof rel === 'string'
+      ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
+      : rel.href;
+  }
+
   /** Resolved absolute URLs of `:card[URL]` and `::card[URL]` references. */
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: RichMarkdownField) {
       if (!this.content) {
         return [];
       }
-      let rel = this[relativeTo];
-      let baseUrl = rel
-        ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
-          : rel.href
-        : '';
       return extractCardReferenceUrls(
         this.content,
-        baseUrl,
+        this.refBaseUrl,
         virtualNetworkFor(this) ?? new VirtualNetwork(),
       );
     },
@@ -76,6 +87,34 @@ export class RichMarkdownField extends FieldDef {
     query: {
       filter: {
         in: { id: '$this.cardReferenceUrls' },
+      },
+    },
+  });
+
+  /** Resolved absolute URLs of `:file[URL]` and `::file[URL]` references. */
+  @field fileReferenceUrls = containsMany(StringField, {
+    computeVia: function (this: RichMarkdownField) {
+      if (!this.content) {
+        return [];
+      }
+      return extractFileReferenceUrls(
+        this.content,
+        this.refBaseUrl,
+        virtualNetworkFor(this) ?? new VirtualNetwork(),
+      );
+    },
+  });
+
+  /**
+   * Files referenced in the markdown, loaded via query. Resolved by `url`
+   * rather than `id`: a FileDef's search doc carries no queryable `id`
+   * (unlike CardDef instances), so `in: { id }` never matches.
+   */
+  @field linkedFiles = linksToMany(FileDef, {
+    isUsed: true,
+    query: {
+      filter: {
+        in: { url: '$this.fileReferenceUrls' },
       },
     },
   });
@@ -101,6 +140,7 @@ export class RichMarkdownField extends FieldDef {
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
         @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
@@ -128,6 +168,7 @@ export class RichMarkdownField extends FieldDef {
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
         @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
@@ -177,6 +218,14 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
+    get linkedFiles(): FileDef[] | null {
+      try {
+        return this.args.model?.linkedFiles ?? null;
+      } catch {
+        // linksToMany query may fail in environments without a full card store
+        return null;
+      }
+    }
     setMode = (mode: MarkdownEditorMode) => {
       this._modeState.value = mode;
     };
@@ -192,6 +241,7 @@ export class RichMarkdownField extends FieldDef {
             <MarkdownTemplate
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
+              @linkedFiles={{@model.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
               @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
@@ -202,6 +252,7 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
+              @linkedFiles={{this.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
               @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}

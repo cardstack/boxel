@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
@@ -93,7 +94,7 @@ function buildModuleResponse(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('DefinitionLookup', function (hooks) {
     let definitionLookup: CachingDefinitionLookup;
     let realmURL = 'http://127.0.0.1:4450/';

@@ -1,6 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import sinon from 'sinon';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
@@ -49,7 +51,7 @@ import {
 // transforms + scoped-css), so the invalidate lands inside the race
 // window. The observable assertion is on the subsequent request's
 // `x-boxel-cache` header — a miss proves A's cache write was discarded.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm.#transpiledModuleCache invalidate-during-transpile race',
     function (hooks) {

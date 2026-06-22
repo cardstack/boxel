@@ -1,10 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { EventEmitter } from 'events';
 import type http2 from 'http2';
 import { logger } from '@cardstack/runtime-common';
 
-import { startSessionKeepalive } from '../server';
+import { startSessionKeepalive } from '../server.ts';
 
 // Unit coverage for the HTTP/2 PING keepalive that tears down wedged sessions
 // so a hung browser fetch rejects (and retries) instead of hanging until a
@@ -103,7 +104,7 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('a responsive session is pinged and never torn down', async function (assert) {
     let fake = new FakeSession();
     let stopKeepalive = startSessionKeepalive(asSession(fake), log, FAST);

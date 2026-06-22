@@ -35,6 +35,13 @@ import {
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
 
+/**
+ * @deprecated Backs the legacy `/_federated-search` endpoint. Prefer the v2
+ * `search-entry` handler `handleSearchV2` (`/_federated-search-v2`), which
+ * returns one heterogeneous result stream — prerendered HTML or live
+ * serialization. Retained as a compat layer over the shared search engine;
+ * removed once every consumer is on v2.
+ */
 export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;

@@ -6,7 +6,8 @@ import {
   param,
   separatedByCommas,
 } from '@cardstack/runtime-common';
-import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { pathExistsSync, readdirSync, removeSync } = fsExtra;
 import { join, relative } from 'path';
 
 // Walk a realm's on-disk directory and return every file's path relative

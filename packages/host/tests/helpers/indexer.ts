@@ -1,4 +1,4 @@
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 
 import type { LooseCardResource, DBAdapter } from '@cardstack/runtime-common';
 import {

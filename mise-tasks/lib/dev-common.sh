@@ -230,7 +230,7 @@ _kill_tree_walk() {
 
 # Sweep orphaned dev-stack processes scoped to this checkout. mise's task
 # supervisor reparents long-running task scripts to init, and the wrapper
-# layers above ts-node (pnpm, npm exec, run-p, vite, start-server-and-test)
+# layers above the node entrypoints (pnpm, npm exec, run-p, vite, start-server-and-test)
 # routinely exit without relaying SIGTERM to their grandchildren — so a
 # tree-walk from a known pid can't reach all of them via PPID. SIGTERM first
 # for anything that listens, brief grace, then SIGKILL.
@@ -245,11 +245,15 @@ _kill_tree_walk() {
 #
 # The patterns:
 #   - mise-tasks/services/* — the bash service entrypoints
-#   - node_modules.*--transpileOnly (worker|main|prerender) — ts-node
-#     grandchildren that actually hold the realm/worker/prerender ports
-#     (4201/4202, 4210/4211, 4221/4222). Wrappers that just invoke ts-node
-#     don't `exec` it, so killing the wrapper alone leaves the ts-node
-#     grandchild reparented to init with its port still bound.
+#   - node <entry>.ts (main / worker-manager / prerender/*-server) — the
+#     native-Node grandchildren that actually hold the realm/worker/prerender
+#     ports (4201/4202, 4210/4211, 4221/4222). They run with
+#     cwd=packages/realm-server and relative argv, so $REPO_ROOT can't anchor
+#     the match; the entry names plus a distinctive flag keep it
+#     Boxel-specific, and the early-return guard above prevents
+#     sibling-checkout collisions. Wrappers that just invoke node don't
+#     `exec` it, so killing the wrapper alone leaves the node grandchild
+#     reparented to init with its port still bound.
 #   - scripts/vite-serve.js — the host start wrapper that spawns the
 #     actual vite child. Can't anchor to $REPO_ROOT because pnpm invokes
 #     it as `node scripts/vite-serve.js` (relative argv, cwd-relative),
@@ -287,7 +291,7 @@ sweep_orphaned_services() {
     return 0
   fi
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
-  TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
+  REALM_NODE_RE="(main\.ts .*--realmsRootPath|worker-manager\.ts .*--allPriorityCount|prerender/(prerender|manager)-server\.ts)"
   VITE_SERVE_RE="scripts/vite-serve\.js"
   VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js"
   SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/src/bin/start\.js"
@@ -296,7 +300,7 @@ sweep_orphaned_services() {
 
   for sig in TERM KILL; do
     pkill -"$sig" -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
-    pkill -"$sig" -f "$TSNODE_RE" 2>/dev/null || true
+    pkill -"$sig" -f "$REALM_NODE_RE" 2>/dev/null || true
     pkill -"$sig" -f "$VITE_SERVE_RE" 2>/dev/null || true
     pkill -"$sig" -f "$VITE_BIN_RE" 2>/dev/null || true
     pkill -"$sig" -f "$SAT_RE" 2>/dev/null || true
