@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
@@ -39,7 +40,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('RealmIndexUpdatedListener (dispatch)', function () {
     test('handleNotification forwards to the mounted realm', function (assert) {
       let cleared = 0;

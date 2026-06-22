@@ -234,7 +234,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
               <:meta as |card|>
                 {{#if this.showAdminData}}
                   <BlogAdminData
-                    @cardId={{card.url}}
+                    @cardId={{card.id}}
                     @context={{this.context}}
                   />
                 {{/if}}
@@ -307,10 +307,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       displayName === 'Blog Posts'
         ? 'blog-posts-grid'
         : displayName === 'Author Bios'
-        ? 'author-bios-grid'
-        : displayName === 'Categories'
-        ? 'categories-grid'
-        : '';
+          ? 'author-bios-grid'
+          : displayName === 'Categories'
+            ? 'categories-grid'
+            : '';
     return gridName ? `bordered-items ${gridName}` : '';
   }
 

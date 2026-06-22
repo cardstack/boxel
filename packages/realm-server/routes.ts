@@ -408,7 +408,7 @@ function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     if (!handler) {
       handler = (
-        createRequire(__filename)(
+        createRequire(import.meta.filename)(
           './handlers/handle-github-pr',
         ) as typeof import('./handlers/handle-github-pr.ts')
       ).default(args);

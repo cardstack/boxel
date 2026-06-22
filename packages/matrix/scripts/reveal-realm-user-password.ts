@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env -S node
 
 import { realmPassword } from '../helpers/realm-credentials.ts';
 

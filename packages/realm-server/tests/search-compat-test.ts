@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   searchEntryDocToPrerenderedDoc,
@@ -64,7 +65,7 @@ function chainDoc(memberRefs: { module: string; name: string }[]) {
   return doc;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('prerendered coalescing: renderType pick', function () {
     test('picks the requested ancestor when its rendering exists', function (assert) {
       let doc = searchEntryDocToPrerenderedDoc(

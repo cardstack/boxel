@@ -147,6 +147,10 @@ interface Signature {
     // When true, search-result cards render the Adorn visual treatment
     // (teal hover type-label tab + teal selection chip).
     adorn?: boolean;
+    // Opt-in visual variant. 'mini' forces single-line rows, suppresses the
+    // per-section "show only" toggle, hides the grid/strip view picker, and
+    // un-hides the recents count — used by MiniCardChooser.
+    variant?: 'default' | 'mini';
   };
   Blocks: {};
 }
@@ -170,6 +174,13 @@ export default class SearchContent extends Component<Signature> {
 
   @tracked activeViewId = 'grid';
   private pagination = new SectionPagination(this.args.initialFocusedSection);
+
+  // Under @variant='mini', the displayed viewId is forced to the internal
+  // 'mini' literal regardless of activeViewId, so the user-facing view picker
+  // (which the mini variant also hides) cannot fight the consumer.
+  private get displayedViewId(): string {
+    return this.args.variant === 'mini' ? 'mini' : this.activeViewId;
+  }
 
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardCollectionContextName)
@@ -371,6 +382,13 @@ export default class SearchContent extends Component<Signature> {
     const total = this.searchEntries.meta.page?.total ?? 0;
     const realms = this.realms;
 
+    // Mini variant compresses the summary to "X results" — the design puts
+    // it next to the Sort dropdown on a single row, so there's no room for
+    // the across-realms qualifier.
+    if (this.args.variant === 'mini') {
+      return pluralize('result', total, true);
+    }
+
     // Default: all results across all realms
     return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
   }
@@ -522,7 +540,11 @@ export default class SearchContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
-      class={{cn 'search-sheet-content' compact=@isCompact}}
+      class={{cn
+        'search-sheet-content'
+        compact=@isCompact
+        mini=(eq @variant 'mini')
+      }}
       ...attributes
     >
       {{! AdornContext aligns with this search-sheet-content div as
@@ -548,6 +570,7 @@ export default class SearchContent extends Component<Signature> {
               @allCards={{this.allCards}}
               @onSelectAll={{@onSelectAll}}
               @onDeselectAll={{@onDeselectAll}}
+              @hideViewSelector={{eq @variant 'mini'}}
             />
           {{/unless}}
         {{/if}}
@@ -581,7 +604,8 @@ export default class SearchContent extends Component<Signature> {
           {{#each this.sections key='sid' as |section i|}}
             <SearchResultSection
               @section={{section}}
-              @viewOption={{this.activeViewId}}
+              @viewOption={{this.displayedViewId}}
+              @variant={{@variant}}
               @handleSelect={{@handleSelect}}
               @isFocused={{eq this.pagination.focusedSection section.sid}}
               @isCollapsed={{this.isSectionCollapsed section.sid}}
@@ -649,6 +673,23 @@ export default class SearchContent extends Component<Signature> {
       }
       .search-sheet-content.compact :deep(.search-result-block) {
         margin-bottom: 0;
+      }
+      /* Mini variant — tighten the layout so the chooser fits into a
+         narrow side-by-side envelope and matches the design references
+         (`.context/attachments/MXpUf9/...` and `.../BMmJkV/...`). */
+      .search-sheet-content.mini {
+        padding-block: var(--boxel-sp-xs);
+      }
+      .search-sheet-content.mini :deep(.search-result-header) {
+        padding-block: var(--boxel-sp-xs);
+      }
+      /* Summary + Sort sit on one row, with the Sort dropdown shrunk to
+         fit its label rather than padded to a comfortable touch target. */
+      .search-sheet-content.mini :deep(.search-result-header .controls) {
+        gap: var(--boxel-sp-xs);
+      }
+      .search-sheet-content.mini :deep(.search-result-header .sort-button) {
+        min-width: 0;
       }
       .empty-state {
         padding-block: var(--boxel-sp);

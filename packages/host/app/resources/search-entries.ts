@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {

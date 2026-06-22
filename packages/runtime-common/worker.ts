@@ -24,7 +24,7 @@ import {
   type DBAdapter,
   type RealmPermissions,
   CachingDefinitionLookup,
-} from '.';
+} from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
@@ -22,7 +23,7 @@ import {
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
   module('Realm Server Endpoints | /_federated-info', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;

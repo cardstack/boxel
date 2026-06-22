@@ -128,7 +128,7 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
     Object.keys(REALM_FILES).map((p, i) => [`${ROOT}${p}`, 1000 + i]),
   );
   return {
-    async authedRealmFetch(input: string | URL | Request) {
+    async authedRealmFetch(input: string | URL | Request, init?: RequestInit) {
       let url = String(input);
       fetchedUrls.push(url);
       if (url === `${ROOT}_mtimes`) {
@@ -137,6 +137,15 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
           {
             status: 200,
           },
+        );
+      }
+      // The ingester discovers instances + Specs via the source realm's own
+      // `_search` endpoint (a QUERY request), not the profile-scoped
+      // federated search — so a shared/published source realm is reachable.
+      if (url === `${ROOT}_search`) {
+        return new Response(
+          JSON.stringify({ data: fakeSearchData(String(init?.body ?? '{}')) }),
+          { status: 200 },
         );
       }
       let rel = url.startsWith(ROOT) ? url.slice(ROOT.length) : null;
@@ -148,72 +157,57 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
   };
 }
 
-// Answers the two search shapes the ingester issues — instances of the entry
-// card's exported classes, and all base-realm Spec cards — as v2 data-only
-// `search-entry` documents: each entry links its `item` serialization, which
-// rides in `included`. The ingester filters Specs (specType + ref) itself. The
-// type anchor arrives `item.`-addressed (`filter['item.on']`), the search-entry
-// query grammar `_federated-search-v2` speaks.
+// The data the source realm's `_search` returns for the two shapes the
+// ingester issues: instances of the entry card's exported classes, and all
+// base-realm Spec cards (filtered by specType + ref in the ingester itself).
+function fakeSearchData(bodyStr: string): unknown[] {
+  let body = JSON.parse(bodyStr) as {
+    filter?: { type?: { module?: string; name?: string } };
+  };
+  let type = body.filter?.type;
+  if (type?.module === 'https://cardstack.com/base/spec') {
+    return [
+      {
+        id: `${ROOT}Spec/gadget`,
+        attributes: {
+          specType: 'card',
+          ref: { module: '../widgets/gadget/gadget', name: 'Gadget' },
+        },
+      },
+      {
+        id: `${ROOT}Spec/clock`,
+        attributes: {
+          specType: 'card',
+          ref: { module: '../standalone/clock', name: 'Clock' },
+        },
+      },
+      {
+        id: `${ROOT}Spec/widget-part-component`,
+        attributes: {
+          specType: 'component',
+          ref: {
+            module: '../widgets/gadget/parts/widget-part',
+            name: 'WidgetPart',
+          },
+        },
+      },
+    ];
+  }
+  if (type?.module === GADGET_MODULE_ABS && type?.name === 'Gadget') {
+    return [{ id: `${ROOT}Gadget/g1` }];
+  }
+  return [];
+}
+
+// Auth is supplied directly via `authenticator`, so the profile manager is
+// only here to satisfy ingestCard's option plumbing — search no longer goes
+// through it.
 function makeFakeProfileManager(): ProfileManager {
-  // Wrap card resources as a data-only search-entry document: one entry per
-  // card linking its `item`, with the card resources themselves in `included`.
-  let searchEntryDoc = (cards: { id: string; attributes?: unknown }[]) => ({
-    data: cards.map((card) => ({
-      id: card.id,
-      relationships: { item: { data: { type: 'card', id: card.id } } },
-    })),
-    included: cards.map((card) => ({ type: 'card', ...card })),
-    meta: { page: { total: cards.length } },
-  });
   return {
     getActiveProfile() {
       return {
         profile: { realmServerUrl: 'https://realm-server.example.test' },
       };
-    },
-    async authedRealmServerFetch(_url: string, init?: RequestInit) {
-      let body = JSON.parse(String(init?.body ?? '{}')) as {
-        filter?: { 'item.on'?: { module?: string; name?: string } };
-        fields?: unknown;
-      };
-      // Data-only consumers must request the item fieldset — that's what keeps
-      // prerendered html/css off the wire.
-      expect(body.fields).toEqual({ 'search-entry': ['item'] });
-      let on = body.filter?.['item.on'];
-      let cards: { id: string; attributes?: unknown }[] = [];
-      if (on?.module === 'https://cardstack.com/base/spec') {
-        cards = [
-          {
-            id: `${ROOT}Spec/gadget`,
-            attributes: {
-              specType: 'card',
-              ref: { module: '../widgets/gadget/gadget', name: 'Gadget' },
-            },
-          },
-          {
-            id: `${ROOT}Spec/clock`,
-            attributes: {
-              specType: 'card',
-              ref: { module: '../standalone/clock', name: 'Clock' },
-            },
-          },
-          {
-            id: `${ROOT}Spec/widget-part-component`,
-            attributes: {
-              specType: 'component',
-              ref: {
-                module: '../widgets/gadget/parts/widget-part',
-                name: 'WidgetPart',
-              },
-            },
-          },
-        ];
-      } else if (on?.module === GADGET_MODULE_ABS && on?.name === 'Gadget') {
-        cards = [{ id: `${ROOT}Gadget/g1` }];
-      }
-      return new Response(JSON.stringify(searchEntryDoc(cards)), {
-        status: 200,
-      });
     },
   } as unknown as ProfileManager;
 }
