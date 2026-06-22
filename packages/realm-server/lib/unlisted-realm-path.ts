@@ -17,17 +17,25 @@ export async function getUnlistedSlug(
   return rows[0]?.slug ?? null;
 }
 
-// Allocates the realm's unlisted slug without clobbering an existing one: insert
-// `candidateSlug`, or — if a row already exists — return the stored slug
-// unchanged. The no-op `DO UPDATE` makes `RETURNING` yield the existing row on
-// conflict, so two racing first-time allocations both converge on whichever slug
-// committed first (the other's candidate is discarded). This keeps a slug shown
-// in one tab from being silently replaced by a concurrent allocation in another
-// — which would otherwise make `handle-publish-realm` reject the first link.
+// Allocates the realm's unlisted slug without clobbering an existing one. In the
+// steady state (a slug is already stored) this is a pure read, so the
+// once-per-modal-open call doesn't churn a new row version each time. Only the
+// genuine first allocation writes — and there it inserts `candidateSlug`, or, if
+// a row appeared since the read (concurrent first-time allocation), converges on
+// the stored slug. `DO UPDATE` rather than `DO NOTHING` is deliberate: it makes
+// `RETURNING` yield the conflicting row even when another transaction inserted it
+// first, so racing allocations both return the same slug instead of one getting
+// an empty result. That keeps a slug shown in one tab from being silently
+// replaced by a concurrent allocation in another — which would otherwise make
+// `handle-publish-realm` reject the first link.
 export async function allocateUnlistedSlug(
   dbAdapter: DBAdapter,
   args: { sourceRealmURL: string; candidateSlug: string; ownerUserId: string },
 ): Promise<string> {
+  let existing = await getUnlistedSlug(dbAdapter, args.sourceRealmURL);
+  if (existing != null) {
+    return existing;
+  }
   let rows = (await query(dbAdapter, [
     `INSERT INTO unlisted_realm_paths (source_realm_url, slug, owner_user_id) VALUES (`,
     param(args.sourceRealmURL),
