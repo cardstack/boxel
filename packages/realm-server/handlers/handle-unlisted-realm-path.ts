@@ -47,7 +47,7 @@ export default function handleUnlistedRealmPathRequest({
       } catch (_error) {
         await sendResponseForBadRequest(
           ctxt,
-          'Request body is not valid JSON - invalid JSON',
+          'Request body is not valid JSON',
         );
         return;
       }
