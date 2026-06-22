@@ -1,36 +1,44 @@
-import { render, settled, waitFor } from '@ember/test-helpers';
+import { render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { rri } from '@cardstack/runtime-common';
+import { rri, type RenderableSearchEntryLike } from '@cardstack/runtime-common';
 
-import ItemButton from '@cardstack/host/components/card-search/item-button';
+import SearchResultTile from '@cardstack/host/components/card-search/result-tile';
 import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { ComponentLike } from '@glint/template';
 
-// Stand-in for a prerendered card component. ItemButton extracts the
-// type-label name from the rendered card DOM, where CardRenderer normally
-// stamps it.
-const PrerenderedStub: ComponentLike<{ Element: Element }> = <template>
-  <div data-card-type-display-name='Authenticated Image Tester'>
-    Authenticated Image Tester preview
-  </div>
+// Stand-in for a search result's `entry.component` (the unified HydratableCard
+// that paints inert prerendered HTML or a live card).
+const StubComponent: ComponentLike<{ Args: {}; Element: Element }> = <template>
+  <div data-test-stub-card>Authenticated Image Tester preview</div>
 </template>;
 
-// Same as above, but also carries the type-icon HTML the realm server
-// stamps on prerendered cards — ItemButton renders it into the label's
-// icon slot.
-const PrerenderedStubWithIcon: ComponentLike<{ Element: Element }> = <template>
-  <div
-    data-card-type-display-name='Authenticated Image Tester'
-    data-card-type-icon-html='<svg data-test-type-icon></svg>'
-  >
-    Authenticated Image Tester preview
-  </div>
-</template>;
+// A minimal `RenderableSearchEntryLike`. The Adorn type-label now reads its
+// name / icon straight from the view-model (`displayName` / `iconHtml`), so the
+// tile no longer scrapes them out of the rendered card DOM.
+function entry(
+  overrides: Partial<RenderableSearchEntryLike> = {},
+): RenderableSearchEntryLike {
+  return {
+    id: 'http://test/Foo/1',
+    realmUrl: 'http://test/',
+    name: 'Foo/1',
+    isError: false,
+    component: StubComponent,
+    ...overrides,
+  };
+}
+
+const baseEntry = entry();
+const namedEntry = entry({ displayName: 'Authenticated Image Tester' });
+const iconEntry = entry({
+  displayName: 'Authenticated Image Tester',
+  iconHtml: '<svg data-test-type-icon></svg>',
+});
 
 const noop = () => {};
 const newCardItem: NewCardArgs = {
@@ -39,14 +47,14 @@ const newCardItem: NewCardArgs = {
   realmURL: rri('http://test/'),
 };
 
-module('Integration | card-search/item-button (adorn)', function (hooks) {
+module('Integration | card-search/result-tile (adorn)', function (hooks) {
   setupRenderingTest(hooks);
 
   test('passes through the adorn class when @adorn is true', async function (assert) {
     await render(
       <template>
-        <ItemButton
-          @item={{newCardItem}}
+        <SearchResultTile
+          @newCard={{newCardItem}}
           @isSelected={{false}}
           @onSelect={{noop}}
           @adorn={{true}}
@@ -61,8 +69,8 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
   test('does not add the adorn class when @adorn is omitted', async function (assert) {
     await render(
       <template>
-        <ItemButton
-          @item={{newCardItem}}
+        <SearchResultTile
+          @newCard={{newCardItem}}
           @isSelected={{false}}
           @onSelect={{noop}}
         />
@@ -75,14 +83,14 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
   });
 
   test('does not apply the Adorn stroke class when @adorn is false', async function (assert) {
-    // SearchContent wraps every item in an AdornContext and threads its
-    // strokeClass down even to non-adorn callers (e.g. Card Catalog), so
-    // the class must stay gated on @adorn or those items would pick up
-    // the teal outline.
+    // The results pane wraps every tile in an AdornContext and threads its
+    // strokeClass down even to non-adorn callers (e.g. Card Catalog), so the
+    // class must stay gated on @adorn or those tiles would pick up the teal
+    // outline.
     await render(
       <template>
-        <ItemButton
-          @item={{newCardItem}}
+        <SearchResultTile
+          @newCard={{newCardItem}}
           @isSelected={{false}}
           @onSelect={{noop}}
           @adornStrokeClass='adorn-stroke'
@@ -92,16 +100,15 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
     assert
       .dom('.item-button.adorn-stroke')
       .doesNotExist(
-        'a non-adorn item does not receive the Adorn outline class',
+        'a non-adorn tile does not receive the Adorn outline class',
       );
   });
 
   test('renders the teal adorn select chip when adorn + multi-select + selected', async function (assert) {
     await render(
       <template>
-        <ItemButton
-          @item={{PrerenderedStub}}
-          @itemId='http://test/Foo/1'
+        <SearchResultTile
+          @entry={{baseEntry}}
           @isSelected={{true}}
           @multiSelect={{true}}
           @onSelect={{noop}}
@@ -118,45 +125,37 @@ module('Integration | card-search/item-button (adorn)', function (hooks) {
       .doesNotExist('the legacy grey selection circle is suppressed');
   });
 
-  test('hover type-label tab picks up the card type display name from the rendered card', async function (assert) {
+  test('hover type-label tab reflects the entry display name', async function (assert) {
     await render(
       <template>
-        <ItemButton
-          @item={{PrerenderedStub}}
-          @itemId='http://test/Foo/1'
+        <SearchResultTile
+          @entry={{namedEntry}}
           @isSelected={{false}}
           @onSelect={{noop}}
           @adorn={{true}}
         />
       </template>,
     );
-    await waitFor('[data-test-adorn-label]');
-    await settled();
 
     assert
       .dom('[data-test-adorn-label]')
       .containsText(
         'Authenticated Image Tester',
-        'the type-label tab reflects data-card-type-display-name from the inner card render',
+        'the type-label tab reflects the entry view-model displayName',
       );
   });
 
-  test('renders the type icon from data-card-type-icon-html and settles (no render loop)', async function (assert) {
+  test('renders the type icon from the entry iconHtml', async function (assert) {
     await render(
       <template>
-        <ItemButton
-          @item={{PrerenderedStubWithIcon}}
-          @itemId='http://test/Foo/1'
+        <SearchResultTile
+          @entry={{iconEntry}}
           @isSelected={{false}}
           @onSelect={{noop}}
           @adorn={{true}}
         />
       </template>,
     );
-    await waitFor('[data-test-adorn-label]');
-    // `settled()` would never resolve if reading the icon HTML and
-    // rendering it fed the capture MutationObserver in a loop.
-    await settled();
 
     assert
       .dom('[data-test-adorn-label] [data-test-type-icon]')

@@ -111,8 +111,6 @@ import { merge } from 'lodash-es';
 import { mergeWith } from 'lodash-es';
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
-import { isPlainObject } from 'lodash-es';
-import { z } from 'zod';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -224,8 +222,6 @@ export type RealmInfo = {
   includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
-const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
-
 // Marker header the host SPA attaches to outbound _federated-search /
 // _search calls when it's running inside a prerender tab. The prerender
 // server uses puppeteer's `evaluateOnNewDocument` to inject a window
@@ -245,21 +241,6 @@ export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
-
-// Fields owned by the RealmConfig card instance at /realm.json. A PATCH
-// /_config attribute outside this set and outside REALM_CONFIG_METADATA_-
-// PROPERTIES is rejected — unrecognized keys have no storage target.
-const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
-  'name',
-  'backgroundURL',
-  'iconURL',
-  'hostRoutingRules',
-  'includePrerenderedDefaultRealmIndex',
-]);
-
-// Fields owned by the realm_metadata DB table. Routes through
-// upsertRealmMetadata.
-const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
 
 export interface FileRef {
   path: LocalPath;
@@ -810,10 +791,11 @@ export class Realm {
   #virtualNetwork: VirtualNetwork;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
-  // card+json ETag so a /_config PATCH (or any other path that nulls
-  // `#cachedRealmInfo`) invalidates cached card responses, even
-  // though the index row's `indexed_at` doesn't bump on a config
-  // change. Recomputed lazily alongside the cached realm info.
+  // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
+  // invalidateCachedRealmInfo on publish/unpublish) invalidates cached
+  // card responses, even though the index row's `indexed_at` doesn't
+  // bump on a config change. Recomputed lazily alongside the cached
+  // realm info.
   #cachedRealmInfoHash: string | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
@@ -951,11 +933,6 @@ export class Realm {
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .patch(
-        '/_config',
-        SupportedMimeType.JSON,
-        this.patchRealmConfig.bind(this),
-      )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       // Deprecated: legacy single-realm live-card search (the bound
@@ -2803,8 +2780,6 @@ export class Realm {
     let localPath = this.paths.local(new URL(request.url));
     let requiredPermission: RealmAction = 'read';
     if (localPath === '_permissions') {
-      requiredPermission = 'realm-owner';
-    } else if (localPath === '_config' && request.method === 'PATCH') {
       requiredPermission = 'realm-owner';
     } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
       requiredPermission = 'write';
@@ -6671,43 +6646,6 @@ export class Realm {
     }
   }
 
-  // Upserts the patch into realm_metadata for this realm. Only the
-  // provided keys are written; absent keys retain their existing column
-  // values via COALESCE on the EXCLUDED row's NULL. Pass an explicit
-  // null to clear a column.
-  private async upsertRealmMetadata(patch: {
-    publishable?: boolean | null;
-    showAsCatalog?: boolean | null;
-  }): Promise<void> {
-    if (patch.publishable === undefined && patch.showAsCatalog === undefined) {
-      return;
-    }
-    let publishable =
-      patch.publishable === undefined ? null : patch.publishable;
-    let showAsCatalog =
-      patch.showAsCatalog === undefined ? null : patch.showAsCatalog;
-    let publishableProvided = patch.publishable !== undefined;
-    let showAsCatalogProvided = patch.showAsCatalog !== undefined;
-    await query(this.#dbAdapter, [
-      `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
-      param(this.url),
-      `,`,
-      param(publishable),
-      `,`,
-      param(showAsCatalog),
-      `) ON CONFLICT (url) DO UPDATE SET `,
-      // Update only the columns that were provided; preserve the
-      // existing values of the others.
-      ...(publishableProvided
-        ? [`publishable = `, param(publishable), `, `]
-        : []),
-      ...(showAsCatalogProvided
-        ? [`show_as_catalog = `, param(showAsCatalog), `, `]
-        : []),
-      `updated_at = now()`,
-    ]);
-  }
-
   async getRealmInfo(): Promise<RealmInfo> {
     if (!this.#cachedRealmInfo) {
       this.#cachedRealmInfo = await this.parseRealmInfo();
@@ -6760,7 +6698,7 @@ export class Realm {
     };
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
-    // file is the source of truth — patchRealmConfig writes it, publish
+    // file is the source of truth — card writes update it, publish
     // copySync's it from the source realm — and exists before the indexer
     // ever processes it. Reading from disk closes the gap during indexing,
     // when /_info can fire mid-pass via the prerender host's cardRender:
@@ -6852,223 +6790,6 @@ export class Realm {
     }
 
     return realmInfo;
-  }
-
-  private async patchRealmConfig(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let json: unknown;
-    try {
-      json = await request.json();
-    } catch (e: any) {
-      return badRequest({
-        message: `The request body was not json: ${e.message}`,
-        requestContext,
-      });
-    }
-
-    const realmConfigPatchSchema = z.object({
-      data: z.object({
-        type: z.literal('realm-config'),
-        attributes: z.record(z.unknown()),
-      }),
-    });
-
-    let parsed = realmConfigPatchSchema.safeParse(json);
-    if (!parsed.success) {
-      let message =
-        parsed.error.issues.map((issue: any) => issue.message).join(', ') ||
-        'The request body was invalid';
-      return badRequest({ message, requestContext });
-    }
-
-    let { attributes } = parsed.data.data;
-
-    if (Object.keys(attributes).length === 0) {
-      return badRequest({
-        message: 'At least one property must be provided',
-        requestContext,
-      });
-    }
-
-    let emptyProperty = Object.keys(attributes).find(
-      (property) => property.trim().length === 0,
-    );
-    if (emptyProperty !== undefined) {
-      return badRequest({
-        message: 'Property names cannot be empty',
-        requestContext,
-      });
-    }
-
-    let protectedProperty = Object.keys(attributes).find((property) =>
-      PROTECTED_REALM_CONFIG_PROPERTIES.includes(property),
-    );
-
-    if (protectedProperty) {
-      return badRequest({
-        message: `${protectedProperty} cannot be updated`,
-        requestContext,
-      });
-    }
-
-    // Validate types of fields bound for realm_metadata BEFORE any
-    // writes. The patch schema accepts arbitrary attribute values
-    // (z.record(z.unknown())); without this check a non-boolean
-    // would reach the SQL boolean column and surface as an opaque
-    // 500. Card and sidecar fields rely on their own downstream
-    // validation; the DB-bound fields don't have one.
-    if ('publishable' in attributes) {
-      let publishableValue = attributes.publishable;
-      if (publishableValue !== null && typeof publishableValue !== 'boolean') {
-        return badRequest({
-          message: `'publishable' must be a boolean or null`,
-          requestContext,
-        });
-      }
-    }
-
-    let cardAttrs: Record<string, unknown> = {};
-    let metadataAttrs: Record<string, unknown> = {};
-    let unknownKeys: string[] = [];
-    for (let [key, value] of Object.entries(attributes)) {
-      if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
-        cardAttrs[key] = value;
-      } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
-        metadataAttrs[key] = value;
-      } else {
-        unknownKeys.push(key);
-      }
-    }
-    if (unknownKeys.length > 0) {
-      return badRequest({
-        message: `Unknown realm config attribute(s): ${unknownKeys.join(', ')}`,
-        requestContext,
-      });
-    }
-
-    // Read and validate the card before writing anything. A mixed PATCH
-    // like { name, publishable } touches the card and the realm_metadata
-    // table; we don't want a malformed card to surface 500 *after* the
-    // metadata has already been mutated.
-    let cardPath: LocalPath | undefined;
-    let cardDoc:
-      | {
-          data: {
-            type: string;
-            attributes?: Record<string, unknown>;
-            meta: { adoptsFrom: { module: string; name: string } };
-          };
-        }
-      | undefined;
-    if (Object.keys(cardAttrs).length > 0) {
-      cardPath = this.paths.local(this.paths.fileURL('realm.json'));
-      cardDoc = {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: '@cardstack/base/realm-config',
-              name: 'RealmConfig',
-            },
-          },
-        },
-      };
-      let existingCard = await this.readFileAsText(cardPath, undefined);
-      if (existingCard?.content) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(existingCard.content);
-        } catch (e: any) {
-          return systemError({
-            requestContext,
-            message: `Unable to parse existing realm config card: ${e.message}`,
-          });
-        }
-        if (!isPlainObject(parsed)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card is not a JSON object`,
-          });
-        }
-        cardDoc = parsed as typeof cardDoc;
-        cardDoc!.data = cardDoc!.data ?? ({} as any);
-        if (!isPlainObject(cardDoc!.data)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card data is not a JSON object`,
-          });
-        }
-        let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
-        if (
-          !isPlainObject(adoptsFrom) ||
-          this.#virtualNetwork.unresolveURL(adoptsFrom.module) !==
-            '@cardstack/base/realm-config' ||
-          adoptsFrom.name !== 'RealmConfig'
-        ) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card does not adopt from RealmConfig`,
-          });
-        }
-        let existingAttrs = cardDoc!.data.attributes;
-        if (existingAttrs != null && !isPlainObject(existingAttrs)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card attributes is not a JSON object`,
-          });
-        }
-        cardDoc!.data.attributes = existingAttrs ?? {};
-      }
-      // `name` is exposed on the public RealmInfo shape but stored on the
-      // RealmConfig card under cardInfo.name (the standard CardDef slot
-      // that drives cardTitle). Translate so PATCH /_config callers can
-      // keep sending { name: ... } unchanged.
-      for (let [key, value] of Object.entries(cardAttrs)) {
-        if (key === 'name') {
-          let existingCardInfo = (cardDoc!.data.attributes!.cardInfo ??
-            {}) as Record<string, unknown>;
-          cardDoc!.data.attributes!.cardInfo = {
-            ...existingCardInfo,
-            name: value,
-          };
-        } else {
-          cardDoc!.data.attributes![key] = value;
-        }
-      }
-    }
-
-    if (cardPath !== undefined && cardDoc !== undefined) {
-      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
-    }
-    if (Object.keys(metadataAttrs).length > 0) {
-      await this.upsertRealmMetadata({
-        publishable:
-          'publishable' in metadataAttrs
-            ? (metadataAttrs.publishable as boolean | null)
-            : undefined,
-      });
-    }
-
-    this.invalidateCachedRealmInfo();
-
-    let realmInfo = await this.parseRealmInfo();
-    let doc = {
-      data: {
-        id: this.url,
-        type: 'realm-config',
-        attributes: realmInfo,
-      },
-    };
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.JSON },
-      },
-      requestContext,
-    });
   }
 
   private async realmInfo(

@@ -127,8 +127,6 @@ export interface RealmPrivateDependencyReport {
   warningTypes?: PublishabilityWarningType[];
 }
 
-type RealmInfoProperty = 'backgroundURL' | 'iconURL';
-
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
   | { type: 'anonymous' };
@@ -497,45 +495,6 @@ class RealmResource {
       lastPublishedAt: this.info.lastPublishedAt,
     });
   });
-
-  async setRealmInfoProperty(
-    property: RealmInfoProperty,
-    value: string | null,
-  ): Promise<void> {
-    await this.loginTask.perform();
-    let headers: Record<string, string> = {
-      Accept: SupportedMimeType.JSON,
-      Authorization: `Bearer ${this.token}`,
-    };
-    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({
-        data: {
-          type: 'realm-config',
-          id: this.url,
-          attributes: { [property]: value },
-        },
-      }),
-    });
-
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
-      );
-    }
-    let json = await waitForPromise(response.json());
-    let isPublic = Boolean(
-      response.headers.get('x-boxel-realm-public-readable'),
-    );
-    let updatedInfo = new TrackedObject({
-      url: json.data.id,
-      ...json.data.attributes,
-      isIndexing: this.info?.isIndexing ?? false,
-      isPublic,
-    }) as EnhancedRealmInfo;
-    this.info = updatedInfo;
-  }
 
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();

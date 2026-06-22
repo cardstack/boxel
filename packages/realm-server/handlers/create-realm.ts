@@ -153,7 +153,7 @@ export async function createRealm(
 
     // publishable lives in realm_metadata. A fresh realm has no
     // hostRoutingRules to seed (host mode picks them up from the
-    // realm.json card once an operator sets one via /_config). Reset
+    // realm.json card once an operator edits one). Reset
     // all mutable metadata columns on conflict so a stale row (e.g.
     // left over from a previous realm at the same URL whose delete
     // didn't clean up) doesn't bleed into the new realm.
