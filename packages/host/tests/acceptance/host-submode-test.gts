@@ -928,6 +928,49 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
+      test('shows an error with retry when loading the unlisted link fails', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let original = realmServer.allocateUnlistedPath;
+        let shouldFail = true;
+        realmServer.allocateUnlistedPath = async (sourceRealmURL: string) => {
+          if (shouldFail) {
+            throw new Error('allocate failed');
+          }
+          return { sourceRealmURL, slug: 'k7f3qz9pbcdmnpqr' };
+        };
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-unlisted-link-error]');
+
+          // Errored, not stuck pretending to still be loading.
+          assert.dom('[data-test-unlisted-link-loading]').doesNotExist();
+          assert.dom('[data-test-unlisted-link-checkbox]').isDisabled();
+          assert.dom('[data-test-retry-unlisted-link-button]').exists();
+
+          // Retry recovers once the server responds.
+          shouldFail = false;
+          await click('[data-test-retry-unlisted-link-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+
+          assert.dom('[data-test-unlisted-link-error]').doesNotExist();
+          assert
+            .dom('[data-test-unlisted-link-url]')
+            .hasText(
+              `https://testuser.${publishedSpaceHost}/k7f3qz9pbcdmnpqr/`,
+            );
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotDisabled();
+        } finally {
+          realmServer.allocateUnlistedPath = original;
+        }
+      });
+
       test('preselects a previously published unlisted link on refresh', async function (assert) {
         let now = Date.now();
         let slug = 'k7f3qz9pbcdmnpqr';

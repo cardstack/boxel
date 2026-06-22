@@ -107,6 +107,9 @@ export default class PublishRealmModal extends Component<Signature> {
   // it can't be hand-picked — and replaced via "New link"
   // (`regenerateUnlistedLinkTask`). Null while loading.
   @tracked private unlistedPathSegment: string | null = null;
+  // Set when loading the slug fails, so the card can show an error + retry
+  // instead of staying stuck on "Generating link…".
+  @tracked private unlistedLinkError: string | null = null;
 
   @tracked private privateDependencyCheckError: string | null = null;
   @tracked private privateDependencyViolations:
@@ -278,7 +281,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get isLoadingUnlistedLink() {
-    return this.loadUnlistedPathTask.isRunning || !this.unlistedPathSegment;
+    return this.loadUnlistedPathTask.isRunning;
   }
 
   get isRegeneratingUnlistedLink() {
@@ -286,7 +289,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get isUnlistedCheckboxDisabled() {
-    return this.isLoadingUnlistedLink || this.isUnpublishingAnyRealms;
+    return !this.unlistedRealmUrl || this.isUnpublishingAnyRealms;
   }
 
   get isUnlistedRealmSelected() {
@@ -671,6 +674,7 @@ export default class PublishRealmModal extends Component<Signature> {
   // Loads the realm's server-issued unlisted-link slug, allocating one if none
   // exists yet. The server owns the slug, so the client never generates it.
   private loadUnlistedPathTask = restartableTask(async () => {
+    this.unlistedLinkError = null;
     try {
       let { slug } = await this.realmServer.allocateUnlistedPath(
         this.currentRealmURL,
@@ -678,6 +682,8 @@ export default class PublishRealmModal extends Component<Signature> {
       this.unlistedPathSegment = slug;
     } catch (error) {
       console.error('Failed to load unlisted link', error);
+      this.unlistedLinkError =
+        'Could not generate an unlisted link. Please try again.';
     }
   });
 
@@ -1201,10 +1207,22 @@ export default class PublishRealmModal extends Component<Signature> {
                     </div>
                   {{/if}}
                 </div>
-              {{else}}
+              {{else if this.isLoadingUnlistedLink}}
                 <span class='domain-url' data-test-unlisted-link-loading>
                   Generating link…
                 </span>
+              {{else}}
+                <div class='unlisted-link-error' data-test-unlisted-link-error>
+                  <span class='error-text'>{{this.unlistedLinkError}}</span>
+                  <BoxelButton
+                    @kind='text-only'
+                    @size='extra-small'
+                    {{on 'click' (perform this.loadUnlistedPathTask)}}
+                    data-test-retry-unlisted-link-button
+                  >
+                    Try again
+                  </BoxelButton>
+                </div>
               {{/if}}
             </div>
             {{#if this.unlistedRealmUrl}}
@@ -1865,6 +1883,18 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .domain-publish-error .error-text {
         flex: 1;
+        color: var(--boxel-error-200);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+
+      .unlisted-link-error {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .unlisted-link-error .error-text {
         color: var(--boxel-error-200);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
