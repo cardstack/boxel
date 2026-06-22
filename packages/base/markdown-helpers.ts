@@ -3,7 +3,7 @@
 // construction, and so future adjustments happen in one place.
 
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
-import { isValidDate } from '@cardstack/runtime-common';
+import { isValidDate, serializeBfmRef } from '@cardstack/runtime-common';
 
 // Date formatting shared by DateField, DateTimeField, and DateRangeField so
 // their markdown output is consistent. Matches the existing `en-US` `{year:
@@ -158,22 +158,25 @@ interface MarkdownEmbedOptions {
   size?: string;
 }
 
+// Returns a BFM reference directive (`:card`/`::card`, `:file`/`::file`, …)
+// for a single reference by keyword + id. Returns `''` for a missing id.
+// Thin wrapper over the shared `serializeBfmRef` builder so base-realm and
+// host code emit identical BFM syntax.
+export function markdownEmbedForRef(
+  refType: string,
+  id: string | null | undefined,
+  options?: MarkdownEmbedOptions,
+): string {
+  return serializeBfmRef(refType, id, options);
+}
+
 // Returns a BFM card-reference directive for a single card.
 // Returns `''` for null/undefined cards.
 export function markdownEmbedForCard(
   card: CardLike | null | undefined,
   options?: MarkdownEmbedOptions,
 ): string {
-  if (!card?.id) {
-    return '';
-  }
-  let kind = options?.kind ?? 'block';
-  let size = options?.size;
-  let prefix = kind === 'inline' ? ':card' : '::card';
-  if (size) {
-    return `${prefix}[${card.id} | ${size}]`;
-  }
-  return `${prefix}[${card.id}]`;
+  return serializeBfmRef('card', card?.id, options);
 }
 
 interface MarkdownEmbedsOptions extends MarkdownEmbedOptions {

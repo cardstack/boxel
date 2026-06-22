@@ -25,6 +25,8 @@ import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/s
 import MiniCardChooserUsage from '@cardstack/host/components/card-chooser/mini/usage';
 import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
 import MiniFileChooserUsage from '@cardstack/host/components/file-chooser/mini/usage';
+import MarkdownEmbedPreviewPaneUsage from '@cardstack/host/components/markdown-embed-chooser/pane-usage';
+import MarkdownEmbedPreviewUsage from '@cardstack/host/components/markdown-embed-chooser/preview/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
@@ -78,6 +80,8 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       ['AiAssistant::SkillMenu', AiAssistantSkillMenuUsage],
       ['MiniCardChooser', MiniCardChooserUsage],
       ['MiniFileChooser', MiniFileChooserUsage],
+      ['MarkdownEmbedChooser::Preview', MarkdownEmbedPreviewUsage],
+      ['MarkdownEmbedChooser::Pane', MarkdownEmbedPreviewPaneUsage],
       ['SearchSheet', SearchSheetUsage],
     ].map(([name, c]) => {
       return {

@@ -115,6 +115,70 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   return null;
 }
 
+/**
+ * Serializes a `BfmSizeSpec` back into the specifier string that goes after
+ * `|` in `::card[url | spec]` — the inverse of `parseBfmSizeSpec`.
+ *
+ * `atom` / `isolated` / `embedded` round-trip to their keyword. Fitted specs
+ * serialize to the explicit-key form (`w:<w> h:<h>`, `w:50%`, `h:200`, or bare
+ * `fitted` when no dimensions are present). Named variants are intentionally
+ * NOT reconstructed here: a `BfmSizeSpec` only carries dimensions, not the
+ * named identity, so callers that want the friendlier `tall-tile` form must
+ * emit it themselves (the chooser pane does this off the user's explicit
+ * selection). The `w:`/`h:` output still parses back to a dimensionally-
+ * identical spec.
+ */
+export function serializeBfmSizeSpec(spec: BfmSizeSpec): string {
+  if (
+    spec.format === 'atom' ||
+    spec.format === 'isolated' ||
+    spec.format === 'embedded'
+  ) {
+    return spec.format;
+  }
+  let parts: string[] = [];
+  if (spec.width !== undefined) {
+    parts.push(`w:${spec.width}`);
+  }
+  if (spec.height !== undefined) {
+    parts.push(`h:${spec.height}`);
+  }
+  return parts.length ? parts.join(' ') : 'fitted';
+}
+
+export interface BfmRefOptions {
+  // 'inline' produces `:<refType>[url]` (or `:<refType>[url | size]`),
+  // 'block' produces `::<refType>[url]` (or `::<refType>[url | size]`).
+  // Default: 'block'.
+  kind?: 'inline' | 'block';
+  // Size specifier appended after `|` (e.g. 'fitted', 'tall-tile',
+  // 'w:300 h:200'). Supported in both inline and block placements.
+  size?: string;
+}
+
+/**
+ * Builds a BFM reference directive (`:card[url]`, `::file[url | size]`, …) for
+ * a single reference by keyword + url. Returns `''` for a missing url. This is
+ * the single source of truth for BFM directive syntax, shared by the base-realm
+ * markdown helpers and host-side serializers (the `extract*`/`parse*` functions
+ * above are the matching readers).
+ */
+export function serializeBfmRef(
+  refType: string,
+  url: string | null | undefined,
+  options?: BfmRefOptions,
+): string {
+  if (!url) {
+    return '';
+  }
+  let kind = options?.kind ?? 'block';
+  let prefix = kind === 'inline' ? ':' : '::';
+  let size = options?.size;
+  return size
+    ? `${prefix}${refType}[${url} | ${size}]`
+    : `${prefix}${refType}[${url}]`;
+}
+
 export type BfmRefFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 
 /**
