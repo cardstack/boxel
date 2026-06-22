@@ -185,23 +185,30 @@ export default class HydratableCard extends Component<Signature> {
   // any delegate-rendered card does), so the overlay re-anchors to the new
   // element with no extra wiring here. Guarded so reading the context while
   // this component is being destroyed can't throw.
+  // Reads the consumed card context, tolerating the owner-destroyed error that a
+  // teardown (realm refresh / unmount) can raise mid-render — returns undefined
+  // then, the same safe no-overlay fallback both consumers below want.
+  private get safeCardContext(): CardContext | undefined {
+    if (isDestroying(this) || isDestroyed(this)) {
+      return undefined;
+    }
+    try {
+      return this.cardContext;
+    } catch (e) {
+      if (e instanceof Error && e.message.includes(OWNER_DESTROYED_ERROR)) {
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
   private get trackElement(): CardComponentModifier {
     // Opted out of overlays — never register with the tracker, so no overlay
     // can anchor to this row regardless of the surrounding context.
     if (this.args.overlays === false) {
       return noopCardModifier;
     }
-    if (isDestroying(this) || isDestroyed(this)) {
-      return noopCardModifier;
-    }
-    try {
-      return this.cardContext?.cardComponentModifier ?? noopCardModifier;
-    } catch (e) {
-      if (e instanceof Error && e.message.includes(OWNER_DESTROYED_ERROR)) {
-        return noopCardModifier;
-      }
-      throw e;
-    }
+    return this.safeCardContext?.cardComponentModifier ?? noopCardModifier;
   }
 
   // Re-provide the card context to the rendered subtree. Normally a pass-through
@@ -211,11 +218,13 @@ export default class HydratableCard extends Component<Signature> {
   // the inert element), so the opt-out must reach it here too, else a hydrated
   // row would re-acquire an overlay.
   @provide(CardContextName)
+  // @ts-ignore "providedCardContext" is declared but not used
   private get providedCardContext(): CardContext | undefined {
-    if (this.args.overlays === false && this.cardContext) {
-      return { ...this.cardContext, cardComponentModifier: noopCardModifier };
+    let cardContext = this.safeCardContext;
+    if (this.args.overlays === false && cardContext) {
+      return { ...cardContext, cardComponentModifier: noopCardModifier };
     }
-    return this.cardContext;
+    return cardContext;
   }
 
   @action private hydrate() {
