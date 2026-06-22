@@ -20,7 +20,9 @@ import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
 import {
   type Query,
   baseRealm,
-  type PrerenderedCardLike,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
+  searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -64,7 +66,7 @@ export class Tab extends FieldDef {
 }
 
 class TableView extends GlimmerComponent<{
-  Args: { cards: PrerenderedCardLike[]; context?: CardContext };
+  Args: { cards: RenderableSearchEntryLike[]; context?: CardContext };
 }> {
   <template>
     {{#if this.isLoaded}}
@@ -127,7 +129,7 @@ class TableView extends GlimmerComponent<{
   // a possibility it might be initialized as undefined
   @tracked private cardCollection = this.args.context?.getCardCollection(
     this,
-    () => this.args.cards.map((c) => c.url),
+    () => this.args.cards.map((c) => c.id),
   );
 
   private get isLoaded() {
@@ -170,22 +172,21 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='app-card-content'>
       {{#if this.activeTabRef}}
-        {{#if this.query}}
-          <@context.prerenderedCardSearchComponent
-            @query={{this.query}}
-            @format='fitted'
-            @realms={{@realms}}
-            @isLive={{true}}
+        {{#if this.searchResultsQuery}}
+          <@context.searchResultsComponent
+            @query={{this.searchResultsQuery}}
+            as |results|
           >
-            <:loading>Loading...</:loading>
-            <:response as |cards|>
+            {{#if results.entries.length}}
               {{#if @activeTab.isTable}}
-                <TableView @cards={{cards}} @context={{@context}} />
+                <TableView @cards={{results.entries}} @context={{@context}} />
               {{else}}
-                <CardsGrid @cards={{cards}} @context={{@context}} />
+                <CardsGrid @cards={{results.entries}} @context={{@context}} />
               {{/if}}
-            </:response>
-          </@context.prerenderedCardSearchComponent>
+            {{else if results.isLoading}}
+              Loading...
+            {{/if}}
+          </@context.searchResultsComponent>
         {{/if}}
       {{else}}
         <p>No cards available</p>
@@ -328,6 +329,19 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
         },
       ],
     } as Query;
+  }
+
+  // The v2 `search-entry`-rooted query, adapted from the v1 `query` above.
+  // `fitted` is the default rendering, so no `htmlQuery` binding is needed.
+  // Undefined (no active tab ref) leaves the search component idle.
+  get searchResultsQuery(): SearchEntryWireQuery | undefined {
+    if (!this.query) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery(this.query),
+      realms: this.args.realms,
+    };
   }
 
   @action createNew(value: unknown) {
@@ -492,7 +506,7 @@ export class AppCard extends CardDef {
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    cards: PrerenderedCardLike[];
+    cards: RenderableSearchEntryLike[];
     context?: CardContext;
     isListFormat?: boolean;
   };
@@ -505,14 +519,14 @@ export class CardsGrid extends GlimmerComponent<{
           <li
             class='cards-grid-item'
             {{@context.cardComponentModifier
-              cardId=card.url
+              cardId=card.id
               format='data'
               fieldType=undefined
               fieldName=undefined
             }}
-            data-test-cards-grid-item={{removeFileExtension card.url}}
+            data-test-cards-grid-item={{removeFileExtension card.id}}
             {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-            data-cards-grid-item={{removeFileExtension card.url}}
+            data-cards-grid-item={{removeFileExtension card.id}}
           >
             <CardContainer class='card' @displayBoundaries={{true}}>
               {{card.component}}
