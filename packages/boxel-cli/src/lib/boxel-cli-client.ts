@@ -256,8 +256,9 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Federated search across one or more realms via `_federated-search`.
-   * Delegates to the standalone `search()` in `commands/search.ts`.
+   * Federated search across one or more realms via `_federated-search-v2`.
+   * Delegates to the standalone `search()` in `commands/search.ts`, which
+   * returns the `item` serializations (the `card`/`file-meta` resources).
    */
   async search(
     realmUrls: string | string[],
