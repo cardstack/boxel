@@ -140,13 +140,14 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
         );
       }
       // The ingester discovers instances + Specs via the source realm's own
-      // `_search` endpoint (a QUERY request), not the profile-scoped
-      // federated search — so a shared/published source realm is reachable.
-      if (url === `${ROOT}_search`) {
-        return new Response(
-          JSON.stringify({ data: fakeSearchData(String(init?.body ?? '{}')) }),
-          { status: 200 },
-        );
+      // `_search-v2` endpoint (a data-only QUERY request), not the
+      // profile-scoped federated search — so a shared/published source realm
+      // is reachable.
+      if (url === `${ROOT}_search-v2`) {
+        let cards = fakeSearchData(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify(searchEntryDoc(cards)), {
+          status: 200,
+        });
       }
       let rel = url.startsWith(ROOT) ? url.slice(ROOT.length) : null;
       if (rel != null && REALM_FILES[rel] != null) {
@@ -157,15 +158,19 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
   };
 }
 
-// The data the source realm's `_search` returns for the two shapes the
-// ingester issues: instances of the entry card's exported classes, and all
-// base-realm Spec cards (filtered by specType + ref in the ingester itself).
-function fakeSearchData(bodyStr: string): unknown[] {
+// The cards the source realm matches for the two shapes the ingester issues:
+// instances of the entry card's exported classes, and all base-realm Spec
+// cards (filtered by specType + ref in the ingester itself). The type anchor
+// arrives `item.`-addressed (`filter['item.on']`) — the search-entry grammar
+// `_search-v2` speaks.
+function fakeSearchData(
+  bodyStr: string,
+): { id: string; attributes?: unknown }[] {
   let body = JSON.parse(bodyStr) as {
-    filter?: { type?: { module?: string; name?: string } };
+    filter?: { 'item.on'?: { module?: string; name?: string } };
   };
-  let type = body.filter?.type;
-  if (type?.module === 'https://cardstack.com/base/spec') {
+  let on = body.filter?.['item.on'];
+  if (on?.module === 'https://cardstack.com/base/spec') {
     return [
       {
         id: `${ROOT}Spec/gadget`,
@@ -193,10 +198,25 @@ function fakeSearchData(bodyStr: string): unknown[] {
       },
     ];
   }
-  if (type?.module === GADGET_MODULE_ABS && type?.name === 'Gadget') {
+  if (on?.module === GADGET_MODULE_ABS && on?.name === 'Gadget') {
     return [{ id: `${ROOT}Gadget/g1` }];
   }
   return [];
+}
+
+// Wrap matched cards as a data-only search-entry document — one entry per card
+// linking its `item`, with the card resources themselves in `included` (the
+// shape `_search-v2` returns; a published realm carries its matches the same
+// way, so the ingester needs no published-vs-normal special-casing).
+function searchEntryDoc(cards: { id: string; attributes?: unknown }[]) {
+  return {
+    data: cards.map((card) => ({
+      id: card.id,
+      relationships: { item: { data: { type: 'card', id: card.id } } },
+    })),
+    included: cards.map((card) => ({ type: 'card', ...card })),
+    meta: { page: { total: cards.length } },
+  };
 }
 
 // Auth is supplied directly via `authenticator`, so the profile manager is

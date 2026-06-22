@@ -99,7 +99,7 @@ function toItemSort(entry: Record<string, unknown>): Record<string, unknown> {
 }
 
 interface SearchEntryRequestBody {
-  realms: string[];
+  realms?: string[];
   // boxel-cli never renders HTML, so it requests the data-only fieldset: each
   // entry carries only its full `item` serialization (no prerendered `html`).
   fields: { 'search-entry': ['item'] };
@@ -110,18 +110,21 @@ interface SearchEntryRequestBody {
 }
 
 /**
- * Build the `_federated-search-v2` request body from a card-rooted query: the
- * `item.`-addressed filter/sort, the realms to federate across, and the
- * data-only fieldset.
+ * Build a v2 search-entry request body from a card-rooted query: the
+ * `item.`-addressed filter/sort plus the data-only fieldset. Pass `realms` for
+ * the federated `_federated-search-v2`; omit it to query a single realm's own
+ * `_search-v2`.
  */
 export function searchEntryRequestBody(
   query: Record<string, unknown>,
-  realms: string[],
+  realms?: string[],
 ): SearchEntryRequestBody {
   let body: SearchEntryRequestBody = {
-    realms,
     fields: { 'search-entry': ['item'] },
   };
+  if (realms !== undefined) {
+    body.realms = realms;
+  }
   if (query.filter !== undefined) {
     if (
       typeof query.filter !== 'object' ||
