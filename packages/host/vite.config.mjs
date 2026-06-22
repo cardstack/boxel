@@ -268,14 +268,14 @@ export default defineConfig(({ mode }) => ({
     },
   },
   resolve: {
-    alias: {
-      path: require.resolve('path-browserify'),
-      crypto: require.resolve('crypto-browserify'),
-      stream: require.resolve('stream-browserify'),
-      util: require.resolve('util/'),
+    alias: [
+      { find: 'path', replacement: require.resolve('path-browserify') },
+      { find: 'crypto', replacement: require.resolve('crypto-browserify') },
+      { find: 'stream', replacement: require.resolve('stream-browserify') },
+      { find: /^util$/, replacement: require.resolve('util/') },
       // recast's main.js eagerly requires 'fs'; we stub it for the browser.
-      fs: require.resolve('./lib/empty-fs.js'),
-    },
+      { find: 'fs', replacement: require.resolve('./lib/empty-fs.js') },
+    ],
   },
   plugins: [
     scopedCSS(),
