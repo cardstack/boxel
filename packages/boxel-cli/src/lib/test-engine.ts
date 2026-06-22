@@ -377,6 +377,7 @@ function resolveBundledRealms(override: string | undefined): {
   // (e.g. the software factory), where `import.meta` is a TS1470 error. esbuild
   // provides `__dirname` in the CJS bundle (the `dist/` dir); these calls run
   // inside functions, never at import time, so ESM-source importers are fine.
+  // eslint-disable-next-line no-restricted-globals -- bundle-only; see comment above
   let cliRoot = findBoxelCliRoot(__dirname);
   let bundled = join(cliRoot, 'bundled-realms');
   if (dirExists(join(bundled, 'base'))) {
@@ -1053,6 +1054,7 @@ function resolveHostDistDir(): string {
       'dist',
     );
   }
+  // eslint-disable-next-line no-restricted-globals -- bundle-only `__dirname`; see `bundledRealmDirs` above
   let cliRoot = findBoxelCliRoot(__dirname);
   let bundled = join(cliRoot, 'bundled-test-harness');
   if (fileExists(join(bundled, 'tests', 'index.html'))) {
@@ -1069,6 +1071,7 @@ function resolveHostDistDir(): string {
 }
 
 function findHostDistPackageDir(): string | undefined {
+  // eslint-disable-next-line no-restricted-globals -- bundle-only `__dirname`; see `bundledRealmDirs` above
   let packageRoot = findBoxelCliRoot(__dirname);
   let packagesDir = resolve(packageRoot, '..');
   let workspaceRoot = resolve(packagesDir, '..');
