@@ -12,8 +12,8 @@ import { getTypeSummaries } from '@cardstack/host/resources/type-summaries';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { SORT_OPTIONS, type SortOption } from './constants';
+import PanelContent from './panel-content';
 import SearchBar from './search-bar';
-import SearchContent from './search-content';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -35,7 +35,7 @@ interface Signature {
     default: [
       WithBoundArgs<typeof SearchBar, 'value' | 'realmFilter' | 'typeFilter'>,
       WithBoundArgs<
-        typeof SearchContent,
+        typeof PanelContent,
         | 'searchKey'
         | 'realmFilter'
         | 'typeFilter'
@@ -145,7 +145,7 @@ export default class SearchPanel extends Component<Signature> {
         typeFilter=this.typeFilter
       )
       (component
-        SearchContent
+        PanelContent
         searchKey=@searchKey
         realmFilter=this.realmFilter
         typeFilter=this.typeFilter
