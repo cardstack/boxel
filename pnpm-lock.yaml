@@ -660,6 +660,9 @@ catalogs:
     undici:
       specifier: ^7.22.0
       version: 7.25.0
+    util:
+      specifier: ^0.12.5
+      version: 0.12.5
     uuid:
       specifier: ^9.0.1
       version: 9.0.1
@@ -2422,6 +2425,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      util:
+        specifier: 'catalog:'
+        version: 0.12.5
       uuid:
         specifier: 'catalog:'
         version: 9.0.1

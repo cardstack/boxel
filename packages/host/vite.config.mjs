@@ -84,12 +84,7 @@ const emptyFsPath = require.resolve('./lib/empty-fs.js');
 const nodeBuiltinStubResolver = {
   name: 'node-builtin-stub-resolver',
   resolveId(id) {
-    if (
-      id === 'fs' ||
-      id === 'node:fs' ||
-      id === 'url' ||
-      id === 'node:url'
-    ) {
+    if (id === 'fs' || id === 'node:fs' || id === 'url' || id === 'node:url') {
       return emptyFsPath;
     }
     return null;
@@ -277,6 +272,7 @@ export default defineConfig(({ mode }) => ({
       path: require.resolve('path-browserify'),
       crypto: require.resolve('crypto-browserify'),
       stream: require.resolve('stream-browserify'),
+      util: require.resolve('util/'),
       // recast's main.js eagerly requires 'fs'; we stub it for the browser.
       fs: require.resolve('./lib/empty-fs.js'),
     },
