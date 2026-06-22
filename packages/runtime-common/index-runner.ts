@@ -298,6 +298,7 @@ export class IndexRunner {
     let resumedSkipped = 0;
     try {
       for (let invalidation of invalidations) {
+        d2(`visit file START ${invalidation.href}`);
         // Resume guard. If a previous attempt of this same job already
         // wrote URL_X to the working table AND the EFS mtime hasn't
         // changed since, skip the visit — the existing working row is
