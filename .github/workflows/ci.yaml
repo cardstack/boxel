@@ -26,22 +26,24 @@ jobs:
     name: Check which packages changed
     runs-on: ubuntu-latest
     outputs:
-      boxel: ${{ steps.filter.outputs.boxel }}
-      ai-bot: ${{ steps.filter.outputs.ai-bot }}
-      bot-runner: ${{ steps.filter.outputs.bot-runner }}
-      eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
-      eslint-plugin-cardstack-host: ${{ steps.filter.outputs.eslint-plugin-cardstack-host }}
-      postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
-      boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
-      boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
-      matrix: ${{ steps.filter.outputs.matrix }}
-      realm-server: ${{ steps.filter.outputs.realm-server }}
-      vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
-      bench-amd: ${{ steps.filter.outputs.bench-amd }}
-      bench-realm: ${{ steps.filter.outputs.bench-realm }}
-      # Force all tests to run when on ci-bisect* branches
-      run_all: ${{ steps.force-run-all.outputs.run_all }}
+      # Diagnostic bisect branch: scoped to Realm Server Tests only — every
+      # other suite is hardcoded off so the run does not spin up Matrix, Bot,
+      # benches, boxel-ui, etc., none of which exercise the 193 investigation.
+      boxel: 'false'
+      ai-bot: 'false'
+      bot-runner: 'false'
+      eslint-plugin-boxel: 'false'
+      eslint-plugin-cardstack-host: 'false'
+      postgres-migrations: 'false'
+      boxel-icons: 'false'
+      boxel-ui: 'false'
+      matrix: 'false'
+      realm-server: 'true'
+      vscode-boxel-tools: 'false'
+      boxel-cli: 'false'
+      bench-amd: 'false'
+      bench-realm: 'false'
+      run_all: 'false'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1

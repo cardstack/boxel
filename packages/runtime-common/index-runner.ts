@@ -203,6 +203,8 @@ export class IndexRunner {
   }
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
+    // eslint-disable-next-line no-console
+    console.warn(`[193-DIAG2] fromScratch ENTER realm=${current.realmURL.href}`);
     current.#dependencyResolver.reset();
     let start = Date.now();
     current.#log.debug(
@@ -215,6 +217,10 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
+    );
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[193-DIAG2] fromScratch createBatch DONE realm=${current.realmURL.href}`,
     );
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts

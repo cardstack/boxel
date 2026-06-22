@@ -559,6 +559,10 @@ export class PgQueueRunner implements QueueRunner {
 
   private async runJob(jobType: string, args: PgPrimitive, jobInfo: JobInfo) {
     let handler = this.#handlers.get(jobType);
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[193-DIAG2] runJob ENTER type=${jobType} realm=${(args as any)?.realmURL ?? '?'} jobId=${jobInfo?.jobId ?? '?'} handler=${handler ? 'found' : 'MISSING'}`,
+    );
     if (!handler) {
       throw new Error(`unknown job handler ${jobType}`);
     }

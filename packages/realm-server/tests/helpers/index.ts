@@ -2518,6 +2518,14 @@ export async function withIndexProgressHeartbeat<T>(
       detail = ` boxel_index=[${rows
         .map((r) => `${r.realm_url}:${r.rows}`)
         .join(', ')}] unfulfilled_jobs=${jobs[0]?.count ?? '?'}`;
+      // [193-DIAG2] dump every non-resolved job (id, type, status, reservation
+      // count) so a stuck base from-scratch job reveals whether it is claimed.
+      let stuckJobs = await dbAdapter.execute(
+        `SELECT j.id, j.job_type, j.status, j.concurrency_group,
+                (SELECT COUNT(*)::int FROM job_reservations r WHERE r.job_id = j.id) AS reservations
+         FROM jobs j WHERE j.status != 'resolved' ORDER BY j.id LIMIT 8`,
+      );
+      detail += ` [193-DIAG2] jobs=${JSON.stringify(stuckJobs).slice(0, 1500)}`;
     } catch (e) {
       detail = ` (progress query failed: ${(e as Error).message})`;
     }
