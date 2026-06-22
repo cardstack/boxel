@@ -59,6 +59,7 @@ type DateSchema = {
   type: 'string';
   description?: string;
   format: 'date' | 'date-time';
+  examples?: any[];
 };
 
 type NumberSchema = {
@@ -69,6 +70,7 @@ type NumberSchema = {
   exclusiveMaximum?: number;
   maximum?: number;
   multipleOf?: number;
+  examples?: any[];
 };
 
 type StringSchema = {
@@ -78,17 +80,20 @@ type StringSchema = {
   maxLength?: number;
   pattern?: string;
   const?: string;
+  examples?: any[];
 };
 
 type BooleanSchema = {
   description?: string;
   type: 'boolean';
+  examples?: any[];
 };
 
 type EnumSchema = {
   // JSON Schema allows a mix of any types in an enum
   description?: string;
   enum: any[];
+  examples?: any[];
 };
 
 export type AttributesSchema =
@@ -402,8 +407,12 @@ function generateJsonSchemaForContainsFields(
         // defaultOptions only represents typical values — use a description
         // hint rather than a hard enum constraint to avoid rejecting valid
         // custom project values.
-        let hint = `Typical values: ${enumResult.values.map((v) => `"${v}"`).join(', ')}`;
-        return { ...schema, description: hint } as AttributesSchema;
+        let hint = `Typical values: ${enumResult.values.map((v) => JSON.stringify(v)).join(', ')}`;
+        return {
+          ...schema,
+          description: hint,
+          examples: enumResult.values,
+        } as AttributesSchema;
       }
       return { ...schema, enum: enumResult.values } as AttributesSchema;
     }

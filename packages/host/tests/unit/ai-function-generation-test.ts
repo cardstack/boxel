@@ -233,10 +233,12 @@ module('Unit | ai-function-generation-test', function (hooks) {
           richDefault: {
             type: 'string',
             description: 'Typical values: "critical", "high"',
+            examples: ['critical', 'high'],
           },
           bareDefault: {
             type: 'string',
             description: 'Typical values: "a", "b"',
+            examples: ['a', 'b'],
           },
           emptyDefault: { type: 'string' },
         },
