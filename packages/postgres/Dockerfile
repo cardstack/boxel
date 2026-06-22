@@ -6,6 +6,9 @@ ARG PNPM_VERSION
 RUN apt-get update && apt-get install -y postgresql
 RUN npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /boxel
+# This image never launches a browser, so skip Puppeteer's Chrome download. Its
+# extractor needs a native tar/unzip binary that node:slim doesn't ship.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Cache-friendly dependency fetch: this layer only re-runs when the lockfile
 # (or patches it references) changes, not on every source edit. `pnpm fetch`
