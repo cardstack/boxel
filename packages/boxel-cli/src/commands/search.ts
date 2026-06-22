@@ -135,31 +135,6 @@ export function parseSearchQuery(
   return query;
 }
 
-// The realm's query parser rejects a filter it can't classify with this
-// message. It doesn't say what a valid filter looks like, so we append a hint.
-const UNCLASSIFIABLE_FILTER_MARKER = 'cannot determine the type of filter';
-
-/**
- * Build an actionable hint for a failed search, or undefined if none applies.
- * Exported for unit testing.
- */
-export function searchErrorHint(
-  status: number | undefined,
-  error: string | undefined,
-): string | undefined {
-  if (status === 400 && error && error.includes(UNCLASSIFIABLE_FILTER_MARKER)) {
-    return [
-      'The filter could not be classified. Valid shapes:',
-      '  • all cards in the realm: omit --query (or pass {})',
-      '  • by type:   {"filter":{"type":{"module":"<https-module-url>","name":"<CardName>"}}}',
-      '  • by field:  {"filter":{"on":{"module":"<https-module-url>","name":"<CardName>"},"eq":{"<field>":"<value>"}}}',
-      '  • combine:   "any" (OR) / "every" (AND); also "contains", "range", "not"',
-      '"<https-module-url>" is the full HTTPS URL of the card definition (no relative paths); field filters (eq/contains/range) must be wrapped in an "on" type scope.',
-    ].join('\n');
-  }
-  return undefined;
-}
-
 export function registerSearchCommand(program: Command): void {
   program
     .command('search')
@@ -217,10 +192,6 @@ export function registerSearchCommand(program: Command): void {
           `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,
         );
         console.error(`${FG_RED}Error:${RESET} ${result.error}`);
-        let hint = searchErrorHint(result.status, result.error);
-        if (hint) {
-          console.error(`${DIM}${hint}${RESET}`);
-        }
       }
 
       if (!result.ok) {

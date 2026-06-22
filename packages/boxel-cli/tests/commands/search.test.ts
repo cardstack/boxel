@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-  parseSearchQuery,
-  searchErrorHint,
-} from '../../src/commands/search.js';
+import { parseSearchQuery } from '../../src/commands/search.js';
 
 describe('parseSearchQuery', () => {
   it('treats an omitted query as list-all ({})', () => {
@@ -19,8 +16,8 @@ describe('parseSearchQuery', () => {
   });
 
   it('strips an explicit empty filter and treats it as list-all', () => {
-    // The server rejects {"filter":{}} with "cannot determine the type of
-    // filter"; an empty filter means "everything", so normalize to list-all.
+    // An empty filter means "everything", so normalize to a bare list-all
+    // query rather than sending a filter the server can't classify.
     expect(parseSearchQuery('{"filter":{}}')).toEqual({});
   });
 
@@ -40,22 +37,5 @@ describe('parseSearchQuery', () => {
 
   it('throws on a non-object (array)', () => {
     expect(() => parseSearchQuery('[1,2]')).toThrow(/must be a JSON object/);
-  });
-});
-
-describe('searchErrorHint', () => {
-  it('adds a hint for the unclassifiable-filter 400', () => {
-    let hint = searchErrorHint(
-      400,
-      'HTTP 400: {"errors":[{"message":"Invalid query: /filter: cannot determine the type of filter"}]}',
-    );
-    expect(hint).toBeTruthy();
-    expect(hint).toMatch(/omit --query/);
-    expect(hint).toMatch(/"on"/);
-  });
-
-  it('returns nothing for unrelated errors', () => {
-    expect(searchErrorHint(404, 'HTTP 404: not found')).toBeUndefined();
-    expect(searchErrorHint(0, 'network down')).toBeUndefined();
   });
 });

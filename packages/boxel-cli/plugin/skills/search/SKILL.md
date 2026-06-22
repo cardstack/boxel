@@ -8,17 +8,26 @@ Wraps `boxel search`, which sends a query to the realm-server's `_federated-sear
 
 ## When the user asks to...
 
-| Ask                             | Run                                                                  |
-| ------------------------------- | -------------------------------------------------------------------- |
-| "what cards are in this realm?" | `boxel search --realm <url>` — **omit `--query`** to list everything |
-| "find all BlogPosts"            | `boxel search` with a type filter (see below)                        |
-| "search for X across my realms" | `boxel search` with a contains filter                                |
-| "search just one realm"         | add `--realm <realm-url>` (repeatable)                               |
-| "give me JSON I can pipe"       | add `--json`                                                         |
+| Ask                             | Run                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| "what's in this realm?"         | `boxel file list --realm <url>` — cheap; lists every file (see Discovery below) |
+| "find all BlogPosts"            | `boxel search` with a type filter (see below)                                   |
+| "search for X across my realms" | `boxel search` with a contains filter                                           |
+| "search just one realm"         | add `--realm <realm-url>` (repeatable)                                          |
+| "give me JSON I can pipe"       | add `--json`                                                                    |
+
+## Discovery: list first, then search
+
+To see what a realm holds — or to find the module URL a `type`/`on` filter needs — use **`boxel file list --realm <url>`**, not `search`. It's a flat file listing (the realm's `_mtimes`), far cheaper than a query, and it gives you exactly what discovery needs:
+
+- The **`.gts` paths are the card definitions** — each one is a card type. Its module URL for a `type` filter is just `<realm-url><path-without-.gts>`.
+- The `.json` paths are the instances.
+
+`boxel search` is for **querying** card data once you know the type/field you want — not for "list everything." Reach for it after `boxel file list` has told you the module URL.
 
 ## Query shape
 
-Queries are JSON, passed via `--query`. **Omit `--query` to list every card in the realm(s)** — the fastest way to discover what's there (and to find a card's module URL from its `meta.adoptsFrom`) before writing a typed filter. The shape mirrors the `_search` API:
+Queries are JSON, passed via `--query`. The shape mirrors the `_search` API:
 
 ```json
 {
@@ -67,8 +76,7 @@ Federated search across realms using a JSON query
 
 ## Pitfalls
 
-- **Discovery first.** Writing a `type` or `on` filter requires the card's full module URL. If you don't know it yet, **omit `--query`** to list every card and read its `meta.adoptsFrom.module` — don't guess the URL.
-- **Field filters need an `on` scope.** `eq` / `contains` / `range` must be wrapped with `on: { module, name }` (see the field-filter example). A bare `{"filter":{"eq":{...}}}` is rejected with `cannot determine the type of filter`.
-- **Don't pass an empty filter.** `{"filter":{}}` is invalid for the same reason; to match everything, omit `--query` entirely (the CLI also treats an explicit empty filter as list-all).
+- **Discovery first.** Writing a `type` or `on` filter requires the card's full module URL. If you don't know it yet, run **`boxel file list`** to see the realm's `.gts` modules — don't guess the URL, and don't use `search` to enumerate.
+- **Field filters need an `on` scope.** `eq` / `contains` / `range` must be wrapped with `on: { module, name }` (see the field-filter example) — a bare `{"filter":{"eq":{...}}}` has no card type to resolve the field against.
 - `module` in a `type` filter must be the **full HTTPS URL** of the card definition (no relative paths). Compose it from the realm URL plus the kebab-case file name without `.gts`.
 - Federated search only sees realms the active profile has read access to. If a realm is missing from results, check `boxel profile` and `boxel realm list`.
