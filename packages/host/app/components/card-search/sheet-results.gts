@@ -49,6 +49,9 @@ interface Signature {
 
     isCompact: boolean;
     showHeader: boolean;
+    // Opt-in visual variant. 'mini' compresses the summary, hides the view
+    // picker + per-section "show only" toggle, and forces single-line rows.
+    variant?: 'default' | 'mini';
 
     // Search-key / URL-paste state, resolved by the parent.
     searchKey: string;
@@ -159,7 +162,20 @@ export default class SheetResults extends Component<Signature> {
       return this.args.resolvedCard ? '1 result from 1 realm' : '0 results';
     }
     const total = this.args.mainResults.meta.page?.total ?? 0;
+    // The mini variant compresses the summary to "X results" — the design puts
+    // it next to the Sort dropdown on a single row, with no room for the
+    // across-realms qualifier.
+    if (this.args.variant === 'mini') {
+      return pluralize('result', total, true);
+    }
     return `${pluralize('result', total, true)} across ${pluralize('realm', this.args.realms.length, true)}`;
+  }
+
+  // Under @variant='mini' the section view id is forced to the internal 'mini'
+  // literal regardless of activeViewId, so the (hidden) view picker can't fight
+  // the consumer.
+  private get displayedViewId(): string {
+    return this.args.variant === 'mini' ? 'mini' : this.args.activeViewId;
   }
 
   private get allCards(): string[] {
@@ -226,6 +242,7 @@ export default class SheetResults extends Component<Signature> {
           @allCards={{this.allCards}}
           @onSelectAll={{@onSelectAll}}
           @onDeselectAll={{@onDeselectAll}}
+          @hideViewSelector={{eq @variant 'mini'}}
         />
       {{/unless}}
     {{/if}}
@@ -258,7 +275,8 @@ export default class SheetResults extends Component<Signature> {
       {{#each this.sections key='sid' as |section i|}}
         <ResultSection
           @section={{section}}
-          @viewOption={{@activeViewId}}
+          @viewOption={{this.displayedViewId}}
+          @variant={{@variant}}
           @handleSelect={{@handleSelect}}
           @isFocused={{eq @pagination.focusedSection section.sid}}
           @isCollapsed={{this.isSectionCollapsed section.sid}}

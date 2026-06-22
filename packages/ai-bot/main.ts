@@ -2,7 +2,10 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
-import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
+import {
+  SlidingSync,
+  type MSC3575List,
+} from 'matrix-js-sdk/lib/sliding-sync.js';
 import OpenAI from 'openai';
 import {
   logger,
@@ -47,11 +50,12 @@ import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireRoomLock, releaseRoomLock } from './lib/queries.ts';
-import { DebugLogger } from 'matrix-js-sdk/lib/logger';
+import { DebugLogger } from 'matrix-js-sdk/lib/logger.js';
 import { setupSignalHandlers } from './lib/signal-handlers.ts';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { debug } from 'debug';
+import createDebug from 'debug';
+const { debug } = createDebug;
 import { profEnabled, profTime, profNote } from './lib/profiler.ts';
 import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness.ts';
 import {

@@ -7,7 +7,7 @@ import { modifier } from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
+import { CheckMark, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
@@ -71,6 +71,11 @@ interface Signature {
       Element: HTMLElement;
       Args: { Positional: [cardEl: HTMLElement | undefined] };
     }>;
+    // When true, render a right-aligned <CheckMark> whenever @isSelected is set
+    // and the row is not in multi-select mode. Used by the mini-chooser variant,
+    // whose selection treatment is a teal fill + checkmark rather than the
+    // border-color shift.
+    showSelectedCheckmark?: boolean;
   };
 }
 
@@ -239,6 +244,22 @@ export default class SearchResultTile extends Component<Signature> {
           </div>
         {{/if}}
       {{/if}}
+      {{#if
+        (and
+          @showSelectedCheckmark
+          @isSelected
+          (not @multiSelect)
+          (not this.isNewCard)
+        )
+      }}
+        <CheckMark
+          class='selected-checkmark'
+          width='16'
+          height='16'
+          aria-hidden='true'
+          data-test-item-button-selected-checkmark
+        />
+      {{/if}}
       {{#if this.isNewCard}}
         <IconPlus
           class='plus-icon'
@@ -374,6 +395,18 @@ export default class SearchResultTile extends Component<Signature> {
         position: absolute;
         bottom: 0.25rem;
         right: 0.25rem;
+        pointer-events: none;
+        z-index: 1;
+      }
+      /* Right-aligned check icon for single-select rows (mini chooser).
+         Vertically centered on the row; the row-level background is
+         supplied by the variant's parent scope. */
+      .selected-checkmark {
+        position: absolute;
+        top: 50%;
+        right: var(--boxel-sp);
+        transform: translateY(-50%);
+        color: var(--boxel-dark);
         pointer-events: none;
         z-index: 1;
       }

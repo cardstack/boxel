@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { rri, type Realm } from '@cardstack/runtime-common';
@@ -9,7 +10,7 @@ import {
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | _search-v2', function (hooks) {
     let testRealm: Realm;
     let dbAdapter: PgAdapter;

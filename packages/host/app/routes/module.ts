@@ -8,7 +8,7 @@ import { isTesting } from '@embroider/macros';
 
 import { parse } from 'date-fns';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 
 import {
   type Definition,

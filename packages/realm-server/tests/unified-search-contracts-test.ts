@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   buildCssResource,
@@ -105,7 +106,7 @@ function css(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('unified search contracts', function () {
     // --- predicates ---------------------------------------------------------
 

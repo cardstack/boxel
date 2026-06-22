@@ -13,9 +13,9 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
-import cloneDeep from 'lodash/cloneDeep';
-import isEqual from 'lodash/isEqual';
-import merge from 'lodash/merge';
+import { cloneDeep } from 'lodash-es';
+import { isEqual } from 'lodash-es';
+import { merge } from 'lodash-es';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 

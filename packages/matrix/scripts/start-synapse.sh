@@ -13,4 +13,4 @@ fi
 
 mkdir -p "${SYNAPSE_DATA_DIR}/db"
 export SYNAPSE_DATA_DIR
-exec ts-node --transpileOnly ./scripts/synapse.ts start
+exec node ./scripts/synapse.ts start

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -21,7 +22,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | GET _user', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;

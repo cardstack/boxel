@@ -6,7 +6,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
@@ -128,6 +128,10 @@ interface Signature {
     // When true, search-result tiles render the Adorn visual treatment
     // (teal hover type-label tab + teal selection chip).
     adorn?: boolean;
+    // Opt-in visual variant. 'mini' forces single-line rows, suppresses the
+    // per-section "show only" toggle, hides the grid/strip view picker, and
+    // un-hides the recents count — used by MiniCardChooser.
+    variant?: 'default' | 'mini';
   };
   Blocks: {};
 }
@@ -336,7 +340,11 @@ export default class PanelContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
-      class={{cn 'search-sheet-content' compact=@isCompact}}
+      class={{cn
+        'search-sheet-content'
+        compact=@isCompact
+        mini=(eq @variant 'mini')
+      }}
       ...attributes
     >
       {{! AdornContext aligns with this search-sheet-content div as the visual
@@ -371,6 +379,7 @@ export default class PanelContent extends Component<Signature> {
                 @recentsResults={{recentsResults}}
                 @liveRecentCards={{liveRecentCards}}
                 @isCompact={{@isCompact}}
+                @variant={{@variant}}
                 @showHeader={{this.showHeader}}
                 @searchKey={{@searchKey}}
                 @searchKeyIsURL={{this.searchKeyIsURL}}
@@ -443,6 +452,22 @@ export default class PanelContent extends Component<Signature> {
       }
       .search-sheet-content.compact :deep(.search-result-block) {
         margin-bottom: 0;
+      }
+      /* Mini variant — tighten the layout so the chooser fits into a
+         narrow side-by-side envelope. */
+      .search-sheet-content.mini {
+        padding-block: var(--boxel-sp-xs);
+      }
+      .search-sheet-content.mini :deep(.search-result-header) {
+        padding-block: var(--boxel-sp-xs);
+      }
+      /* Summary + Sort sit on one row, with the Sort dropdown shrunk to
+         fit its label rather than padded to a comfortable touch target. */
+      .search-sheet-content.mini :deep(.search-result-header .controls) {
+        gap: var(--boxel-sp-xs);
+      }
+      .search-sheet-content.mini :deep(.search-result-header .sort-button) {
+        min-width: 0;
       }
     </style>
   </template>

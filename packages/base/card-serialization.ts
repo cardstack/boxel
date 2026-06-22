@@ -21,7 +21,7 @@ import type { ResourceID, VirtualNetwork } from '@cardstack/runtime-common';
 
 // --- Runtime Imports ---
 
-import { isEqual, merge } from 'lodash';
+import { isEqual, merge } from 'lodash-es';
 import {
   assertIsSerializerName,
   CardResourceType,

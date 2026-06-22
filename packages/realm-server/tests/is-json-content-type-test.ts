@@ -1,8 +1,9 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { isJsonContentType } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('accepts application/json and JSON-suffix media types', function (assert) {
     assert.true(isJsonContentType('application/json'));
     assert.true(isJsonContentType('text/json'));

@@ -16,7 +16,7 @@ fi
 
 JUNIT_REPORTER_ARGS=()
 if [ -n "${JUNIT_OUTPUT_FILE-}" ]; then
-  JUNIT_REPORTER_ARGS=(--require "${SCRIPT_DIR}/../../scripts/junit-reporter.js")
+  JUNIT_REPORTER_ARGS=(--require "${SCRIPT_DIR}/../../scripts/junit-reporter.cjs")
 fi
 
 # Trust mkcert's local CA so test fetches to the dev stack on HTTPS
@@ -45,4 +45,4 @@ NODE_DISABLE_COMPILE_CACHE=1 \
 PGPORT=55436 \
 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret \
 STRIPE_API_KEY=stripe-api-key \
-qunit --require ts-node/register/transpile-only ${JUNIT_REPORTER_ARGS[@]+"${JUNIT_REPORTER_ARGS[@]}"} "$@" tests/index.ts
+node ${JUNIT_REPORTER_ARGS[@]+"${JUNIT_REPORTER_ARGS[@]}"} tests/index.ts "$@"

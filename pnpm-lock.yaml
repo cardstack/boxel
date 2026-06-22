@@ -213,9 +213,9 @@ catalogs:
     '@types/koa__router':
       specifier: ^12.0.0
       version: 12.0.5
-    '@types/lodash':
-      specifier: ^4.17.15
-      version: 4.17.24
+    '@types/lodash-es':
+      specifier: ^4.17.12
+      version: 4.17.12
     '@types/matrix-js-sdk':
       specifier: ^11.0.1
       version: 11.1.0
@@ -510,15 +510,15 @@ catalogs:
     loader.js:
       specifier: ^4.7.0
       version: 4.7.0
-    lodash:
+    lodash-es:
       specifier: ^4.17.21
       version: 4.18.1
     loglevel:
       specifier: ^1.8.1
       version: 1.9.2
     magic-string:
-      specifier: 0.25.9
-      version: 0.25.9
+      specifier: ^0.30.21
+      version: 0.30.21
     marked:
       specifier: ^12.0.1
       version: 12.0.2
@@ -808,9 +808,9 @@ importers:
       '@sentry/node':
         specifier: 'catalog:'
         version: 8.55.2
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
@@ -823,7 +823,7 @@ importers:
       debug:
         specifier: ^4.4.3
         version: 4.4.3(supports-color@8.1.1)
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       matrix-js-sdk:
@@ -841,9 +841,6 @@ importers:
       stream-json:
         specifier: 'catalog:'
         version: 1.9.1
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -890,6 +887,9 @@ importers:
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
+      lodash-es:
+        specifier: 'catalog:'
+        version: 4.18.1
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -918,9 +918,9 @@ importers:
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       awesome-phonenumber:
         specifier: 'catalog:'
         version: 7.8.0
@@ -997,9 +997,6 @@ importers:
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1116,9 +1113,6 @@ importers:
       semver:
         specifier: ^7.7.0
         version: 7.8.0
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       vite:
         specifier: 'catalog:'
         version: 6.4.2(@types/node@24.12.4)(lightningcss@1.32.0)(terser@5.47.1)(yaml@2.9.0)
@@ -1344,7 +1338,7 @@ importers:
       focus-trap:
         specifier: 'catalog:'
         version: 7.8.0
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       pluralize:
@@ -1399,9 +1393,9 @@ importers:
       '@types/dompurify':
         specifier: 'catalog:'
         version: 3.2.0
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/pluralize':
         specifier: 'catalog:'
         version: 0.0.30
@@ -1737,9 +1731,9 @@ importers:
       '@glint/template':
         specifier: 'catalog:'
         version: 1.7.7
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
@@ -1788,7 +1782,7 @@ importers:
       eslint-plugin-prettier:
         specifier: 'catalog:'
         version: 5.5.5(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.3)
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       prettier:
@@ -1920,9 +1914,9 @@ importers:
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7)
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
@@ -1947,6 +1941,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      lodash-es:
+        specifier: 'catalog:'
+        version: 4.18.1
       tracked-built-ins:
         specifier: ^4.1.2
         version: 4.1.2(@babel/core@7.29.0)
@@ -2110,9 +2107,9 @@ importers:
       '@types/indefinite':
         specifier: 'catalog:'
         version: 2.3.4
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/matrix-js-sdk':
         specifier: 'catalog:'
         version: 11.1.0
@@ -2344,7 +2341,7 @@ importers:
       katex:
         specifier: 'catalog:'
         version: 0.16.45
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       loglevel:
@@ -2500,9 +2497,6 @@ importers:
       tmp:
         specifier: 'catalog:'
         version: 0.2.5
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -2559,9 +2553,6 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.20.0
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@25.7.0)(typescript@5.9.3)
     devDependencies:
       '@cardstack/local-types':
         specifier: workspace:*
@@ -2666,9 +2657,9 @@ importers:
       '@types/koa__router':
         specifier: 'catalog:'
         version: 12.0.5
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/mime-types':
         specifier: 'catalog:'
         version: 2.1.4
@@ -2774,7 +2765,7 @@ importers:
       koa-proxies:
         specifier: 'catalog:'
         version: 0.12.4(koa@2.16.4)
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       loglevel:
@@ -2831,9 +2822,6 @@ importers:
       tmp:
         specifier: 'catalog:'
         version: 0.2.5
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -2900,9 +2888,6 @@ importers:
       puppeteer:
         specifier: ^25.0.2
         version: 25.1.0
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -2975,9 +2960,9 @@ importers:
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
-      '@types/lodash':
+      '@types/lodash-es':
         specifier: 'catalog:'
-        version: 4.17.24
+        version: 4.17.12
       '@types/pluralize':
         specifier: 'catalog:'
         version: 0.0.30
@@ -3047,7 +3032,7 @@ importers:
       json-typescript:
         specifier: 'catalog:'
         version: 1.1.2
-      lodash:
+      lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
       loglevel:
@@ -3055,7 +3040,7 @@ importers:
         version: 1.9.2
       magic-string:
         specifier: 'catalog:'
-        version: 0.25.9(patch_hash=32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39)
+        version: 0.30.21
       marked:
         specifier: 'catalog:'
         version: 12.0.2
@@ -3156,9 +3141,6 @@ importers:
       statuses:
         specifier: 'catalog:'
         version: 2.0.2
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@25.7.0)(typescript@5.9.3)
 
   packages/skills-realm: {}
 
@@ -3272,9 +3254,6 @@ importers:
       tmp:
         specifier: 'catalog:'
         version: 0.2.5
-      ts-node:
-        specifier: ^10.9.1
-        version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -4302,10 +4281,6 @@ packages:
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
-
-  '@cspotcode/source-map-support@0.8.1':
-    resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
-    engines: {node: '>=12'}
 
   '@csstools/color-helpers@5.1.0':
     resolution: {integrity: sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==}
@@ -5476,9 +5451,6 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
-
-  '@jridgewell/trace-mapping@0.3.9':
-    resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
   '@koa/cors@4.0.0':
     resolution: {integrity: sha512-Y4RrbvGTlAaa04DBoPBWJqDR5gPj32OOz827ULXfgB1F7piD1MB/zwn8JR2LAnvdILhxUbXbkXGWuNVsFuVFCQ==}
@@ -6652,18 +6624,6 @@ packages:
     resolution: {integrity: sha512-IBoECN9o9StxTZSy12eNSPdqiH5VzngD5Qx9YQDfteiXk9XyJhnyRQuBoU/MQCVnqau9fJpgKoA8Sy/0qItFXw==}
     deprecated: Please use @ember/app-tsconfig or @ember/library-tsconfig instead. These live at https://github.com/ember-cli/tsconfigs
 
-  '@tsconfig/node10@1.0.12':
-    resolution: {integrity: sha512-UCYBaeFvM11aU2y3YPZ//O5Rhj+xKyzy7mvcIoAjASbigy8mHMryP5cK7dgjlz2hWxh1g5pLw084E0a/wlUSFQ==}
-
-  '@tsconfig/node12@1.0.11':
-    resolution: {integrity: sha512-cqefuRsh12pWyGsIoBKJA9luFu3mRxCA+ORZvA4ktLSzIuCUtWVxGIuXigEwO5/ywWFMZ2QEGKWvkZG1zDMTag==}
-
-  '@tsconfig/node14@1.0.3':
-    resolution: {integrity: sha512-ysT8mhdixWK6Hw3i1V2AeRqZ5WfXg1G43mqoYlM2nc6388Fq5jcXyr5mRsqViLx/GJYdoL0bfXD8nmF+Zn/Iow==}
-
-  '@tsconfig/node16@1.0.4':
-    resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
-
   '@tybys/wasm-util@0.10.2':
     resolution: {integrity: sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg==}
 
@@ -6920,6 +6880,9 @@ packages:
 
   '@types/koa__router@12.0.5':
     resolution: {integrity: sha512-1HeLxuDn4n5it1yZYCSyOYXo++73zT0ffoviXnPxbwbxLbvDFEvWD9ZzpRiIpK4oKR0pi+K+Mk/ZjyROjW3HSw==}
+
+  '@types/lodash-es@4.17.12':
+    resolution: {integrity: sha512-0NgftHUcV4v34VhXm8QBSftKVXtbkBG3ViCjs6+eJ5a6y6Mi/jiFGPc1sC7QK+9BFhWrURE3EOggmWaSxL9OzQ==}
 
   '@types/lodash@4.17.24':
     resolution: {integrity: sha512-gIW7lQLZbue7lRSWEFql49QJJWThrTFFeIMJdp3eH4tKoxm1OvEPg02rm4wCCSHS0cL3/Fizimb35b7k8atwsQ==}
@@ -7585,9 +7548,6 @@ packages:
     resolution: {integrity: sha512-ncSWAawFhKMJDTdoAeOV+jyW1VCMj5QIAwULIBV0SSR7B/RLPPEQiknKcg/RIIZlUQrxELpsxMiTUoAQ4sIUyg==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
     deprecated: This package is no longer supported.
-
-  arg@4.1.3:
-    resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
   arg@5.0.2:
     resolution: {integrity: sha512-PYjyFOLKQ9y57JvQ6QLo8dAgNqswh8M1RMJYdQduT6xbWSgK36P/Z/v+p888pM69jMMfS8Xd8F6I1kQ/I9HUGg==}
@@ -8909,9 +8869,6 @@ packages:
   create-hmac@1.1.7:
     resolution: {integrity: sha512-MJG9liiZ+ogc4TzUwuvbER1JRdgvUFSB5+VR/g5h82fGaIRWMWddtKBHi7/sVhfjQZ6SehlyhvQYrcYkaUIpLg==}
 
-  create-require@1.1.1:
-    resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
-
   crelt@1.0.6:
     resolution: {integrity: sha512-VQ2MBenTq1fWZUH9DJNGti7kKv6EeAuYr3cLwxUWhIu1baTaXh4Ib5W2CqHVqib4/MqbYGJqiL3Zb8GJZr3l4g==}
 
@@ -9381,10 +9338,6 @@ packages:
   diff-sequences@29.6.3:
     resolution: {integrity: sha512-EjePK1srD3P08o2j4f0ExnylqRs5B9tJjcp9t1krH2qRi8CCdsYfwe9JgSLurFBWwq4uOlipzfk5fHNvwFKr8Q==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
-
-  diff@4.0.4:
-    resolution: {integrity: sha512-X07nttJQkwkfKfvTPG/KSnE2OMdcUCao6+eXF3wmnIQRn2aPAHH3VxDbDOdegkd6JbPsXqShpvEOHfAT+nCNwQ==}
-    engines: {node: '>=0.3.1'}
 
   diff@5.2.2:
     resolution: {integrity: sha512-vtcDfH3TOjP8UekytvnHH1o1P4FcUdt4eQ1Y+Abap1tk/OB2MWQvcwS2ClCd1zuIhc3JKOx6p3kod8Vfys3E+A==}
@@ -12257,9 +12210,6 @@ packages:
     resolution: {integrity: sha512-g3FeP20LNwhALb/6Cz6Dd4F2ngze0jz7tbzrD2wAV+o9FeNHe4rL+yK2md0J/fiSf1sa1ADhXqi5+oVwOM/eGw==}
     engines: {node: '>=8'}
 
-  make-error@1.3.6:
-    resolution: {integrity: sha512-s8UhlNe7vPKomQhC1qFelMokr/Sc3AgNbso3n74mVPA5LTZwkB9NlXf4XPamLxJE8h0gh73rM94xvwRT2CVInw==}
-
   makeerror@1.0.12:
     resolution: {integrity: sha512-JmqCvUhmt43madlpFzG4BQzG2Z3m6tvQDNKdClZnO3VbIudJYmxsT0FNJMeiB2+JTSlTQTSbU8QdesVmwJcmLg==}
 
@@ -14926,20 +14876,6 @@ packages:
     resolution: {integrity: sha512-q5W7tVM71e2xjHZTlgfTDoPF/SmqKG5hddq9SzR49CH2hayqRKJtQ4mtRlSxKaJlR/+9rEM+mnBHf7I2/BQcpQ==}
     engines: {node: '>=6.10'}
 
-  ts-node@10.9.2:
-    resolution: {integrity: sha512-f0FFpIdcHgn8zcPSbf1dRevwt047YMnaiJM3u2w2RewrB+fob/zePZcrOyQoLMMO7aBIddLcQIEK5dYjkLnGrQ==}
-    hasBin: true
-    peerDependencies:
-      '@swc/core': '>=1.2.50'
-      '@swc/wasm': '>=1.2.50'
-      '@types/node': '*'
-      typescript: '>=2.7'
-    peerDependenciesMeta:
-      '@swc/core':
-        optional: true
-      '@swc/wasm':
-        optional: true
-
   tsconfig-paths@3.15.0:
     resolution: {integrity: sha512-2Ac2RgzDe/cn48GvOe3M+o82pEFewD3UPbyoUHHdKasHwJKjds4fLXWf/Ux5kATBKN20oaFGu+jbElp1pos0mg==}
 
@@ -15254,9 +15190,6 @@ packages:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
-
-  v8-compile-cache-lib@3.0.1:
-    resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
 
   validate-npm-package-license@3.0.4:
     resolution: {integrity: sha512-DpKm2Ui/xN7/HQKCtpZxoRWBhZ9Z0kqtygG8XCgNQ8ZlDnxuQmWhj566j8fN4Cu3/JmbhsDo7fcAJq4s9h27Ew==}
@@ -15825,10 +15758,6 @@ packages:
   ylru@1.4.0:
     resolution: {integrity: sha512-2OQsPNEmBCvXuFlIni/a+Rn+R2pHW9INm0BxXJ4hVDA8TirqMj+J/Rp9ItLatT/5pZqWwefVrTQcHpixsxnVlA==}
     engines: {node: '>= 4.0.0'}
-
-  yn@3.1.1:
-    resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
-    engines: {node: '>=6'}
 
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
@@ -17204,10 +17133,6 @@ snapshots:
   '@colors/colors@1.5.0':
     optional: true
 
-  '@cspotcode/source-map-support@0.8.1':
-    dependencies:
-      '@jridgewell/trace-mapping': 0.3.9
-
   '@csstools/color-helpers@5.1.0': {}
 
   '@csstools/css-calc@2.1.4(@csstools/css-parser-algorithms@3.0.5(@csstools/css-tokenizer@3.0.4))(@csstools/css-tokenizer@3.0.4)':
@@ -18487,11 +18412,6 @@ snapshots:
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
   '@jridgewell/trace-mapping@0.3.31':
-    dependencies:
-      '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
-
-  '@jridgewell/trace-mapping@0.3.9':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -19817,14 +19737,6 @@ snapshots:
 
   '@tsconfig/ember@3.0.1': {}
 
-  '@tsconfig/node10@1.0.12': {}
-
-  '@tsconfig/node12@1.0.11': {}
-
-  '@tsconfig/node14@1.0.3': {}
-
-  '@tsconfig/node16@1.0.4': {}
-
   '@tybys/wasm-util@0.10.2':
     dependencies:
       tslib: 2.8.1
@@ -20152,6 +20064,10 @@ snapshots:
   '@types/koa__router@12.0.5':
     dependencies:
       '@types/koa': 2.15.0
+
+  '@types/lodash-es@4.17.12':
+    dependencies:
+      '@types/lodash': 4.17.24
 
   '@types/lodash@4.17.24': {}
 
@@ -20943,8 +20859,6 @@ snapshots:
       - react-native-b4a
 
   are-we-there-yet@4.0.2: {}
-
-  arg@4.1.3: {}
 
   arg@5.0.2: {}
 
@@ -22517,8 +22431,6 @@ snapshots:
       safe-buffer: 5.2.1
       sha.js: 2.4.12
 
-  create-require@1.1.1: {}
-
   crelt@1.0.6: {}
 
   cron@3.5.0:
@@ -23032,8 +22944,6 @@ snapshots:
       wrappy: 1.0.2
 
   diff-sequences@29.6.3: {}
-
-  diff@4.0.4: {}
 
   diff@5.2.2: {}
 
@@ -27345,8 +27255,6 @@ snapshots:
     dependencies:
       semver: 6.3.1
 
-  make-error@1.3.6: {}
-
   makeerror@1.0.12:
     dependencies:
       tmpl: 1.0.5
@@ -30472,42 +30380,6 @@ snapshots:
 
   ts-dedent@2.2.0: {}
 
-  ts-node@10.9.2(@types/node@24.12.4)(typescript@5.9.3):
-    dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.12
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 24.12.4
-      acorn: 8.16.0
-      acorn-walk: 8.3.5
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.4
-      make-error: 1.3.6
-      typescript: 5.9.3
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-
-  ts-node@10.9.2(@types/node@25.7.0)(typescript@5.9.3):
-    dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.12
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 25.7.0
-      acorn: 8.16.0
-      acorn-walk: 8.3.5
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.4
-      make-error: 1.3.6
-      typescript: 5.9.3
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-
   tsconfig-paths@3.15.0:
     dependencies:
       '@types/json5': 0.0.29
@@ -30780,8 +30652,6 @@ snapshots:
   uuid@8.3.2: {}
 
   uuid@9.0.1: {}
-
-  v8-compile-cache-lib@3.0.1: {}
 
   validate-npm-package-license@3.0.4:
     dependencies:
@@ -31450,8 +31320,6 @@ snapshots:
       buffer-crc32: 0.2.13
 
   ylru@1.4.0: {}
-
-  yn@3.1.1: {}
 
   yocto-queue@0.1.0: {}
 
