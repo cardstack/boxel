@@ -275,6 +275,47 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
   });
 
+  // (d) `@overlays={{false}}`: even with the operator-mode tracker present, the
+  // row opts out of the overlay — it never registers, so no chip / options menu
+  // / selection toggle can anchor to it. Hydration is unaffected: the inert HTML
+  // still swaps to a live card, the swap just never registers either element.
+  test('overlays=false — never registers with the tracker, even in operator mode', async function (assert) {
+    let tracker = new ElementTracker();
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext @tracker={{tracker}}>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+            @overlays={{false}}
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert.strictEqual(
+      tracker.elements.length,
+      0,
+      'the inert element opts out of the overlay tracker',
+    );
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert
+      .dom('[data-test-live-card]')
+      .hasText(
+        'Live: Hassan',
+        'still hydrates — overlays opt-out is independent',
+      );
+    assert.strictEqual(
+      tracker.elements.length,
+      0,
+      'the live element stays out of the tracker too',
+    );
+  });
+
   // `none` stays inert with the diagnostic attribute and never fetches.
   test('none — stays inert, marks data-hydration=none, and never fetches', async function (assert) {
     let inert = htmlComponent(INERT_HTML);

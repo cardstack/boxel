@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   CardContextName,
@@ -96,6 +96,11 @@ interface Signature {
     errorDoc?: ErrorEntry;
     // The hydration gesture (defaults to `none`).
     mode?: HydrationMode;
+    // Whether this row registers with the operator-mode overlay (defaults to
+    // `true`). `false` applies the no-op tracker, so the row is never tracked
+    // and no overlay (chip / options menu / selection toggle) ever anchors to
+    // it — for a consumer that lays results out in its own UI.
+    overlays?: boolean;
     // The format the live/hydrated card renders as, so it matches the
     // prerendered HTML the query selected (defaults to `fitted`).
     format?: Format;
@@ -181,6 +186,11 @@ export default class HydratableCard extends Component<Signature> {
   // element with no extra wiring here. Guarded so reading the context while
   // this component is being destroyed can't throw.
   private get trackElement(): CardComponentModifier {
+    // Opted out of overlays — never register with the tracker, so no overlay
+    // can anchor to this row regardless of the surrounding context.
+    if (this.args.overlays === false) {
+      return noopCardModifier;
+    }
     if (isDestroying(this) || isDestroyed(this)) {
       return noopCardModifier;
     }
@@ -192,6 +202,20 @@ export default class HydratableCard extends Component<Signature> {
       }
       throw e;
     }
+  }
+
+  // Re-provide the card context to the rendered subtree. Normally a pass-through
+  // of the consumed context, but when `overlays` is opted out it blanks
+  // `cardComponentModifier` to the no-op — the live `CardRenderer` registers
+  // itself through this context (not through `trackElement`, which only governs
+  // the inert element), so the opt-out must reach it here too, else a hydrated
+  // row would re-acquire an overlay.
+  @provide(CardContextName)
+  private get providedCardContext(): CardContext | undefined {
+    if (this.args.overlays === false && this.cardContext) {
+      return { ...this.cardContext, cardComponentModifier: noopCardModifier };
+    }
+    return this.cardContext;
   }
 
   @action private hydrate() {

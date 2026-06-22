@@ -91,6 +91,7 @@ export class RenderableSearchEntry {
     private fallbackRenderType: ResolvedCodeRef | undefined,
     private fallbackFormat: PrerenderedHtmlFormat,
     private mode: HydrationMode,
+    private overlays: boolean,
   ) {}
 
   get id(): string {
@@ -212,6 +213,7 @@ export class RenderableSearchEntry {
         isError: this.isError,
         errorDoc: this.errorDoc,
         mode: this.mode,
+        overlays: this.overlays,
       });
     }
     return this.#component;
@@ -239,6 +241,7 @@ export class RenderableSearchEntries {
   constructor(
     private resource: ReturnType<typeof getSearchEntriesResource>,
     private getMode: () => HydrationMode,
+    private getOverlays: () => boolean,
   ) {}
 
   private get fallbackRenderType(): ResolvedCodeRef | undefined {
@@ -253,7 +256,13 @@ export class RenderableSearchEntries {
     let fallbackRenderType = this.fallbackRenderType;
     let fallbackFormat = this.fallbackFormat;
     let mode = this.getMode();
-    let inputsKey = JSON.stringify([mode, fallbackRenderType, fallbackFormat]);
+    let overlays = this.getOverlays();
+    let inputsKey = JSON.stringify([
+      mode,
+      overlays,
+      fallbackRenderType,
+      fallbackFormat,
+    ]);
     if (inputsKey !== this.#renderInputsKey) {
       // Pure memoization bookkeeping — see the per-row note below. Dropping the
       // cache when the captured inputs change rebuilds view-models with the new
@@ -272,6 +281,7 @@ export class RenderableSearchEntries {
         fallbackRenderType,
         fallbackFormat,
         mode,
+        overlays,
       );
       // Pure memoization keyed on the resource's stable entry identity — it
       // dirties no tracked state, and keeping unchanged rows' view-models (and
@@ -300,14 +310,17 @@ export class RenderableSearchEntries {
 // one `getSearchEntriesResource` parented to `owner`, and per-render calls would
 // pile up live resources. Vary the search through the `getQuery` thunk (re-read
 // reactively) and the hydration gesture through `getMode`; the resource is never
-// rebuilt.
+// rebuilt. `getOverlays` (defaults to `true` at the call site) similarly re-reads
+// whether rendered rows register with the operator-mode overlay.
 export function getRenderableSearchEntries(
   owner: object,
   getQuery: () => SearchEntryWireQuery | undefined,
   getMode: () => HydrationMode,
+  getOverlays: () => boolean = () => true,
 ): RenderableSearchEntries {
   return new RenderableSearchEntries(
     getSearchEntriesResource(owner, getQuery),
     getMode,
+    getOverlays,
   );
 }
