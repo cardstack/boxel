@@ -57,8 +57,11 @@ module('Integration | Component | matrix/login', function (hooks) {
   }
 
   hooks.beforeEach(function () {
-    // Reset URL so leftover ?loginToken= from a previous test doesn't bleed in.
-    window.history.replaceState({}, '', '/');
+    // Reset the mocked URL so leftover ?loginToken= from a previous test
+    // doesn't bleed in. Goes through ember-window-mock's location setter;
+    // history.replaceState would hit the real History API and leave the
+    // mocked window.location.search unchanged.
+    window.location.href = '/';
   });
 
   test('hides Google button when GOOGLE_AUTH_ENABLED flag is off', async function (assert) {
@@ -106,10 +109,25 @@ module('Integration | Component | matrix/login', function (hooks) {
   });
 
   test('?loginToken= triggers loginWithToken, hides form, clears the query param', async function (assert) {
-    window.history.replaceState({}, '', '/?loginToken=abc123');
+    window.location.href = '/?loginToken=abc123';
 
     let receivedToken: string | undefined;
     let startCalled = false;
+    let replaceStateUrls: (string | null | undefined)[] = [];
+
+    // Spy on history.replaceState. ember-window-mock's proxy lets us
+    // override functions on `window.history` by assignment — subsequent
+    // reads return the override instead of the wrapped real method. The
+    // mocked window.location is not updated by the real History API, so a
+    // spy is the only way to verify the URL-cleanup step.
+    let originalReplaceState = window.history.replaceState;
+    (window.history as any).replaceState = (
+      _state: unknown,
+      _title: string,
+      url?: string | null,
+    ) => {
+      replaceStateUrls.push(url);
+    };
 
     setLoginWithTokenInterceptor((token: string) => {
       receivedToken = token;
@@ -144,18 +162,29 @@ module('Integration | Component | matrix/login', function (hooks) {
         'loginWithToken received the URL token',
       );
       assert.true(startCalled, 'matrixService.start was invoked');
-      assert.strictEqual(
-        new URLSearchParams(window.location.search).get('loginToken'),
+      let cleanupUrl = replaceStateUrls.at(-1);
+      let cleanupHasLoginToken =
+        cleanupUrl != null &&
+        new URLSearchParams(new URL(cleanupUrl, 'http://x').search).has(
+          'loginToken',
+        );
+      assert.notEqual(
+        cleanupUrl,
         null,
-        'loginToken query param was cleared from the URL',
+        'history.replaceState was called to clean up the URL',
+      );
+      assert.false(
+        cleanupHasLoginToken,
+        'loginToken query param was cleared via history.replaceState',
       );
     } finally {
       matrixService.start = originalStart;
+      (window.history as any).replaceState = originalReplaceState;
     }
   });
 
   test('?loginToken= exchange failure falls back to the password form with an error', async function (assert) {
-    window.history.replaceState({}, '', '/?loginToken=bad');
+    window.location.href = '/?loginToken=bad';
 
     setLoginWithTokenInterceptor(() =>
       Promise.reject(new Error('synapse said no')),
