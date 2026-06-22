@@ -85,6 +85,24 @@ function isPortBindError(error: unknown): boolean {
   return /address already in use|port is already allocated/i.test(message);
 }
 
+// The Google OIDC block is gated on env vars so a developer without a Google
+// OAuth client can still run Synapse for unrelated work. When either env var is
+// missing, the whole `# BEGIN_GOOGLE_OIDC ... # END_GOOGLE_OIDC` block is
+// stripped — Synapse refuses to boot with an `oidc_providers` entry whose
+// `client_id` is empty. When both are present, the secrets are interpolated.
+export function applyGoogleOidcGating(
+  hsYaml: string,
+  clientId: string,
+  clientSecret: string,
+): string {
+  if (clientId && clientSecret) {
+    return hsYaml
+      .replace(/{{GOOGLE_OAUTH_CLIENT_ID}}/g, clientId)
+      .replace(/{{GOOGLE_OAUTH_CLIENT_SECRET}}/g, clientSecret);
+  }
+  return hsYaml.replace(/# BEGIN_GOOGLE_OIDC[\s\S]*?# END_GOOGLE_OIDC\n?/g, '');
+}
+
 export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
@@ -129,24 +147,11 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
 
-  // The Google OIDC block is gated on env vars so a developer without a Google
-  // OAuth client can still run Synapse for unrelated work. When the env vars
-  // are unset, the whole block is stripped — Synapse refuses to boot with an
-  // `oidc_providers` entry whose `client_id` is empty.
-  const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? '';
-  const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '';
-  if (googleClientId && googleClientSecret) {
-    hsYaml = hsYaml.replace(/{{GOOGLE_OAUTH_CLIENT_ID}}/g, googleClientId);
-    hsYaml = hsYaml.replace(
-      /{{GOOGLE_OAUTH_CLIENT_SECRET}}/g,
-      googleClientSecret,
-    );
-  } else {
-    hsYaml = hsYaml.replace(
-      /# BEGIN_GOOGLE_OIDC[\s\S]*?# END_GOOGLE_OIDC\n?/g,
-      '',
-    );
-  }
+  hsYaml = applyGoogleOidcGating(
+    hsYaml,
+    process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
+  );
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 

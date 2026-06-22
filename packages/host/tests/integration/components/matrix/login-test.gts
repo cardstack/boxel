@@ -197,4 +197,40 @@ module('Integration | Component | matrix/login', function (hooks) {
       .exists('Password form is restored after the failed SSO exchange');
     assert.dom('[data-test-login-error]').includesText('Google sign-in failed');
   });
+
+  test('?loginToken= falls back to the password form when start() fails after a successful token exchange', async function (assert) {
+    window.location.href = '/?loginToken=abc123';
+
+    setLoginWithTokenInterceptor(() =>
+      Promise.resolve({
+        access_token: 't',
+        user_id: '@u:s',
+        device_id: 'd',
+      } as any),
+    );
+
+    let matrixService = getMatrixService(this);
+    let originalStart = matrixService.start.bind(matrixService);
+    // Token exchange succeeds but session start blows up — the component must
+    // not get stranded on the "Signing you in…" placeholder.
+    matrixService.start = (async () => {
+      throw new Error('realm unreachable');
+    }) as typeof matrixService.start;
+
+    try {
+      await render(<template><Login @setMode={{noop}} /></template>);
+
+      assert
+        .dom('[data-test-sso-exchanging]')
+        .doesNotExist('Exchanging placeholder is cleared when start() fails');
+      assert
+        .dom('[data-test-login-form]')
+        .exists('Password form is restored after the failed start()');
+      assert
+        .dom('[data-test-login-error]')
+        .includesText('Google sign-in failed');
+    } finally {
+      matrixService.start = originalStart;
+    }
+  });
 });

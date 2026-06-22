@@ -262,11 +262,15 @@ export default class Login extends Component<Signature> {
   });
 
   private doGoogleSso = restartableTask(async () => {
-    let url = await this.matrixService.getSsoLoginUrl(
-      window.location.href,
-      GOOGLE_IDP_ID,
-    );
-    window.location.assign(url);
+    try {
+      let url = await this.matrixService.getSsoLoginUrl(
+        window.location.href,
+        GOOGLE_IDP_ID,
+      );
+      window.location.assign(url);
+    } catch (e: any) {
+      this.error = `Could not start Google sign-in: ${e.message}`;
+    }
   });
 
   private consumeSsoLoginToken = restartableTask(async () => {
@@ -285,9 +289,16 @@ export default class Login extends Component<Signature> {
       window.location.hash;
     window.history.replaceState({}, '', newUrl);
 
-    let auth: LoginResponse;
     try {
-      auth = await this.matrixService.loginWithSsoToken(token);
+      let auth = await this.matrixService.loginWithSsoToken(token);
+      // start() must stay inside the try: a failure here (e.g. realm
+      // unreachable, session init) would otherwise leave us stuck on the
+      // "Signing you in…" placeholder forever, with the token already
+      // consumed and stripped from the URL so a refresh can't recover.
+      await this.matrixService.start({
+        auth,
+        refreshRoutes: true,
+      });
     } catch (e: any) {
       if (isMatrixError(e)) {
         this.error = `Google sign-in failed. ${extractMatrixErrorMessage(e)}`;
@@ -296,12 +307,7 @@ export default class Login extends Component<Signature> {
       }
       // Fall back to the password form so the user can recover.
       this.exchangingSsoToken = false;
-      return;
     }
-    await this.matrixService.start({
-      auth,
-      refreshRoutes: true,
-    });
   });
 
   private doLogin = restartableTask(async () => {

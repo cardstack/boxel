@@ -16,18 +16,32 @@ Behaviour:
     as a verified 3pid. Synapse's schema makes this improbable but not
     impossible (admin-API or migration bypasses), and silently picking one
     would be an account-takeover surface too.
-  - On no match, derives the localpart from the email's local part. If Synapse
-    retries because that localpart collided (`failures > 0`), suffixes the
-    failure count.
+  - On no match, derives the localpart from the email's local part, sanitized
+    to the characters Matrix permits in a user ID. If Synapse retries because
+    that localpart collided (`failures > 0`), suffixes the failure count.
 
 References:
-  - Spike findings: linear.app/cardstack/issue/CS-11638
   - Synapse OidcMappingProvider interface: synapse/handlers/oidc.py
 """
+
+import re
 
 from synapse.handlers.sso import MappingException
 from synapse.module_api import ModuleApi
 from synapse.types import JsonDict, UserID
+
+# Characters Matrix forbids in a user-ID localpart. Email local-parts permit
+# plenty that Matrix does not (e.g. `'`, `!`, `#`), so anything outside the
+# allowed set is squashed before we hand the localpart back to Synapse —
+# otherwise the no-match new-user path would fail registration for those users.
+_DISALLOWED_LOCALPART_CHARS = re.compile(r"[^a-z0-9._=\-/+]")
+
+
+def _sanitize_localpart(value: str) -> str:
+    sanitized = _DISALLOWED_LOCALPART_CHARS.sub("-", value)
+    # Guard against an email whose local part is entirely disallowed
+    # characters collapsing to an empty/dash-only localpart.
+    return sanitized.strip("-") or "user"
 
 
 class BoxelOidcMappingProvider:
@@ -70,7 +84,7 @@ class BoxelOidcMappingProvider:
                 "emails": [email_lower],
             }
 
-        base_localpart = email_lower.split("@", 1)[0]
+        base_localpart = _sanitize_localpart(email_lower.split("@", 1)[0])
         localpart = (
             base_localpart if failures == 0 else f"{base_localpart}{failures}"
         )

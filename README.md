@@ -513,7 +513,7 @@ To enable Google sign-in locally:
 
 Notes:
 
-- Each developer uses their own Google OAuth client locally. The shared client used for staging/prod is provisioned separately as part of CS-11645.
+- Each developer uses their own Google OAuth client locally. The shared client used for staging/prod is provisioned separately.
 - To reset the link and see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions). To also re-trigger Synapse's username picker, wipe the dev Synapse DB: `pnpm stop:synapse && rm -rf packages/matrix/synapse-data && mise run infra:start-synapse`.
 
 #### SMTP Server
