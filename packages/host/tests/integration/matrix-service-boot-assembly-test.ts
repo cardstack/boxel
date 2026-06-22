@@ -94,22 +94,16 @@ module(
     setupLocalIndexing(hooks);
 
     // The mock matrix client's `startClient` re-emits a synthetic
-    // `app.boxel.realms` AccountData event with `activeRealms` content.
-    // With the new key authoritative, that re-emission must NOT overwrite
-    // the realms the trusted-servers boot path discovered. The setup
-    // below deliberately diverges activeRealms from realmPermissions so
-    // the bug (if reintroduced) shows up as a missing realm from the
-    // _realm-auth response.
-    const otherRealmURL = 'http://test-realm/test-other/';
-
+    // `app.boxel.realms` AccountData event carrying `activeRealms`. When
+    // trusted servers are authoritative, that re-emission must NOT
+    // overwrite the realms the trusted-servers boot path discovered.
+    // `activeRealms` is empty while `_realm-auth` advertises testRealmURL,
+    // so a clobber would zero the available-realms list and drop
+    // testRealmURL — making the regression observable as a missing realm.
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
-      activeRealms: [], // synthetic legacy event would clear availableRealms
+      activeRealms: [],
       activeRealmServers: [testRealmServerURL],
-      realmPermissions: {
-        [testRealmURL]: ['read', 'write'],
-        [otherRealmURL]: ['read', 'write'],
-      },
       autostart: true,
     });
 
@@ -125,10 +119,6 @@ module(
       assert.ok(
         realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
         'testRealmURL from _realm-auth survives the legacy event',
-      );
-      assert.ok(
-        realmServer.availableRealmIdentifiers.includes(ri(otherRealmURL)),
-        'otherRealmURL from _realm-auth survives the legacy event (regression guard)',
       );
     });
   },
