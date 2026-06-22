@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env -S node
 import { registerRealmUser } from './register-realm-user-using-api.ts';
 import { realmPassword } from '../helpers/realm-credentials.ts';
 
@@ -274,7 +274,7 @@ async function main() {
   console.log('='.repeat(70));
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main()
     .then(() => {
       console.log('✓ GitHub webhook registration complete');

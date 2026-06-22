@@ -52,7 +52,7 @@ import { withStdoutRedirected } from './redirect-stdout.ts';
 
 let log = logger('factory-issue-loop-wiring');
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Types

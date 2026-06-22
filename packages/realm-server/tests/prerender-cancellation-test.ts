@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   PrerenderCancelledError,
@@ -24,7 +25,7 @@ import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
 // Holding these invariants down means the manager-level client-abort
 // tests don't have to re-verify them end to end.
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('PrerenderCancelledError shape', function () {
     test('defaults to queued state with no reason', function (assert) {
       let err = new PrerenderCancelledError();

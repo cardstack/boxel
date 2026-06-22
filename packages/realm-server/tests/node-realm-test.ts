@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -11,7 +12,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 import { NodeAdapter } from '../node-realm.ts';
 import { insertUser, setupDB } from './helpers/index.ts';
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;
   const realmURL = new URL('http://127.0.0.1:4444/test/');
   const staleRoomId = '!room-alice:localhost';

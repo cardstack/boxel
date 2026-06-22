@@ -26,7 +26,7 @@
  * out-of-workspace Write is rejected.
  *
  * Usage:
- *   pnpm exec ts-node --transpileOnly scripts/canusetool-repro.ts
+ *   pnpm exec node scripts/canusetool-repro.ts
  *
  * (Auth: works with whatever `claude login` already set up; no
  * ANTHROPIC_API_KEY needed.)

@@ -7,11 +7,14 @@
 // NOTE: This runs before logger setup, so we check the env var directly instead
 // of importing isEnvironmentMode() (which would trigger a logger import).
 
+import { createRequire } from 'module';
+
 if (process.env.BOXEL_ENVIRONMENT) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // `require` doesn't exist in ESM scope; recreate it so undici stays a lazy,
+    // optional load (the catch below tolerates it being absent).
+    const require = createRequire(import.meta.url);
     const undici = require('undici') as typeof import('undici');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const dns = require('dns');
 
     const agent = new undici.Agent({

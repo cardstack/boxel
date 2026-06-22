@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -16,7 +17,7 @@ import * as path from 'path';
 // If a future change accidentally pulls turndown into the server graph, this
 // test fails — even before any networked behavior is exercised.
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 
 // Packages whose source code runs in the realm-server Node.js process. If a
 // new server-side workspace is added that runs in Node, list it here too.
@@ -86,7 +87,7 @@ function findForbiddenImports(file: string): string | null {
   return null;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('realm-server package.json does not declare turndown deps', function (assert) {
     let pkg = JSON.parse(
       fs.readFileSync(

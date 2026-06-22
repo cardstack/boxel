@@ -38,5 +38,5 @@ docker exec boxel-pg pg_dump \
   --no-acl \
   boxel >$tmpFile
 
-ts-node --transpileOnly ./scripts/convert-to-sqlite.ts $tmpFile
+node ./scripts/convert-to-sqlite.ts $tmpFile
 rm $tmpFile
