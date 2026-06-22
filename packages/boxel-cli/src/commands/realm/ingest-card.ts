@@ -50,6 +50,34 @@ export function extractImportSpecifiers(source: string): string[] {
   return [...specs];
 }
 
+/**
+ * Non-null `relationships.*.links.self` values from a card instance's JSON —
+ * the `linksTo` / `linksToMany` targets to follow when crawling an instance's
+ * link graph. `linksToMany` serializes as `field.0`, `field.1`, … each with its
+ * own `links.self`; unset links are `null` and skipped.
+ */
+export function extractRelationshipLinks(source: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    return [];
+  }
+  let rels = (parsed as { data?: { relationships?: Record<string, unknown> } })
+    ?.data?.relationships;
+  if (!rels || typeof rels !== 'object') {
+    return [];
+  }
+  let out: string[] = [];
+  for (let value of Object.values(rels)) {
+    let self = (value as { links?: { self?: unknown } })?.links?.self;
+    if (typeof self === 'string' && self) {
+      out.push(self);
+    }
+  }
+  return out;
+}
+
 /** Exported card/field class names declared in a module (for instance lookup). */
 export function extractExportedClassNames(source: string): string[] {
   let names = new Set<string>();
@@ -196,14 +224,20 @@ class RealmCardIngester extends RealmSyncBase {
       if (test !== f && fileSet.has(test)) toCopy.add(test);
     }
 
-    // 3. The entry card's own instances.
-    let entryModuleAbs = entry.moduleRels.map((r) => this.relToAbs(r));
-    let instanceRels = await this.findEntryInstances(
-      moduleFiles,
-      entryModuleAbs,
-      fileSet,
-    );
-    for (let r of entry.instanceRels) instanceRels.add(r);
+    // 3. Instances. A module entry means "the card type" → copy every
+    //    instance of it. An instance entry means "this record" → copy just it
+    //    and the records it links to (transitively), not unrelated siblings.
+    let instanceRels: Set<string>;
+    if (entry.instanceRels.length > 0) {
+      instanceRels = await this.crawlInstanceLinks(entry.instanceRels, fileSet);
+    } else {
+      let entryModuleAbs = entry.moduleRels.map((r) => this.relToAbs(r));
+      instanceRels = await this.findEntryInstances(
+        moduleFiles,
+        entryModuleAbs,
+        fileSet,
+      );
+    }
     for (let r of instanceRels) toCopy.add(r);
 
     // 4. The card's own Catalog Spec(s) — card/app specType only.
@@ -311,6 +345,66 @@ class RealmCardIngester extends RealmSyncBase {
       }
     }
     return out;
+  }
+
+  /**
+   * BFS the same-realm link graph from the seed instances: each instance plus
+   * every instance it references via `linksTo` / `linksToMany`, transitively.
+   * The instance analogue of `crawlModules` — for an instance entry we copy
+   * that record and the records it links to (e.g. a cellar and its bottles),
+   * but not unrelated siblings of the same type.
+   */
+  private async crawlInstanceLinks(
+    seeds: string[],
+    fileSet: Set<string>,
+  ): Promise<Set<string>> {
+    let seen = new Set<string>();
+    let queue = [...seeds];
+    while (queue.length) {
+      let rel = queue.shift()!;
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      let source = await this.fetchText(rel);
+      if (source == null) continue;
+      for (let self of extractRelationshipLinks(source)) {
+        let linked = this.resolveLinkedInstanceRel(self, rel, fileSet);
+        if (linked && !seen.has(linked)) queue.push(linked);
+      }
+    }
+    return seen;
+  }
+
+  /**
+   * Resolve a relationship `links.self` (relative `../Foo/x`, published alias
+   * `@cardstack/<realm>/…`, or absolute https — and without a `.json` extension)
+   * to a same-realm instance file that exists in `fileSet`, or null for
+   * cross-realm / missing links.
+   */
+  private resolveLinkedInstanceRel(
+    self: string,
+    fromRel: string,
+    fileSet: Set<string>,
+  ): string | null {
+    let rel: string;
+    if (self.startsWith('@')) {
+      // Published-alias form — map onto this realm by its path tail. A tail
+      // that isn't ours (another realm's alias) won't resolve to a local file.
+      rel = this.relativize(self);
+    } else {
+      // Relative or absolute https: resolve to an absolute URL and require it
+      // to live under THIS realm's served root. A link into another realm —
+      // even one whose URL happens to share our path tail — is left as a
+      // runtime reference, not copied (mirrors resolveSameRealmFile).
+      let absUrl = /^https?:\/\//.test(self)
+        ? self
+        : new URL(self, this.relToAbs(fromRel)).href;
+      if (!absUrl.startsWith(this.realmRoot)) {
+        return null;
+      }
+      rel = absUrl.slice(this.realmRoot.length).replace(/^\/+/, '');
+    }
+    let candidate = rel.endsWith('.json') ? rel : `${rel}.json`;
+    return fileSet.has(candidate) ? candidate : null;
   }
 
   /** Card/app Spec cards whose `ref` resolves to a seeded module. */
