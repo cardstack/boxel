@@ -129,6 +129,25 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
 
+  // The Google OIDC block is gated on env vars so a developer without a Google
+  // OAuth client can still run Synapse for unrelated work. When the env vars
+  // are unset, the whole block is stripped — Synapse refuses to boot with an
+  // `oidc_providers` entry whose `client_id` is empty.
+  const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? '';
+  const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '';
+  if (googleClientId && googleClientSecret) {
+    hsYaml = hsYaml.replace(/{{GOOGLE_OAUTH_CLIENT_ID}}/g, googleClientId);
+    hsYaml = hsYaml.replace(
+      /{{GOOGLE_OAUTH_CLIENT_SECRET}}/g,
+      googleClientSecret,
+    );
+  } else {
+    hsYaml = hsYaml.replace(
+      /# BEGIN_GOOGLE_OIDC[\s\S]*?# END_GOOGLE_OIDC\n?/g,
+      '',
+    );
+  }
+
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 
   // now generate a signing key (we could use synapse's config generation for
@@ -216,6 +235,10 @@ export async function synapseStart(
       `${synCfg.configDir}:/data`,
       '-v',
       `${path.join(import.meta.dirname, 'templates')}:/custom/templates/`,
+      '-v',
+      `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
+      '-e',
+      'PYTHONPATH=/custom/modules',
     ];
     if (useDynamicHostPort) {
       // In dynamic-host-port mode multiple harnesses may run concurrently, so

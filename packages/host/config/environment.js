@@ -188,7 +188,14 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      // True locally so `pnpm start` shows the Sign in with Google button by
+      // default; staging/prod stays false until CS-11645 lands the staging
+      // Synapse OIDC config + flips this on via the deployed env var.
+      GOOGLE_AUTH_ENABLED: process.env.GOOGLE_AUTH_ENABLED
+        ? process.env.GOOGLE_AUTH_ENABLED === 'true'
+        : environment === 'development',
+    },
   };
 
   if (environment === 'test') {

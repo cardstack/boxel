@@ -481,6 +481,41 @@ To stop the admin console:
 mise run infra:stop-admin
 ```
 
+#### Google Sign-In (local dev)
+
+The dev Synapse template ships with a Google OIDC block and a custom `user_mapping_provider` (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`) that auto-links Google sign-ins to existing Matrix accounts by verified email. The whole block is **gated on env vars** — without them, `packages/matrix/support/synapse/index.ts` strips the OIDC block from the generated `homeserver.yaml` so Synapse boots cleanly for unrelated work. The host's "Sign in with Google" button is also gated on the `GOOGLE_AUTH_ENABLED` feature flag (defaults `true` in `development`).
+
+To enable Google sign-in locally:
+
+1. **Create a Google Cloud OAuth 2.0 client** (Web application) in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `http://localhost:8008/_synapse/client/oidc/callback` as an authorized redirect URI (exact match — `http`, no trailing slash, port `8008`). If you haven't configured an OAuth consent screen, create one in **Testing** mode and add your own Google account as a test user.
+
+2. **Export the client ID and secret** in the same shell that runs `mise`:
+
+   ```sh
+   export GOOGLE_OAUTH_CLIENT_ID='<your-id>.apps.googleusercontent.com'
+   export GOOGLE_OAUTH_CLIENT_SECRET='<your-secret>'
+   ```
+
+3. **Restart Synapse** so the OIDC block is interpolated into the generated `homeserver.yaml`:
+
+   ```sh
+   pnpm stop:synapse
+   mise run infra:start-synapse
+   ```
+
+4. **Verify** Synapse advertises the Google IDP:
+
+   ```sh
+   curl -s http://localhost:8008/_matrix/client/v3/login | jq
+   ```
+
+   You should see a flow with `type: "m.login.sso"` and an `identity_providers` entry whose `id` is `"oidc-google"`. The "Sign in with Google" button will now appear on the host login screen.
+
+Notes:
+
+- Each developer uses their own Google OAuth client locally. The shared client used for staging/prod is provisioned separately as part of CS-11645.
+- To reset the link and see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions). To also re-trigger Synapse's username picker, wipe the dev Synapse DB: `pnpm stop:synapse && rm -rf packages/matrix/synapse-data && mise run infra:start-synapse`.
+
 #### SMTP Server
 
 Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of `mise run dev`.
