@@ -314,6 +314,7 @@ export default class HostModeService extends Service {
       method: 'QUERY',
       headers: {
         Accept: 'application/vnd.card+json',
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify({
