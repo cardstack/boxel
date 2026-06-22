@@ -85,8 +85,12 @@ export default class MiniFileChooser extends Component<Signature> {
     return undefined;
   }
 
+  private get selectedRealmURL(): string | undefined {
+    return this.selectedRealm?.url.href;
+  }
+
   private get fileTreeRenderKey(): string {
-    return `${this.fileTreeRenderNonce}:${this.selectedRealm.url.href}`;
+    return `${this.fileTreeRenderNonce}:${this.selectedRealm?.url.href ?? ''}`;
   }
 
   private get isUploadBusy(): boolean {
@@ -95,6 +99,9 @@ export default class MiniFileChooser extends Component<Signature> {
   }
 
   private get dropZoneLabel() {
+    if (!this.selectedRealm) {
+      return '';
+    }
     return `Drop file to upload to ${this.selectedRealm.info.name}`;
   }
 
@@ -117,6 +124,9 @@ export default class MiniFileChooser extends Component<Signature> {
 
   @action
   private triggerUpload() {
+    if (!this.selectedRealm) {
+      return;
+    }
     let task = this.fileUpload.uploadFile({
       realmURL: this.selectedRealm.url,
     });
@@ -173,7 +183,7 @@ export default class MiniFileChooser extends Component<Signature> {
     dragEvent.stopPropagation();
     this.dropZoneDragDepth = 0;
     this.isDropZoneActive = false;
-    if (this.isUploadBusy) {
+    if (this.isUploadBusy || !this.selectedRealm) {
       return;
     }
     let file = dragEvent.dataTransfer?.files?.[0];
@@ -223,7 +233,7 @@ export default class MiniFileChooser extends Component<Signature> {
         <span class='mini-file-chooser__label'>Workspace</span>
         <RealmDropdown
           class='mini-file-chooser__realm-chooser'
-          @selectedRealmURL={{this.selectedRealm.url.href}}
+          @selectedRealmURL={{this.selectedRealmURL}}
           @onSelect={{this.selectRealm}}
           @displayReadOnlyTag={{true}}
           data-test-mini-file-chooser-realm-chooser
@@ -233,16 +243,18 @@ export default class MiniFileChooser extends Component<Signature> {
       <div class='mini-file-chooser__field mini-file-chooser__tree-field'>
         <span class='mini-file-chooser__label'>Choose File</span>
         <div class='mini-file-chooser__tree'>
-          {{! Force recreation when the realm changes }}
-          {{#each (array this.fileTreeRenderKey)}}
-            <IndexedFileTree
-              @realmURL={{this.selectedRealm.url.href}}
-              @selectedFile={{this.selectedFile}}
-              @onFileSelected={{this.selectFile}}
-              @onFileConfirmed={{this.selectFile}}
-              @autoFocus={{true}}
-            />
-          {{/each}}
+          {{#if this.selectedRealm}}
+            {{! Force recreation when the realm changes }}
+            {{#each (array this.fileTreeRenderKey)}}
+              <IndexedFileTree
+                @realmURL={{this.selectedRealm.url.href}}
+                @selectedFile={{this.selectedFile}}
+                @onFileSelected={{this.selectFile}}
+                @onFileConfirmed={{this.selectFile}}
+                @autoFocus={{true}}
+              />
+            {{/each}}
+          {{/if}}
         </div>
       </div>
 
@@ -369,7 +381,7 @@ export default class MiniFileChooser extends Component<Signature> {
       }
       /* Drag-and-drop overlay: dim the chooser and surface the drop label,
          mirroring choose-file-modal's drop-zone treatment. */
-      .mini-file-chooser[data-drop-zone-active='true']::before {
+      .mini-file-chooser[data-drop-zone-active]::before {
         content: '';
         position: absolute;
         inset: 0;
@@ -377,7 +389,7 @@ export default class MiniFileChooser extends Component<Signature> {
         pointer-events: none;
         z-index: 2;
       }
-      .mini-file-chooser[data-drop-zone-active='true']::after {
+      .mini-file-chooser[data-drop-zone-active]::after {
         content: attr(data-drop-zone-label);
         position: absolute;
         inset: 0;

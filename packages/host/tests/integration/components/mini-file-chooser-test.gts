@@ -231,7 +231,7 @@ module('Integration | mini-file-chooser', function (hooks) {
 
     assert
       .dom('[data-test-mini-file-chooser]')
-      .hasAttribute('data-drop-zone-active', 'true');
+      .hasAttribute('data-drop-zone-active');
     let dropZoneLabel = document
       .querySelector('[data-test-mini-file-chooser]')
       ?.getAttribute('data-drop-zone-label');
