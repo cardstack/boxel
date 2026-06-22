@@ -75,7 +75,10 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install
+        # --with-deps also apt-installs the system libraries Playwright needs;
+        # without it CI fails with "Host system is missing dependencies to run
+        # browsers".
+        run: pnpm exec playwright install --with-deps
         working-directory: packages/software-factory
       - name: Run Node tests
         if: ${{ matrix.shard.index == 1 }}

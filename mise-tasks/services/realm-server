@@ -23,9 +23,9 @@ cleanup_icons_server() {
   fi
 }
 # EXIT runs cleanup unconditionally. INT/TERM additionally exit 0 so that the
-# 143-on-Ctrl-C from the ts-node pipeline below isn't reported by mise /
+# 143-on-Ctrl-C from the node pipeline below isn't reported by mise /
 # run-p as "task failed" — see mise-tasks/services/worker for the broader
-# rationale. Real crashes still propagate (ts-node faulting on its own
+# rationale. Real crashes still propagate (node faulting on its own
 # leaves the trap unfired, so pipefail's 143-aware exit code wins).
 # The signal handler clears the EXIT trap before exiting so cleanup doesn't
 # run twice in succession.
@@ -44,7 +44,7 @@ if [ "${SKIP_CATALOG:-}" != "true" ]; then
 fi
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
-  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  MATRIX_REGISTRATION_SHARED_SECRET=$(node "$SCRIPTS_DIR/matrix-registration-secret.ts")
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
@@ -93,8 +93,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ENABLE_FILE_WATCHER=true \
-  ts-node \
-  --transpileOnly main \
+  node main.ts \
   --port="${REALM_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALMS_ROOT}" \

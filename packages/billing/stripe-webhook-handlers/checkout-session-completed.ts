@@ -8,7 +8,7 @@ import {
   markStripeEventAsProcessed,
   updateUserStripeCustomerEmail,
 } from '../billing-queries.ts';
-import type { StripeCheckoutSessionCompletedWebhookEvent } from '.';
+import type { StripeCheckoutSessionCompletedWebhookEvent } from './index.ts';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import { TransactionManager } from '@cardstack/postgres';

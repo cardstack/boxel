@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   baseRRI,
@@ -70,7 +71,7 @@ function htmlIdsOf(entry: SearchEntryResource): string[] | undefined {
   return entry.relationships.html?.data.map((member) => member.id);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('searchEntries projection engine', function (hooks) {
     let testRealm: Realm;
     let dbAdapter: PgAdapter;

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
 
 import {
@@ -33,7 +34,7 @@ import {
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 import { basename } from 'path';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('queue', function (hooks) {
     let publisher: QueuePublisher;
     let runner: QueueRunner;

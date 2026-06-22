@@ -4795,7 +4795,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-css-url',
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
-        'https://packages/lodash',
+        'https://packages/lodash-es',
         'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
         // Sort the expected list so the assertion is robust against
@@ -4968,7 +4968,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
         'https://packages/ember-resources',
-        'https://packages/lodash',
+        'https://packages/lodash-es',
         'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
         // See note on iconsBase ordering above.

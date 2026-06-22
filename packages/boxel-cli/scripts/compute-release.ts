@@ -319,7 +319,7 @@ function main(): void {
 }
 
 // CJS guard: only run main() when invoked as a script, not when imported
-// by the vitest test file. `require.main === module` is the standard idiom.
-if (require.main === module) {
+// by the vitest test file. `import.meta.main` is the standard idiom.
+if (import.meta.main) {
   main();
 }

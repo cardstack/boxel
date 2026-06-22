@@ -10,8 +10,8 @@ import {
   type PreparedTemplateMetadata,
 } from '@cardstack/realm-test-harness';
 
-const packageRoot = resolve(__dirname);
-const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
+const packageRoot = resolve(import.meta.dirname);
+const nodeBin = process.execPath;
 const configuredRealmDir = resolve(
   packageRoot,
   process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
@@ -258,20 +258,16 @@ export default async function globalSetup() {
 
   supportLog.debug(`starting serve:support for realm ${realmDir}`);
   let logs = '';
-  let child = spawn(
-    tsNodeBin,
-    ['--transpileOnly', 'src/cli/serve-support.ts', realmDir],
-    {
-      cwd: packageRoot,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        NODE_NO_WARNINGS: '1',
-        TEST_HARNESS_SUPPORT_METADATA_FILE: metadataFile,
-      },
+  let child = spawn(nodeBin, ['src/cli/serve-support.ts', realmDir], {
+    cwd: packageRoot,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      NODE_NO_WARNINGS: '1',
+      TEST_HARNESS_SUPPORT_METADATA_FILE: metadataFile,
     },
-  );
+  });
 
   mirrorChildOutput(
     child,

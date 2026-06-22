@@ -1,5 +1,6 @@
 import { createServer } from 'node:net';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import {
   TEST_WORKER_PORT_RANGE_END,

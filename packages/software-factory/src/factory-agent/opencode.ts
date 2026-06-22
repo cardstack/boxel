@@ -32,9 +32,9 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Config as OpencodeConfig } from '@opencode-ai/sdk';
 
-// `@opencode-ai/sdk` is ESM-only and the test runner uses ts-node in
-// CommonJS mode, so a top-level `import` would fail at module-load
-// time on every test that touches this file. Lazy-load via dynamic
+// `@opencode-ai/sdk` is ESM-only, so in a CommonJS load context a
+// top-level `import` would fail at module-load time on every test that
+// touches this file. Lazy-load via dynamic
 // import inside `run()` so the type imports stay available at compile
 // time and the runtime cost (one dynamic import per `factory:go`) is
 // negligible.

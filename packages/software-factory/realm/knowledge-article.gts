@@ -161,6 +161,7 @@ class KnowledgeArticleEdit extends Component<typeof KnowledgeArticle> {
 
 export class KnowledgeArticle extends CardDef {
   static displayName = 'Knowledge Article';
+  static icon = BookOpen;
 
   @field articleTitle = contains(StringField);
   @field articleType = contains(KnowledgeTypeField);

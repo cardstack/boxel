@@ -42,6 +42,11 @@ export { knownFileMetaUrls, clearKnownFileMetaUrls };
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
+/**
+ * @deprecated Legacy per-row view-model produced by the prerendered-search
+ * resource. The v2 `search-entry` path renders each result via
+ * `RenderableSearchEntryLike` instead. Removed once every consumer is on v2.
+ */
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
   constructor(
@@ -196,6 +201,14 @@ function wrapWithModifier(
   return DecoratedPrerenderedCard as unknown as HTMLComponent;
 }
 
+/**
+ * @deprecated The legacy prerendered-card search component. Favor the v2
+ * `<SearchResults>` component — host: `components/card-search/search-results`;
+ * card `@context`: `@context.searchResultsComponent` — which consumes the
+ * heterogeneous `search-entry` stream and renders prerendered-HTML / live rows
+ * transparently. Still provided during the migration window; removed once every
+ * consumer is on v2.
+ */
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
   @consume(CardContextName) declare private cardContext?: CardContext;
 

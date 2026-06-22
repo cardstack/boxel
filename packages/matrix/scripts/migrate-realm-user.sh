@@ -10,4 +10,4 @@ if [ -z "$1" ]; then
   exit -1
 fi
 
-ts-node --transpileOnly ./scripts/migrate-realm-user $1
+node ./scripts/migrate-realm-user.ts $1

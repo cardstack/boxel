@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type {
   AgentContext,
@@ -321,6 +322,70 @@ module('issue-loop > happy path', function () {
     assert.strictEqual(result.issueResults[0].exitReason, 'done');
     assert.strictEqual(result.issueResults[0].innerIterations, 1);
     assert.strictEqual(result.issueResults[0].toolCallLog.length, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. Timing attribution
+// ---------------------------------------------------------------------------
+
+module('issue-loop > timing attribution', function () {
+  test('tool-triggered syncs count as sync time, not agent time', async function (assert) {
+    let syncCounter = 0;
+    // A realm-touching `run_*` tool syncs the workspace before it runs. Model
+    // that as a 500ms bump to the shared sync stopwatch during the agent turn.
+    let toolThatSyncs: FactoryTool = {
+      name: 'run_tests',
+      description: 'Mock run_tests that syncs first',
+      parameters: {},
+      execute: async () => {
+        syncCounter += 500;
+        return { ok: true };
+      },
+    };
+
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [{ tool: 'run_tests', args: {} }],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        tools: [toolThatSyncs],
+        createValidator: () => new MockValidator([makePassingValidation()]),
+        // Loop-owned syncs also advance the shared stopwatch.
+        syncWorkspace: async () => {
+          syncCounter += 10;
+          return { ok: true };
+        },
+        getSyncElapsedMs: () => syncCounter,
+      }),
+    );
+
+    let timing = result.issueResults[0].timing;
+    assert.ok(timing, 'issue carries timing attribution');
+    // The 500ms tool-triggered sync is attributed to sync...
+    assert.ok(
+      timing!.syncMs >= 500,
+      `syncMs (${timing!.syncMs}) includes the tool-triggered sync`,
+    );
+    // ...and subtracted from the agent's wall clock, so the near-zero mock
+    // turn leaves nothing once the 500ms tool sync is removed.
+    assert.strictEqual(
+      timing!.agentMs,
+      0,
+      'tool-sync time is not double-counted as agent time',
+    );
   });
 });
 

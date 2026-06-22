@@ -6,4 +6,4 @@ MATRIX_URL="${MATRIX_URL_VAL}" \
   NODE_NO_WARNINGS=1 \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE}" \
-  exec ts-node --transpileOnly main
+  exec node main.ts

@@ -3,7 +3,7 @@
 // Selectors for TypeScript syntax that Node cannot run via
 // `--experimental-strip-types`, which only handles "erasable" TS —
 // syntax that vanishes once type annotations are stripped. New code
-// must avoid these so it can run under Node natively, without ts-node.
+// must avoid these so it can run under Node natively.
 //
 // Shared by the root `.eslintrc.js`, `packages/ai-bot/.eslintrc.js`
 // (which is `root: true`), and `packages/catalog/.eslintrc.cjs` (which

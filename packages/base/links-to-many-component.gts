@@ -756,10 +756,11 @@ export function getLinksToManyComponent({
       </DefaultFormatsConsumer>
       <style scoped>
         @layer {
-          .linksToMany-field.fitted-effectiveFormat
-            > .linksToMany-itemContainer
-            + .linksToMany-itemContainer,
-          .linksToMany-field.embedded-effectiveFormat
+          .linksToMany-field:is(
+              .fitted-effectiveFormat,
+              .embedded-effectiveFormat,
+              .edit-effectiveFormat
+            )
             > .linksToMany-itemContainer
             + .linksToMany-itemContainer {
             margin-top: var(--boxel-sp);

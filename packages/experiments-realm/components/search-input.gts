@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { debounce } from 'lodash';
+import { debounce } from 'lodash-es';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 

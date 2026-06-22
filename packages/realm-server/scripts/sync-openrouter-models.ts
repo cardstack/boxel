@@ -30,7 +30,7 @@ async function main() {
 }
 
 // When run directly as a script
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

@@ -22,6 +22,7 @@ import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
 import { resolvePrerenderManagerURL } from './config.ts';
 import {
+  PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
@@ -58,6 +59,30 @@ export function decorateRenderErrorDiagnostics(
     ...(response.meta ?? {}),
     requestId,
   };
+}
+
+// Pure decision for the host-shell recycle reconcile. Given the token the
+// manager last reported (`reported`, null when it doesn't know one yet) and
+// the token this server warmed against (`warmed`, undefined before the first
+// report), decide whether to recycle and what the baseline token becomes:
+//   - no report          → keep the current baseline, don't recycle
+//   - first report seen   → adopt it as the baseline, don't recycle (we just
+//                           warmed against whatever shell is current)
+//   - same as baseline    → no-op
+//   - differs from baseline → recycle and advance the baseline
+// Exported for unit testing; the live caller layers the draining / in-flight
+// guards and the async recycle on top.
+export function decideHostShellRecycle(
+  reported: string | null,
+  warmed: string | undefined,
+): { recycle: boolean; nextWarmed: string | undefined } {
+  if (!reported) {
+    return { recycle: false, nextWarmed: warmed };
+  }
+  if (warmed === undefined || warmed === reported) {
+    return { recycle: false, nextWarmed: reported };
+  }
+  return { recycle: true, nextWarmed: reported };
 }
 
 export function buildPrerenderApp(options: {
@@ -1021,6 +1046,13 @@ export function createPrerenderHttpServer(options?: {
   let drainingResolved = false;
   let drainingDeferred = new Deferred<void>();
   let heartbeatTimer: NodeJS.Timeout | undefined;
+  // Host-shell token the standbys were last warmed against, learned from the
+  // manager's heartbeat responses (PRERENDER_HOST_SHELL_HASH_HEADER). When the
+  // manager reports a different token — the host was redeployed and the realm
+  // server is now serving a new shell — the browser is recycled so pages
+  // reload it. Undefined until the first heartbeat that carries a token.
+  let warmedHostShellHash: string | undefined;
+  let recyclingForHostChange = false;
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
@@ -1079,7 +1111,7 @@ export function createPrerenderHttpServer(options?: {
       log.debug(
         `POST heartbeat to ${managerURL}/prerender-servers with body:\n${JSON.stringify(body, null, 2)}`,
       );
-      await fetch(`${managerURL}/prerender-servers`, {
+      let response = await fetch(`${managerURL}/prerender-servers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/vnd.api+json',
@@ -1088,11 +1120,52 @@ export function createPrerenderHttpServer(options?: {
         body: JSON.stringify(body),
       }).catch((e) => {
         log.debug('Prerender manager heartbeat request failed:', e);
+        return undefined;
       });
+      if (response) {
+        reconcileHostShell(
+          response.headers.get(PRERENDER_HOST_SHELL_HASH_HEADER),
+        );
+      }
     } catch (e) {
       // best-effort, but log for visibility
       log.debug('Error while attempting heartbeat with prerender manager:', e);
     }
+  }
+
+  // Compare the manager's current host-shell token against the one we warmed
+  // against. A change means the host was redeployed, so recycle the browser
+  // (fire-and-forget; the heartbeat itself must not block on the restart).
+  function reconcileHostShell(hash: string | null) {
+    if (draining || recyclingForHostChange) {
+      return;
+    }
+    let { recycle, nextWarmed } = decideHostShellRecycle(
+      hash,
+      warmedHostShellHash,
+    );
+    if (!recycle) {
+      // Either nothing reported, or we adopted a baseline / matched — record
+      // the (possibly newly-adopted) token and we're done.
+      warmedHostShellHash = nextWarmed;
+      return;
+    }
+    recyclingForHostChange = true;
+    log.info(
+      `host shell changed (${warmedHostShellHash} -> ${hash}); recycling prerender browser`,
+    );
+    void prerenderer
+      .recycle()
+      .then(() => {
+        warmedHostShellHash = nextWarmed;
+      })
+      .catch((e) => {
+        // Leave warmedHostShellHash unchanged so the next heartbeat retries.
+        log.error('Failed to recycle prerender browser on host change:', e);
+      })
+      .finally(() => {
+        recyclingForHostChange = false;
+      });
   }
 
   function startHeartbeatLoop() {

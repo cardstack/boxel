@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type { SchedulableIssue } from '../src/factory-agent/index.ts';
 import type { IssueStore } from '../src/issue-scheduler.ts';

@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { getField } from '@cardstack/runtime-common';
 import { resolveFieldConfiguration } from './field-support';

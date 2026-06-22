@@ -118,6 +118,22 @@ test.describe('Room messages', () => {
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, room1, `message ${i}`);
     }
+
+    // Every message must be persisted on the server before logging out;
+    // otherwise the re-login below rebuilds a timeline that is missing whatever
+    // send had not yet landed. Verify the server side directly so a regression
+    // surfaces here rather than as a short count after pagination.
+    await expect
+      .poll(async () => {
+        let events = await getRoomEvents(username, password, room1);
+        return events.filter(
+          (e) =>
+            e.type === 'm.room.message' &&
+            e.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+        ).length;
+      })
+      .toBe(totalMessageCount);
+
     await logout(page);
 
     await login(page, username, password, { url: appURL });

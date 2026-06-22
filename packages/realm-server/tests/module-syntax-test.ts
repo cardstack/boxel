@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   ModuleSyntax,
   gjsToPlaceholderJS,
@@ -22,7 +23,7 @@ const virtualNetwork = new VirtualNetwork();
 import { basename } from 'path';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('module-syntax', function () {
     function addField(src: string, addFieldAtIndex?: number) {
       let mod = new ModuleSyntax(

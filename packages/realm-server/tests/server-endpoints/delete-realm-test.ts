@@ -1,6 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { existsSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync } = fsExtra;
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -15,7 +17,7 @@ import { insertJob, insertUser, realmSecretSeed } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { setupServerEndpointsTest } from './helpers.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function (hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let context = setupServerEndpointsTest(hooks);
 
   async function createRealmFor(ownerUserId: string) {

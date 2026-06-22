@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -16,7 +17,7 @@ import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import type { PgAdapter } from '@cardstack/postgres';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm server authentication', function (hooks) {
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;

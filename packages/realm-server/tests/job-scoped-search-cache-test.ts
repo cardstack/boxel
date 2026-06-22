@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { query, type Query, type Expression } from '@cardstack/runtime-common';
@@ -30,7 +31,7 @@ function makeDoc(label: string): string {
   );
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;
 
   setupDB(hooks, {

@@ -1,7 +1,7 @@
 import { setTitle } from './set-title.ts';
 import type OpenAI from 'openai';
 
-import * as Sentry from '@sentry/node';
+import { errorReporter } from './sentry.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import {
   getPromptParts,
@@ -78,7 +78,7 @@ To patch a card:\n
         customMessage,
       );
     } catch (error) {
-      Sentry.captureException(error, {
+      errorReporter.captureException(error, {
         extra: {
           roomId: roomId,
           userId: userId,
@@ -133,7 +133,7 @@ To patch a card:\n
         );
       }
     } catch (error) {
-      Sentry.captureException(error, {
+      errorReporter.captureException(error, {
         extra: {
           roomId: roomId,
           userId: userId,

@@ -72,6 +72,7 @@ export class IssueOptionField extends FieldDef {
         }
         .option-edit-field {
           min-width: 0;
+          overflow: hidden;
           --boxel-field-label-font-size: 0.6875rem;
         }
         .option-edit-field em {

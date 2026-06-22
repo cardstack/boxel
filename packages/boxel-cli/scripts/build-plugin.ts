@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildBoxelProgram } from '../src/build-program.ts';
 
-const PLUGIN_DIR = resolve(__dirname, '..', 'plugin');
+const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
 
 interface SkillSpec {
   /** Skill folder name under plugin/skills/ */

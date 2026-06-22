@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 
 import type {
@@ -47,7 +48,7 @@ async function fetchReservation(
   return rows[0];
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('finalizeChildReservationAsFailure', function (hooks) {
     let adapter: PgAdapter;
 

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { readFileSync, utimesSync, writeFileSync } from 'fs';
 import type { SuperTest, Test } from 'supertest';
@@ -95,7 +96,7 @@ const ARTICLE_INSTANCE = JSON.stringify({
   },
 });
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm-specific Endpoints | POST _reindex and _full-reindex',
     function (hooks) {

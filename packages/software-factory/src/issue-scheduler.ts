@@ -199,22 +199,16 @@ export interface RealmIssueStoreConfig {
 
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
-  private darkfactoryModuleUrl: string;
   private issueTrackerModuleUrl: string;
   private client: BoxelCLIClient;
   private workspaceDir: string;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
-    this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
-    // The Issue class lives in `issue-tracker` and is re-exported by
-    // `darkfactory`. Factory-written issues adopt the darkfactory re-export;
-    // issues a human adds through the IssueTracker board adopt the canonical
-    // `issue-tracker` module instead. A type filter is module-URL-specific,
-    // so the scheduler must match either — otherwise UI-added issues are
-    // silently invisible to the loop.
-    // Swap the final path segment (`darkfactory` → `issue-tracker`),
-    // tolerating a trailing slash or other equivalent canonicalization.
+    // Tracker types (Issue/Project/IssueTracker) are defined in the
+    // `issue-tracker` module and re-exported by `darkfactory`. Derive the
+    // canonical `issue-tracker` URL from the darkfactory URL by swapping the
+    // final path segment, tolerating a trailing slash.
     this.issueTrackerModuleUrl = config.darkfactoryModuleUrl
       .replace(/\/+$/, '')
       .replace(/[^/]+$/, 'issue-tracker');
@@ -222,23 +216,9 @@ export class RealmIssueStore implements IssueStore {
     this.workspaceDir = config.workspaceDir;
   }
 
-  /**
-   * Match `Issue` cards regardless of which module they adopt — the
-   * `darkfactory` re-export (factory-written) or the canonical
-   * `issue-tracker` module (added via the board UI).
-   */
-  private issueTypeFilter() {
-    return {
-      any: [
-        { type: { module: this.darkfactoryModuleUrl, name: 'Issue' } },
-        { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
-      ],
-    };
-  }
-
   async listIssues(): Promise<SchedulableIssue[]> {
     let result = await this.client.search(this.realmUrl, {
-      filter: this.issueTypeFilter(),
+      filter: { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
     });
 
     if (!result.ok) {
@@ -254,7 +234,10 @@ export class RealmIssueStore implements IssueStore {
   async refreshIssue(issueId: string): Promise<SchedulableIssue> {
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        every: [this.issueTypeFilter(), { eq: { id: issueId } }],
+        every: [
+          { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
+          { eq: { id: issueId } },
+        ],
       },
     });
 
@@ -331,11 +314,12 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
-    // We expect exactly one Project card per target realm. The search
-    // index stays on the realm — card mutations happen locally.
+    // We expect exactly one Project card per target realm. The search index
+    // stays on the realm — card mutations happen locally. Match by the
+    // canonical `issue-tracker` module (see the constructor).
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Project' },
+        type: { module: this.issueTrackerModuleUrl, name: 'Project' },
       },
       sort: [{ by: 'lastModified', direction: 'desc' as const }],
     });

@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
-import { isEqual, omit } from 'lodash';
+import { isEqual, omit } from 'lodash-es';
 
 import { localId as localIdSymbol, rri } from '@cardstack/runtime-common';
 

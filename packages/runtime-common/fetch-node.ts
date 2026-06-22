@@ -1,3 +1,9 @@
+import { createRequire } from 'node:module';
+
+// Node-only module; resolved via the package `#fetch` condition. Browsers get
+// fetch-browser.ts instead, so this CJS bridge never reaches a bundle.
+const require = createRequire(import.meta.url);
+
 /**
  * Creates a fetch implementation that's appropriate for the current environment.
  * In Node.js, it enhances localhost subdomain resolution using Undici agent.

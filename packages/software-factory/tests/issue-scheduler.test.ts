@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
@@ -474,17 +475,16 @@ module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
 // ---------------------------------------------------------------------------
 
 module('issue-scheduler > RealmIssueStore issue-type filter', function () {
-  // The `Issue` class is defined in `issue-tracker` and re-exported by
-  // `darkfactory`. Factory-written issues adopt darkfactory#Issue; an issue a
-  // human adds via the IssueTracker board adopts issue-tracker#Issue. A type
-  // filter is module-URL-specific, so listIssues must match BOTH — otherwise
-  // UI-added issues are invisible to the loop (observed in factory:go: a
-  // backlog issue added in the host UI was never picked).
-  test('listIssues matches both darkfactory#Issue and issue-tracker#Issue', async function (assert) {
+  // `Issue` is defined in `issue-tracker` and re-exported by `darkfactory`
+  // (same class). A Boxel `type` filter resolves to the canonical definition
+  // module, so listIssues queries `issue-tracker#Issue` — which matches the
+  // card regardless of which module it was authored adopting.
+  test('listIssues queries the canonical issue-tracker#Issue type', async function (assert) {
     let realmUrl = 'http://localhost:4201/user/my-test-realm/';
     let darkfactoryModuleUrl =
       'http://localhost:4201/software-factory/darkfactory';
-    let captured: { filter?: { any?: { type?: { module?: string } }[] } } = {};
+    let captured: { filter?: { type?: { module?: string; name?: string } } } =
+      {};
 
     let mockClient = {
       async search(_realm: string, query: typeof captured) {
@@ -502,14 +502,9 @@ module('issue-scheduler > RealmIssueStore issue-type filter', function () {
 
     await store.listIssues();
 
-    let modules = (captured.filter?.any ?? []).map((c) => c.type?.module);
-    assert.ok(
-      modules.includes(darkfactoryModuleUrl),
-      'matches factory-written darkfactory#Issue cards',
-    );
-    assert.ok(
-      modules.includes('http://localhost:4201/software-factory/issue-tracker'),
-      'matches UI-added issue-tracker#Issue cards',
-    );
+    assert.deepEqual(captured.filter?.type, {
+      module: 'http://localhost:4201/software-factory/issue-tracker',
+      name: 'Issue',
+    });
   });
 });

@@ -1,11 +1,12 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   deriveRealmName,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('resolve-published-realm-url', function () {
     // deriveRealmName
     test('deriveRealmName returns the last path segment, lowercased', async function (assert) {

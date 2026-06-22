@@ -9,7 +9,7 @@ import Component from '@glimmer/component';
 import Package from '@cardstack/boxel-icons/package';
 import { use, resource } from 'ember-resources';
 
-import startCase from 'lodash/startCase';
+import { startCase } from 'lodash-es';
 
 import { TrackedObject } from 'tracked-built-ins';
 

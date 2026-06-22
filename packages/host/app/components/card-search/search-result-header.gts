@@ -31,6 +31,7 @@ interface Signature {
     allCards?: string[];
     onSelectAll?: (cards: string[]) => void;
     onDeselectAll?: () => void;
+    hideViewSelector?: boolean;
   };
   Blocks: {};
 }
@@ -93,11 +94,13 @@ export default class SearchResultHeader extends Component<Signature> {
             @label={{this.selectionMenuLabel}}
           />
         {{/if}}
-        <ViewSelector
-          @items={{@viewOptions}}
-          @selectedId={{@activeViewId}}
-          @onChange={{@onChangeView}}
-        />
+        {{#unless @hideViewSelector}}
+          <ViewSelector
+            @items={{@viewOptions}}
+            @selectedId={{@activeViewId}}
+            @onChange={{@onChangeView}}
+          />
+        {{/unless}}
         <SortDropdown
           @options={{@sortOptions}}
           @selectedOption={{@activeSort}}

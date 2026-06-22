@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import sinon from 'sinon';
@@ -14,7 +15,7 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { Realm } from '@cardstack/runtime-common';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm Server Endpoints (not specific to one realm)', function () {
     module('stripe session handler', function (hooks) {
       let createCustomerStub: sinon.SinonStub;

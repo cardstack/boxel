@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -86,10 +87,7 @@ module('lint-runner | parseTscOutput', () => {
   test('also works when prefix is passed with a trailing slash', (assert) => {
     let output =
       '../catalog/__submissions-temp__/x/foo.gts(1,1): error TS1: msg';
-    let errors = parseTscOutput(
-      output,
-      '../catalog/__submissions-temp__/x/',
-    );
+    let errors = parseTscOutput(output, '../catalog/__submissions-temp__/x/');
     assert.strictEqual(errors.length, 1);
     assert.ok(errors[0].startsWith('foo.gts '), errors[0]);
   });
@@ -171,10 +169,7 @@ module('lint-runner | parseTemplateLintOutput', () => {
 
   test('handles empty messages array', (assert) => {
     let json = JSON.stringify({ '__submissions-temp__/abc/foo.hbs': [] });
-    assert.deepEqual(
-      parseTemplateLintOutput(json, tempDir, catalogDir),
-      [],
-    );
+    assert.deepEqual(parseTemplateLintOutput(json, tempDir, catalogDir), []);
   });
 
   test('handles multiple files', (assert) => {

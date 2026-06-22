@@ -261,6 +261,6 @@ function main(): void {
   );
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main();
 }

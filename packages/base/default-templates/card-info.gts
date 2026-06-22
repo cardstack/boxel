@@ -22,7 +22,7 @@ import {
 import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { ChevronRight } from '@cardstack/boxel-ui/icons';
 
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 
 import {
   chooseFile,

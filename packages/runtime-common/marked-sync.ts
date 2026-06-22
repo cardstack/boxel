@@ -1,6 +1,9 @@
 import { sanitizeHtml } from './dompurify-runtime.ts';
 import { escapeHtml } from './helpers/html.ts';
-import { bfmCardReferenceExtensions } from './bfm-card-references.ts';
+import {
+  bfmCardReferenceExtensions,
+  bfmExtensionsForKeyword,
+} from './bfm-card-references.ts';
 import { markedKatexPlaceholder } from './bfm-math.ts';
 
 import {
@@ -22,6 +25,10 @@ const bfmMarked = new Marked();
 
 // Register BFM card reference extensions.
 bfmMarked.use({ extensions: bfmCardReferenceExtensions() });
+
+// Register BFM file reference extensions (`:file[URL]` / `::file[URL]`).
+// FileDef extends BaseDef rather than CardDef, so it needs its own keyword.
+bfmMarked.use({ extensions: bfmExtensionsForKeyword('file') });
 
 // Register community marked extensions for BFM layers 3+ (GFM enhancements).
 bfmMarked.use(gfmHeadingId({ prefix: 'user-content-' }));

@@ -16,7 +16,7 @@ import {
 
 import perform from 'ember-concurrency/helpers/perform';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 
 import { Position } from 'monaco-editor';
 

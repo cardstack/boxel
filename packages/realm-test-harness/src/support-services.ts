@@ -644,8 +644,8 @@ async function attemptStartHarnessPrerenderServer(options: {
     await portReservation.release();
   }
   let child = spawn(
-    'ts-node',
-    ['--transpileOnly', 'prerender/prerender-server', `--port=${port}`],
+    'node',
+    ['prerender/prerender-server.ts', `--port=${port}`],
     {
       cwd: realmServerDir,
       stdio: ['pipe', 'pipe', 'pipe'],

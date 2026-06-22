@@ -356,6 +356,30 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
+        // A valid card definition whose module imports a dependency that does
+        // not exist, so resolving the import 404s. The card itself is found;
+        // it just can't load because a dependency is missing — a legitimate
+        // error state, distinct from the card not being found.
+        'missing-dep-card.gts': `
+          import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+          import { MissingThing } from './missing-dependency';
+          export class MissingDepCard extends CardDef {
+            static displayName = 'MissingDepCard';
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><div>{{MissingThing}}</div></template>
+            };
+          }
+        `,
+        'MissingDepCard/instance.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}missing-dep-card`,
+                name: 'MissingDepCard',
+              },
+            },
+          },
+        },
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
@@ -424,8 +448,6 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom('[data-test-host-mode-404]')
       .containsText('This page could not be found.');
-    // The collapsible technical detail stays available below the placeholder.
-    assert.dom('[data-test-error-display]').exists();
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
@@ -433,6 +455,25 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom('[data-test-host-loading]').doesNotExist();
 
     store.get = originalGet;
+  });
+
+  test('visiting a card whose dependency is missing surfaces the error rather than a 404', async function (assert) {
+    await visit('/test/MissingDepCard/instance.json');
+
+    await waitFor('[data-test-card-error]');
+    // The card itself exists; one of its dependencies 404s. That is a
+    // legitimate error state, not a missing card, so the error is surfaced
+    // instead of the bare 404 placeholder.
+    assert
+      .dom('[data-test-host-mode-404]')
+      .doesNotExist('a missing dependency is not a missing card');
+    assert
+      .dom('[data-test-card-error]')
+      .containsText('This card contains an error');
+    assert.strictEqual(
+      getPageTitle(),
+      `Error rendering ${testHostModeRealmURL}MissingDepCard/instance`,
+    );
   });
 
   test('visiting a card with a rendering error shows an error', async function (assert) {

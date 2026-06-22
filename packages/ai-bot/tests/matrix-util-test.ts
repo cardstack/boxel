@@ -1,4 +1,5 @@
-import { test } from 'qunit';
+import QUnit from 'qunit';
+const { test } = QUnit;
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import type { Method } from 'matrix-js-sdk';
 import type {

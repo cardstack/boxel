@@ -205,6 +205,18 @@ export async function performFileIndexing({
   // is no longer acted on here — the fused visit already gates fileRender.
   void hasModulePrerender;
 
+  // A frontmatter parse failure doesn't fail the file (it still indexes
+  // body-only), so it rides on the row's diagnostics — mirroring brokenLinks —
+  // where `/_indexing-errors` surfaces it for the author. Merge it onto
+  // whatever render-side diagnostics the visit already produced.
+  let fileDiagnostics: Diagnostics | undefined =
+    extractResult.frontmatterParseError
+      ? {
+          ...(diagnostics ?? {}),
+          frontmatterParseError: extractResult.frontmatterParseError,
+        }
+      : diagnostics;
+
   await updateEntry(entryURL, {
     type: 'file',
     lastModified,
@@ -227,7 +239,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
-    diagnostics,
+    diagnostics: fileDiagnostics,
   });
 
   return 'indexed';

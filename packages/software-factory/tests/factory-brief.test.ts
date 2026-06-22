@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
@@ -12,12 +13,15 @@ import {
 } from '../src/factory-brief.ts';
 
 const stickyNoteFixture = JSON.parse(
-  readFileSync(resolve(__dirname, '../realm/Wiki/sticky-note.json'), 'utf8'),
+  readFileSync(
+    resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
+    'utf8',
+  ),
 ) as unknown;
 const darkfactoryIssueFixture = JSON.parse(
   readFileSync(
     resolve(
-      __dirname,
+      import.meta.dirname,
       '../test-fixtures/darkfactory-adopter/Issues/issue-001.json',
     ),
     'utf8',

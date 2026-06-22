@@ -123,7 +123,7 @@ export async function registerRealmUser(): Promise<{
   return { jwt, userId };
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   registerRealmUser()
     .then(({ userId }) => {
       console.log(`Registered realm user ${userId}`);

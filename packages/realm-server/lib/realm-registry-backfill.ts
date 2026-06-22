@@ -11,7 +11,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { isEnvironmentMode } from './dev-service-registry';
+import { isEnvironmentMode } from './dev-service-registry.ts';
 
 const log = logger('realm-server:registry-backfill');
 

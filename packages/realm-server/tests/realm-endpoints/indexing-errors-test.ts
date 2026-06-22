@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
@@ -20,7 +21,7 @@ import {
 
 const ownerUserId = '@mango:localhost';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('with a clean realm', function (hooks) {
     let realmURL = testRealmURLFor('test/');
     let request: RealmRequest;
@@ -277,6 +278,54 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       );
     });
 
+    test('surfaces rows with has_error TRUE even when error_doc is NULL', async function (assert) {
+      // The query selects on `has_error = TRUE`, so a row with that flag set
+      // must surface even if its `error_doc` column was never populated. This
+      // locks in that the discriminator follows `has_error`, not `error_doc`.
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let cardURL = `${sourceRealm.url}broken-instance.json`;
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET has_error = TRUE,
+             error_doc = NULL,
+             diagnostics = NULL
+         WHERE url = $1 AND realm_url = $2 AND type = 'instance'`,
+        { bind: [cardURL, sourceRealm.url] },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: { url: string; entryType: string; errorDoc: unknown };
+        }>
+      ).filter(
+        (e) =>
+          e.attributes.url === cardURL && e.attributes.entryType === 'instance',
+      );
+      assert.strictEqual(
+        entries.length,
+        1,
+        'has_error=TRUE row is surfaced even with a NULL error_doc',
+      );
+      assert.strictEqual(entries[0].type, 'indexing-error', 'discriminator');
+      assert.strictEqual(
+        entries[0].attributes.errorDoc,
+        null,
+        'errorDoc passes through as null',
+      );
+    });
+
     test('surfaces broken-link rows even when has_error is FALSE', async function (assert) {
       await sourceRealm.realmIndexUpdater.fullIndex();
 
@@ -351,6 +400,188 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         entry.attributes.brokenLinks?.map((l) => l.fieldName).sort(),
         ['author', 'tags'],
         'brokenLinks payload included',
+      );
+    });
+
+    test('surfaces frontmatter-error rows even when has_error is FALSE', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let fileURL = `${sourceRealm.url}skills/bad/SKILL.md`;
+      let frontmatterParseError = {
+        message: 'Implicit map keys need to be on a single line',
+        line: 4,
+        column: 3,
+      };
+      let diagnostics = { frontmatterParseError };
+
+      // A file row that indexed cleanly (has_error = FALSE) but whose YAML
+      // frontmatter wouldn't parse. Upsert keeps the test re-runnable against
+      // the cached realm.
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index
+           (url, file_alias, type, realm_version, realm_url,
+            has_error, error_doc, diagnostics, is_deleted)
+         VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
+         ON CONFLICT (url, realm_url, type) DO UPDATE
+         SET has_error = FALSE,
+             error_doc = NULL,
+             diagnostics = EXCLUDED.diagnostics,
+             is_deleted = FALSE`,
+        {
+          bind: [
+            fileURL,
+            fileURL.replace(/\.md$/, ''),
+            sourceRealm.url,
+            JSON.stringify(diagnostics),
+          ],
+        },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: {
+            url: string;
+            entryType: string;
+            errorDoc?: unknown;
+            frontmatterParseError?: {
+              message: string;
+              line?: number;
+              column?: number;
+            };
+          };
+        }>
+      ).filter((e) => e.attributes.url === fileURL);
+      assert.strictEqual(
+        entries.length,
+        1,
+        'one frontmatter-error row reported',
+      );
+      let entry = entries[0];
+      assert.strictEqual(entry.type, 'frontmatter-error', 'discriminator');
+      assert.strictEqual(
+        entry.id,
+        `file::${fileURL}`,
+        'id encodes both entry type and URL',
+      );
+      assert.strictEqual(
+        entry.attributes.errorDoc,
+        undefined,
+        'no errorDoc on a healthy-but-unparseable-frontmatter row',
+      );
+      assert.deepEqual(
+        entry.attributes.frontmatterParseError,
+        frontmatterParseError,
+        'frontmatterParseError payload included',
+      );
+    });
+
+    test('emits both findings when a healthy row has broken links AND a frontmatter parse error', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let fileURL = `${sourceRealm.url}skills/both/SKILL.md`;
+      let frontmatterParseError = {
+        message: 'Implicit map keys need to be on a single line',
+        line: 4,
+        column: 3,
+      };
+      let brokenLinks = [
+        {
+          fieldName: 'related',
+          reference: 'https://example.com/missing',
+          kind: 'not-found',
+        },
+      ];
+      let diagnostics = { frontmatterParseError, brokenLinks };
+
+      // A healthy file row (has_error = FALSE) that carries two independent
+      // findings at once. Neither should mask the other.
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index
+           (url, file_alias, type, realm_version, realm_url,
+            has_error, error_doc, diagnostics, is_deleted)
+         VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
+         ON CONFLICT (url, realm_url, type) DO UPDATE
+         SET has_error = FALSE,
+             error_doc = NULL,
+             diagnostics = EXCLUDED.diagnostics,
+             is_deleted = FALSE`,
+        {
+          bind: [
+            fileURL,
+            fileURL.replace(/\.md$/, ''),
+            sourceRealm.url,
+            JSON.stringify(diagnostics),
+          ],
+        },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: {
+            url: string;
+            entryType: string;
+            errorDoc?: unknown;
+            brokenLinks?: Array<{ fieldName: string }>;
+            frontmatterParseError?: { message: string };
+          };
+        }>
+      ).filter((e) => e.attributes.url === fileURL);
+      assert.strictEqual(
+        entries.length,
+        2,
+        'one finding per class for the same row',
+      );
+      let byType = Object.fromEntries(entries.map((e) => [e.type, e]));
+
+      let frontmatterEntry = byType['frontmatter-error'];
+      assert.ok(frontmatterEntry, 'frontmatter-error finding present');
+      assert.strictEqual(
+        frontmatterEntry.id,
+        `file::${fileURL}::frontmatter-error`,
+        'multi-finding ids append the finding class to stay unique',
+      );
+      assert.deepEqual(
+        frontmatterEntry.attributes.frontmatterParseError,
+        frontmatterParseError,
+        'frontmatterParseError payload on the frontmatter-error finding',
+      );
+
+      let brokenLinkEntry = byType['broken-link'];
+      assert.ok(
+        brokenLinkEntry,
+        'broken-link finding is not hidden by the frontmatter error',
+      );
+      assert.strictEqual(
+        brokenLinkEntry.id,
+        `file::${fileURL}::broken-link`,
+        'broken-link finding gets its own unique id',
+      );
+      assert.deepEqual(
+        brokenLinkEntry.attributes.brokenLinks?.map((l) => l.fieldName),
+        ['related'],
+        'brokenLinks payload on the broken-link finding',
       );
     });
   });

@@ -1,4 +1,4 @@
-import { isScopedCSSRequest } from './scoped-css';
+import { isScopedCSSRequest } from './scoped-css.ts';
 import {
   cssResourceId,
   type CardResource,
@@ -6,9 +6,9 @@ import {
   type FileMetaResource,
   type RenderedHtmlResource,
   type Saved,
-} from './resource-types';
-import type { CodeRef } from './code-ref';
-import type { RealmResourceIdentifier } from './realm-identifiers';
+} from './resource-types.ts';
+import type { CodeRef } from './code-ref.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 
 // Builders for the unified-search resources. The realm-server's result mapper
 // runs these per row when applying the prefer-HTML resolution policy; keeping

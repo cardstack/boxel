@@ -46,6 +46,24 @@ Percentage width (50%, auto height):
 
 ::card[./Author/jane-doe | isolated]
 
+## File References
+
+`FileDef` instances embed with the `:file` keyword. Inline references render in atom format; block references render in embedded format.
+
+Inline file reference to an image: :file[./test-images/red-mango.jpg] — renders in atom format.
+
+A block image reference renders in embedded format:
+
+::file[./test-images/green-mango.png]
+
+A CSV data file:
+
+::file[./sample-data.csv]
+
+A linked markdown document:
+
+::file[./FileLinksExample/mango-news.md]
+
 ## GFM Alerts
 
 > [!NOTE]
@@ -55,7 +73,7 @@ Percentage width (50%, auto height):
 > This is a warning. Be careful when editing production data.
 
 > [!TIP]
-> You can nest **bold**, *italic*, and `code` inside alerts.
+> You can nest **bold**, _italic_, and `code` inside alerts.
 
 ## Math / LaTeX
 
@@ -109,19 +127,21 @@ Boxel Flavored Markdown[^1] extends standard GFM with additional features for ri
 The math rendering uses KaTeX[^2] for typesetting, while diagrams use Mermaid.js[^3].
 
 [^1]: BFM is documented at [bfm.boxel.site](https://bfm.boxel.site/).
+
 [^2]: KaTeX is a fast math typesetting library for the web.
+
 [^3]: Mermaid lets you create diagrams using a markdown-like syntax.
 
 ## Extended Tables
 
-| Feature | Status | Bundle Impact |
-| ------- | ------ | ------------- |
-| GFM Alerts | Static HTML | None |
-| Heading IDs | Static HTML | None |
-| Footnotes | Static HTML | None |
-| Extended Tables | Static HTML | None |
-| Math / LaTeX || Lazy KaTeX (~268KB) |
-| Mermaid Diagrams || Lazy Mermaid (~2MB) |
+| Feature          | Status      | Bundle Impact       |
+| ---------------- | ----------- | ------------------- |
+| GFM Alerts       | Static HTML | None                |
+| Heading IDs      | Static HTML | None                |
+| Footnotes        | Static HTML | None                |
+| Extended Tables  | Static HTML | None                |
+| Math / LaTeX     |             | Lazy KaTeX (~268KB) |
+| Mermaid Diagrams |             | Lazy Mermaid (~2MB) |
 
 ## Heading IDs
 

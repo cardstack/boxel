@@ -1,3 +1,5 @@
+import { createRequire } from 'module';
+
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'none';
 type AcceptedLogLevel = LogLevel | 'silent';
 
@@ -21,8 +23,9 @@ type LoggerFactory = {
 };
 
 // The published package does not ship TypeScript declarations, so we keep the
-// typing local here instead of maintaining an ambient .d.ts shim.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// typing local here instead of maintaining an ambient .d.ts shim. It's also
+// CJS, so under native ESM we load it through createRequire.
+const require = createRequire(import.meta.url);
 const createLogger = require('@cardstack/logger') as LoggerFactory;
 
 export function configureLogger(serializedLogLevels: string): void {

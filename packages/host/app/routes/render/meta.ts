@@ -3,7 +3,7 @@ import type Transition from '@ember/routing/transition';
 
 import { service } from '@ember/service';
 
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {

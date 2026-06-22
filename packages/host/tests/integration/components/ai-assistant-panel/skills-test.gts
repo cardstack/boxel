@@ -278,6 +278,23 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
           },
         },
+        // A skill expressed as a markdown file (`boxel.kind: skill`), at the
+        // realm root so it appears directly in the file chooser's tree.
+        'realm-sync-skill.md': `---
+name: Realm Sync Skill
+description: A skill expressed as a markdown file
+boxel:
+  kind: skill
+  commands:
+    - codeRef:
+        module: '${testRealmURL}placeholder-command'
+        name: default
+      requiresApproval: false
+---
+# Realm Sync Skill
+
+Instructions live in the markdown body.
+`,
         'hello.txt': 'Hello, world!',
         'index.json': new CardsGrid(),
         'realm.json': realmConfigCardJSON({ name: realmName }),
@@ -402,6 +419,92 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
   });
 
+  test('skill picker can add a skill markdown file through the UI', async function (assert) {
+    const roomId = await renderAiAssistantPanel();
+    let skillId = `${testRealmURL}realm-sync-skill.md`;
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+
+    // The file chooser is scoped to skill markdown files.
+    await waitFor('[data-test-choose-file-modal]');
+    await waitFor('[data-test-file="realm-sync-skill.md"]');
+    await click('[data-test-file="realm-sync-skill.md"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await waitUntil(
+      () =>
+        Boolean(
+          getRoomState(
+            roomId,
+            APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          )?.enabledSkillCards?.some((card: any) => card.sourceUrl === skillId),
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage: `timed out waiting for ${skillId} to be enabled`,
+      },
+    );
+
+    let skillsState = getRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE);
+    assert.ok(
+      skillsState.commandDefinitions?.some((c: any) =>
+        c.sourceUrl?.includes('placeholder-command'),
+      ),
+      "the markdown skill's frontmatter command is uploaded as a command definition",
+    );
+
+    await click('[data-test-skill-menu]');
+    assert
+      .dom(`[data-test-skill-toggle="${skillId}-on"]`)
+      .exists('the attached skill markdown is enabled in the menu');
+    assert
+      .dom('[data-test-skill-menu]')
+      .containsText(
+        'Realm Sync Skill',
+        'the pill is titled from the markdown frontmatter name',
+      );
+  });
+
+  test('canceling the skill-file chooser re-enables the add-markdown button', async function (assert) {
+    await renderAiAssistantPanel();
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+
+    await waitFor('[data-test-choose-file-modal]');
+    await click('[data-test-choose-file-modal-cancel-button]');
+
+    // Canceling settles the chooser promise, so the trigger button returns to
+    // its enabled state. A chooser that left its deferred unsettled would hang
+    // the attach task and leave this button stuck disabled.
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+    );
+    assert
+      .dom('[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]')
+      .isNotDisabled('the add-markdown button is re-enabled after canceling');
+
+    // The chooser can be reopened after canceling.
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await waitFor('[data-test-choose-file-modal]');
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('the chooser reopens after canceling');
+  });
+
   test('skill picker excludes already-enabled skills', async function (assert) {
     await renderAiAssistantPanel();
     let enabledSkillId = `${testRealmURL}Skill/example`;
@@ -451,6 +554,27 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       operatorModeStateService.getOpenCardIds().includes(skillId),
       'skill card is opened in operator mode',
     );
+  });
+
+  test('skill pill menu opens the skill markdown file', async function (assert) {
+    await renderAiAssistantPanel();
+
+    let skillId = `${testRealmURL}realm-sync-skill.md`;
+    await addSkillToAiAssistant(skillId);
+
+    assert
+      .dom(`[data-test-stack-card="${skillId}"]`)
+      .doesNotExist('skill file is not open before using the menu');
+
+    await click('[data-test-skill-menu]');
+    await click(`[data-test-skill-options-button="${skillId}"]`);
+    await waitFor('[data-test-boxel-menu-item-text="Open Skill File"]');
+    await click('[data-test-boxel-menu-item-text="Open Skill File"]');
+
+    await waitFor(`[data-test-stack-card="${skillId}"]`);
+    assert
+      .dom(`[data-test-stack-card="${skillId}"]`)
+      .exists('skill markdown file is opened as a stack item');
   });
 
   test('skill pill menu opens the skill card while in code mode', async function (assert) {

@@ -10,7 +10,6 @@ import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
-import CardErrorDetail from '@cardstack/host/components/operator-mode/card-error-detail';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
@@ -45,7 +44,10 @@ export default class HostModeCard extends Component<Signature> {
   // visit to a missing card, resolves to a 404. Rather than surfacing the
   // raw card-error/debug treatment on a public page, render a friendly
   // not-found placeholder so one dangling reference degrades gracefully
-  // instead of taking the page down.
+  // instead of taking the page down. A card that exists but is in an error
+  // state — e.g. because one of its dependencies is missing — does not get
+  // this treatment: the store reports it with its real (non-404) status, so
+  // its error is surfaced instead of a bare 404.
   get isNotFound() {
     return this.cardError?.status === 404;
   }
@@ -125,14 +127,10 @@ export default class HostModeCard extends Component<Signature> {
     >
       {{#if this.cardError}}
         {{#if this.isNotFound}}
-          {{! A 404 (e.g. a routing rule pointing at a deleted card) gets a
-              friendly centered placeholder, while the collapsible technical
-              detail stays available below for the realm owner debugging it. }}
           <div class='not-found' data-test-host-mode-404>
             <p class='not-found-code'>404</p>
             <p class='not-found-message'>This page could not be found.</p>
           </div>
-          <CardErrorDetail @error={{this.cardError}} class='not-found-detail' />
         {{else}}
           <CardError @error={{this.cardError}} @hideHeader={{true}} />
         {{/if}}
@@ -205,19 +203,6 @@ export default class HostModeCard extends Component<Signature> {
         margin: 0;
         color: var(--boxel-450);
         font: var(--boxel-font);
-      }
-
-      /* Anchor the technical-detail box to the bottom of the card, the same
-         way CardError positions its own detail, so the centered 404 message
-         sits above it. */
-      .not-found-detail {
-        position: absolute;
-        bottom: var(--boxel-sp);
-        left: var(--boxel-sp);
-        right: var(--boxel-sp);
-        max-height: calc(100% - calc(var(--boxel-sp) * 2));
-        z-index: 10;
-        margin: 0;
       }
 
       .non-publishable-message {

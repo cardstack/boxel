@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   Loader,
@@ -14,7 +15,7 @@ import {
   withRuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   hooks.afterEach(() => {
     endRuntimeDependencyTrackingSession();
     resetRuntimeDependencyTracker();

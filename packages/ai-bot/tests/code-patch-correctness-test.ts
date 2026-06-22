@@ -1,4 +1,5 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 
 import { publishCodePatchCorrectnessMessage } from '../lib/code-patch-correctness.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';

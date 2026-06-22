@@ -37,8 +37,8 @@ Start the server with `pnpm start` or `pnpm start-dev` for live reload.
 
 ### Async graphs (Clinic Bubbleprof)
 
-- Run Bubbleprof attached to ts-node:
-  - `AI_BOT_PROF=1 DISABLE_MATRIX_JS_LOGGING=1 LOG_LEVELS="ai-bot=debug" pnpm dlx clinic bubbleprof --dest .clinic/ai-bot-bp -- node --require ts-node/register/transpile-only main.ts`
+- Run Bubbleprof attached to the node process:
+  - `AI_BOT_PROF=1 DISABLE_MATRIX_JS_LOGGING=1 LOG_LEVELS="ai-bot=debug" pnpm dlx clinic bubbleprof --dest .clinic/ai-bot-bp -- node main.ts`
   - Drive one interaction; stop with Ctrl+C twice (~200–500ms apart) or send `SIGTERM` from another terminal.
   - Open the report:
     - `pnpm dlx clinic open .clinic/ai-bot-bp`

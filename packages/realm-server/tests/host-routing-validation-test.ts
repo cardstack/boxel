@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import hostRoutingValidationTests from '@cardstack/runtime-common/tests/host-routing-validation-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('validateRoutingPath', function () {
     test('validateRoutingPath: no warning for empty or whitespace paths', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});

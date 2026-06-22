@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import type { FieldDef } from '../card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 import { getField } from '@cardstack/runtime-common';
 
 export default class FieldDefEditTemplate extends GlimmerComponent<{

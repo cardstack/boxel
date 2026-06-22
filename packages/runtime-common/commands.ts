@@ -10,7 +10,7 @@ import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
 import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
-import type { EncodedCommandRequest } from '../base/matrix-event';
+import type { EncodedCommandRequest } from '../base/matrix-event.gts';
 
 export interface CommandRequest {
   id: string;

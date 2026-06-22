@@ -7,7 +7,7 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-import { get } from 'lodash';
+import { get } from 'lodash-es';
 
 import Pill from '../pill/index.gts';
 import DndKanbanBoard, { DndColumn } from './index.gts';

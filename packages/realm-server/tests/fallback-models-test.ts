@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import fallbackModelsTests from '@cardstack/runtime-common/tests/fallback-models-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('DEFAULT_FALLBACK_MODELS', function () {
     test('ships at least one curated model', async function (assert) {
       await runSharedTest(fallbackModelsTests, assert, {});

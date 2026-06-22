@@ -1,6 +1,6 @@
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
-import merge from 'lodash/merge';
+import { merge } from 'lodash-es';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   hasExtension,

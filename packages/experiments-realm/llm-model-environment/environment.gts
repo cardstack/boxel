@@ -23,7 +23,7 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { Skill } from 'https://cardstack.com/base/skill';
-import { includes, uniqBy } from 'lodash';
+import { includes, uniqBy } from 'lodash-es';
 
 import SettingsIcon from '@cardstack/boxel-icons/settings';
 import ZapIcon from '@cardstack/boxel-icons/zap';

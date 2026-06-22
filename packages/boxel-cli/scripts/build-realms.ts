@@ -22,7 +22,7 @@
 import { cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 const MONOREPO_PACKAGES = resolve(PACKAGE_ROOT, '..');
 const OUT_DIR = join(PACKAGE_ROOT, 'bundled-realms');
 

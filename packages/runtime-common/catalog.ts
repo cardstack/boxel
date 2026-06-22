@@ -1,4 +1,6 @@
-import { isEqual, uniqWith, kebabCase } from 'lodash';
+import { isEqual } from 'lodash-es';
+import { uniqWith } from 'lodash-es';
+import { kebabCase } from 'lodash-es';
 import { v4 as uuidv4 } from 'uuid';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { CardDef } from 'https://cardstack.com/base/card-api';

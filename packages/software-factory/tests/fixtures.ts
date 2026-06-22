@@ -90,7 +90,7 @@ type SharedRealmHandle = {
 };
 
 const packageRoot = resolve(process.cwd());
-const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
+const nodeBin = process.execPath;
 const defaultRealmDir = resolve(
   packageRoot,
   process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
@@ -278,9 +278,8 @@ async function startRealmProcess(
   };
   try {
     child = spawn(
-      tsNodeBin,
+      nodeBin,
       [
-        '--transpileOnly',
         'src/cli/serve-realm.ts',
         realmDir,
         `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
@@ -347,7 +346,7 @@ async function startRealmProcess(
 
     // Race the metadata-file poll against an early `'error'` from the
     // child. Without this, a spawn-level failure (e.g. ENOENT on the
-    // ts-node binary) leaves waitForMetadataFile polling until its
+    // node binary) leaves waitForMetadataFile polling until its
     // 300-second timeout before the startup error surfaces.
     let earlyError = new Promise<never>((_, reject) => {
       child!.once('error', reject);

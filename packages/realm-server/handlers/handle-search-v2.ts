@@ -151,7 +151,9 @@ export default function handleSearchV2(opts: {
         ? await timings.time('resolveRealms', resolveRealms)
         : await resolveRealms();
       let doc = await searchEntryRealms(realmInstances, parsed, runSearchOpts);
-      let stringify = async () => JSON.stringify(doc, null, 2);
+      // Serialize compact: a search-entry doc can run to many MB, so indentation
+      // whitespace is pure wire overhead the consumer parses straight back off.
+      let stringify = async () => JSON.stringify(doc);
       return timings ? await timings.time('stringify', stringify) : stringify();
     };
 

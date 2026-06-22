@@ -32,6 +32,13 @@ import { respondWithJobScopedSearchCache } from './handle-search.ts';
 // with `_federated-search` through `respondWithJobScopedSearchCache`. Its
 // `htmlFormat` / `cardUrls` / `renderType` are the inner-key opts, so its cache
 // entries segregate from the live endpoint's.
+/**
+ * @deprecated Backs the legacy `/_federated-search-prerendered` endpoint. Prefer
+ * the v2 `search-entry` handler `handleSearchV2` (`/_federated-search-v2`), which
+ * carries prerendered HTML and the live serialization in one heterogeneous
+ * result rather than a dedicated prerendered shape. Retained as a compat layer
+ * over the shared search engine; removed once every consumer is on v2.
+ */
 export default function handleSearchPrerendered(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;

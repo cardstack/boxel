@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { z, type ZodType } from 'zod';
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk';

@@ -23,18 +23,14 @@
     "experimentalDecorators": true,
     "paths": {
       "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/host/tests/*": [
-        "../host/tests/*"
-      ]
+      "@cardstack/host/tests/*": ["../host/tests/*"]
     },
-    "types": [
-      "@cardstack/local-types"
-    ]
+    "types": ["@cardstack/local-types"]
   },
-  "include": [
-    "**/*.ts",
-    "**/*.gts"
-  ]
+  "include": ["**/*.ts", "**/*.gts"]
 }

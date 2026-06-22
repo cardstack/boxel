@@ -53,3 +53,12 @@ export async function compareCurrentBoxelUIChecksum(distURL: URL) {
 export function writeCurrentBoxelUIChecksum(checksum: string) {
   fs.writeFileSync(fileChecksumPath, checksum);
 }
+
+// Grouped on a mutable object so tests can stub these under native ESM —
+// named exports are read-only live bindings and can't be stubbed directly.
+// Consumers (e.g. the post-deployment handler) call through `boxelUIChecker`
+// so a `sinon.stub(boxelUIChecker, …)` takes effect.
+export const boxelUIChecker = {
+  compareCurrentBoxelUIChecksum,
+  writeCurrentBoxelUIChecksum,
+};

@@ -1,6 +1,6 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { reportError } from '@cardstack/runtime-common';
-import type { StripeSubscriptionDeletedWebhookEvent } from '.';
+import type { StripeSubscriptionDeletedWebhookEvent } from './index.ts';
 import {
   insertStripeEvent,
   updateSubscription,

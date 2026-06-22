@@ -19,7 +19,7 @@ import { consume, provide } from 'ember-provide-consume-context';
 import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
-import startCase from 'lodash/startCase';
+import { startCase } from 'lodash-es';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {

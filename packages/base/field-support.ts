@@ -23,7 +23,7 @@ import {
 } from './card-serialization';
 import { initSharedState } from './shared-state';
 import { rawArrayValues } from './watched-array';
-import { flatMap } from 'lodash';
+import { flatMap } from 'lodash-es';
 import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
 

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -12,7 +13,7 @@ import {
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 import { setupDB } from './helpers/index.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('fetchUserPermissions', function (hooks) {
     let dbAdapter: PgAdapter;
 

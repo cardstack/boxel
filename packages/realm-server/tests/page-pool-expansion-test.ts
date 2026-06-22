@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { PagePool } from '../prerender/page-pool.ts';
 import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
@@ -105,7 +106,7 @@ async function withEnv(
   }
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('PagePool dynamic-pool configuration', function (hooks) {
     let teardown: Array<() => Promise<void>> = [];
 

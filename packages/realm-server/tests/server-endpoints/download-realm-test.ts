@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { mkdirSync, writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,7 +26,7 @@ function binaryParser(
   });
 }
 
-module(`server-endpoints/${basename(__filename)}`, function (hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   // Use the `simple` fixture so the realm has real card files to assert
   // the archive contains; the `blank` fixture has no card content.
   let context = setupServerEndpointsTest(hooks, { fixture: 'simple' });

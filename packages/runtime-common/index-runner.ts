@@ -1,4 +1,4 @@
-import ignore, { type Ignore } from 'ignore';
+import { ignore, type Ignore } from './ignore.ts';
 // Isomorphic UUID — works in both Node and the browser (host tests
 // instantiate IndexRunner inside a Chrome tab, so Node's built-in
 // `crypto.randomUUID` is not available).

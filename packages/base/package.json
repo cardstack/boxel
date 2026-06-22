@@ -12,7 +12,7 @@
     "@glimmer/tracking": "^1.0.4",
     "@glint/template": "catalog:",
     "@types/flat": "catalog:",
-    "@types/lodash": "catalog:",
+    "@types/lodash-es": "catalog:",
     "awesome-phonenumber": "catalog:",
     "concurrently": "catalog:",
     "ember-cli-htmlbars": "^6.3.0",
@@ -29,7 +29,8 @@
   },
   "peerDependencies": {
     "ember-provide-consume-context": "^0.7.0",
-    "ember-source": "catalog:"
+    "ember-source": "catalog:",
+    "lodash-es": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

@@ -443,10 +443,10 @@ The first version should support:
 Add a script:
 
 ```json
-"factory:go": "ts-node --transpileOnly src/cli/factory-entrypoint.ts"
+"factory:go": "node src/cli/factory-entrypoint.ts"
 ```
 
-For software-factory CLI entrypoints, favor `ts-node --transpileOnly` over `tsx`.
+For software-factory CLI entrypoints, run the TypeScript directly with `node` (native type stripping) rather than a separate runner like `tsx`.
 
 - it matches the execution model already used by `realm-server`
 - it avoids the decorator/runtime incompatibilities we hit when `tsx` imports `runtime-common` auth code

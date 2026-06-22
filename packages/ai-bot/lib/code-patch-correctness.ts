@@ -1,5 +1,5 @@
 import type { MatrixClient } from 'matrix-js-sdk';
-import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
+import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events.js';
 
 import { uuidv4 } from '@cardstack/runtime-common';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';

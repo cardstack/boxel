@@ -42,6 +42,21 @@ export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
 export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
+# Echo the first installed system Chrome/Chromium, or nothing. Lets tooling
+# reuse an already-present browser instead of downloading its own. Explicit
+# checks (not a for-loop) so the macOS path's embedded space doesn't get
+# word-split — env-vars.sh runs under whatever shell mise invokes, and POSIX
+# sh handles backslash-escapes in for-loop word lists inconsistently.
+_boxel_resolve_chrome() {
+  if [ -x /usr/bin/google-chrome ]; then echo /usr/bin/google-chrome
+  elif [ -x /usr/bin/google-chrome-stable ]; then echo /usr/bin/google-chrome-stable
+  elif [ -x /usr/bin/chromium ]; then echo /usr/bin/chromium
+  elif [ -x /usr/bin/chromium-browser ]; then echo /usr/bin/chromium-browser
+  elif [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then echo "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  elif [ -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]; then echo "/Applications/Chromium.app/Contents/MacOS/Chromium"
+  fi
+}
+
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   ENV_SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
   export ENV_SLUG
@@ -230,24 +245,27 @@ else
   # keep the bundled puppeteer chromium — they'll see the hang stall
   # longer until vite's optimizer cache warms up.
   if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
-    # Explicit checks (not a for-loop) so the macOS path's embedded space
-    # doesn't get word-split by /bin/sh — env-vars.sh runs under whatever
-    # shell mise invokes, and POSIX sh handles backslash-escapes in for-
-    # loop word lists inconsistently across implementations.
-    if [ -x /usr/bin/google-chrome ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
-    elif [ -x /usr/bin/google-chrome-stable ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
-    elif [ -x /usr/bin/chromium ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-    elif [ -x /usr/bin/chromium-browser ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-    elif [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
-      export PUPPETEER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    elif [ -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]; then
-      export PUPPETEER_EXECUTABLE_PATH="/Applications/Chromium.app/Contents/MacOS/Chromium"
-    fi
+    _boxel_chrome="$(_boxel_resolve_chrome)"
+    [ -n "$_boxel_chrome" ] && export PUPPETEER_EXECUTABLE_PATH="$_boxel_chrome"
+    unset _boxel_chrome
   fi
+fi
+
+# Percy bundles its own Chromium and downloads + unzips it on first use
+# (@percy/core install.js) via extract-zip, whose extraction step hangs
+# indefinitely on Node 24.x — `percy exec` then never reaches the test
+# command it wraps, so the host suite never runs and no junit report is
+# written. @percy/core honors PERCY_BROWSER_EXECUTABLE and skips the download
+# when it points at an existing binary. This sits outside the env/standard
+# branches above because the host-test job runs in env mode (BOXEL_ENVIRONMENT
+# set), whose branch resolves no Chrome path. Reuse PUPPETEER_EXECUTABLE_PATH
+# when standard mode already set it, otherwise detect the system Chrome.
+if [ -z "${PERCY_BROWSER_EXECUTABLE:-}" ]; then
+  _boxel_percy_chrome="${PUPPETEER_EXECUTABLE_PATH:-$(_boxel_resolve_chrome)}"
+  if [ -n "$_boxel_percy_chrome" ] && [ -x "$_boxel_percy_chrome" ]; then
+    export PERCY_BROWSER_EXECUTABLE="$_boxel_percy_chrome"
+  fi
+  unset _boxel_percy_chrome
 fi
 
 # Trust the mkcert root CA in Node clients regardless of env-mode vs

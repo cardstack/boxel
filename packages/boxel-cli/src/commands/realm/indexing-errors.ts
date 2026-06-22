@@ -40,7 +40,25 @@ export interface BrokenLinkEntry {
   };
 }
 
-export type IndexingErrorsEntry = IndexingErrorEntry | BrokenLinkEntry;
+// Resource for a row that indexed cleanly but whose YAML frontmatter wouldn't
+// parse, surfaced via `diagnostics.frontmatterParseError`. The file indexes
+// body-only; anything the frontmatter declared (e.g. a skill's commands) was
+// dropped.
+export interface FrontmatterErrorEntry {
+  type: 'frontmatter-error';
+  id: string;
+  attributes: {
+    url: string;
+    entryType: string;
+    diagnostics: Record<string, unknown> | null;
+    frontmatterParseError: FrontmatterParseErrorLike;
+  };
+}
+
+export type IndexingErrorsEntry =
+  | IndexingErrorEntry
+  | BrokenLinkEntry
+  | FrontmatterErrorEntry;
 
 export interface IndexingErrorsDocument {
   data: IndexingErrorsEntry[];
@@ -52,6 +70,14 @@ export interface BrokenLinkLike {
   fieldName: string;
   reference: string;
   kind: 'error' | 'not-found';
+}
+
+// Mirror of FrontmatterParseError from @cardstack/runtime-common, kept local
+// for the same reason.
+export interface FrontmatterParseErrorLike {
+  message: string;
+  line?: number;
+  column?: number;
 }
 
 export interface IndexingErrorsResult {
@@ -179,7 +205,32 @@ export function formatEntry(entry: IndexingErrorsEntry): string {
   if (entry.type === 'indexing-error') {
     return `${prefix} ${url}  ${shortErrorMessage(entry.attributes.errorDoc)}`;
   }
+  if (entry.type === 'frontmatter-error') {
+    return `${prefix} ${url}  ${shortFrontmatterError(
+      entry.attributes.frontmatterParseError,
+    )}`;
+  }
   return `${prefix} ${url}  ${shortBrokenLinks(entry.attributes.brokenLinks)}`;
+}
+
+export function shortFrontmatterError(
+  parseError: FrontmatterParseErrorLike | null | undefined,
+): string {
+  if (!parseError) {
+    return '<no frontmatter error>';
+  }
+  let where =
+    typeof parseError.line === 'number'
+      ? ` (line ${parseError.line}${
+          typeof parseError.column === 'number' ? `:${parseError.column}` : ''
+        })`
+      : '';
+  let raw = (parseError.message ?? '<no message>').replace(/\s+/g, ' ').trim();
+  let message =
+    raw.length <= SHORT_MESSAGE_MAX
+      ? raw
+      : `${raw.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
+  return `frontmatter parse error${where}: ${message}`;
 }
 
 const BROKEN_LINKS_MAX_LIST = 3;

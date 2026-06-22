@@ -43,6 +43,7 @@ interface Signature {
   Args: {
     realmURL: string;
     fileTypeFilter?: CodeRef;
+    fileFieldFilter?: Record<string, unknown>;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
@@ -112,6 +113,7 @@ export default class IndexedFileTree extends Component<Signature> {
     this,
     () => this.args.realmURL,
     () => this.args.fileTypeFilter,
+    () => this.args.fileFieldFilter,
   );
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;

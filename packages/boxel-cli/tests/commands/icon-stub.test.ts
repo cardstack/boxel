@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { getIconStubModule } from '../../src/commands/test.js';
+import { getIconStubModule } from '../../src/lib/test-engine.js';
 
 // `boxel test` serves this stub for every
 // `/@cardstack/boxel-icons/v1/icons/<name>.js` request so base modules

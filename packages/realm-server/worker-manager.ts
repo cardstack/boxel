@@ -12,7 +12,7 @@ import { writeSync } from 'node:fs';
 // and throws *again*. Node delivers the throw inside an uncaughtException
 // handler as the next pending exception, so V8 hot-loops re-reporting it
 // (uv__run_check → CheckImmediate → InspectorConsoleCall → Error.stack
-// formatting via ts-node) at ~100% CPU until the process is SIGKILLed —
+// formatting) at ~100% CPU until the process is SIGKILLed —
 // CS-11084. Swallowing EPIPE at the stream level breaks the loop and
 // lets normal SIGTERM-driven shutdown finish.
 const swallowEpipe = (err: NodeJS.ErrnoException) => {
@@ -55,7 +55,7 @@ import {
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
-import flattenDeep from 'lodash/flattenDeep';
+import { flattenDeep } from 'lodash-es';
 import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
@@ -822,10 +822,9 @@ async function startWorker(
   urlMappings: [URL | string, URL][],
 ) {
   let worker = spawn(
-    'ts-node',
+    'node',
     [
-      '--transpileOnly',
-      'worker',
+      'worker.ts',
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,

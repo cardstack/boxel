@@ -11,7 +11,7 @@ import {
   wantsFactoryEntrypointHelp,
 } from '../factory-entrypoint.ts';
 import { FactoryBriefError } from '../factory-brief.ts';
-import { configureLogger, logger } from '../logger.ts';
+import { configureLogger, logger, setLogTimestampsEnabled } from '../logger.ts';
 
 let log = logger('factory-entrypoint');
 
@@ -25,9 +25,14 @@ async function main(): Promise<void> {
 
   // --debug raises the log level so debug-gated lines (e.g. full
   // run-command response bodies) surface, unless the caller has already
-  // pinned a level via LOG_LEVELS.
-  if (options.debug && !process.env.LOG_LEVELS) {
-    configureLogger('*=debug');
+  // pinned a level via LOG_LEVELS. It also turns on the timing
+  // instrumentation (per-line timestamps + per-phase/summary durations),
+  // which is otherwise off so normal runs stay clean.
+  if (options.debug) {
+    setLogTimestampsEnabled(true);
+    if (!process.env.LOG_LEVELS) {
+      configureLogger('*=debug');
+    }
   }
 
   await BoxelCLIClient.ensureProfile({

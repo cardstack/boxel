@@ -10,7 +10,7 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
-import * as QUnit from 'qunit';
+import QUnit from 'qunit';
 import { gjsToPlaceholderJS } from '../module-syntax.ts';
 
 declare global {

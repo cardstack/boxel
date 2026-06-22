@@ -9,7 +9,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, task, timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
-import { cloneDeep } from 'lodash';
+import { cloneDeep } from 'lodash-es';
 
 import { Filter } from 'matrix-js-sdk';
 import {

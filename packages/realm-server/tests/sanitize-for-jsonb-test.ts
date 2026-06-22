@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { sanitizeForJsonb } from '@cardstack/runtime-common';
 
@@ -18,7 +19,7 @@ function hasIllegalCodePoint(value: string): boolean {
   );
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('returns clean values unchanged', function (assert) {
     assert.strictEqual(sanitizeForJsonb('plain text'), 'plain text');
     assert.strictEqual(sanitizeForJsonb(42 as unknown), 42);

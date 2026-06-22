@@ -1,5 +1,6 @@
 import { join } from 'path';
-import { existsSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync } = fsExtra;
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   executableExtensions,

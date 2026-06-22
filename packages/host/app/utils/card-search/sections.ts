@@ -1,6 +1,8 @@
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RenderableSearchEntryLike,
+} from '@cardstack/runtime-common';
 
-import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -18,7 +20,7 @@ export interface RealmSection {
   type: 'realm';
   realmUrl: string;
   realmInfo: RealmSectionInfo;
-  cards: PrerenderedCard[];
+  cards: RenderableSearchEntryLike[];
   totalCount: number;
 }
 
@@ -27,7 +29,7 @@ export type RecentsSection =
       sid: string;
       type: 'recents';
       kind: 'prerendered';
-      cards: PrerenderedCard[];
+      cards: RenderableSearchEntryLike[];
       totalCount: number;
     }
   | {
@@ -97,7 +99,7 @@ function realmUrlForCard(cardIdOrUrl: string, realmURLs: string[]): string {
 // ── Section builders ──
 
 export function buildRecentsSection(
-  cards: PrerenderedCard[],
+  cards: RenderableSearchEntryLike[],
 ): RecentsSection | undefined {
   if (cards.length === 0) {
     return undefined;
@@ -147,7 +149,7 @@ export function buildUrlSection(
 }
 
 export function buildQuerySections(
-  instances: PrerenderedCard[],
+  instances: RenderableSearchEntryLike[],
   opts: {
     isURL: boolean;
     isSearchKeyEmpty: boolean;
@@ -165,9 +167,9 @@ export function buildQuerySections(
     return null;
   }
 
-  const byRealm = new Map<string, PrerenderedCard[]>();
+  const byRealm = new Map<string, RenderableSearchEntryLike[]>();
   for (const card of instances) {
-    const list: PrerenderedCard[] = byRealm.get(card.realmUrl) ?? [];
+    const list: RenderableSearchEntryLike[] = byRealm.get(card.realmUrl) ?? [];
     list.push(card);
     byRealm.set(card.realmUrl, list);
   }

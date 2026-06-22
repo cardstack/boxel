@@ -1,7 +1,9 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { dirSync, type DirResult } from 'tmp';
-import { ensureDirSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeFileSync } = fsExtra;
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   asExpressions,
@@ -103,7 +105,7 @@ function seedRealmJson(realmDir: string, payload: Record<string, unknown>) {
   writeFileSync(join(realmDir, 'realm.json'), JSON.stringify(card, null, 2));
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('runRegistryBackfill', function (hooks) {
     let dbAdapter: PgAdapter;
     let dir: DirResult;

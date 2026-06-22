@@ -100,8 +100,6 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       'node',
       [
         '--no-warnings',
-        '--require',
-        require.resolve('ts-node/register/transpile-only'),
         resolve(packageRoot, 'src/cli/factory-entrypoint.ts'),
         '--brief-url',
         briefUrl,

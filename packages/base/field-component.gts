@@ -34,7 +34,7 @@ import {
   sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
-import { isEqual, flatMap } from 'lodash';
+import { isEqual, flatMap } from 'lodash-es';
 import { initSharedState } from './shared-state';
 import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';

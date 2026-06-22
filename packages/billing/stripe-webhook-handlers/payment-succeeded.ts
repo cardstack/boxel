@@ -21,7 +21,7 @@ import {
   sumUpCreditsLedger,
   updateSubscription as updateSubscriptionQuery,
 } from '../billing-queries.ts';
-import type { StripeInvoicePaymentSucceededWebhookEvent } from '.';
+import type { StripeInvoicePaymentSucceededWebhookEvent } from './index.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 import { TransactionManager } from '@cardstack/postgres';
 import { ProrationCalculator } from '../proration-calculator.ts';

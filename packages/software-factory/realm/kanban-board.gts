@@ -415,6 +415,7 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
 
 export class KanbanBoard extends CardDef {
   static displayName = 'Kanban Board';
+  static icon = SquareKanban;
   static prefersWideFormat = true;
 
   @field boardKey = contains(StringField);

@@ -8,7 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import merge from 'lodash/merge';
+import { merge } from 'lodash-es';
 
 // The `?worker&url` suffix is a vite feature that builds each worker into a
 // standalone script outside the main bundle and gives us back its URL. We

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
@@ -13,7 +14,7 @@ import { realmSecretSeed } from './helpers/index.ts';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 import { verifyJWT } from '../jwt.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('prerender proxy', function () {
     let createPrerenderAuth = buildCreatePrerenderAuth(realmSecretSeed);
 

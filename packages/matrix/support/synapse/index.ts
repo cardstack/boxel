@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as net from 'net';
-import * as fse from 'fs-extra';
+import fse from 'fs-extra';
 import { request } from '@playwright/test';
 import {
   dockerCreateNetwork,
@@ -24,7 +24,7 @@ export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
 
 const registrationSecretFile = path.resolve(
-  path.join(__dirname, '..', '..', 'registration_secret.txt'),
+  path.join(import.meta.dirname, '..', '..', 'registration_secret.txt'),
 );
 
 interface SynapseConfig {
@@ -94,7 +94,7 @@ export async function cfgDirFromTemplate(
     port?: number;
   },
 ): Promise<SynapseConfig> {
-  const templateDir = path.join(__dirname, template);
+  const templateDir = path.join(import.meta.dirname, template);
 
   const stats = await fse.stat(templateDir);
   if (!stats?.isDirectory) {
@@ -215,7 +215,7 @@ export async function synapseStart(
       '-v',
       `${synCfg.configDir}:/data`,
       '-v',
-      `${path.join(__dirname, 'templates')}:/custom/templates/`,
+      `${path.join(import.meta.dirname, 'templates')}:/custom/templates/`,
     ];
     if (useDynamicHostPort) {
       // In dynamic-host-port mode multiple harnesses may run concurrently, so

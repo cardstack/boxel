@@ -33,26 +33,31 @@ export class Comment extends FieldDef {
     }
 
     <template>
-      <div class='comment-edit'>
-        <div
-          class='comment-edit-avatar'
-          aria-hidden='true'
-        >{{this.initials}}</div>
-        <div class='comment-edit-fields'>
-          <div class='comment-edit-meta'>
-            <FieldContainer @label='Author' @tag='label' @vertical={{true}}>
-              <@fields.author />
-            </FieldContainer>
-            <FieldContainer @label='Date' @tag='label' @vertical={{true}}>
-              <@fields.datetime />
+      <div class='comment-edit-container'>
+        <div class='comment-edit'>
+          <div
+            class='comment-edit-avatar'
+            aria-hidden='true'
+          >{{this.initials}}</div>
+          <div class='comment-edit-fields'>
+            <div class='comment-edit-meta'>
+              <FieldContainer @label='Author' @tag='label' @vertical={{true}}>
+                <@fields.author />
+              </FieldContainer>
+              <FieldContainer @label='Date' @tag='label' @vertical={{true}}>
+                <@fields.datetime />
+              </FieldContainer>
+            </div>
+            <FieldContainer @label='Comment' @tag='label' @vertical={{true}}>
+              <@fields.body />
             </FieldContainer>
           </div>
-          <FieldContainer @label='Comment' @tag='label' @vertical={{true}}>
-            <@fields.body />
-          </FieldContainer>
         </div>
       </div>
       <style scoped>
+        .comment-edit-container {
+          container-type: inline-size;
+        }
         .comment-edit {
           display: grid;
           grid-template-columns: 2rem 1fr;
@@ -88,6 +93,15 @@ export class Comment extends FieldDef {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: var(--boxel-sp-xs);
+        }
+        @container (width < 300px) {
+          .comment-edit {
+            grid-template-columns: 1fr;
+            padding: 0;
+          }
+          .comment-edit-meta {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </template>

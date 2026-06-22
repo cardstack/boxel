@@ -53,8 +53,8 @@ module.exports = {
       'error',
       { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
     ],
-    // Keep new code "erasable" so it can run under Node's
-    // `--experimental-strip-types` without ts-node.
+    // Keep new code "erasable" so Node can run it via
+    // `--experimental-strip-types` (type-only syntax that vanishes when stripped).
     '@typescript-eslint/parameter-properties': [
       'error',
       { prefer: 'class-property' },

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
@@ -20,7 +21,7 @@ import {
 
 const ownerUserId = '@mango:localhost';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('with a publishable realm', function (hooks) {
     let realmURL = testRealmURLFor('test/');
     let request: RealmRequest;

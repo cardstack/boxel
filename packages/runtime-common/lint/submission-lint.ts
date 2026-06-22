@@ -12,7 +12,7 @@ if (typeof (globalThis as any).document !== 'undefined') {
 
 const log = logger('submission-lint');
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const CATALOG_DIR = path.join(REPO_ROOT, 'packages', 'catalog');
 const HOST_DIR = path.join(REPO_ROOT, 'packages', 'host');
 export const SUBMISSIONS_TEMP_ROOT = path.join(

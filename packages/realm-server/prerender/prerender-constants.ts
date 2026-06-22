@@ -2,6 +2,16 @@ export const PRERENDER_SERVER_STATUS_HEADER = 'X-Boxel-Prerender-Server-Status';
 export const PRERENDER_SERVER_STATUS_DRAINING = 'draining';
 export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
 
+// Opaque token for the current host shell (the realm server's rewritten
+// index.html). The realm server reports it to the manager at boot
+// (POST /host-shell); the manager echoes the latest value on every
+// heartbeat response via this header, and a prerender server recycles its
+// browser when the value differs from the shell it last warmed against —
+// i.e. the host was redeployed. The token only has to change when the host
+// bundle changes; prerender servers treat it opaquely.
+export const PRERENDER_HOST_SHELL_HASH_HEADER =
+  'X-Boxel-Prerender-Host-Shell-Hash';
+
 // CS-10872: correlates one client-initiated prerender call across
 // remote-prerenderer → manager → prerender-server. The client assigns
 // the ID on the first request; the manager and prerender-server echo

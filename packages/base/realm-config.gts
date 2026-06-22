@@ -29,7 +29,7 @@ import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
