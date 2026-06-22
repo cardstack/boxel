@@ -1,7 +1,6 @@
-import { array } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -10,12 +9,9 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common';
 
-import type FileUploadService from '@cardstack/host/services/file-upload';
-import type { FileUploadTask } from '@cardstack/host/services/file-upload';
-import type RealmService from '@cardstack/host/services/realm';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import IndexedFileTree from '../../editor/indexed-file-tree';
-import RealmDropdown, { type RealmDropdownItem } from '../../realm-dropdown';
+import FileChooser, { type FileChooserRealm } from '../panel';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -34,46 +30,23 @@ interface Signature {
 }
 
 export default class MiniFileChooser extends Component<Signature> {
-  @service declare private realm: RealmService;
-  @service('file-upload') declare private fileUpload: FileUploadService;
-
-  @tracked private selectedRealm = this.initialRealm;
   // The user's most recent in-tree pick, relative to the selected realm. Seeds
   // the tree's highlight and takes precedence over @selected once the user acts.
   @tracked private userSelectedFile?: LocalPath;
-  @tracked private currentUpload?: FileUploadTask;
-  @tracked private isDropZoneActive = false;
-  // Bumped on realm switch so IndexedFileTree (which keys off realm internally)
-  // is fully recreated rather than reused across workspaces.
-  @tracked private fileTreeRenderNonce = 0;
-  private dropZoneDragDepth = 0;
-
-  private get knownRealms() {
-    return Object.entries(this.realm.allRealmsInfo).map((entry) => ({
-      url: new URL(entry[0]),
-      info: entry[1].info,
-    }));
-  }
-
-  private get initialRealm() {
-    let realms = this.knownRealms;
-    let match = this.args.initialRealmURL
-      ? realms.find((r) => r.url.href === this.args.initialRealmURL)
-      : undefined;
-    return match ?? realms[0];
-  }
 
   // Highlighted tree row: the user's own pick wins; otherwise derive a local
   // path from @selected when it lives inside the open workspace.
-  private get selectedFile(): LocalPath | undefined {
+  private selectedFileFor = (
+    selectedRealm: FileChooserRealm | undefined,
+  ): LocalPath | undefined => {
     if (this.userSelectedFile) {
       return this.userSelectedFile;
     }
     let { selected } = this.args;
-    if (!selected || !this.selectedRealm) {
+    if (!selected || !selectedRealm) {
       return undefined;
     }
-    let paths = new RealmPaths(this.selectedRealm.url);
+    let paths = new RealmPaths(selectedRealm.url);
     try {
       let url = new URL(selected);
       if (paths.inRealm(url)) {
@@ -83,222 +56,126 @@ export default class MiniFileChooser extends Component<Signature> {
       // malformed URL or outside the realm — nothing to highlight
     }
     return undefined;
-  }
+  };
 
-  private get selectedRealmURL(): string | undefined {
-    return this.selectedRealm?.url.href;
-  }
-
-  private get fileTreeRenderKey(): string {
-    return `${this.fileTreeRenderNonce}:${this.selectedRealm?.url.href ?? ''}`;
-  }
-
-  private get isUploadBusy(): boolean {
-    let state = this.currentUpload?.state;
-    return state === 'picking' || state === 'uploading';
-  }
-
-  private get dropZoneLabel() {
-    if (!this.selectedRealm) {
-      return '';
-    }
-    return `Drop file to upload to ${this.selectedRealm.info.name}`;
+  @action
+  private handleRealmChange() {
+    this.userSelectedFile = undefined;
   }
 
   @action
-  private selectRealm({ path }: RealmDropdownItem) {
-    let realm = this.knownRealms.find((r) => r.url.href === path);
-    if (realm) {
-      this.selectedRealm = realm;
-      this.userSelectedFile = undefined;
-      this.fileTreeRenderNonce++;
+  private handleFileSelected(
+    realm: FileChooserRealm | undefined,
+    path: LocalPath,
+  ) {
+    if (!realm) {
+      return;
     }
-  }
-
-  @action
-  private selectFile(path: LocalPath) {
     this.userSelectedFile = path;
-    let url = new RealmPaths(this.selectedRealm.url).fileURL(path);
+    let url = new RealmPaths(realm.url).fileURL(path);
     this.args.onSelect(url.href);
   }
 
   @action
-  private triggerUpload() {
-    if (!this.selectedRealm) {
-      return;
+  private handleUploadComplete(fileDef: FileDef) {
+    if (fileDef.sourceUrl) {
+      this.userSelectedFile = undefined;
+      this.args.onSelect(fileDef.sourceUrl);
     }
-    let task = this.fileUpload.uploadFile({
-      realmURL: this.selectedRealm.url,
-    });
-    this.beginUpload(task);
-  }
-
-  @action
-  private handleDragEnter(event: Event) {
-    let dragEvent = event as DragEvent;
-    if (!this.isFileDrag(dragEvent.dataTransfer)) {
-      return;
-    }
-    dragEvent.preventDefault();
-    dragEvent.stopPropagation();
-    this.dropZoneDragDepth++;
-    this.isDropZoneActive = true;
-  }
-
-  @action
-  private handleDragOver(event: Event) {
-    let dragEvent = event as DragEvent;
-    if (!this.isFileDrag(dragEvent.dataTransfer)) {
-      return;
-    }
-    dragEvent.preventDefault();
-    dragEvent.stopPropagation();
-    this.isDropZoneActive = true;
-    if (dragEvent.dataTransfer) {
-      dragEvent.dataTransfer.dropEffect = 'copy';
-    }
-  }
-
-  @action
-  private handleDragLeave(event: Event) {
-    let dragEvent = event as DragEvent;
-    if (!this.isFileDrag(dragEvent.dataTransfer) && !this.isDropZoneActive) {
-      return;
-    }
-    dragEvent.preventDefault();
-    dragEvent.stopPropagation();
-    this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
-    if (this.dropZoneDragDepth === 0) {
-      this.isDropZoneActive = false;
-    }
-  }
-
-  @action
-  private handleDrop(event: Event) {
-    let dragEvent = event as DragEvent;
-    if (!this.isFileDrag(dragEvent.dataTransfer)) {
-      return;
-    }
-    dragEvent.preventDefault();
-    dragEvent.stopPropagation();
-    this.dropZoneDragDepth = 0;
-    this.isDropZoneActive = false;
-    if (this.isUploadBusy || !this.selectedRealm) {
-      return;
-    }
-    let file = dragEvent.dataTransfer?.files?.[0];
-    if (!file) {
-      return;
-    }
-    let task = this.fileUpload.uploadProvidedFile({
-      realmURL: this.selectedRealm.url,
-      file,
-    });
-    this.beginUpload(task);
-  }
-
-  private beginUpload(task: FileUploadTask) {
-    this.currentUpload = task;
-    task.result.then((fileDef) => {
-      if (fileDef?.sourceUrl) {
-        this.userSelectedFile = undefined;
-        this.currentUpload = undefined;
-        this.args.onSelect(fileDef.sourceUrl);
-      } else if (task.state !== 'error') {
-        this.currentUpload = undefined;
-      }
-    });
-  }
-
-  private isFileDrag(dataTransfer: DataTransfer | null | undefined): boolean {
-    if (!dataTransfer) {
-      return false;
-    }
-    return Array.from(dataTransfer.types ?? []).includes('Files');
   }
 
   <template>
-    <div
-      class='mini-file-chooser'
-      data-test-mini-file-chooser
-      data-drop-zone-active={{this.isDropZoneActive}}
-      data-drop-zone-label={{this.dropZoneLabel}}
-      {{on 'dragenter' this.handleDragEnter}}
-      {{on 'dragover' this.handleDragOver}}
-      {{on 'dragleave' this.handleDragLeave}}
-      {{on 'drop' this.handleDrop}}
-      ...attributes
+    <FileChooser
+      @initialRealmURL={{@initialRealmURL}}
+      @onRealmChange={{this.handleRealmChange}}
+      @onUploadComplete={{this.handleUploadComplete}}
+      as |chooser|
     >
-      <div class='mini-file-chooser__field'>
-        <span class='mini-file-chooser__label'>Workspace</span>
-        <RealmDropdown
-          class='mini-file-chooser__realm-chooser'
-          @selectedRealmURL={{this.selectedRealmURL}}
-          @onSelect={{this.selectRealm}}
-          @displayReadOnlyTag={{true}}
-          data-test-mini-file-chooser-realm-chooser
-        />
-      </div>
+      <div
+        class='mini-file-chooser'
+        data-test-mini-file-chooser
+        data-drop-zone-active={{chooser.dropZoneActive}}
+        data-drop-zone-label={{chooser.dropZoneLabel}}
+        {{on 'dragenter' chooser.onDragEnter}}
+        {{on 'dragover' chooser.onDragOver}}
+        {{on 'dragleave' chooser.onDragLeave}}
+        {{on 'drop' chooser.onDrop}}
+        ...attributes
+      >
+        <div class='mini-file-chooser__field'>
+          <span class='mini-file-chooser__label'>Workspace</span>
+          <chooser.RealmDropdown
+            class='mini-file-chooser__realm-chooser'
+            data-test-mini-file-chooser-realm-chooser
+          />
+        </div>
 
-      <div class='mini-file-chooser__field mini-file-chooser__tree-field'>
-        <span class='mini-file-chooser__label'>Choose File</span>
-        <div class='mini-file-chooser__tree'>
-          {{#if this.selectedRealm}}
-            {{! Force recreation when the realm changes }}
-            {{#each (array this.fileTreeRenderKey)}}
-              <IndexedFileTree
-                @realmURL={{this.selectedRealm.url.href}}
-                @selectedFile={{this.selectedFile}}
-                @onFileSelected={{this.selectFile}}
-                @onFileConfirmed={{this.selectFile}}
-                @autoFocus={{true}}
-              />
-            {{/each}}
+        <div class='mini-file-chooser__field mini-file-chooser__tree-field'>
+          <span class='mini-file-chooser__label'>Choose File</span>
+          <div class='mini-file-chooser__tree'>
+            {{#if chooser.selectedRealm}}
+              {{! Force recreation when the realm changes }}
+              {{#each (array chooser.fileTreeKey)}}
+                <chooser.FileTree
+                  @realmURL={{chooser.selectedRealm.url.href}}
+                  @selectedFile={{this.selectedFileFor chooser.selectedRealm}}
+                  @onFileSelected={{fn
+                    this.handleFileSelected
+                    chooser.selectedRealm
+                  }}
+                  @onFileConfirmed={{fn
+                    this.handleFileSelected
+                    chooser.selectedRealm
+                  }}
+                  @autoFocus={{true}}
+                />
+              {{/each}}
+            {{/if}}
+          </div>
+        </div>
+
+        <div class='mini-file-chooser__footer'>
+          {{#if (eq chooser.currentUpload.state 'picking')}}
+            <BoxelButton
+              @disabled={{true}}
+              data-test-mini-file-chooser-upload-button
+            >
+              Choose a file&hellip;
+            </BoxelButton>
+          {{else if (eq chooser.currentUpload.state 'uploading')}}
+            <div
+              class='mini-file-chooser__upload-progress'
+              data-test-mini-file-chooser-upload-progress
+            >
+              <span
+                class='mini-file-chooser__upload-name'
+              >{{chooser.currentUpload.fileName}}</span>
+              <LoadingIndicator class='mini-file-chooser__upload-spinner' />
+            </div>
+          {{else if (eq chooser.currentUpload.state 'error')}}
+            <div class='mini-file-chooser__upload-error-row'>
+              <BoxelButton
+                {{on 'click' chooser.triggerUpload}}
+                data-test-mini-file-chooser-upload-button
+              >
+                Retry&hellip;
+              </BoxelButton>
+              <div
+                class='mini-file-chooser__upload-error'
+                data-test-mini-file-chooser-upload-error
+              >{{chooser.currentUpload.error}}</div>
+            </div>
+          {{else}}
+            <BoxelButton
+              {{on 'click' chooser.triggerUpload}}
+              data-test-mini-file-chooser-upload-button
+            >
+              Upload&hellip;
+            </BoxelButton>
           {{/if}}
         </div>
       </div>
-
-      <div class='mini-file-chooser__footer'>
-        {{#if (eq this.currentUpload.state 'picking')}}
-          <BoxelButton
-            @disabled={{true}}
-            data-test-mini-file-chooser-upload-button
-          >
-            Choose a file&hellip;
-          </BoxelButton>
-        {{else if (eq this.currentUpload.state 'uploading')}}
-          <div
-            class='mini-file-chooser__upload-progress'
-            data-test-mini-file-chooser-upload-progress
-          >
-            <span
-              class='mini-file-chooser__upload-name'
-            >{{this.currentUpload.fileName}}</span>
-            <LoadingIndicator class='mini-file-chooser__upload-spinner' />
-          </div>
-        {{else if (eq this.currentUpload.state 'error')}}
-          <div class='mini-file-chooser__upload-error-row'>
-            <BoxelButton
-              {{on 'click' this.triggerUpload}}
-              data-test-mini-file-chooser-upload-button
-            >
-              Retry&hellip;
-            </BoxelButton>
-            <div
-              class='mini-file-chooser__upload-error'
-              data-test-mini-file-chooser-upload-error
-            >{{this.currentUpload.error}}</div>
-          </div>
-        {{else}}
-          <BoxelButton
-            {{on 'click' this.triggerUpload}}
-            data-test-mini-file-chooser-upload-button
-          >
-            Upload&hellip;
-          </BoxelButton>
-        {{/if}}
-      </div>
-    </div>
+    </FileChooser>
 
     <style scoped>
       .mini-file-chooser {
@@ -379,8 +256,7 @@ export default class MiniFileChooser extends Component<Signature> {
         font: var(--boxel-font-xs);
         overflow-wrap: anywhere;
       }
-      /* Drag-and-drop overlay: dim the chooser and surface the drop label,
-         mirroring choose-file-modal's drop-zone treatment. */
+      /* Drag-and-drop overlay: dim the chooser and surface the drop label. */
       .mini-file-chooser[data-drop-zone-active]::before {
         content: '';
         position: absolute;
