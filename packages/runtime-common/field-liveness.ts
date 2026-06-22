@@ -2,8 +2,10 @@ import type { Format } from './formats.ts';
 import type { HydrationMode } from './search-results-component.ts';
 
 // The single declarative rule mapping a resolved render format to its default
-// liveness. An auto-rendered field (a query- or collection-backed `@field`)
-// inherits this default; a surface that needs different behavior passes an
+// liveness. A delegated linked-card render — a `linksTo` / `linksToMany`
+// (query-backed or not) — inherits this default. It governs *delegated field
+// renders*, not the `<SearchResults>` component, where hydration is a
+// caller-specified mode; a surface that needs different behavior passes an
 // explicit hydration mode, which overrides the format default.
 //
 //   `fitted`           → prerendered HTML, inert until a lazy hydration gesture

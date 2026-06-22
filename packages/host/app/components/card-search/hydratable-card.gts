@@ -100,10 +100,11 @@ interface Signature {
     // The error doc surfaced by the host error component when this row falls
     // through to it. Absent => the component shows a generic message.
     errorDoc?: ErrorEntry;
-    // The hydration gesture. An explicit value is a per-surface override that
-    // always takes the inert + gesture path; when omitted the default follows
-    // `format` via the format → liveness rule — `embedded` resolves live,
-    // every other format is inert and lazily hydrated.
+    // The hydration gesture for the prerendered (inert) branch. An explicit
+    // value is a per-surface override that always takes the inert + gesture
+    // path; when omitted the default follows `format` via the format → liveness
+    // rule — `fitted` is prerendered and lazily hydrated, every other format
+    // (incl. `embedded`) resolves live.
     mode?: HydrationMode;
     // The format the live/hydrated card renders as, so it matches the
     // prerendered HTML the query selected (defaults to `fitted`).
