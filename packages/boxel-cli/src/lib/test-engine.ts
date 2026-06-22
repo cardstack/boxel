@@ -1054,7 +1054,7 @@ function resolveHostDistDir(): string {
       'dist',
     );
   }
-  // eslint-disable-next-line no-restricted-globals -- bundle-only `__dirname`; see `bundledRealmDirs` above
+  // eslint-disable-next-line no-restricted-globals -- bundle-only `__dirname`; see `resolveBundledRealms` above
   let cliRoot = findBoxelCliRoot(__dirname);
   let bundled = join(cliRoot, 'bundled-test-harness');
   if (fileExists(join(bundled, 'tests', 'index.html'))) {
@@ -1071,7 +1071,7 @@ function resolveHostDistDir(): string {
 }
 
 function findHostDistPackageDir(): string | undefined {
-  // eslint-disable-next-line no-restricted-globals -- bundle-only `__dirname`; see `bundledRealmDirs` above
+  // eslint-disable-next-line no-restricted-globals -- bundle-only `__dirname`; see `resolveBundledRealms` above
   let packageRoot = findBoxelCliRoot(__dirname);
   let packagesDir = resolve(packageRoot, '..');
   let workspaceRoot = resolve(packagesDir, '..');
