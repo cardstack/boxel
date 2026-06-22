@@ -235,8 +235,12 @@ export class IndexRunner {
       files: [],
     });
     let invalidations: URL[] = [];
+    let d2base = current.realmURL.href.includes('cardstack.com/base');
+    // eslint-disable-next-line no-console
+    let d2 = (m: string) => d2base && console.warn(`[193-DIAG2] base ${m}`);
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
+    d2(`getModifiedTimes DONE count=${Object.keys(mtimes ?? {}).length}`);
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
     );
@@ -246,6 +250,7 @@ export class IndexRunner {
       mtimes,
     );
     invalidations = discoverResult.urls.map((href) => new URL(href));
+    d2(`discoverInvalidations DONE urls=${invalidations.length}`);
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
     );
@@ -256,6 +261,7 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    d2(`ordered invalidations=${invalidations.length}`);
     // Pre-warm the modules cache. Combines per-row deps (which catch
     // most modules used during a from-scratch pass) with the realm-
     // wide `.gts` / `.gjs` sweep (which catches sibling card modules
@@ -270,6 +276,7 @@ export class IndexRunner {
     // and the files visited below share one `totalFiles`, so the dashboard
     // bar advances through pre-warming and into the visit phase.
     let filesCompleted = 0;
+    d2(`preWarm START realmCardModules=${allRealmCardModules.length}`);
     let preWarmedCount = await current.preWarmModulesTable(
       invalidations,
       allRealmCardModules,
@@ -286,6 +293,7 @@ export class IndexRunner {
       },
     );
     let totalFiles = preWarmedCount + invalidations.length;
+    d2(`preWarm DONE count=${preWarmedCount}; visit loop START total=${totalFiles}`);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     try {
