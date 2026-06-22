@@ -4,6 +4,7 @@
 // erasable-syntax rule must be re-declared from the shared list.
 const {
   NO_COMPILATION_REQUIRED_TS_SELECTORS,
+  CJS_GLOBALS_IN_ESM,
 } = require('../../eslint/erasable-syntax-selectors.cjs');
 
 module.exports = {
@@ -59,6 +60,14 @@ module.exports = {
       },
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
+      },
+    },
+    {
+      // See the root `.eslintrc.js`: ban CommonJS-only `__dirname`/`__filename`
+      // in ESM-loaded TS source. Re-declared here because this config is `root`.
+      files: ['**/src/**/*.{ts,mts}', '**/scripts/**/*.{ts,mts}'],
+      rules: {
+        'no-restricted-globals': ['error', ...CJS_GLOBALS_IN_ESM],
       },
     },
   ],
