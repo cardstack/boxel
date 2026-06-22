@@ -186,6 +186,7 @@
     "tracked-built-ins": "catalog:",
     "turndown": "^7.2.4",
     "typescript": "catalog:",
+    "util": "catalog:",
     "uuid": "catalog:",
     "vite": "^8.0.8",
     "wait-for-localhost-cli": "catalog:",
