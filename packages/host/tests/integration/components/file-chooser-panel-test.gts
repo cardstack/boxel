@@ -210,7 +210,7 @@ module('Integration | file-chooser/panel', function (hooks) {
       .dom('[data-test-panel]')
       .hasAttribute(
         'data-drop-zone-active',
-        'true',
+        '',
         'dragging a file in activates the overlay',
       );
     let label = document

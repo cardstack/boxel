@@ -184,6 +184,14 @@ export default class RealmDropdown extends Component<Signature> {
   }
 
   get selectedRealm(): RealmDropdownItem | undefined {
+    // Until the realm list has loaded there is nothing to select, and the
+    // defaultWritableRealm fallback below reaches into the matrix client —
+    // which throws if it's consulted before the matrix SDK is ready (e.g. while
+    // this dropdown renders during app boot). The fallback would resolve to
+    // undefined against an empty list anyway, so short-circuit.
+    if (this.realms.length === 0) {
+      return undefined;
+    }
     let selectedRealm: RealmDropdownItem | undefined;
     if (this.args.selectedRealmURL) {
       selectedRealm = this.realms.find(
