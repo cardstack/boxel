@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { GitHubClient } from '../lib/github.ts';
 import {
   CreateListingPRHandler,

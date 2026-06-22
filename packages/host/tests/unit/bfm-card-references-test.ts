@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
   extractBfmReferences,
   bfmBlockFormatAndSize,
   bfmCardReferenceExtensions,
@@ -163,6 +164,45 @@ module('Unit | bfm-card-references', function () {
     });
   });
 
+  module('extractFileReferenceUrls', function () {
+    test('extracts only file references, ignoring card references', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1]',
+        ':file[https://example.com/files/1.pdf]',
+        '::file[https://example.com/files/2.pdf]',
+      ].join('\n');
+      let urls = extractFileReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
+      assert.deepEqual(urls, [
+        'https://example.com/files/1.pdf',
+        'https://example.com/files/2.pdf',
+      ]);
+    });
+
+    test('resolves relative file URLs against base', function (assert) {
+      let markdown = ':file[./docs/report.pdf]';
+      let urls = extractFileReferenceUrls(
+        markdown,
+        'https://realm.example/notes/file.md',
+        virtualNetwork,
+      );
+      assert.deepEqual(urls, ['https://realm.example/notes/docs/report.pdf']);
+    });
+
+    test('returns empty array when there are no file references', function (assert) {
+      let markdown = ':card[https://example.com/cards/1]';
+      let urls = extractFileReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
+      assert.deepEqual(urls, []);
+    });
+  });
+
   module('extractBfmReferences', function () {
     test('extracts references for multiple keywords', function (assert) {
       let markdown = [
@@ -212,6 +252,125 @@ module('Unit | bfm-card-references', function () {
       assert.strictEqual(extensions.length, 2);
       assert.strictEqual((extensions[0] as any).name, 'bfmFileBlock');
       assert.strictEqual((extensions[1] as any).name, 'bfmFileInline');
+    });
+  });
+
+  module('markdownToHtml with BFM file syntax', function () {
+    test('inline file ref produces span placeholder with bfm attributes', function (assert) {
+      let markdown = 'See :file[https://example.com/files/1.pdf] here.';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/files/1.pdf"',
+        ),
+        'inline placeholder has ref data attribute',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-type="file"'),
+        'inline placeholder has file type data attribute',
+      );
+      assert.true(
+        html.includes('<span data-boxel-bfm-inline-ref='),
+        'inline placeholder is a span element',
+      );
+    });
+
+    test('block file ref produces div placeholder with bfm attributes', function (assert) {
+      let markdown = '::file[https://example.com/files/1.pdf]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-block-ref="https://example.com/files/1.pdf"',
+        ),
+        'block placeholder has ref data attribute',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-type="file"'),
+        'block placeholder has file type data attribute',
+      );
+      assert.true(
+        html.includes('<div data-boxel-bfm-block-ref='),
+        'block placeholder is a div element',
+      );
+    });
+
+    test('file refs inside code blocks are not processed', function (assert) {
+      let markdown = ['```', ':file[https://example.com/files/1]', '```'].join(
+        '\n',
+      );
+      let html = markdownToHtml(markdown);
+      assert.false(
+        html.includes('data-boxel-bfm-inline-ref'),
+        'no file ref placeholder inside code block',
+      );
+    });
+
+    test('card and file refs coexist in a document', function (assert) {
+      let markdown = [
+        'Card :card[https://example.com/cards/1] and file',
+        ':file[https://example.com/files/1.pdf].',
+      ].join('\n');
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-type="card"'),
+        'card placeholder present',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-type="file"'),
+        'file placeholder present',
+      );
+    });
+
+    test('block file ref with size spec emits format and dimension attributes', function (assert) {
+      let markdown = '::file[https://example.com/images/photo.png | 400x200]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-block-ref="https://example.com/images/photo.png"',
+        ),
+        'URL excludes the pipe and specifier',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'file block ref honors fitted format',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="400"'), 'width=400');
+      assert.true(html.includes('data-boxel-bfm-height="200"'), 'height=200');
+    });
+
+    test('block file ref with named size constant emits dimension attributes', function (assert) {
+      let markdown = '::file[https://example.com/images/photo.png | strip]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-width="250"'),
+        'width from strip constant',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-height="40"'),
+        'height from strip constant',
+      );
+    });
+
+    test('DOMPurify preserves file BFM placeholders', function (assert) {
+      let markdown =
+        'Text :file[https://example.com/files/1.pdf] and more.\n\n::file[https://example.com/files/2.pdf]\n';
+      let html = markdownToHtml(markdown, { sanitize: true });
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/files/1.pdf"',
+        ),
+        'inline file ref survives sanitization',
+      );
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-block-ref="https://example.com/files/2.pdf"',
+        ),
+        'block file ref survives sanitization',
+      );
     });
   });
 

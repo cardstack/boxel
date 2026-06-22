@@ -38,6 +38,7 @@ docker exec "$TEST_PG_SEED_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_S
   pnpm exec node-pg-migrate \
     --migrations-table migrations \
     --check-order false \
+    --ignore-pattern '.*\.eslintrc\.js|package\.json' \
     --no-verbose \
     up
 )

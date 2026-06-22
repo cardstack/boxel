@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { createServer } from 'http';
 import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
@@ -8,7 +9,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants.ts';
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   hooks.afterEach(function () {
     delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
     delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
@@ -449,7 +450,7 @@ module(basename(__filename), function (hooks) {
   });
 });
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('remote prerenderer timeouts', function () {
     test('does not retry when the client aborts from request timeout', async function (assert) {
       process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -118,7 +119,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('parseModuleCacheInvalidationPayload', function () {
     test('parses a module payload carrying a single URL', function (assert) {
       assert.deepEqual(

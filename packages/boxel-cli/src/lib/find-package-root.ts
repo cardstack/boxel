@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path';
 /**
  * Walk up from `__dirname` until we find the `@cardstack/boxel-cli`
  * package.json. The single-file esbuild bundle places `__dirname` at
- * `boxel-cli/dist`; the ts-node fallback places it inside `src/...`.
- * Anchoring to the package.json keeps every downstream path stable
- * regardless of which entry mode is active.
+ * `boxel-cli/dist`; running from source (e.g. under vitest) places it
+ * inside `src/...`. Anchoring to the package.json keeps every downstream
+ * path stable regardless of which entry mode is active.
  */
 export function findBoxelCliRoot(startDir: string): string {
   let dir = startDir;
