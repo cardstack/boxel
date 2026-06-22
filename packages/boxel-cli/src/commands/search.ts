@@ -82,8 +82,57 @@ export async function search(
 
 interface SearchCliOptions {
   realm: string[];
-  query: string;
+  query?: string;
   json?: boolean;
+}
+
+/**
+ * Normalize the raw `--query` string into a query object.
+ *
+ * - Omitted/empty → `{}`, which the `_federated-search` endpoint treats as
+ *   "every card in the realm(s)". This is the discovery / list-all path.
+ * - An explicit empty `filter` (`{"filter":{}}`) is the same intent but the
+ *   server rejects it with "cannot determine the type of filter", so we strip
+ *   the empty filter and treat it as list-all too.
+ *
+ * Throws on invalid JSON or a non-object (so callers can surface a clear
+ * message). Exported for unit testing.
+ */
+export function parseSearchQuery(
+  raw: string | undefined,
+): Record<string, unknown> {
+  if (raw == null || raw.trim() === '') {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `Invalid JSON in --query: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      `--query must be a JSON object, got ${Array.isArray(parsed) ? 'array' : typeof parsed}`,
+    );
+  }
+
+  let query = parsed as Record<string, unknown>;
+  let filter = query.filter;
+  let emptyFilter =
+    filter != null &&
+    typeof filter === 'object' &&
+    !Array.isArray(filter) &&
+    Object.keys(filter as object).length === 0;
+  if (emptyFilter) {
+    let { filter: _omit, ...rest } = query;
+    return rest;
+  }
+
+  return query;
 }
 
 export function registerSearchCommand(program: Command): void {
@@ -99,7 +148,10 @@ export function registerSearchCommand(program: Command): void {
       },
       [] as string[],
     )
-    .requiredOption('--query <json>', 'JSON query object (as a string)')
+    .option(
+      '--query <json>',
+      'JSON query object (as a string). Omit to list every card in the realm(s).',
+    )
     .option('--json', 'Output raw JSON response')
     .action(async (opts: SearchCliOptions) => {
       if (opts.realm.length === 0) {
@@ -111,21 +163,10 @@ export function registerSearchCommand(program: Command): void {
 
       let query: Record<string, unknown>;
       try {
-        let parsed = JSON.parse(opts.query);
-        if (
-          typeof parsed !== 'object' ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          console.error(
-            `${FG_RED}Error:${RESET} --query must be a JSON object, got ${Array.isArray(parsed) ? 'array' : typeof parsed}`,
-          );
-          process.exit(1);
-        }
-        query = parsed as Record<string, unknown>;
+        query = parseSearchQuery(opts.query);
       } catch (err) {
         console.error(
-          `${FG_RED}Error:${RESET} Invalid JSON in --query: ${err instanceof Error ? err.message : String(err)}`,
+          `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
         );
         process.exit(1);
         return; // unreachable, but helps TS
