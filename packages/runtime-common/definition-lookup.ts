@@ -930,6 +930,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
     let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
+      if (codeRef.name === 'CardInfoField' || codeRef.module.includes('card-api')) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[193-DEF] MISS name=${codeRef.name} codeRef.module=${codeRef.module} canonicalModuleURL=${canonicalModuleURL} queriedModuleId=${moduleId} | definitionKeys=${JSON.stringify(
+            Object.keys(moduleEntry.definitions).slice(0, 40),
+          )}`,
+        );
+      }
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
       });
