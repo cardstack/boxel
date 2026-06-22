@@ -98,6 +98,14 @@ module('Integration | Component | hydratable-card', function (hooks) {
           </div>
         </template>
       };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div class='live-embedded' data-test-live-embedded-card>
+            Embedded:
+            <@fields.name />
+          </div>
+        </template>
+      };
     }
 
     storeService = getService('store');
@@ -299,6 +307,110 @@ module('Integration | Component | hydratable-card', function (hooks) {
     assert.notOk(
       isCardInstance(storeService.peek(HASSAN)),
       'no links.self fetch — the card never entered the Store',
+    );
+  });
+
+  // Format default — `embedded`: with no explicit `@mode`, the format → liveness
+  // rule resolves the row live immediately. No gesture, the inert HTML never
+  // shows, and the live instance lands in the Store on its own.
+  test('embedded format default — renders live with no gesture', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @format='embedded'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-live-embedded-card]')
+      .hasText(
+        'Embedded: Hassan',
+        'embedded resolves live with no interaction',
+      );
+    assert.dom('[data-test-inert-card]').doesNotExist('inert HTML never shown');
+    assert
+      .dom('[data-hydration="hydrated"]')
+      .exists('marked hydrated, not a gesture');
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'the card entered the Store without a gesture',
+    );
+  });
+
+  // Format default — `fitted` is the one prerendered format: with no explicit
+  // `@mode`, the rule keeps the row inert and lazily hydrates it on hover (every
+  // other format is live).
+  test('fitted format default — inert until a lazy hover, no explicit mode', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @format='fitted'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert.dom('[data-test-inert-card]').exists('starts inert');
+    assert
+      .dom('[data-hydration="hover"]')
+      .exists('the format default is the lazy hover gesture');
+    assert.dom('[data-test-live-card]').doesNotExist('no live card yet');
+    assert.notOk(
+      isCardInstance(storeService.peek(HASSAN)),
+      'no fetch before the gesture',
+    );
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert.dom('[data-test-live-card]').hasText('Live: Hassan', 'now live');
+    assert.dom('[data-test-inert-card]').doesNotExist('inert HTML is gone');
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'the card entered the Store on hover',
+    );
+  });
+
+  // An explicit `@mode` is a per-surface override that beats the format default:
+  // an `embedded` row that would otherwise be live stays inert under `none`.
+  test('explicit mode overrides the format default', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @format='embedded'
+            @mode='none'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-hydration="none"]')
+      .exists('explicit none overrides embedded’s live default');
+    assert.dom('[data-test-inert-card]').exists('stays inert');
+    assert
+      .dom('[data-test-live-embedded-card]')
+      .doesNotExist('did not resolve live');
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert.dom('[data-test-inert-card]').exists('still inert after hover');
+    assert.notOk(
+      isCardInstance(storeService.peek(HASSAN)),
+      'never fetched — the override holds',
     );
   });
 

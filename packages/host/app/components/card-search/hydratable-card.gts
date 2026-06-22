@@ -9,7 +9,9 @@ import { consume } from 'ember-provide-consume-context';
 import {
   CardContextName,
   GetCardContextName,
+  defaultLivenessForFormat,
   type ErrorEntry,
+  type FieldLiveness,
   type Format,
   type HydrationMode,
   type ResolvedCodeRef,
@@ -94,7 +96,10 @@ interface Signature {
     // The error doc surfaced by the host error component when this row falls
     // through to it. Absent => the component shows a generic message.
     errorDoc?: ErrorEntry;
-    // The hydration gesture (defaults to `none`).
+    // The hydration gesture. An explicit value is a per-surface override that
+    // always takes the inert + gesture path; when omitted the default follows
+    // `format` via the format → liveness rule — `embedded` resolves live,
+    // every other format is inert and lazily hydrated.
     mode?: HydrationMode;
     // The format the live/hydrated card renders as, so it matches the
     // prerendered HTML the query selected (defaults to `fitted`).
@@ -126,9 +131,25 @@ export default class HydratableCard extends Component<Signature> {
     return this.getCard(this, () => this.resolvedId, { type: this.args.type });
   }
 
+  // The row's default liveness. An explicit `@mode` is a per-surface override
+  // (always the inert + gesture path); otherwise the default follows the
+  // resolved render format via the format → liveness rule — `embedded` is live,
+  // every other format is prerendered + lazily hydrated. An error rendering
+  // never hydrates, so it is pinned to the inert, gesture-less `none`.
+  private get liveness(): FieldLiveness {
+    if (this.args.isError) {
+      return { live: false, mode: 'none' };
+    }
+    if (this.args.mode != null) {
+      return { live: false, mode: this.args.mode };
+    }
+    return defaultLivenessForFormat(this.format);
+  }
+
   // A full live row (no inert HTML) has nothing to stay inert as, so it
   // resolves its instance immediately; an HTML-backed row resolves only once
-  // its gesture has fired. An error row never resolves.
+  // its gesture has fired — unless its format default is live, which skips the
+  // inert stage and resolves immediately. An error row never resolves.
   private get resolvedId(): string | undefined {
     if (this.args.isError) {
       return undefined;
@@ -138,17 +159,21 @@ export default class HydratableCard extends Component<Signature> {
     if (this.args.component == null) {
       return this.args.cardId;
     }
+    // A live row (the `embedded` format default) skips the inert stage and
+    // resolves immediately even though inert HTML is present.
+    if (this.liveness.live) {
+      return this.args.cardId;
+    }
     // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired.
     return this.hydrated ? this.args.cardId : undefined;
   }
 
+  // The gesture wired onto the inert HTML. A live row resolves immediately and
+  // shows no inert HTML, so it wires no gesture; the prerendered branch hydrates
+  // on the liveness mode (an error row's `none` keeps it inert).
   private get mode(): HydrationMode {
-    // An error rendering never hydrates, so no gesture is wired regardless of
-    // the requested mode.
-    if (this.args.isError) {
-      return 'none';
-    }
-    return this.args.mode ?? 'none';
+    let { liveness } = this;
+    return liveness.live ? 'none' : liveness.mode;
   }
 
   private get format(): Format {
