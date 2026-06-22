@@ -17,6 +17,7 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { searchEntryRequestBody, itemsFromSearchEntryDoc } from '../search.ts';
 
 const CARD_JSON = 'application/vnd.card+json';
 const MODULE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
@@ -432,21 +433,25 @@ class RealmCardIngester extends RealmSyncBase {
   private async searchCards(
     query: Record<string, unknown>,
   ): Promise<CardResource[]> {
-    // Query the SOURCE realm's own `_search` directly rather than the
-    // profile-scoped `_federated-search`. A shared/published source realm
-    // (e.g. the catalog) isn't in the active profile's federated set, so
-    // federated search returns nothing for it — which is why instances and
-    // Specs went uncopied (the module crawl survives because it uses direct
-    // file fetches). The realm's own `_search` sees its full index.
+    // Query the SOURCE realm's own `_search-v2` directly rather than the
+    // profile-scoped federated search. A shared/published source realm (e.g.
+    // the catalog) isn't in the active profile's federated set, so federated
+    // search returns nothing for it — which is why instances and Specs went
+    // uncopied (the module crawl survives because it uses direct file fetches).
+    // The realm's own endpoint sees its full index. The request is data-only
+    // (`fields[search-entry]=item`); the response is a search-entry document
+    // whose matched `item` serializations resolve out of `included` uniformly
+    // for normal and published realms (the v1 `data`-vs-`included` split
+    // disappears — every match is an entry that references its item).
     let res = await this.authenticator.authedRealmFetch(
-      `${this.realmRoot}_search`,
+      `${this.realmRoot}_search-v2`,
       {
         method: 'QUERY',
         headers: {
           Accept: CARD_JSON,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(query),
+        body: JSON.stringify(searchEntryRequestBody(query)),
       },
     );
     if (!res.ok) {
@@ -460,8 +465,10 @@ class RealmCardIngester extends RealmSyncBase {
       );
       return [];
     }
-    let json = (await res.json()) as SearchResponse;
-    return selectSearchResults(json);
+    let json = (await res.json()) as Parameters<
+      typeof itemsFromSearchEntryDoc
+    >[0];
+    return itemsFromSearchEntryDoc(json) as unknown as CardResource[];
   }
 
   private cardIdToInstanceRel(id: string | undefined): string | null {
@@ -527,23 +534,6 @@ class RealmCardIngester extends RealmSyncBase {
 interface CardResource {
   id?: string;
   attributes?: { specType?: string; ref?: unknown; [k: string]: unknown };
-}
-
-interface SearchResponse {
-  data?: CardResource[];
-  included?: CardResource[];
-}
-
-/**
- * Pick the matched cards out of a realm `_search` response. A normal realm
- * returns matches in `data`; a published realm (e.g. the catalog) returns them
- * in `included` with an empty `data`. Prefer `data`, fall back to `included` —
- * never merge, so a normal realm's `included` (linked deps of the matches) is
- * not mistaken for matches. Exported for unit testing.
- */
-export function selectSearchResults(json: SearchResponse): CardResource[] {
-  let data = json.data ?? [];
-  return data.length > 0 ? data : (json.included ?? []);
 }
 
 function tryParseCardDoc(
