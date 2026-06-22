@@ -372,7 +372,12 @@ function resolveBundledRealms(override: string | undefined): {
       skillsDir: join(override, 'skills'),
     };
   }
-  let cliRoot = findBoxelCliRoot(import.meta.dirname);
+  // Use `__dirname` (not `import.meta.dirname`) here: this module is re-exported
+  // through `@cardstack/boxel-cli/api` and type-checked by CommonJS consumers
+  // (e.g. the software factory), where `import.meta` is a TS1470 error. esbuild
+  // provides `__dirname` in the CJS bundle (the `dist/` dir); these calls run
+  // inside functions, never at import time, so ESM-source importers are fine.
+  let cliRoot = findBoxelCliRoot(__dirname);
   let bundled = join(cliRoot, 'bundled-realms');
   if (dirExists(join(bundled, 'base'))) {
     return {
@@ -1048,7 +1053,7 @@ function resolveHostDistDir(): string {
       'dist',
     );
   }
-  let cliRoot = findBoxelCliRoot(import.meta.dirname);
+  let cliRoot = findBoxelCliRoot(__dirname);
   let bundled = join(cliRoot, 'bundled-test-harness');
   if (fileExists(join(bundled, 'tests', 'index.html'))) {
     return bundled;
@@ -1064,7 +1069,7 @@ function resolveHostDistDir(): string {
 }
 
 function findHostDistPackageDir(): string | undefined {
-  let packageRoot = findBoxelCliRoot(import.meta.dirname);
+  let packageRoot = findBoxelCliRoot(__dirname);
   let packagesDir = resolve(packageRoot, '..');
   let workspaceRoot = resolve(packagesDir, '..');
   let hostDir = join(packagesDir, 'host');
