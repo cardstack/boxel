@@ -44,7 +44,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index.ts';
-import { rri } from './realm-identifiers.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
@@ -456,8 +456,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        let moduleId = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
-        let entry = cached.definitions[moduleId];
+        let entry = this.definitionEntryFor(
+          cached.definitions,
+          codeRef,
+          canonicalModuleURL,
+        );
         if (entry && 'definition' in entry) {
           return entry.definition;
         }
@@ -860,6 +863,29 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
+  // The definition store keys entries by internalKeyFor. Across virtual
+  // networks the registered-prefix form and the canonical fetchable (alias)
+  // form do not always unresolve to the same key, and a given module may be
+  // stored under either. Try the prefix form (from the original codeRef)
+  // first, then the canonical form.
+  private definitionEntryFor(
+    definitions: Record<string, ModuleDefinitionResult | ErrorEntry>,
+    codeRef: ResolvedCodeRef,
+    canonicalModuleURL: string,
+  ): ModuleDefinitionResult | ErrorEntry | undefined {
+    let entry =
+      definitions[internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    if (!entry && canonicalModuleURL !== codeRef.module) {
+      let canonicalModuleId = internalKeyFor(
+        { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier },
+        undefined,
+        this.#virtualNetwork,
+      );
+      entry = definitions[canonicalModuleId];
+    }
+    return entry;
+  }
+
   private async lookupDefinitionWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
@@ -908,13 +934,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    const moduleId = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
-    let defOrError = moduleEntry.definitions[moduleId];
+    let defOrError = this.definitionEntryFor(
+      moduleEntry.definitions,
+      codeRef,
+      canonicalModuleURL,
+    );
     if (!defOrError) {
       if (codeRef.name === 'CardInfoField' || codeRef.module.includes('card-api')) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[193-DEF] MISS name=${codeRef.name} codeRef.module=${codeRef.module} canonicalModuleURL=${canonicalModuleURL} queriedModuleId=${moduleId} | definitionKeys=${JSON.stringify(
+          `[193-DEF] MISS name=${codeRef.name} codeRef.module=${codeRef.module} canonicalModuleURL=${canonicalModuleURL} primaryKey=${internalKeyFor(codeRef, undefined, this.#virtualNetwork)} | definitionKeys=${JSON.stringify(
             Object.keys(moduleEntry.definitions).slice(0, 40),
           )}`,
         );
