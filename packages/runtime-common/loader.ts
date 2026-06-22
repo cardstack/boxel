@@ -774,12 +774,35 @@ export class Loader {
     }
   };
 
+  // Cache key for the per-module maps. Collapses the virtual-alias URL and the
+  // resolved real URL of the same module onto one key, so a base module
+  // imported via the alias (`https://cardstack.com/base/X`) and via the RRI
+  // prefix (`@cardstack/base/X` → resolveImport → resolved real URL) share one
+  // cached module — and therefore one class object. Without this, the alias
+  // and RRI forms evaluate as two distinct modules and `instanceof` /
+  // polymorphic-field identity checks across them diverge. Mirrors the
+  // real→virtual convention used by `canonicalizeTrackingKey`.
+  private moduleCacheKey(moduleIdentifier: string): string {
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    if (this.virtualNetwork) {
+      try {
+        let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
+        if (virtual) {
+          return virtual.href;
+        }
+      } catch {
+        // not a parseable URL (e.g. a bare specifier) — fall through
+      }
+    }
+    return trimmed;
+  }
+
   private getModule(moduleIdentifier: string): Module | undefined {
-    return this.modules.get(trimModuleIdentifier(moduleIdentifier));
+    return this.modules.get(this.moduleCacheKey(moduleIdentifier));
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
+    this.modules.set(this.moduleCacheKey(moduleIdentifier), module);
   }
 
   private setCanonicalModuleURL(
@@ -787,13 +810,13 @@ export class Loader {
     canonicalURL: string,
   ) {
     this.moduleCanonicalURLs.set(
-      trimModuleIdentifier(moduleIdentifier),
+      this.moduleCacheKey(moduleIdentifier),
       canonicalURL,
     );
   }
 
   private getCanonicalModuleURL(moduleIdentifier: string): string | undefined {
-    return this.moduleCanonicalURLs.get(trimModuleIdentifier(moduleIdentifier));
+    return this.moduleCanonicalURLs.get(this.moduleCacheKey(moduleIdentifier));
   }
 
   // Collapse a module identifier to its virtual-alias URL form when one
@@ -882,7 +905,7 @@ export class Loader {
         // module entry for the lifetime of this loader (every future
         // `import` would rethrow without retrying). Drop the entry so
         // the next `import` re-enters `fetchModule` and refetches.
-        this.modules.delete(trimModuleIdentifier(moduleIdentifier));
+        this.modules.delete(this.moduleCacheKey(moduleIdentifier));
       } else {
         this.setModule(moduleIdentifier, {
           state: 'broken',
