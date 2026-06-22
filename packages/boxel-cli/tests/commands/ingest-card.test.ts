@@ -4,9 +4,34 @@ import {
   extractExportedClassNames,
   extractRelationshipLinks,
   resolveSameRealmFile,
+  selectSearchResults,
 } from '../../src/commands/realm/ingest-card.js';
 
 describe('ingest-card helpers', () => {
+  describe('selectSearchResults', () => {
+    it('uses `data` when present (normal realm)', () => {
+      let json = {
+        data: [{ id: 'a' }, { id: 'b' }],
+        included: [{ id: 'dep' }],
+      };
+      expect(selectSearchResults(json)).toEqual([{ id: 'a' }, { id: 'b' }]);
+    });
+
+    it('falls back to `included` when `data` is empty (published realm)', () => {
+      // The catalog returns matches in `included` with `data: []`.
+      let json = { data: [], included: [{ id: 'spec-1' }, { id: 'spec-2' }] };
+      expect(selectSearchResults(json)).toEqual([
+        { id: 'spec-1' },
+        { id: 'spec-2' },
+      ]);
+    });
+
+    it('returns [] when both are empty/absent', () => {
+      expect(selectSearchResults({})).toEqual([]);
+      expect(selectSearchResults({ data: [], included: [] })).toEqual([]);
+    });
+  });
+
   describe('extractRelationshipLinks', () => {
     it('collects linksToMany (field.N) + linksTo self URLs, skipping nulls', () => {
       let src = JSON.stringify({

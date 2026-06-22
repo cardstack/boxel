@@ -17,7 +17,6 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
-import { search } from '../search.ts';
 
 const CARD_JSON = 'application/vnd.card+json';
 const MODULE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
@@ -132,17 +131,14 @@ export function resolveSameRealmFile(
 class RealmCardIngester extends RealmSyncBase {
   hasError = false;
   copiedFiles: string[] = [];
-  private profileManager: ProfileManager;
   private cardUrl: string;
   private sourceCache = new Map<string, string | null>();
 
   constructor(
     options: SyncOptions & { cardUrl: string },
     authenticator: RealmAuthenticator,
-    profileManager: ProfileManager,
   ) {
     super(options, authenticator);
-    this.profileManager = profileManager;
     this.cardUrl = options.cardUrl;
   }
 
@@ -436,15 +432,36 @@ class RealmCardIngester extends RealmSyncBase {
   private async searchCards(
     query: Record<string, unknown>,
   ): Promise<CardResource[]> {
-    let result = await search([this.realmRoot], query, {
-      profileManager: this.profileManager,
-    });
-    if (!result.ok) {
+    // Query the SOURCE realm's own `_search` directly rather than the
+    // profile-scoped `_federated-search`. A shared/published source realm
+    // (e.g. the catalog) isn't in the active profile's federated set, so
+    // federated search returns nothing for it — which is why instances and
+    // Specs went uncopied (the module crawl survives because it uses direct
+    // file fetches). The realm's own `_search` sees its full index.
+    let res = await this.authenticator.authedRealmFetch(
+      `${this.realmRoot}_search`,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: CARD_JSON,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(query),
+      },
+    );
+    if (!res.ok) {
       this.hasError = true;
-      console.warn(`  search failed: ${result.error ?? 'unknown'}`);
+      // Include statusText + a body snippet so auth errors, malformed queries,
+      // etc. are diagnosable from the CLI output, not just a bare status code.
+      let body = await res.text().catch(() => '');
+      console.warn(
+        `  search failed: HTTP ${res.status} ${res.statusText}`.trimEnd() +
+          (body ? ` — ${body.slice(0, 300)}` : ''),
+      );
       return [];
     }
-    return (result.data ?? []) as CardResource[];
+    let json = (await res.json()) as SearchResponse;
+    return selectSearchResults(json);
   }
 
   private cardIdToInstanceRel(id: string | undefined): string | null {
@@ -510,6 +527,23 @@ class RealmCardIngester extends RealmSyncBase {
 interface CardResource {
   id?: string;
   attributes?: { specType?: string; ref?: unknown; [k: string]: unknown };
+}
+
+interface SearchResponse {
+  data?: CardResource[];
+  included?: CardResource[];
+}
+
+/**
+ * Pick the matched cards out of a realm `_search` response. A normal realm
+ * returns matches in `data`; a published realm (e.g. the catalog) returns them
+ * in `included` with an empty `data`. Prefer `data`, fall back to `included` —
+ * never merge, so a normal realm's `included` (linked deps of the matches) is
+ * not mistaken for matches. Exported for unit testing.
+ */
+export function selectSearchResults(json: SearchResponse): CardResource[] {
+  let data = json.data ?? [];
+  return data.length > 0 ? data : (json.included ?? []);
 }
 
 function tryParseCardDoc(
@@ -584,7 +618,6 @@ export async function ingestCard(
         cardUrl,
       },
       authenticator,
-      pm,
     );
     console.log(
       `Ingesting ${cardUrl}\n  from realm ${realmRoot}\n  into ${localDir}`,
