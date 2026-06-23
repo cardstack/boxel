@@ -1,7 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
 import enumField from 'https://cardstack.com/base/enum';
 
-import { IssueOptionField } from './issue-option';
+import { IssueOptionField } from './issue-option.gts';
 
 export interface Option {
   value: string;

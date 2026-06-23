@@ -50,9 +50,9 @@ import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import { KanbanBoard } from './kanban-board';
-import { KanbanColumnField } from './kanban-column';
-import { KanbanBoardPlacement } from './kanban-board-placement';
+import { KanbanBoard } from './kanban-board.gts';
+import { KanbanColumnField } from './kanban-column.gts';
+import { KanbanBoardPlacement } from './kanban-board-placement.gts';
 import {
   issueStatusOptions,
   issuePriorityOptions,
@@ -71,11 +71,11 @@ import {
   ProjectStatusField,
   GroupByField,
   type Column,
-} from './kanban-config';
-import { Comment } from './comment';
-import { KnowledgeArticle } from './knowledge-article';
-import { StatusPill } from './status-pill';
-import { IssueOptionField } from './issue-option';
+} from './kanban-config.gts';
+import { Comment } from './comment.gts';
+import { KnowledgeArticle } from './knowledge-article.gts';
+import { StatusPill } from './status-pill.gts';
+import { IssueOptionField } from './issue-option.gts';
 
 const issueCodeRef: ResolvedCodeRef = {
   // @ts-expect-error this is not a CJS file, import.meta is allowed
