@@ -5,7 +5,7 @@ import { buildBoxelProgram } from './build-program.ts';
 import { setQuiet } from './lib/cli-log.ts';
 
 const pkg = JSON.parse(
-  readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
+  readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf-8'),
 );
 
 // `--quiet` is implemented by intercepting `console.log/info/debug`.
