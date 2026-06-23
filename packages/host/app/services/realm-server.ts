@@ -259,11 +259,11 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
-  // CS-11658: boot assembly reads `app.boxel.realm-servers` and asks each
-  // trusted server (via `_realm-auth`) which realms the current user has.
-  // Returns the union of realm URLs across all trusted servers. v1 keeps
-  // the single-server invariant — assertOwnRealmServer() rejects any list
-  // that includes a non-own server until multi-realm-server federation
+  // Boot assembly reads `app.boxel.realm-servers` and asks each trusted
+  // server (via `_realm-auth`) which realms the current user has. Returns
+  // the union of realm URLs across all trusted servers. assertOwnRealmServer()
+  // keeps the single-server invariant — it rejects any list that includes a
+  // server other than the user's own until multi-realm-server federation
   // ships.
   async fetchUserRealmsFromTrustedServers(
     trustedServerURLs: string[],
