@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import { realmSecretSeed } from '../helpers/index.ts';
 import { createJWT } from '../../utils/jwt.ts';
-import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature';
+import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature-node';
 import type { Response } from 'superagent';
 
 function binaryParser(
