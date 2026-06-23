@@ -799,6 +799,10 @@ export default class RealmService extends Service {
 
   @tracked private identifyRealmTracker = 0;
 
+  ccInstanceId = (RealmService.ccInstanceCounter =
+    (RealmService.ccInstanceCounter ?? 0) + 1);
+  static ccInstanceCounter = 0;
+
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
@@ -809,6 +813,14 @@ export default class RealmService extends Service {
   }
 
   resetState() {
+    if (isTesting()) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[POP-DIAG] inst=${this.ccInstanceId} resetState() clearing realms (had ${JSON.stringify(
+          [...this._realms.keys()],
+        )})`,
+      );
+    }
     this.logout();
     this._realms = new Map();
     this.currentKnownRealms = new TrackedSet();
@@ -930,7 +942,7 @@ export default class RealmService extends Service {
       if (isTesting() && url.includes('/base/')) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[CC-DIAG] info(${url}) NO RESOURCE — identifyRealm kicked; realms keys=${JSON.stringify(
+          `[CC-DIAG] info(${url}) NO RESOURCE inst=${this.ccInstanceId} — identifyRealm kicked; realms keys=${JSON.stringify(
             [...this.realms.keys()],
           )}`,
         );
@@ -1448,7 +1460,7 @@ export default class RealmService extends Service {
       if (isTesting()) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[POP-DIAG] registered realm resource: ${realmURL} | realms now=${JSON.stringify(
+          `[POP-DIAG] inst=${this.ccInstanceId} registered realm resource: ${realmURL} | realms now=${JSON.stringify(
             [...this._realms.keys()],
           )}`,
         );
