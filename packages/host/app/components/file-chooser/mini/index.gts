@@ -214,7 +214,10 @@ export default class MiniFileChooser extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xxs);
       }
-      .mini-file-chooser__tree:focus-within {
+      /* Ring on keyboard focus only — :focus-within would also fire on a
+         mouse click, drawing the ring around the whole tree when a file is
+         picked. */
+      .mini-file-chooser__tree:has(:focus-visible) {
         outline: 2px solid var(--ring, var(--boxel-highlight-hover));
         outline-offset: 2px;
       }
