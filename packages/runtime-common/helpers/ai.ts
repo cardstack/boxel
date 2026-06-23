@@ -59,6 +59,7 @@ type DateSchema = {
   type: 'string';
   description?: string;
   format: 'date' | 'date-time';
+  examples?: any[];
 };
 
 type NumberSchema = {
@@ -69,6 +70,7 @@ type NumberSchema = {
   exclusiveMaximum?: number;
   maximum?: number;
   multipleOf?: number;
+  examples?: any[];
 };
 
 type StringSchema = {
@@ -78,17 +80,20 @@ type StringSchema = {
   maxLength?: number;
   pattern?: string;
   const?: string;
+  examples?: any[];
 };
 
 type BooleanSchema = {
   description?: string;
   type: 'boolean';
+  examples?: any[];
 };
 
 type EnumSchema = {
   // JSON Schema allows a mix of any types in an enum
   description?: string;
   enum: any[];
+  examples?: any[];
 };
 
 export type AttributesSchema =
@@ -326,13 +331,30 @@ function getPrimitiveType(
  * `option.value` for the former, the option itself for the latter.
  *
  * The function form of `configuration` (model-dependent options, e.g. a
- * status list configured per project) is skipped: there is no model
- * instance at schema-generation time to resolve it against.
+ * status list configured per project) cannot be resolved at schema-generation
+ * time. When `defaultOptions` is provided, it returns them with
+ * `isDynamic: true` so callers can use a non-constraining description hint
+ * instead of a hard `enum` — preserving the AI's ability to use custom
+ * project values that differ from the defaults.
  */
-function getStaticEnumValues(
+function getEnumValues(
   def: typeof CardAPI.BaseDef,
-): unknown[] | undefined {
+): { values: unknown[]; isDynamic: boolean } | undefined {
   let configuration = (def as { configuration?: unknown }).configuration;
+  if (typeof configuration === 'function') {
+    let defaultOptions = (def as { defaultOptions?: unknown[] }).defaultOptions;
+    if (Array.isArray(defaultOptions) && defaultOptions.length > 0) {
+      return {
+        values: defaultOptions.map((option) =>
+          option !== null && typeof option === 'object' && 'value' in option
+            ? (option as { value: unknown }).value
+            : option,
+        ),
+        isDynamic: true,
+      };
+    }
+    return undefined;
+  }
   if (!configuration || typeof configuration !== 'object') {
     return undefined;
   }
@@ -341,11 +363,14 @@ function getStaticEnumValues(
   if (!Array.isArray(options) || options.length === 0) {
     return undefined;
   }
-  return options.map((option) =>
-    option !== null && typeof option === 'object' && 'value' in option
-      ? (option as { value: unknown }).value
-      : option,
-  );
+  return {
+    values: options.map((option) =>
+      option !== null && typeof option === 'object' && 'value' in option
+        ? (option as { value: unknown }).value
+        : option,
+    ),
+    isDynamic: false,
+  };
 }
 
 /**
@@ -375,9 +400,21 @@ function generateJsonSchemaForContainsFields(
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     let schema = getPrimitiveType(def, mappings);
-    let enumValues = getStaticEnumValues(def);
-    if (schema && enumValues) {
-      return { ...schema, enum: enumValues } as AttributesSchema;
+    let enumResult = getEnumValues(def);
+    if (schema && enumResult) {
+      if (enumResult.isDynamic) {
+        // Options are resolved at runtime from the model instance, so
+        // defaultOptions only represents typical values — use a description
+        // hint rather than a hard enum constraint to avoid rejecting valid
+        // custom project values.
+        let hint = `Typical values: ${enumResult.values.map((v) => JSON.stringify(v)).join(', ')}`;
+        return {
+          ...schema,
+          description: hint,
+          examples: enumResult.values,
+        } as AttributesSchema;
+      }
+      return { ...schema, enum: enumResult.values } as AttributesSchema;
     }
     return schema;
   }
