@@ -1,6 +1,11 @@
 import { service } from '@ember/service';
 
-import { SupportedMimeType, rri } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  isSearchEntryCollectionDocument,
+  rri,
+  searchEntryWireQueryFromQuery,
+} from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -333,35 +338,48 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
   private async fetchExistingSlugs(realmURL: string): Promise<Set<string>> {
     let slugs = new Set<string>();
     try {
-      let response = await this.network.authedFetch(`${realmURL}_search`, {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Listing existing cards only needs each one's id, so ask the
+      // search-entry engine for a data-only projection
+      // (`fields[search-entry]=item`): every entry carries its `item`
+      // serialization, no prerendered HTML.
+      let wireQuery = searchEntryWireQueryFromQuery(
+        {
           filter: {
             type: {
-              module: new URL('openrouter-model', realmURL).href,
+              module: rri(new URL('openrouter-model', realmURL).href),
               name: 'OpenRouterModel',
             },
           },
-        }),
-      });
+        },
+        { fields: ['item'] },
+      );
+      let response = await this.network.authedFetch(
+        new URL('_search-v2', realmURL).href,
+        {
+          method: 'QUERY',
+          headers: {
+            Accept: SupportedMimeType.CardJson,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(wireQuery),
+        },
+      );
 
       if (response.ok) {
         let result = await response.json();
-        let cards = result?.data ?? [];
-        for (let card of cards) {
-          let id: string = card.id ?? '';
-          // Extract slug from URL: .../OpenRouterModel/slug-name or .../OpenRouterModel/slug-name.json
-          let match = id.match(/OpenRouterModel\/([^/]+)$/);
-          if (match) {
-            let slug = match[1];
-            if (slug.endsWith('.json')) {
-              slug = slug.slice(0, -5);
+        if (isSearchEntryCollectionDocument(result)) {
+          for (let entry of result.data) {
+            // A `search-entry` resource's id is the card URL.
+            let id = entry.id ?? '';
+            // Extract slug from URL: .../OpenRouterModel/slug-name or .../OpenRouterModel/slug-name.json
+            let match = id.match(/OpenRouterModel\/([^/]+)$/);
+            if (match) {
+              let slug = match[1];
+              if (slug.endsWith('.json')) {
+                slug = slug.slice(0, -5);
+              }
+              slugs.add(slug);
             }
-            slugs.add(slug);
           }
         }
       }
