@@ -45,15 +45,20 @@ module(
         mockMatrixUtils,
         contents: {},
       });
+      // Boot's lazy migration (CS-11659) seeds `app.boxel.realm-servers` from
+      // the active realms, so reset to a known-empty starting point — these
+      // tests exercise the raw read/write helpers, not the migration.
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.setRealmServersInAccountData([]);
     });
 
-    test('get returns empty when no event has been written', async function (assert) {
+    test('get returns empty when the realm-servers list is empty', async function (assert) {
       let matrixService = getService('matrix-service') as MatrixService;
       let servers = await matrixService.getRealmServersFromAccountData();
       assert.deepEqual(
         servers,
         [],
-        'returns an empty array when the event is absent',
+        'returns an empty array when the event has no servers',
       );
     });
 

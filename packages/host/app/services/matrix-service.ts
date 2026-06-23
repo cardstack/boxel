@@ -182,6 +182,12 @@ export default class MatrixService extends Service {
   // gains content at runtime. Login-related side effects (`loginToRealms`,
   // `loadMoreAuthRooms`) still run regardless.
   private trustedRealmServersAuthoritative = false;
+  // Set only while the boot-time lazy migration writes `app.boxel.realm-servers`
+  // itself, so the AccountData listener ignores that self-write rather than
+  // re-running trusted-servers assembly mid-boot. The migration has already
+  // assembled this session from the equivalent legacy realm list; the new key
+  // only needs to take effect on the next boot.
+  private migratingRealmServersAccountData = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
@@ -421,6 +427,13 @@ export default class MatrixService extends Service {
               break;
             }
             case APP_BOXEL_REALM_SERVERS_EVENT_TYPE: {
+              // The boot-time lazy migration's own write echoes back here; it
+              // has already assembled this session from the equivalent legacy
+              // realm list, so ignore the self-write rather than re-running
+              // assembly mid-boot.
+              if (this.migratingRealmServersAccountData) {
+                break;
+              }
               let realmServers = e.event.content.realmServers as string[];
               this.trustedRealmServersAuthoritative = realmServers.length > 0;
               if (this.trustedRealmServersAuthoritative) {
@@ -942,7 +955,16 @@ export default class MatrixService extends Service {
               if (derivedRealmServers.length > 0) {
                 if (isTesting())
                   console.warn('[start-phase] migrateRealmServersAccountData');
-                await this.setRealmServersInAccountData(derivedRealmServers);
+                // Guard so this self-write doesn't re-trigger trusted-servers
+                // assembly via the AccountData listener while boot is still
+                // running — this session is already assembled from the legacy
+                // list; the new key takes effect on the next boot.
+                this.migratingRealmServersAccountData = true;
+                try {
+                  await this.setRealmServersInAccountData(derivedRealmServers);
+                } finally {
+                  this.migratingRealmServersAccountData = false;
+                }
               }
             } catch (err) {
               console.error(
