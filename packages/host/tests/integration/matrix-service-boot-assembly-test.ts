@@ -191,8 +191,9 @@ module(
 
 // CS-11659: lazy migration on host boot. A user who predates
 // `app.boxel.realm-servers` (only `app.boxel.realms` set) has the new key
-// seeded on next boot from the realm-server origins backing their existing
-// realm URLs. The legacy key is retained for rollback safety.
+// seeded on next boot with the realm-server backing their existing realms
+// (derived via JWT `realmServerURL` claim / own-server fallback, never the
+// bare realm-URL origin). The legacy key is retained for rollback safety.
 module(
   'Integration | matrix-service | lazy migration seeds realm-servers',
   function (hooks) {
@@ -220,13 +221,13 @@ module(
       await matrixService.start();
     });
 
-    test('boot writes `app.boxel.realm-servers` derived from the realm origins', async function (assert) {
+    test('boot writes `app.boxel.realm-servers` with the backing realm-server', async function (assert) {
       let matrixService = getService('matrix-service') as MatrixService;
       let realmServers = await matrixService.getRealmServersFromAccountData();
       assert.deepEqual(
         realmServers,
         [normalizedTrustedServerURL],
-        'the trusted realm-server backing testRealmURL is persisted',
+        'the realm-server backing testRealmURL is persisted (own server, not the base-realm origin)',
       );
     });
 

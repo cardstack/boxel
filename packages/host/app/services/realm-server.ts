@@ -364,29 +364,6 @@ export default class RealmServerService extends Service {
     return [...realmServerURLs];
   }
 
-  // Derives the distinct realm-server URLs backing the given realm URLs.
-  // Used by the one-time host-boot migration that seeds
-  // `app.boxel.realm-servers` from the legacy `app.boxel.realms` list. A
-  // realm's server is the origin of its URL; when a session token for that
-  // realm is present its `realmServerURL` claim is authoritative and taken
-  // as a cross-check over the bare origin. Results run through the same
-  // normalization as the rest of the service, so the distinct origins that
-  // back a single server (e.g. the test-realm origin and the base realm
-  // origin in tests) collapse to that one server.
-  deriveRealmServerURLsForRealms(realms: string[]): string[] {
-    let sessionTokens = this.readSessionTokens();
-    let realmServerURLs = new Set<string>();
-    for (let realmURL of realms) {
-      let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
-      let claims = token ? realmClaimsFromRawToken(token) : undefined;
-      let realmServerURL =
-        claims?.realmServerURL ?? new URL(normalizedRealmURL).origin;
-      realmServerURLs.add(this.normalizeRealmServerURL(realmServerURL));
-    }
-    return [...realmServerURLs];
-  }
-
   private readSessionTokens(): Record<string, string> {
     let sessionStr =
       window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
