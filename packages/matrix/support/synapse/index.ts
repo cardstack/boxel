@@ -85,6 +85,39 @@ function isPortBindError(error: unknown): boolean {
   return /address already in use|port is already allocated/i.test(message);
 }
 
+// The Google OIDC block is gated on env vars so a developer without a Google
+// OAuth client can still run Synapse for unrelated work. When either env var is
+// missing, the whole `# BEGIN_GOOGLE_OIDC ... # END_GOOGLE_OIDC` block is
+// stripped — Synapse refuses to boot with an `oidc_providers` entry whose
+// `client_id` is empty. When both are present, the secrets are interpolated.
+export function applyGoogleOidcGating(
+  hsYaml: string,
+  clientId: string,
+  clientSecret: string,
+): string {
+  if (clientId && clientSecret) {
+    return hsYaml
+      .replace(/{{GOOGLE_OAUTH_CLIENT_ID}}/g, clientId)
+      .replace(/{{GOOGLE_OAUTH_CLIENT_SECRET}}/g, clientSecret);
+  }
+  return hsYaml.replace(/# BEGIN_GOOGLE_OIDC[\s\S]*?# END_GOOGLE_OIDC\n?/g, '');
+}
+
+// The test template carries a Google OIDC block pointed at
+// navikt/mock-oauth2-server for the Playwright SSO suite. It is gated on
+// `issuer` (set by the matrix global setup once the mock container is up) so
+// every other suite — which never starts the mock — boots Synapse without a
+// dangling provider whose discovery would never resolve.
+export function applyTestOidcGating(
+  hsYaml: string,
+  issuer: string | undefined,
+): string {
+  if (issuer) {
+    return hsYaml.replace(/{{MOCK_OAUTH2_ISSUER}}/g, issuer);
+  }
+  return hsYaml.replace(/# BEGIN_TEST_OIDC[\s\S]*?# END_TEST_OIDC\n?/g, '');
+}
+
 export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
@@ -128,6 +161,14 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
+
+  hsYaml = applyGoogleOidcGating(
+    hsYaml,
+    process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
+  );
+
+  hsYaml = applyTestOidcGating(hsYaml, process.env.MOCK_OAUTH2_ISSUER);
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 
@@ -216,6 +257,10 @@ export async function synapseStart(
       `${synCfg.configDir}:/data`,
       '-v',
       `${path.join(import.meta.dirname, 'templates')}:/custom/templates/`,
+      '-v',
+      `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
+      '-e',
+      'PYTHONPATH=/custom/modules',
     ];
     if (useDynamicHostPort) {
       // In dynamic-host-port mode multiple harnesses may run concurrently, so

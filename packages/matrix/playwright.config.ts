@@ -35,8 +35,12 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         launchOptions: {
           args: [
-            // Simulate resolving a custom workspace domain to a realm server
-            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',
+            // Simulate resolving a custom workspace domain to a realm server.
+            // The second rule points the mock OIDC provider's container-name
+            // host (the issuer Synapse advertises) at its published host port,
+            // so the browser and Synapse resolve `boxel-mock-oauth:8080` to the
+            // same server and the issuer / `iss` claim stays consistent.
+            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205,MAP boxel-mock-oauth 127.0.0.1:8083',
             // The mkcert leaf's SAN is `localhost` only — the published
             // realm subdomain (`https://published.realm:4205/`) and the
             // tenant-style subdomains under `*.localhost:4205` that

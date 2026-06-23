@@ -49,6 +49,7 @@
     "test": "./scripts/test.sh",
     "test:cleanup": "./scripts/remove-test-dbs.sh",
     "test:group": "./scripts/test.sh",
+    "test:oidc-mapping-provider": "./scripts/test-oidc-mapping-provider.sh",
     "wait": "sleep 10000000",
     "lint": "ember-tsc --noEmit",
     "clean": "rm -rf ./synapse-data"
