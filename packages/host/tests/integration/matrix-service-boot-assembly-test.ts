@@ -189,11 +189,11 @@ module(
   },
 );
 
-// CS-11659: lazy migration on host boot. A user who predates
-// `app.boxel.realm-servers` (only `app.boxel.realms` set) has the new key
-// seeded on next boot with the realm-server backing their existing realms
-// (derived via JWT `realmServerURL` claim / own-server fallback, never the
-// bare realm-URL origin). The legacy key is retained for rollback safety.
+// Lazy migration on host boot. An account with no `app.boxel.realm-servers`
+// entry (only `app.boxel.realms` set) has the new key seeded on next boot
+// with the realm-server backing its existing realms (derived via JWT
+// `realmServerURL` claim / own-server fallback, never the bare realm-URL
+// origin). The legacy key is retained for rollback safety.
 module(
   'Integration | matrix-service | lazy migration seeds realm-servers',
   function (hooks) {
@@ -202,7 +202,7 @@ module(
     setupLocalIndexing(hooks);
 
     // Only the legacy `app.boxel.realms` key is set (no activeRealmServers),
-    // matching a not-yet-migrated account.
+    // matching an unmigrated account.
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],

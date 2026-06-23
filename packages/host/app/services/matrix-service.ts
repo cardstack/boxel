@@ -954,23 +954,23 @@ export default class MatrixService extends Service {
           )) as { realms: string[] } | null;
           userRealmURLs = legacyRealmsData?.realms ?? [];
 
-          // Lazy migration: this account predates `app.boxel.realm-servers`
-          // (the key was absent or empty, so boot fell back to the legacy
-          // realm list above). Seed the new key with the realm-server backing
-          // the user's existing realms so future boots take the authoritative
-          // trusted-servers assembly path. We use `getRealmServersForRealms`,
-          // which derives the server from each realm's JWT `realmServerURL`
-          // claim and falls back to this host's own realm server — never the
-          // bare realm-URL origin. That matters because a realm URL's origin
-          // can differ from its realm server (e.g. the shared base realm at
-          // cardstack.com); persisting such a foreign origin would make the
-          // next boot's `assertOwnRealmServer` reject the list and log the
-          // user out. The legacy `app.boxel.realms` key is intentionally
-          // retained for rollback safety during the transition window. Gated
-          // on `trustedServers` being genuinely empty so a re-boot of this
-          // already-legacy session (where the key we just wrote is now
-          // present) doesn't re-write it. A no-op for an account with no
-          // realms. Best-effort: a failure must not break boot.
+          // Lazy migration: this account has no `app.boxel.realm-servers`
+          // entry (the key was absent or empty, so boot fell back to the
+          // legacy realm list above). Seed the new key with the realm-server
+          // backing the user's existing realms so subsequent boots take the
+          // authoritative trusted-servers assembly path. We use
+          // `getRealmServersForRealms`, which derives the server from each
+          // realm's JWT `realmServerURL` claim and falls back to this host's
+          // own realm server — never the bare realm-URL origin. That matters
+          // because a realm URL's origin can differ from its realm server
+          // (e.g. the shared base realm at cardstack.com); persisting such a
+          // foreign origin would make the next boot's `assertOwnRealmServer`
+          // reject the list and log the user out. The legacy
+          // `app.boxel.realms` key is intentionally retained for rollback
+          // safety. Gated on `trustedServers` being genuinely empty so a
+          // re-boot of this same legacy session (where the key we just wrote
+          // is now present) doesn't re-write it. A no-op for an account with
+          // no realms. Best-effort: a failure must not break boot.
           if (trustedServers.length === 0 && userRealmURLs.length > 0) {
             try {
               let derivedRealmServers =

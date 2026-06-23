@@ -42,9 +42,9 @@ module(
         mockMatrixUtils,
         contents: {},
       });
-      // Boot's lazy migration (CS-11659) seeds `app.boxel.realm-servers` from
-      // the active realms, so reset to a known-empty starting point — these
-      // tests exercise the raw read/write helpers, not the migration.
+      // Boot's lazy migration seeds `app.boxel.realm-servers` from the active
+      // realms, so reset to a known-empty starting point — these tests
+      // exercise the raw read/write helpers, not the migration.
       let matrixService = getService('matrix-service') as MatrixService;
       await matrixService.setRealmServersInAccountData([]);
     });
