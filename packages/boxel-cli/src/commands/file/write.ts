@@ -143,6 +143,21 @@ export function registerWriteCommand(parent: Command): void {
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: WriteCliOptions) => {
+      // Resolve the seed before consuming stdin: when content arrives on stdin
+      // and --realm-secret-seed prompts, both would contend for stdin. Wrapped
+      // so a seed-resolution throw (e.g. non-TTY stdin) is a clean error.
+      let realmSecretSeed: string | undefined;
+      try {
+        realmSecretSeed = await resolveRealmSecretSeed(
+          opts.realmSecretSeed === true,
+        );
+      } catch (err) {
+        stderr(
+          `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+        );
+        process.exit(1);
+      }
+
       let content: string | Uint8Array;
       if (opts.file) {
         // Refuse a source/destination binary-classification mismatch
@@ -184,10 +199,6 @@ export function registerWriteCommand(parent: Command): void {
           `${DIM}Received ${content.length} bytes. Writing to realm...${RESET}`,
         );
       }
-
-      let realmSecretSeed = await resolveRealmSecretSeed(
-        opts.realmSecretSeed === true,
-      );
 
       let result: WriteResult;
       try {

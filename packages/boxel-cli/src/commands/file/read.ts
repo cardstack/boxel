@@ -111,11 +111,13 @@ export function registerReadCommand(parent: Command): void {
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: ReadCliOptions) => {
-      let realmSecretSeed = await resolveRealmSecretSeed(
-        opts.realmSecretSeed === true,
-      );
       let result: ReadResult;
       try {
+        // Inside the try so a seed-resolution throw (e.g. --realm-secret-seed
+        // with non-TTY stdin) surfaces as a clean error, not an unhandled one.
+        let realmSecretSeed = await resolveRealmSecretSeed(
+          opts.realmSecretSeed === true,
+        );
         result = await read(opts.realm, filePath, { realmSecretSeed });
       } catch (err) {
         console.error(
