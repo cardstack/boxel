@@ -63,18 +63,23 @@ function readFrontmatter(content: string): {
 const COMMAND_MODULE = `${testRealmURL}test-command.gts`;
 
 module('Integration | commands | migrate-skill', function (hooks) {
-  setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
-  let mockMatrixUtils = setupMockMatrix(hooks);
-  setupBaseRealm(hooks);
-  setupOnSave(hooks);
-
   let loader: Loader;
 
+  setupRenderingTest(hooks);
+
+  // Register the realm-service stub before the realm/base-realm/matrix helpers
+  // run, so their `lookup('service:realm')` resolves the stub rather than
+  // instantiating the real singleton first (which would leave `realmOf`
+  // unstubbed and realm resolution test-order dependent).
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loader = getService('loader-service').loader;
   });
+
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+  setupBaseRealm(hooks);
+  setupOnSave(hooks);
 
   setupCardLogs(
     hooks,
