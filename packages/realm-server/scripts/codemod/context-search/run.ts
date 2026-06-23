@@ -12,7 +12,7 @@ import { join, resolve } from 'path';
 
 import * as prettier from 'prettier';
 
-import { transformContextSearch } from './transform.ts';
+import { transformContextSearch, type TransformResult } from './transform.ts';
 
 // Format the migrated source through the repo's prettier config (with
 // prettier-plugin-ember-template-tag for `.gts`) so the structural edits land as
@@ -68,14 +68,15 @@ async function main(): Promise<void> {
 
   for (let file of files) {
     let source = readFileSync(file, 'utf8');
-    let result;
+    let result: TransformResult;
     try {
       result = transformContextSearch(source, { filename: file });
     } catch (err) {
       // The transformer threw while parsing this module's template, so it can't
       // be migrated mechanically (and would not compile as-is either). Record it
       // and keep going so a single bad module doesn't mask every file after it.
-      unparseable.push({ file, error: (err as Error).message.split('\n')[0] });
+      let message = err instanceof Error ? err.message : String(err);
+      unparseable.push({ file, error: message.split('\n')[0] });
       continue;
     }
     if (result.status === 'transformed') {
