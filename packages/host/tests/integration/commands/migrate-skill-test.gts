@@ -1,0 +1,229 @@
+import { getOwner } from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import { parse as parseYaml } from 'yaml';
+
+import { baseRealm } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common/loader';
+
+import MigrateSkillCommand from '@cardstack/host/commands/migrate-skill';
+import RealmService from '@cardstack/host/services/realm';
+
+import {
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupOnSave,
+  testRealmInfo,
+  testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+} from '../../helpers';
+import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupRenderingTest } from '../../helpers/setup';
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+
+  realmOf(input: URL | string) {
+    let str = input instanceof URL ? input.href : input;
+    if (str === testRealmURL) {
+      return testRealmURL as ReturnType<RealmService['realmOf']>;
+    }
+    return undefined;
+  }
+}
+
+// Split a `--- … ---` frontmatter block off the front of a SKILL.md and parse
+// the YAML, so assertions can read the structured frontmatter rather than match
+// exact YAML formatting.
+function readFrontmatter(content: string): {
+  data: Record<string, any>;
+  body: string;
+} {
+  let match = /^---\n([\s\S]*?)\n---\n?/.exec(content);
+  if (!match) {
+    return { data: {}, body: content };
+  }
+  return {
+    data: (parseYaml(match[1]) as Record<string, any>) ?? {},
+    body: content.slice(match[0].length),
+  };
+}
+
+const COMMAND_MODULE = `${testRealmURL}test-command.gts`;
+
+module('Integration | commands | migrate-skill', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+  setupBaseRealm(hooks);
+  setupOnSave(hooks);
+
+  let loader: Loader;
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    loader = getService('loader-service').loader;
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+
+export class DoThing extends Command {
+  static displayName = 'Test Command';
+  async getInputType() {
+    return undefined;
+  }
+}`,
+          'Skill/data-management.json': new Skill({
+            cardTitle: 'Data Management',
+            cardDescription: 'Manage data in a realm',
+            instructions: '# Data\n\nDo data things.',
+            commands: [
+              new CommandField({
+                codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
+                requiresApproval: true,
+              }),
+            ],
+          }),
+          'Skill/no-commands.json': new Skill({
+            cardTitle: 'No Commands',
+            cardDescription: 'A skill without commands',
+            instructions: 'Just instructions.',
+          }),
+        },
+      }),
+    );
+  });
+
+  test('migrates a Skill card with commands into a SKILL.md', async function (assert) {
+    let commandContext = getService('command-service').commandContext;
+    let cardService = getService('card-service');
+    let command = new MigrateSkillCommand(commandContext);
+
+    let result = await command.execute({ realm: testRealmURL });
+
+    let skillUrl = `${testRealmURL}skills/data-management/SKILL.md`;
+    assert.true(
+      result.migratedFiles.includes(skillUrl),
+      'the data-management SKILL.md is reported as migrated',
+    );
+
+    let { data, body } = readFrontmatter(
+      (await cardService.getSource(new URL(skillUrl))).content,
+    );
+    assert.strictEqual(data.name, 'Data Management', 'top-level name is set');
+    assert.strictEqual(
+      data.description,
+      'Manage data in a realm',
+      'top-level description is set',
+    );
+    assert.strictEqual(data.boxel.kind, 'skill', 'boxel.kind is skill');
+    assert.deepEqual(
+      data.boxel.commands,
+      [
+        {
+          codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
+          requiresApproval: true,
+        },
+      ],
+      'the command round-trips into boxel.commands',
+    );
+    assert.strictEqual(
+      body.trim(),
+      '# Data\n\nDo data things.',
+      'the instructions become the markdown body',
+    );
+  });
+
+  test('omits boxel.commands when the skill has none', async function (assert) {
+    let commandContext = getService('command-service').commandContext;
+    let cardService = getService('card-service');
+    let command = new MigrateSkillCommand(commandContext);
+
+    await command.execute({ realm: testRealmURL });
+
+    let { data } = readFrontmatter(
+      (
+        await cardService.getSource(
+          new URL(`${testRealmURL}skills/no-commands/SKILL.md`),
+        )
+      ).content,
+    );
+    assert.strictEqual(data.boxel.kind, 'skill', 'boxel.kind is skill');
+    assert.notOk(
+      'commands' in data.boxel,
+      'no commands key when the skill has none',
+    );
+  });
+
+  test('skips existing targets unless overwrite is set', async function (assert) {
+    let commandContext = getService('command-service').commandContext;
+    let cardService = getService('card-service');
+    let command = new MigrateSkillCommand(commandContext);
+
+    let first = await command.execute({ realm: testRealmURL });
+    assert.strictEqual(
+      first.migratedFiles.length,
+      2,
+      'both skills migrate on the first run',
+    );
+
+    let second = await command.execute({ realm: testRealmURL });
+    assert.strictEqual(
+      second.migratedFiles.length,
+      0,
+      'nothing is rewritten on the second run',
+    );
+    assert.strictEqual(
+      second.skippedSkillIds.length,
+      2,
+      'both skills are reported as skipped',
+    );
+
+    // Overwrite re-migrates even though the targets already exist.
+    let third = await command.execute({ realm: testRealmURL, overwrite: true });
+    assert.strictEqual(
+      third.migratedFiles.length,
+      2,
+      'both skills migrate again with overwrite',
+    );
+    assert.strictEqual(
+      third.skippedSkillIds.length,
+      0,
+      'nothing is skipped with overwrite',
+    );
+
+    // The overwritten content is still well-formed.
+    let { data } = readFrontmatter(
+      (
+        await cardService.getSource(
+          new URL(`${testRealmURL}skills/data-management/SKILL.md`),
+        )
+      ).content,
+    );
+    assert.strictEqual(data.boxel.kind, 'skill');
+  });
+});

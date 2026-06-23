@@ -159,6 +159,24 @@ export class WriteTextFileInput extends CardDef {
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
+export class MigrateSkillInput extends CardDef {
+  // The realm to migrate: legacy `Skill` cards are read from it and the
+  // resulting `skills/<name>/SKILL.md` files are written back into it.
+  @field realm = contains(StringField);
+  // Overwrite an existing `SKILL.md` at the target path. When false (default),
+  // a skill whose target already exists is left untouched and reported as
+  // skipped.
+  @field overwrite = contains(BooleanField);
+}
+
+export class MigrateSkillResult extends CardDef {
+  // Absolute URLs of the `SKILL.md` files written by this run.
+  @field migratedFiles = containsMany(StringField);
+  // Ids of legacy `Skill` cards skipped because their target `SKILL.md`
+  // already exists and `overwrite` was not set.
+  @field skippedSkillIds = containsMany(StringField);
+}
+
 export class WriteBinaryFileInput extends CardDef {
   @field path = contains(StringField);
   @field realm = contains(StringField);
