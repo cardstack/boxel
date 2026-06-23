@@ -2,7 +2,6 @@ import type Koa from 'koa';
 import {
   asExpressions,
   dbAdapterQuerier,
-  ensureTrailingSlash,
   fetchRealmPermissions,
   getMatrixUsername,
   notifyAllFileChanges,
@@ -34,6 +33,7 @@ import {
   deletePublishedRowsBySourceUrl,
   deleteRegistryRowByUrl,
 } from '../lib/realm-registry-writes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -282,18 +282,6 @@ function assertIsDeleteRealmJSON(
   }
   if (!('id' in data) || typeof data.id !== 'string') {
     throw new Error('json.data.id is required and must be a string');
-  }
-}
-
-function normalizeRealmURL(realmURL: string): URL | null {
-  try {
-    let parsedRealmURL = new URL(realmURL);
-    parsedRealmURL.pathname = ensureTrailingSlash(parsedRealmURL.pathname);
-    parsedRealmURL.search = '';
-    parsedRealmURL.hash = '';
-    return parsedRealmURL;
-  } catch {
-    return null;
   }
 }
 

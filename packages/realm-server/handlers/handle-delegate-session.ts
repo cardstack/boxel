@@ -1,7 +1,6 @@
 import type Koa from 'koa';
 import { randomUUID } from 'crypto';
 import {
-  ensureTrailingSlash,
   fetchRealmPermissions,
   logger,
   SupportedMimeType,
@@ -9,6 +8,7 @@ import {
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { createJWT } from '../jwt.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -28,14 +28,6 @@ import {
 const DELEGATED_TOKEN_TTL = '30m';
 
 const log = logger('realm:delegate-session');
-
-function headerValue(
-  headers: Koa.Context['req']['headers'],
-  name: string,
-): string | undefined {
-  let value = headers[name];
-  return Array.isArray(value) ? value[0] : value;
-}
 
 // Mints a realm session JWT scoped to a named user's read access on a single
 // realm (CS-11552). Shared-secret authenticated (HMAC over the request body +
@@ -67,8 +59,8 @@ export default function handleDelegateSession({
 
     let auth = verifyDelegationRequest({
       secret: aiBotDelegationSecret,
-      timestamp: headerValue(ctxt.req.headers, DELEGATION_TIMESTAMP_HEADER),
-      signature: headerValue(ctxt.req.headers, DELEGATION_SIGNATURE_HEADER),
+      timestamp: ctxt.get(DELEGATION_TIMESTAMP_HEADER),
+      signature: ctxt.get(DELEGATION_SIGNATURE_HEADER),
       rawBody,
       now: Date.now(),
     });
@@ -103,23 +95,18 @@ export default function handleDelegateSession({
       return;
     }
 
-    let realmURL: URL;
-    try {
-      realmURL = new URL(realm);
-    } catch {
+    // Normalise to the canonical realm-root form so the permission lookup hits
+    // the same realm_user_permissions row a write through other endpoints
+    // produced (they key by the trailing-slash href; see normalizeRealmURL).
+    let normalizedRealmURL = normalizeRealmURL(realm);
+    if (!normalizedRealmURL) {
       await sendResponseForBadRequest(
         ctxt,
         `"realm" is not a valid URL: ${realm}`,
       );
       return;
     }
-    // Normalise to the canonical realm-root form so the permission lookup hits
-    // the same realm_user_permissions row a write through other endpoints
-    // produced (they key by the trailing-slash href; see
-    // handle-upsert-realm-user-permission).
-    realmURL.search = '';
-    realmURL.hash = '';
-    let normalizedRealmHref = ensureTrailingSlash(realmURL.href);
+    let normalizedRealmHref = normalizedRealmURL.href;
 
     // Forensic audit record (security design CS-11551): every delegation
     // request is logged with a correlation id, requester, and outcome.
@@ -132,7 +119,7 @@ export default function handleDelegateSession({
     // via a `users` grant, diverging from what the realm would accept.
     let realmPermissions = await fetchRealmPermissions(
       dbAdapter,
-      new URL(normalizedRealmHref),
+      normalizedRealmURL,
     );
     let permissionChecker = new RealmPermissionChecker(
       realmPermissions,
