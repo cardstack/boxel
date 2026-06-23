@@ -1114,10 +1114,20 @@ export class Realm {
 
     Object.values(SupportedMimeType).forEach((mimeType) => {
       if (mimeType !== SupportedMimeType.CardSource) {
-        this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-          let requestContext = await this.createRequestContext('read');
-          return createResponse({ init: { status: 200 }, requestContext });
-        });
+        this.#router.head(
+          '/.*',
+          mimeType as SupportedMimeType,
+          async (request: Request) => {
+            if (this.paths.local(new URL(request.url)) === '') {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `[CCSRV] catchall-head ENTER mime=${mimeType} url=${request.url}`,
+              );
+            }
+            let requestContext = await this.createRequestContext('read');
+            return createResponse({ init: { status: 200 }, requestContext });
+          },
+        );
       }
     });
   }
@@ -3889,6 +3899,13 @@ export class Realm {
       (!url.pathname.endsWith('.json') &&
         !hasExecutableExtension(url.pathname));
     let localName = this.paths.local(url);
+    let __ccdbg = request.method === 'HEAD' && localName === '';
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[CCSRV] getSourceOrRedirect ENTER root bypassCache=${bypassCache} localName="${localName}"`,
+      );
+    }
     if (bypassCache) {
       let cachedEntry = this.#sourceCache.get(localName);
       if (cachedEntry) {
@@ -3953,10 +3970,22 @@ export class Realm {
       let sourceCacheGenSnapshot = bypassCache
         ? undefined
         : this.#snapshotSourceCacheGeneration(localName);
+      if (__ccdbg) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[CCSRV] getSourceOrRedirect before getFileWithFallbacks fallbacks=${JSON.stringify(fallbackExtensions)}`,
+        );
+      }
       let handle = await this.getFileWithFallbacks(
         localName,
         fallbackExtensions,
       );
+      if (__ccdbg) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[CCSRV] getSourceOrRedirect after getFileWithFallbacks handle=${handle ? handle.path : 'undefined'}`,
+        );
+      }
       if (!handle) {
         return notFound(request, requestContext, `${localName} not found`);
       }
