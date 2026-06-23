@@ -1456,9 +1456,24 @@ export default class RealmService extends Service {
         // could have already been discovered while we were queued
         return;
       }
-      let response = await this.network.authedFetch(url, {
-        method: 'HEAD',
-      });
+      if (isTesting() && url.includes('/base/')) {
+        // eslint-disable-next-line no-console
+        console.warn(`[CC-DIAG] identifyRealm(${url}) BEFORE HEAD`);
+      }
+      let response: Response;
+      try {
+        response = await this.network.authedFetch(url, {
+          method: 'HEAD',
+        });
+      } catch (e) {
+        if (isTesting() && url.includes('/base/')) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[CC-DIAG] identifyRealm(${url}) HEAD THREW ${String(e)}`,
+          );
+        }
+        throw e;
+      }
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (isTesting() && url.includes('/base/')) {
         // eslint-disable-next-line no-console
