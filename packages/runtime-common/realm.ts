@@ -1117,14 +1117,13 @@ export class Realm {
         this.#router.head(
           '/.*',
           mimeType as SupportedMimeType,
-          async (request: Request) => {
+          async (request: Request, requestContext: RequestContext) => {
             if (this.paths.local(new URL(request.url)) === '') {
               // eslint-disable-next-line no-console
               console.warn(
                 `[CCSRV] catchall-head ENTER mime=${mimeType} url=${request.url}`,
               );
             }
-            let requestContext = await this.createRequestContext('read');
             return createResponse({ init: { status: 200 }, requestContext });
           },
         );
