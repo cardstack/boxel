@@ -1445,6 +1445,14 @@ export default class RealmService extends Service {
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
       this.currentKnownRealms.add(realmURL);
+      if (isTesting()) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[POP-DIAG] registered realm resource: ${realmURL} | realms now=${JSON.stringify(
+            [...this._realms.keys()],
+          )}`,
+        );
+      }
     }
     return resource;
   }
