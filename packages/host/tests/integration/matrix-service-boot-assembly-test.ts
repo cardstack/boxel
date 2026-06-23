@@ -22,6 +22,12 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 const testRealmServerURL = ensureTrailingSlash(ENV.realmServerURL);
+// The realm-server service normalizes the test-realm origin onto the base
+// realm origin (see `normalizeRealmServerURL`), so a realm rooted at the
+// test-realm origin resolves to this canonical server identity.
+const normalizedTrustedServerURL = ensureTrailingSlash(
+  new URL(ENV.resolvedBaseRealmURL).origin,
+);
 
 // Boot assembles the available-realms list from the user's trusted
 // realm-servers (`app.boxel.realm-servers`) by asking each via
@@ -178,6 +184,104 @@ module(
       assert.ok(
         realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
         'testRealmURL is present in availableRealmIdentifiers',
+      );
+    });
+  },
+);
+
+// CS-11659: lazy migration on host boot. A user who predates
+// `app.boxel.realm-servers` (only `app.boxel.realms` set) has the new key
+// seeded on next boot from the realm-server origins backing their existing
+// realm URLs. The legacy key is retained for rollback safety.
+module(
+  'Integration | matrix-service | lazy migration seeds realm-servers',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    // Only the legacy `app.boxel.realms` key is set (no activeRealmServers),
+    // matching a not-yet-migrated account.
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('boot writes `app.boxel.realm-servers` derived from the realm origins', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      let realmServers = await matrixService.getRealmServersFromAccountData();
+      assert.deepEqual(
+        realmServers,
+        [normalizedTrustedServerURL],
+        'the trusted realm-server backing testRealmURL is persisted',
+      );
+    });
+
+    test('boot retains the legacy `app.boxel.realms` key', async function (assert) {
+      assert.deepEqual(
+        mockMatrixUtils.getActiveRealms(),
+        [testRealmURL],
+        'app.boxel.realms is left intact for rollback safety',
+      );
+    });
+
+    test('boot still assembles the available realms', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'testRealmURL is present in availableRealmIdentifiers',
+      );
+    });
+  },
+);
+
+module(
+  'Integration | matrix-service | already-migrated account is untouched',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    // `app.boxel.realm-servers` is already populated, so boot takes the
+    // trusted-servers path and the migration must not run.
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      activeRealmServers: [testRealmServerURL],
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('boot leaves `app.boxel.realm-servers` unchanged', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(
+        await matrixService.getRealmServersFromAccountData(),
+        [testRealmServerURL],
+        'the existing realm-servers list is neither rewritten nor duplicated',
       );
     });
   },

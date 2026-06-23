@@ -923,6 +923,34 @@ export default class MatrixService extends Service {
             APP_BOXEL_REALMS_EVENT_TYPE,
           )) as { realms: string[] } | null;
           userRealmURLs = legacyRealmsData?.realms ?? [];
+
+          // Lazy migration: this account predates `app.boxel.realm-servers`
+          // (the key was absent or empty, so boot fell back to the legacy
+          // realm list above). Seed the new key from the trusted realm-server
+          // origins backing the user's existing realm URLs so future boots
+          // take the authoritative trusted-servers assembly path. The legacy
+          // `app.boxel.realms` key is intentionally retained for rollback
+          // safety during the transition window. Once written the new key is
+          // non-empty, so subsequent boots skip this branch — the migration
+          // fires at most once per account, and is a no-op for an account
+          // with no realms (nothing to derive). Best-effort: a derivation
+          // failure must not break boot.
+          if (userRealmURLs.length > 0) {
+            try {
+              let derivedRealmServers =
+                this.realmServer.deriveRealmServerURLsForRealms(userRealmURLs);
+              if (derivedRealmServers.length > 0) {
+                if (isTesting())
+                  console.warn('[start-phase] migrateRealmServersAccountData');
+                await this.setRealmServersInAccountData(derivedRealmServers);
+              }
+            } catch (err) {
+              console.error(
+                'Failed to migrate legacy realms to app.boxel.realm-servers account data',
+                err,
+              );
+            }
+          }
         }
 
         let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(

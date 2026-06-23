@@ -1,11 +1,14 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   testRealmURL,
@@ -103,6 +106,43 @@ module(
         await matrixService.getRealmServersFromAccountData(),
         [b],
         'removing a non-existent server leaves the list unchanged',
+      );
+    });
+
+    // CS-11659: the lazy boot migration derives the realm-server URLs to seed
+    // into `app.boxel.realm-servers`. These exercise the derivation directly
+    // with non-test origins so `normalizeRealmServerURL` is a no-op and the
+    // origin-vs-claim resolution is observable.
+    test('deriveRealmServerURLsForRealms uses the realm URL origin when no token is present', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      window.localStorage.removeItem(SessionLocalStorageKey);
+
+      assert.deepEqual(
+        realmServer.deriveRealmServerURLsForRealms([
+          'https://content.example/my-realm/',
+          'https://content.example/another-realm/',
+        ]),
+        ['https://content.example/'],
+        'distinct realms sharing an origin collapse to a single server',
+      );
+    });
+
+    test('deriveRealmServerURLsForRealms prefers the JWT realmServerURL claim over the origin', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      let realmURL = 'https://content.example/my-realm/';
+      // A realm whose content is served from one origin but whose JWT names a
+      // different realm-server origin — the claim is authoritative.
+      let claim = { realmServerURL: 'https://api.example/' };
+      let token = `header.${btoa(JSON.stringify(claim))}.signature`;
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [realmURL]: token }),
+      );
+
+      assert.deepEqual(
+        realmServer.deriveRealmServerURLsForRealms([realmURL]),
+        ['https://api.example/'],
+        'the realmServerURL claim cross-checks and overrides the bare origin',
       );
     });
   },
