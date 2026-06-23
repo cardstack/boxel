@@ -418,9 +418,27 @@ export class VirtualNetwork {
   }
 
   private async runFetch(request: Request, init?: RequestInit) {
-    let handlers: FetcherMiddlewareHandler[] = this.handlers.map((h) => {
+    let dbg =
+      request.url.includes('cardstack.com/base/') && request.method === 'HEAD';
+    if (dbg) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[VN-DIAG] runFetch ENTER ${request.method} ${request.url} mountedHandlers=${this.handlers.length}`,
+      );
+    }
+    let handlers: FetcherMiddlewareHandler[] = this.handlers.map((h, i) => {
       return async (request, next) => {
+        if (dbg) {
+          // eslint-disable-next-line no-console
+          console.warn(`[VN-DIAG] handler#${i} BEFORE ${request.url}`);
+        }
         let response = await h(request);
+        if (dbg) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[VN-DIAG] handler#${i} AFTER got=${response ? response.status : 'null'}`,
+          );
+        }
         if (response) {
           return response;
         }
@@ -429,7 +447,14 @@ export class VirtualNetwork {
     });
 
     handlers.push(async (request, next) => {
-      return next(await this.mapRequest(request, 'virtual-to-real'));
+      let mapped = await this.mapRequest(request, 'virtual-to-real');
+      if (dbg) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[VN-DIAG] mapRequest -> ${mapped.url} ; calling nativeFetch`,
+        );
+      }
+      return next(mapped);
     });
 
     return withRetries(new URL(request.url), () =>
