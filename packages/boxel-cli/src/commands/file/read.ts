@@ -1,9 +1,8 @@
 import type { Command } from 'commander';
-import {
-  getProfileManager,
-  NO_ACTIVE_PROFILE_ERROR,
-  type ProfileManager,
-} from '../../lib/profile-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
@@ -26,11 +25,16 @@ export interface ReadResult {
 
 export interface ReadCommandOptions {
   profileManager?: ProfileManager;
+  /** Pre-resolved realm secret seed for administrative (seed) auth. */
+  realmSecretSeed?: string;
+  /** @internal Test hook: supply an already-constructed authenticator. */
+  authenticator?: RealmAuthenticator;
 }
 
 interface ReadCliOptions {
   realm: string;
   json?: boolean;
+  realmSecretSeed?: boolean;
 }
 
 /**
@@ -39,27 +43,31 @@ interface ReadCliOptions {
  * per `isBinaryFilename`). Callers should parse the content themselves
  * if needed (e.g. JSON).
  *
- * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
+ * Auth is resolved via `resolveRealmAuthenticator`: a realm secret seed (when
+ * supplied) mints a JWT locally as the realm-server bot; otherwise the active
+ * Matrix profile's per-realm JWT is used.
  */
 export async function read(
   realmUrl: string,
   path: string,
   options?: ReadCommandOptions,
 ): Promise<ReadResult> {
-  let pm = options?.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    return {
-      ok: false,
-      error: NO_ACTIVE_PROFILE_ERROR,
-    };
+  let resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options?.realmSecretSeed,
+    profileManager: options?.profileManager,
+    authenticator: options?.authenticator,
+  });
+  if (!resolution.ok) {
+    return { ok: false, error: resolution.error };
   }
+  let authenticator = resolution.authenticator;
 
   let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   let response: Response;
   try {
-    response = await pm.authedRealmFetch(url, {
+    response = await authenticator.authedRealmFetch(url, {
       method: 'GET',
       headers: { Accept: SupportedMimeType.CardSource },
     });
@@ -97,11 +105,18 @@ export function registerReadCommand(parent: Command): void {
       'Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts)',
     )
     .requiredOption('--realm <realm-url>', 'The realm URL to read from')
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: ReadCliOptions) => {
+      let realmSecretSeed = await resolveRealmSecretSeed(
+        opts.realmSecretSeed === true,
+      );
       let result: ReadResult;
       try {
-        result = await read(opts.realm, filePath);
+        result = await read(opts.realm, filePath, { realmSecretSeed });
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
