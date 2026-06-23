@@ -296,6 +296,7 @@ const ALL_TEST_FILES: string[] = [
   './package-shim-handler-test',
   './command-parsing-utils-test',
   './query-matches-filter-test',
+  './parse-search-url-test',
   './matches-filter-integration-test',
   './eq-containment-integration-test',
   './search-in-flight-key-test',
