@@ -560,6 +560,12 @@ export interface TokenClaims {
   sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
   permissions: RealmPermissions['user'];
   realmServerURL: string;
+  // Set on tokens minted by the realm-server's /_delegate-session endpoint
+  // (CS-11552): a read-only session ai-bot uses to read a realm on behalf of
+  // a user. Unlike a normal session token, a delegated token carries only
+  // ['read'] even when the bound user has broader permissions, so request
+  // authorization treats it specially (read-only, no exact-permissions match).
+  delegated?: boolean;
 }
 
 export interface AdapterWriteResult {
@@ -3685,6 +3691,48 @@ export class Realm {
       );
 
       let user = token.user;
+
+      // Delegated read-only session (minted by the realm-server's
+      // /_delegate-session endpoint for ai-bot — CS-11552). It is bound to a
+      // single user and deliberately scoped to ['read'] even when that user
+      // has broader permissions, so neither the exact-permissions-match
+      // invariant used for normal sessions below nor the assume-user
+      // indirection applies. Enforce instead the two guarantees the delegation
+      // design promises: the session is read-only, and it grants no more than
+      // the bound user can already read.
+      if (token.delegated) {
+        // Single-realm scope. Delegated tokens are signed with the realm-server
+        // seed shared across every realm on this server and this branch skips
+        // the normal exact-permissions match, so without this check a token
+        // minted for realm A could be replayed against realm B whenever the
+        // bound user also has read on B. Bind the token to the realm it names.
+        if (
+          ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
+        ) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+        }
+        if (requiredPermission !== 'read') {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
+          );
+          throw new AuthorizationError('Delegated sessions are read-only');
+        }
+        if (!(await realmPermissionChecker.can(user, 'read'))) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.PermissionMismatch,
+          );
+        }
+        return;
+      }
+
       let assumedUser = request.headers.get('X-Boxel-Assume-User');
       let didAssumeUser = false;
       if (
