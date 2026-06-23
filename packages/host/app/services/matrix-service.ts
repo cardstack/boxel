@@ -182,6 +182,12 @@ export default class MatrixService extends Service {
   // gains content at runtime. Login-related side effects (`loginToRealms`,
   // `loadMoreAuthRooms`) still run regardless.
   private trustedRealmServersAuthoritative = false;
+  // Sticky for the lifetime of this instance once a boot assembles from the
+  // legacy `app.boxel.realms` list. Keeps later start() calls on the legacy
+  // path even after the lazy migration writes `app.boxel.realm-servers`, so
+  // the migration only takes effect on the next fresh session. Reset by
+  // resetState() so a logout/login re-evaluates against the persisted key.
+  private bootedFromLegacyRealmsList = false;
   // Set only while the boot-time lazy migration writes `app.boxel.realm-servers`
   // itself, so the AccountData listener ignores that self-write rather than
   // re-running trusted-servers assembly mid-boot. The migration has already
@@ -916,13 +922,23 @@ export default class MatrixService extends Service {
         // the lazy migration that populates `app.boxel.realm-servers` has
         // run on all active accounts.
         let trustedServers = realmServersData?.realmServers ?? [];
+        // A session that first assembled from the legacy `app.boxel.realms`
+        // list stays on the legacy path for the lifetime of this
+        // MatrixService instance. The lazy migration below persists
+        // `app.boxel.realm-servers` for the next fresh session; switching
+        // this same instance to the trusted path on a later start() (e.g. a
+        // test that re-boots to pick up a newly-added realm) would re-derive
+        // the realm list from `_realm-auth` for no benefit and drop realms
+        // that the trusted servers don't advertise.
+        let useTrustedServers =
+          trustedServers.length > 0 && !this.bootedFromLegacyRealmsList;
         // The legacy `app.boxel.realms` AccountData event is re-emitted by
         // the matrix sync that runs inside `startClient()` below. Setting
         // this flag here makes that re-emission a no-op for the available-
         // realms list — the realm-servers path is the authoritative source.
-        this.trustedRealmServersAuthoritative = trustedServers.length > 0;
+        this.trustedRealmServersAuthoritative = useTrustedServers;
         let userRealmURLs: string[];
-        if (trustedServers.length > 0) {
+        if (useTrustedServers) {
           if (isTesting())
             console.warn('[start-phase] fetchUserRealmsFromTrustedServers');
           userRealmURLs =
@@ -930,6 +946,7 @@ export default class MatrixService extends Service {
               trustedServers,
             );
         } else {
+          this.bootedFromLegacyRealmsList = true;
           if (isTesting())
             console.warn('[start-phase] getAccountData(realms-legacy)');
           let legacyRealmsData = (await this.client.getAccountDataFromServer(
@@ -943,12 +960,12 @@ export default class MatrixService extends Service {
           // origins backing the user's existing realm URLs so future boots
           // take the authoritative trusted-servers assembly path. The legacy
           // `app.boxel.realms` key is intentionally retained for rollback
-          // safety during the transition window. Once written the new key is
-          // non-empty, so subsequent boots skip this branch — the migration
-          // fires at most once per account, and is a no-op for an account
-          // with no realms (nothing to derive). Best-effort: a derivation
-          // failure must not break boot.
-          if (userRealmURLs.length > 0) {
+          // safety during the transition window. Gated on `trustedServers`
+          // being genuinely empty so a re-boot of this already-legacy session
+          // (where the key we just wrote is now present) doesn't re-write it.
+          // A no-op for an account with no realms (nothing to derive).
+          // Best-effort: a derivation failure must not break boot.
+          if (trustedServers.length === 0 && userRealmURLs.length > 0) {
             try {
               let derivedRealmServers =
                 this.realmServer.deriveRealmServerURLsForRealms(userRealmURLs);
@@ -1834,6 +1851,7 @@ export default class MatrixService extends Service {
       );
     }
     this.postLoginCompleted = false;
+    this.bootedFromLegacyRealmsList = false;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
     this.cardsToSend.clear();

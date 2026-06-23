@@ -245,6 +245,28 @@ module(
         'testRealmURL is present in availableRealmIdentifiers',
       );
     });
+
+    test('a re-boot of the same session after migration stays on the legacy path', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      let realmServer = getService('realm-server') as RealmServerService;
+
+      // The first boot (beforeEach) migrated and wrote `app.boxel.realm-servers`.
+      // Re-booting the same MatrixService instance must keep assembling from the
+      // legacy realm list rather than switching to the trusted-servers path,
+      // which would re-derive the list from `_realm-auth`. The migration only
+      // takes effect on the next fresh session.
+      await matrixService.start();
+
+      assert.deepEqual(
+        await matrixService.getRealmServersFromAccountData(),
+        [normalizedTrustedServerURL],
+        'realm-servers stays as migrated — not re-derived or duplicated',
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'testRealmURL from the legacy list survives the re-boot',
+      );
+    });
   },
 );
 
