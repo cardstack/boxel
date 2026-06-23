@@ -10,7 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
-import { verifyURLSignature } from '@cardstack/runtime-common/url-signature';
+import { verifyURLSignature } from '@cardstack/runtime-common/url-signature-node';
 import archiver from 'archiver';
 import fsExtra from 'fs-extra';
 const { existsSync, statSync } = fsExtra;
