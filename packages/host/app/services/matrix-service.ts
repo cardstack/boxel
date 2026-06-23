@@ -175,12 +175,12 @@ export default class MatrixService extends Service {
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
-  // CS-11658: when true, `app.boxel.realm-servers` is the authoritative
-  // source of the user's realm list and `app.boxel.realms` events are
-  // ignored for `setAvailableRealmIdentifiers`. Set during boot based on
-  // the new key's presence; flipped on by the realm-servers listener if
-  // the key gains content at runtime. Login-related side effects
-  // (`loginToRealms`, `loadMoreAuthRooms`) still run regardless.
+  // When true, `app.boxel.realm-servers` is the authoritative source of
+  // the user's realm list and `app.boxel.realms` events are ignored for
+  // `setAvailableRealmIdentifiers`. Set during boot from whether that key
+  // has content, and flipped on by the realm-servers listener if the key
+  // gains content at runtime. Login-related side effects (`loginToRealms`,
+  // `loadMoreAuthRooms`) still run regardless.
   private trustedRealmServersAuthoritative = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
@@ -403,8 +403,8 @@ export default class MatrixService extends Service {
           switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE: {
               let legacyRealms = e.event.content.realms as string[];
-              // CS-11658: when `app.boxel.realm-servers` is the source of
-              // truth, ignore the realm-list payload here — otherwise the
+              // When `app.boxel.realm-servers` is the source of truth,
+              // ignore the realm-list payload here — otherwise the
               // initial-sync re-emission of this event would overwrite the
               // trusted-servers boot result. Side effects below still run
               // so post-login realm authentication isn't dropped.
@@ -895,12 +895,13 @@ export default class MatrixService extends Service {
         ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
 
-        // CS-11658: boot assembles the realm list from trusted servers via
+        // Boot assembles the realm list from trusted servers via
         // `_realm-auth`. The transition fallback below reads the legacy
         // `app.boxel.realms` key when `app.boxel.realm-servers` is absent
-        // or empty — necessary until CS-11659's lazy migration populates
-        // the new key for existing users. Remove the fallback once that
-        // migration has run on all active accounts.
+        // or empty, so users whose accounts haven't yet been migrated to
+        // `app.boxel.realm-servers` still boot. Remove the fallback once
+        // the lazy migration that populates `app.boxel.realm-servers` has
+        // run on all active accounts.
         let trustedServers = realmServersData?.realmServers ?? [];
         // The legacy `app.boxel.realms` AccountData event is re-emitted by
         // the matrix sync that runs inside `startClient()` below. Setting

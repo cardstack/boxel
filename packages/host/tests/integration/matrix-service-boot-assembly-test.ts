@@ -23,11 +23,12 @@ import { setupRenderingTest } from '../helpers/setup';
 
 const testRealmServerURL = ensureTrailingSlash(ENV.realmServerURL);
 
-// CS-11658: boot assembles the available-realms list from the user's
-// trusted realm-servers (`app.boxel.realm-servers`) by asking each via
-// `_realm-auth`, instead of reading the realm list directly out of
+// Boot assembles the available-realms list from the user's trusted
+// realm-servers (`app.boxel.realm-servers`) by asking each via
+// `_realm-auth`, rather than reading the realm list directly out of
 // `app.boxel.realms`. A transition fallback to the legacy key remains
-// until CS-11659's lazy migration has run on all active accounts.
+// until the lazy migration that populates `app.boxel.realm-servers` has
+// run on all active accounts.
 module(
   'Integration | matrix-service | boot assembly with trusted servers',
   function (hooks) {
@@ -150,8 +151,8 @@ module(
     setupLocalIndexing(hooks);
 
     // No activeRealmServers — the mock returns `{ realmServers: [] }`, the
-    // same shape the host sees for a user who hasn’t been migrated to
-    // `app.boxel.realm-servers` yet (CS-11659).
+    // same shape the host sees for a user who hasn't yet been migrated to
+    // `app.boxel.realm-servers`.
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [baseRealm.url, testRealmURL],
