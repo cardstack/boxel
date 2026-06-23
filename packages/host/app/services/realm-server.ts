@@ -21,6 +21,7 @@ import {
   ri,
   testRealmURL,
   unpublishRealm as unpublishRealmOperation,
+  waitForReady as waitForReadyOperation,
   type RealmClient,
   type RealmIdentifier,
   type RealmInfo,
@@ -942,6 +943,22 @@ export default class RealmServerService extends Service {
   async unpublishRealm(publishedRealmURL: string) {
     await this.login();
     return unpublishRealmOperation(this.realmClient, { publishedRealmURL });
+  }
+
+  // Polls <publishedRealmURL>_readiness-check until the published realm is
+  // indexed and viewable. `_publish-realm` returns 202 before indexing
+  // finishes, so callers that need the realm ready wait here — the Publish UI
+  // keeps its "Publishing…" state until this resolves.
+  async waitForRealmReady(
+    publishedRealmURL: string,
+    opts?: { timeoutMs?: number; pollIntervalMs?: number },
+  ) {
+    await this.login();
+    return waitForReadyOperation(this.realmClient, {
+      publishedRealmURL,
+      timeoutMs: opts?.timeoutMs,
+      pollIntervalMs: opts?.pollIntervalMs,
+    });
   }
 
   async checkDomainAvailability(

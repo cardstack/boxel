@@ -97,6 +97,12 @@ module('Integration | commands | publish-realm', function (hooks) {
         );
       },
     },
+    {
+      // `realm.publish` polls each target's readiness after the 202.
+      // Report ready immediately so the command resolves.
+      route: '_readiness-check',
+      getResponse: async () => new Response(null, { status: 200 }),
+    },
   ]);
 
   setupRealmCacheTeardown(hooks);
