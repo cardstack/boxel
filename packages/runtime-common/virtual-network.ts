@@ -430,7 +430,11 @@ export class VirtualNetwork {
       return async (request, next) => {
         if (dbg) {
           // eslint-disable-next-line no-console
-          console.warn(`[VN-DIAG] handler#${i} BEFORE ${request.url}`);
+          console.warn(
+            `[VN-DIAG] handler#${i} BEFORE ${request.url} | name=${
+              (h as any).name || '(anon)'
+            } src=${String(h).replace(/\s+/g, ' ').slice(0, 160)}`,
+          );
         }
         let response = await h(request);
         if (dbg) {
