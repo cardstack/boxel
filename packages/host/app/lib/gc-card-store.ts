@@ -480,11 +480,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   delete(id: string): void {
-    // Retain the un-stripped url so the matching file-meta row (keyed with its
-    // extension) is actually deleted; the card-identity logic below operates on
-    // the stripped id, as card ids never carry an extension.
-    let rawId = id;
-    id = id.replace(/\.json$/, '');
+    // A `.json` url addresses the file-meta identity, never a card: card ids
+    // never carry an extension, while file-meta keeps its `.json`. The two
+    // share a stem (e.g. the card `…/realm` and its `…/realm.json` file — every
+    // card has a backing `.json`), so deleting the file must remove only the
+    // file-meta row. Stripping `.json` and running the card-identity logic
+    // below on the result would evict the same-named card.
+    if (/\.json$/.test(id)) {
+      this.#gcCandidates.delete(id);
+      this.deleteFileMeta(id);
+      return;
+    }
     let localId = isLocalId(id, this.#virtualNetwork) ? id : undefined;
     let remoteId = !isLocalId(id, this.#virtualNetwork) ? id : undefined;
 
@@ -512,7 +518,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
           this.#idResolver.removeByRemoteId(id);
         }
       }
-      this.deleteFromAll(remoteId, rawId);
+      this.deleteFromAll(remoteId);
       this.#idResolver.removeByRemoteId(remoteId);
     }
   }
@@ -717,19 +723,30 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       .filter(Boolean) as CardDef[];
   }
 
-  private deleteFromAll(id: string, fileMetaId: string = id) {
-    id = id.replace(/\.json$/, '');
+  private deleteFromAll(id: string) {
+    // `.json` deletes are routed to `deleteFileMeta` (a same-named card must
+    // not be evicted), so `id` here never carries a `.json` extension — the
+    // only ids that reach this are card ids/localIds and non-`.json` file urls
+    // (e.g. `…/x.png`). For those the card id and the file-meta key are
+    // identical, so one key clears both bucket sets.
     this.#cardInstances.delete(id);
     this.#cardInstanceErrors.delete(id);
     this.#nonTrackedCardInstances.delete(id);
     this.#nonTrackedCardInstanceErrors.delete(id);
-    // File-meta is keyed by the full URL, so it is deleted by the un-stripped
-    // id. Deleting a card (`fileMetaId` === card id, no extension) therefore
-    // leaves a same-named `…/x.json` FileDef untouched, and vice versa.
-    this.#fileMetaInstances.delete(fileMetaId);
-    this.#fileMetaInstanceErrors.delete(fileMetaId);
-    this.#nonTrackedFileMetaInstances.delete(fileMetaId);
-    this.#nonTrackedFileMetaInstanceErrors.delete(fileMetaId);
+    this.#fileMetaInstances.delete(id);
+    this.#fileMetaInstanceErrors.delete(id);
+    this.#nonTrackedFileMetaInstances.delete(id);
+    this.#nonTrackedFileMetaInstanceErrors.delete(id);
+  }
+
+  // Delete only the file-meta buckets, keyed by the full URL (extension
+  // included). Used for `.json` deletes so a same-named card — e.g. the realm
+  // config card `…/realm` vs its `…/realm.json` file — is left intact.
+  private deleteFileMeta(id: string) {
+    this.#fileMetaInstances.delete(id);
+    this.#fileMetaInstanceErrors.delete(id);
+    this.#nonTrackedFileMetaInstances.delete(id);
+    this.#nonTrackedFileMetaInstanceErrors.delete(id);
   }
 
   private getCardItem(type: 'instance', id: string): CardDef | undefined;

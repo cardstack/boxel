@@ -408,20 +408,35 @@ module('Unit | identity-context garbage collection', function (hooks) {
       'the card is still found by its (extension-less) card id',
     );
 
-    // Deleting the card must not evict the same-named FileDef.
-    store.delete(cardId);
-    assert.strictEqual(
-      store.getFileMeta(fileUrl),
-      fileDef,
-      'deleting the card leaves the same-named FileDef in place',
-    );
-
-    // Deleting the file by its `.json` URL must actually remove it (no leak).
+    // Deleting the file by its `.json` URL removes only the file-meta row; the
+    // same-named card must survive. The GC sweep deletes resident file-meta
+    // this way (`this.delete(fileDef.id)`), so a `.json` delete must never
+    // evict a live card.
     store.delete(fileUrl);
     assert.strictEqual(
       store.getFileMeta(fileUrl),
       undefined,
       'the FileDef is removed when deleted by its `.json` URL',
+    );
+    assert.strictEqual(
+      store.getCard(cardId),
+      realmConfig,
+      'deleting the `.json` file leaves the same-named card in place',
+    );
+
+    // The inverse separation must hold too: deleting the card removes only the
+    // card and leaves the same-named FileDef untouched.
+    store.setFileMeta(fileUrl, fileDef);
+    store.delete(cardId);
+    assert.strictEqual(
+      store.getCard(cardId),
+      undefined,
+      'the card is removed when deleted by its (extension-less) id',
+    );
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      fileDef,
+      'deleting the card leaves the same-named FileDef in place',
     );
   });
 
