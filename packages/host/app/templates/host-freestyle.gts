@@ -15,6 +15,7 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
@@ -60,8 +61,8 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
 
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
-  private get getCard() {
-    return getCard;
+  private get getCard(): GetCardType {
+    return getCard as unknown as GetCardType;
   }
 
   @provide(GetCardsContextName)
@@ -82,7 +83,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   // @ts-ignore "cardContext" is declared but not used
   private get cardContext(): CardContext {
     return {
-      getCard,
+      getCard: this.getCard,
       getCards: this.store.getSearchResource.bind(this.store),
       getCardCollection,
       store: this.store,
