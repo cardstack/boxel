@@ -71,6 +71,24 @@ export default class MarkdownEmbedPreviewUsage extends Component {
                 @sizeSpec={{this.custom}}
               />
             </figure>
+            <figure>
+              <figcaption>atom — within surrounding text (inline)</figcaption>
+              <MarkdownEmbedPreview
+                @target={{this.target}}
+                @format='atom'
+                @kind='inline'
+                @showSurroundingText={{true}}
+              />
+            </figure>
+            <figure>
+              <figcaption>embedded — within surrounding text (block)</figcaption>
+              <MarkdownEmbedPreview
+                @target={{this.target}}
+                @format='embedded'
+                @kind='block'
+                @showSurroundingText={{true}}
+              />
+            </figure>
           </div>
         {{else}}
           <p class='hint'>Pick a card above to preview it.</p>
@@ -94,6 +112,10 @@ export default class MarkdownEmbedPreviewUsage extends Component {
         <Args.String
           @name='kind'
           @description="Placement: 'inline' (<span>) or 'block' (<div>). Default 'block'."
+        />
+        <Args.Bool
+          @name='showSurroundingText'
+          @description='When true, wraps the embed in skeleton document text to preview how it sits in a real markdown doc. Default false.'
         />
       </:api>
     </FreestyleUsage>

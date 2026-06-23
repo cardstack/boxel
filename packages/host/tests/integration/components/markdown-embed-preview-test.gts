@@ -231,4 +231,55 @@ module('Integration | markdown-embed-preview', function (hooks) {
       .dom('div[data-test-markdown-embed-preview]')
       .doesNotExist('no block wrapper for inline kind');
   });
+
+  test('showSurroundingText wraps the embed in skeleton document text', async function (assert) {
+    let card = await loadCard();
+    await render(
+      <template>
+        <PreviewBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreview
+              @target={{card}}
+              @format='atom'
+              @kind='inline'
+              @showSurroundingText={{true}}
+            />
+          </HostContextProvider>
+        </PreviewBox>
+      </template>,
+    );
+    // The real embed still renders…
+    assert
+      .dom('[data-test-markdown-embed-preview]')
+      .hasAttribute('data-test-markdown-embed-preview-format', 'atom');
+    // …flowing inside decorative skeleton document text (2 lines above + 2
+    // below the paragraph that carries the inline embed).
+    assert.dom('.markdown-embed-preview-doc__line').exists({ count: 4 });
+    assert
+      .dom(
+        '.markdown-embed-preview-doc__para span[data-test-markdown-embed-preview]',
+      )
+      .exists('inline embed flows within the skeleton paragraph');
+  });
+
+  test('bare preview (no surrounding text) renders no skeleton document', async function (assert) {
+    let card = await loadCard();
+    await render(
+      <template>
+        <PreviewBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreview @target={{card}} @format='atom' />
+          </HostContextProvider>
+        </PreviewBox>
+      </template>,
+    );
+    assert
+      .dom('[data-test-markdown-embed-preview]')
+      .exists('the embed renders');
+    assert
+      .dom('.markdown-embed-preview-doc')
+      .doesNotExist(
+        'no skeleton document wrapper without @showSurroundingText',
+      );
+  });
 });

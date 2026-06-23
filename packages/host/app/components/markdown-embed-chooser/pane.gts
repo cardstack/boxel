@@ -104,16 +104,12 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     return this.selectedOption.category;
   }
 
-  // Atom has no `::card[... | atom]` block form, so block is disallowed while
-  // Atom is selected — the toggle is forced/locked to inline.
-  private get blockDisabled(): boolean {
-    return this.category === 'atom';
-  }
-
   private get showSizeInputs(): boolean {
     return this.category === 'fitted' || this.category === 'custom';
   }
 
+  // The preview renders the selected format in the chosen placement; format and
+  // inline/block are independent (every format works in both modes).
   private get previewFormat(): EmbedFormat {
     switch (this.category) {
       case 'atom':
@@ -163,10 +159,13 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     return `Insert as ${this.categoryLabel}`;
   }
 
-  // Block size specifier: the variant id for a named Fitted variant, `embedded`
-  // for Embedded, and `w:<w> h:<h>` for Custom dimensions (per CS-11674).
-  private get blockSizeSpecifier(): string | undefined {
+  // Size specifier for the chosen format, independent of placement: `atom` /
+  // `embedded` keywords, the variant id for a named Fitted variant, and
+  // `w:<w> h:<h>` for Custom dimensions (per CS-11674).
+  private get sizeSpecifier(): string | undefined {
     switch (this.category) {
+      case 'atom':
+        return 'atom';
       case 'embedded':
         return 'embedded';
       case 'fitted':
@@ -184,25 +183,24 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
 
   private get bfmString(): string {
     let url = this.args.target.id;
-    if (this.kind === 'inline') {
-      return serializeBfmRef(this.args.refType, url, { kind: 'inline' });
-    }
+    // Declare intent uniformly (kind + size); the BFM serializer in
+    // runtime-common owns whether a given kind carries the size. Today it drops
+    // the size for inline (so inline emits `:card[url]`); the BFM "all formats
+    // in both modes" ticket makes inline honor it, after which this chooser
+    // emits `:card[url | spec]` with no change here.
     return serializeBfmRef(this.args.refType, url, {
-      kind: 'block',
-      size: this.blockSizeSpecifier,
+      kind: this.kind,
+      size: this.sizeSpecifier,
     });
   }
 
   @action
   private selectFormat(option: FormatOption) {
     this.selectedValue = option.value;
-    if (option.category === 'atom') {
-      this.kind = 'inline';
-    } else {
-      // A sized embed is meaningful as a block; the user can still toggle back
-      // to inline afterward.
-      this.kind = 'block';
-    }
+    // Pick a sensible default placement for the format — atom reads as inline,
+    // sized formats as block — but the toggle stays free, so the user can flip
+    // either way afterward.
+    this.kind = option.category === 'atom' ? 'inline' : 'block';
     if (option.category === 'fitted') {
       let spec = fittedFormatById.get(option.value as FittedFormatId);
       if (spec) {
@@ -241,9 +239,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
 
   @action
   private setKind(kind: 'inline' | 'block') {
-    if (kind === 'block' && this.blockDisabled) {
-      return;
-    }
     this.kind = kind;
   }
 
@@ -258,16 +253,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       data-test-markdown-embed-preview-pane
       ...attributes
     >
-      <div class='markdown-embed-preview-pane__viewport'>
-        <MarkdownEmbedPreview
-          @target={{@target}}
-          @format={{this.previewFormat}}
-          @sizeSpec={{this.sizeSpec}}
-          @kind={{this.kind}}
-        />
-      </div>
-
-      <div class='markdown-embed-preview-pane__controls'>
+      <div class='markdown-embed-preview-pane__header'>
         <BoxelSelect
           class='markdown-embed-preview-pane__format-select'
           @options={{this.formatOptions}}
@@ -280,6 +266,45 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         >
           <span data-test-format-option={{option.value}}>{{option.label}}</span>
         </BoxelSelect>
+      </div>
+
+      <div class='markdown-embed-preview-pane__viewport'>
+        <MarkdownEmbedPreview
+          @target={{@target}}
+          @format={{this.previewFormat}}
+          @sizeSpec={{this.sizeSpec}}
+          @kind={{this.kind}}
+          @showSurroundingText={{true}}
+        />
+      </div>
+
+      <footer class='markdown-embed-preview-pane__footer'>
+        <div
+          class='markdown-embed-preview-pane__toggle'
+          role='group'
+          aria-label='Embed placement'
+        >
+          <button
+            type='button'
+            class='markdown-embed-preview-pane__toggle-option
+              {{if (eq this.kind "inline") "is-active"}}'
+            aria-pressed='{{if (eq this.kind "inline") "true" "false"}}'
+            data-test-markdown-embed-preview-inline
+            {{on 'click' (fn this.setKind 'inline')}}
+          >
+            Inline
+          </button>
+          <button
+            type='button'
+            class='markdown-embed-preview-pane__toggle-option
+              {{if (eq this.kind "block") "is-active"}}'
+            aria-pressed='{{if (eq this.kind "block") "true" "false"}}'
+            data-test-markdown-embed-preview-block
+            {{on 'click' (fn this.setKind 'block')}}
+          >
+            Block
+          </button>
+        </div>
 
         {{#if this.showSizeInputs}}
           <div
@@ -306,36 +331,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
             />
           </div>
         {{/if}}
-      </div>
-
-      <footer class='markdown-embed-preview-pane__footer'>
-        <div
-          class='markdown-embed-preview-pane__toggle'
-          role='group'
-          aria-label='Embed placement'
-        >
-          <button
-            type='button'
-            class='markdown-embed-preview-pane__toggle-option
-              {{if (eq this.kind "inline") "is-active"}}'
-            aria-pressed='{{if (eq this.kind "inline") "true" "false"}}'
-            data-test-markdown-embed-preview-inline
-            {{on 'click' (fn this.setKind 'inline')}}
-          >
-            Inline
-          </button>
-          <button
-            type='button'
-            class='markdown-embed-preview-pane__toggle-option
-              {{if (eq this.kind "block") "is-active"}}'
-            aria-pressed='{{if (eq this.kind "block") "true" "false"}}'
-            disabled={{this.blockDisabled}}
-            data-test-markdown-embed-preview-block
-            {{on 'click' (fn this.setKind 'block')}}
-          >
-            Block
-          </button>
-        </div>
 
         <Button
           @kind='primary'
@@ -355,6 +350,12 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         min-height: 0;
         background-color: var(--boxel-light);
       }
+      .markdown-embed-preview-pane__header {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-xs);
+      }
       .markdown-embed-preview-pane__viewport {
         flex: 1 1 auto;
         min-height: 0;
@@ -363,13 +364,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         justify-content: center;
         padding: var(--boxel-sp);
         overflow: auto;
-      }
-      .markdown-embed-preview-pane__controls {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: 0 var(--boxel-sp) var(--boxel-sp-xs);
       }
       .markdown-embed-preview-pane__format-select {
         flex: 1 1 auto;
@@ -417,10 +411,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
         box-shadow: var(--boxel-box-shadow);
-      }
-      .markdown-embed-preview-pane__toggle-option:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
       }
     </style>
   </template>

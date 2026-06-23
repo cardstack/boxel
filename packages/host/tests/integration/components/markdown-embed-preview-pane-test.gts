@@ -52,7 +52,7 @@ const PaneBox: TOC<{ Blocks: { default: [] } }> = <template>
   </div>
   <style scoped>
     .pane-box {
-      width: 420px;
+      width: 553px;
       height: 480px;
       display: flex;
       flex-direction: column;
@@ -98,9 +98,10 @@ class InsertHarness {
 }
 
 async function chooseFormat(value: string) {
-  await click(
-    '[data-test-markdown-embed-preview-format-select] .ember-power-select-trigger',
-  );
+  // BoxelSelect spreads attributes onto the PowerSelect trigger itself, so the
+  // data-test attribute lands directly on the `.ember-power-select-trigger`
+  // element (not a wrapper) — click it directly to open the dropdown.
+  await click('[data-test-markdown-embed-preview-format-select]');
   await waitFor('.ember-power-select-option', { timeout: 3000 });
   await click(`[data-test-format-option="${value}"]`);
 }
@@ -139,7 +140,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
     return (await store.get(mango)) as CardDefInstance;
   }
 
-  test('atom is the default; block is disabled and inline emits :card[url]', async function (assert) {
+  test('atom is the default; both placements are available', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
     await render(
@@ -161,7 +162,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
       .hasText('Insert as Atom', 'CTA reflects the default Atom category');
     assert
       .dom('[data-test-markdown-embed-preview-block]')
-      .isDisabled('Block toggle is disabled while Atom is selected');
+      .isNotDisabled('Block toggle is available for every format');
     assert
       .dom('[data-test-markdown-embed-preview-size]')
       .doesNotExist('no W/H inputs for Atom');
@@ -170,7 +171,17 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
     assert.strictEqual(
       harness.last,
       `:card[${card.id}]`,
-      'atom inserts the inline atom directive',
+      'inline atom inserts the size-less inline directive',
+    );
+
+    // Atom is available in block placement too (`::card[url | atom]`); the BFM
+    // grammar ticket makes the renderer honor it.
+    await click('[data-test-markdown-embed-preview-block]');
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `::card[${card.id} | atom]`,
+      'block atom emits the atom specifier',
     );
   });
 
@@ -201,6 +212,44 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
 
     await click('[data-test-markdown-embed-preview-cta]');
     assert.strictEqual(harness.last, `::card[${card.id} | embedded]`);
+  });
+
+  test('the preview tracks the selected format in either placement', async function (assert) {
+    let card = await loadCard();
+    let harness = new InsertHarness();
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @target={{card}}
+              @refType='card'
+              @onInsert={{harness.onInsert}}
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    await chooseFormat('embedded');
+    assert
+      .dom('[data-test-markdown-embed-preview]')
+      .hasAttribute(
+        'data-test-markdown-embed-preview-format',
+        'embedded',
+        'block embedded previews in embedded format',
+      );
+
+    // Format and placement are independent: toggling to inline keeps the
+    // embedded render rather than collapsing to atom.
+    await click('[data-test-markdown-embed-preview-inline]');
+    assert
+      .dom('[data-test-markdown-embed-preview]')
+      .hasAttribute(
+        'data-test-markdown-embed-preview-format',
+        'embedded',
+        'inline still previews the selected embedded format',
+      );
   });
 
   test('fitted variant prefills W/H, emits the variant id, and inline drops the size', async function (assert) {
@@ -238,12 +287,16 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
       'block emits the named variant id',
     );
 
+    // The chooser passes the size for inline too, but the BFM serializer
+    // (runtime-common) currently drops it for inline, so the emitted directive
+    // is the size-less `:card[url]`. The BFM "all formats in both modes" ticket
+    // flips this to `:card[url | tall-tile]` and updates this assertion.
     await click('[data-test-markdown-embed-preview-inline]');
     await click('[data-test-markdown-embed-preview-cta]');
     assert.strictEqual(
       harness.last,
       `:card[${card.id}]`,
-      'inline drops the size and emits the atom directive',
+      'inline emission drops the size today (BFM-owned, pending the grammar ticket)',
     );
   });
 
