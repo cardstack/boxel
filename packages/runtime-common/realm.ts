@@ -803,6 +803,15 @@ export class Realm {
   // bump on a config change. Recomputed lazily alongside the cached
   // realm info.
   #cachedRealmInfoHash: string | null = null;
+  // Cached host routing map, derived from the indexed RealmConfig card.
+  // `getHostRoutingMap()` is called on every host-mode index request
+  // (serve-index), so re-querying the index each time is wasteful — the map
+  // only changes when the realm is (re)indexed. Dropped by
+  // `clearRealmIndexCaches()` alongside `#cachedRealmInfo`, which fires on
+  // every index swap (full/incremental/publish) both locally and on peer
+  // replicas via the realm_index_updated broadcast. `null` means "not yet
+  // computed"; an empty array is a valid cached result (no routing rules).
+  #cachedHostRoutingMap: { path: string; id: string }[] | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -1599,6 +1608,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
+    this.#cachedHostRoutingMap = null;
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -6637,6 +6647,9 @@ export class Realm {
   // linked-card attrs }`. We only need the absolute `id` here.
   // Returns absolute URLs.
   async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+    if (this.#cachedHostRoutingMap) {
+      return this.#cachedHostRoutingMap;
+    }
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
     );
@@ -6644,13 +6657,13 @@ export class Realm {
       let indexEntry =
         await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type !== 'instance') {
-        return [];
+        return (this.#cachedHostRoutingMap = []);
       }
       let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
       if (!Array.isArray(rules)) {
-        return [];
+        return (this.#cachedHostRoutingMap = []);
       }
-      return rules.flatMap((rule) => {
+      let map = rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
@@ -6682,10 +6695,13 @@ export class Realm {
         }
         return [{ path, id }];
       });
+      return (this.#cachedHostRoutingMap = map);
     } catch (e) {
       this.#log.warn(
         `failed to read host routing map from RealmConfig card: ${e}`,
       );
+      // Don't cache a transient read failure — leave `null` so the next
+      // call retries the index query.
       return [];
     }
   }
