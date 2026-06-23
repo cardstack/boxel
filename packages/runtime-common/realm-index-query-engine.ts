@@ -56,8 +56,9 @@ import {
   type LinkableCollectionDocument,
   type SearchEntryCollectionDocument,
   type SearchEntryIncludedResource,
-  isLinkableCollectionDocument,
+  isSearchEntryCollectionDocument,
 } from './document-types.ts';
+import { resourceIdentity } from './resource-identity.ts';
 import { relationshipEntries } from './relationship-utils.ts';
 import type {
   CardResource,
@@ -82,6 +83,7 @@ import {
   htmlQueryHasRenderTypePredicate,
   htmlQueryMatches,
   resolveHtmlQuery,
+  searchEntryWireQueryFromQuery,
   type RenderingCandidate,
   type SearchEntryQuery,
 } from './search-entry.ts';
@@ -1408,12 +1410,22 @@ export class RealmIndexQueryEngine {
         realms?: string[];
       };
       let realmList = realms ?? (realm ? [realm] : [realmHref]);
+      // Resolve the cross-realm query-backed field against the peer realm's
+      // v2 `/_search-v2` endpoint, data-only: the legacy card-rooted query
+      // translates to the search-entry wire grammar, and the `item` fieldset
+      // makes every entry carry its full `card`/`file-meta` serialization.
+      let wireQuery = searchEntryWireQueryFromQuery(
+        queryWithoutRealm as Query,
+        {
+          fields: ['item'],
+        },
+      );
       let response = await this.#fetch(searchURL, {
         method: 'QUERY',
         headers: {
           Accept: SupportedMimeType.CardJson,
         },
-        body: JSON.stringify({ ...queryWithoutRealm, realms: realmList }),
+        body: JSON.stringify({ ...wireQuery, realms: realmList }),
       });
       if (!response.ok) {
         let type: QueryFieldErrorType =
@@ -1434,7 +1446,7 @@ export class RealmIndexQueryEngine {
         };
       }
       let json = await response.json();
-      if (!isLinkableCollectionDocument(json)) {
+      if (!isSearchEntryCollectionDocument(json)) {
         return {
           cards: [],
           error: {
@@ -1444,7 +1456,38 @@ export class RealmIndexQueryEngine {
           },
         };
       }
-      return { cards: json.data };
+      // The matched instances ride in `included` as `card`/`file-meta`
+      // resources, reached through each entry's `item` relationship; recover
+      // them in entry (sorted) order — the linked resources this field
+      // resolves to.
+      let itemsByIdentity = new Map<
+        string,
+        CardResource<Saved> | FileMetaResource
+      >();
+      for (let resource of json.included ?? []) {
+        if (
+          (resource.type === CardResourceType ||
+            resource.type === FileMetaResourceType) &&
+          resource.id
+        ) {
+          itemsByIdentity.set(
+            resourceIdentity(resource.type, resource.id),
+            resource,
+          );
+        }
+      }
+      let cards: (CardResource<Saved> | FileMetaResource)[] = [];
+      for (let entry of json.data) {
+        let ref = entry.relationships.item?.data;
+        if (!ref) {
+          continue;
+        }
+        let item = itemsByIdentity.get(resourceIdentity(ref.type, ref.id));
+        if (item) {
+          cards.push(item);
+        }
+      }
+      return { cards };
     } catch (err: unknown) {
       let message =
         err instanceof Error ? err.message : String(err ?? 'unknown error');

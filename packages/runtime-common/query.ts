@@ -726,12 +726,11 @@ export function parseSearchURL(searchURL: string | URL): {
     ? parseQuery(queryParam)
     : parseQuery(url.search.slice(1));
 
-  // strip the trailing "_search" path segment to recover the realm URL
-  if (url.pathname.endsWith('_search')) {
-    url.pathname = url.pathname.replace(/_search$/, '');
-  } else if (url.pathname.endsWith('_search/')) {
-    url.pathname = url.pathname.replace(/_search\/$/, '/');
-  }
+  // Strip the trailing search path segment — the v2 `_search-v2` or the
+  // legacy `_search` — to recover the realm URL.
+  url.pathname = url.pathname.replace(/_search(?:-v2)?\/?$/, (segment) =>
+    segment.endsWith('/') ? '/' : '',
+  );
   url.search = '';
 
   return { query, realm: url };
