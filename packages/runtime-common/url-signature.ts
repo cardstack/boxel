@@ -11,16 +11,22 @@
  * Node-only signing/verification path lives in `./url-signature-node`.
  */
 
+// The exact bytes both signing paths must HMAC. Shared so the browser signer
+// and the Node verifier provably agree on the message; drift here would
+// silently break URL-signature verification.
+export function signingMessageFor(url: URL): string {
+  // Copy the URL without the signature param so signing and verifying match.
+  let urlForSigning = new URL(url.href);
+  urlForSigning.searchParams.delete('sig');
+  return urlForSigning.pathname + urlForSigning.search;
+}
+
 // Browser implementation using Web Crypto API
 export async function createURLSignature(
   token: string,
   url: URL,
 ): Promise<string> {
-  // Create a copy of the URL without the signature param
-  let urlForSigning = new URL(url.href);
-  urlForSigning.searchParams.delete('sig');
-
-  let message = urlForSigning.pathname + urlForSigning.search;
+  let message = signingMessageFor(url);
   let encoder = new TextEncoder();
   let keyData = encoder.encode(token);
   let messageData = encoder.encode(message);

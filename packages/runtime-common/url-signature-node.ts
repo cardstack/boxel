@@ -9,12 +9,10 @@
  */
 
 import { createHmac } from 'node:crypto';
+import { signingMessageFor } from './url-signature.ts';
 
 export function createURLSignatureSync(token: string, url: URL): string {
-  let urlForSigning = new URL(url.href);
-  urlForSigning.searchParams.delete('sig');
-
-  let message = urlForSigning.pathname + urlForSigning.search;
+  let message = signingMessageFor(url);
   let signature = createHmac('sha256', token)
     .update(message)
     .digest('base64url');
