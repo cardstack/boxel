@@ -55,6 +55,12 @@ export function createServeFromRealm(
       ctxt.body = `Realm mount failed: ${err?.message ?? err}`;
       return;
     }
+    let __ccdbg =
+      request.method === 'HEAD' && new URL(request.url).pathname === '/base/';
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(`[CCSRV] serveFromRealm: calling virtualNetwork.handle`);
+    }
     let realmResponse = await virtualNetwork.handle(
       request,
       (mappedRequest) => {
@@ -63,7 +69,17 @@ export function createServeFromRealm(
         setupCloseHandler(ctxt.res, mappedRequest);
       },
     );
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[CCSRV] serveFromRealm: virtualNetwork.handle returned status=${realmResponse.status}`,
+      );
+    }
 
     await setContextResponse(ctxt, realmResponse);
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(`[CCSRV] serveFromRealm: setContextResponse done`);
+    }
   };
 }

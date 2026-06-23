@@ -2865,7 +2865,14 @@ export class Realm {
           // eslint-disable-next-line no-console
           console.warn(`[CCSRV] -> router.handle`);
         }
-        return this.#router.handle(request, requestContext);
+        let routed = await this.#router.handle(request, requestContext);
+        if (__ccdbg) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[CCSRV] router.handle returned status=${routed.status}`,
+          );
+        }
+        return routed;
       } else {
         if (__ccdbg) {
           // eslint-disable-next-line no-console
