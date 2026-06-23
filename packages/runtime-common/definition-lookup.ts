@@ -44,7 +44,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index.ts';
-import { rri } from './realm-identifiers.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
@@ -456,13 +456,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        // The definition store keys entries by internalKeyFor, which
-        // canonicalizes the module to its registered prefix form. Build the
-        // lookup key from the original codeRef so it matches storage. The
-        // alias-form canonicalModuleURL (used for fetching) does not round-trip
-        // back to the prefix form on every virtual network.
-        let moduleId = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
-        let entry = cached.definitions[moduleId];
+        let entry = this.definitionEntryFor(
+          cached.definitions,
+          codeRef,
+          canonicalModuleURL,
+        );
         if (entry && 'definition' in entry) {
           return entry.definition;
         }
@@ -865,6 +863,29 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
+  // The definition store keys entries by internalKeyFor. Across virtual
+  // networks the registered-prefix form and the canonical fetchable (alias)
+  // form do not always unresolve to the same key, and a given module may be
+  // stored under either. Try the prefix form (from the original codeRef)
+  // first, then the canonical form.
+  private definitionEntryFor(
+    definitions: Record<string, ModuleDefinitionResult | ErrorEntry>,
+    codeRef: ResolvedCodeRef,
+    canonicalModuleURL: string,
+  ): ModuleDefinitionResult | ErrorEntry | undefined {
+    let entry =
+      definitions[internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    if (!entry && canonicalModuleURL !== codeRef.module) {
+      let canonicalModuleId = internalKeyFor(
+        { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier },
+        undefined,
+        this.#virtualNetwork,
+      );
+      entry = definitions[canonicalModuleId];
+    }
+    return entry;
+  }
+
   private async lookupDefinitionWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
@@ -913,12 +934,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    // Key by the original codeRef so the lookup matches how the definition
-    // store keys entries (internalKeyFor canonicalizes the module to its
-    // registered prefix form). canonicalModuleURL stays the alias form for
-    // fetching, which does not round-trip back to the prefix form everywhere.
-    const moduleId = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
-    let defOrError = moduleEntry.definitions[moduleId];
+    let defOrError = this.definitionEntryFor(
+      moduleEntry.definitions,
+      codeRef,
+      canonicalModuleURL,
+    );
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
