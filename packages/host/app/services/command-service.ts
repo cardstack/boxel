@@ -36,6 +36,10 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import {
+  CHECK_CORRECTNESS_COMMAND_NAME,
+  isAutoExecutableCommand,
+} from '../lib/command-auto-execute';
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
@@ -47,10 +51,15 @@ import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageCommand from '../lib/matrix-classes/message-command';
+import type { RoomResource } from '../resources/room';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
-const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
+// How long drainCommandProcessingQueue and drainCodePatchProcessingQueue wait
+// for a room resource that's still processing before giving up on the event.
+// In tests we shorten this so the stuck-timeout invalidation path can be
+// exercised in a single test without holding a real test open for a minute.
+const STUCK_PROCESSING_TIMEOUT_MS = isTesting() ? 1000 : 60_000;
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -320,7 +329,7 @@ export default class CommandService extends Service {
             `Room resource not found for room id ${roomId}, this should not happen`,
           );
         }
-        let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+        let timeout = Date.now() + STUCK_PROCESSING_TIMEOUT_MS; // reset the timer to avoid a long wait if the room resource is processing
         let currentRoomProcessingTimestamp =
           roomResource.processingLastStartedAt;
         while (
@@ -337,9 +346,23 @@ export default class CommandService extends Service {
           currentRoomProcessingTimestamp ===
             roomResource.processingLastStartedAt
         ) {
-          // room seems to be stuck processing, so we will log and skip this event
+          // Room processing is wedged. The synthetic 'applying' state in
+          // room-message-command.gts shows the spinner the moment an
+          // auto-executable command lands and only clears when we dispatch
+          // a terminal commandResult ('applied' or 'invalid'). If we just
+          // logged and continued, the spinner would hang indefinitely with
+          // no manual Run fallback. Mark each auto-executable command on
+          // this message invalid so the UI falls through to the
+          // invalidCommandState "Try Anyway" branch; manual-approval
+          // commands are left in 'ready' so the action bar's Run button
+          // remains the user's fallback.
           console.error(
-            `Room resource for room ${roomId} seems to be stuck processing, skipping event ${eventId}`,
+            `Room resource for room ${roomId} seems to be stuck processing, invalidating auto-executable commands on event ${eventId}`,
+          );
+          await this.invalidateAutoExecutableCommandsForStuckProcessing(
+            roomResource,
+            roomId!,
+            eventId!,
           );
           continue;
         }
@@ -379,26 +402,21 @@ export default class CommandService extends Service {
             continue;
           }
 
-          // Get the LLM mode that was active when this message was created
           let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
             message.eventId,
           );
 
-          // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
-          // or if requiresApproval is false
-          let shouldAutoExecute = false;
-          let isCheckCorrectnessCommand =
-            messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
-
+          // The outer `message.agentId !== this.matrixService.agentId`
+          // gate above already short-circuited the not-our-agent case, so
+          // every command reaching this point is owned by the current
+          // agent.
           if (
-            isCheckCorrectnessCommand ||
-            messageCommand.requiresApproval === false ||
-            activeModeAtMessageTime === 'act'
+            isAutoExecutableCommand(
+              messageCommand,
+              activeModeAtMessageTime,
+              true,
+            )
           ) {
-            shouldAutoExecute = true;
-          }
-
-          if (shouldAutoExecute) {
             readyCommands.push(messageCommand);
           }
         }
@@ -419,6 +437,68 @@ export default class CommandService extends Service {
       finishedProcessingCommands!();
     } finally {
       commandProcessingWaiter.endAsync(waiterToken);
+    }
+  }
+
+  private async invalidateAutoExecutableCommandsForStuckProcessing(
+    roomResource: RoomResource,
+    roomId: string,
+    eventId: string,
+  ) {
+    let message = roomResource.messages.find((m) => m.eventId === eventId);
+    if (!message) {
+      return;
+    }
+    if (message.agentId !== this.matrixService.agentId) {
+      return;
+    }
+    let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
+      message.eventId,
+    );
+    for (let messageCommand of message.commands) {
+      let commandRequestId = messageCommand.commandRequest.id;
+      // Without a tool call id we can't address a command result event, so
+      // there's nothing to invalidate.
+      if (!commandRequestId) {
+        continue;
+      }
+      if (this.currentlyExecutingCommandRequestIds.has(commandRequestId)) {
+        continue;
+      }
+      if (this.executedCommandRequestIds.has(commandRequestId)) {
+        continue;
+      }
+      if (
+        messageCommand.status === 'applied' ||
+        messageCommand.status === 'invalid'
+      ) {
+        continue;
+      }
+      if (!messageCommand.name) {
+        continue;
+      }
+      // The outer agentId gate already verified ownership, so this command
+      // is owned by the current agent.
+      if (
+        !isAutoExecutableCommand(messageCommand, activeModeAtMessageTime, true)
+      ) {
+        // Manual-approval commands stay 'ready' — the action bar's Run
+        // button is still the user's fallback for those.
+        continue;
+      }
+      let invokedToolFromEventId =
+        this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
+        messageCommand.eventId;
+      await this.matrixService.sendCommandResultEvent({
+        roomId,
+        invokedToolFromEventId,
+        toolCallId: commandRequestId,
+        status: 'invalid',
+        failureReason: `Room processing did not finish within ${Math.round(
+          STUCK_PROCESSING_TIMEOUT_MS / 1000,
+        )}s; command was not started`,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
     }
   }
 
@@ -444,7 +524,7 @@ export default class CommandService extends Service {
             `Room resource not found for room id ${roomId}, this should not happen`,
           );
         }
-        let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+        let timeout = Date.now() + STUCK_PROCESSING_TIMEOUT_MS; // reset the timer to avoid a long wait if the room resource is processing
         let currentRoomProcessingTimestamp =
           roomResource.processingLastStartedAt;
         while (
