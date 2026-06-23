@@ -2783,8 +2783,21 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
+    let __ccdbg =
+      request.method === 'HEAD' &&
+      this.paths.local(new URL(request.url)) === '';
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[CCSRV] internalHandle ENTER HEAD root url=${request.url} isLocal=${isLocal}`,
+      );
+    }
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
+      if (__ccdbg) {
+        // eslint-disable-next-line no-console
+        console.warn(`[CCSRV] rootRealmRedirect returned`);
+      }
       return redirectResponse;
     }
 
@@ -2810,11 +2823,27 @@ export class Realm {
       requiredPermission = 'write';
     }
 
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(`[CCSRV] before createRequestContext`);
+    }
     let requestContext = await this.createRequestContext(requiredPermission);
+    if (__ccdbg) {
+      // eslint-disable-next-line no-console
+      console.warn(`[CCSRV] after createRequestContext`);
+    }
 
     try {
       if (!isLocal) {
+        if (__ccdbg) {
+          // eslint-disable-next-line no-console
+          console.warn(`[CCSRV] before checkPermission`);
+        }
         await this.checkPermission(request, requestContext, requiredPermission);
+        if (__ccdbg) {
+          // eslint-disable-next-line no-console
+          console.warn(`[CCSRV] after checkPermission`);
+        }
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -2823,8 +2852,16 @@ export class Realm {
         });
       }
       if (this.#router.handles(request)) {
+        if (__ccdbg) {
+          // eslint-disable-next-line no-console
+          console.warn(`[CCSRV] -> router.handle`);
+        }
         return this.#router.handle(request, requestContext);
       } else {
+        if (__ccdbg) {
+          // eslint-disable-next-line no-console
+          console.warn(`[CCSRV] -> fallbackHandle`);
+        }
         return this.fallbackHandle(request, requestContext);
       }
     } catch (e) {
