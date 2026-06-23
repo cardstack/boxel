@@ -55,10 +55,10 @@ import type { RoomResource } from '../resources/room';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
-// How long drainCommandProcessingQueue waits for a room resource that's
-// still processing before giving up on the event. In tests we shorten this
-// so the stuck-timeout invalidation path can be exercised in a single test
-// without holding a real test open for a minute.
+// How long drainCommandProcessingQueue and drainCodePatchProcessingQueue wait
+// for a room resource that's still processing before giving up on the event.
+// In tests we shorten this so the stuck-timeout invalidation path can be
+// exercised in a single test without holding a real test open for a minute.
 const STUCK_PROCESSING_TIMEOUT_MS = isTesting() ? 1000 : 60_000;
 
 type GenericCommand = Command<
@@ -456,10 +456,16 @@ export default class CommandService extends Service {
       message.eventId,
     );
     for (let messageCommand of message.commands) {
-      if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
+      let commandRequestId = messageCommand.commandRequest.id;
+      // Without a tool call id we can't address a command result event, so
+      // there's nothing to invalidate.
+      if (!commandRequestId) {
         continue;
       }
-      if (this.executedCommandRequestIds.has(messageCommand.id!)) {
+      if (this.currentlyExecutingCommandRequestIds.has(commandRequestId)) {
+        continue;
+      }
+      if (this.executedCommandRequestIds.has(commandRequestId)) {
         continue;
       }
       if (
@@ -481,14 +487,12 @@ export default class CommandService extends Service {
         continue;
       }
       let invokedToolFromEventId =
-        this.getCurrentEventIdForCommandRequest(
-          roomId,
-          messageCommand.commandRequest.id,
-        ) ?? messageCommand.eventId;
+        this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
+        messageCommand.eventId;
       await this.matrixService.sendCommandResultEvent({
         roomId,
         invokedToolFromEventId,
-        toolCallId: messageCommand.commandRequest.id!,
+        toolCallId: commandRequestId,
         status: 'invalid',
         failureReason: `Room processing did not finish within ${Math.round(
           STUCK_PROCESSING_TIMEOUT_MS / 1000,
