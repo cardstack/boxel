@@ -727,10 +727,11 @@ export function parseSearchURL(searchURL: string | URL): {
     : parseQuery(url.search.slice(1));
 
   // Strip the trailing search path segment — the v2 `_search-v2` or the
-  // legacy `_search` — to recover the realm URL.
-  url.pathname = url.pathname.replace(/_search(?:-v2)?\/?$/, (segment) =>
-    segment.endsWith('/') ? '/' : '',
-  );
+  // legacy `_search`, with or without a trailing slash — to recover the
+  // realm URL. Matching the segment's leading slash and substituting a
+  // single `/` leaves exactly one separator (a trailing-slash input like
+  // `/realm/_search-v2/` must not collapse to `/realm//`).
+  url.pathname = url.pathname.replace(/\/_search(?:-v2)?\/?$/, '/');
   url.search = '';
 
   return { query, realm: url };
