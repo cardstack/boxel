@@ -1517,6 +1517,20 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
             );
           }
+
+          // `_publish-realm` returns 202 before indexing finishes. The
+          // published realm's readiness check lazy-mounts it and awaits
+          // start() + any in-flight index, so this single request blocks until
+          // the swapped files are indexed and the assertions below query
+          // indexed content.
+          let readinessResponse = await request
+            .get(`${publishedRealmPath}_readiness-check`)
+            .set('Host', publishedRealmHost);
+          if (readinessResponse.status !== 200) {
+            throw new Error(
+              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
+            );
+          }
         },
         afterEach: async () => {
           await closeServer(testRealmHttpServer);

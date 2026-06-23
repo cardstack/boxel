@@ -1272,6 +1272,26 @@ module(basename(import.meta.filename), function () {
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
 
+        // Publish returns 202 before indexing finishes: drive a reconcile
+        // pass to mount the published realm, then wait for the from-scratch
+        // index to populate boxel_index before asserting on it.
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index WHERE realm_url = $1 LIMIT 1`,
+              { bind: [publishedRealmURL] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'boxel_index entries for published realm did not appear',
+          },
+        );
+
         // Verify that boxel_index entries exist before unpublishing
         let indexResultsBefore = await dbAdapter.execute(
           `SELECT * FROM boxel_index WHERE realm_url = '${publishedRealmURL}'`,
