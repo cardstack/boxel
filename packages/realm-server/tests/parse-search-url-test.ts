@@ -1,14 +1,18 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { buildQuerySearchURL, parseSearchURL } from '@cardstack/runtime-common';
+import {
+  buildQuerySearchURL,
+  parseSearchURL,
+  rri,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common';
 
 module(basename(import.meta.filename), function () {
   module('parseSearchURL realm recovery', function () {
     const realm = 'http://example.test/my-realm/';
     const query: Query = {
-      filter: { type: { module: `${realm}person`, name: 'Person' } },
+      filter: { type: { module: rri(`${realm}person`), name: 'Person' } },
     };
 
     test('recovers the realm from a built v2 search URL', async function (assert) {
