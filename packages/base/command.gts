@@ -175,6 +175,10 @@ export class MigrateSkillResult extends CardDef {
   // Ids of legacy `Skill` cards skipped because their target `SKILL.md`
   // already exists and `overwrite` was not set.
   @field skippedSkillIds = containsMany(StringField);
+  // Ids of skills skipped because they had no instructions to write — e.g. a
+  // markdown-backed skill whose linked instructions did not resolve. Reported
+  // rather than written out as an empty `SKILL.md`.
+  @field emptySkillIds = containsMany(StringField);
 }
 
 export class WriteBinaryFileInput extends CardDef {

@@ -81,11 +81,29 @@ files with boxel.kind: skill frontmatter.`;
       [realmUrl],
     );
 
+    // Sort by id so slug de-duplication is deterministic: re-running the command
+    // assigns the same `-2`/`-3` suffixes in the same order, which keeps the
+    // skip-if-exists check stable instead of producing fresh duplicates.
+    skills.sort((a, b) => (a.id ?? '').localeCompare(b.id ?? ''));
+
     let migratedFiles: string[] = [];
     let skippedSkillIds: string[] = [];
+    let emptySkillIds: string[] = [];
     let usedSlugs = new Set<string>();
 
     for (let skill of skills) {
+      // Skip — and report — skills with nothing to transcribe rather than
+      // writing an empty `SKILL.md`. This guards the markdown-backed subclasses
+      // (e.g. `SkillPlusMarkdown`), whose `instructions` is computed from a
+      // linked file that may not have resolved in the search result.
+      let body = (skill.instructions ?? '').trim();
+      if (!body) {
+        if (skill.id) {
+          emptySkillIds.push(skill.id);
+        }
+        continue;
+      }
+
       let slug = this.slugForSkill(skill, usedSlugs);
       usedSlugs.add(slug);
 
@@ -98,7 +116,7 @@ files with boxel.kind: skill frontmatter.`;
         continue;
       }
 
-      let content = this.buildSkillMarkdown(skill);
+      let content = this.buildSkillMarkdown(skill, body);
       await this.cardService.saveSource(
         url,
         content,
@@ -109,7 +127,11 @@ files with boxel.kind: skill frontmatter.`;
 
     let commandModule = await this.loadCommandModule();
     const { MigrateSkillResult } = commandModule;
-    return new MigrateSkillResult({ migratedFiles, skippedSkillIds });
+    return new MigrateSkillResult({
+      migratedFiles,
+      skippedSkillIds,
+      emptySkillIds,
+    });
   }
 
   private slugForSkill(skill: Skill, usedSlugs: Set<string>): string {
@@ -123,7 +145,7 @@ files with boxel.kind: skill frontmatter.`;
     return slug;
   }
 
-  private buildSkillMarkdown(skill: Skill): string {
+  private buildSkillMarkdown(skill: Skill, body: string): string {
     let commands = (skill.commands ?? []).reduce<FrontmatterCommand[]>(
       (acc, command) => {
         let module = command.codeRef?.module;
@@ -151,7 +173,6 @@ files with boxel.kind: skill frontmatter.`;
       },
     };
 
-    let body = (skill.instructions ?? '').trim();
     return `---\n${stringifyYaml(frontmatter)}---\n\n${body}\n`;
   }
 

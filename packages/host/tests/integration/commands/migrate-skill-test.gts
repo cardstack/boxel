@@ -118,6 +118,11 @@ export class DoThing extends Command {
             cardDescription: 'A skill without commands',
             instructions: 'Just instructions.',
           }),
+          'Skill/empty.json': new Skill({
+            cardTitle: 'Empty Skill',
+            cardDescription: 'A skill with no instructions',
+            instructions: '   ',
+          }),
         },
       }),
     );
@@ -182,6 +187,27 @@ export class DoThing extends Command {
       'commands' in data.boxel,
       'no commands key when the skill has none',
     );
+  });
+
+  test('reports skills with no instructions instead of writing an empty file', async function (assert) {
+    let commandContext = getService('command-service').commandContext;
+    let cardService = getService('card-service');
+    let command = new MigrateSkillCommand(commandContext);
+
+    let result = await command.execute({ realm: testRealmURL });
+
+    assert.true(
+      result.emptySkillIds.includes(`${testRealmURL}Skill/empty`),
+      'the empty skill is reported in emptySkillIds',
+    );
+    assert.notOk(
+      result.migratedFiles.some((f: string) => f.includes('/empty/')),
+      'no SKILL.md is written for the empty skill',
+    );
+    let { status } = await cardService.getSource(
+      new URL(`${testRealmURL}skills/empty/SKILL.md`),
+    );
+    assert.strictEqual(status, 404, 'the empty skill target does not exist');
   });
 
   test('skips existing targets unless overwrite is set', async function (assert) {
