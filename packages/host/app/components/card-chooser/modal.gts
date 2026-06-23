@@ -46,6 +46,8 @@ import ModalContainer from '../modal-container';
 
 import { Submodes } from '../submode-switcher';
 
+import WithKnownRealmsLoaded from '../with-known-realms-loaded';
+
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -113,6 +115,7 @@ export default class CardChooserModal extends Component<Signature> {
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
       {{#if (not this.state.dismissModal)}}
         {{#each (array this.state) key='id' as |state|}}
+          <WithKnownRealmsLoaded>
           <SearchPanel
             @searchKey={{state.searchKey}}
             @baseFilter={{state.baseFilter}}
@@ -188,6 +191,7 @@ export default class CardChooserModal extends Component<Signature> {
               data-test-card-chooser-picker-wormhole
             ></div>
           </SearchPanel>
+          </WithKnownRealmsLoaded>
         {{/each}}
       {{/if}}
     {{/if}}
