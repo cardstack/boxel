@@ -381,6 +381,13 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
               slugs.add(slug);
             }
           }
+        } else {
+          // A 200 that isn't a search-entry document is unexpected for
+          // /_search-v2; surface it rather than silently treating every model
+          // as new (same best-effort fallback as the catch below).
+          console.warn(
+            'Unexpected /_search-v2 response shape, treating all models as new',
+          );
         }
       }
     } catch (e) {
