@@ -92,6 +92,11 @@ export interface SearchResultsComponentSignature {
     // the wire. A full live row ignores it. Defaults to `hover`; pass `none` to
     // keep rows inert, `click` / `touch` to gate on those gestures.
     mode?: HydrationMode;
+    // Whether rendered results register with the operator-mode overlay (the
+    // card-type chip / options menu / selection toggle). Defaults to `true`;
+    // pass `false` for a card that lays results out in its own UI and wants
+    // them rendered plainly, with no overlay even inside operator mode.
+    overlays?: boolean;
   };
   Blocks: {
     default: [SearchResultsYield];
