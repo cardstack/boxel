@@ -468,6 +468,14 @@ class RealmResource {
       response.headers.get('x-boxel-realm-public-readable') ||
       response.headers.get('x-boxel-realms-public-readable'),
     );
+    if (isTesting() && this.realmURL.includes('/base/')) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[CC-DIAG] fetchInfoFromServer(${this.realmURL}) OK name=${JSON.stringify(
+          info.name,
+        )} id=${JSON.stringify(realmData.id)}`,
+      );
+    }
     return { info, isPublic };
   }
 
@@ -919,6 +927,14 @@ export default class RealmService extends Service {
 
       this.identifyRealmTracker;
 
+      if (isTesting() && url.includes('/base/')) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[CC-DIAG] info(${url}) NO RESOURCE — identifyRealm kicked; realms keys=${JSON.stringify(
+            [...this.realms.keys()],
+          )}`,
+        );
+      }
       return {
         name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
@@ -934,6 +950,12 @@ export default class RealmService extends Service {
 
     if (!resource.info) {
       resource.fetchInfo();
+      if (isTesting() && url.includes('/base/')) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[CC-DIAG] info(${url}) RESOURCE FOUND but NO INFO — fetchInfo kicked; resource.url=${resource.url}`,
+        );
+      }
       return {
         name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
@@ -1438,6 +1460,12 @@ export default class RealmService extends Service {
         method: 'HEAD',
       });
       let realmURL = response.headers.get('x-boxel-realm-url');
+      if (isTesting() && url.includes('/base/')) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[CC-DIAG] identifyRealm(${url}) HEAD status=${response.status} x-boxel-realm-url=${realmURL}`,
+        );
+      }
       if (realmURL) {
         this.getOrCreateRealmResource(realmURL);
         this.identifyRealmTracker = 0;

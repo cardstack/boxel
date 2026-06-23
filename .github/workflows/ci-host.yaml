@@ -22,6 +22,11 @@ on:
       - "mise-tasks/**"
       - "packages/observability/scripts/**"
   workflow_dispatch:
+    inputs:
+      probe_shard:
+        description: 'Run only this single shard index (debug probe). Empty = all 20 shards.'
+        required: false
+        default: ''
 
 concurrency:
   group: ci-host-${{ github.head_ref || github.run_id }}
@@ -299,29 +304,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-          ]
+        # When dispatched with a `probe_shard` input, run only that single
+        # shard (cheap debugging probe); otherwise run all 20.
+        shardIndex: ${{ (github.event.inputs.probe_shard != '' && github.event.inputs.probe_shard != null) && fromJSON(format('[{0}]', github.event.inputs.probe_shard)) || fromJSON('[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]') }}
         shardTotal: [20]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
