@@ -103,6 +103,21 @@ export function applyGoogleOidcGating(
   return hsYaml.replace(/# BEGIN_GOOGLE_OIDC[\s\S]*?# END_GOOGLE_OIDC\n?/g, '');
 }
 
+// The test template carries a Google OIDC block pointed at
+// navikt/mock-oauth2-server for the Playwright SSO suite. It is gated on
+// `issuer` (set by the matrix global setup once the mock container is up) so
+// every other suite — which never starts the mock — boots Synapse without a
+// dangling provider whose discovery would never resolve.
+export function applyTestOidcGating(
+  hsYaml: string,
+  issuer: string | undefined,
+): string {
+  if (issuer) {
+    return hsYaml.replace(/{{MOCK_OAUTH2_ISSUER}}/g, issuer);
+  }
+  return hsYaml.replace(/# BEGIN_TEST_OIDC[\s\S]*?# END_TEST_OIDC\n?/g, '');
+}
+
 export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
@@ -152,6 +167,8 @@ export async function cfgDirFromTemplate(
     process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
     process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
   );
+
+  hsYaml = applyTestOidcGating(hsYaml, process.env.MOCK_OAUTH2_ISSUER);
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 
