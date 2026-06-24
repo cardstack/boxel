@@ -190,7 +190,7 @@ export async function requestDelegatedRealmSession({
   }
 
   if (!response.ok) {
-    let detail = await safeText(response);
+    let detail = await response.text().catch(() => '');
     throw new DelegatedRealmSessionError(
       delegatedRealmSessionErrorKindForStatus(response.status),
       `delegation request rejected (${response.status})${
@@ -218,12 +218,4 @@ export async function requestDelegatedRealmSession({
     );
   }
   return session;
-}
-
-async function safeText(response: Response): Promise<string> {
-  try {
-    return (await response.text()).slice(0, 500);
-  } catch {
-    return '';
-  }
 }
