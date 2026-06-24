@@ -68,8 +68,15 @@ export default class FileChooser extends Component<Signature> {
   @service declare private realm: RealmService;
   @service('file-upload') declare private fileUpload: FileUploadService;
 
-  @tracked private selectedRealm: FileChooserRealm | undefined =
-    this.initialRealm;
+  @tracked private _explicitlySelectedRealm?: FileChooserRealm;
+
+  private get selectedRealm(): FileChooserRealm | undefined {
+    return this._explicitlySelectedRealm ?? this.initialRealm;
+  }
+
+  private set selectedRealm(value: FileChooserRealm | undefined) {
+    this._explicitlySelectedRealm = value;
+  }
   @tracked private currentUpload?: FileUploadTask;
   @tracked private isDropZoneActive = false;
   // Bumped on realm switch so the yielded FileTree (which keys off realm URL

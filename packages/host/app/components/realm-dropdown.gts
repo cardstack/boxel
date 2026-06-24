@@ -135,10 +135,13 @@ export default class RealmDropdown extends Component<Signature> {
   @service declare realm: RealmService;
 
   get selectedItemText() {
-    if (this.args.selectedRealmPrefix) {
-      return `${this.args.selectedRealmPrefix} ${this.selectedRealm?.name}`;
+    if (!this.selectedRealm) {
+      return '';
     }
-    return this.selectedRealm?.name;
+    if (this.args.selectedRealmPrefix) {
+      return `${this.args.selectedRealmPrefix} ${this.selectedRealm.name}`;
+    }
+    return this.selectedRealm.name;
   }
 
   allRealmsInfo = trackedFunction(this, async () => {

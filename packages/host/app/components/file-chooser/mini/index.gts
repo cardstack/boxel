@@ -64,6 +64,19 @@ export default class MiniFileChooser extends Component<Signature> {
   }
 
   @action
+  private handleFileSelectOnly(
+    realm: FileChooserRealm | undefined,
+    path: LocalPath,
+  ) {
+    if (!realm) {
+      return;
+    }
+    this.userSelectedFile = path;
+    // Deliberately does NOT call this.args.onSelect — that only happens on
+    // confirmation (Enter) to avoid double-fire.
+  }
+
+  @action
   private handleFileSelected(
     realm: FileChooserRealm | undefined,
     path: LocalPath,
@@ -120,7 +133,7 @@ export default class MiniFileChooser extends Component<Signature> {
                   @realmURL={{chooser.selectedRealm.url.href}}
                   @selectedFile={{this.selectedFileFor chooser.selectedRealm}}
                   @onFileSelected={{fn
-                    this.handleFileSelected
+                    this.handleFileSelectOnly
                     chooser.selectedRealm
                   }}
                   @onFileConfirmed={{fn
