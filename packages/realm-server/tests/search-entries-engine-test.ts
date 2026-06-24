@@ -229,6 +229,57 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('html.format: head selects the document head rendering', async function (assert) {
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({
+          filterEq: { htmlQuery: { eq: { format: 'head' } } },
+          fields: { 'search-entry': ['html'] },
+        }),
+      );
+      assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'head' } });
+      // `head` is a scalar column rendered at the row's own native type, so its
+      // composite id carries the native key like the keyed formats do.
+      let htmlId = `${johnId}#head#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entryFor(doc, johnId)!), [htmlId]);
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'head');
+      assert.true(
+        normalizedHtml(html).includes('data-test-card-head-title'),
+        `head rendering carries the card head <title>: ${html.attributes.html}`,
+      );
+    });
+
+    test('html.format: head scoped to a single card URL returns only that card head markup', async function (assert) {
+      // Mirrors the host-mode published-view head prefetch: an html-only query
+      // at html.format: head, scoped to the single card by cardUrls.
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          cardUrls: [`${johnId}.json`],
+          filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
+          fields: { 'search-entry': ['html'] },
+        }),
+      );
+      assert.strictEqual(
+        doc.data.length,
+        1,
+        'only the scoped card is returned',
+      );
+      let entry = entryFor(doc, johnId)!;
+      let htmlId = `${johnId}#head#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entry), [htmlId]);
+      assert.strictEqual(
+        entry.relationships.item,
+        undefined,
+        'the html-only fieldset carries no item branch',
+      );
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'head');
+      assert.true(
+        normalizedHtml(html).includes('data-test-card-head-title'),
+        `head rendering carries the card head <title>: ${html.attributes.html}`,
+      );
+    });
+
     test('a disjunctive htmlQuery selects several renderings per entry', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({

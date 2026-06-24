@@ -14,7 +14,7 @@ import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
 import { RealmPaths } from '@cardstack/runtime-common';
-import { Project, Issue } from './darkfactory';
+import { Project, Issue } from './darkfactory.gts';
 
 export const InstantiateResultStatusField = enumField(StringField, {
   options: [

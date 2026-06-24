@@ -1559,6 +1559,21 @@ export default class MatrixService extends Service {
     }
   }
 
+  async loginFlows() {
+    await this.ready;
+    return this.client.loginFlows();
+  }
+
+  async getSsoLoginUrl(callbackUrl: string, idpId: string) {
+    await this.ready;
+    return this.client.getSsoLoginUrl(callbackUrl, 'sso', idpId);
+  }
+
+  async loginWithSsoToken(token: string) {
+    await this.ready;
+    return this.client.loginWithToken(token);
+  }
+
   getRoomData(roomId: string) {
     return this.roomDataMap.get(roomId);
   }

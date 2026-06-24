@@ -8,7 +8,7 @@ import ColorField from 'https://cardstack.com/base/color';
 import StringField from 'https://cardstack.com/base/string';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { StatusPill } from './status-pill';
+import { StatusPill } from './status-pill.gts';
 
 export class IssueOptionField extends FieldDef {
   @field value = contains(StringField);

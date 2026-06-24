@@ -22,7 +22,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import BookOpen from '@cardstack/boxel-icons/book-open';
 
-import { AgentProfile } from './agent-profile';
+import { AgentProfile } from './agent-profile.gts';
 
 export const KnowledgeTypeField = enumField(StringField, {
   options: [
