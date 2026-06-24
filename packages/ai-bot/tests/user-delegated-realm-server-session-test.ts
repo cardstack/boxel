@@ -2,13 +2,13 @@ import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
 import {
-  requestDelegatedToken,
-  verifyDelegationRequest,
-  DelegationError,
-  DELEGATION_TIMESTAMP_HEADER,
-  DELEGATION_SIGNATURE_HEADER,
+  requestDelegatedRealmSession,
+  verifyDelegatedRealmSessionRequest,
+  DelegatedRealmSessionError,
+  DELEGATED_REALM_SESSION_TIMESTAMP_HEADER,
+  DELEGATED_REALM_SESSION_SIGNATURE_HEADER,
 } from '@cardstack/runtime-common/user-delegated-realm-server-session';
-import { DelegatedTokenManager } from '../lib/user-delegated-realm-server-session.ts';
+import { DelegatedRealmSessionManager } from '../lib/user-delegated-realm-server-session.ts';
 
 const SECRET = 'shared-secret-under-test';
 const ON_BEHALF_OF = '@example-user:boxel.ai';
@@ -48,7 +48,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-module('delegation client', () => {
+module('delegated realm session client', () => {
   test('signs the request so the server verifier accepts it', async () => {
     let now = 1_700_000_000_000;
     let captured: RequestInit | undefined;
@@ -61,7 +61,7 @@ module('delegation client', () => {
       });
     });
 
-    await requestDelegatedToken({
+    await requestDelegatedRealmSession({
       realmServerURL: 'https://realm.example.com',
       secret: SECRET,
       onBehalfOf: ON_BEHALF_OF,
@@ -71,16 +71,16 @@ module('delegation client', () => {
     });
 
     let headers = captured!.headers as Record<string, string>;
-    let result = verifyDelegationRequest({
+    let result = verifyDelegatedRealmSessionRequest({
       secret: SECRET,
-      timestamp: headers[DELEGATION_TIMESTAMP_HEADER],
-      signature: headers[DELEGATION_SIGNATURE_HEADER],
+      timestamp: headers[DELEGATED_REALM_SESSION_TIMESTAMP_HEADER],
+      signature: headers[DELEGATED_REALM_SESSION_SIGNATURE_HEADER],
       rawBody: captured!.body as string,
       now,
     });
     assert.true(result.ok, 'server verifier accepts the client signature');
     assert.strictEqual(
-      headers[DELEGATION_TIMESTAMP_HEADER],
+      headers[DELEGATED_REALM_SESSION_TIMESTAMP_HEADER],
       String(now),
       'timestamp header carries the signing time',
     );
@@ -94,7 +94,7 @@ module('delegation client', () => {
         permissions: ['read'],
       }),
     );
-    await requestDelegatedToken({
+    await requestDelegatedRealmSession({
       realmServerURL: 'https://realm.example.com',
       secret: SECRET,
       onBehalfOf: ON_BEHALF_OF,
@@ -109,7 +109,7 @@ module('delegation client', () => {
     assert.strictEqual(calls[0].init.method, 'POST');
   });
 
-  test('maps status codes to typed DelegationError kinds', async () => {
+  test('maps status codes to typed DelegatedRealmSessionError kinds', async () => {
     let cases: { status: number; kind: string }[] = [
       { status: 503, kind: 'disabled' },
       { status: 403, kind: 'forbidden' },
@@ -120,7 +120,7 @@ module('delegation client', () => {
     for (let { status, kind } of cases) {
       let { fetch } = recordingFetch(() => new Response('nope', { status }));
       try {
-        await requestDelegatedToken({
+        await requestDelegatedRealmSession({
           realmServerURL: 'https://realm.example.com',
           secret: SECRET,
           onBehalfOf: ON_BEHALF_OF,
@@ -131,11 +131,11 @@ module('delegation client', () => {
         assert.true(false, `expected ${status} to throw`);
       } catch (e) {
         assert.true(
-          e instanceof DelegationError,
-          `${status} → DelegationError`,
+          e instanceof DelegatedRealmSessionError,
+          `${status} → DelegatedRealmSessionError`,
         );
         assert.strictEqual(
-          (e as DelegationError).kind,
+          (e as DelegatedRealmSessionError).kind,
           kind,
           `${status} → ${kind}`,
         );
@@ -144,16 +144,16 @@ module('delegation client', () => {
   });
 });
 
-module('DelegatedTokenManager', () => {
+module('DelegatedRealmSessionManager', () => {
   test('is disabled and throws when no secret is configured', async () => {
-    let manager = new DelegatedTokenManager(undefined);
+    let manager = new DelegatedRealmSessionManager(undefined);
     assert.false(manager.enabled, 'manager reports disabled');
     try {
       await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
       assert.true(false, 'expected getToken to throw');
     } catch (e) {
-      assert.true(e instanceof DelegationError);
-      assert.strictEqual((e as DelegationError).kind, 'disabled');
+      assert.true(e instanceof DelegatedRealmSessionError);
+      assert.strictEqual((e as DelegatedRealmSessionError).kind, 'disabled');
     }
   });
 
@@ -167,7 +167,10 @@ module('DelegatedTokenManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedTokenManager(SECRET, { fetch, now: () => now });
+    let manager = new DelegatedRealmSessionManager(SECRET, {
+      fetch,
+      now: () => now,
+    });
 
     let a = await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
     let b = await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
@@ -187,7 +190,10 @@ module('DelegatedTokenManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedTokenManager(SECRET, { fetch, now: () => now });
+    let manager = new DelegatedRealmSessionManager(SECRET, {
+      fetch,
+      now: () => now,
+    });
 
     await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
     await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
@@ -204,7 +210,10 @@ module('DelegatedTokenManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedTokenManager(SECRET, { fetch, now: () => now });
+    let manager = new DelegatedRealmSessionManager(SECRET, {
+      fetch,
+      now: () => now,
+    });
 
     await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
     await manager.getToken({
@@ -228,7 +237,10 @@ module('DelegatedTokenManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedTokenManager(SECRET, { fetch, now: () => now });
+    let manager = new DelegatedRealmSessionManager(SECRET, {
+      fetch,
+      now: () => now,
+    });
     await manager.getToken({
       onBehalfOf: ON_BEHALF_OF,
       realm: 'https://realm.example.com/u/example-user/',
@@ -250,7 +262,10 @@ module('DelegatedTokenManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedTokenManager(SECRET, { fetch, now: () => now });
+    let manager = new DelegatedRealmSessionManager(SECRET, {
+      fetch,
+      now: () => now,
+    });
     await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
     manager.invalidate({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
     await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });

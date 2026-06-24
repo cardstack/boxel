@@ -9,27 +9,29 @@ import { createHmac, timingSafeEqual } from 'crypto';
 //
 // This module is the single source of truth for the signed-payload format.
 // Both sides import from here so they can never drift: ai-bot calls
-// `requestDelegatedToken`/`delegationSignature` to sign, and the realm
-// server's /_delegate-session handler calls `verifyDelegationRequest` to
+// `requestDelegatedRealmSession`/`delegatedRealmSessionSignature` to sign, and the realm
+// server's /_delegate-session handler calls `verifyDelegatedRealmSessionRequest` to
 // verify — neither keeps its own copy of the canonical `${timestamp}.${rawBody}`
 // construction. It is imported via the
 // `@cardstack/runtime-common/user-delegated-realm-server-session` subpath by
 // node consumers only — it pulls in node `crypto`, so it is
 // deliberately not re-exported from the package barrel that browser code loads.
 
-export const DELEGATION_TIMESTAMP_HEADER = 'x-boxel-delegation-timestamp';
-export const DELEGATION_SIGNATURE_HEADER = 'x-boxel-delegation-signature';
+export const DELEGATED_REALM_SESSION_TIMESTAMP_HEADER =
+  'x-boxel-delegated-realm-session-timestamp';
+export const DELEGATED_REALM_SESSION_SIGNATURE_HEADER =
+  'x-boxel-delegated-realm-session-signature';
 
 // ±60s window on the request timestamp. Cheap and stateless — it bounds the
 // replay window for a captured request without a server-side nonce store.
-export const DELEGATION_TIMESTAMP_WINDOW_MS = 60_000;
+export const DELEGATED_REALM_SESSION_TIMESTAMP_WINDOW_MS = 60_000;
 
 // The canonical string both sides sign: `${timestamp}.${rawBody}`. `timestamp`
 // is epoch milliseconds in base-10; `rawBody` is the exact request body bytes.
 // HMAC-SHA256 with the shared secret, hex digest. Binding the timestamp into
 // the signed payload is what makes the ±60s window enforceable — a captured
 // request cannot have its timestamp rewritten without the secret.
-export function delegationSignature(
+export function delegatedRealmSessionSignature(
   secret: string,
   timestamp: string,
   rawBody: string,
@@ -39,9 +41,11 @@ export function delegationSignature(
     .digest('hex');
 }
 
-export type DelegationAuthResult = { ok: true } | { ok: false; reason: string };
+export type DelegatedRealmSessionAuthResult =
+  | { ok: true }
+  | { ok: false; reason: string };
 
-export function verifyDelegationRequest({
+export function verifyDelegatedRealmSessionRequest({
   secret,
   timestamp,
   signature,
@@ -53,7 +57,7 @@ export function verifyDelegationRequest({
   signature: string | undefined;
   rawBody: string;
   now: number;
-}): DelegationAuthResult {
+}): DelegatedRealmSessionAuthResult {
   if (!timestamp || !signature) {
     return {
       ok: false,
@@ -64,13 +68,13 @@ export function verifyDelegationRequest({
   if (!Number.isFinite(ts)) {
     return { ok: false, reason: 'malformed delegation timestamp' };
   }
-  if (Math.abs(now - ts) > DELEGATION_TIMESTAMP_WINDOW_MS) {
+  if (Math.abs(now - ts) > DELEGATED_REALM_SESSION_TIMESTAMP_WINDOW_MS) {
     return {
       ok: false,
       reason: 'delegation timestamp is outside the allowed window',
     };
   }
-  let expected = delegationSignature(secret, timestamp, rawBody);
+  let expected = delegatedRealmSessionSignature(secret, timestamp, rawBody);
   let expectedBuf = Buffer.from(expected, 'utf8');
   let providedBuf = Buffer.from(signature, 'utf8');
   // Constant-time compare. timingSafeEqual throws on a length mismatch, so
@@ -87,7 +91,7 @@ export function verifyDelegationRequest({
 
 // ─── Client ──────────────────────────────────────────────────────────────
 
-export interface DelegatedSession {
+export interface DelegatedRealmSession {
   token: string;
   realm: string;
   permissions: string[];
@@ -97,25 +101,31 @@ export interface DelegatedSession {
 // (the realm server has no secret configured, 503) is a "feature is off, carry
 // on" signal, whereas `forbidden` (the user has no read access, 403) and the
 // auth failures are genuine errors worth surfacing.
-export type DelegationErrorKind =
+export type DelegatedRealmSessionErrorKind =
   | 'disabled' // 503: endpoint not configured on the realm server
   | 'forbidden' // 403: onBehalfOf lacks read on the realm
   | 'unauthorized' // 401: signature/timestamp rejected
   | 'bad-request' // 400: malformed request
   | 'unexpected'; // anything else
 
-export class DelegationError extends Error {
-  readonly kind: DelegationErrorKind;
+export class DelegatedRealmSessionError extends Error {
+  readonly kind: DelegatedRealmSessionErrorKind;
   readonly status?: number;
-  constructor(kind: DelegationErrorKind, message: string, status?: number) {
+  constructor(
+    kind: DelegatedRealmSessionErrorKind,
+    message: string,
+    status?: number,
+  ) {
     super(message);
-    this.name = 'DelegationError';
+    this.name = 'DelegatedRealmSessionError';
     this.kind = kind;
     this.status = status;
   }
 }
 
-function delegationErrorKindForStatus(status: number): DelegationErrorKind {
+function delegatedRealmSessionErrorKindForStatus(
+  status: number,
+): DelegatedRealmSessionErrorKind {
   switch (status) {
     case 503:
       return 'disabled';
@@ -137,7 +147,7 @@ function delegationErrorKindForStatus(status: number): DelegationErrorKind {
 // `realmServerURL` is the origin of the realm server that fronts `realm`
 // (ai-bot derives it as `new URL(realm).origin`). `now` and `fetch` are
 // injectable for tests.
-export async function requestDelegatedToken({
+export async function requestDelegatedRealmSession({
   realmServerURL,
   secret,
   onBehalfOf,
@@ -151,14 +161,14 @@ export async function requestDelegatedToken({
   realm: string;
   fetch?: typeof globalThis.fetch;
   now?: number;
-}): Promise<DelegatedSession> {
+}): Promise<DelegatedRealmSession> {
   let endpoint = new URL(
     '_delegate-session',
     ensureTrailingSlash(realmServerURL),
   );
   let rawBody = JSON.stringify({ onBehalfOf, realm });
   let timestamp = String(now);
-  let signature = delegationSignature(secret, timestamp, rawBody);
+  let signature = delegatedRealmSessionSignature(secret, timestamp, rawBody);
 
   let response: Response;
   try {
@@ -166,13 +176,13 @@ export async function requestDelegatedToken({
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        [DELEGATION_TIMESTAMP_HEADER]: timestamp,
-        [DELEGATION_SIGNATURE_HEADER]: signature,
+        [DELEGATED_REALM_SESSION_TIMESTAMP_HEADER]: timestamp,
+        [DELEGATED_REALM_SESSION_SIGNATURE_HEADER]: signature,
       },
       body: rawBody,
     });
   } catch (e: any) {
-    throw new DelegationError(
+    throw new DelegatedRealmSessionError(
       'unexpected',
       `delegation request to ${endpoint.href} failed: ${e?.message ?? e}`,
     );
@@ -180,8 +190,8 @@ export async function requestDelegatedToken({
 
   if (!response.ok) {
     let detail = await safeText(response);
-    throw new DelegationError(
-      delegationErrorKindForStatus(response.status),
+    throw new DelegatedRealmSessionError(
+      delegatedRealmSessionErrorKindForStatus(response.status),
       `delegation request rejected (${response.status})${
         detail ? `: ${detail}` : ''
       }`,
@@ -189,18 +199,18 @@ export async function requestDelegatedToken({
     );
   }
 
-  let session: DelegatedSession;
+  let session: DelegatedRealmSession;
   try {
-    session = (await response.json()) as DelegatedSession;
+    session = (await response.json()) as DelegatedRealmSession;
   } catch {
-    throw new DelegationError(
+    throw new DelegatedRealmSessionError(
       'unexpected',
       'delegation response was not valid JSON',
       response.status,
     );
   }
   if (!session?.token) {
-    throw new DelegationError(
+    throw new DelegatedRealmSessionError(
       'unexpected',
       'delegation response did not include a token',
       response.status,

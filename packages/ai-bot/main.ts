@@ -34,7 +34,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug.ts';
-import { DelegatedTokenManager } from './lib/user-delegated-realm-server-session.ts';
+import { DelegatedRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
@@ -88,7 +88,7 @@ class Assistant {
   // Mints user-scoped, read-only realm tokens on demand. Inert unless
   // AI_BOT_DELEGATION_SECRET is configured; the pull-model skill loader is its
   // consumer.
-  delegatedTokens: DelegatedTokenManager;
+  delegatedRealmSessions: DelegatedRealmSessionManager;
 
   constructor(client: MatrixClient, id: string, aiBotInstanceId: string) {
     this.openai = new OpenAI({
@@ -99,7 +99,7 @@ class Assistant {
     this.client = client;
     this.pgAdapter = new PgAdapter();
     this.aiBotInstanceId = aiBotInstanceId;
-    this.delegatedTokens = new DelegatedTokenManager(
+    this.delegatedRealmSessions = new DelegatedRealmSessionManager(
       process.env.AI_BOT_DELEGATION_SECRET,
     );
   }

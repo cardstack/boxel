@@ -17,9 +17,9 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import {
-  DELEGATION_SIGNATURE_HEADER,
-  DELEGATION_TIMESTAMP_HEADER,
-  verifyDelegationRequest,
+  DELEGATED_REALM_SESSION_SIGNATURE_HEADER,
+  DELEGATED_REALM_SESSION_TIMESTAMP_HEADER,
+  verifyDelegatedRealmSessionRequest,
 } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 
 // Token lifetime per the v1 security design (CS-11551): 30 minutes. Long
@@ -32,8 +32,7 @@ const log = logger('realm:delegate-session');
 // Mints a realm session JWT scoped to a named user's read access on a single
 // realm (CS-11552). Shared-secret authenticated (HMAC over the request body +
 // timestamp, see @cardstack/runtime-common/user-delegated-realm-server-session).
-// The minted token
-// carries only ['read']
+// The minted token carries only ['read']
 // and is flagged `delegated` so the realm accepts it read-only regardless of
 // the user's broader permissions; it can never read anything the user
 // couldn't, and can never write.
@@ -59,10 +58,10 @@ export default function handleDelegateSession({
     let request = await fetchRequestFromContext(ctxt);
     let rawBody = await request.text();
 
-    let auth = verifyDelegationRequest({
+    let auth = verifyDelegatedRealmSessionRequest({
       secret: aiBotDelegationSecret,
-      timestamp: ctxt.get(DELEGATION_TIMESTAMP_HEADER),
-      signature: ctxt.get(DELEGATION_SIGNATURE_HEADER),
+      timestamp: ctxt.get(DELEGATED_REALM_SESSION_TIMESTAMP_HEADER),
+      signature: ctxt.get(DELEGATED_REALM_SESSION_SIGNATURE_HEADER),
       rawBody,
       now: Date.now(),
     });
