@@ -12,10 +12,10 @@ import type {
 import type { SearchEntryWireQuery } from './search-entry.ts';
 
 // How an HTML-backed search result becomes a live, running card. `none` stays
-// inert; `hover` / `click` / `touch` fetch the card on the matching gesture and
-// swap the inert HTML for a live render. A host-side UX choice — it never
-// travels on the wire.
-export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
+// inert; `hover` fetches the card on pointer-hover / keyboard-focus and swaps
+// the inert HTML for a live render. A host-side UX choice — it never travels on
+// the wire.
+export type HydrationMode = 'none' | 'hover';
 
 // One rendering of a search result: the wire's `html` resource flattened, with
 // its `styles` references resolved to the stylesheets' hrefs. `id` is the
@@ -90,7 +90,7 @@ export interface SearchResultsComponentSignature {
     query: SearchEntryWireQuery | undefined;
     // The hydration gesture for HTML-backed rows — a host-UX choice, never on
     // the wire. A full live row ignores it. Defaults to `hover`; pass `none` to
-    // keep rows inert, `click` / `touch` to gate on those gestures.
+    // keep rows inert.
     mode?: HydrationMode;
     // Whether rendered results register with the operator-mode overlay (the
     // card-type chip / options menu / selection toggle). Defaults to `true`;

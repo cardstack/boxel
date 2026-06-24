@@ -3,7 +3,6 @@ import {
   render,
   settled,
   triggerEvent,
-  click,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -197,36 +196,7 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
   });
 
-  // (b) Published view (no overlay): the click gesture hydrates the same way,
-  // with no operator-mode machinery present.
-  test('published view — click hydrates the inert HTML into a live card', async function (assert) {
-    let inert = htmlComponent(INERT_HTML);
-    await render(
-      <template>
-        <TestContext>
-          <HydratableCard
-            @cardId={{HASSAN}}
-            @component={{inert}}
-            @mode='click'
-          />
-        </TestContext>
-      </template>,
-    );
-
-    assert.dom('[data-hydration="click"]').exists('carries the click gesture');
-    assert.dom('[data-test-live-card]').doesNotExist('no live card yet');
-
-    await click('[data-test-hydratable-card]');
-
-    assert.dom('[data-test-live-card]').hasText('Live: Hassan', 'now live');
-    assert.dom('[data-test-inert-card]').doesNotExist('inert HTML is gone');
-    assert.ok(
-      isCardInstance(storeService.peek(HASSAN)),
-      'the card entered the Store',
-    );
-  });
-
-  // (c) Operator mode (overlay present): hydration and the overlay coexist —
+  // (b) Operator mode (overlay present): hydration and the overlay coexist —
   // the inert HTML registers with the ElementTracker, and the inert→live swap
   // re-registers the new element so the overlay re-anchors to the live card.
   test('operator mode — the swap re-registers the new element with the ElementTracker', async function (assert) {
@@ -283,7 +253,7 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
   });
 
-  // (d) `@overlays={{false}}`: even with the operator-mode tracker present, the
+  // (c) `@overlays={{false}}`: even with the operator-mode tracker present, the
   // row opts out of the overlay — it never registers, so no chip / options menu
   // / selection toggle can anchor to it. Hydration is unaffected: the inert HTML
   // still swaps to a live card, the swap just never registers either element.
