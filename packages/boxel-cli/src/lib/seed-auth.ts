@@ -55,12 +55,16 @@ export function deriveRealmServerUrl(realmUrl: string): string {
  * realm-server token for owner-gated admin endpoints (e.g. realm publish).
  */
 export function deriveOwnerUserId(realmUrl: string): string {
+  // A realm URL is `https://<host>/<owner>/<realm>/` — two path segments, the
+  // first being the owner. Require both so a non-realm URL (a 1-segment path or
+  // the server root) doesn't silently yield a bogus owner.
   const segments = new URL(realmUrl).pathname.split('/').filter(Boolean);
-  const owner = segments[0];
-  if (!owner) {
-    throw new Error(`Cannot derive realm owner from realm URL: ${realmUrl}`);
+  if (segments.length < 2) {
+    throw new Error(
+      `Cannot derive realm owner: ${realmUrl} is not a <host>/<owner>/<realm>/ realm URL`,
+    );
   }
-  return `@${owner}:${deriveHostFromRealmUrl(realmUrl)}`;
+  return `@${segments[0]}:${deriveHostFromRealmUrl(realmUrl)}`;
 }
 
 /**

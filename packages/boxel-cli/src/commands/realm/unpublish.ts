@@ -53,7 +53,7 @@ export async function unpublishRealm(
   options: UnpublishOptions = {},
 ): Promise<UnpublishRealmResult> {
   let normalized = ensureTrailingSlash(publishedRealmURL);
-  let client;
+  let client: ReturnType<typeof buildCliRealmClient>;
   if (options.realmSecretSeed) {
     if (!options.asUser) {
       return {
