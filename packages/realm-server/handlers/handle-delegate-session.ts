@@ -20,7 +20,7 @@ import {
   DELEGATION_SIGNATURE_HEADER,
   DELEGATION_TIMESTAMP_HEADER,
   verifyDelegationRequest,
-} from '../utils/delegation.ts';
+} from '@cardstack/runtime-common/user-delegated-realm-server-session';
 
 // Token lifetime per the v1 security design (CS-11551): 30 minutes. Long
 // enough to span a tool call, short enough to bound how stale a revoked
@@ -31,7 +31,9 @@ const log = logger('realm:delegate-session');
 
 // Mints a realm session JWT scoped to a named user's read access on a single
 // realm (CS-11552). Shared-secret authenticated (HMAC over the request body +
-// timestamp, see utils/delegation.ts). The minted token carries only ['read']
+// timestamp, see @cardstack/runtime-common/user-delegated-realm-server-session).
+// The minted token
+// carries only ['read']
 // and is flagged `delegated` so the realm accepts it read-only regardless of
 // the user's broader permissions; it can never read anything the user
 // couldn't, and can never write.

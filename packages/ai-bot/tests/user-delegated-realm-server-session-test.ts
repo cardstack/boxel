@@ -7,8 +7,8 @@ import {
   DelegationError,
   DELEGATION_TIMESTAMP_HEADER,
   DELEGATION_SIGNATURE_HEADER,
-} from '@cardstack/runtime-common/delegation';
-import { DelegatedTokenManager } from '../lib/delegation.ts';
+} from '@cardstack/runtime-common/user-delegated-realm-server-session';
+import { DelegatedTokenManager } from '../lib/user-delegated-realm-server-session.ts';
 
 const SECRET = 'shared-secret-under-test';
 const ON_BEHALF_OF = '@example-user:boxel.ai';

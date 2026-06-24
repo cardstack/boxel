@@ -17,7 +17,7 @@ import {
   DELEGATION_SIGNATURE_HEADER,
   DELEGATION_TIMESTAMP_HEADER,
   delegationSignature,
-} from '../../utils/delegation.ts';
+} from '@cardstack/runtime-common/user-delegated-realm-server-session';
 
 const onBehalfOf = '@jane:localhost';
 // A user with no permission rows on the test realm.

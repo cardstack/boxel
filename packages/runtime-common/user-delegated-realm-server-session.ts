@@ -12,8 +12,9 @@ import { createHmac, timingSafeEqual } from 'crypto';
 // `requestDelegatedToken`/`delegationSignature` to sign, and the realm
 // server's /_delegate-session handler calls `verifyDelegationRequest` to
 // verify — neither keeps its own copy of the canonical `${timestamp}.${rawBody}`
-// construction. It is imported via the `@cardstack/runtime-common/delegation`
-// subpath by node consumers only — it pulls in node `crypto`, so it is
+// construction. It is imported via the
+// `@cardstack/runtime-common/user-delegated-realm-server-session` subpath by
+// node consumers only — it pulls in node `crypto`, so it is
 // deliberately not re-exported from the package barrel that browser code loads.
 
 export const DELEGATION_TIMESTAMP_HEADER = 'x-boxel-delegation-timestamp';

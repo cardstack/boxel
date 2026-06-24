@@ -34,7 +34,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug.ts';
-import { DelegatedTokenManager } from './lib/delegation.ts';
+import { DelegatedTokenManager } from './lib/user-delegated-realm-server-session.ts';
 import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
