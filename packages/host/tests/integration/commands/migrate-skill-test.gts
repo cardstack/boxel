@@ -101,6 +101,13 @@ export class DoThing extends Command {
   async getInputType() {
     return undefined;
   }
+}
+
+export class DoThingQuietly extends Command {
+  static displayName = 'Test Command (no approval)';
+  async getInputType() {
+    return undefined;
+  }
 }`,
           'Skill/data-management.json': new Skill({
             cardTitle: 'Data Management',
@@ -110,6 +117,11 @@ export class DoThing extends Command {
               new CommandField({
                 codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
                 requiresApproval: true,
+              }),
+              // requiresApproval: false must survive migration — see assertion.
+              new CommandField({
+                codeRef: { module: COMMAND_MODULE, name: 'DoThingQuietly' },
+                requiresApproval: false,
               }),
             ],
           }),
@@ -158,8 +170,12 @@ export class DoThing extends Command {
           codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
           requiresApproval: true,
         },
+        {
+          codeRef: { module: COMMAND_MODULE, name: 'DoThingQuietly' },
+          requiresApproval: false,
+        },
       ],
-      'the command round-trips into boxel.commands',
+      'commands round-trip into boxel.commands, preserving an explicit requiresApproval: false',
     );
     assert.strictEqual(
       body.trim(),

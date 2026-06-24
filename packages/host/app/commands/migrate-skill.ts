@@ -18,7 +18,13 @@ import type StoreService from '../services/store';
 // out of `boxel.commands`.
 interface FrontmatterCommand {
   codeRef: { module: string; name: string };
-  requiresApproval?: boolean;
+  // Always emitted explicitly. The host auto-executes a command only when
+  // `requiresApproval === false` (`command-auto-execute.ts`) and otherwise
+  // treats a missing value as `true` (`message-builder.ts`), so dropping an
+  // explicit `false` would silently flip an auto-executing command back to
+  // approval-required. Preserve the source value, defaulting a missing one to
+  // `true` to match that downstream behavior.
+  requiresApproval: boolean;
 }
 
 // Convert a skill name into a directory-safe slug for `skills/<slug>/SKILL.md`.
@@ -151,11 +157,10 @@ files with boxel.kind: skill frontmatter.`;
         let module = command.codeRef?.module;
         let name = command.codeRef?.name;
         if (module && name) {
-          let entry: FrontmatterCommand = { codeRef: { module, name } };
-          if (command.requiresApproval) {
-            entry.requiresApproval = true;
-          }
-          acc.push(entry);
+          acc.push({
+            codeRef: { module, name },
+            requiresApproval: command.requiresApproval ?? true,
+          });
         }
         return acc;
       },
