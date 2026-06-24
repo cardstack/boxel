@@ -188,12 +188,6 @@ export default class MatrixService extends Service {
   // the migration only takes effect on the next fresh session. Reset by
   // resetState() so a logout/login re-evaluates against the persisted key.
   private bootedFromLegacyRealmsList = false;
-  // Set only while the boot-time lazy migration writes `app.boxel.realm-servers`
-  // itself, so the AccountData listener ignores that self-write rather than
-  // re-running trusted-servers assembly mid-boot. The migration has already
-  // assembled this session from the equivalent legacy realm list; the new key
-  // only needs to take effect on the next boot.
-  private migratingRealmServersAccountData = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
@@ -433,11 +427,16 @@ export default class MatrixService extends Service {
               break;
             }
             case APP_BOXEL_REALM_SERVERS_EVENT_TYPE: {
-              // The boot-time lazy migration's own write echoes back here; it
-              // has already assembled this session from the equivalent legacy
-              // realm list, so ignore the self-write rather than re-running
-              // assembly mid-boot.
-              if (this.migratingRealmServersAccountData) {
+              // A session that booted from the legacy `app.boxel.realms` list
+              // stays on the legacy path for the lifetime of this instance
+              // (see `bootedFromLegacyRealmsList` in start()). The boot-time
+              // lazy migration writes `app.boxel.realm-servers`, and that write
+              // echoes back here — both synchronously and again when
+              // startClient()'s initial sync re-emits account data. Ignoring
+              // these keeps the migrated key from re-running trusted-servers
+              // assembly mid-boot and overwriting the legacy-assembled realm
+              // list; the new key only takes effect on the next fresh session.
+              if (this.bootedFromLegacyRealmsList) {
                 break;
               }
               let realmServers = e.event.content.realmServers as string[];
@@ -493,6 +492,17 @@ export default class MatrixService extends Service {
       clientExists: Boolean(this._client),
       clientLoggedIn: this._client?.isLoggedIn() === true,
       postLoginCompleted: this.postLoginCompleted,
+    };
+  }
+
+  // Test-only diagnostic exposing which boot path the current session is on.
+  // A legacy-booted session must stay non-authoritative even after the lazy
+  // migration writes `app.boxel.realm-servers` and that write echoes back
+  // through the AccountData listener. No production caller.
+  get bootAssemblyDebug() {
+    return {
+      trustedRealmServersAuthoritative: this.trustedRealmServersAuthoritative,
+      bootedFromLegacyRealmsList: this.bootedFromLegacyRealmsList,
     };
   }
 
@@ -978,16 +988,12 @@ export default class MatrixService extends Service {
               if (derivedRealmServers.length > 0) {
                 if (isTesting())
                   console.warn('[start-phase] migrateRealmServersAccountData');
-                // Guard so this self-write doesn't re-trigger trusted-servers
-                // assembly via the AccountData listener while boot is still
-                // running — this session is already assembled from the legacy
+                // `bootedFromLegacyRealmsList` is already set above, so the
+                // AccountData listener ignores both this self-write and the
+                // echo from startClient()'s initial sync — no extra guard
+                // needed. This session is already assembled from the legacy
                 // list; the new key takes effect on the next boot.
-                this.migratingRealmServersAccountData = true;
-                try {
-                  await this.setRealmServersInAccountData(derivedRealmServers);
-                } finally {
-                  this.migratingRealmServersAccountData = false;
-                }
+                await this.setRealmServersInAccountData(derivedRealmServers);
               }
             } catch (err) {
               console.error(

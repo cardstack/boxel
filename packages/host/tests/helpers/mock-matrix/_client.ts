@@ -145,11 +145,24 @@ export class MockClient implements ExtendedClient {
       }),
     );
 
+    // The real matrix initial sync re-emits every account-data key, not just
+    // the legacy realms list. Re-emit both so boot-path handlers see the same
+    // echoes they would in production — notably the `app.boxel.realm-servers`
+    // echo a lazy-migration boot triggers by writing that key just before
+    // startClient().
     this.emitEvent(
       new MatrixEvent({
         type: APP_BOXEL_REALMS_EVENT_TYPE,
         content: {
           realms: this.sdkOpts.activeRealms ?? [],
+        },
+      }),
+    );
+    this.emitEvent(
+      new MatrixEvent({
+        type: APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+        content: {
+          realmServers: this.sdkOpts.activeRealmServers ?? [],
         },
       }),
     );

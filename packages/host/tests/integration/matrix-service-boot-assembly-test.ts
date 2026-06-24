@@ -247,6 +247,31 @@ module(
       );
     });
 
+    test('the migration self-write echo does not flip the boot to the trusted path', async function (assert) {
+      // The migration writes `app.boxel.realm-servers` during start(), and that
+      // write echoes back through the AccountData listener twice: synchronously
+      // from setAccountData, and again when startClient()'s initial sync
+      // re-emits every account-data key. Neither echo may switch this
+      // legacy-booted session to the authoritative trusted-servers path —
+      // doing so would re-derive the realm list from `_realm-auth` and could
+      // drop realms the trusted servers don't advertise.
+      let matrixService = getService('matrix-service') as MatrixService;
+      let realmServer = getService('realm-server') as RealmServerService;
+
+      assert.deepEqual(
+        matrixService.bootAssemblyDebug,
+        {
+          trustedRealmServersAuthoritative: false,
+          bootedFromLegacyRealmsList: true,
+        },
+        'the session stays on the legacy path despite the realm-servers echo',
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the legacy-assembled realm survives the echo',
+      );
+    });
+
     test('a re-boot of the same session after migration stays on the legacy path', async function (assert) {
       let matrixService = getService('matrix-service') as MatrixService;
       let realmServer = getService('realm-server') as RealmServerService;
