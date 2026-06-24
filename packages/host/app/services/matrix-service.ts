@@ -858,7 +858,13 @@ export default class MatrixService extends Service {
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
       } catch (e) {
         console.log('Error starting Matrix client', e);
-        await this.logout();
+        // Only tear the session down for a failure that happened before login
+        // completed. A late/post-login rejection must not unwind an already-
+        // established session — logging out here clears realm state (including
+        // realm info) that the app has already populated and is relying on.
+        if (!this.postLoginCompleted) {
+          await this.logout();
+        }
       }
 
       let indexController = getOwner(this)!.lookup(

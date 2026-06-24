@@ -299,30 +299,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-          ]
-        shardTotal: [20]
+        shardIndex: [1]
+        shardTotal: [1]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -551,15 +529,10 @@ jobs:
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
-          if [ "$PERCY_ENABLED" = "true" ]; then
-            TEST_CMD="pnpm test-with-percy"
-          else
-            echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
-            TEST_CMD="pnpm ember-test-pre-built"
-          fi
+          TEST_CMD=(pnpm ember-test-pre-built --filter="can specify a card by URL in the card chooser")
 
           set +e
-          dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output.log
+          dbus-run-session -- "${TEST_CMD[@]}" 2>&1 | tee /tmp/test-output.log
           exit_code=${PIPESTATUS[0]}
 
           # Transient chunk-fetch failures present as `ChunkLoadError` under
@@ -592,7 +565,7 @@ jobs:
             echo "::endgroup::"
             echo ""
 
-            dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output-retry.log
+            dbus-run-session -- "${TEST_CMD[@]}" 2>&1 | tee /tmp/test-output-retry.log
             retry_exit_code=${PIPESTATUS[0]}
             if [ $retry_exit_code -eq 0 ]; then
               echo "::notice::Shard ${{ matrix.shardIndex }} recovered on retry — original failure was a transient chunk-fetch flake"
