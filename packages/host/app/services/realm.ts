@@ -885,8 +885,11 @@ export default class RealmService extends Service {
         (id) => vn.unresolveURL(id) === normalizedUrl,
       );
       if (isKnownAvailableRealm) {
-        let knownResource = this.getOrCreateRealmResource(url);
-        knownResource.fetchInfo();
+        // Populate via the realm server's bulk info endpoint rather than the
+        // realm's own _info: the bulk endpoint is already used at login and is
+        // the path that reliably resolves, whereas a direct per-realm fetch can
+        // stall before the realm is independently reachable.
+        this.prefetchRealmInfos([url]);
       } else {
         this.identifyRealm.perform(url);
       }
