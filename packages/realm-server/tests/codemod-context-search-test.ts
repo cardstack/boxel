@@ -204,6 +204,56 @@ export class Grid extends GlimmerComponent<Sig> {
 }
 `;
 
+// Hands the whole list to a child AND reads `.length` — both adapt cleanly
+// (the array adapter for the list, `results.entries.length` for the count).
+const ARRAY_AND_LENGTH = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query, type PrerenderedCardLike } from '@cardstack/runtime-common';
+
+import TableView from './table-view';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class AppGrid extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
+      <:response as |cards|>
+        {{#if cards.length}}
+          <TableView @cards={{cards}} />
+        {{/if}}
+      </:response>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
+// Reads the result list through an arbitrary property path (`firstObject.url`)
+// — can't adapt as a path, so it stays reported for hand migration.
+const UNSUPPORTED_TAIL = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Peek extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
+      <:response as |cards|>
+        {{cards.firstObject.url}}
+      </:response>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
 // No old affordance at all — must be left byte-for-byte untouched.
 const NO_USAGE = `import GlimmerComponent from '@glimmer/component';
 
@@ -403,6 +453,45 @@ module(basename(import.meta.filename), function () {
     assert.true(
       /htmlQuery:\s*\{\s*eq:\s*\{\s*format:\s*this\.args\.format/.test(output),
       'binds the dynamic format through htmlQuery',
+    );
+  });
+
+  test('migrates a list passed to a child plus a `.length` read by binding the adapted list once', function (assert) {
+    let { status, output, reasons } = transformContextSearch(ARRAY_AND_LENGTH, {
+      filename: 'app-grid.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.true(
+      output.includes('searchEntriesToPrerenderedCards'),
+      'binds the adapted array',
+    );
+    assert.true(
+      output.includes('as |cards|'),
+      `binds the adapted list to the original param: ${output}`,
+    );
+    // The body stays verbatim on the bound list — `.length` and the child
+    // hand-off both read the legacy-shape `cards`.
+    assert.true(output.includes('cards.length'), 'keeps the `.length` read');
+    assert.true(
+      output.includes('@cards={{cards}}'),
+      'child still receives `cards`',
+    );
+  });
+
+  test('migrates a list read through a property path by binding the adapted list', function (assert) {
+    let { status, output, reasons } = transformContextSearch(UNSUPPORTED_TAIL, {
+      filename: 'peek.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.notOk(output.includes('prerenderedCardSearchComponent'));
+    assert.true(
+      output.includes('searchEntriesToPrerenderedCards'),
+      'binds the adapted array',
+    );
+    // The path rides on the adapted (legacy-shape) list, so `.url` resolves.
+    assert.true(
+      output.includes('cards.firstObject.url'),
+      `keeps the property path on the adapted list: ${output}`,
     );
   });
 

@@ -431,19 +431,19 @@ function tryTransformInvocation(
   element.blockParams = ['results'];
   let bodyChildren: any[];
   if (useShim) {
-    // Replace every reference to the <:response> array with the adapted list,
-    // leaving the rest of the body (a `{{#each}}` over it, child-component
-    // hand-offs, `.length`, …) verbatim — the rows it sees keep the legacy
-    // field names, so per-card field access and `{{yield row}}` still work.
-    replacePaths(
-      responseBlock,
-      (p: any) => p.head?.type === 'VarHead' && p.head.name === responseParam,
-      (p: any) =>
-        p.tail.length === 0
-          ? b.sexpr(b.path(ARRAY_SHIM), [b.path('results.entries')])
-          : b.path(`results.entries.${p.tail.join('.')}`),
+    // Bind the adapted list once to the original block param and keep the body
+    // verbatim: `{{#let (searchEntriesToPrerenderedCards results.entries) as
+    // |<param>|}}…body…{{/let}}`. The body keeps reading the list and its rows
+    // under the legacy field names (`{{#each}}`, `.length`, child-component
+    // hand-offs, `{{yield row}}`, even `.firstObject.url`), and the adapter runs
+    // once per render rather than once per reference.
+    let letBlock = b.block(
+      b.path('let'),
+      [b.sexpr(b.path(ARRAY_SHIM), [b.path('results.entries')])],
+      b.hash([]),
+      b.blockItself(responseBlock.children ?? [], [responseParam]),
     );
-    bodyChildren = responseBlock.children ?? [];
+    bodyChildren = [letBlock];
   } else {
     // Minimal: iterate `results.entries`, key `url` → `id`, per-item `.url` → `.id`.
     let eachBlock = significant[0];
