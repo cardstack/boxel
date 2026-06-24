@@ -1,7 +1,9 @@
 // CLI for the `@context` search codemod. Dry-run by default; pass `--write` to
 // apply. Walks the given files/directories for `.gts` card source, migrates the
 // usages it can transform mechanically, and reports the ones it can't so they
-// can be migrated by hand.
+// can be migrated by hand. A file whose template can't be parsed is skipped and
+// reported (left untouched) rather than aborting the whole sweep — such a module
+// already fails to compile, so it's out of scope here.
 //
 //   node scripts/codemod/context-search/run.ts <path…> [--write]
 
@@ -10,7 +12,7 @@ import { join, resolve } from 'path';
 
 import * as prettier from 'prettier';
 
-import { transformContextSearch } from './transform.ts';
+import { transformContextSearch, type TransformResult } from './transform.ts';
 
 // Format the migrated source through the repo's prettier config (with
 // prettier-plugin-ember-template-tag for `.gts`) so the structural edits land as
@@ -62,10 +64,21 @@ async function main(): Promise<void> {
   let files = collectGtsFiles(paths);
   let transformed: string[] = [];
   let reported: { file: string; reasons: string[] }[] = [];
+  let unparseable: { file: string; error: string }[] = [];
 
   for (let file of files) {
     let source = readFileSync(file, 'utf8');
-    let result = transformContextSearch(source, { filename: file });
+    let result: TransformResult;
+    try {
+      result = transformContextSearch(source, { filename: file });
+    } catch (err) {
+      // The transformer threw while parsing this module's template, so it can't
+      // be migrated mechanically (and would not compile as-is either). Record it
+      // and keep going so a single bad module doesn't mask every file after it.
+      let message = err instanceof Error ? err.message : String(err);
+      unparseable.push({ file, error: message.split('\n')[0] });
+      continue;
+    }
     if (result.status === 'transformed') {
       transformed.push(file);
       if (write && result.output !== source) {
@@ -94,6 +107,16 @@ async function main(): Promise<void> {
       for (let reason of reasons) {
         console.log(`      - ${reason}`);
       }
+    }
+  }
+
+  if (unparseable.length > 0) {
+    console.log(
+      `\nSkipped ${unparseable.length} unparseable file(s) (left untouched):`,
+    );
+    for (let { file, error } of unparseable) {
+      console.log(`  ⚠ ${file}`);
+      console.log(`      - ${error}`);
     }
   }
 
