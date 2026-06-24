@@ -4,6 +4,7 @@ import {
   click,
   render,
   triggerEvent,
+  triggerKeyEvent,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
@@ -157,7 +158,13 @@ module('Integration | mini-file-chooser', function (hooks) {
     await waitFor('[data-test-mini-file-chooser] [data-test-file="pet.gts"]');
     await waitForFileTreeReady();
 
+    // Click selects the file visually; Enter confirms the selection.
     await click('[data-test-mini-file-chooser] [data-test-file="pet.gts"]');
+    await triggerKeyEvent(
+      '[data-test-mini-file-chooser] [data-test-file-tree-nav]',
+      'keydown',
+      'Enter',
+    );
     await waitUntil(() => harness.selected === `${testRealmURL}pet.gts`);
 
     assert.strictEqual(
