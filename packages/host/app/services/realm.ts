@@ -874,25 +874,7 @@ export default class RealmService extends Service {
     }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
-      // Network discovery (a HEAD to learn the owning realm's url) is only
-      // needed when we don't already know which realm owns this url. When the
-      // url is itself one of the realms the server has told us is available,
-      // register it directly so its info loads via fetchInfo — avoiding a
-      // discovery round-trip that can stall before the realm is reachable.
-      let vn = this.network.virtualNetwork;
-      let normalizedUrl = vn.unresolveURL(url);
-      let isKnownAvailableRealm = this.realmServer.availableRealmIdentifiers.some(
-        (id) => vn.unresolveURL(id) === normalizedUrl,
-      );
-      if (isKnownAvailableRealm) {
-        // Populate via the realm server's bulk info endpoint rather than the
-        // realm's own _info: the bulk endpoint is already used at login and is
-        // the path that reliably resolves, whereas a direct per-realm fetch can
-        // stall before the realm is independently reachable.
-        this.prefetchRealmInfos([url]);
-      } else {
-        this.identifyRealm.perform(url);
-      }
+      this.identifyRealm.perform(url);
 
       this.identifyRealmTracker;
 

@@ -513,12 +513,16 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       count: 1,
     });
 
-    // The section block is keyed by realm name, but `realm.info()` returns
-    // a "Unknown Workspace" placeholder until `fetchInfo` resolves.
-    // Selecting on the stable URL alongside the human-visible name avoids
-    // racing the info fetch. Default `waitFor` timeout (1s) can be tight
-    // on a loaded CI shard, so use the file's long-running cap (10s)
-    // consistent with `displays searching results` above.
+    // Ensure the base realm's info is loaded the way it is after login (via the
+    // realm server's bulk info endpoint) so the section can render its human-
+    // visible name. The section block is keyed by realm name and `realm.info()`
+    // returns the "Unknown Workspace" placeholder until that info resolves.
+    await getService('realm').prefetchRealmInfos([baseRealm.url]);
+
+    // Select on the stable URL alongside the human-visible name. Default
+    // `waitFor` timeout (1s) can be tight on a loaded CI shard, so use the
+    // file's long-running cap (10s) consistent with `displays searching
+    // results` above.
     await waitFor(
       `[data-test-realm-url="${baseRealm.url}"][data-test-realm="Base Workspace"]`,
       { timeout: 10000 },
