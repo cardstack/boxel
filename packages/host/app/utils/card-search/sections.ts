@@ -139,6 +139,10 @@ export function buildUrlSection(
   }
   const urlForRealm = urlForRealmLookup(card);
   const realmUrl = realmUrlForCard(urlForRealm, realmURLs);
+  // TEMP diagnostic (cc-diag-host-envmode): confirm RRI/URL form mismatch.
+  console.warn(
+    `[cc-diag] buildUrlSection: card.id=${card.id} urlForRealm=${urlForRealm} realmUrl="${realmUrl}" realmURLs=${JSON.stringify(realmURLs)}`,
+  );
   return {
     sid: `url:${card.id}`,
     type: 'url',

@@ -498,7 +498,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
   // realm info, so the "Base Workspace" tile intermittently never resolves its
   // name. The behavior itself is correct, and the server-side request handling
   // is covered by the realm-server node tests (HEAD + _info).
-  skip(`can specify a card by URL in the card chooser`, async function (assert) {
+  test(`can specify a card by URL in the card chooser`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
