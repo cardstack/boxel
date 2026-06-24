@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'crypto';
+import { ensureTrailingSlash } from './paths.ts';
 
 // Shared-secret authentication for the realm-server /_delegate-session
 // endpoint. ai-bot and the realm server hold a shared secret; ai-bot signs
@@ -225,8 +226,4 @@ async function safeText(response: Response): Promise<string> {
   } catch {
     return '';
   }
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
