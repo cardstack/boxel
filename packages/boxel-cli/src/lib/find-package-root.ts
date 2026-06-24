@@ -2,11 +2,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /**
- * Walk up from `__dirname` until we find the `@cardstack/boxel-cli`
- * package.json. The single-file esbuild bundle places `__dirname` at
- * `boxel-cli/dist`; running from source (e.g. under vitest) places it
- * inside `src/...`. Anchoring to the package.json keeps every downstream
- * path stable regardless of which entry mode is active.
+ * Walk up from the caller's directory (`import.meta.dirname`) until we find
+ * the `@cardstack/boxel-cli` package.json. The single-file esbuild bundle
+ * places it at `boxel-cli/dist`; running from source (e.g. under vitest or
+ * `node scripts/build-plugin.ts`) places it inside `src/...`. Anchoring to the
+ * package.json keeps every downstream path stable regardless of entry mode.
  */
 export function findBoxelCliRoot(startDir: string): string {
   let dir = startDir;

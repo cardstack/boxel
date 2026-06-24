@@ -34,6 +34,10 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
     return this.args.mode ?? 'hover';
   }
 
+  private get overlays(): boolean {
+    return this.args.overlays ?? true;
+  }
+
   // Created once per component: the underlying search resource owns its realm
   // subscriptions and re-runs through the reactive query thunk, while the
   // view-model layer memoizes render-stable entries on top. The query varies
@@ -42,6 +46,7 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
     this,
     () => this.args.query,
     () => this.mode,
+    () => this.overlays,
   );
 
   private get results(): SearchResultsYield {

@@ -4,7 +4,7 @@ import {
   extractCardReferenceUrls,
   extractFileReferenceUrls,
   extractBfmReferences,
-  bfmBlockFormatAndSize,
+  bfmRefFormatAndSize,
   bfmCardReferenceExtensions,
   bfmExtensionsForKeyword,
   parseBfmSizeSpec,
@@ -51,6 +51,21 @@ module('Unit | bfm-card-references', function () {
         'https://example.com/cards/1',
         'https://example.com/cards/2',
       ]);
+    });
+
+    test('extracts the URL from an inline ref with a size spec', function (assert) {
+      let markdown =
+        'See :card[https://example.com/cards/1 | embedded] for details.';
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://base.com/',
+        virtualNetwork,
+      );
+      assert.deepEqual(
+        urls,
+        ['https://example.com/cards/1'],
+        'the specifier is stripped from the extracted URL',
+      );
     });
 
     test('resolves relative URLs against base', function (assert) {
@@ -685,12 +700,99 @@ module('Unit | bfm-card-references', function () {
         'no format for unrecognized specifier',
       );
     });
+
+    test('block ref with atom format emits an atom format attribute', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | atom]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/1"'),
+        'URL excludes the pipe and specifier',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-format="atom"'),
+        'has atom format attribute',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'atom carries no width',
+      );
+    });
+
+    test('inline ref with a size spec emits format and dimension attributes', function (assert) {
+      let markdown = 'See :card[https://example.com/cards/1 | 400x200] here.';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/cards/1"',
+        ),
+        'URL excludes the pipe and specifier',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format attribute',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="400"'), 'width=400');
+      assert.true(html.includes('data-boxel-bfm-height="200"'), 'height=200');
+    });
+
+    test('inline ref with embedded format emits the format attribute', function (assert) {
+      let markdown = 'See :card[https://example.com/cards/1 | embedded] here.';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="embedded"'),
+        'has embedded format attribute',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'embedded carries no width',
+      );
+    });
+
+    test('inline ref without pipe has no format/size attributes', function (assert) {
+      let markdown = 'See :card[https://example.com/cards/1] here.';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/cards/1"',
+        ),
+        'inline placeholder still has the ref attribute',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-format'),
+        'no format attribute for plain inline ref',
+      );
+    });
+
+    test('inline ref with unrecognized specifier emits no format attributes', function (assert) {
+      let markdown = 'See :card[https://example.com/cards/1 | nonsense] here.';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/cards/1"',
+        ),
+        'URL excludes the pipe and specifier',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-format'),
+        'no format for unrecognized specifier',
+      );
+    });
   });
 
   module('parseBfmSizeSpec', function () {
     test('returns null for unrecognized specifiers', function (assert) {
       assert.strictEqual(parseBfmSizeSpec('nonsense'), null);
       assert.strictEqual(parseBfmSizeSpec(''), null);
+    });
+
+    test('parses atom keyword', function (assert) {
+      let result = parseBfmSizeSpec('atom');
+      assert.deepEqual(result, { format: 'atom' });
+    });
+
+    test('parses atom keyword case-insensitively', function (assert) {
+      let result = parseBfmSizeSpec('Atom');
+      assert.deepEqual(result, { format: 'atom' });
     });
 
     test('parses isolated keyword', function (assert) {
@@ -929,55 +1031,77 @@ module('Unit | bfm-card-references', function () {
     });
   });
 
-  module('bfmBlockFormatAndSize', function () {
+  module('bfmRefFormatAndSize', function () {
     test('defaults to embedded with no sizeStyle when format attr is missing', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize(undefined, undefined, undefined), {
+      assert.deepEqual(bfmRefFormatAndSize(undefined, undefined, undefined), {
         format: 'embedded',
       });
     });
 
+    test('honors an explicit defaultFormat when the format attr is missing', function (assert) {
+      assert.deepEqual(
+        bfmRefFormatAndSize(undefined, undefined, undefined, 'atom'),
+        { format: 'atom' },
+      );
+    });
+
     test('defaults to embedded when format attr is unrecognized', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('something', '400', '200'), {
+      assert.deepEqual(bfmRefFormatAndSize('something', '400', '200'), {
         format: 'embedded',
+      });
+    });
+
+    test('falls back to the supplied defaultFormat when format attr is unrecognized', function (assert) {
+      assert.deepEqual(
+        bfmRefFormatAndSize('something', undefined, undefined, 'atom'),
+        {
+          format: 'atom',
+        },
+      );
+    });
+
+    test('passes atom through and ignores width/height', function (assert) {
+      assert.deepEqual(bfmRefFormatAndSize('atom', '400', '200'), {
+        format: 'atom',
       });
     });
 
     test('passes isolated through and ignores width/height', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('isolated', '400', '200'), {
+      assert.deepEqual(bfmRefFormatAndSize('isolated', '400', '200'), {
         format: 'isolated',
       });
     });
 
     test('fitted with no width/height returns undefined sizeStyle', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', undefined, undefined), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', undefined, undefined), {
         format: 'fitted',
         sizeStyle: undefined,
       });
     });
 
     test('fitted converts integer width attr to a px value', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', '400', undefined), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', '400', undefined), {
         format: 'fitted',
         sizeStyle: 'width: 400px',
       });
     });
 
     test('fitted passes percentage width attr through unchanged', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', '50%', undefined), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', '50%', undefined), {
         format: 'fitted',
         sizeStyle: 'width: 50%',
       });
     });
 
     test('fitted converts integer height attr to a px value', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', undefined, '200'), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', undefined, '200'), {
         format: 'fitted',
         sizeStyle: 'height: 200px',
       });
     });
 
     test('fitted combines width + height into one sizeStyle string', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', '400', '200'), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', '400', '200'), {
         format: 'fitted',
         sizeStyle: 'width: 400px; height: 200px',
       });
@@ -985,14 +1109,14 @@ module('Unit | bfm-card-references', function () {
 
     test('fitted ignores width with unsupported units', function (assert) {
       // Only `\d+` (px implied) and `\d+%` are accepted; anything else is dropped.
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', '100em', '200'), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', '100em', '200'), {
         format: 'fitted',
         sizeStyle: 'height: 200px',
       });
     });
 
     test('fitted ignores height with unsupported units', function (assert) {
-      assert.deepEqual(bfmBlockFormatAndSize('fitted', '400', '50%'), {
+      assert.deepEqual(bfmRefFormatAndSize('fitted', '400', '50%'), {
         format: 'fitted',
         sizeStyle: 'width: 400px',
       });

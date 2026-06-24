@@ -9,7 +9,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
-  bfmBlockFormatAndSize,
+  bfmRefFormatAndSize,
   buildWaiter,
   cardTypeName,
   fileNameFromUrl,
@@ -255,23 +255,19 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           if (!rawUrl) continue;
           let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
 
-          // Inline refs render in atom format. Block refs (card and file
-          // alike) derive their format and any fitted sizing from the BFM size
-          // attributes, so `::file[./photo.jpg | 400x300]` is honored the same
-          // way `::card[... | 400x300]` is.
-          let format: CardSlotFormat;
-          let sizeStyle: string | undefined;
-          if (isInline) {
-            format = 'atom';
-          } else {
-            let derived = bfmBlockFormatAndSize(
-              el.dataset.boxelBfmFormat,
-              el.dataset.boxelBfmWidth,
-              el.dataset.boxelBfmHeight,
-            );
-            format = derived.format;
-            sizeStyle = derived.sizeStyle;
-          }
+          // Both inline and block refs derive their format and any fitted
+          // sizing from the BFM size attributes, so `:card[url | embedded]` and
+          // `::card[url | 400x300]` are honored alike. Only the default differs:
+          // an inline ref with no specifier falls back to atom, a block ref to
+          // embedded.
+          let derived = bfmRefFormatAndSize(
+            el.dataset.boxelBfmFormat,
+            el.dataset.boxelBfmWidth,
+            el.dataset.boxelBfmHeight,
+            isInline ? 'atom' : 'embedded',
+          );
+          let format: CardSlotFormat = derived.format;
+          let sizeStyle: string | undefined = derived.sizeStyle;
 
           // Fitted slots carry an inline width/height plus `overflow: hidden`
           // so the resolved instance occupies the requested footprint.
@@ -507,7 +503,14 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             {{#let (this.getCardComponent slot.instance) as |RefComponent|}}
               {{#if (eq slot.kind 'inline')}}
                 <span
-                  class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                  class='markdown-bfm-card-slot
+                    {{if
+                      (eq slot.format "atom")
+                      "markdown-bfm-card-slot--inline"
+                      "markdown-bfm-card-slot--inline-embed"
+                    }}
+                    {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                  style={{slot.style}}
                   data-test-markdown-bfm-inline-file={{if
                     (eq slot.refType 'file')
                     ''
@@ -558,11 +561,21 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           </CardContextConsumer>
         {{else if (eq slot.state 'loading')}}
           {{#if (eq slot.kind 'inline')}}
-            <span
-              class='markdown-bfm-loading markdown-bfm-loading--inline'
-              aria-hidden='true'
-              data-test-markdown-bfm-loading-inline
-            />
+            {{#if (eq slot.format 'atom')}}
+              <span
+                class='markdown-bfm-loading markdown-bfm-loading--inline'
+                aria-hidden='true'
+                data-test-markdown-bfm-loading-inline
+              />
+            {{else}}
+              <span
+                class='markdown-bfm-loading markdown-bfm-loading--inline-embed
+                  markdown-bfm-loading--{{slot.format}}'
+                style={{slot.style}}
+                aria-hidden='true'
+                data-test-markdown-bfm-loading-inline
+              />
+            {{/if}}
           {{else}}
             <div
               class='markdown-bfm-loading markdown-bfm-loading--block markdown-bfm-loading--{{slot.format}}'
@@ -573,16 +586,31 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           {{/if}}
         {{else}}
           {{#if (eq slot.kind 'inline')}}
-            <span
-              class='markdown-bfm-broken markdown-bfm-broken--inline'
-              title={{slot.url}}
-              data-test-markdown-bfm-unresolved-inline
-            >
-              <span class='markdown-bfm-broken-label'>
-                <LinkOffIcon width='12' height='12' />
-                {{slot.typeName}}
+            {{#if (eq slot.format 'atom')}}
+              <span
+                class='markdown-bfm-broken markdown-bfm-broken--inline'
+                title={{slot.url}}
+                data-test-markdown-bfm-unresolved-inline
+              >
+                <span class='markdown-bfm-broken-label'>
+                  <LinkOffIcon width='12' height='12' />
+                  {{slot.typeName}}
+                </span>
               </span>
-            </span>
+            {{else}}
+              <span
+                class='markdown-bfm-broken markdown-bfm-broken--inline-embed
+                  markdown-bfm-broken--{{slot.format}}'
+                style={{slot.style}}
+                title={{slot.url}}
+                data-test-markdown-bfm-unresolved-inline
+              >
+                <span class='markdown-bfm-broken-label'>
+                  <LinkOffIcon width='14' height='14' />
+                  {{slot.typeName}}
+                </span>
+              </span>
+            {{/if}}
           {{else}}
             <div
               class='markdown-bfm-broken markdown-bfm-broken--block markdown-bfm-broken--{{slot.format}}'
@@ -925,6 +953,14 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           vertical-align: middle;
         }
 
+        /* Inline embeds with an explicit non-atom format flow inline-block so a
+           sized card sits in the text run without the flex shrink behavior the
+           atom pill relies on. */
+        .markdown-bfm-card-slot--inline-embed {
+          display: inline-block;
+          vertical-align: middle;
+        }
+
         .markdown-bfm-card-slot--block {
           display: block;
         }
@@ -967,6 +1003,13 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           height: 1.2em;
           vertical-align: middle;
           border-radius: var(--boxel-border-radius-sm);
+        }
+        /* Inline embeds with an explicit non-atom format share the block
+           footprint classes but flow inline. */
+        .markdown-bfm-loading--inline-embed {
+          display: inline-block;
+          max-width: 100%;
+          vertical-align: middle;
         }
         .markdown-bfm-loading--block {
           display: block;
@@ -1026,6 +1069,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           padding: 0 var(--boxel-sp-5xs);
           vertical-align: middle;
           border-radius: var(--boxel-border-radius-sm);
+        }
+        /* Inline embeds with an explicit non-atom format share the block
+           footprint classes but flow inline. */
+        .markdown-bfm-broken--inline-embed {
+          display: inline-flex;
+          vertical-align: middle;
         }
         .markdown-bfm-broken--block {
           display: flex;

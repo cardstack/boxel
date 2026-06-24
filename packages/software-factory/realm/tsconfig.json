@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "moduleResolution": "node16",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
@@ -22,11 +23,21 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../../base/*"],
-      "@cardstack/boxel-ui": ["../../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../../boxel-ui/addon/*"],
+      "https://cardstack.com/base/*": [
+        "../../base/*.gts",
+        "../../base/*.ts",
+        "../../base/*.d.ts",
+        "../../base/*"
+      ],
+      "@cardstack/boxel-ui": ["../../boxel-ui/addon/declarations"],
+      "@cardstack/boxel-ui/*": ["../../boxel-ui/addon/declarations/*"],
       "@cardstack/host/*": ["../../host/app/*"],
-      "@cardstack/host/tests/*": ["../../host/tests/*"],
+      "@cardstack/host/tests/*": [
+        "../../host/tests/*",
+        "../../host/tests/*.ts",
+        "../../host/tests/*.gts",
+        "../../host/tests/*/index.gts"
+      ],
       "*": ["../../host/types/*"]
     },
     "types": ["@cardstack/local-types", "qunit", "qunit-dom"]

@@ -1,9 +1,9 @@
 name: Warm test Docker images
 description: >-
-  Pull the test suite's third-party Docker images (synapse, smtp4dev, postgres)
-  from this repo's GHCR mirror and retag them to their canonical Docker Hub
-  names, so the services start from a local image instead of racing an
-  unauthenticated Docker Hub pull. Docker Hub rate-limits / connection timeouts
+  Pull the test suite's third-party Docker images (synapse, smtp4dev, postgres,
+  mock-oauth2-server, caddy) from this repo's GHCR mirror and retag them to
+  their canonical names, so the services start from a local image instead of
+  racing an unauthenticated registry pull. Docker Hub rate-limits / connection timeouts
   from the shared runner IP pool are the cause of the recurring "Failed to reach
   Synapse" host-test failures. The mirror is populated by the
   mirror-test-images workflow. Best-effort: callers should set continue-on-error
@@ -29,11 +29,12 @@ runs:
         # on a fork PR the token can't read them, so the warm misses and the
         # services fall back to Docker Hub (handled by dockerPull's retry).
         echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
-        # warm <canonical-docker-hub-ref> <ghcr-package-suffix:tag>. These
-        # versions must match what runs at test time and what the mirror
-        # publishes: packages/matrix/support/synapse/index.ts, packages/matrix/
-        # docker/smtp4dev.ts, mise-tasks/infra/ensure-pg, packages/postgres/
-        # scripts/start-pg.sh, and .github/workflows/mirror-test-images.yml.
+        # warm <canonical-ref> <ghcr-package-suffix:tag>. These versions must
+        # match what runs at test time and what the mirror publishes:
+        # packages/matrix/support/synapse/index.ts, packages/matrix/docker/
+        # smtp4dev.ts, packages/matrix/docker/mock-oauth2.ts, mise-tasks/infra/
+        # ensure-pg, packages/postgres/scripts/start-pg.sh, and
+        # .github/workflows/mirror-test-images.yml.
         warm() {
           canonical="$1"
           mirror="$GHCR_PREFIX/$2"
@@ -52,3 +53,5 @@ runs:
         warm matrixdotorg/synapse:v1.126.0 synapse:v1.126.0
         warm rnwood/smtp4dev:v3.1          smtp4dev:v3.1
         warm postgres:16.3                 postgres:16.3
+        warm ghcr.io/navikt/mock-oauth2-server:4.0.1 mock-oauth2-server:4.0.1
+        warm caddy:2.10.2-alpine           caddy:2.10.2-alpine

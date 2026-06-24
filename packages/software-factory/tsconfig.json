@@ -40,9 +40,10 @@
     "./scripts/**/*.ts",
     "./src/**/*",
     "./tests/**/*",
+    "./realm/**/*",
     "./playwright.config.ts",
     "./playwright.global-setup.ts",
     "./playwright.global-teardown.ts"
   ],
-  "exclude": ["./test-fixtures/**", "./realm/**/*"]
+  "exclude": ["./test-fixtures/**", "./realm/*.test.gts"]
 }

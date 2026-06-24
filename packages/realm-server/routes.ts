@@ -38,9 +38,11 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleDelegateSession from './handlers/handle-delegate-session.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
 import handleSearchV2 from './handlers/handle-search-v2.ts';
@@ -84,6 +86,11 @@ export type CreateRoutesArgs = {
   realmServerSecretSeed: string;
   grafanaSecret: string;
   realmSecretSeed: string;
+  // Shared secret authenticating ai-bot's delegation requests (CS-11552).
+  // Optional: when unset, the /_delegate-session endpoint responds 503 rather
+  // than minting tokens, so the feature stays inert until a secret is
+  // provisioned.
+  aiBotDelegationSecret?: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
@@ -305,6 +312,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleRealmAuth(args),
   );
+  // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
+  // inside the handler because the signature covers the request body.
+  router.post('/_delegate-session', handleDelegateSession(args));
   router.get(
     '/_check-boxel-domain-availability',
     jwtMiddleware(args.realmSecretSeed),
@@ -324,6 +334,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_unlisted-realm-path',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnlistedRealmPathRequest(args),
   );
   // Matrix tests don't need the GitHub PR integration, and skipping this route
   // keeps the realm server from loading Octokit's ESM entrypoint during boot.

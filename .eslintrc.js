@@ -2,6 +2,7 @@
 
 const {
   NO_COMPILATION_REQUIRED_TS_SELECTORS,
+  CJS_GLOBALS_IN_ESM,
 } = require('./eslint/erasable-syntax-selectors.cjs');
 
 const DATA_TEST_SELECTORS = [
@@ -87,6 +88,18 @@ module.exports = {
           ...NO_COMPILATION_REQUIRED_TS_SELECTORS,
           ...DATA_TEST_SELECTORS,
         ],
+      },
+    },
+    {
+      // Ban the CommonJS-only `__dirname`/`__filename` globals in TS source under
+      // `src/` and `scripts/` — the surface that runs or gets imported as native
+      // ESM, where they are `undefined`. Bundle-only modules opt out per-line.
+      // Packages with their own `root: true` ESLint config don't inherit this and
+      // must re-declare it; among the native-ESM (`type: module`) packages only
+      // `ai-bot` is `root: true`, and it does (see its `.eslintrc.cjs`).
+      files: ['**/src/**/*.{ts,mts}', '**/scripts/**/*.{ts,mts}'],
+      rules: {
+        'no-restricted-globals': ['error', ...CJS_GLOBALS_IN_ESM],
       },
     },
   ],

@@ -19,6 +19,7 @@ export { registerUser } from '#realm-server/synapse';
 export {
   matrixURL,
   matrixRegistrationSecret,
+  realmSecretSeed,
 } from '#realm-server/tests/helpers/index';
 import {
   PgQueuePublisher,

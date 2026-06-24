@@ -1,10 +1,9 @@
 import type { Command } from 'commander';
 import { readFileSync } from 'fs';
-import {
-  getProfileManager,
-  NO_ACTIVE_PROFILE_ERROR,
-  type ProfileManager,
-} from '../../lib/profile-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
@@ -18,12 +17,17 @@ export interface WriteResult {
 
 export interface WriteCommandOptions {
   profileManager?: ProfileManager;
+  /** Pre-resolved realm secret seed for administrative (seed) auth. */
+  realmSecretSeed?: string;
+  /** @internal Test hook: supply an already-constructed authenticator. */
+  authenticator?: RealmAuthenticator;
 }
 
 interface WriteCliOptions {
   realm: string;
   file?: string;
   json?: boolean;
+  realmSecretSeed?: boolean;
 }
 
 /**
@@ -34,7 +38,9 @@ interface WriteCliOptions {
  * including the `Buffer` subclass) is sent with `application/octet-stream`,
  * which the realm-server routes to `upsertBinaryFile` and writes verbatim.
  *
- * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
+ * Auth is resolved via `resolveRealmAuthenticator`: a realm secret seed (when
+ * supplied) mints a JWT locally as the realm-server bot; otherwise the active
+ * Matrix profile's per-realm JWT is used.
  */
 export async function write(
   realmUrl: string,
@@ -42,14 +48,16 @@ export async function write(
   content: string | Uint8Array,
   options?: WriteCommandOptions,
 ): Promise<WriteResult> {
-  let pm = options?.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    return {
-      ok: false,
-      error: NO_ACTIVE_PROFILE_ERROR,
-    };
+  let resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options?.realmSecretSeed,
+    profileManager: options?.profileManager,
+    authenticator: options?.authenticator,
+  });
+  if (!resolution.ok) {
+    return { ok: false, error: resolution.error };
   }
+  let authenticator = resolution.authenticator;
 
   let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
   let isBinary = typeof content !== 'string';
@@ -72,7 +80,7 @@ export async function write(
   }
 
   try {
-    let response = await pm.authedRealmFetch(url, {
+    let response = await authenticator.authedRealmFetch(url, {
       method: 'POST',
       headers: isBinary
         ? { 'Content-Type': SupportedMimeType.OctetStream }
@@ -129,8 +137,27 @@ export function registerWriteCommand(parent: Command): void {
       '--file <filepath>',
       'Read content from a local file instead of STDIN',
     )
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: WriteCliOptions) => {
+      // Resolve the seed before consuming stdin: when content arrives on stdin
+      // and --realm-secret-seed prompts, both would contend for stdin. Wrapped
+      // so a seed-resolution throw (e.g. non-TTY stdin) is a clean error.
+      let realmSecretSeed: string | undefined;
+      try {
+        realmSecretSeed = await resolveRealmSecretSeed(
+          opts.realmSecretSeed === true,
+        );
+      } catch (err) {
+        stderr(
+          `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+        );
+        process.exit(1);
+      }
+
       let content: string | Uint8Array;
       if (opts.file) {
         // Refuse a source/destination binary-classification mismatch
@@ -175,7 +202,9 @@ export function registerWriteCommand(parent: Command): void {
 
       let result: WriteResult;
       try {
-        result = await write(opts.realm, filePath, content);
+        result = await write(opts.realm, filePath, content, {
+          realmSecretSeed,
+        });
       } catch (err) {
         stderr(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,

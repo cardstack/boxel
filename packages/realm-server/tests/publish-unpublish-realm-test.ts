@@ -182,6 +182,38 @@ module(basename(import.meta.filename), function () {
         `);
       });
 
+      test('POST /_publish-realm rejects a hand-picked subdirectory under the owner space', async function (assert) {
+        // `mango` is the owner, so `mango.localhost` is their own space; the path
+        // here is neither the realm name nor a server-issued unlisted slug, so
+        // the unguessable unlisted path can't be chosen via a direct API call.
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL:
+                'http://mango.localhost:4445/hand-picked-path/',
+            }),
+          );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.ok(
+          response.text.includes(
+            'must be the realm name or the server-issued unlisted link',
+          ),
+          'error explains the path restriction',
+        );
+      });
+
       test('POST /_publish-realm can publish realm successfully', async function (assert) {
         let response = await request
           .post('/_publish-realm')

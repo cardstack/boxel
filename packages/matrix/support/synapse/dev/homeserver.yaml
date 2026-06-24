@@ -112,3 +112,37 @@ templates:
 experimental_features:
   msc3575_enabled: true
   msc3874_enabled: true
+
+# BEGIN_GOOGLE_OIDC
+# Google sign-in is activated locally by setting GOOGLE_OAUTH_CLIENT_ID and
+# GOOGLE_OAUTH_CLIENT_SECRET in the developer's shell before starting Synapse.
+# Without those env vars, packages/matrix/support/synapse/index.ts strips this
+# entire block so Synapse boots cleanly for unrelated dev work.
+#
+# To enable Google sign-in locally:
+#   1. Create a Google Cloud OAuth 2.0 client (Web application).
+#   2. Add http://localhost:8008/_synapse/client/oidc/callback as an authorized
+#      redirect URI.
+#   3. Export GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in your
+#      shell, then restart Synapse.
+sso:
+  # Without this allowlist Synapse refuses to redirect back to the host's URL
+  # after a successful SSO sign-in and renders its built-in success page
+  # instead — which surfaces as the browser sitting on `/oidc/callback` with
+  # no further activity.
+  client_whitelist:
+    - "https://localhost:4200/"
+    - "http://localhost:4200/"
+oidc_providers:
+  - idp_id: google
+    idp_name: "Google"
+    idp_brand: "google"
+    issuer: "https://accounts.google.com/"
+    client_id: "{{GOOGLE_OAUTH_CLIENT_ID}}"
+    client_secret: "{{GOOGLE_OAUTH_CLIENT_SECRET}}"
+    scopes: ["openid", "email", "profile"]
+    allow_existing_users: true
+    user_mapping_provider:
+      module: boxel_oidc_mapping_provider.BoxelOidcMappingProvider
+      config: {}
+# END_GOOGLE_OIDC

@@ -93,6 +93,59 @@ function normalizeProtocol(protocol: string): string {
   return protocol.replace(/:\/*$/, '');
 }
 
+// Character set for the machine-generated path segment of an "unlisted link"
+// publish target (`<username>.<spaceDomain>/<slug>/`). Lowercase letters and
+// digits only — safe as a URL path segment with no escaping — with the visually
+// ambiguous characters removed (i, l, o, 0, 1) so a link read aloud or copied by
+// hand is less error-prone.
+const OBSCURE_SLUG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz';
+const OBSCURE_SLUG_DIGITS = '23456789';
+const OBSCURE_SLUG_CHARSET = OBSCURE_SLUG_ALPHABET + OBSCURE_SLUG_DIGITS;
+
+// Length of a generated slug. 16 characters over a 31-symbol alphabet is ~79
+// bits of entropy — unguessable in the "even if the page is public, the URL is
+// the secret" sense (a la a Google Doc link).
+export const OBSCURE_SLUG_LENGTH = 16;
+
+function randomBytes(length: number): Uint8Array {
+  let cryptoObj = (
+    globalThis as { crypto?: { getRandomValues?: (a: Uint8Array) => void } }
+  ).crypto;
+  if (!cryptoObj?.getRandomValues) {
+    throw new Error(
+      'A secure random source (crypto.getRandomValues) is required to generate an unlisted link',
+    );
+  }
+  let bytes = new Uint8Array(length);
+  cryptoObj.getRandomValues(bytes);
+  return bytes;
+}
+
+// Picks `count` characters uniformly from `charset` using rejection sampling so
+// there is no modulo bias toward the earlier characters of the alphabet.
+function randomChars(charset: string, count: number): string {
+  let max = Math.floor(256 / charset.length) * charset.length;
+  let out = '';
+  while (out.length < count) {
+    for (let byte of randomBytes(count - out.length)) {
+      if (byte < max) {
+        out += charset[byte % charset.length];
+        if (out.length === count) {
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Generates an unguessable path-segment slug for an "unlisted link" publish
+// target. The whole string is drawn from a URL-path-safe alphabet so it needs no
+// escaping in the published-realm URL.
+export function generateObscureSlug(): string {
+  return randomChars(OBSCURE_SLUG_CHARSET, OBSCURE_SLUG_LENGTH);
+}
+
 export function resolvePublishedRealmUrl(
   target: PublishTargetSpec,
   ctx: PublishedRealmUrlContext = {},

@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   asExpressions,
+  deriveRealmName,
   insert,
   insertPermissions,
   PUBLISHED_DIRECTORY_NAME,
@@ -102,7 +103,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     let ownerUserId = `@${owner}:localhost`;
     let realmURL = await createRealmFor(ownerUserId);
     let realmPath = new URL(realmURL).pathname.split('/').filter(Boolean);
-    let publishedRealmURL = `http://${owner}.localhost:4445/published-${uuidv4()}/`;
+    // Publishing to the owner's own space is restricted to the realm-name path
+    // (the "Your Boxel Space" target) or a server-issued unlisted slug, so use
+    // the realm name here.
+    let publishedRealmURL = `http://${owner}.localhost:4445/${deriveRealmName(
+      realmURL,
+    )}/`;
     let unrelatedRealmURL = `http://papaya.localhost:4445/unrelated-${uuidv4()}/`;
 
     let user = await insertUser(
@@ -272,6 +278,20 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await query(
       context.dbAdapter,
       insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+    );
+
+    let unlisted = asExpressions({
+      source_realm_url: realmURL,
+      slug: 'deleteslugexample',
+      owner_user_id: ownerUserId,
+    });
+    await query(
+      context.dbAdapter,
+      insert(
+        'unlisted_realm_paths',
+        unlisted.nameExpressions,
+        unlisted.valueExpressions,
+      ),
     );
 
     // Phase 3: source realm is mounted lazily. The publish handler
@@ -599,6 +619,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       'claimed domains are soft deleted',
     );
 
+    let unlistedPaths = (await context.dbAdapter.execute(
+      `SELECT slug FROM unlisted_realm_paths WHERE source_realm_url = '${realmURL}'`,
+    )) as { slug: string }[];
+    assert.strictEqual(
+      unlistedPaths.length,
+      0,
+      'unlisted-link slug is removed so a recreated realm cannot reuse it',
+    );
+
     assert.notOk(
       context.testRealmServer.testingOnlyRealms.find(
         (realm) => realm.url === realmURL,
@@ -617,7 +646,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     let owner = `mango-${uuidv4()}`;
     let ownerUserId = `@${owner}:localhost`;
     let realmURL = await createRealmFor(ownerUserId);
-    let publishedRealmURL = `http://${owner}.localhost:4445/published-${uuidv4()}/`;
+    let publishedRealmURL = `http://${owner}.localhost:4445/${deriveRealmName(
+      realmURL,
+    )}/`;
 
     await insertUser(
       context.dbAdapter,

@@ -219,6 +219,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
+export const aiBotDelegationSecret = `delegation shared secret for tests`;
 
 function getMatrixRegistrationSecret(): string {
   let secret =
@@ -1337,6 +1338,7 @@ export async function runTestRealmServer({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1486,6 +1488,7 @@ export async function runTestRealmServerWithRealms({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -2689,6 +2692,7 @@ async function buildBaseRealmTemplate(
       realmServerSecretSeed,
       realmSecretSeed,
       grafanaSecret,
+      aiBotDelegationSecret,
       matrixRegistrationSecret,
       realmsRootPath: dirSync().name,
       dbAdapter,

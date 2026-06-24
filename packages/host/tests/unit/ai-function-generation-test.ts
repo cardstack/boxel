@@ -187,6 +187,124 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
+  test(`surfaces defaultOptions as description hint (not enum constraint) for function-form enumField config`, async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: enumField } = enumModule;
+
+    const richOptions = [
+      { value: 'critical', label: 'Critical' },
+      { value: 'high', label: 'High' },
+    ];
+    // function-form with rich defaultOptions — extracts .value
+    const RichDefaultField = enumField(StringField, {
+      options: function () {
+        return richOptions;
+      },
+      defaultOptions: richOptions,
+    });
+    // function-form with bare-primitive defaultOptions
+    const BareDefaultField = enumField(StringField, {
+      options: function () {
+        return ['a', 'b'];
+      },
+      defaultOptions: ['a', 'b'],
+    });
+    // function-form with empty defaultOptions — no enum emitted
+    const EmptyDefaultField = enumField(StringField, {
+      options: function () {
+        return [];
+      },
+      defaultOptions: [],
+    });
+
+    class TestCard extends CardDef {
+      @field richDefault = contains(RichDefaultField);
+      @field bareDefault = contains(BareDefaultField);
+      @field emptyDefault = contains(EmptyDefaultField);
+    }
+
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
+    assert.deepEqual(schema, {
+      attributes: {
+        type: 'object',
+        properties: {
+          ...cardDefAttributesProperties,
+          richDefault: {
+            type: 'string',
+            description: 'Typical values: "critical", "high"',
+            examples: ['critical', 'high'],
+          },
+          bareDefault: {
+            type: 'string',
+            description: 'Typical values: "a", "b"',
+            examples: ['a', 'b'],
+          },
+          emptyDefault: { type: 'string' },
+        },
+      },
+      relationships: cardDefRelationships,
+    });
+  });
+
+  test(`ignores defaultOptions when options is a static array (emits hard enum, not hint)`, async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: enumField } = enumModule;
+
+    // defaultOptions is silently ignored when options is a static array —
+    // static options are always resolved at schema-generation time, so a hard
+    // enum constraint is correct and defaultOptions would be redundant.
+    const StaticWithDefault = enumField(StringField, {
+      options: ['x', 'y'],
+      defaultOptions: ['x', 'y'],
+    });
+
+    class TestCard extends CardDef {
+      @field staticWithDefault = contains(StaticWithDefault);
+    }
+
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
+    assert.deepEqual(schema, {
+      attributes: {
+        type: 'object',
+        properties: {
+          ...cardDefAttributesProperties,
+          staticWithDefault: { type: 'string', enum: ['x', 'y'] },
+        },
+      },
+      relationships: cardDefRelationships,
+    });
+  });
+
+  test(`omits enum for function-form enumField config with no defaultOptions`, async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: enumField } = enumModule;
+
+    const NoDefaultField = enumField(StringField, {
+      options: function () {
+        return ['x', 'y'];
+      },
+    });
+
+    class TestCard extends CardDef {
+      @field noDefault = contains(NoDefaultField);
+    }
+
+    let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
+    assert.deepEqual(schema, {
+      attributes: {
+        type: 'object',
+        properties: {
+          ...cardDefAttributesProperties,
+          noDefault: { type: 'string' },
+        },
+      },
+      relationships: cardDefRelationships,
+    });
+  });
+
   test(`generates a simple compliant schema for nested types`, async function (assert) {
     let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
