@@ -9,16 +9,16 @@ import {
   createTestProfileDir,
   setupTestProfile,
   uniqueRealmName,
+  realmSecretSeed,
   TEST_REALM_SERVER_URL,
   TEST_USERNAME,
 } from '../helpers/integration.ts';
 import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 
-// The test realm server signs JWTs with this seed (see helpers/integration.ts),
-// and grants `@<TEST_USERNAME>:localhost` the `realm-owner` permission. The
-// publish endpoint authorizes the token's `user` as realm-owner, so a
-// seed-minted server token impersonating that owner is what we assert works.
-const TEST_REALM_SECRET_SEED = `shhh! it's a secret`;
+// The test realm server signs JWTs with `realmSecretSeed` and grants
+// `@<TEST_USERNAME>:localhost` the `realm-owner` permission. The publish
+// endpoint authorizes the token's `user` as realm-owner, so a seed-minted
+// server token impersonating that owner is what we assert works.
 const OWNER_USER_ID = `@${TEST_USERNAME}:localhost`;
 
 let profileManager: ProfileManager;
@@ -58,7 +58,7 @@ describe('realm publish with seed-based auth (integration)', () => {
     let emptyProfile = createTestProfileDir();
     try {
       let result = await publishRealm(sourceUrl, publishedUrl, {
-        realmSecretSeed: TEST_REALM_SECRET_SEED,
+        realmSecretSeed: realmSecretSeed,
         asUser: OWNER_USER_ID,
         profileManager: emptyProfile.profileManager,
         force: true, // skip the publishability gate (noop prerenderer → error docs)
@@ -73,7 +73,7 @@ describe('realm publish with seed-based auth (integration)', () => {
     } finally {
       // Clean up via the same seed path (also exercises /_unpublish-realm).
       await unpublishRealm(publishedUrl, {
-        realmSecretSeed: TEST_REALM_SECRET_SEED,
+        realmSecretSeed: realmSecretSeed,
         asUser: OWNER_USER_ID,
         tolerateMissing: true,
       });
@@ -94,7 +94,7 @@ describe('realm publish with seed-based auth (integration)', () => {
       // source realm — the server must refuse.
       await expect(
         publishRealm(sourceUrl, publishedUrl, {
-          realmSecretSeed: TEST_REALM_SECRET_SEED,
+          realmSecretSeed: realmSecretSeed,
           asUser: '@nobody-not-an-owner:localhost',
           profileManager: emptyProfile.profileManager,
           force: true,
