@@ -22,7 +22,6 @@ export interface QueryFieldMeta {
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
-export const RenderedHtmlResourceType = 'rendered-html';
 export const CssResourceType = 'css';
 export const SearchEntryResourceType = 'search-entry';
 export const HtmlResourceType = 'html';
@@ -32,7 +31,6 @@ export type Resource =
   | ModuleResource
   | CardResource
   | PrerenderedCardResource
-  | RenderedHtmlResource
   | CssResource
   | SearchEntryResource
   | HtmlResource
@@ -90,18 +88,6 @@ export type CardResourceMeta = Meta & {
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
-  // Set by the server on an HTML-backed result to mark this `card` as
-  // identity-only: identity + a `rendered-html` relationship, with the live
-  // serialization deliberately withheld (no `attributes`; hydration fetches it
-  // on demand). The authoritative wire signal that a consumer must not treat
-  // this resource as a complete instance — see `isIdentityOnlyCardResource`.
-  identityOnly?: boolean;
-  // The ancestor type this result's HTML was rendered as, echoed on an
-  // identity-only `card` so a consumer renders the hydrated/fallback card as
-  // the same type as its HTML sibling. A full live `card` never carries this
-  // (it ships the standard live wireformat); it rides only on identity-only
-  // results.
-  renderType?: CodeRef;
   // Set on a field-limited serialization: the names of the fields it carries.
   // Presence marks the resource sparse — distinguishing "only these fields
   // were loaded" from "a full card whose other fields happen to be empty" —
@@ -120,9 +106,6 @@ export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
   queryFieldDefs?: Record<string, QueryFieldMeta>;
-  // See CardResourceMeta.identityOnly — a file-meta result can likewise be
-  // HTML-backed and identity-only.
-  identityOnly?: boolean;
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
@@ -138,11 +121,6 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
-  } & {
-    // The card's rendering, when the server resolves this row to prerendered
-    // HTML. A reserved platform key (see RenderedHtmlResourceType) that can
-    // never collide with a userland @field name.
-    'rendered-html'?: Relationship;
   };
   meta: CardResourceMeta;
   links?: {
@@ -156,8 +134,6 @@ export interface FileMetaResource {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
-  } & {
-    'rendered-html'?: Relationship;
   };
   meta: FileMetaResourceResourceMeta;
   links?: {
@@ -165,33 +141,7 @@ export interface FileMetaResource {
   };
 }
 
-// One prerendered presentation of a card/file (a single format per response).
-// Its `id` is the bare card/file URL — the same id as the `card`/`file-meta`
-// resource it renders; `type` is what distinguishes them. The scoped CSS the
-// rendering needs travels as first-class `css` resources linked through
-// `styles` (deduped in `included` by identity).
-export interface RenderedHtmlResource {
-  id: string;
-  type: typeof RenderedHtmlResourceType;
-  attributes: {
-    html: string;
-    cardType: string;
-    iconHtml?: string;
-    isError?: boolean;
-  };
-  relationships: {
-    styles: {
-      data: { type: typeof CssResourceType; id: string }[];
-    };
-  };
-  // The ancestor type the HTML was rendered as (echoed from the request's
-  // resolved render type).
-  meta?: {
-    renderType?: CodeRef;
-  };
-}
-
-// A scoped stylesheet referenced by a `rendered-html` resource. The scoped-CSS
+// A scoped stylesheet referenced by an `html` rendering. The scoped-CSS
 // URL base64-embeds the whole stylesheet, so it travels exactly once here in
 // `attributes.href` (the host loads it via `loader.import`); the `id` is a
 // stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
@@ -351,11 +301,8 @@ export {
   isCardFields,
   isMeta,
   isRelationship,
-  isRenderedHtmlResource,
   isCssResource,
   isIconResource,
-  isIdentityOnlyCardResource,
-  isIdentityOnlyFileMetaResource,
   isSearchEntryResource,
   isHtmlResource,
   isSparseItemResource,

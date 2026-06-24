@@ -30,8 +30,8 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import Settings from '@cardstack/boxel-icons/settings';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
-import { KanbanColumnField } from './kanban-column';
-import { KanbanBoardPlacement } from './kanban-board-placement';
+import { KanbanColumnField } from './kanban-column.gts';
+import { KanbanBoardPlacement } from './kanban-board-placement.gts';
 
 class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   @tracked isSidebarOpen = false;

@@ -153,8 +153,8 @@ interface MarkdownEmbedOptions {
   // 'inline' produces `:card[URL]`, 'block' produces `::card[URL]`.
   // Default: 'block'.
   kind?: 'inline' | 'block';
-  // Size specifier appended after `|` in block embeds (e.g. 'fitted 250x40',
-  // 'isolated', 'strip'). Ignored for inline embeds.
+  // Size specifier appended after `|` (e.g. 'fitted 250x40', 'isolated',
+  // 'embedded', 'atom', 'strip'). Honored for both inline and block embeds.
   size?: string;
 }
 
@@ -168,14 +168,12 @@ export function markdownEmbedForCard(
     return '';
   }
   let kind = options?.kind ?? 'block';
-  if (kind === 'inline') {
-    return `:card[${card.id}]`;
-  }
   let size = options?.size;
+  let prefix = kind === 'inline' ? ':card' : '::card';
   if (size) {
-    return `::card[${card.id} | ${size}]`;
+    return `${prefix}[${card.id} | ${size}]`;
   }
-  return `::card[${card.id}]`;
+  return `${prefix}[${card.id}]`;
 }
 
 interface MarkdownEmbedsOptions extends MarkdownEmbedOptions {

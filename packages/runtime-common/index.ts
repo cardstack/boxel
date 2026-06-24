@@ -862,8 +862,6 @@ export type {
   CardCollectionDocument,
   FileMetaCollectionDocument,
   LinkableCollectionDocument,
-  UnifiedSearchCollectionDocument,
-  UnifiedSearchIncludedResource,
   SearchEntryCollectionDocument,
   SearchEntryIncludedResource,
   SearchEntryResults,
