@@ -2,16 +2,23 @@
 // `@context.prerenderedCardSearchComponent` and onto the v2
 // `@context.searchResultsComponent` surface.
 //
-// A usage migrates when its `<:response>` body is a direct `{{#each}}` over the
-// result array that renders the per-item component, the query is a simple path,
-// and `@format` is static. The legacy `@query`/`@format`/`@realms`/`@cardUrls`
-// args fold into a single `search-entry`-rooted query, built by a generated
-// getter that wraps the incoming v1 `Query` through `searchEntryWireQueryFromQuery`.
+// A usage migrates when its `@query`/`@realms`/`@cardUrls` are simple paths. The
+// legacy args fold into a `search-entry`-rooted query built by a generated
+// getter (wrapping the v1 `Query` through `searchEntryWireQueryFromQuery`); a
+// static or dynamic `@format` binds through the query's `htmlQuery` (a dynamic
+// format guarded by `isValidPrerenderedHtmlFormat`, mirroring base CardsGrid).
 //
-// Anything that reaches past that shape — the result array handed to a child
-// component, per-card fields with no v2 mapping (`cardType`/`iconHtml`/…), a
-// dynamic `@format`, a non-path `@query` — is left untouched and reported, so it
-// can be migrated by hand.
+// A `<:response>` body that only iterates the result list and reads v2-native
+// per-row fields (`url`/`isError`/`component`) is rewritten minimally. A body
+// that yields the row onward, reaches into legacy-only fields (`cardType`/…), or
+// hands the whole list to other markup (a child component, …) is migrated by
+// feeding `results.entries` through the legacy-shape array adapter
+// (`searchEntriesToPrerenderedCards`), so the body keeps working under the old
+// field names.
+//
+// Genuinely un-mechanizable shapes — a non-path `@query`/`@realms`, an
+// unsupported named block, a non-path/non-static `@format` — are left untouched
+// and reported for hand migration.
 
 import * as etr from 'ember-template-recast';
 import * as ContentTag from 'content-tag';
@@ -39,6 +46,11 @@ const RUNTIME_COMMON = '@cardstack/runtime-common';
 const OLD_PATH = `@context.${OLD_MEMBER}`;
 const NEW_PATH = `@context.${NEW_MEMBER}`;
 const GETTER_BASE = 'searchResultsQuery';
+// Legacy-shape array adapter (runtime-common) the codemod emits so a migrated
+// body keeps reading the old per-row field names; the dynamic-format guard
+// mirrors the base CardsGrid getter.
+const ARRAY_SHIM = 'searchEntriesToPrerenderedCards';
+const FORMAT_GUARD = 'isValidPrerenderedHtmlFormat';
 
 // The legacy component args this codemod understands. Any other `@arg` means a
 // shape we don't model — bail out and report rather than silently drop it.
@@ -63,8 +75,14 @@ interface GetterSpec {
   queryExpr: string;
   realmsExpr?: string;
   cardUrlsExpr?: string;
-  // Only set for a non-default (non-`fitted`) format.
+  // Only set for a non-default (non-`fitted`) static format.
   format?: string;
+  // Set for a dynamic format (a `this.`/`@arg` path) — bound through the query
+  // getter guarded by `isValidPrerenderedHtmlFormat`.
+  formatExpr?: string;
+  // The migrated body feeds `results.entries` through the legacy-shape array
+  // adapter (`searchEntriesToPrerenderedCards`) instead of rewriting each field.
+  usesArrayShim?: boolean;
 }
 
 export function transformContextSearch(
@@ -302,12 +320,20 @@ function tryTransformInvocation(
   }
 
   let format: string | undefined;
+  let formatExpr: string | undefined;
   if (argByName.has('@format')) {
     let value = staticString(argByName.get('@format'));
-    if (value == null) {
-      return skip('@format is not a static string');
+    if (value != null) {
+      format = value;
+    } else {
+      let expr = pathAttrToTs(argByName.get('@format'));
+      if (!expr) {
+        return skip(
+          '@format is neither a static string nor a simple this./@arg path',
+        );
+      }
+      formatExpr = expr;
     }
-    format = value;
   }
 
   // --- blocks ---
@@ -330,68 +356,52 @@ function tryTransformInvocation(
   }
   let responseParam = responseBlock.blockParams[0];
 
-  // The response body must be a single `{{#each <responseParam>}}` and nothing
-  // else, and the array must not escape elsewhere (e.g. into a child component).
+  // Decide how to migrate the <:response> body. A single direct
+  // `{{#each <param>}}` whose item only touches v2-native fields
+  // (`url`/`isError`/`component`) is rewritten minimally. Anything else — a body
+  // that yields the row onward, reaches into legacy-only fields, or hands the
+  // whole list to other markup (a child component, etc.) — is migrated by
+  // feeding `results.entries` through the legacy-shape array adapter, so the
+  // body keeps working verbatim with the old field names.
   let significant = significantChildren(responseBlock);
-  if (
-    significant.length !== 1 ||
-    significant[0].type !== 'BlockStatement' ||
-    significant[0].path?.original !== 'each'
-  ) {
-    return skip(
-      'the <:response> result list is passed to other markup instead of a direct {{#each}}',
-    );
-  }
-  let eachBlock = significant[0];
-  if (eachBlock.params?.[0]?.original !== responseParam) {
-    return skip('the {{#each}} does not iterate the <:response> result list');
-  }
-  if (countPathReferences(responseBlock, responseParam) !== 1) {
-    return skip(
-      'the <:response> result list is referenced outside its {{#each}} (passed to other markup)',
-    );
-  }
+  let cleanEach =
+    significant.length === 1 &&
+    significant[0].type === 'BlockStatement' &&
+    significant[0].path?.original === 'each' &&
+    significant[0].params?.[0]?.original === responseParam &&
+    countPathReferences(responseBlock, responseParam) === 1;
 
-  let itemParam = eachBlock.program?.blockParams?.[0];
-  if (!itemParam) {
-    return skip('the {{#each}} does not yield an item');
-  }
-
-  // Per-item field access: only `component` / `url` / `isError` map to v2.
-  let badFields = new Set<string>();
-  let passesWholeItem = false;
-  walkGlimmer(eachBlock.program, (node: any) => {
-    if (
-      node.type === 'PathExpression' &&
-      node.head?.type === 'VarHead' &&
-      node.head.name === itemParam
-    ) {
-      if (node.tail.length === 0) {
-        passesWholeItem = true;
-      } else if (!ALLOWED_ITEM_FIELDS.has(node.tail[0])) {
-        badFields.add(node.tail.join('.'));
-      }
+  let useShim = true;
+  if (cleanEach) {
+    let itemParam = significant[0].program?.blockParams?.[0];
+    if (itemParam) {
+      let badFields = new Set<string>();
+      let passesWholeItem = false;
+      walkGlimmer(significant[0].program, (node: any) => {
+        if (
+          node.type === 'PathExpression' &&
+          node.head?.type === 'VarHead' &&
+          node.head.name === itemParam
+        ) {
+          if (node.tail.length === 0) {
+            passesWholeItem = true;
+          } else if (!ALLOWED_ITEM_FIELDS.has(node.tail[0])) {
+            badFields.add(node.tail.join('.'));
+          }
+        }
+        if (
+          node.type === 'ElementNode' &&
+          node.tag.startsWith(`${itemParam}.`) &&
+          node.tag.slice(itemParam.length + 1) !== 'component'
+        ) {
+          badFields.add(node.tag);
+        }
+      });
+      useShim = passesWholeItem || badFields.size > 0;
     }
-    if (
-      node.type === 'ElementNode' &&
-      node.tag.startsWith(`${itemParam}.`) &&
-      node.tag.slice(itemParam.length + 1) !== 'component'
-    ) {
-      badFields.add(node.tag);
-    }
-  });
-  if (passesWholeItem) {
-    return skip(`the {{#each}} body passes the whole ${itemParam} item onward`);
-  }
-  if (badFields.size > 0) {
-    return skip(
-      `the {{#each}} body reaches into per-card field(s) with no v2 mapping: ${[
-        ...badFields,
-      ].join(', ')}`,
-    );
   }
 
-  // --- all checks passed: mutate ---
+  // --- mutate ---
   let getterName = uniqueName(GETTER_BASE, usedGetterNames);
   getterSpecs.push({
     templateIndex,
@@ -400,6 +410,8 @@ function tryTransformInvocation(
     realmsExpr,
     cardUrlsExpr,
     format: format && format !== 'fitted' ? format : undefined,
+    formatExpr,
+    usesArrayShim: useShim,
   });
 
   // Move the component reference to the v2 member.
@@ -409,20 +421,6 @@ function tryTransformInvocation(
     element.tag = NEW_PATH;
   }
 
-  // Rewrite `<responseParam>` (the array) → `results.entries`, key `url` → `id`,
-  // and per-item `.url` → `.id`, reusing the existing each subtree.
-  eachBlock.params[0] = b.path('results.entries');
-  retargetEachKey(eachBlock);
-  replacePaths(
-    eachBlock.program,
-    (p: any) =>
-      p.head?.type === 'VarHead' &&
-      p.head.name === itemParam &&
-      p.tail.length === 1 &&
-      Boolean(ITEM_FIELD_RENAMES[p.tail[0]]),
-    (p: any) => b.path(`${itemParam}.${ITEM_FIELD_RENAMES[p.tail[0]]}`),
-  );
-
   // Args: keep any non-`@` attributes, point `@query` at the getter.
   let keptAttrs = (element.attributes ?? []).filter(
     (a: any) => !a.name.startsWith('@'),
@@ -431,6 +429,39 @@ function tryTransformInvocation(
 
   // Blocks → a single default block yielding `results`.
   element.blockParams = ['results'];
+  let bodyChildren: any[];
+  if (useShim) {
+    // Replace every reference to the <:response> array with the adapted list,
+    // leaving the rest of the body (a `{{#each}}` over it, child-component
+    // hand-offs, `.length`, …) verbatim — the rows it sees keep the legacy
+    // field names, so per-card field access and `{{yield row}}` still work.
+    replacePaths(
+      responseBlock,
+      (p: any) => p.head?.type === 'VarHead' && p.head.name === responseParam,
+      (p: any) =>
+        p.tail.length === 0
+          ? b.sexpr(b.path(ARRAY_SHIM), [b.path('results.entries')])
+          : b.path(`results.entries.${p.tail.join('.')}`),
+    );
+    bodyChildren = responseBlock.children ?? [];
+  } else {
+    // Minimal: iterate `results.entries`, key `url` → `id`, per-item `.url` → `.id`.
+    let eachBlock = significant[0];
+    let itemParam = eachBlock.program.blockParams[0];
+    eachBlock.params[0] = b.path('results.entries');
+    retargetEachKey(eachBlock);
+    replacePaths(
+      eachBlock.program,
+      (p: any) =>
+        p.head?.type === 'VarHead' &&
+        p.head.name === itemParam &&
+        p.tail.length === 1 &&
+        Boolean(ITEM_FIELD_RENAMES[p.tail[0]]),
+      (p: any) => b.path(`${itemParam}.${ITEM_FIELD_RENAMES[p.tail[0]]}`),
+    );
+    bodyChildren = [eachBlock];
+  }
+
   let newChildren: any[] = [b.text('\n      ')];
   if (loadingBlock) {
     newChildren.push(
@@ -443,7 +474,7 @@ function tryTransformInvocation(
       b.text('\n      '),
     );
   }
-  newChildren.push(eachBlock, b.text('\n    '));
+  newChildren.push(...bodyChildren, b.text('\n    '));
   element.children = newChildren;
 
   return true;
@@ -471,7 +502,12 @@ function applyTsEdits(
   let placeholder = gjsToPlaceholderJS(source);
   let ast = recastParseJs(placeholder, filename);
 
-  ensureRuntimeCommonImport(ast, filename);
+  let extraValueImports: string[] = [];
+  if (getterSpecs.some((s) => s.usesArrayShim))
+    extraValueImports.push(ARRAY_SHIM);
+  if (getterSpecs.some((s) => s.formatExpr))
+    extraValueImports.push(FORMAT_GUARD);
+  ensureRuntimeCommonImport(ast, filename, extraValueImports);
 
   let classByTemplate = mapTemplatesToClasses(ast);
   for (let spec of getterSpecs) {
@@ -489,10 +525,15 @@ function applyTsEdits(
   return { ok: true, output: placeholderJSToGJS(printed) };
 }
 
-function ensureRuntimeCommonImport(ast: any, filename: string): void {
+function ensureRuntimeCommonImport(
+  ast: any,
+  filename: string,
+  extraValueImports: string[] = [],
+): void {
   let body = ast.program.body;
+  let valueImports = [ADAPTER, ...extraValueImports];
   let snippet = recastParseJs(
-    `import { ${ADAPTER}, type ${QUERY_TYPE} } from '${RUNTIME_COMMON}';`,
+    `import { ${valueImports.join(', ')}, type ${QUERY_TYPE} } from '${RUNTIME_COMMON}';`,
     filename,
   ).program.body[0];
 
@@ -532,7 +573,29 @@ function ensureRuntimeCommonImport(ast: any, filename: string): void {
 
 function buildGetter(spec: GetterSpec, filename: string): any {
   let lines: string[] = [];
-  if (spec.format) {
+  if (spec.formatExpr) {
+    // Dynamic format: bind it through `htmlQuery` only when it is a valid
+    // prerendered format, mirroring the base CardsGrid getter.
+    lines.push(`  get ${spec.name}(): ${QUERY_TYPE} {`);
+    lines.push(`    let query = ${ADAPTER}(${spec.queryExpr});`);
+    lines.push(`    if (!${FORMAT_GUARD}(${spec.formatExpr})) {`);
+    lines.push(`      return {`);
+    lines.push(`        ...query,`);
+    if (spec.realmsExpr) lines.push(`        realms: ${spec.realmsExpr},`);
+    if (spec.cardUrlsExpr)
+      lines.push(`        cardUrls: ${spec.cardUrlsExpr},`);
+    lines.push(`      };`);
+    lines.push(`    }`);
+    lines.push(`    return {`);
+    lines.push(`      ...query,`);
+    if (spec.realmsExpr) lines.push(`      realms: ${spec.realmsExpr},`);
+    if (spec.cardUrlsExpr) lines.push(`      cardUrls: ${spec.cardUrlsExpr},`);
+    lines.push(
+      `      filter: { ...query.filter, eq: { ...query.filter?.eq, htmlQuery: { eq: { format: ${spec.formatExpr} } } } },`,
+    );
+    lines.push(`    };`);
+    lines.push(`  }`);
+  } else if (spec.format) {
     lines.push(`  get ${spec.name}(): ${QUERY_TYPE} {`);
     lines.push(`    let query = ${ADAPTER}(${spec.queryExpr});`);
     lines.push(`    return {`);

@@ -102,3 +102,47 @@ export interface SearchResultsComponentSignature {
     default: [SearchResultsYield];
   };
 }
+
+// ---------------------------------------------------------------------------
+// Legacy-shape adapter (migration aid)
+// ---------------------------------------------------------------------------
+
+// The legacy per-row view-model the deprecated `prerenderedCardSearchComponent`
+// yielded (`PrerenderedCardLike`). Card source migrated to
+// `searchResultsComponent` keeps reading these field names by wrapping each v2
+// `RenderableSearchEntryLike` through the adapters below, so rows handed to
+// child components / named blocks need no edits.
+export interface LegacyPrerenderedCard {
+  url: string;
+  isError: boolean;
+  realmUrl: string;
+  component: RenderableSearchEntryLike['component'];
+  cardType?: string;
+  iconHtml?: string;
+  usedRenderType?: ResolvedCodeRef;
+  hasHtml?: boolean;
+}
+
+// Adapt one v2 search entry to the legacy field names.
+export function searchEntryToPrerenderedCard(
+  entry: RenderableSearchEntryLike,
+): LegacyPrerenderedCard {
+  return {
+    url: entry.id,
+    isError: entry.isError,
+    realmUrl: entry.realmUrl,
+    component: entry.component,
+    cardType: entry.html?.cardType,
+    iconHtml: entry.iconHtml,
+    usedRenderType: entry.html?.renderType,
+    hasHtml: Boolean(entry.html?.html),
+  };
+}
+
+// Adapt a list of v2 search entries — for cards that hand the whole array to a
+// child component that expects the legacy shape.
+export function searchEntriesToPrerenderedCards(
+  entries: RenderableSearchEntryLike[],
+): LegacyPrerenderedCard[] {
+  return entries.map(searchEntryToPrerenderedCard);
+}

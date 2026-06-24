@@ -175,6 +175,35 @@ export class CardList extends GlimmerComponent<Sig> {
 }
 `;
 
+// A dynamic `@format` (a passed-in `@arg`) — folded into the query getter and
+// guarded by `isValidPrerenderedHtmlFormat`, mirroring base CardsGrid.
+const DYNAMIC_FORMAT = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; format: string; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Grid extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent
+      @query={{@query}}
+      @format={{@format}}
+      @realms={{@realms}}
+    >
+      <:response as |cards|>
+        {{#each cards key='url' as |card|}}
+          <card.component />
+        {{/each}}
+      </:response>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
 // No old affordance at all — must be left byte-for-byte untouched.
 const NO_USAGE = `import GlimmerComponent from '@glimmer/component';
 
@@ -318,32 +347,62 @@ module(basename(import.meta.filename), function () {
     );
   });
 
-  test('reports (does not transform) a usage that hands the result array to a child component', function (assert) {
-    let { status, reasons, output } = transformContextSearch(
+  test('migrates a usage that hands the result array to a child component via the array adapter', function (assert) {
+    let { status, output, reasons } = transformContextSearch(
       COMPLEX_PASSES_CARDS,
       {
         filename: 'app-card.gts',
       },
     );
-    assert.strictEqual(status, 'skipped');
-    assert.true(
-      reasons.some((r) => /child component|passed|iterate/i.test(r)),
-      `reason explains why: ${reasons.join('; ')}`,
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.notOk(
+      output.includes('prerenderedCardSearchComponent'),
+      'old member removed',
     );
     assert.true(
-      output.includes('prerenderedCardSearchComponent'),
-      'left untouched for hand migration',
+      output.includes('@context.searchResultsComponent'),
+      'uses the v2 member',
+    );
+    assert.true(
+      output.includes('searchEntriesToPrerenderedCards'),
+      `child receives the adapted array: ${output}`,
+    );
+    assert.true(
+      /import\s*\{[^}]*searchEntriesToPrerenderedCards/.test(output),
+      'imports the array adapter from runtime-common',
     );
   });
 
-  test('reports a usage that reaches into per-card fields with no v2 mapping', function (assert) {
-    let { status, reasons } = transformContextSearch(COMPLEX_PER_CARD_FIELDS, {
-      filename: 'card-list.gts',
-    });
-    assert.strictEqual(status, 'skipped');
+  test('migrates a usage that reaches into legacy per-card fields via the array adapter', function (assert) {
+    let { status, output, reasons } = transformContextSearch(
+      COMPLEX_PER_CARD_FIELDS,
+      {
+        filename: 'card-list.gts',
+      },
+    );
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.notOk(output.includes('prerenderedCardSearchComponent'));
     assert.true(
-      reasons.some((r) => /cardType|iconHtml|hasHtml|field/i.test(r)),
-      `reason names the unsupported field(s): ${reasons.join('; ')}`,
+      output.includes('searchEntriesToPrerenderedCards'),
+      'wraps the rows in the legacy-shape adapter',
+    );
+    // The legacy field reads survive verbatim on the adapted rows.
+    assert.true(/cardType/.test(output), `keeps the cardType read: ${output}`);
+    assert.true(/iconHtml/.test(output), 'keeps the iconHtml read');
+  });
+
+  test('migrates a dynamic @format into a guarded query getter', function (assert) {
+    let { status, output, reasons } = transformContextSearch(DYNAMIC_FORMAT, {
+      filename: 'grid.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.true(
+      output.includes('isValidPrerenderedHtmlFormat(this.args.format)'),
+      `guards the dynamic format: ${output}`,
+    );
+    assert.true(
+      /htmlQuery:\s*\{\s*eq:\s*\{\s*format:\s*this\.args\.format/.test(output),
+      'binds the dynamic format through htmlQuery',
     );
   });
 
