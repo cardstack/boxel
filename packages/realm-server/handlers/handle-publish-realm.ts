@@ -614,38 +614,44 @@ export default function handlePublishRealm({
         },
       );
 
-      // Indexing/prerender is not awaited in the request: the handler returns
-      // 202 (pending) and the client polls <publishedRealmURL>_readiness-check.
-      // Awaiting a full index + prerender (pool-bound) here would hold the HTTP
-      // request open for the entire indexing duration.
+      // Mount the published realm on this instance so it is served as soon as
+      // the 202 returns, but do NOT await its index/prerender — that runs in
+      // the background and clients poll <publishedRealmURL>_readiness-check.
+      // ensureMounted publishes the realm into virtualNetwork synchronously, so
+      // a request arriving right after this 202 (the readiness poll, or a
+      // visitor) resolves to the realm rather than 404ing; awaiting the full
+      // index + prerender (pool-bound) instead would hold the HTTP request open
+      // for the entire indexing duration. Sibling instances pick the realm up
+      // via the realm_registry NOTIFY and lazy-mount on their first request.
       //
-      // If this realm is already mounted on this instance (a republish), its
-      // #startedUp is already resolved, so _readiness-check would otherwise
-      // return 200 immediately — before the swapped files are reindexed.
-      // Kick a fire-and-forget full index here: publishFullIndex registers
-      // its in-flight deferred synchronously, so Realm.indexing() (which
-      // readinessCheck awaits) reflects this reindex until it completes.
-      // A single pass suffices for the correct og:title — Realm.fullIndex
-      // invalidates the cached RealmInfo before the pass, and parseRealmInfo
-      // reads the realm name from the swapped realm.json via its on-disk
-      // overlay, so /index re-bakes with the right name without a second
-      // pass. (This job coalesces with the durability enqueue above.)
-      //
-      // For a realm not mounted here (new publish, or a peer instance), the
-      // durability enqueue above plus lazy-mount-on-first-request handle the
-      // index; #startedUp resolves only after that from-scratch pass.
-      let mountedPublishedRealm = reconciler.mounted.get(publishedRealmURL);
-      if (mountedPublishedRealm) {
-        void mountedPublishedRealm
-          .fullIndex(userInitiatedPriority, { clearLastModified: true })
-          .catch((err: unknown) => {
-            log.error(
-              `background publish reindex failed for ${publishedRealmURL}: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-          });
-      }
+      // For a new publish, mount's start() runs a from-scratch index and
+      // #startedUp resolves only after it completes — readinessCheck awaits
+      // that. For a republish the realm is already mounted with a resolved
+      // #startedUp, so start() won't re-run; kick an explicit reindex of the
+      // swapped files. fullIndex invalidates the cached RealmInfo before the
+      // pass, so the og:title re-bakes from the swapped realm.json (read via
+      // parseRealmInfo's disk overlay) in a single pass; publishFullIndex
+      // registers its in-flight deferred synchronously, so Realm.indexing()
+      // (which readinessCheck also awaits) reflects the reindex until it
+      // completes. (Both index paths coalesce with the durability enqueue.)
+      let wasMounted = reconciler.mounted.has(publishedRealmURL);
+      reconciler
+        .lookupOrMount(publishedRealmURL)
+        .then((publishedRealm) => {
+          if (wasMounted && publishedRealm) {
+            return publishedRealm.fullIndex(userInitiatedPriority, {
+              clearLastModified: true,
+            });
+          }
+          return undefined;
+        })
+        .catch((err: unknown) => {
+          log.error(
+            `background mount/reindex failed for ${publishedRealmURL}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        });
 
       // The source realm's `RealmInfo.lastPublishedAt` map is built
       // from `realm_registry` rows joined on `source_url = sourceRealmURL`,

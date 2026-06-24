@@ -1347,6 +1347,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     'Published realm: theme icon links after _publish-realm',
     function (hooks) {
       let testRealmHttpServer: Server;
+      let testRealmServer: Awaited<
+        ReturnType<typeof runTestRealmServer>
+      >['testRealmServer'];
       let request: SuperTest<Test>;
       let dbAdapter: PgAdapter;
       let dir: DirResult;
@@ -1365,7 +1368,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           let virtualNetwork = createVirtualNetwork();
           let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
           ensureDirSync(testRealmDir);
-          ({ testRealmHttpServer } = await runTestRealmServer({
+          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
             fileSystem: {},
@@ -1518,11 +1521,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             );
           }
 
-          // `_publish-realm` returns 202 before indexing finishes. The
-          // published realm's readiness check lazy-mounts it and awaits
-          // start() + any in-flight index, so this single request blocks until
-          // the swapped files are indexed and the assertions below query
+          // `_publish-realm` returns 202 before indexing finishes. Drive a
+          // reconcile pass to mount the published realm, then hit its readiness
+          // check, which awaits start() + any in-flight index — so this blocks
+          // until the swapped files are indexed and the assertions below query
           // indexed content.
+          await testRealmServer.testingOnlyReconcile();
           let readinessResponse = await request
             .get(`${publishedRealmPath}_readiness-check`)
             .set('Host', publishedRealmHost);
