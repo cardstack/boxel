@@ -141,6 +141,16 @@ export class Job<T> {
   constructor(id: number, notifier: Deferred<T>) {
     this.id = id;
     this.notifier = notifier;
+    // The result promise is live from the moment the job is published,
+    // before any caller reads `.done` and attaches a handler. A job that
+    // settles to a rejection in that window — or whose result is never
+    // awaited at all — would otherwise surface as an unhandled rejection
+    // and abort the process. The runner is the source of truth for job
+    // failures (it logs and reports them), so a dropped `.done` rejection
+    // loses no signal. This no-op keeps the promise permanently handled;
+    // callers that do read `.done` still receive the rejection, because a
+    // promise delivers to every attached handler.
+    this.notifier.promise.catch(() => {});
   }
   get done(): Promise<T> {
     return this.notifier.promise;
