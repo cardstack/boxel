@@ -1233,6 +1233,36 @@ export function internalKeyFor(
   }
 }
 
+// Like `internalKeyFor`, but returns every equivalent spelling of the key —
+// the RRI-prefix, real-URL, and virtual-alias forms. Type predicates compare
+// a single stored `types` value against a key; index rows written before
+// references were canonicalized to RRI may hold the alias or real-URL form,
+// so matching all spellings keeps base-typed cards/files findable until the
+// persisted data is migrated or reindexed.
+export function internalKeysFor(
+  ref: CodeRef,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  if (!('type' in ref)) {
+    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
+    let module: string = trimExecutableExtension(rri(resolved));
+    return virtualNetwork
+      .equivalentURLForms(module)
+      .map((form) => `${form}/${ref.name}`);
+  }
+  switch (ref.type) {
+    case 'ancestorOf':
+      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
+        (key) => `${key}/ancestor`,
+      );
+    case 'fieldOf':
+      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
+        (key) => `${key}/fields/${ref.field}`,
+      );
+  }
+}
+
 export function codeRefFromInternalKey(
   internalKey: string | null | undefined,
 ): ResolvedCodeRef | undefined {

@@ -170,6 +170,29 @@ export class VirtualNetwork {
   }
 
   /**
+   * All known spellings of a (resolved) URL: the URL itself, its RRI-prefix
+   * form, and any registered virtual-alias form. Lets callers match index
+   * data persisted before references were canonicalized to RRI — which may
+   * hold the virtual-alias or real-URL spelling of a key — against the
+   * RRI-form key produced today. Returns just the input for URLs that belong
+   * to no registered realm, so normal realms are unaffected.
+   */
+  equivalentURLForms(url: string): string[] {
+    let forms = new Set<string>([url]);
+    forms.add(this.unresolveURL(url));
+    let virtual: string | undefined;
+    try {
+      virtual = this.resolveURLMapping(url, 'real-to-virtual');
+    } catch {
+      virtual = undefined;
+    }
+    if (virtual) {
+      forms.add(virtual);
+    }
+    return [...forms];
+  }
+
+  /**
    * Resolve `reference` (relative path, prefix-form RRI, or URL string)
    * to a canonical URL object using `relativeTo` as the base when
    * `reference` is relative. Composes `resolveRRI` + `toURL`, with a
