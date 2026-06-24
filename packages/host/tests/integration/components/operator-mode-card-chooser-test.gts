@@ -11,7 +11,7 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import {
   baseRealm,
@@ -492,13 +492,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
 
-  // Skipped: under the per-slug Traefik HTTP/2 topology, a transport-layer
-  // stall on the base realm-root endpoints (the response is built server-side
-  // but never delivered to the browser) races a login-flow reset that clears
-  // realm info, so the "Base Workspace" tile intermittently never resolves its
-  // name. The behavior itself is correct, and the server-side request handling
-  // is covered by the realm-server node tests (HEAD + _info).
-  skip(`can specify a card by URL in the card chooser`, async function (assert) {
+  test(`can specify a card by URL in the card chooser`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
