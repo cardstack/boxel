@@ -91,7 +91,7 @@ All helpers return pre-escaped strings — safe to interpolate directly.
 | `fencedCodeBlock(content, language?)`        | Auto-widens the fence past any backtick run in `content`                           |
 | `markdownLinkForCard(card, text?)`           | `[title](card.id)` — empty for null card                                           |
 | `markdownLinksForCards(cards, { style })`    | `style: 'list'` (default, `- [A](id)` per line) or `'inline'` (`[A](id), [B](id)`) |
-| `markdownEmbedForCard(card, { kind, size })` | `:card[id]` (inline) or `::card[id]` / `::card[id \| size]` (block, default)       |
+| `markdownEmbedForCard(card, { kind, size })` | `:card[id]` / `:card[id \| size]` (inline) or `::card[id]` / `::card[id \| size]` (block, default) |
 | `markdownEmbedsForCards(cards, options)`     | Multiple embeds joined by `separator` (default `\n\n` block, `' '` inline)         |
 
 The last four emit BFM card directives — see the `dev-bfm-syntax` skill.

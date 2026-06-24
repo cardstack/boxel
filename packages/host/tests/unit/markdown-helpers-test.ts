@@ -184,11 +184,19 @@ module('Unit | markdown-helpers | card link helpers', function (hooks) {
     );
   });
 
-  test('size specifier is ignored for inline embeds', function (assert) {
+  test('size specifier is honored for inline embeds', function (assert) {
     let card = { id: 'https://example.com/Post/1' };
     assert.strictEqual(
       markdownEmbedForCard(card, { kind: 'inline', size: 'strip' }),
-      ':card[https://example.com/Post/1]',
+      ':card[https://example.com/Post/1 | strip]',
+    );
+  });
+
+  test('inline embed with embedded size', function (assert) {
+    let card = { id: 'https://example.com/Post/1' };
+    assert.strictEqual(
+      markdownEmbedForCard(card, { kind: 'inline', size: 'embedded' }),
+      ':card[https://example.com/Post/1 | embedded]',
     );
   });
 

@@ -592,4 +592,151 @@ module('Integration | rendered-markdown', function (hooks) {
       `loading block inline style includes height: 200px (got "${capturedLoadingStyle}")`,
     );
   });
+
+  test('inline card reference with size spec sets data attributes', async function (assert) {
+    let cardUrl = 'http://example.com/Card/inline-sized';
+    let content = `See :card[${cardUrl} | 400x200] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    let el = document.querySelector(
+      `.markdown-content [data-boxel-bfm-inline-ref="${cardUrl}"]`,
+    );
+    assert.ok(el, 'inline placeholder exists');
+    assert.strictEqual(
+      el?.getAttribute('data-boxel-bfm-format'),
+      'fitted',
+      'format is set to fitted',
+    );
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-width'), '400');
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-height'), '200');
+  });
+
+  test('inline card reference with embedded format sets the format attribute', async function (assert) {
+    let cardUrl = 'http://example.com/Card/inline-embedded';
+    let content = `See :card[${cardUrl} | embedded] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    let el = document.querySelector(
+      `.markdown-content [data-boxel-bfm-inline-ref="${cardUrl}"]`,
+    );
+    assert.ok(el, 'inline placeholder exists');
+    assert.strictEqual(
+      el?.getAttribute('data-boxel-bfm-format'),
+      'embedded',
+      'inline ref carries the embedded format',
+    );
+  });
+
+  test('unresolved embedded inline ref renders with the embedded footprint class', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-inline-embed';
+    let content = `See :card[${cardUrl} | embedded] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved inline did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasClass(
+        'markdown-bfm-broken--embedded',
+        'embedded inline ref carries the embedded footprint class',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasClass(
+        'markdown-bfm-broken--inline-embed',
+        'embedded inline ref flows inline',
+      );
+  });
+
+  test('unresolved fitted inline ref carries inline width/height matching the footprint', async function (assert) {
+    let cardUrl =
+      'http://nonexistent.example.com/Article/missing-inline-fitted';
+    let content = `See :card[${cardUrl} | 400x200] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved inline did not appear' },
+    );
+
+    let brokenInline = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-inline]',
+    ) as HTMLElement | null;
+    assert.ok(brokenInline, 'broken-link inline exists');
+    assert
+      .dom(brokenInline)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted inline ref carries the fitted footprint class',
+      );
+    let style = brokenInline?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
+  test('plain inline ref (no spec) keeps the atom pill fallback', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Pet/plain-inline';
+    let content = `See :card[${cardUrl}] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved inline did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasClass(
+        'markdown-bfm-broken--inline',
+        'a plain inline ref defaults to the atom pill',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotHaveClass(
+        'markdown-bfm-broken--embedded',
+        'a plain inline ref is not given a non-atom footprint',
+      );
+  });
 });
