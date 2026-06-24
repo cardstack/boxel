@@ -15,7 +15,7 @@ import { task } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
-import { merge } from 'lodash-es';
+import { merge, mergeWith } from 'lodash-es';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
@@ -974,7 +974,11 @@ export default class StoreService extends Service implements StoreInterface {
       omitQueryFields: true,
     });
     if (patch.attributes) {
-      doc.data.attributes = merge(doc.data.attributes, patch.attributes);
+      doc.data.attributes = mergeWith(
+        doc.data.attributes,
+        patch.attributes,
+        (_dest, src) => (Array.isArray(src) ? src : undefined),
+      );
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(

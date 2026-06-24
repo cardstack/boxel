@@ -215,6 +215,54 @@ module('Integration | commands | patch-instance', function (hooks) {
     );
   });
 
+  test<TestContextWithSave>('patching a containsMany field with a shorter array fully replaces it (no stale trailing items)', async function (assert) {
+    let patchInstanceCommand = new PatchCardInstanceCommand(
+      commandService.commandContext,
+      {
+        cardType: PersonDef,
+      },
+    );
+    let url = new URL(`${testRealmURL}Person/hassan`);
+    let saves = 0;
+    this.onSave((saveURL) => {
+      if (saveURL.href === url.href) {
+        saves++;
+      }
+    });
+
+    await patchInstanceCommand.execute({
+      cardId: `${testRealmURL}Person/hassan`,
+      patch: { attributes: { nickNames: ['Paper', 'Pinky', 'Pix'] } },
+    });
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for the first save',
+    });
+
+    let savesAfterGrow = saves;
+    await patchInstanceCommand.execute({
+      cardId: `${testRealmURL}Person/hassan`,
+      patch: { attributes: { nickNames: ['Paper'] } },
+    });
+    await waitUntil(() => saves > savesAfterGrow, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for the second save',
+    });
+
+    let result = await indexQuery.instance(url);
+    let instance =
+      result && result.type === 'instance' ? result.instance : undefined;
+    assert.ok(instance, 'instance payload is present');
+    if (!instance) {
+      throw new Error('expected instance payload');
+    }
+    assert.deepEqual(
+      instance.attributes?.nickNames,
+      ['Paper'],
+      'the containsMany array was fully replaced, not index-merged',
+    );
+  });
+
   test<TestContextWithSave>('can patch a linksTo field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
