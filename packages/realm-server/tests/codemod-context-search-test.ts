@@ -418,8 +418,12 @@ module(basename(import.meta.filename), function () {
       `child receives the adapted array: ${output}`,
     );
     assert.true(
+      /function searchEntriesToPrerenderedCards\b/.test(output),
+      `emits the adapter as a module-local function: ${output}`,
+    );
+    assert.notOk(
       /import\s*\{[^}]*searchEntriesToPrerenderedCards/.test(output),
-      'imports the array adapter from runtime-common',
+      'does not import the adapter from runtime-common',
     );
   });
 

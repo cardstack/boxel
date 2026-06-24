@@ -46,9 +46,11 @@ const RUNTIME_COMMON = '@cardstack/runtime-common';
 const OLD_PATH = `@context.${OLD_MEMBER}`;
 const NEW_PATH = `@context.${NEW_MEMBER}`;
 const GETTER_BASE = 'searchResultsQuery';
-// Legacy-shape array adapter (runtime-common) the codemod emits so a migrated
-// body keeps reading the old per-row field names; the dynamic-format guard
-// mirrors the base CardsGrid getter.
+// Name of the legacy-shape array adapter the codemod emits as a module-local
+// function in each migrated card, so the body keeps reading the old per-row
+// field names without baking a legacy shape into the platform (and the migrated
+// card stays self-contained). The dynamic-format guard is a real runtime-common
+// helper, mirroring the base CardsGrid getter.
 const ARRAY_SHIM = 'searchEntriesToPrerenderedCards';
 const FORMAT_GUARD = 'isValidPrerenderedHtmlFormat';
 
@@ -503,11 +505,16 @@ function applyTsEdits(
   let ast = recastParseJs(placeholder, filename);
 
   let extraValueImports: string[] = [];
-  if (getterSpecs.some((s) => s.usesArrayShim))
-    extraValueImports.push(ARRAY_SHIM);
   if (getterSpecs.some((s) => s.formatExpr))
     extraValueImports.push(FORMAT_GUARD);
   ensureRuntimeCommonImport(ast, filename, extraValueImports);
+
+  // Emit the legacy-shape array adapter as a module-local function rather than
+  // importing it from runtime-common, so no legacy shape is baked into the
+  // platform and the migrated card carries everything it needs.
+  if (getterSpecs.some((s) => s.usesArrayShim)) {
+    insertArrayShim(ast, filename);
+  }
 
   let classByTemplate = mapTemplatesToClasses(ast);
   for (let spec of getterSpecs) {
@@ -569,6 +576,42 @@ function ensureRuntimeCommonImport(
       existing.specifiers.push(spec);
     }
   }
+}
+
+// Insert the module-local legacy-shape array adapter once, after the imports.
+// It maps each v2 `entry` to the legacy `PrerenderedCardLike` field names so a
+// migrated body (and the components it hands rows to) keeps working unchanged.
+function insertArrayShim(ast: any, filename: string): void {
+  let body = ast.program.body;
+  if (
+    body.some(
+      (n: any) => n.type === 'FunctionDeclaration' && n.id?.name === ARRAY_SHIM,
+    )
+  ) {
+    return;
+  }
+  let fn = recastParseJs(
+    `function ${ARRAY_SHIM}(entries) {
+  return entries.map((entry) => ({
+    url: entry.id,
+    isError: entry.isError,
+    realmUrl: entry.realmUrl,
+    component: entry.component,
+    cardType: entry.html?.cardType,
+    iconHtml: entry.iconHtml,
+    usedRenderType: entry.html?.renderType,
+    hasHtml: Boolean(entry.html?.html),
+  }));
+}`,
+    filename,
+  ).program.body[0];
+  let lastImport = -1;
+  body.forEach((n: any, i: number) => {
+    if (n.type === 'ImportDeclaration') {
+      lastImport = i;
+    }
+  });
+  body.splice(lastImport + 1, 0, fn);
 }
 
 function buildGetter(spec: GetterSpec, filename: string): any {
