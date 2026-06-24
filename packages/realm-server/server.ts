@@ -104,15 +104,17 @@ export type RealmHttpServer =
   | net.Server;
 
 // Node's HTTP/2 compat layer reports Http2Stream.writable === false on
-// server-side streams whose request method is HEAD (the protocol forbids a
-// body, so the stream is marked non-writable up front). Koa's
-// `ctx.writable` getter delegates to `res.socket.writable`, so for HEAD
-// over h2 it sees `false` and `respond()` bails silently — the response
-// headers never get sent and the client hangs until its timeout.
-// Patching the prototype getter to recognise HEAD-over-h2 streams as
-// writable (when they are otherwise healthy) restores normal HEAD
-// semantics over h2 without disturbing GET/POST or HTTP/1.1. Exported so
-// tests that build their own Koa app pick up the same fix.
+// server-side streams for non-GET requests (HEAD up front; and once the
+// client has half-closed its request side, as QUERY/_info callers do).
+// Koa's `ctx.writable` getter delegates to `res.socket.writable`, so
+// `respond()` sees `false` and bails silently — the response headers never
+// get sent and the client hangs until its timeout. A server-side h2 stream
+// is in fact writable for the response until we end it, independent of the
+// request method or the client's request-side half-close. Patch the
+// prototype getter to treat any healthy (non-destroyed, not-yet-ended) h2
+// stream as writable, restoring response delivery for HEAD, QUERY, etc.
+// without disturbing GET/POST or HTTP/1.1. Exported so tests that build
+// their own Koa app pick up the same fix.
 let koaResponsePatchedForH2 = false;
 export function patchKoaResponseForH2Head() {
   if (koaResponsePatchedForH2) return;
@@ -127,17 +129,11 @@ export function patchKoaResponseForH2Head() {
     get(this: Koa.Response) {
       let res = this.res as unknown as {
         writableEnded?: boolean;
-        req?: { method?: string };
-        stream?: { destroyed?: boolean; closed?: boolean };
+        stream?: { destroyed?: boolean };
       };
       if (res?.writableEnded) return false;
       let stream = res?.stream;
-      if (
-        res?.req?.method === 'HEAD' &&
-        stream &&
-        !stream.destroyed &&
-        !stream.closed
-      ) {
+      if (stream && !stream.destroyed) {
         return true;
       }
       return origWritable!.call(this);
