@@ -214,4 +214,60 @@ test.describe('Live Cards', () => {
       'monaco editor has been updated',
     ).toContain('Replacement');
   });
+
+  // End-to-end coverage of specifying a card type by URL in the card chooser,
+  // against a real realm server (real HTTP + real Matrix login). The host
+  // integration version of this flow is skipped; this is its real-server home.
+  test('can specify a card by URL in the card chooser', async ({ page }) => {
+    let { username } = await createSubscribedUserAndLogin(
+      page,
+      'chooser',
+      serverIndexUrl,
+    );
+
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    await createRealm(page, realmName);
+
+    // Land on the realm's grid so the create-new-card affordance is present.
+    await page.goto(realmURL);
+    await showAllCards(page);
+    await expect(
+      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+    ).toHaveCount(1);
+
+    await page.locator('[data-test-create-new-card-button]').click();
+    await expect(page.locator('[data-test-card-chooser-modal]')).toBeVisible();
+    await expect(page.locator('[data-test-item-button]').first()).toBeVisible();
+
+    // Specify a base-realm card type by its URL.
+    await page
+      .locator('[data-test-search-field]')
+      .fill('https://cardstack.com/base/types/card');
+
+    // The result resolves under the "Base Workspace" realm section.
+    await expect(
+      page.locator(
+        '[data-test-realm-url="https://cardstack.com/base/"][data-test-realm="Base Workspace"]',
+      ),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.locator(
+        '[data-test-realm="Base Workspace"] [data-test-results-count]',
+      ),
+    ).toContainText('1 result');
+    await expect(page.locator('[data-test-item-button]')).toHaveCount(1);
+
+    await page.locator('[data-test-item-button]').click();
+    await expect(
+      page.locator('[data-test-card-chooser-go-button]'),
+    ).toBeEnabled();
+    await page.locator('[data-test-card-chooser-go-button]').click();
+
+    // The chosen type produces a new card on the stack.
+    await expect(
+      page.locator(
+        '[data-test-stack-card-index="1"] [data-test-field="cardInfo-name"]',
+      ),
+    ).toBeVisible();
+  });
 });
