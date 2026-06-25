@@ -1529,7 +1529,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           await testRealmServer.testingOnlyReconcile();
           let readinessResponse = await request
             .get(`${publishedRealmPath}_readiness-check`)
-            .set('Host', publishedRealmHost);
+            .set('Host', publishedRealmHost)
+            .set('Accept', 'application/vnd.api+json');
           if (readinessResponse.status !== 200) {
             throw new Error(
               `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
