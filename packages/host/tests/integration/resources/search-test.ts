@@ -1815,5 +1815,226 @@ module(`Integration | search resource`, function (hooks) {
         'the locally added candidate is not pulled into a matches search',
       );
     });
+
+    test(`a candidate evicted from the Store drops out of the displayed set on the next reactive pass`, async function (assert) {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+
+      await addBookCandidate('books/will-evict', 'Plum', 'Abdel-Rahman');
+      await settled();
+      let candidateId = `${testRealmURL}books/will-evict`;
+      assert.ok(
+        search.instances.map((i) => i.id).includes(rri(candidateId)),
+        'the candidate is displayed before eviction',
+      );
+
+      // Evict from the Store without going through realm DELETE — the reactive
+      // recompute must respond to a Store-level removal on its own, distinct
+      // from the realm-invalidation path which would also re-run the server
+      // search and could mask the recompute under test.
+      let fetchesBefore = fetchCalls;
+      (storeService as any).store.delete(candidateId);
+      await settled();
+
+      assert.notOk(
+        search.instances.map((i) => i.id).includes(rri(candidateId)),
+        'the candidate drops out after a Store eviction',
+      );
+      assert.strictEqual(
+        fetchCalls,
+        fetchesBefore,
+        'no _federated-search fetch fired for the recompute',
+      );
+    });
+
+    test(`a candidate with an unresolvable predicate (unloaded linksTo) is not added`, async function (assert) {
+      // The merge rule is "unresolvable never adds and never removes". This
+      // test pins the "never adds" half: a Post candidate whose `article`
+      // relationship points at a card not in the Store is unresolvable for any
+      // predicate over `article.*`, and so must NOT be merged into the result
+      // set. The symmetric "never removes" guarantee falls out of the same
+      // matcher branch.
+      let postRef = { module: testRRI('post'), name: 'Post' };
+      let query: Query = {
+        filter: { on: postRef, eq: { 'article.cardTitle': 'Any Title' } },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      let serverIds = search.instances.map((i) => i.id);
+
+      await storeService.add(
+        {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}posts/unresolved`,
+            attributes: { cardTitle: 'Lonely Post' },
+            relationships: {
+              article: {
+                links: { self: `${testRealmURL}does/not/exist` },
+              },
+            },
+            meta: { adoptsFrom: postRef },
+          },
+        } as LooseSingleCardDocument,
+        { doNotPersist: true },
+      );
+      await settled();
+
+      assert.deepEqual(
+        search.instances.map((i) => i.id),
+        serverIds,
+        'an unresolvable candidate does not enter the displayed set',
+      );
+      assert.notOk(
+        search.instances
+          .map((i) => i.id)
+          .includes(rri(`${testRealmURL}posts/unresolved`)),
+        'the unresolvable candidate is absent',
+      );
+    });
+
+    test(`a Store candidate outside the query's target realm is not added`, async function (assert) {
+      // Candidate-pool reduction is realm-scoped (`isInTargetRealm`), so a
+      // hydrated card whose id falls outside `realms: [testRealmURL]` must
+      // not surface even when it satisfies the filter — that's another
+      // realm's data and the local search has no authority over it.
+      let otherRealmURL = 'https://other-realm.example/';
+      await storeService.add(
+        {
+          data: {
+            type: 'card',
+            id: `${otherRealmURL}books/foreign`,
+            attributes: {
+              author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
+              editions: 0,
+              pubDate: '2024-01-01',
+            },
+            meta: { adoptsFrom: bookRef },
+          },
+        } as LooseSingleCardDocument,
+        { doNotPersist: true },
+      );
+
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+
+      let ids = search.instances.map((i) => i.id).map(String);
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'only the two in-realm matches are displayed',
+      );
+      assert.notOk(
+        ids.some((id) => id.startsWith(otherRealmURL)),
+        'the candidate outside [testRealmURL] is excluded',
+      );
+    });
+
+    test(`override authority: the corrected set wins on a remove + add in the same pass`, async function (assert) {
+      // The merge must reflect corrections in BOTH directions in a single
+      // recompute — not just one or the other. Editing a server-returned card
+      // out of the filter and surfacing a local-only candidate happen in the
+      // same pass, and the displayed set reflects both.
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(search.instances.length, 2);
+
+      // Same recompute window: drop a server card via a local edit AND
+      // surface a local-only candidate via a Store add.
+      let book1 = storeService.peek(`${testRealmURL}books/1`) as any;
+      book1.author.lastName = 'Changed';
+      await addBookCandidate('books/local-add', 'Local', 'Abdel-Rahman');
+      await settled();
+
+      let ids = search.instances.map((i) => i.id);
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'one server card dropped, one local candidate surfaced — same count, different members',
+      );
+      assert.notOk(
+        ids.includes(rri(`${testRealmURL}books/1`)),
+        'the now-non-matching server card is gone',
+      );
+      assert.ok(
+        ids.includes(rri(`${testRealmURL}books/local-add`)),
+        'the local-only matching candidate is present',
+      );
+    });
+
+    test(`no _federated-search fetch fires for a sequence of Store mutations`, async function (assert) {
+      // Pins the integration-level reactivity rule: every kind of Store
+      // mutation the displayed set responds to (candidate add, in-place edit,
+      // Store eviction) must recompute locally, never via a server round-trip.
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      let fetchesBefore = fetchCalls;
+
+      await addBookCandidate('books/no-fetch-add', 'Adder', 'Abdel-Rahman');
+      await settled();
+
+      let book1 = storeService.peek(`${testRealmURL}books/1`) as any;
+      book1.author.lastName = 'Other';
+      await settled();
+
+      (storeService as any).store.delete(`${testRealmURL}books/no-fetch-add`);
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        fetchesBefore,
+        'no _federated-search fetch was made across the entire mutation sequence',
+      );
+    });
   });
 });
