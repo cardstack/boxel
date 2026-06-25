@@ -392,6 +392,46 @@ export function moduleFrom(ref: CodeRef): string {
   }
 }
 
+// Reduce a module reference to a single canonical key, collapsing every
+// equivalent spelling the VirtualNetwork knows about — a prefix-form RRI
+// (`@cardstack/base/foo`), the real URL it maps to, and any virtual-URL alias
+// registered via `addURLMapping` (e.g. `https://cardstack.com/base/foo`) — so
+// two refs that point at the same module compare equal regardless of how they
+// were written. The client-side counterpart to the server's `internalKeyFor`,
+// extended to also fold `addURLMapping` aliases (which `resolveURL` alone
+// leaves untouched). Used wherever a code ref carried in a query is compared
+// against a ref derived from a loaded module.
+export function canonicalModuleKey(
+  module: string,
+  virtualNetwork: VirtualNetwork,
+): string {
+  let href: string;
+  try {
+    // Resolves a prefix-form RRI to its mapped URL; an absolute URL is parsed
+    // and returned unchanged. Memoized, so this stays cheap on hot paths.
+    href = virtualNetwork.toURLHref(module);
+  } catch {
+    // Unresolvable reference (e.g. a scoped prefix with no mapping): fall back
+    // to the raw form. Exact-string equality already covers the only way two
+    // such refs can be equal.
+    return module;
+  }
+  // `toURLHref` leaves an absolute URL untouched, so a virtual spelling and its
+  // real target (registered via `addURLMapping`) stay distinct without this.
+  // Collapse virtual onto real; real and unmapped URLs pass through.
+  try {
+    let real = virtualNetwork.mapURL(href, 'virtual-to-real');
+    if (real) {
+      href = real.href;
+    }
+  } catch {
+    // `href` wasn't a parseable absolute URL — leave it as resolved.
+  }
+  // Collapse the real URL onto its portable prefix form when a registered realm
+  // prefix matches, so `@scope/…` and the real URL also land on one key.
+  return virtualNetwork.unresolveURL(href);
+}
+
 function exportFrom(ref: CodeRef): string {
   if (!('type' in ref)) {
     return ref.name;

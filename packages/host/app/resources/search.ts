@@ -527,7 +527,10 @@ export class SearchResource<
     // still need the file-meta pool to surface a locally hydrated FileDef. Fall
     // back to the row when the query carries no top-level type ref.
     let filterRef = filter as { on?: CodeRef; type?: CodeRef } | undefined;
-    let isFileSearch = isFileDefCodeRef(filterRef?.on ?? filterRef?.type)
+    let isFileSearch = isFileDefCodeRef(
+      filterRef?.on ?? filterRef?.type,
+      api.virtualNetwork,
+    )
       ? true
       : serverResults.length > 0 && isFileDefInstance(serverResults[0]);
     let candidatePool: (CardDef | FileDef)[] = isFileSearch

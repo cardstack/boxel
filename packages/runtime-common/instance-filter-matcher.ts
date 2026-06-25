@@ -1,6 +1,6 @@
 import { isEqual } from 'lodash-es';
 
-import { getField, identifyCard } from './code-ref.ts';
+import { canonicalModuleKey, getField, identifyCard } from './code-ref.ts';
 import {
   isAnyFilter,
   isCardTypeFilter,
@@ -473,41 +473,6 @@ function codeRefEquals(
     );
   }
   return isEqual(a, b);
-}
-
-// Reduce a module reference to a single canonical key, collapsing every
-// equivalent spelling the VirtualNetwork knows about so two refs that point at
-// the same module compare equal regardless of how they were written.
-function canonicalModuleKey(
-  module: string,
-  virtualNetwork: VirtualNetwork,
-): string {
-  let href: string;
-  try {
-    // Resolves a prefix-form RRI (e.g. `@cardstack/base/card-api`) to its
-    // mapped URL; an absolute URL is returned unchanged.
-    href = virtualNetwork.resolveURL(module, undefined).href;
-  } catch {
-    // Unresolvable reference (e.g. a scoped prefix with no mapping): fall back
-    // to the raw form. The `a.module === b.module` fast path already covered
-    // the only way two such refs can be equal.
-    return module;
-  }
-  // `resolveURL` leaves an absolute URL untouched, so a virtual spelling and
-  // its real target (registered via `addURLMapping`, e.g.
-  // `https://cardstack.com/base/…` ↔ the deployed realm URL) stay distinct.
-  // Collapse virtual onto real here; real and unmapped URLs pass through.
-  try {
-    let real = virtualNetwork.mapURL(href, 'virtual-to-real');
-    if (real) {
-      href = real.href;
-    }
-  } catch {
-    // `href` wasn't a parseable absolute URL — leave it as resolved.
-  }
-  // Collapse the real URL onto its portable prefix form when a registered realm
-  // prefix matches, so `@scope/…` and the real URL also land on one key.
-  return virtualNetwork.unresolveURL(href);
 }
 
 // -- sort comparator ---------------------------------------------------------
