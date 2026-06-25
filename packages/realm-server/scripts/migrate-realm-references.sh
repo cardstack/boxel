@@ -13,12 +13,15 @@
 # so changes can be rolled back with: patch -R -p0 < <name>.patch
 #
 # Usage:
-#   ./migrate-realm-references.sh [--dry-run] [--json-only] <find> <replace> <directory> [<directory> ...]
-#   ./migrate-realm-references.sh [--dry-run] [--json-only] -e <environment> -r <realm> <directory> [<directory> ...]
+#   ./migrate-realm-references.sh [--dry-run] [--json-only] [--exclude <dir>]... <find> <replace> <directory> [<directory> ...]
+#   ./migrate-realm-references.sh [--dry-run] [--json-only] [--exclude <dir>]... -e <environment> -r <realm> <directory> [<directory> ...]
 #
 # Flags:
 #   --dry-run           Preview changes without modifying files
 #   --json-only         Only scan card JSON (skip .gts modules)
+#   --exclude <dir>     Skip directories matching <dir> (by name, any depth).
+#                       Repeatable. e.g. --exclude decommissioned to leave
+#                       moved-aside or backup trees untouched.
 #
 # Shortcut flags:
 #   -e, --environment   development | staging | production
@@ -35,8 +38,9 @@
 # replacement left valid JSON; a parse failure is reported and exits non-zero.
 #
 # Examples:
-#   # Convert the base virtual-alias references to RRI prefix form in card JSON.
-#   ./migrate-realm-references.sh --json-only https://cardstack.com/base/ @cardstack/base/ /persistent
+#   # Convert the base virtual-alias references to RRI prefix form in card JSON,
+#   # skipping moved-aside / backup trees.
+#   ./migrate-realm-references.sh --json-only --exclude decommissioned https://cardstack.com/base/ @cardstack/base/ /persistent
 #
 #   # Shortcut form (deployment-URL references)
 #   ./migrate-realm-references.sh --dry-run -e staging -r catalog /persistent/catalog /persistent/experiments
@@ -64,6 +68,7 @@ ENV=""
 REALM=""
 ERRORS=()
 CHANGED_JSON=()
+EXCLUDE_DIRS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -74,6 +79,10 @@ while [ $# -gt 0 ]; do
     --json-only)
       JSON_ONLY=true
       shift
+      ;;
+    --exclude)
+      EXCLUDE_DIRS+=("$2")
+      shift 2
       ;;
     -e|--environment)
       ENV="$2"
@@ -137,6 +146,7 @@ else
   echo "  -r, --realm        catalog | base | skills | openrouter"
   echo "  --dry-run          Preview changes without modifying files"
   echo "  --json-only        Only scan card JSON (skip .gts modules)"
+  echo "  --exclude <dir>    Skip directories matching <dir> (repeatable)"
   echo ""
   echo "  Environment URL mappings:"
   echo "    development  -> http://localhost:4201/"
@@ -162,6 +172,13 @@ if [ "$JSON_ONLY" = true ]; then
 else
   INCLUDE_ARGS=(--include='*.json' --include='*.gts')
 fi
+
+# Directories to skip (matched by name at any depth), e.g. --exclude
+# decommissioned to leave moved-aside / backup trees untouched.
+EXCLUDE_ARGS=()
+for d in ${EXCLUDE_DIRS[@]+"${EXCLUDE_DIRS[@]}"}; do
+  EXCLUDE_ARGS+=("--exclude-dir=$d")
+done
 
 # If <find> is a URL, extract the path portion for matching path-only references.
 # e.g., https://realms-staging.stack.cards/catalog/ -> /catalog/
@@ -197,9 +214,9 @@ for search_dir in "$@"; do
     [ -n "$file" ] && matching_files+=("$file")
   done < <(
     if [ "$IS_URL" = true ]; then
-      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" "${INCLUDE_ARGS[@]}" 2>/dev/null || true
+      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" "${INCLUDE_ARGS[@]}" ${EXCLUDE_ARGS[@]+"${EXCLUDE_ARGS[@]}"} 2>/dev/null || true
     else
-      grep -rl "${FIND_STR}" "$search_dir" "${INCLUDE_ARGS[@]}" 2>/dev/null || true
+      grep -rl "${FIND_STR}" "$search_dir" "${INCLUDE_ARGS[@]}" ${EXCLUDE_ARGS[@]+"${EXCLUDE_ARGS[@]}"} 2>/dev/null || true
     fi
   )
 

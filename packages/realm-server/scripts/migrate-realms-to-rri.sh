@@ -10,18 +10,18 @@
 # conversion. If a realm regains a virtual alias, add a mapping to MAPPINGS
 # below and it is picked up automatically.
 #
-# Pass-through flags (--dry-run, --json-only) are forwarded to each underlying
-# run; each run writes its own rollback .patch.
+# Pass-through flags (--dry-run, --json-only, --exclude <dir>) are forwarded to
+# each underlying run; each run writes its own rollback .patch.
 #
 # Usage:
-#   ./migrate-realms-to-rri.sh [--dry-run] [--json-only] <directory> [<directory> ...]
+#   ./migrate-realms-to-rri.sh [--dry-run] [--json-only] [--exclude <dir>]... <directory> [<directory> ...]
 #
 # Examples:
-#   # Preview the conversion across a realm data tree (no writes)
-#   ./migrate-realms-to-rri.sh --dry-run --json-only /persistent
+#   # Preview the conversion across /persistent, skipping moved-aside trees
+#   ./migrate-realms-to-rri.sh --dry-run --json-only --exclude decommissioned /persistent
 #
 #   # Apply it
-#   ./migrate-realms-to-rri.sh --json-only /persistent
+#   ./migrate-realms-to-rri.sh --json-only --exclude decommissioned /persistent
 
 set -uo pipefail
 
@@ -41,6 +41,10 @@ while [ $# -gt 0 ]; do
       FLAGS+=("$1")
       shift
       ;;
+    --exclude)
+      FLAGS+=("$1" "$2")
+      shift 2
+      ;;
     -*)
       echo "Unknown flag: $1" >&2
       exit 1
@@ -53,7 +57,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ ${#DIRS[@]} -lt 1 ]; then
-  echo "Usage: $0 [--dry-run] [--json-only] <directory> [<directory> ...]" >&2
+  echo "Usage: $0 [--dry-run] [--json-only] [--exclude <dir>]... <directory> [<directory> ...]" >&2
   exit 1
 fi
 
