@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Client Filter Playground",
+        "summary": "Live demo of the client-side Store filtering step",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../client-filter-playground",
+        "name": "ClientFilterPlayground"
+      }
+    }
+  }
+}
