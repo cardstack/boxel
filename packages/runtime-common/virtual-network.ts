@@ -556,7 +556,7 @@ const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
-export function shouldRetryFetch(url: URL) {
+export function shouldRetryFetch(url: URL): boolean {
   // Env-mode services live at `<service>.<slug>.localhost` and are
   // reached through a local Traefik. The realm-server worker fetches
   // its own realm's `_mtimes` via this hostname on boot, and if Traefik
