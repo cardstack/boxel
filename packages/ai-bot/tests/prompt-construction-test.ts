@@ -235,7 +235,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   },
                   {
                     codeRef: {
-                      module: rri('https://cardstack.com/base/card-api'),
+                      module: rri('@cardstack/base/card-api'),
                       name: 'CardDef',
                     },
                     fields: [],
@@ -294,7 +294,7 @@ File open in code editor: http://localhost:4201/experiments/author.gts
   Inheritance chain:
     1. Address from http://localhost:4201/experiments/author
        Fields: street, city, state
-      2. CardDef from https://cardstack.com/base/card-api
+      2. CardDef from @cardstack/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview
@@ -1947,7 +1947,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -1993,7 +1993,7 @@ Attached Files (files with newer versions don't show their content):
     assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
       systemPromptText.includes(
-        'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
+        'Skill (id: @cardstack/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
@@ -2026,7 +2026,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2245,7 +2245,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2673,7 +2673,7 @@ Attached Files (files with newer versions don't show their content):
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/search-results',
+                      module: '@cardstack/base/search-results',
                       name: 'SearchResults',
                     },
                   },
@@ -2713,7 +2713,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.equal(result[5].role, 'tool');
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
+    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
     assert.equal((result[5].content as string).trim(), expected.trim());
   });
@@ -2854,7 +2854,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -2873,7 +2873,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          id: '@cardstack/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -3104,7 +3104,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -3280,7 +3280,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -3299,7 +3299,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          id: '@cardstack/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -3453,7 +3453,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',

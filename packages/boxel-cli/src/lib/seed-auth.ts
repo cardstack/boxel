@@ -47,6 +47,42 @@ export function deriveRealmServerUrl(realmUrl: string): string {
   return new URL(realmUrl).origin + '/';
 }
 
+/**
+ * Derive the realm owner's Matrix user id from a realm URL. The CLI-visible
+ * realm URL convention is `https://<host>/<owner>/<realm>/`, so the first path
+ * segment is the owner's username and the host maps to the Matrix domain (the
+ * same mapping `deriveHostFromRealmUrl` applies). Used to mint an owner-scoped
+ * realm-server token for owner-gated admin endpoints (e.g. realm publish).
+ */
+export function deriveOwnerUserId(realmUrl: string): string {
+  // A realm URL is `https://<host>/<owner>/<realm>/` — two path segments, the
+  // first being the owner. Require both so a non-realm URL (a 1-segment path or
+  // the server root) doesn't silently yield a bogus owner.
+  const segments = new URL(realmUrl).pathname.split('/').filter(Boolean);
+  if (segments.length < 2) {
+    throw new Error(
+      `Cannot derive realm owner: ${realmUrl} is not a <host>/<owner>/<realm>/ realm URL`,
+    );
+  }
+  return `@${segments[0]}:${deriveHostFromRealmUrl(realmUrl)}`;
+}
+
+/**
+ * Mint a realm-server (admin) token signed with the seed, for the given user.
+ * The realm server verifies it with the same seed and reads `{ user,
+ * sessionRoom }` (realm-server `utils/jwt.ts` `RealmServerTokenClaim`). This is
+ * the seed-mode counterpart to a Matrix-login `/_server-session` token.
+ */
+export function mintRealmServerToken(
+  seed: string,
+  user: string,
+  opts: { sessionRoom?: string; expiresIn?: jwt.SignOptions['expiresIn'] } = {},
+): string {
+  return jwt.sign({ user, sessionRoom: opts.sessionRoom ?? '' }, seed, {
+    expiresIn: opts.expiresIn ?? '7d',
+  });
+}
+
 function normalizeRealmUrl(realmUrl: string): string {
   try {
     const u = new URL(realmUrl);

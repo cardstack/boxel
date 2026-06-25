@@ -19,7 +19,7 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
 import {
   type Query,
-  baseRealm,
+  baseRealmRRI,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
   searchEntryWireQueryFromQuery,
@@ -322,7 +322,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       sort: [
         {
           on: {
-            module: `${baseRealm.url}card-api`,
+            module: `${baseRealmRRI}card-api`,
             name: 'CardDef',
           },
           by: 'cardTitle',

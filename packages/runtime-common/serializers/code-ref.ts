@@ -142,7 +142,23 @@ function codeRefAdjustments(
     return new URL(ref, relativeTo).href;
   };
   if (!isUrlLike(codeRef.module)) {
-    // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
+    // A scoped RRI (e.g. `@cardstack/base/card-api`) is already the canonical,
+    // deployment-independent portable form. Preserve it verbatim rather than
+    // resolving it to a concrete realm URL: resolution maps the prefix to the
+    // serializing realm's real base URL, baking an environment-specific (and
+    // possibly cross-origin) URL into the stored card and defeating the
+    // portability the RRI exists to provide. (A URL-form alias is left as-is
+    // by `resolveURL`, so this matches how the alias form round-trips.)
+    if (vn?.isRegisteredPrefix(codeRef.module)) {
+      let module: string = codeRef.module;
+      if (opts?.trimExecutableExtension) {
+        module = trimExecutableExtension(rri(module));
+      }
+      return { module };
+    }
+    // Otherwise it is a loader-only bare specifier (e.g. a boxel-host
+    // command). Try registered prefix mappings, and if unresolvable leave it
+    // for the loader's importMap shim via the surrounding try/catch.
     try {
       let resolved = resolve(codeRef.module);
       if (resolved !== codeRef.module) {

@@ -122,15 +122,17 @@ Fenced code blocks with a language tag (e.g. ` `ts ```) are highlighted via the 
 
 Two forms reference a card by its full URL:
 
-### Inline: `:card[URL]`
+### Inline: `:card[URL]` or `:card[URL | spec]`
 
-Renders the target card in **atom** format, inline with surrounding text.
+Renders the target card inline with surrounding text. Default format is **atom**.
 
 ```md
 Written by :card[https://my.realm/Author/jane] for the team.
 ```
 
-Use inline form when the card should flow with the sentence.
+Use inline form when the card should flow with the sentence. The optional
+`| spec` accepts every format the block form does (see the grammar below), so
+`:card[URL | embedded]` flows an embedded card inline.
 
 ### Block: `::card[URL]` or `::card[URL | spec]`
 
@@ -142,11 +144,14 @@ See the latest post:
 ::card[https://my.realm/BlogPost/first-look]
 ```
 
-The optional `| spec` after the URL controls size/format. The grammar:
+The optional `| spec` after the URL controls size/format, and works in both the
+inline and block forms — only the default differs (inline → atom, block →
+embedded). The grammar:
 
 | Spec                            | Meaning                                                            |
 | ------------------------------- | ------------------------------------------------------------------ |
-| _(no spec)_                     | Default — embedded                                                 |
+| _(no spec)_                     | Default — atom inline, embedded block                              |
+| `atom`                          | Atom format (explicit)                                            |
 | `embedded`                      | Embedded format (explicit)                                         |
 | `isolated`                      | Isolated format (full detailed view)                               |
 | `fitted`                        | Fitted format at its container's natural size                      |
@@ -174,7 +179,7 @@ Featured authors:
 ::card[https://my.realm/Essay/manifesto | isolated]
 ```
 
-If a spec fails to parse, the renderer emits the directive with no format override, so the card falls back to embedded with no error — validate specs before shipping.
+If a spec fails to parse, the renderer emits the directive with no format override, so the card falls back to its placement default (embedded for block, atom for inline) with no error — validate specs before shipping.
 
 ### Unresolved references
 

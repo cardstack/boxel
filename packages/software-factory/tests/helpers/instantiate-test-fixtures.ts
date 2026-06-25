@@ -144,7 +144,7 @@ export function validCardSpecJson(): string {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
+            module: '@cardstack/base/spec',
             name: 'Spec',
           },
         },
@@ -169,7 +169,7 @@ export function tagsCardSpecJson(): string {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
+            module: '@cardstack/base/spec',
             name: 'Spec',
           },
         },

@@ -6,6 +6,7 @@ import {
   Loader,
   VirtualNetwork,
   baseRealm,
+  baseRealmRRI,
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
@@ -61,6 +62,7 @@ module('Unit | query', function (hooks) {
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
     );
+    virtualNetwork.addRealmMapping('@cardstack/base/', resolvedBaseRealmURL);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${ENV.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
@@ -137,14 +139,14 @@ module('Unit | query', function (hooks) {
     let stringFieldEntry = new SimpleSpec({
       cardTitle: 'String Field',
       ref: {
-        module: `${baseRealm.url}string`,
+        module: `${baseRealmRRI}string`,
         name: 'default',
       },
     });
     let numberFieldEntry = new SimpleSpec({
       cardTitle: 'Number Field',
       ref: {
-        module: `${baseRealm.url}number`,
+        module: `${baseRealmRRI}number`,
         name: 'default',
       },
     });
@@ -885,7 +887,7 @@ module('Unit | query', function (hooks) {
           on: type,
           eq: {
             ref: {
-              module: `${baseRealm.url}string`,
+              module: `${baseRealmRRI}string`,
               name: 'default',
             },
           },

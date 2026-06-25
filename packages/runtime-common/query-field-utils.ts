@@ -319,8 +319,12 @@ export function getValueForResourcePath(
 
 export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
-  let searchURL = new URL('./_search', baseHref);
+  let searchURL = new URL('./_search-v2', baseHref);
   searchURL.searchParams.set('realms', baseHref);
+  // A query-backed field resolves to linked instances, so it asks the
+  // search-entry engine for a data-only projection: each entry carries its
+  // full `item` (`card`/`file-meta`) serialization, no prerendered HTML.
+  searchURL.searchParams.set('fields[search-entry]', 'item');
   let normalizedQuery = normalizeQueryForSignature(query);
   searchURL.searchParams.set('query', buildQueryParamValue(normalizedQuery));
   return searchURL.href;

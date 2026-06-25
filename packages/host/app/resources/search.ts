@@ -1,4 +1,8 @@
-import { registerDestructor } from '@ember/destroyable';
+import {
+  isDestroyed,
+  isDestroying,
+  registerDestructor,
+} from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { service } from '@ember/service';
@@ -21,6 +25,10 @@ import type {
 import {
   subscribeToRealm,
   isFileDefInstance,
+  isFileDefCodeRef,
+  isClientEvaluable,
+  matchInstanceAgainstFilter,
+  makeInstanceComparator,
   logger as runtimeLogger,
   normalizeQueryForSignature,
   buildQueryParamValue,
@@ -28,8 +36,12 @@ import {
   ri,
   RealmPaths,
   runtimeDependencyContextWithSource,
+  type CardAPIForMatching,
+  type CodeRef,
+  type MatchResult,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
+import type { Filter, Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -41,6 +53,70 @@ import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-resource:search-waiter');
+
+// Retains Store references for a changing set of instance ids and reconciles
+// them as that set changes, releasing all on teardown. `addReference` /
+// `dropReference` can mutate tracked Store state (e.g. `autoSaveStates`), so
+// reconciliation is deferred to a microtask — it must never run inside the
+// tracked computation that declares the set. Used for the live-search
+// candidates surfaced by the client-side merge but absent from the server
+// result: `updateInstances` references only the server result, so without this
+// a displayed candidate at reference count zero could be swept by the Store GC
+// while still on screen.
+class CandidateReferenceRetainer {
+  #held = new Set<string>();
+  #desired = new Set<string>();
+  #flushScheduled = false;
+  #torn = false;
+
+  constructor(
+    private getStore: () => StoreService,
+    parent: object,
+  ) {
+    registerDestructor(parent, () => {
+      this.#torn = true;
+      this.#desired = new Set();
+      this.#reconcile();
+    });
+  }
+
+  // Declare the ids currently in use. Safe to call from a tracked getter — the
+  // reference mutation happens later, in a microtask, outside this frame.
+  retain(ids: string[]): void {
+    if (this.#torn) {
+      return;
+    }
+    this.#desired = new Set(ids);
+    if (this.#flushScheduled) {
+      return;
+    }
+    this.#flushScheduled = true;
+    queueMicrotask(() => {
+      this.#flushScheduled = false;
+      if (!this.#torn) {
+        this.#reconcile();
+      }
+    });
+  }
+
+  #reconcile(): void {
+    if (this.#held.size === 0 && this.#desired.size === 0) {
+      return;
+    }
+    let store = this.getStore();
+    for (let id of this.#held) {
+      if (!this.#desired.has(id)) {
+        store.dropReference(id);
+      }
+    }
+    for (let id of this.#desired) {
+      if (!this.#held.has(id)) {
+        store.addReference(id);
+      }
+    }
+    this.#held = new Set(this.#desired);
+  }
+}
 
 export interface Args<T extends CardDef | FileDef = CardDef> {
   named: {
@@ -87,9 +163,23 @@ export class SearchResource<
   // Kept private for tests/internal load bookkeeping.
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
+  // The result set as returned by the server. The publicly-exposed
+  // `instances` getter derives from this: for an eligible live search it is
+  // reconciled against in-memory Store state (the client-side filtering step);
+  // otherwise it is passed through unchanged.
   private _instances = new TrackedArray<T>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   @tracked private _errors: ErrorEntry[] | undefined;
+  // The card-api slice the client-side matcher/comparator need. Loaded
+  // asynchronously for live searches; until it resolves the search behaves as
+  // a server-only passthrough. Tracked so the derived result set recomputes
+  // once it lands.
+  @tracked private matchAPI: CardAPIForMatching | undefined;
+  #matchAPILoading = false;
+  // The query currently driving results, tracked so the client filtering step
+  // re-derives when the filter/sort changes (the server result set also
+  // changes, but reading this keeps the derivation self-contained).
+  @tracked private activeQuery: Query | undefined;
   #isLive = false;
   #seedApplied = false;
   #doWhileRefreshing: (() => void) | undefined;
@@ -99,9 +189,44 @@ export class SearchResource<
   #dependencyTracking: RuntimeDependencyTrackingContext | undefined;
   #log = runtimeLogger('search-resource');
   #trackedLoadCount = 0;
+  // Holds Store references for merged candidates that aren't in `_instances`
+  // (those server results are referenced by `updateInstances`). Reconciliation
+  // is deferred out of the render frame; released on teardown.
+  #candidateRefs = new CandidateReferenceRetainer(
+    () => this.runtimeStore,
+    this,
+  );
 
   private get runtimeStore(): StoreService {
     return this.#storeServiceOverride ?? this.store;
+  }
+
+  private loadMatchAPI(): void {
+    if (this.matchAPI || this.#matchAPILoading) {
+      return;
+    }
+    this.#matchAPILoading = true;
+    // Held by the test waiter so `settled()` blocks until the matcher
+    // dependencies are loaded and the search is eligible to reconcile.
+    let token = waiter.beginAsync();
+    this.runtimeStore
+      .getMatchAPI()
+      .then((api) => {
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
+        this.matchAPI = api;
+      })
+      .catch((error) => {
+        this.#log.error(
+          'failed to load card-api for client-side filtering',
+          error,
+        );
+      })
+      .finally(() => {
+        this.#matchAPILoading = false;
+        waiter.endAsync(token);
+      });
   }
 
   private trackStoreLoad(
@@ -209,6 +334,13 @@ export class SearchResource<
       `modify: query present; isLive=${isLive}; realms=${realms?.join(',') ?? '(default)'}`,
     );
     this.#isLive = isLive;
+    if (isLive) {
+      // The client-side filtering step only runs for live searches; load its
+      // matcher dependencies eagerly so the first eligible result set can be
+      // reconciled without waiting on a Store mutation to trigger it.
+      this.loadMatchAPI();
+    }
+    this.activeQuery = query;
     this.#doWhileRefreshing = doWhileRefreshing;
     this.#dependencyTracking = named.dependencyTracking;
     this.realmsToSearch =
@@ -337,8 +469,149 @@ export class SearchResource<
     return this.#isLive;
   }
   get instances() {
-    return this._instances;
+    return this.displayedInstances;
   }
+
+  // The displayed result set. For an eligible live search this is the server
+  // result reconciled against in-memory Store state (CS-11416); otherwise the
+  // server result is returned untouched.
+  //
+  // Reactive recompute: this getter reads the tracked Store identity map
+  // (`allCardInstances`, which changes on create/delete) and the Store's
+  // `instanceMutationVersion` (which bumps on edit/save), so it re-derives
+  // when a relevant Store card mutates — not only when the server search
+  // re-runs. As a memoized getter it is recomputed lazily, on the next read
+  // after an invalidation, which naturally coalesces bursts of mutations
+  // between renders. A dirty-set / incremental optimization is deferred to
+  // CS-11419.
+  @cached
+  private get displayedInstances(): T[] {
+    let serverInstances = this._instances;
+    if (!this.isClientFilterEligible) {
+      // Passthrough: nothing is merged, so release any candidate references
+      // a prior eligible recompute retained.
+      this.#candidateRefs.retain([]);
+      return serverInstances;
+    }
+    let api = this.matchAPI!;
+    let filter = this.activeQuery?.filter;
+
+    // Reading the mutation-version signal here establishes the dependency that
+    // re-derives on in-place field edits/saves (adds and deletes already flow
+    // through the tracked identity map read below).
+    void this.runtimeStore.instanceMutationVersion;
+
+    // The matcher and comparator operate on the card-api instance surface,
+    // which both CardDef and FileDef expose; file-meta searches are handled
+    // exactly like card searches.
+    let localMatch = (instance: CardDef | FileDef): MatchResult =>
+      filter
+        ? matchInstanceAgainstFilter(instance as CardDef, filter, api)
+        : 'match';
+
+    // Keep every server-returned instance unless it now demonstrably fails the
+    // filter locally. An `unresolvable` predicate (e.g. a linked target absent
+    // from the Store) never removes a server result.
+    let serverResults = serverInstances as (CardDef | FileDef)[];
+    let kept = serverResults.filter(
+      (instance) => localMatch(instance) !== 'no-match',
+    );
+
+    let serverIds = new Set(
+      serverResults.map((instance) => instance.id).filter(Boolean) as string[],
+    );
+
+    // The candidate pool is drawn from the same kind (card vs file-meta) as the
+    // search. Dispatch by the query's target type rather than sniffing the
+    // first returned row: a complete file-meta search can return zero rows yet
+    // still need the file-meta pool to surface a locally hydrated FileDef. Fall
+    // back to the row when the query carries no top-level type ref.
+    let filterRef = filter as { on?: CodeRef; type?: CodeRef } | undefined;
+    let isFileSearch = isFileDefCodeRef(
+      filterRef?.on ?? filterRef?.type,
+      api.virtualNetwork,
+    )
+      ? true
+      : serverResults.length > 0 && isFileDefInstance(serverResults[0]);
+    let candidatePool: (CardDef | FileDef)[] = isFileSearch
+      ? this.runtimeStore.allFileMetaInstances()
+      : this.runtimeStore.allCardInstances();
+
+    // Add candidates the server didn't return but that match locally, scoped to
+    // the query's target realm(s). `unresolvable` candidates are not added.
+    let added = candidatePool.filter(
+      (instance) =>
+        instance.id != null &&
+        !serverIds.has(instance.id) &&
+        this.isInTargetRealm(instance.id) &&
+        localMatch(instance) === 'match',
+    );
+
+    // These candidates are displayed but absent from `_instances`, so the
+    // server-result reference bookkeeping in `updateInstances` doesn't cover
+    // them. Retain Store references while they're shown so the GC can't sweep a
+    // card that's still on screen; reconciliation is deferred out of this
+    // render frame (see CandidateReferenceRetainer).
+    this.#candidateRefs.retain(
+      added.map((instance) => instance.id).filter(Boolean) as string[],
+    );
+
+    // Dedupe by id before sorting: the candidate pool collapses local/remote
+    // id aliases already, but a defensive pass here guarantees the displayed
+    // set never renders the same card twice regardless of how the pool or
+    // server result was assembled.
+    let seenIds = new Set<string>();
+    let merged: (CardDef | FileDef)[] = [];
+    for (let instance of [...kept, ...added]) {
+      let id = instance.id;
+      if (id != null) {
+        if (seenIds.has(id)) {
+          continue;
+        }
+        seenIds.add(id);
+      }
+      merged.push(instance);
+    }
+    let comparator = makeInstanceComparator(this.activeQuery?.sort, api);
+    merged.sort((a, b) => comparator(a as CardDef, b as CardDef));
+    return merged as unknown as T[];
+  }
+
+  // Per CS-11417: the client filtering step runs only for a live search whose
+  // server response is a complete, fully-client-evaluable result set (card or
+  // file-meta alike). Any other search is a server-only passthrough.
+  private get isClientFilterEligible(): boolean {
+    if (!this.#isLive) {
+      return false;
+    }
+    let api = this.matchAPI;
+    if (!api) {
+      // Matcher dependencies not loaded yet — pass through until they are.
+      return false;
+    }
+    // Complete result set: the server returns the full match count across all
+    // pages in `meta.page.total`; an incompletely-loaded set (load-more /
+    // infinite scroll) is not safe to reconcile locally.
+    let total = this._meta?.page?.total;
+    if (total == null || this._instances.length !== total) {
+      return false;
+    }
+    // A `matches` (full-text) or otherwise unsupported operator forces
+    // server-only evaluation. A query with no filter matches everything and is
+    // eligible.
+    let filter = this.activeQuery?.filter as Filter | undefined;
+    if (filter && !isClientEvaluable(filter)) {
+      return false;
+    }
+    return true;
+  }
+
+  private isInTargetRealm(id: RealmResourceIdentifier): boolean {
+    return this.realmsToSearch.some((realm) =>
+      new RealmPaths(realm).inRealm(id),
+    );
+  }
+
   @cached
   get instancesByRealm() {
     return this.realmsToSearch

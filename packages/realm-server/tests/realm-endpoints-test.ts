@@ -11,6 +11,7 @@ import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  baseRealmRRI,
   baseRRI,
   CachingDefinitionLookup,
   SupportedMimeType,
@@ -286,7 +287,7 @@ module(basename(import.meta.filename), function () {
       let json = response.body;
       assert.strictEqual(json.data.type, 'file-meta');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}markdown-file-def`,
+        module: `${baseRealmRRI}markdown-file-def`,
         name: 'MarkdownDef',
       });
 
@@ -1578,6 +1579,10 @@ module(basename(import.meta.filename), function () {
           testCreatePrerenderAuth,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+        virtualNetwork.addRealmMapping(
+          '@cardstack/base/',
+          localBaseRealmURL.href,
+        );
 
         ({ realm: base } = await createRealm({
           definitionLookup,

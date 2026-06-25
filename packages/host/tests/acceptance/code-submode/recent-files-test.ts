@@ -13,7 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI } from '@cardstack/runtime-common';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -243,7 +243,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },

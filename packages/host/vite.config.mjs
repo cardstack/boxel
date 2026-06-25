@@ -270,7 +270,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: [
       { find: 'path', replacement: require.resolve('path-browserify') },
-      { find: 'crypto', replacement: require.resolve('crypto-browserify') },
       { find: 'stream', replacement: require.resolve('stream-browserify') },
       { find: /^util$/, replacement: require.resolve('util/') },
       // recast's main.js eagerly requires 'fs'; we stub it for the browser.

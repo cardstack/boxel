@@ -217,7 +217,7 @@ module(basename(import.meta.filename), function () {
         },
         {
           type: 'card-type-summary',
-          id: 'https://cardstack.com/base/realm-config/RealmConfig',
+          id: '@cardstack/base/realm-config/RealmConfig',
           attributes: {
             displayName: 'Realm Config',
             total: 1,

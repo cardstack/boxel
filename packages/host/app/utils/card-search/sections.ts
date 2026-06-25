@@ -82,10 +82,27 @@ function resolveRealmInfo(
   };
 }
 
-function realmUrlForCard(cardIdOrUrl: string, realmURLs: string[]): string {
+function realmUrlForCard(
+  cardIdOrUrl: string,
+  realmURLs: string[],
+  unresolveURL?: (url: string) => string,
+): string {
   for (const realm of realmURLs) {
     if (cardIdOrUrl.startsWith(realm)) {
       return realm;
+    }
+  }
+  // The card id may be in canonical RRI-prefix form (e.g.
+  // `@cardstack/base/types/card`) while the realm URLs are in real/alias URL
+  // form. Normalize both sides to the realm-prefix RRI form before comparing,
+  // mirroring RealmService#knownRealm, so the owning realm is found regardless
+  // of which form each side is expressed in.
+  if (unresolveURL) {
+    const normalizedId = unresolveURL(cardIdOrUrl);
+    for (const realm of realmURLs) {
+      if (normalizedId.startsWith(unresolveURL(realm))) {
+        return realm;
+      }
     }
   }
   try {
@@ -133,12 +150,13 @@ export function buildUrlSection(
   isURL: boolean,
   realmURLs: string[],
   realm: RealmInfoLookup,
+  unresolveURL?: (url: string) => string,
 ): UrlSection | undefined {
   if (!isURL || !card) {
     return undefined;
   }
   const urlForRealm = urlForRealmLookup(card);
-  const realmUrl = realmUrlForCard(urlForRealm, realmURLs);
+  const realmUrl = realmUrlForCard(urlForRealm, realmURLs, unresolveURL);
   return {
     sid: `url:${card.id}`,
     type: 'url',

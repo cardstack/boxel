@@ -290,7 +290,7 @@ const localStyleReferenceCard = {
     },
     meta: {
       adoptsFrom: {
-        module: 'https://cardstack.com/base/style-reference',
+        module: '@cardstack/base/style-reference',
         name: 'default',
       },
     },

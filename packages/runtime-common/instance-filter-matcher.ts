@@ -1,6 +1,6 @@
 import { isEqual } from 'lodash-es';
 
-import { getField, identifyCard } from './code-ref.ts';
+import { canonicalModuleKey, getField, identifyCard } from './code-ref.ts';
 import {
   isAnyFilter,
   isCardTypeFilter,
@@ -16,6 +16,7 @@ import {
 } from './query.ts';
 
 import type { CodeRef } from './code-ref.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import type {
   BaseDef,
   CardDef,
@@ -47,6 +48,13 @@ export interface CardAPIForMatching {
     metaKey: 'lastModified' | 'resourceCreatedAt',
   ): any;
   primitive: symbol;
+  // Resolves a module reference's URL aliases so a type gate compares refs by
+  // their resolved identity rather than raw spelling. The server tolerates
+  // equivalent spellings (RRI / real-URL / virtual-alias) via `internalKeyFor`
+  // in index-query-engine.ts; this is the client-side counterpart, and without
+  // it a type-gated filter drops a server-returned instance whose class was
+  // identified under a different-but-equivalent module spelling.
+  virtualNetwork: VirtualNetwork;
 }
 
 // Three-valued result, deliberately not a boolean. The integration layer needs
@@ -103,12 +111,12 @@ export function matchInstanceAgainstFilter(
   // carries `type` *and* an operator (e.g. `{ type, eq }`) is not pure; there
   // `type` only gates, exactly as the server treats it.
   if (typeRef && Object.keys(filter).length === 1) {
-    return instanceIsType(instance, typeRef) ? 'match' : 'no-match';
+    return instanceIsType(instance, typeRef, api) ? 'match' : 'no-match';
   }
 
   // Any other node with an `on`/`type` is gated: if the instance isn't of that
   // type the whole node is a no-match before we look at fields.
-  if (typeGate && !instanceIsType(instance, typeGate)) {
+  if (typeGate && !instanceIsType(instance, typeGate, api)) {
     return 'no-match';
   }
 
@@ -425,12 +433,16 @@ function negate(result: MatchResult): MatchResult {
   return 'unresolvable';
 }
 
-function instanceIsType(instance: BaseDef, ref: CodeRef): boolean {
+function instanceIsType(
+  instance: BaseDef,
+  ref: CodeRef,
+  api: CardAPIForMatching,
+): boolean {
   let klass: typeof BaseDef | null =
     (instance.constructor as typeof BaseDef) ?? null;
   while (klass) {
     let codeRef = identifyCard(klass);
-    if (codeRef && codeRefEquals(codeRef, ref)) {
+    if (codeRef && codeRefEquals(codeRef, ref, api.virtualNetwork)) {
       return true;
     }
     klass = Object.getPrototypeOf(klass) as typeof BaseDef | null;
@@ -438,9 +450,27 @@ function instanceIsType(instance: BaseDef, ref: CodeRef): boolean {
   return false;
 }
 
-function codeRefEquals(a: CodeRef, b: CodeRef): boolean {
+function codeRefEquals(
+  a: CodeRef,
+  b: CodeRef,
+  virtualNetwork: VirtualNetwork,
+): boolean {
   if (a && b && 'module' in a && 'name' in a && 'module' in b && 'name' in b) {
-    return a.module === b.module && a.name === b.name;
+    if (a.name !== b.name) {
+      return false;
+    }
+    if (a.module === b.module) {
+      return true;
+    }
+    // The class is identified under the module spelling it was loaded from,
+    // while the filter ref can carry an equivalent spelling (prefix RRI /
+    // real-URL / virtual-alias). Reduce both to a single canonical key before
+    // comparing so the type gate doesn't drop an instance over a cosmetic URL
+    // difference — the tolerance the server applies in `internalKeyFor`.
+    return (
+      canonicalModuleKey(a.module, virtualNetwork) ===
+      canonicalModuleKey(b.module, virtualNetwork)
+    );
   }
   return isEqual(a, b);
 }
