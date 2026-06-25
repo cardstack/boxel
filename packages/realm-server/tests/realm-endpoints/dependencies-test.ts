@@ -68,9 +68,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.strictEqual(entry.attributes.entryType, 'file');
     assert.false(entry.attributes.hasError);
     assert.true(
-      entry.attributes.dependencies.includes(
-        'https://cardstack.com/base/card-api',
-      ),
+      entry.attributes.dependencies.includes('@cardstack/base/card-api'),
       'includes consumed card-api module dependency',
     );
     assert.false(

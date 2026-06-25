@@ -130,7 +130,7 @@ export default class EditFieldModal extends Component<Signature> {
     // When adding a new field, we want to default to the base string card
     if (!field) {
       let ref = {
-        module: rri('https://cardstack.com/base/card-api'), // This seems fundamental enough to be hardcoded
+        module: rri('@cardstack/base/card-api'), // This seems fundamental enough to be hardcoded
         name: 'StringField',
       };
       this.isFieldDef = true;

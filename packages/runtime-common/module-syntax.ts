@@ -415,17 +415,33 @@ function makeNewField({
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
   //typeof Babel.types
   let importUtil = new ImportUtil(Babel.types, programPath);
+  // The field decorator (`field`) and the field-type helper (`contains`,
+  // `linksTo`, …) both come from base/card-api, which the edited module
+  // already imports (its card extends a base def). Reuse that existing
+  // card-api import — in whatever specifier form the file uses — so the new
+  // identifiers merge into it instead of emitting a second card-api import in
+  // a different form.
+  let cardApiCanonical = virtualNetwork.unresolveURL(
+    `${baseRealm.url}card-api`,
+  );
+  let cardApiSource =
+    findEquivalentImportSource(
+      programPath,
+      cardApiCanonical,
+      undefined,
+      virtualNetwork,
+    ) ?? cardApiCanonical;
   let fieldDecorator = importUtil.import(
     // there is some type of mismatch here--importUtil expects the
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    cardApiSource,
     'field',
   );
 
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    cardApiSource,
     fieldType,
   );
 
@@ -450,15 +466,41 @@ function makeNewField({
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldRef.name});`;
   }
 
+  // Canonicalize `fieldRef.module` to the registered RRI prefix form
+  // (e.g. `@cardstack/base/X`) so generated import lines use the stable
+  // identifier rather than a deployment-specific real URL.
+  let canonicalFieldModule = virtualNetwork.unresolveURL(fieldRef.module);
+
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
+    let resolved = virtualNetwork.resolveURL(
+      canonicalFieldModule,
+      incomingRelativeTo,
+    );
+    let canonical = virtualNetwork.unresolveURL(resolved.href);
     relativeFieldModuleRef = maybeRelativeReference(
-      virtualNetwork.resolveURL(fieldRef.module, incomingRelativeTo),
+      canonical,
       outgoingRelativeTo,
       outgoingRealmURL,
     );
   } else {
-    relativeFieldModuleRef = fieldRef.module;
+    relativeFieldModuleRef = canonicalFieldModule;
+  }
+
+  // `ImportUtil` matches existing imports by exact source string. The
+  // file may still use the virtual-alias URL form
+  // (`https://cardstack.com/base/X`) for an equivalent module while the
+  // canonical form is the RRI prefix (`@cardstack/base/X`). Reuse the
+  // existing import specifier when one matches under VN canonicalization
+  // so we merge instead of emitting a duplicate import line.
+  let existingEquivalentSource = findEquivalentImportSource(
+    programPath,
+    relativeFieldModuleRef,
+    incomingRelativeTo,
+    virtualNetwork,
+  );
+  if (existingEquivalentSource) {
+    relativeFieldModuleRef = existingEquivalentSource;
   }
 
   let fieldCardIdentifier = importUtil.import(
@@ -487,6 +529,51 @@ function makeNewField({
   }
 
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+}
+
+// Returns the source string of an existing `ImportDeclaration` that
+// resolves to the same module as `targetSpecifier` under VN
+// canonicalization (RRI prefix vs. registered URL alias), so callers
+// can merge new identifiers into the existing import line rather than
+// emitting a duplicate. Returns undefined when no existing import
+// matches or when the file is being authored against the canonical
+// specifier directly.
+function findEquivalentImportSource(
+  programPath: NodePath<t.Program>,
+  targetSpecifier: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string | undefined {
+  let targetCanonical: string;
+  try {
+    targetCanonical = virtualNetwork.unresolveURL(
+      virtualNetwork.resolveURL(targetSpecifier, relativeTo).href,
+    );
+  } catch {
+    return undefined;
+  }
+  for (let node of programPath.node.body) {
+    if (node.type !== 'ImportDeclaration') {
+      continue;
+    }
+    let source = node.source.value;
+    if (source === targetSpecifier) {
+      // already exact-match — importUtil will merge without help
+      return undefined;
+    }
+    let sourceCanonical: string;
+    try {
+      sourceCanonical = virtualNetwork.unresolveURL(
+        virtualNetwork.resolveURL(source, relativeTo).href,
+      );
+    } catch {
+      continue;
+    }
+    if (sourceCanonical === targetCanonical) {
+      return source;
+    }
+  }
+  return undefined;
 }
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {

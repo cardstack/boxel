@@ -112,6 +112,12 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
+// Shared secret authenticating ai-bot's delegation requests (CS-11552).
+// Optional: when unset, the /_delegate-session endpoint responds 503 and mints
+// nothing, so the pull-model feature stays inert until the secret is
+// provisioned (and rotated, CS-11567) alongside ai-bot.
+const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
 // Synapse admin credentials. Optional: only consumed by operator-action
 // endpoints that need to admin-impersonate a target user to read or write
 // their account_data on their behalf (synapse admin tokens can read but
@@ -307,6 +313,17 @@ for (let i = 0; i < fromUrls.length; i++) {
     let fromURL = new URL(from);
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);
+    // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Register
+    // the realm-prefix mapping too so unresolveURL on either form
+    // canonicalises to the same RRI form. This matters for cross-process
+    // cache keys (e.g. host prerender writes definitions cache keyed by
+    // internalKeyFor; realm-server reads back with the same VN). Without
+    // this, the realm-server would see only the URL mapping for base and
+    // the host's RRI-form keys would never match.
+    let m = from.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+    if (m) {
+      virtualNetwork.addRealmMapping(`@cardstack/${m[1]}/`, to.href);
+    }
   } else {
     virtualNetwork.addRealmMapping(from, to.href);
     urlMappings.push([to, to]); // use toUrl for both in hrefs
@@ -615,6 +632,7 @@ const reportHostShellToManager = async () => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     dbAdapter,
     queue,
     searchCache,

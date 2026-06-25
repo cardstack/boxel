@@ -353,7 +353,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'Theme',
                 },
               },
@@ -370,7 +370,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/brand-guide'),
+                  module: rri('@cardstack/base/brand-guide'),
                   name: 'default',
                 },
               },
@@ -1444,7 +1444,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: '@cardstack/base/brand-guide',
                       name: 'default',
                     },
                   },
@@ -1476,7 +1476,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module: '@cardstack/base/card-api',
                       name: 'CardDef',
                     },
                   },

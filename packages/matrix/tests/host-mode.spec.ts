@@ -265,7 +265,7 @@ async function createAndPublishHostModeRealm(
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
+              module: '@cardstack/base/realm-config',
               name: 'RealmConfig',
             },
           },

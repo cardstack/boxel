@@ -560,6 +560,12 @@ export interface TokenClaims {
   sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
   permissions: RealmPermissions['user'];
   realmServerURL: string;
+  // Set on tokens minted by the realm-server's /_delegate-session endpoint
+  // (CS-11552): a read-only session ai-bot uses to read a realm on behalf of
+  // a user. Unlike a normal session token, a delegated token carries only
+  // ['read'] even when the bound user has broader permissions, so request
+  // authorization treats it specially (read-only, no exact-permissions match).
+  delegated?: boolean;
 }
 
 export interface AdapterWriteResult {
@@ -797,6 +803,15 @@ export class Realm {
   // bump on a config change. Recomputed lazily alongside the cached
   // realm info.
   #cachedRealmInfoHash: string | null = null;
+  // Cached host routing map, derived from the indexed RealmConfig card.
+  // `getHostRoutingMap()` is called on every host-mode index request
+  // (serve-index), so re-querying the index each time is wasteful — the map
+  // only changes when the realm is (re)indexed. Dropped by
+  // `clearRealmIndexCaches()` alongside `#cachedRealmInfo`, which fires on
+  // every index swap (full/incremental/publish) both locally and on peer
+  // replicas via the realm_index_updated broadcast. `null` means "not yet
+  // computed"; an empty array is a valid cached result (no routing rules).
+  #cachedHostRoutingMap: { path: string; id: string }[] | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -1593,6 +1608,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
+    this.#cachedHostRoutingMap = null;
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -2996,7 +3012,11 @@ export class Realm {
     if (!maybeFileRef) {
       return {
         kind: 'not-found',
-        response: notFound(request, requestContext, `${request.url} not found`),
+        response: notFound(
+          request,
+          requestContext,
+          `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+        ),
       };
     }
 
@@ -3685,6 +3705,48 @@ export class Realm {
       );
 
       let user = token.user;
+
+      // Delegated read-only session (minted by the realm-server's
+      // /_delegate-session endpoint for ai-bot — CS-11552). It is bound to a
+      // single user and deliberately scoped to ['read'] even when that user
+      // has broader permissions, so neither the exact-permissions-match
+      // invariant used for normal sessions below nor the assume-user
+      // indirection applies. Enforce instead the two guarantees the delegation
+      // design promises: the session is read-only, and it grants no more than
+      // the bound user can already read.
+      if (token.delegated) {
+        // Single-realm scope. Delegated tokens are signed with the realm-server
+        // seed shared across every realm on this server and this branch skips
+        // the normal exact-permissions match, so without this check a token
+        // minted for realm A could be replayed against realm B whenever the
+        // bound user also has read on B. Bind the token to the realm it names.
+        if (
+          ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
+        ) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+        }
+        if (requiredPermission !== 'read') {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
+          );
+          throw new AuthorizationError('Delegated sessions are read-only');
+        }
+        if (!(await realmPermissionChecker.can(user, 'read'))) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.PermissionMismatch,
+          );
+        }
+        return;
+      }
+
       let assumedUser = request.headers.get('X-Boxel-Assume-User');
       let didAssumeUser = false;
       if (
@@ -6589,6 +6651,9 @@ export class Realm {
   // linked-card attrs }`. We only need the absolute `id` here.
   // Returns absolute URLs.
   async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+    if (this.#cachedHostRoutingMap) {
+      return this.#cachedHostRoutingMap;
+    }
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
     );
@@ -6596,13 +6661,13 @@ export class Realm {
       let indexEntry =
         await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type !== 'instance') {
-        return [];
+        return (this.#cachedHostRoutingMap = []);
       }
       let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
       if (!Array.isArray(rules)) {
-        return [];
+        return (this.#cachedHostRoutingMap = []);
       }
-      return rules.flatMap((rule) => {
+      let map = rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
@@ -6634,10 +6699,13 @@ export class Realm {
         }
         return [{ path, id }];
       });
+      return (this.#cachedHostRoutingMap = map);
     } catch (e) {
       this.#log.warn(
         `failed to read host routing map from RealmConfig card: ${e}`,
       );
+      // Don't cache a transient read failure — leave `null` so the next
+      // call retries the index query.
       return [];
     }
   }

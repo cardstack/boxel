@@ -11,6 +11,7 @@ import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   REALM_FILE_CHANGES_CHANNEL,
+  REALM_INDEX_UPDATED_CHANNEL,
   RealmIndexUpdater,
   SupportedMimeType,
   param,
@@ -1279,7 +1280,7 @@ module(basename(import.meta.filename), function () {
             attributes: { cardInfo: { name: 'Peer Realm' } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },
@@ -1694,6 +1695,38 @@ module(basename(import.meta.filename), function () {
           'L2 rows tombstoned by the worker-side NOTIFY even though startReindex never ran',
         );
       });
+
+      test('realmIndexUpdater.fullIndex emits realm_index_updated so index-derived caches drop on every replica', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+
+        try {
+          // Bypass `Realm.startReindex` (whose .then never clears the
+          // index-derived caches anyway) and go straight through
+          // `RealmIndexUpdater.fullIndex`, mirroring the production bypass
+          // paths. The worker-side emit is the only thing that drops
+          // `#cachedRealmInfo` / `#cachedHostRoutingMap` / `#inFlightSearch`
+          // on every mounted replica after a from-scratch swap.
+          await testRealm.realmIndexUpdater.fullIndex(userInitiatedPriority);
+
+          let indexUpdatedCall = notifyStub
+            .getCalls()
+            .find(
+              (c) =>
+                c.args[0] === REALM_INDEX_UPDATED_CHANNEL &&
+                c.args[1] === realmURL.href,
+            );
+
+          assert.ok(
+            indexUpdatedCall,
+            'worker emitted realm_index_updated for the realm URL after the from-scratch swap',
+          );
+        } finally {
+          notifyStub.restore();
+        }
+      });
     },
   );
 
@@ -1746,7 +1779,7 @@ module(basename(import.meta.filename), function () {
             attributes: { cardInfo: { name: 'Startup Realm' } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },

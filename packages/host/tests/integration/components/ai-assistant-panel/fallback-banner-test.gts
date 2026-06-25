@@ -42,7 +42,7 @@ const SYSTEM_CARD_CONTENT = {
     attributes: {},
     meta: {
       adoptsFrom: {
-        module: 'https://cardstack.com/base/system-card',
+        module: '@cardstack/base/system-card',
         name: 'SystemCard',
       },
     },

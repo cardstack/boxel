@@ -35,6 +35,7 @@ import {
   specRef,
   chooseCard,
   baseRealm,
+  baseRealmRRI,
   RealmPaths,
   Deferred,
   SupportedMimeType,
@@ -844,9 +845,22 @@ export default class CreateFileModal extends Component<Signature> {
         this.network.virtualNetwork,
       ) as ResolvedCodeRef
     ).module;
-    const absoluteModule = new URL(absoluteModuleHref);
+    // Address the base realm by its stable RRI prefix (`@cardstack/base/X`),
+    // matching the `Component` import emitted below — base modules are
+    // referenced by alias, not by a deployment-specific real URL.
+    // `codeRefWithAbsoluteIdentifier` returns the resolved real URL for
+    // RRI-prefix inputs, so map it back to the prefix form for base only.
+    // Cross-realm references keep their absolute URL: a generated import
+    // pointing at another workspace resolves by real URL and is not
+    // rewritten to a realm-prefix form here.
+    const canonicalModule =
+      this.network.virtualNetwork.unresolveURL(absoluteModuleHref);
+    const moduleForImport: RealmResourceIdentifier | URL =
+      canonicalModule.startsWith(`${baseRealmRRI}`)
+        ? (canonicalModule as RealmResourceIdentifier)
+        : new URL(absoluteModuleHref);
     let moduleURL = maybeRelativeReference(
-      absoluteModule,
+      moduleForImport,
       url,
       new URL(this.selectedRealmURL),
     );
@@ -854,7 +868,7 @@ export default class CreateFileModal extends Component<Signature> {
 
     let componentImport = isFileDef
       ? ''
-      : `\nimport { Component } from 'https://cardstack.com/base/card-api';`;
+      : `\nimport { Component } from '@cardstack/base/card-api';`;
 
     // There is actually only one possible declaration collision: `className` and `parent`,
     // reconcile that particular collision as necessary.

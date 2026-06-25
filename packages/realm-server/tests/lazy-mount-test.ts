@@ -133,7 +133,7 @@ module(basename(import.meta.filename), function () {
 
     test('server.start() eager-mounts pinned rows only', async function (assert) {
       await seedRow(dbAdapter, {
-        url: 'https://cardstack.com/base/',
+        url: '@cardstack/base/',
         kind: 'bootstrap',
         disk_id: '/abs/base',
         owner_username: 'system',
@@ -151,7 +151,7 @@ module(basename(import.meta.filename), function () {
 
       assert.deepEqual(
         mountCalls,
-        ['https://cardstack.com/base/'],
+        ['@cardstack/base/'],
         'only the pinned bootstrap row was mounted at boot',
       );
       assert.strictEqual(

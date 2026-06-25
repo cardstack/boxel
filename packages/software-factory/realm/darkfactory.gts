@@ -10,11 +10,11 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 
 // Re-export (not subclass) so `darkfactory#Issue` stays identical to
 // `issue-tracker#Issue` — subclassing forks the type identity.
-import { Issue, Project, IssueTracker } from './issue-tracker';
+import { Issue, Project, IssueTracker } from './issue-tracker.gts';
 export { Issue, Project, IssueTracker };
-export { AgentProfile } from './agent-profile';
-export { Comment } from './comment';
-export { KnowledgeArticle } from './knowledge-article';
+export { AgentProfile } from './agent-profile.gts';
+export { Comment } from './comment.gts';
+export { KnowledgeArticle } from './knowledge-article.gts';
 
 export class DarkFactory extends CardDef {
   static displayName = 'Dark Factory';

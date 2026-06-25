@@ -1,6 +1,5 @@
 import type Koa from 'koa';
 import {
-  ensureTrailingSlash,
   insertPermissions,
   logger,
   type RealmAction,
@@ -11,6 +10,7 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 import {
   adminImpersonateUser,
   appendRealmServerToUserAccountData,
@@ -100,21 +100,17 @@ export default function handleUpsertRealmUserPermission({
       return;
     }
 
-    let realmURL: URL;
-    try {
-      realmURL = new URL(realm);
-    } catch {
-      await sendResponseForBadRequest(ctxt, `realm "${realm}" is not a URL`);
-      return;
-    }
     // realm_user_permissions is keyed by exact `realm_url` string. Normalise
     // to the canonical realm-root form (no querystring or fragment, single
     // trailing slash) so a caller passing `https://h/r` and another passing
     // `https://h/r/?token=...` write to the same row instead of a stray
     // permission whose URL the realm runtime never consults.
-    realmURL.search = '';
-    realmURL.hash = '';
-    let normalizedRealmHref = ensureTrailingSlash(realmURL.href);
+    let normalizedRealmURL = normalizeRealmURL(realm);
+    if (!normalizedRealmURL) {
+      await sendResponseForBadRequest(ctxt, `realm "${realm}" is not a URL`);
+      return;
+    }
+    let normalizedRealmHref = normalizedRealmURL.href;
 
     let readResult = parseBoolFlag(ctxt.URL.searchParams.get('read'), 'read');
     if (!readResult.ok) {

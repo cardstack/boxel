@@ -65,7 +65,7 @@ function makeRoutingFixture(): Record<
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/realm-config'),
+            module: rri('@cardstack/base/realm-config'),
             name: 'RealmConfig',
           },
         },
@@ -99,6 +99,30 @@ module(basename(import.meta.filename), function () {
         map,
         [{ path: '/rel', id: `${realmURL.href}white-paper` }],
         'relative reference resolved against the realm root; cross-realm rule filtered',
+      );
+    });
+
+    test('caches the computed map and drops it on index-cache clear', async function (assert) {
+      let first = await testRealm.getHostRoutingMap();
+      let second = await testRealm.getHostRoutingMap();
+      assert.strictEqual(
+        first,
+        second,
+        'a cache hit returns the same array reference without re-querying the index',
+      );
+
+      testRealm.clearRealmIndexCaches();
+
+      let third = await testRealm.getHostRoutingMap();
+      assert.notStrictEqual(
+        third,
+        first,
+        'clearRealmIndexCaches drops the cache so the next call recomputes',
+      );
+      assert.deepEqual(
+        third,
+        first,
+        'recomputed map matches the previously cached value',
       );
     });
   });

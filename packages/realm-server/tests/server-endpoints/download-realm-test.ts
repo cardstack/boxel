@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import { realmSecretSeed } from '../helpers/index.ts';
 import { createJWT } from '../../utils/jwt.ts';
-import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature';
+import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature-node';
 import type { Response } from 'superagent';
 
 function binaryParser(
@@ -204,7 +204,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
             attributes: { cardInfo: { name: 'CS-11270 regression realm' } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },

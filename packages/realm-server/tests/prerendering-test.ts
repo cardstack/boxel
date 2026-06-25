@@ -27,7 +27,7 @@ import {
   baseCardRef,
   trimExecutableExtension,
   rri,
-  baseRealm,
+  baseRealmRRI,
   baseRRI,
   executableExtensions,
 } from '@cardstack/runtime-common';
@@ -2415,7 +2415,7 @@ module(basename(import.meta.filename), function () {
           'search doc includes name',
         );
         assert.ok(
-          result.response.deps.includes(`${baseRealm.url}card-api`),
+          result.response.deps.includes(`${baseRealmRRI}card-api`),
           'deps include base card-api module (where FileDef is defined)',
         );
         assert.notOk(
@@ -2880,7 +2880,7 @@ module(basename(import.meta.filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: rri('https://cardstack.com/base/card-api'),
+                          module: rri('@cardstack/base/card-api'),
                           name: 'FileDef',
                         },
                         eq: {
@@ -4173,7 +4173,7 @@ module(basename(import.meta.filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('https://cardstack.com/base/brand-guide'),
+                      module: rri('@cardstack/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -4442,9 +4442,7 @@ module(basename(import.meta.filename), function () {
         test('parent embedded HTML', function (assert) {
           assert.ok(
             /data-test-card-thumbnail-placeholder/.test(
-              result.embeddedHTML![
-                'https://cardstack.com/base/card-api/CardDef'
-              ],
+              result.embeddedHTML!['@cardstack/base/card-api/CardDef'],
             ),
             `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
           );
@@ -4520,7 +4518,7 @@ module(basename(import.meta.filename), function () {
           assert.ok(
             result.deps?.find((d) =>
               d.match(
-                /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+                /^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
               ),
             ),
             `glimmer scoped css from ${baseCardRef.module} is a dep`,
@@ -4530,7 +4528,7 @@ module(basename(import.meta.filename), function () {
         test('types', function (assert) {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
-            'https://cardstack.com/base/card-api/CardDef',
+            '@cardstack/base/card-api/CardDef',
           ]);
         });
 

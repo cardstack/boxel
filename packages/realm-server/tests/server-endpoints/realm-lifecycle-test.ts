@@ -119,7 +119,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/realm-config',
+                  module: '@cardstack/base/realm-config',
                   name: 'RealmConfig',
                 },
               },
@@ -168,7 +168,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 attributes: { cardInfo: { name: 'Test Card' } },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -310,7 +310,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -375,7 +375,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 attributes: { cardInfo: { name: 'Test Card' } },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },

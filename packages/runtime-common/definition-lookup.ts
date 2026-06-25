@@ -106,7 +106,7 @@ function canonicalURL(
   // to real URLs so that realm-membership checks and DB lookups work.
   if (virtualNetwork.isRegisteredPrefix(url)) {
     try {
-      return virtualNetwork.toURL(url).href;
+      return toFetchableForm(virtualNetwork.toURL(url), virtualNetwork);
     } catch (_e) {
       // fall through to normal URL handling
     }
@@ -115,11 +115,26 @@ function canonicalURL(
     let parsed = new URL(url, relativeTo);
     parsed.search = '';
     parsed.hash = '';
-    return parsed.href;
+    return toFetchableForm(parsed, virtualNetwork);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;
   }
+}
+
+// A base-realm module resolves to a real URL (e.g.
+// `http://localhost:4201/base/X`), but that realm is reachable in-process
+// only under its virtual-alias URL (`https://cardstack.com/base/X`) — the
+// alias is what the loader's mounted handler / origin-matched auth
+// interceptor recognizes. A direct fetch of the bare real URL bypasses
+// that and fails at the transport, poisoning the module's definition
+// entry. When a real→virtual URL mapping is registered (only base today),
+// return the alias form so the definition-load target is fetchable.
+// Realms with no alias map (user realms, catalog, …) are served at their
+// real URL and are returned unchanged.
+function toFetchableForm(real: URL, virtualNetwork: VirtualNetwork): string {
+  let virtual = virtualNetwork.mapURL(real, 'real-to-virtual');
+  return (virtual ?? real).href;
 }
 
 function normalizeExecutableURL(url: string): string {
@@ -441,19 +456,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        let canonicalCodeRef =
-          canonicalModuleURL === codeRef.module
-            ? codeRef
-            : {
-                ...codeRef,
-                module: canonicalModuleURL as RealmResourceIdentifier,
-              };
-        let moduleId = internalKeyFor(
-          canonicalCodeRef,
-          undefined,
-          this.#virtualNetwork,
+        let entry = this.definitionEntryFor(
+          cached.definitions,
+          codeRef,
+          canonicalModuleURL,
         );
-        let entry = cached.definitions[moduleId];
         if (entry && 'definition' in entry) {
           return entry.definition;
         }
@@ -856,6 +863,29 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
+  // The definition store keys entries by internalKeyFor. Across virtual
+  // networks the registered-prefix form and the canonical fetchable (alias)
+  // form do not always unresolve to the same key, and a given module may be
+  // stored under either. Try the prefix form (from the original codeRef)
+  // first, then the canonical form.
+  private definitionEntryFor(
+    definitions: Record<string, ModuleDefinitionResult | ErrorEntry>,
+    codeRef: ResolvedCodeRef,
+    canonicalModuleURL: string,
+  ): ModuleDefinitionResult | ErrorEntry | undefined {
+    let entry =
+      definitions[internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    if (!entry && canonicalModuleURL !== codeRef.module) {
+      let canonicalModuleId = internalKeyFor(
+        { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier },
+        undefined,
+        this.#virtualNetwork,
+      );
+      entry = definitions[canonicalModuleId];
+    }
+    return entry;
+  }
+
   private async lookupDefinitionWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
@@ -865,10 +895,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       undefined,
       this.#virtualNetwork,
     );
-    let canonicalCodeRef =
-      canonicalModuleURL === codeRef.module
-        ? codeRef
-        : { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier };
     let context = await this.buildLookupContext(
       canonicalModuleURL,
       contextOpts,
@@ -908,12 +934,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    const moduleId = internalKeyFor(
-      canonicalCodeRef,
-      undefined,
-      this.#virtualNetwork,
+    let defOrError = this.definitionEntryFor(
+      moduleEntry.definitions,
+      codeRef,
+      canonicalModuleURL,
     );
-    let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
@@ -1155,8 +1180,29 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
   } | null> {
+    // `canonicalURL` of an RRI-prefix input resolves to the realm's
+    // RESOLVED real URL via `vn.toURL` (e.g. `@cardstack/base/foo` →
+    // `https://localhost:4201/base/foo`), while `#realms` is keyed by
+    // the user-facing realm URL — typically the virtual alias like
+    // `https://cardstack.com/base/`. The direct startsWith check
+    // therefore misses local realms whenever the input was RRI form
+    // (or whenever realm.url is the virtual alias and the input
+    // canonicalised to the resolved URL).
+    //
+    // Normalize both sides to RRI form via `unresolveURL` (which
+    // chases through any registered virtual → real URL mapping and
+    // matches against realm-prefix targets) so the comparison is
+    // form-agnostic. After normalization, `https://localhost:4201/base/foo`,
+    // `https://cardstack.com/base/foo`, and `@cardstack/base/foo` all
+    // become `@cardstack/base/foo`.
+    let vn = this.#virtualNetwork;
+    let normalizedModuleURL = vn.unresolveURL(moduleURL);
     let localRealm = this.#realms.find((realm) => {
-      return moduleURL.startsWith(realm.url);
+      if (moduleURL.startsWith(realm.url)) {
+        return true;
+      }
+      let normalizedRealmURL = vn.unresolveURL(realm.url);
+      return normalizedModuleURL.startsWith(normalizedRealmURL);
     });
 
     if (localRealm) {

@@ -459,6 +459,40 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       this.getCardItem('error', id)) as T | CardErrorJSONAPI | undefined;
   }
 
+  // All hydrated (non-error) card instances currently in the identity map.
+  // Reads the tracked `#cardInstances` map, so a caller that consumes the
+  // result inside an autotracked computation re-runs when an instance is
+  // added or removed — the candidate set for the client-side search filter.
+  // Field-level edits to an already-present instance don't change the map;
+  // those are surfaced separately by StoreService's mutation-version signal.
+  //
+  // A single instance is keyed under both its local and remote id (see
+  // setCardItem), so the map yields it more than once; collapse to a unique
+  // set so the candidate pool never contains the same card twice.
+  allCardInstances(): CardDef[] {
+    let result = new Set<CardDef>();
+    for (let instance of this.#cardInstances.values()) {
+      if (isCardInstance(instance)) {
+        result.add(instance);
+      }
+    }
+    return [...result];
+  }
+
+  // The file-meta counterpart of `allCardInstances`, reading the tracked
+  // `#fileMetaInstances` map so file-meta searches get the same client-side
+  // candidate set as card searches. Deduped to a unique set for the same
+  // reason — an instance can appear under more than one key.
+  allFileMetaInstances(): FileDef[] {
+    let result = new Set<FileDef>();
+    for (let instance of this.#fileMetaInstances.values()) {
+      if (isFileDefInstance(instance)) {
+        result.add(instance);
+      }
+    }
+    return [...result];
+  }
+
   addFileMetaInstanceOrError(
     id: string,
     instanceOrError: FileDef | CardErrorJSONAPI,
@@ -480,7 +514,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   delete(id: string): void {
-    id = id.replace(/\.json$/, '');
+    // A `.json` url addresses the file-meta identity, never a card: card ids
+    // never carry an extension, while file-meta keeps its `.json`. The two
+    // share a stem (e.g. the card `…/realm` and its `…/realm.json` file — every
+    // card has a backing `.json`), so deleting the file must remove only the
+    // file-meta row. Stripping `.json` and running the card-identity logic
+    // below on the result would evict the same-named card.
+    if (/\.json$/.test(id)) {
+      this.#gcCandidates.delete(id);
+      this.deleteFileMeta(id);
+      return;
+    }
     let localId = isLocalId(id, this.#virtualNetwork) ? id : undefined;
     let remoteId = !isLocalId(id, this.#virtualNetwork) ? id : undefined;
 
@@ -669,6 +713,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   makeTracked(remoteId: string) {
+    // File-meta is keyed by the full URL; card buckets by the stripped id.
+    let fileMetaId = remoteId;
     remoteId = remoteId.replace(/\.json$/, '');
     let instance = this.#nonTrackedCardInstances.get(remoteId);
     if (instance) {
@@ -682,17 +728,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     this.#nonTrackedCardInstanceErrors.delete(remoteId);
 
-    let fileMetaInstance = this.#nonTrackedFileMetaInstances.get(remoteId);
+    let fileMetaInstance = this.#nonTrackedFileMetaInstances.get(fileMetaId);
     if (fileMetaInstance) {
-      this.setFileMetaItem(remoteId, fileMetaInstance);
+      this.setFileMetaItem(fileMetaId, fileMetaInstance);
     }
-    this.#nonTrackedFileMetaInstances.delete(remoteId);
+    this.#nonTrackedFileMetaInstances.delete(fileMetaId);
 
-    let fileMetaError = this.#nonTrackedFileMetaInstanceErrors.get(remoteId);
+    let fileMetaError = this.#nonTrackedFileMetaInstanceErrors.get(fileMetaId);
     if (fileMetaError) {
-      this.addFileMetaInstanceOrError(remoteId, fileMetaError);
+      this.addFileMetaInstanceOrError(fileMetaId, fileMetaError);
     }
-    this.#nonTrackedFileMetaInstanceErrors.delete(remoteId);
+    this.#nonTrackedFileMetaInstanceErrors.delete(fileMetaId);
   }
 
   consumersOf(api: typeof CardAPI, instance: CardDef) {
@@ -712,11 +758,25 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   private deleteFromAll(id: string) {
-    id = id.replace(/\.json$/, '');
+    // `.json` deletes are routed to `deleteFileMeta` (a same-named card must
+    // not be evicted), so `id` here never carries a `.json` extension — the
+    // only ids that reach this are card ids/localIds and non-`.json` file urls
+    // (e.g. `…/x.png`). For those the card id and the file-meta key are
+    // identical, so one key clears both bucket sets.
     this.#cardInstances.delete(id);
     this.#cardInstanceErrors.delete(id);
     this.#nonTrackedCardInstances.delete(id);
     this.#nonTrackedCardInstanceErrors.delete(id);
+    this.#fileMetaInstances.delete(id);
+    this.#fileMetaInstanceErrors.delete(id);
+    this.#nonTrackedFileMetaInstances.delete(id);
+    this.#nonTrackedFileMetaInstanceErrors.delete(id);
+  }
+
+  // Delete only the file-meta buckets, keyed by the full URL (extension
+  // included). Used for `.json` deletes so a same-named card — e.g. the realm
+  // config card `…/realm` vs its `…/realm.json` file — is left intact.
+  private deleteFileMeta(id: string) {
     this.#fileMetaInstances.delete(id);
     this.#fileMetaInstanceErrors.delete(id);
     this.#nonTrackedFileMetaInstances.delete(id);
@@ -754,7 +814,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     type: 'instance' | 'error',
     id: string,
   ): FileDef | CardErrorJSONAPI | undefined {
-    id = id.replace(/\.json$/, '');
+    // File-meta rows are keyed by their full URL, extension included — unlike
+    // card ids, which never carry one. Stripping `.json` here would collapse a
+    // `…/x.json` FileDef onto the card id `…/x`, so a `.json` file that is also
+    // a card (e.g. a realm config) would misread as the other identity.
     let bucket =
       type === 'instance'
         ? this.#fileMetaInstances
@@ -909,7 +972,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     item: StoredInstance | CardErrorJSONAPI,
     notTracked?: true,
   ) {
-    id = id.replace(/\.json$/, '');
+    // Key by the full URL (extension included). See getFileMetaItem: collapsing
+    // `…/x.json` onto `…/x` would collide with the card id `…/x`.
     let instanceBucket = notTracked
       ? this.#nonTrackedFileMetaInstances
       : this.#fileMetaInstances;
