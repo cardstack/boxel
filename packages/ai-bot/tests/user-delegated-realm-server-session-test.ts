@@ -16,11 +16,11 @@ const REALM = 'https://realm.example.com/u/example-user/';
 
 // Builds a minimally-valid JWT carrying the given `exp` (epoch seconds) in its
 // payload — the manager only ever reads `exp` off the token, so the header and
-// signature segments are placeholders. Payload uses base64url to match real
-// JWT encoding (RFC 7515).
+// signature segments are placeholders. Payload is standard base64 to match the
+// manager's `atob` decode.
 function makeToken(expSeconds: number): string {
   let payload = Buffer.from(JSON.stringify({ exp: expSeconds })).toString(
-    'base64url',
+    'base64',
   );
   return `header.${payload}.signature`;
 }
