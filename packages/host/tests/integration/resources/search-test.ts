@@ -1960,11 +1960,11 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
-    test(`override authority: the corrected set wins on a remove + add in the same pass`, async function (assert) {
-      // The merge must reflect corrections in BOTH directions in a single
-      // recompute — not just one or the other. Editing a server-returned card
-      // out of the filter and surfacing a local-only candidate happen in the
-      // same pass, and the displayed set reflects both.
+    test(`override authority: a server-card removal and a candidate add both reach the displayed set`, async function (assert) {
+      // The merge applies corrections in BOTH directions. A server-returned
+      // card mutated out of the filter is dropped, and a local-only candidate
+      // that matches is surfaced — the converged displayed set has the same
+      // count as the server's but different members.
       let search = getSearchResourceForTest(loaderService, () => ({
         named: {
           query: abdelRahmanQuery,
@@ -1979,8 +1979,10 @@ module(`Integration | search resource`, function (hooks) {
       await settled();
       assert.strictEqual(search.instances.length, 2);
 
-      // Same recompute window: drop a server card via a local edit AND
-      // surface a local-only candidate via a Store add.
+      // Drop a server card via a local edit AND surface a local-only
+      // candidate via a Store add. The assertions verify convergence, not
+      // single-pass: the `addBookCandidate` await between the two mutations
+      // yields the event loop, so the merge may re-derive twice.
       let book1 = storeService.peek(`${testRealmURL}books/1`) as any;
       book1.author.lastName = 'Changed';
       await addBookCandidate('books/local-add', 'Local', 'Abdel-Rahman');
