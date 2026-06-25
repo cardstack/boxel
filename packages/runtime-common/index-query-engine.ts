@@ -5,7 +5,6 @@ import {
   type CardResource,
   type CodeRef,
   baseCardRef,
-  internalKeyFor,
   internalKeysFor,
   isResolvedCodeRef,
   baseRealmRRI,
