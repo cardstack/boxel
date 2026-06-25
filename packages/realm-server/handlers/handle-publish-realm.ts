@@ -420,9 +420,8 @@ export default function handlePublishRealm({
       // mounts the (re-)published realm on its first request. The
       // response is 202 Accepted with status:'pending'; the client polls
       // /<publishedRealmURL>/_readiness-check to learn when it's ready.
-      let { lastPublishedAt, publishedRealmId } = await dbAdapter.withWriteLock(
-        publishedRealmURL,
-        async () => {
+      let { lastPublishedAt, publishedRealmId, isNewRealm } =
+        await dbAdapter.withWriteLock(publishedRealmURL, async () => {
           let existingRows = (await query(dbAdapter, [
             `SELECT disk_id, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
@@ -610,9 +609,8 @@ export default function handlePublishRealm({
             { clearLastModified: true },
           );
 
-          return { lastPublishedAt, publishedRealmId };
-        },
-      );
+          return { lastPublishedAt, publishedRealmId, isNewRealm };
+        });
 
       // Mount the published realm on this instance so it is served as soon as
       // the 202 returns, but do NOT await its index/prerender — that runs in
@@ -623,43 +621,12 @@ export default function handlePublishRealm({
       // index + prerender (pool-bound) instead would hold the HTTP request open
       // for the entire indexing duration. Sibling instances pick the realm up
       // via the realm_registry NOTIFY and lazy-mount on their first request.
-      //
-      // For a new publish, mount's start() runs a from-scratch index and
-      // #startedUp resolves only after it completes — readinessCheck awaits
-      // that. For a republish the realm is already mounted with a resolved
-      // #startedUp, so start() won't re-run; kick an explicit reindex of the
-      // swapped files. fullIndex invalidates the cached RealmInfo before the
-      // pass, so the og:title re-bakes from the swapped realm.json (read via
-      // parseRealmInfo's disk overlay) in a single pass; publishFullIndex
-      // registers its in-flight deferred synchronously, so Realm.indexing()
-      // (which readinessCheck also awaits) reflects the reindex until it
-      // completes. (Both index paths coalesce with the durability enqueue.)
-      let mountedPublishedRealm = reconciler.mounted.get(publishedRealmURL);
-      if (mountedPublishedRealm) {
-        // Republish: the realm is already mounted with a resolved #startedUp,
-        // so readinessCheck relies on indexing() to know the swapped files are
-        // still being reindexed. Call fullIndex directly (not behind a deferred
-        // `.then`) so publishFullIndex registers its in-flight deferred
-        // SYNCHRONOUSLY, before this handler returns 202 — otherwise a readiness
-        // poll arriving first would see an empty indexing() and report ready
-        // before the reindex even starts. fullIndex invalidates the cached
-        // RealmInfo first, so og:title re-bakes from the swapped realm.json
-        // (parseRealmInfo's disk overlay) in a single pass.
-        void mountedPublishedRealm
-          .fullIndex(userInitiatedPriority, { clearLastModified: true })
-          .catch((err: unknown) => {
-            log.error(
-              `background publish reindex failed for ${publishedRealmURL}: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-          });
-      } else {
-        // New publish (or not mounted on this instance): mount so the realm is
-        // served as soon as the 202 returns. ensureMounted publishes it into
-        // virtualNetwork synchronously; start()'s from-scratch index runs in
-        // the background and #startedUp resolves only after it completes, which
-        // readinessCheck awaits. Sibling instances lazy-mount on first request.
+      if (isNewRealm) {
+        // Brand-new publish: no prior index. lookupOrMount's start() runs a
+        // from-scratch index (isNewIndex), and #startedUp resolves only after
+        // it completes — readinessCheck awaits #startedUp, so a single pass
+        // gates readiness. Don't await it here (that would block the response
+        // on the full index); the durability enqueue above coalesces with it.
         void reconciler
           .lookupOrMount(publishedRealmURL)
           .catch((err: unknown) => {
@@ -669,6 +636,33 @@ export default function handlePublishRealm({
               }`,
             );
           });
+      } else {
+        // Republish: the realm already has index rows, so start() does NOT
+        // re-index them and #startedUp resolves without reflecting the swapped
+        // files — readinessCheck must instead wait on indexing(). Register a
+        // tracked clearLastModified reindex SYNCHRONOUSLY (before the 202) so
+        // indexing() reflects it and readiness can't report ready before the
+        // reindex lands. Get the mounted realm, or mount it first when this
+        // instance is cold (e.g. after a restart, or the publish landed on an
+        // instance that never mounted this realm) — that mount is fast because
+        // start() skips indexing for an existing index. fullIndex invalidates
+        // the cached RealmInfo before the pass, so og:title re-bakes from the
+        // swapped realm.json (parseRealmInfo's disk overlay) in a single pass.
+        // The reindex job coalesces with the durability enqueue above.
+        let publishedRealm =
+          reconciler.mounted.get(publishedRealmURL) ??
+          (await reconciler.lookupOrMount(publishedRealmURL));
+        if (publishedRealm) {
+          void publishedRealm
+            .fullIndex(userInitiatedPriority, { clearLastModified: true })
+            .catch((err: unknown) => {
+              log.error(
+                `background publish reindex failed for ${publishedRealmURL}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            });
+        }
       }
 
       // The source realm's `RealmInfo.lastPublishedAt` map is built
