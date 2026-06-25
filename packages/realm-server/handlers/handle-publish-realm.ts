@@ -689,6 +689,14 @@ export default function handlePublishRealm({
       // Build the 202 directly rather than via createResponse: the published
       // realm may not be mounted on this instance (a new publish lazy-mounts
       // on first request), so there is no Realm object to read a url from.
+      //
+      // Point clients at the status monitor for this accepted-but-not-yet-
+      // -complete request (RFC 9110 §15.3.3): `Location` is the published
+      // realm's readiness check, which resolves once it is indexed and
+      // viewable, and `Retry-After` hints the poll interval. This lets a
+      // consumer discover where to wait for completion from the response
+      // itself rather than hard-coding the readiness URL.
+      let readinessCheckURL = `${publishedRealmURL}_readiness-check`;
       let response = new Response(
         JSON.stringify(
           {
@@ -710,6 +718,8 @@ export default function handlePublishRealm({
           status: 202,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
+            Location: readinessCheckURL,
+            'Retry-After': '1',
             'X-Boxel-Realm-Url': publishedRealmURL,
             ...(publishedPermissions['*']?.includes('read') && {
               'X-Boxel-Realm-Public-Readable': 'true',

@@ -254,6 +254,15 @@ module(basename(import.meta.filename), function () {
           'pending',
           'status is pending — client should poll _readiness-check',
         );
+        assert.strictEqual(
+          response.headers['location'],
+          `${response.body.data.attributes.publishedRealmURL}_readiness-check`,
+          'Location points at the readiness-check status monitor for the 202',
+        );
+        assert.ok(
+          response.headers['retry-after'],
+          'Retry-After hints the readiness poll interval',
+        );
 
         // Phase 3: publish only writes registry + NOTIFY + enqueues
         // an indexing job. Drive a reconcile pass to mount the new
