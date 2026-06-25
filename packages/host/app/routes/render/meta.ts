@@ -179,7 +179,7 @@ export default class RenderMetaRoute extends Route<Model> {
         internalKeyFor(t, undefined, this.network.virtualNetwork),
       ),
       searchDoc,
-      deps: deps.map((dep) => this.network.virtualNetwork.unresolveURL(dep)),
+      deps: this.network.virtualNetwork.unresolveURLs(deps),
       diagnostics,
     };
   }

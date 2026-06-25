@@ -170,6 +170,18 @@ export class VirtualNetwork {
   }
 
   /**
+   * Canonicalize a set of identifiers to RRI form, deduped. Distinct
+   * spellings of the same module (a real URL and its virtual alias) collapse
+   * to one RRI, so the result is uniqued — callers consume these as sets
+   * (dependency lists, etc.) and would otherwise carry duplicates.
+   */
+  unresolveURLs(urls: string[]): RealmResourceIdentifier[] {
+    return [
+      ...new Set(urls.map((url) => this.unresolveURL(url))),
+    ] as RealmResourceIdentifier[];
+  }
+
+  /**
    * All known spellings of a (resolved) URL: the URL itself, its RRI-prefix
    * form, and any registered virtual-alias form. Lets callers match index
    * data persisted before references were canonicalized to RRI — which may

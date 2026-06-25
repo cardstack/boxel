@@ -605,15 +605,14 @@ export class Batch {
     // form. Normalizing here keeps one canonical form on disk; dependency
     // invalidation already searches both the real and prefix forms.
     if (preparedEntry.deps) {
-      preparedEntry.deps = preparedEntry.deps.map((d: string) =>
-        this.unresolveURL(d),
+      preparedEntry.deps = this.virtualNetwork.unresolveURLs(
+        preparedEntry.deps,
       );
     }
     if (preparedEntry.last_known_good_deps) {
-      preparedEntry.last_known_good_deps =
-        preparedEntry.last_known_good_deps.map((d: string) =>
-          this.unresolveURL(d),
-        );
+      preparedEntry.last_known_good_deps = this.virtualNetwork.unresolveURLs(
+        preparedEntry.last_known_good_deps,
+      );
     }
 
     let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
