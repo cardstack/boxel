@@ -795,6 +795,7 @@ export default class StoreService extends Service implements StoreInterface {
       isNonPresentLink: api.isNonPresentLink,
       getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: api.primitive,
+      virtualNetwork: this.network.virtualNetwork,
     };
   }
 
