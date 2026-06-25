@@ -116,9 +116,13 @@ export default class MiniFileChooser extends Component<Signature> {
         ...attributes
       >
         <div class='mini-file-chooser__field'>
-          <span class='mini-file-chooser__label'>Workspace</span>
+          <span
+            id='mini-file-chooser-workspace-label'
+            class='mini-file-chooser__label'
+          >Workspace</span>
           <chooser.RealmDropdown
             class='mini-file-chooser__realm-chooser'
+            aria-labelledby='mini-file-chooser-workspace-label'
             data-test-mini-file-chooser-realm-chooser
           />
         </div>
@@ -175,11 +179,14 @@ export default class MiniFileChooser extends Component<Signature> {
               </BoxelButton>
               <div
                 class='mini-file-chooser__upload-error'
+                role='alert'
                 data-test-mini-file-chooser-upload-error
               >{{chooser.currentUpload.error}}</div>
             </div>
           {{else}}
             <BoxelButton
+              class='mini-file-chooser__upload-button'
+              @size='tall'
               {{on 'click' chooser.triggerUpload}}
               data-test-mini-file-chooser-upload-button
             >
@@ -192,6 +199,8 @@ export default class MiniFileChooser extends Component<Signature> {
 
     <style scoped>
       .mini-file-chooser {
+        --boxel-border-color: var(--boxel-400);
+        --boxel-button-border-color: var(--boxel-border-color);
         position: relative;
         display: flex;
         flex-direction: column;
@@ -201,11 +210,13 @@ export default class MiniFileChooser extends Component<Signature> {
         min-height: 0;
         padding: var(--boxel-sp-xs);
         background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+        font: var(--boxel-font-xs);
       }
       .mini-file-chooser__field {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         flex: 0 0 auto;
       }
       .mini-file-chooser__tree-field {
@@ -213,8 +224,8 @@ export default class MiniFileChooser extends Component<Signature> {
         min-height: 0;
       }
       .mini-file-chooser__label {
-        font: 600 var(--boxel-font-sm);
-        color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        font-weight: 600;
       }
       .mini-file-chooser__realm-chooser {
         width: 100%;
@@ -223,19 +234,9 @@ export default class MiniFileChooser extends Component<Signature> {
         flex: 1 1 auto;
         min-height: 0;
         overflow: auto;
-        border: var(--boxel-border);
+        border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-xxs);
-      }
-      /* Ring on keyboard focus only — :focus-within would also fire on a
-         mouse click, drawing the ring around the whole tree when a file is
-         picked. */
-      .mini-file-chooser__tree:has(:focus-visible) {
-        outline: 2px solid var(--ring, var(--boxel-highlight-hover));
-        outline-offset: 2px;
-      }
-      .mini-file-chooser__tree :deep([data-file-tree-nav]:focus-visible) {
-        outline: none;
+        padding: var(--boxel-sp-2xs);
       }
       .mini-file-chooser__footer {
         flex: 0 0 auto;
@@ -243,6 +244,12 @@ export default class MiniFileChooser extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
         min-width: 0;
+        padding-top: var(--boxel-sp-2xs);
+        padding-left: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp-xs);
+      }
+      .mini-file-chooser__upload-button {
+        font-size: inherit;
       }
       .mini-file-chooser__upload-progress {
         display: flex;
