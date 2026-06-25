@@ -631,8 +631,9 @@ class RealmResource {
           // `_publish-realm` returns 202 before the published realm is
           // indexed. Keep the "Publishing…" state until the realm passes its
           // readiness check so "Open Site" only enables once the page is
-          // actually viewable.
-          await this.realmServer.waitForRealmReady(url);
+          // actually viewable. Poll the URL the server actually published to —
+          // a server-side domain override can make that differ from `url`.
+          await this.realmServer.waitForRealmReady(result.publishedRealmURL);
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
