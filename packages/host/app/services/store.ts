@@ -46,6 +46,7 @@ import {
   rri,
   logger,
   formattedError,
+  stringifyErrorForLog,
   isJsonContentType,
   SupportedMimeType,
   RealmPaths,
@@ -2142,11 +2143,11 @@ export default class StoreService extends Service implements StoreInterface {
         status === 404 &&
         isSystemCardDefault
       );
-      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`;
+      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${stringifyErrorForLog(error)}`;
       if (shouldLogAsError) {
-        storeLogger.error(message, error);
+        storeLogger.error(message);
       } else {
-        storeLogger.debug(message, error);
+        storeLogger.debug(message);
       }
       return cardError;
     } finally {

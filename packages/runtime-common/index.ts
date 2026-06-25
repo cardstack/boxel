@@ -676,6 +676,7 @@ export {
   isCardErrorJSONAPI,
   clampSerializedError,
   coerceErrorMessage,
+  stringifyErrorForLog,
   sanitizeForJsonb,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
