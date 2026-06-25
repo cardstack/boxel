@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 import {
+  ensureTrailingSlash,
   insertPermissions,
   logger,
   type RealmAction,
