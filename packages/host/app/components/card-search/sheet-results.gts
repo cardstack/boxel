@@ -13,6 +13,7 @@ import type {
   SearchResultsYield,
 } from '@cardstack/runtime-common';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
@@ -102,6 +103,7 @@ interface Signature {
 // without a parallel search resource.
 export default class SheetResults extends Component<Signature> {
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
 
   VIEW_OPTIONS = VIEW_OPTIONS;
   SORT_OPTIONS = SORT_OPTIONS;
@@ -135,6 +137,7 @@ export default class SheetResults extends Component<Signature> {
         this.args.searchKeyIsURL,
         this.args.realms,
         this.realm,
+        (url) => this.network.virtualNetwork.unresolveURL(url),
       ),
       buildQuerySections(this.args.mainResults.entries, {
         isURL: this.args.searchKeyIsURL,

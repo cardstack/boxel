@@ -191,9 +191,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.ok(
         (card.deps as string[]).find((d) =>
-          d.match(
-            /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
-          ),
+          d.match(/^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/),
         ),
         `glimmer scoped css from ${baseCardRef.module} is a dep`,
       );

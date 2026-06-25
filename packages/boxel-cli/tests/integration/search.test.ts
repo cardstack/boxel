@@ -37,7 +37,7 @@ beforeAll(async () => {
               attributes: { cardInfo: { name: 'Shared Card' } },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -50,7 +50,7 @@ beforeAll(async () => {
               attributes: { cardInfo: { name: 'Other Card' } },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },

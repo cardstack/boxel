@@ -30,7 +30,7 @@ import type { Model as ParentModel } from '../render';
 // the check tolerates whatever resolved form the host's identify path
 // produces (e.g. realm-aliased base URLs).
 const CARDS_GRID_REF = {
-  module: 'https://cardstack.com/base/cards-grid',
+  module: '@cardstack/base/cards-grid',
   name: 'CardsGrid',
 } as ResolvedCodeRef;
 

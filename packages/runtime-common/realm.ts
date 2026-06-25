@@ -3012,7 +3012,11 @@ export class Realm {
     if (!maybeFileRef) {
       return {
         kind: 'not-found',
-        response: notFound(request, requestContext, `${request.url} not found`),
+        response: notFound(
+          request,
+          requestContext,
+          `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+        ),
       };
     }
 

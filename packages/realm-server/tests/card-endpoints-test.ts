@@ -1283,7 +1283,7 @@ module(basename(import.meta.filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -1348,7 +1348,7 @@ module(basename(import.meta.filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -2333,7 +2333,7 @@ module(basename(import.meta.filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -4338,7 +4338,7 @@ module(basename(import.meta.filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'CardDef',
                 },
               },

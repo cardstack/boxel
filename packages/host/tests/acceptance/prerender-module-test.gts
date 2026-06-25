@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  baseRealmRRI,
   rri,
   trimExecutableExtension,
   type RenderRouteOptions,
@@ -127,7 +128,7 @@ module('Acceptance | prerender | module', function (hooks) {
       'types include the card itself',
     );
     assert.ok(
-      personEntry.types.includes(`${baseRealm.url}card-api/CardDef`),
+      personEntry.types.includes(`${baseRealmRRI}card-api/CardDef`),
       'types include base card',
     );
   });

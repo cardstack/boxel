@@ -18,7 +18,7 @@ import FileIcon from '@cardstack/boxel-icons/file';
 import {
   chooseCard,
   specRef,
-  baseRealm,
+  baseRealmRRI,
   baseFileRef,
   isCardInstance,
   SupportedMimeType,
@@ -361,12 +361,12 @@ class Isolated extends Component<typeof CardsGrid> {
       };
     }[];
     let excludedCardTypeIds = [
-      `${baseRealm.url}card-api/CardDef`,
-      `${baseRealm.url}cards-grid/CardsGrid`,
+      `${baseRealmRRI}card-api/CardDef`,
+      `${baseRealmRRI}cards-grid/CardsGrid`,
     ];
     // The "All Files" group already represents the bare FileDef root — listing
     // it again as a leaf would just be a duplicate row.
-    let excludedFileTypeIds = [`${baseRealm.url}card-api/FileDef`];
+    let excludedFileTypeIds = [`${baseRealmRRI}card-api/FileDef`];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
     this.fileTypeFilters.splice(0, this.fileTypeFilters.length);

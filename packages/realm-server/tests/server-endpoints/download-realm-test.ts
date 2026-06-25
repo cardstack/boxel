@@ -204,7 +204,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
             attributes: { cardInfo: { name: 'CS-11270 regression realm' } },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },

@@ -64,7 +64,7 @@ module('Integration | commands | store-add', function (hooks) {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: '@cardstack/base/card-api',
               name: 'CardDef',
             },
           },
