@@ -10,9 +10,10 @@ import {
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
-import { verifyURLSignature } from '@cardstack/runtime-common/url-signature';
+import { verifyURLSignature } from '@cardstack/runtime-common/url-signature-node';
 import archiver from 'archiver';
-import { existsSync, statSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, statSync } = fsExtra;
 import { join, relative, resolve, sep, isAbsolute } from 'path';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { retrieveTokenClaim } from '../utils/jwt.ts';

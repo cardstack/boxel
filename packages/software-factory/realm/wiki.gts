@@ -642,7 +642,7 @@ export class Wiki extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     // Handle clicks on wiki links inside rendered markdown content
     // Resolves [[Name]] links by matching against relatedPages, falls back to URL
-    handleContentClick = (event: MouseEvent) => {
+    handleContentClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const wikiLink = target?.closest?.('.wiki-link') as HTMLElement | null;
       if (!wikiLink) return;
@@ -687,7 +687,7 @@ export class Wiki extends CardDef {
       }
     };
 
-    handleTocClick = (event: MouseEvent) => {
+    handleTocClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest?.('a') as HTMLAnchorElement | null;
       if (!anchor) return;

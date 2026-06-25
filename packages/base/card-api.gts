@@ -1,6 +1,6 @@
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
 import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
 import {
@@ -81,7 +81,6 @@ import {
   type SerializedError,
   FileMetaResourceType,
   CardResourceType,
-  RenderedHtmlResourceType,
   loadFileMetaDocument,
   CardResource,
   LooseLinkableResource,
@@ -2285,14 +2284,6 @@ export const field = function (
       `the @field decorator can only be used inside classes that extend BaseDef`,
     );
   }
-  if (key === RenderedHtmlResourceType) {
-    // Reserved platform relationship key (the link from a card/file-meta to
-    // its rendered-html resource). Reserved exactly like `id` so it can never
-    // collide with a userland field name.
-    throw new Error(
-      `'${key}' is a reserved relationship key and cannot be used as a @field name`,
-    );
-  }
   let init = initializer() as InternalFieldInitializer;
   let descriptor = init.setupField(key, target as BaseDef);
   if (init.description) {
@@ -4207,11 +4198,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let deferred = new Deferred<BaseDef>();
   let nonNestedRelationships = Object.fromEntries(
     Object.entries(resource.relationships ?? {}).filter(
-      // Skip the reserved `rendered-html` relationship key: it links the
-      // resource to its prerendered-HTML rendering, not to a field, so it must
-      // never be deserialized as one.
-      ([fieldName]) =>
-        !fieldName.includes('.') && fieldName !== RenderedHtmlResourceType,
+      ([fieldName]) => !fieldName.includes('.'),
     ),
   );
   let linksToManyRelationships: Record<string, Relationship[]> = Object.entries(

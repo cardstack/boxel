@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { getField } from '@cardstack/runtime-common';
 import { resolveFieldConfiguration } from './field-support';
@@ -29,7 +29,9 @@ export function enumConfig<T>(
   input:
     | EnumConfigurationInput<T>
     | ({ options?: any[]; unsetLabel?: string } | undefined)
-    | ((self: Readonly<T>) =>
+    | ((
+        self: Readonly<T>,
+      ) =>
         | EnumConfiguration
         | { options?: any[]; unsetLabel?: string }
         | undefined),
@@ -45,9 +47,9 @@ export function enumConfig<T>(
   }
 
   if (typeof input === 'function') {
-    return (function (this: Readonly<T>) {
+    return function (this: Readonly<T>) {
       return normalize((input as any).call(this));
-    }) as any;
+    } as any;
   }
   return normalize(input as any) as EnumConfiguration;
 }
@@ -98,7 +100,12 @@ export function enumValues(model: object, fieldName: string): any[] {
 
 function enumField<BaseT extends FieldDefConstructor>(
   Base: BaseT,
-  config: { options: any; displayName?: string; icon?: any },
+  config: {
+    options: any;
+    defaultOptions?: any[];
+    displayName?: string;
+    icon?: any;
+  },
 ): BaseT {
   class EnumField extends (Base as any) {
     static configuration =
@@ -109,6 +116,16 @@ function enumField<BaseT extends FieldDefConstructor>(
         : ({
             enum: { options: (config as any)?.options },
           } as EnumConfiguration);
+    // defaultOptions is the static fallback for function-form options, which
+    // cannot be resolved at schema-generation time without a model instance.
+    // ai.ts reads it to emit a description hint ("Typical values: …") in the
+    // JSON schema so agents have guidance without being constrained to the list.
+    static defaultOptions =
+      typeof (config as any)?.options === 'function' &&
+      Array.isArray((config as any)?.defaultOptions) &&
+      (config as any).defaultOptions.length > 0
+        ? (config as any).defaultOptions
+        : undefined;
     static displayName =
       (config as any)?.displayName ?? (Base as any).displayName;
     static icon = (config as any)?.icon ?? (Base as any).icon;
@@ -223,7 +240,9 @@ function enumField<BaseT extends FieldDefConstructor>(
       }
       get selectedOption() {
         let opts = this.options as any[];
-        let found = opts.find((o: any) => isEqual(o.value, (this.args.model as any)));
+        let found = opts.find((o: any) =>
+          isEqual(o.value, this.args.model as any),
+        );
         return found === undefined ? undefined : found;
       }
       update = (opt: any) => {

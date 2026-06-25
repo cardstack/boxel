@@ -1,8 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
-import {
+import fsExtra from 'fs-extra';
+const {
   existsSync,
   ensureDirSync,
   copySync,
@@ -10,7 +12,7 @@ import {
   readJsonSync,
   writeJsonSync,
   removeSync,
-} from 'fs-extra';
+} = fsExtra;
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
@@ -37,7 +39,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 const testRealm2URL = 'http://127.0.0.1:4445/test/';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
@@ -178,6 +180,38 @@ module(basename(__filename), function () {
           INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
           VALUES ('${sourceRealmUrlString}', '*', true, true, true)
         `);
+      });
+
+      test('POST /_publish-realm rejects a hand-picked subdirectory under the owner space', async function (assert) {
+        // `mango` is the owner, so `mango.localhost` is their own space; the path
+        // here is neither the realm name nor a server-issued unlisted slug, so
+        // the unguessable unlisted path can't be chosen via a direct API call.
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL:
+                'http://mango.localhost:4445/hand-picked-path/',
+            }),
+          );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.ok(
+          response.text.includes(
+            'must be the realm name or the server-issued unlisted link',
+          ),
+          'error explains the path restriction',
+        );
       });
 
       test('POST /_publish-realm can publish realm successfully', async function (assert) {

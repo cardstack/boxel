@@ -45,6 +45,7 @@ import * as InvalidateRealmIdentifiersCommandModule from './invalidate-realm-ide
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
+import * as MigrateSkillCommandModule from './migrate-skill';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalCommandModule from './open-create-listing-modal';
@@ -208,6 +209,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-action-build',
     ListingBuildCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/migrate-skill',
+    MigrateSkillCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-listing-pr-request',
@@ -567,6 +572,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateRoomSkillsCommandModule.default,
   UseAiAssistantCommandModule.default,
   ValidateRealmCommandModule.default,
+  MigrateSkillCommandModule.default,
   WriteBinaryFileCommandModule.default,
   WriteTextFileCommandModule.default,
 ];

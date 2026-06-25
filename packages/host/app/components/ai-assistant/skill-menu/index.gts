@@ -11,13 +11,22 @@ import pluralize from 'pluralize';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { skillCardRef } from '@cardstack/runtime-common';
-import { chooseCard } from '@cardstack/runtime-common';
+import { baseRRI, skillCardRef } from '@cardstack/runtime-common';
+import { chooseCard, chooseFile } from '@cardstack/runtime-common';
 
 import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
+
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
+// A skill expressed as a markdown file is a `MarkdownDef` whose frontmatter
+// declares `boxel.kind: skill`. The file chooser is scoped to exactly those.
+const markdownDefRef = {
+  module: baseRRI('markdown-file-def'),
+  name: 'MarkdownDef',
+};
 
 interface Signature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -26,6 +35,8 @@ interface Signature {
     onExpand?: () => void;
     onCollapse?: () => void;
     onChooseCard?: (cardId: string) => Promise<unknown>;
+    // Parallel to onChooseCard: attaches a skill expressed as a markdown file.
+    onChooseSkillMarkdown?: (skillId: string) => Promise<unknown>;
     onUpdateSkillIsActive?: (isActive: boolean, skillCardId: string) => void;
   };
 }
@@ -73,6 +84,21 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
             Adding Skill
           {{else}}
             Choose a Skill to add
+          {{/if}}
+        </Button>
+        <Button
+          class='attach-button'
+          @kind='primary'
+          @size='extra-small'
+          {{on 'click' this.attachSkillMarkdown}}
+          @disabled={{this.doAttachSkillMarkdown.isRunning}}
+          @loading={{this.isAttachingSkillMarkdown}}
+          data-test-pill-menu-add-markdown-button
+        >
+          {{#if this.isAttachingSkillMarkdown}}
+            Adding Skill
+          {{else}}
+            Choose a skill file to add
           {{/if}}
         </Button>
       </:footer>
@@ -127,6 +153,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   @tracked private isExpanded = false;
   @tracked private isAttachingSkill = false;
+  @tracked private isAttachingSkillMarkdown = false;
 
   private urlForRealmLookup(skill: RoomSkill) {
     return skill.fileDef.sourceUrl;
@@ -179,6 +206,30 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         await this.args.onChooseCard?.(cardId);
       } finally {
         this.isAttachingSkill = false;
+      }
+    }
+  });
+
+  @action
+  private attachSkillMarkdown() {
+    this.doAttachSkillMarkdown.perform();
+  }
+
+  // Parallel to doAttachSkillCard: pick a skill markdown file (a MarkdownDef
+  // with `boxel.kind: skill`) rather than a Skill card. The file chooser is
+  // scoped to skill markdown via the indexed `kind` field.
+  private doAttachSkillMarkdown = restartableTask(async () => {
+    let file = await chooseFile<FileDef>({
+      fileType: markdownDefRef,
+      fileTypeName: 'Skill',
+      fileFieldFilter: { kind: 'skill' },
+    });
+    if (file?.sourceUrl) {
+      try {
+        this.isAttachingSkillMarkdown = true;
+        await this.args.onChooseSkillMarkdown?.(file.sourceUrl);
+      } finally {
+        this.isAttachingSkillMarkdown = false;
       }
     }
   });

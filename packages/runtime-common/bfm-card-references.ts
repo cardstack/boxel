@@ -26,7 +26,7 @@ function resolveUrl(
 // ── BFM size spec parsing ──
 
 export interface BfmSizeSpec {
-  format: 'fitted' | 'isolated' | 'embedded';
+  format: 'atom' | 'fitted' | 'isolated' | 'embedded';
   width?: number | string; // number = px, string = e.g. "50%"
   height?: number;
 }
@@ -47,6 +47,7 @@ SIZE_CONSTANTS.set('grid-tile', SIZE_CONSTANTS.get('cardsgrid-tile')!);
  * Parses a BFM size specifier (the part after `|` in `::card[url | spec]`).
  *
  * Supported forms:
+ *  - `atom`                              — atom format
  *  - `isolated`                          — isolated format
  *  - `embedded`                          — embedded format (explicit)
  *  - `fitted`                            — fitted at the container's natural size
@@ -58,6 +59,10 @@ SIZE_CONSTANTS.set('grid-tile', SIZE_CONSTANTS.get('cardsgrid-tile')!);
  */
 export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   let trimmed = specifier.trim().toLowerCase();
+
+  if (trimmed === 'atom') {
+    return { format: 'atom' };
+  }
 
   if (trimmed === 'isolated') {
     return { format: 'isolated' };
@@ -110,23 +115,29 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   return null;
 }
 
-export type BfmBlockFormat = 'embedded' | 'fitted' | 'isolated';
+export type BfmRefFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 
 /**
- * Derives the block-level render format and an optional inline sizing style
- * (`width`/`height`) from a BFM block-ref element's `data-boxel-bfm-*`
- * attributes. Shared so that resolved cards, the loading shimmer, and the
- * broken-link placeholder all occupy the same footprint as the eventual card.
+ * Derives the render format and an optional inline sizing style
+ * (`width`/`height`) from a BFM ref element's `data-boxel-bfm-*` attributes.
+ * Works for both inline and block refs — only `defaultFormat` differs by
+ * placement (block embeds default to `embedded`, inline embeds to `atom`).
+ * Shared so that resolved cards, the loading shimmer, and the broken-link
+ * placeholder all occupy the same footprint as the eventual card.
  */
-export function bfmBlockFormatAndSize(
+export function bfmRefFormatAndSize(
   formatAttr: string | undefined,
   widthAttr: string | undefined,
   heightAttr: string | undefined,
-): { format: BfmBlockFormat; sizeStyle?: string } {
-  let format: BfmBlockFormat =
-    formatAttr === 'fitted' || formatAttr === 'isolated'
+  defaultFormat: BfmRefFormat = 'embedded',
+): { format: BfmRefFormat; sizeStyle?: string } {
+  let format: BfmRefFormat =
+    formatAttr === 'atom' ||
+    formatAttr === 'embedded' ||
+    formatAttr === 'fitted' ||
+    formatAttr === 'isolated'
       ? formatAttr
-      : 'embedded';
+      : defaultFormat;
   if (format !== 'fitted') {
     return { format };
   }
@@ -140,6 +151,30 @@ export function bfmBlockFormatAndSize(
     parts.push(`height: ${heightAttr}px`);
   }
   return { format, sizeStyle: parts.length ? parts.join('; ') : undefined };
+}
+
+/**
+ * Builds the `data-boxel-bfm-format` / `-width` / `-height` attribute string
+ * for a BFM size specifier (the part after `|`). Returns `''` when there is no
+ * specifier or it doesn't parse. Shared by the inline and block renderers so
+ * both placements emit identical size attributes.
+ */
+function bfmSizeAttrs(specifier: string | undefined): string {
+  if (!specifier) {
+    return '';
+  }
+  let sizeSpec = parseBfmSizeSpec(specifier);
+  if (!sizeSpec) {
+    return '';
+  }
+  let attrs = ` data-boxel-bfm-format="${sizeSpec.format}"`;
+  if (sizeSpec.width !== undefined) {
+    attrs += ` data-boxel-bfm-width="${sizeSpec.width}"`;
+  }
+  if (sizeSpec.height !== undefined) {
+    attrs += ` data-boxel-bfm-height="${sizeSpec.height}"`;
+  }
+  return attrs;
 }
 
 /**
@@ -202,7 +237,8 @@ export function extractBfmReferences(
       }
     }
     for (let match of stripped.matchAll(inlineRe)) {
-      let resolved = resolveUrl(match[1], baseUrl, virtualNetwork);
+      let { url: rawUrl } = splitBfmContent(match[1]);
+      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -238,6 +274,20 @@ export function extractCardReferenceUrls(
   virtualNetwork: VirtualNetwork,
 ): string[] {
   return extractBfmReferences(markdown, baseUrl, ['card'], virtualNetwork).map(
+    (r) => r.url,
+  );
+}
+
+/**
+ * Convenience wrapper that extracts only `:file[URL]` / `::file[URL]`
+ * references and returns just the resolved URL strings.
+ */
+export function extractFileReferenceUrls(
+  markdown: string,
+  baseUrl: string,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  return extractBfmReferences(markdown, baseUrl, ['file'], virtualNetwork).map(
     (r) => r.url,
   );
 }
@@ -289,21 +339,9 @@ export function bfmExtensionsForKeyword(
       renderer(token) {
         let url = escapeHtml((token as any).url);
         let specifier: string | undefined = (token as any).specifier;
-        let attrs = `data-boxel-bfm-block-ref="${url}" data-boxel-bfm-type="${keyword}"`;
-
-        if (specifier) {
-          let sizeSpec = parseBfmSizeSpec(specifier);
-          if (sizeSpec) {
-            attrs += ` data-boxel-bfm-format="${sizeSpec.format}"`;
-            if (sizeSpec.width !== undefined) {
-              attrs += ` data-boxel-bfm-width="${sizeSpec.width}"`;
-            }
-            if (sizeSpec.height !== undefined) {
-              attrs += ` data-boxel-bfm-height="${sizeSpec.height}"`;
-            }
-          }
-        }
-
+        let attrs =
+          `data-boxel-bfm-block-ref="${url}" data-boxel-bfm-type="${keyword}"` +
+          bfmSizeAttrs(specifier);
         return `<div ${attrs}>${url}</div>\n`;
       },
     },
@@ -328,17 +366,23 @@ export function bfmExtensionsForKeyword(
         let re = new RegExp(`^:${escapeRegExp(keyword)}\\[([^\\]]+)\\]`);
         let match = src.match(re);
         if (match) {
+          let { url, specifier } = splitBfmContent(match[1]);
           return {
             type: inlineType,
             raw: match[0],
-            url: match[1],
+            url,
+            specifier,
           };
         }
         return undefined;
       },
       renderer(token) {
         let url = escapeHtml((token as any).url);
-        return `<span data-boxel-bfm-inline-ref="${url}" data-boxel-bfm-type="${keyword}">${url}</span>`;
+        let specifier: string | undefined = (token as any).specifier;
+        let attrs =
+          `data-boxel-bfm-inline-ref="${url}" data-boxel-bfm-type="${keyword}"` +
+          bfmSizeAttrs(specifier);
+        return `<span ${attrs}>${url}</span>`;
       },
     },
   ];
@@ -387,6 +431,32 @@ export function cardTypeName(url: string): string {
     return segments[0];
   }
   return 'Card';
+}
+
+/**
+ * Extracts a human-readable file name from a `:file[URL]` reference.
+ *
+ * Unlike card URLs (`<base>/<TypeName>/<id>`, whose human-readable label is the
+ * second-to-last segment), a file reference's label is its file name — the last
+ * path segment.
+ *
+ * Examples:
+ *  - `https://example.com/path/photo.jpg` → `"photo.jpg"`
+ *  - `./assets/data.csv`                  → `"data.csv"`
+ *  - `""`                                 → `"File"`
+ */
+export function fileNameFromUrl(url: string): string {
+  let path = url;
+
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // Not an absolute URL; treat as a path/reference string.
+  }
+
+  let cleaned = path.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  let segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
+  return segments.length ? segments[segments.length - 1] : 'File';
 }
 
 function capitalize(s: string): string {

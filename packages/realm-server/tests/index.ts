@@ -36,6 +36,55 @@ delete process.env.REALM_SERVER_TLS_KEY_FILE;
 }
 
 import QUnit from 'qunit';
+import { createRequire } from 'module';
+
+// `require` doesn't exist in ESM scope; recreate it so the synchronous,
+// order-preserving test-file loader and the lazy cleanup requires below keep
+// working under native node.
+const require = createRequire(import.meta.url);
+
+// The qunit CLI used to provide the TAP reporter, autostart, and a
+// failure-based exit code. Running under `node tests/index.ts` we wire them up
+// here; autostart is disabled so every test file registers before we start.
+QUnit.config.autostart = false;
+(QUnit as any).reporters.tap.init(QUnit); // QUnit 2.x API missing from @types/qunit
+(QUnit as any).on('runEnd', (data: { testCounts: { failed: number } }) => {
+  process.exitCode = data.testCounts.failed > 0 ? 1 : 0;
+});
+
+// Track the running test through QUnit's public callback API so the
+// unhandled-rejection handler below can attribute a leak without reaching
+// into QUnit internals.
+let currentTestName = '<no test running>';
+QUnit.testStart(({ module, name }) => {
+  currentTestName = module ? `${module} > ${name}` : name;
+});
+QUnit.testDone(() => {
+  currentTestName = '<no test running>';
+});
+
+// Native Node aborts the whole suite on the first unhandled rejection, and
+// its default dump names neither the test that leaked the promise nor a
+// usable stack. Attribute it to the running test before re-raising so the
+// failure stays fatal but becomes diagnosable instead of an opaque object
+// printed by node:internal/process/promises.
+process.on('unhandledRejection', (reason: unknown) => {
+  let testName = currentTestName;
+  let detail =
+    reason instanceof Error
+      ? (reason.stack ?? reason.message)
+      : (() => {
+          try {
+            return JSON.stringify(reason);
+          } catch {
+            return String(reason);
+          }
+        })();
+  console.error(
+    `Unhandled promise rejection during test [${testName}]:\n${detail}`,
+  );
+  throw reason;
+});
 
 QUnit.config.testTimeout = 60000;
 const testModules = process.env.TEST_MODULES?.trim();
@@ -59,8 +108,7 @@ if (testModules) {
 // hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
 // Ctrl+C or an abnormal exit (but not SIGKILL, which bypasses handlers).
 async function runTrackedCleanup(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const helpers = require('./helpers') as {
+  const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
     destroyTrackedQueueRunners?: () => Promise<void>;
@@ -87,8 +135,7 @@ for (let signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
 }
 
 QUnit.done(() => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const helpers = require('./helpers') as {
+  const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
     destroyTrackedQueueRunners?: () => Promise<void>;
@@ -103,7 +150,6 @@ QUnit.done(() => {
       await helpers.destroyTrackedQueuePublishers?.();
       await helpers.closeTrackedDbAdapters?.();
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const undici = require('undici') as {
           getGlobalDispatcher?: () => { close?: () => Promise<void> };
         };
@@ -192,6 +238,7 @@ const ALL_TEST_FILES: string[] = [
   './prerendering-test',
   './prerender-server-test',
   './prerender-manager-test',
+  './prerender-host-shell-recycle-test',
   './prerender-artifact-sink-test',
   './prerender-affinity-activity-test',
   './prerender-batch-ownership-test',
@@ -283,14 +330,15 @@ const ALL_TEST_FILES: string[] = [
   './package-shim-handler-test',
   './command-parsing-utils-test',
   './query-matches-filter-test',
+  './parse-search-url-test',
   './matches-filter-integration-test',
   './eq-containment-integration-test',
   './search-in-flight-key-test',
   './unified-search-contracts-test',
+  './pre-v2-search-surface-removed-test',
   './search-entry-test',
   './search-compat-test',
   './search-entries-engine-test',
-  './render-type-resolution-test',
   './coerce-error-message-test',
   './realm-operations-test',
   './resolve-published-realm-url-test',
@@ -329,8 +377,11 @@ if (testFilesEnv) {
 }
 
 for (const file of filesToLoad) {
-  require(file);
+  // Explicit `.ts` — native `require` does no extension search for TypeScript.
+  require(`${file}.ts`);
 }
+
+QUnit.start();
 
 function parseTestFiles(value: string): string[] {
   return value

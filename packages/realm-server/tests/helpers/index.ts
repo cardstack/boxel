@@ -1,11 +1,12 @@
-import {
+import fsExtra from 'fs-extra';
+const {
   writeFileSync,
   writeJSONSync,
   readdirSync,
   statSync,
   ensureDirSync,
   copySync,
-} from 'fs-extra';
+} = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
@@ -46,7 +47,8 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.t
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
-import { sign as jwtSign } from 'jsonwebtoken';
+import jsonwebtoken from 'jsonwebtoken';
+const { sign: jwtSign } = jsonwebtoken;
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -217,6 +219,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
+export const aiBotDelegationSecret = `delegation shared secret for tests`;
 
 function getMatrixRegistrationSecret(): string {
   let secret =
@@ -1330,6 +1333,7 @@ export async function runTestRealmServer({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1479,6 +1483,7 @@ export async function runTestRealmServerWithRealms({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1935,7 +1940,7 @@ function realmEventIsIndex(
 export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
 
 export function fixtureDir(name: RealmFixtureName): string {
-  return join(__dirname, '..', 'fixtures', name);
+  return join(import.meta.dirname, '..', 'fixtures', name);
 }
 
 type InternalPermissionedRealmSetupOptions = {
@@ -2677,6 +2682,7 @@ async function buildBaseRealmTemplate(
       realmServerSecretSeed,
       realmSecretSeed,
       grafanaSecret,
+      aiBotDelegationSecret,
       matrixRegistrationSecret,
       realmsRootPath: dirSync().name,
       dbAdapter,

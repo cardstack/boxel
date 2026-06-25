@@ -206,6 +206,7 @@ export function searchEntryDocToPrerenderedDoc(
   },
 ): PrerenderedCardCollectionDocument {
   let htmlById = new Map<string, HtmlResource>();
+  let iconHtmlById = new Map<string, string>();
   let scopedCssUrls: string[] = [];
   let byIdentity = new Map<string, CardResource<Saved> | FileMetaResource>();
   for (let resource of doc.included ?? []) {
@@ -213,6 +214,8 @@ export function searchEntryDocToPrerenderedDoc(
       htmlById.set(resource.id, resource);
     } else if (resource.type === 'css') {
       scopedCssUrls.push(resource.attributes.href);
+    } else if (resource.type === 'icon') {
+      iconHtmlById.set(resource.id, resource.attributes.iconHtml);
     } else if (
       (resource.type === 'card' || resource.type === 'file-meta') &&
       resource.id
@@ -249,6 +252,13 @@ export function searchEntryDocToPrerenderedDoc(
           sameRef(member.attributes.renderType, nativeRef),
         ))
       : members[0];
+    // The type icon now rides as a deduped `icon` resource rather than on each
+    // rendering; resolve it through the entry's `icon` relationship. Gated on
+    // `picked` to match the legacy shape (a rendered row carries its icon; an
+    // unrendered fallback row carries none).
+    let iconHtml = entry.relationships.icon?.data.id
+      ? iconHtmlById.get(entry.relationships.icon.data.id)
+      : undefined;
 
     let resource: PrerenderedCardResource = {
       type: 'prerendered-card',
@@ -261,9 +271,7 @@ export function searchEntryDocToPrerenderedDoc(
         ...(picked?.attributes.cardType
           ? { cardType: picked.attributes.cardType }
           : {}),
-        ...(picked?.attributes.iconHtml
-          ? { iconHtml: picked.attributes.iconHtml }
-          : {}),
+        ...(picked && iconHtml ? { iconHtml } : {}),
         ...(picked?.attributes.isError ? { isError: true } : {}),
       },
       relationships: {

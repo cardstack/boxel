@@ -420,6 +420,29 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
+  loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
+    return Promise.resolve(
+      this.sdkOpts.loginFlowsResponse ?? {
+        flows: [{ type: 'm.login.password' }],
+      },
+    );
+  }
+
+  getSsoLoginUrl(
+    _redirectUrl: string,
+    _loginType?: string,
+    _idpId?: string,
+  ): string {
+    return this.sdkOpts.ssoLoginUrl ?? 'http://example.invalid/sso';
+  }
+
+  loginWithToken(token: string): Promise<MatrixSDK.LoginResponse> {
+    if (this.sdkOpts.loginWithTokenInterceptor) {
+      return this.sdkOpts.loginWithTokenInterceptor(token);
+    }
+    throw new Error('Method not implemented.');
+  }
+
   logout(_stopClient?: boolean | undefined): Promise<{}> {
     if (_stopClient) {
       this.stopClient();

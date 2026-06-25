@@ -31,7 +31,7 @@ import {
 } from '@cardstack/host/utils/card-search/types';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
-import ItemButton from './item-button';
+import ResultTile from './result-tile';
 import SearchSheetSectionHeader from './section-header';
 
 import type { ModifierLike } from '@glint/template';
@@ -58,7 +58,7 @@ const warnPlaceholderModifier = modifier(
     if (placeholderWarnedFor.has(realmUrl)) return;
     placeholderWarnedFor.add(realmUrl);
     console.warn(
-      `search-result-section: rendering with placeholder realm name for ${realmUrl} — realm.info() returned "${UNKNOWN_REALM_NAME}" because fetchInfo has not resolved yet. If a test failed selecting on data-test-realm here, this is the race.`,
+      `result-section: rendering with placeholder realm name for ${realmUrl} — realm.info() returned "${UNKNOWN_REALM_NAME}" because fetchInfo has not resolved yet. If a test failed selecting on data-test-realm here, this is the race.`,
     );
   },
 );
@@ -82,24 +82,32 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
-    // When true, ItemButton renders the Adorn visual treatment (teal hover
-    // type-label tab + teal selection chip) rather than the legacy grey
+    // When true, the tiles render the Adorn visual treatment (teal hover
+    // type-label tab + selection chip) rather than the plain grey
     // hover/selection visuals.
     adorn?: boolean;
-    // The outline class yielded by the enclosing <AdornContext>,
-    // threaded down to each ItemButton.
+    // The outline class yielded by the enclosing <AdornContext>, threaded
+    // down to each tile.
     adornStrokeClass?: string;
-    // The pre-wired label positioner yielded by the enclosing
-    // <AdornContext>, threaded down to each ItemButton.
+    // The pre-wired label positioner yielded by the enclosing <AdornContext>,
+    // threaded down to each tile.
     adornPositionLabel?: ModifierLike<{
       Element: HTMLElement;
       Args: { Positional: [cardEl: HTMLElement | undefined] };
     }>;
+    // Opt-in visual variant. 'mini' forces single-strip rows, suppresses the
+    // per-section "show only" toggle, and un-hides the recents count.
+    variant?: 'default' | 'mini';
   };
   Blocks: {};
 }
 
-export default class SearchResultSection extends Component<Signature> {
+// One section of the search-results pane — a realm group, the URL-paste row, or
+// the recents row. Lays its rows out into a grid of `ResultTile`s; each tile
+// renders through the unified search-entry rendering surface (a search-entry's
+// `entry.component`, or a live `CardDef` for the URL paste / live-recents
+// fallback).
+export default class ResultSection extends Component<Signature> {
   @service declare realm: RealmService;
 
   recentsIcon = HistoryIcon;
@@ -230,8 +238,20 @@ export default class SearchResultSection extends Component<Signature> {
     return Math.min(SECTION_SHOW_MORE_INCREMENT, this.remainingCount);
   }
 
+  get isMini(): boolean {
+    return this.args.variant === 'mini';
+  }
+
+  // Recents rows go through FittedCardContainer, which writes an inline
+  // `width: <single-strip width>px` unless @fullWidthItem is set. The mini
+  // variant wants every row to fill the chooser's narrow envelope, same
+  // as strip-view does in the full search sheet.
+  get useFullWidthItem(): boolean {
+    return this.viewClass === 'strip-view' || this.isMini;
+  }
+
   get viewClass() {
-    if (this.args.isCompact) {
+    if (this.args.isCompact || this.isMini) {
       return 'compact-view';
     } else if (
       this.args.viewOption === 'grid' &&
@@ -264,6 +284,10 @@ export default class SearchResultSection extends Component<Signature> {
     return selected.some(
       (s) => typeof s === 'string' && s.replace(/\.json$/, '') === normalized,
     );
+  };
+
+  showSelectedCheckmark = (cardUrl: string): boolean => {
+    return this.isMini && this.isCardSelected(cardUrl);
   };
 
   get isCreateNewSelected(): boolean {
@@ -306,6 +330,7 @@ export default class SearchResultSection extends Component<Signature> {
       class={{cn
         'search-result-block'
         search-result-block--collapsed=@isCollapsed
+        search-result-block--mini=this.isMini
       }}
       data-test-realm={{this.sectionRealmName}}
       data-test-realm-url={{this.sectionRealmUrl}}
@@ -324,7 +349,7 @@ export default class SearchResultSection extends Component<Signature> {
           @realmInfo={{this.realmSection.realmInfo}}
           @title={{this.realmSection.realmInfo.name}}
           @totalCount={{this.realmSection.totalCount}}
-          @showOnlyLabel={{this.realmSection.realmInfo.name}}
+          @showOnlyLabel={{unless this.isMini this.realmSection.realmInfo.name}}
           @showOnlyChecked={{@isFocused}}
           @onShowOnlyChange={{this.handleShowOnlyChange}}
         />
@@ -335,8 +360,8 @@ export default class SearchResultSection extends Component<Signature> {
           data-test-search-cards-result
         >
           {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
-            <ItemButton
-              @item={{this.newCardArgs this.realmSection.realmUrl}}
+            <ResultTile
+              @newCard={{this.newCardArgs this.realmSection.realmUrl}}
               @isSelected={{this.isCreateNewSelected}}
               @multiSelect={{@multiSelect}}
               @onSelect={{@handleSelect}}
@@ -348,10 +373,10 @@ export default class SearchResultSection extends Component<Signature> {
           {{/if}}
           {{#each this.displayedRealmCards as |card i|}}
             {{#unless card.isError}}
-              <ItemButton
-                @item={{card.component}}
-                @itemId={{card.url}}
-                @isSelected={{this.isCardSelected card.url}}
+              <ResultTile
+                @entry={{card}}
+                @isSelected={{this.isCardSelected card.id}}
+                @showSelectedCheckmark={{this.showSelectedCheckmark card.id}}
                 @multiSelect={{@multiSelect}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
@@ -391,11 +416,11 @@ export default class SearchResultSection extends Component<Signature> {
           @viewFormat={{this.viewFormat}}
           @size={{this.cardSize}}
         >
-          <ItemButton
-            @item={{this.urlSection.card}}
-            @itemId={{this.urlSection.card.id}}
+          <ResultTile
+            @card={{this.urlSection.card}}
             @isSelected={{this.isCardSelected this.urlSection.card.id}}
             @multiSelect={{@multiSelect}}
+            @showSelectedCheckmark={{this.isMini}}
             @onSelect={{@handleSelect}}
             @onSubmit={{@onSubmit}}
             @adorn={{@adorn}}
@@ -406,14 +431,22 @@ export default class SearchResultSection extends Component<Signature> {
         </GridContainer>
       {{else if this.recentsSection}}
         {{#unless @isCompact}}
-          <SearchSheetSectionHeader
-            @icon={{this.recentsIcon}}
-            @title='Recents'
-            @hideCount={{true}}
-            @showOnlyLabel='Recents'
-            @showOnlyChecked={{@isFocused}}
-            @onShowOnlyChange={{this.handleShowOnlyChange}}
-          />
+          {{#if this.isMini}}
+            <SearchSheetSectionHeader
+              @icon={{this.recentsIcon}}
+              @title='Recents'
+              @totalCount={{this.recentsSection.totalCount}}
+            />
+          {{else}}
+            <SearchSheetSectionHeader
+              @icon={{this.recentsIcon}}
+              @title='Recents'
+              @hideCount={{true}}
+              @showOnlyLabel='Recents'
+              @showOnlyChecked={{@isFocused}}
+              @onShowOnlyChange={{this.handleShowOnlyChange}}
+            />
+          {{/if}}
         {{/unless}}
 
         {{#if (eq this.recentsSection.kind 'prerendered')}}
@@ -422,22 +455,22 @@ export default class SearchResultSection extends Component<Signature> {
             @items={{this.displayedPrerenderedRecents}}
             @viewFormat={{this.viewFormat}}
             @size={{this.cardSize}}
-            @fullWidthItem={{eq this.viewClass 'strip-view'}}
+            @fullWidthItem={{this.useFullWidthItem}}
             as |card GridItem|
           >
             <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
               <:default>
-                <ItemButton
-                  @item={{card.component}}
-                  @itemId={{card.url}}
-                  @isSelected={{this.isCardSelected card.url}}
+                <ResultTile
+                  @entry={{card}}
+                  @isSelected={{this.isCardSelected card.id}}
                   @multiSelect={{@multiSelect}}
+                  @showSelectedCheckmark={{this.isMini}}
                   @onSelect={{@handleSelect}}
                   @onSubmit={{@onSubmit}}
                   @adorn={{@adorn}}
                   @adornStrokeClass={{@adornStrokeClass}}
                   @adornPositionLabel={{@adornPositionLabel}}
-                  data-test-recent-card-result={{removeFileExtension card.url}}
+                  data-test-recent-card-result={{removeFileExtension card.id}}
                 />
               </:default>
               <:after>
@@ -463,16 +496,16 @@ export default class SearchResultSection extends Component<Signature> {
             @items={{this.displayedLiveRecents}}
             @viewFormat={{this.viewFormat}}
             @size={{this.cardSize}}
-            @fullWidthItem={{eq this.viewClass 'strip-view'}}
+            @fullWidthItem={{this.useFullWidthItem}}
             as |card GridItem|
           >
             <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
               <:default>
-                <ItemButton
-                  @item={{card}}
-                  @itemId={{card.id}}
+                <ResultTile
+                  @card={{card}}
                   @isSelected={{this.isCardSelected card.id}}
                   @multiSelect={{@multiSelect}}
+                  @showSelectedCheckmark={{this.isMini}}
                   @onSelect={{@handleSelect}}
                   @onSubmit={{@onSubmit}}
                   @adorn={{@adorn}}
@@ -550,6 +583,74 @@ export default class SearchResultSection extends Component<Signature> {
       .show-more {
         margin-top: var(--boxel-sp);
         width: fit-content;
+      }
+      .search-result-block--mini .show-more {
+        border-radius: var(--boxel-border-radius-xl);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        font-weight: 600;
+      }
+      .search-result-block--mini {
+        margin-bottom: var(--boxel-sp);
+      }
+      /* The recents/realm "in {realm}" caption is rendered as a GridItem
+         :after — hide it in the mini variant so each row collapses to icon
+         + name only. The Spec card type also renders a `spec-tag-pill`
+         badge inside its prerendered body; suppress it for the same
+         single-line reason. */
+      .search-result-block--mini .realm-name,
+      .search-result-block--mini :deep(.spec-tag-pill) {
+        display: none;
+      }
+      /* `.compact-view` was authored for the horizontal quick-menu strip
+         (row of cards scrolling sideways). The mini chooser wants the
+         opposite — a vertical list of single-line rows, one per card. */
+      .search-result-block--mini .compact-view {
+        flex-flow: column nowrap;
+        gap: 0;
+      }
+      /* The realm/recents section header is bottom-margined for the full
+         search-sheet layout; in mini it sits right above the rows, so
+         tighten the gap. */
+      .search-result-block--mini :deep(.search-sheet-section-header) {
+        margin-bottom: var(--boxel-sp-xxs);
+        padding-block: var(--boxel-sp-xs);
+      }
+      /* Rows in the mini variant are bare — no border or hover shadow.
+         Selection is signaled by a teal fill + a black checkmark on the
+         right, matching the design. */
+      .search-result-block--mini :deep(.item-button) {
+        border: none;
+        background-color: transparent;
+        border-radius: var(--boxel-border-radius);
+      }
+      .search-result-block--mini :deep(.item-button:hover) {
+        box-shadow: none;
+        background-color: var(--boxel-200);
+      }
+      .search-result-block--mini :deep(.item-button.selected),
+      .search-result-block--mini :deep(.item-button.selected:hover) {
+        background-color: var(--boxel-highlight);
+        box-shadow: none;
+        border: none;
+        --background: transparent;
+        --card: transparent;
+      }
+      /* The Button's own scoped CSS sets `background-color` via the
+         `--boxel-button-color` variable; override that var here too so
+         the teal fill wins regardless of which selector lands first. */
+      .search-result-block--mini :deep(.item-button.selected) {
+        --boxel-button-color: var(--boxel-highlight);
+      }
+      /* The fitted-format card template (and the prerendered HTML for
+         each card type) renders with its own opaque background — that
+         covers the Button's teal so only the strip of padding around
+         the card would show through. Force every descendant of a
+         selected row to transparent so the teal reads end-to-end.
+         SVG fills (e.g. the CheckMark icon) aren't `background-color`,
+         so the icon glyph stays visible. */
+      .search-result-block--mini :deep(.item-button.selected *) {
+        background-color: transparent;
+        background-image: none;
       }
       .realm-name {
         padding-top: var(--boxel-sp-4xs);

@@ -4,15 +4,14 @@ import type {
   PrerenderedCard,
 } from './index-query-engine.ts';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
-import type { CodeRef } from './code-ref.ts';
 import {
   type CardResource,
   type CssResource,
   type FileMetaResource,
   type HtmlQuery,
   type HtmlResource,
+  type IconResource,
   type PrerenderedCardResource,
-  type RenderedHtmlResource,
   type Saved,
   type SearchEntryResource,
   type Unsaved,
@@ -41,31 +40,6 @@ export interface PrerenderedCardCollectionDocument {
   };
 }
 
-// The unified search response is heterogeneous, per row: a result resolves
-// either to a full live `card`/`file-meta` (its `attributes`/`relationships`
-// shipped in `data`, exactly as `/_search` returns today) or — preferentially —
-// to prerendered HTML, in which case `data` carries an identity-only `card`
-// (no `attributes`) and the rendering rides in `included` as a `rendered-html`
-// plus its deduped `css` stylesheets.
-export type UnifiedSearchIncludedResource =
-  | CardResource<Saved>
-  | FileMetaResource
-  | RenderedHtmlResource
-  | CssResource;
-
-export interface UnifiedSearchCollectionDocument<
-  Identity extends Unsaved = Saved,
-> {
-  data: (CardResource<Identity> | FileMetaResource)[];
-  included?: UnifiedSearchIncludedResource[];
-  meta: QueryResultsMeta & {
-    // The render type resolved for this search, echoed at the collection level
-    // so a live/fallback row renders as the same ancestor type as its HTML
-    // siblings.
-    renderType?: CodeRef;
-  };
-}
-
 // The v2 search response: heterogeneous `search-entry` resources in `data`,
 // with everything they compose — `html` renderings (plus their deduped `css`
 // stylesheets) and/or `card`/`file-meta` `item` serializations — riding in
@@ -74,6 +48,7 @@ export interface UnifiedSearchCollectionDocument<
 export type SearchEntryIncludedResource =
   | HtmlResource
   | CssResource
+  | IconResource
   | CardResource<Saved>
   | FileMetaResource;
 

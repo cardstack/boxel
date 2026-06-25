@@ -32,6 +32,9 @@ import type { ComponentLike } from '@glint/template';
 export interface HydratableEntryArgs {
   // The card/file identity URL — also the hydration GET target.
   cardId: string;
+  // The result's display name (realm-local path), surfaced by the host error
+  // tile to identify which result failed.
+  name?: string;
   // The inert prerendered HTML for an HTML-backed row; absent for a full live
   // row, which resolves to its live instance with nothing to stay inert as.
   component?: HTMLComponent;
@@ -51,11 +54,15 @@ export interface HydratableEntryArgs {
   errorDoc?: ErrorEntry;
   // The hydration gesture for an HTML-backed row.
   mode: HydrationMode;
+  // Whether the row registers with the operator-mode overlay; `false` renders
+  // it plainly (no chip / options menu / selection toggle).
+  overlays: boolean;
 }
 
 class _HydratableEntryComponent {
   constructor(
     readonly cardId: string,
+    readonly name: string | undefined,
     readonly component: HTMLComponent | undefined,
     readonly renderType: ResolvedCodeRef | undefined,
     readonly type: StoreReadType | undefined,
@@ -63,6 +70,7 @@ class _HydratableEntryComponent {
     readonly isError: boolean,
     readonly errorDoc: ErrorEntry | undefined,
     readonly mode: HydrationMode,
+    readonly overlays: boolean,
   ) {}
 }
 
@@ -70,6 +78,7 @@ setComponentTemplate(
   precompileTemplate(
     `<HydratableCard
       @cardId={{this.cardId}}
+      @name={{this.name}}
       @component={{this.component}}
       @renderType={{this.renderType}}
       @type={{this.type}}
@@ -77,6 +86,7 @@ setComponentTemplate(
       @isError={{this.isError}}
       @errorDoc={{this.errorDoc}}
       @mode={{this.mode}}
+      @overlays={{this.overlays}}
       ...attributes
     />`,
     {
@@ -114,6 +124,7 @@ export function hydratableEntryComponent(
 ): EntryComponent {
   return new _HydratableEntryComponent(
     args.cardId,
+    args.name,
     args.component,
     args.renderType,
     args.type,
@@ -121,5 +132,6 @@ export function hydratableEntryComponent(
     args.isError,
     args.errorDoc,
     args.mode,
+    args.overlays,
   ) as unknown as EntryComponent;
 }

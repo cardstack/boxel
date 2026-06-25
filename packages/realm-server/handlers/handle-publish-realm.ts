@@ -14,18 +14,21 @@ import {
   fetchRealmPermissions,
   uuidv4,
   userInitiatedPriority,
+  deriveRealmName,
 } from '@cardstack/runtime-common';
+import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import { join } from 'path';
-import {
+import fsExtra from 'fs-extra';
+const {
   copySync,
   readJsonSync,
   writeJsonSync,
   removeSync,
   existsSync,
   moveSync,
-} from 'fs-extra';
+} = fsExtra;
 
 import {
   fetchRequestFromContext,
@@ -39,7 +42,10 @@ import { createJWT } from '../jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { registerUser } from '../synapse.ts';
-import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
+import {
+  getMatrixUsername,
+  passwordFromSeed,
+} from '@cardstack/runtime-common/matrix-client';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 
@@ -314,6 +320,35 @@ export default function handlePublishRealm({
           `${ownerUserId} does not have enough permission to publish this realm`,
         );
         return;
+      }
+
+      // Within the owner's own published space (`<username>.<spaceDomain>`), a
+      // subdirectory publish may target only the realm-name path (the "Your
+      // Boxel Space" target) or the server-issued unlisted-link slug — never an
+      // arbitrary, client-chosen path — so the unlisted link's unguessable
+      // path can't be hand-picked through a direct API call. Publishes to any
+      // other host (claimed custom domains, etc.) are left permissive.
+      let spaceDomain = domainsForPublishedRealms?.boxelSpace;
+      let matrixUsername = getMatrixUsername(ownerUserId);
+      let publishedURLForPath = new URL(publishedRealmURL);
+      let isOwnerSpaceHost =
+        !!spaceDomain &&
+        (publishedURLForPath.host === `${matrixUsername}.${spaceDomain}` ||
+          publishedURLForPath.hostname === `${matrixUsername}.${spaceDomain}`);
+      if (isOwnerSpaceHost) {
+        let publishedPath = publishedURLForPath.pathname
+          .split('/')
+          .filter(Boolean)
+          .join('/');
+        let realmName = deriveRealmName(sourceRealmURL);
+        let unlistedSlug = await getUnlistedSlug(dbAdapter, sourceRealmURL);
+        if (publishedPath !== realmName && publishedPath !== unlistedSlug) {
+          await sendResponseForBadRequest(
+            ctxt,
+            'publishedRealmURL path must be the realm name or the server-issued unlisted link',
+          );
+          return;
+        }
       }
     }
 

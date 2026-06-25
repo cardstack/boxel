@@ -8,7 +8,7 @@ import ColorField from 'https://cardstack.com/base/color';
 import StringField from 'https://cardstack.com/base/string';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { StatusPill } from './status-pill';
+import { StatusPill } from './status-pill.gts';
 
 export class IssueOptionField extends FieldDef {
   @field value = contains(StringField);
@@ -72,6 +72,7 @@ export class IssueOptionField extends FieldDef {
         }
         .option-edit-field {
           min-width: 0;
+          overflow: hidden;
           --boxel-field-label-font-size: 0.6875rem;
         }
         .option-edit-field em {

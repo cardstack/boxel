@@ -426,6 +426,108 @@ module('Integration | RichMarkdownField', function (hooks) {
       .doesNotExist('no unresolved Pill remains after card resolves (block)');
   });
 
+  test('inline card reference with a non-atom format resolves to an inline-block slot', async function (assert) {
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded><@fields.name /></div>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Embedded inline: :card[${testRealmURL}Pet/mango | embedded]\n\nAtom inline: :card[${testRealmURL}Pet/mango | atom]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    // Both inline refs target the same card; the embedded one renders the
+    // embedded format and the atom one renders atom.
+    await waitFor('[data-test-pet-embedded]', { timeout: 10_000 });
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+
+    let embeddedSlot = document
+      .querySelector('[data-test-pet-embedded]')!
+      .closest('[data-test-markdown-bfm-inline-card]');
+    assert.ok(
+      embeddedSlot,
+      'the embedded inline ref renders inside an inline card slot',
+    );
+    assert
+      .dom(embeddedSlot)
+      .hasClass(
+        'markdown-bfm-card-slot--inline-embed',
+        'a non-atom inline embed flows as an inline-block slot',
+      );
+    assert
+      .dom(embeddedSlot)
+      .doesNotHaveClass(
+        'markdown-bfm-card-slot--inline',
+        'a non-atom inline embed does not use the atom pill flow class',
+      );
+
+    let atomSlot = document
+      .querySelector('[data-test-pet-atom]')!
+      .closest('[data-test-markdown-bfm-inline-card]');
+    assert.ok(
+      atomSlot,
+      'the atom inline ref renders inside an inline card slot',
+    );
+    assert
+      .dom(atomSlot)
+      .hasClass(
+        'markdown-bfm-card-slot--inline',
+        'a plain (atom) inline ref keeps the atom pill flow class',
+      );
+  });
+
   test('card references show loading shimmer before linkedCards resolves, not broken Pills', async function (assert) {
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -638,6 +740,72 @@ module('Integration | RichMarkdownField', function (hooks) {
       .hasClass(
         'markdown-bfm-broken--fitted',
         'fitted ref carries the fitted footprint class',
+      );
+    let style = brokenBlock?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
+  test('unresolved block ::file with fitted size spec carries the same footprint as ::card', async function (assert) {
+    // A `::file[... | spec]` block ref honors fitted sizing the same way
+    // `::card[... | spec]` does — the broken-link box adopts the fitted format
+    // class and inline width/height.
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'article.gts': { ArticleCard },
+        'article-file-fitted-unresolved.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `::file[https://nonexistent.example/images/gone.png | 400x200]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(
+      `${testRealmURL}article-file-fitted-unresolved`,
+    )) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 10_000 },
+    );
+
+    let brokenBlock = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-block]',
+    ) as HTMLElement | null;
+    assert.ok(brokenBlock, 'broken-link block exists');
+    assert
+      .dom(brokenBlock)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted file ref carries the fitted footprint class',
       );
     let style = brokenBlock?.getAttribute('style') ?? '';
     assert.true(

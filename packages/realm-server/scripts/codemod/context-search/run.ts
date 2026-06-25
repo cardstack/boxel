@@ -1,16 +1,18 @@
 // CLI for the `@context` search codemod. Dry-run by default; pass `--write` to
 // apply. Walks the given files/directories for `.gts` card source, migrates the
 // usages it can transform mechanically, and reports the ones it can't so they
-// can be migrated by hand.
+// can be migrated by hand. A file whose template can't be parsed is skipped and
+// reported (left untouched) rather than aborting the whole sweep — such a module
+// already fails to compile, so it's out of scope here.
 //
-//   ts-node --transpileOnly scripts/codemod/context-search/run.ts <path…> [--write]
+//   node scripts/codemod/context-search/run.ts <path…> [--write]
 
 import { readFileSync, writeFileSync, statSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 
 import * as prettier from 'prettier';
 
-import { transformContextSearch } from './transform';
+import { transformContextSearch, type TransformResult } from './transform.ts';
 
 // Format the migrated source through the repo's prettier config (with
 // prettier-plugin-ember-template-tag for `.gts`) so the structural edits land as
@@ -54,7 +56,7 @@ async function main(): Promise<void> {
   let paths = args.filter((a) => !a.startsWith('--'));
   if (paths.length === 0) {
     console.error(
-      'usage: ts-node scripts/codemod/context-search/run.ts <file-or-dir>… [--write]',
+      'usage: node scripts/codemod/context-search/run.ts <file-or-dir>… [--write]',
     );
     process.exit(2);
   }
@@ -62,18 +64,32 @@ async function main(): Promise<void> {
   let files = collectGtsFiles(paths);
   let transformed: string[] = [];
   let reported: { file: string; reasons: string[] }[] = [];
+  let unparseable: { file: string; error: string }[] = [];
 
   for (let file of files) {
     let source = readFileSync(file, 'utf8');
-    let result = transformContextSearch(source, { filename: file });
+    let result: TransformResult;
+    try {
+      result = transformContextSearch(source, { filename: file });
+    } catch (err) {
+      // The transformer threw while parsing this module's template, so it can't
+      // be migrated mechanically (and would not compile as-is either). Record it
+      // and keep going so a single bad module doesn't mask every file after it.
+      let message = err instanceof Error ? err.message : String(err);
+      unparseable.push({ file, error: message.split('\n')[0] });
+      continue;
+    }
     if (result.status === 'transformed') {
+      // `transformed` is all-or-nothing: the transformer only reports it when
+      // the module is fully migrated (no `@context.prerenderedCardSearchComponent`
+      // left), so the written output is never a half-migrated mix.
       transformed.push(file);
       if (write && result.output !== source) {
         writeFileSync(file, await formatGts(result.output, file));
       }
-    }
-    // A file may be both transformed (some usages) and reported (others).
-    if (result.reasons.length > 0) {
+    } else if (result.reasons.length > 0) {
+      // `skipped` with reasons: at least one usage couldn't be migrated, so the
+      // whole file was left untouched and is reported for hand migration.
       reported.push({ file, reasons: result.reasons });
     }
   }
@@ -94,6 +110,16 @@ async function main(): Promise<void> {
       for (let reason of reasons) {
         console.log(`      - ${reason}`);
       }
+    }
+  }
+
+  if (unparseable.length > 0) {
+    console.log(
+      `\nSkipped ${unparseable.length} unparseable file(s) (left untouched):`,
+    );
+    for (let { file, error } of unparseable) {
+      console.log(`  ⚠ ${file}`);
+      console.log(`      - ${error}`);
     }
   }
 

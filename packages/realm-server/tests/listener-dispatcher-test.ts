@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { execFileSync } from 'child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
@@ -258,7 +259,7 @@ function withEnv<T>(
   }
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   hooks.before(function () {
     tmpCertDir = mkdtempSync(join(tmpdir(), 'realm-listener-test-'));
     let pair = makeCert(tmpCertDir);

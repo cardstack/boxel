@@ -12,7 +12,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
-import { Project, Issue } from './darkfactory';
+import { Project, Issue } from './darkfactory.gts';
 
 export const TestRunStatusField = enumField(StringField, {
   options: [

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { JSDOM } from 'jsdom';
 import {
@@ -11,7 +12,7 @@ function makeDoc() {
   return new JSDOM().window.document;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('sanitizeHeadHTML', function () {
     test('allows title, meta, and link tags', function (assert) {
       let doc = makeDoc();

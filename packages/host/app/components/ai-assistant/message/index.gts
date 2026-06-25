@@ -10,7 +10,7 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
-import throttle from 'lodash/throttle';
+import { throttle } from 'lodash-es';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';

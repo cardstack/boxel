@@ -22,19 +22,19 @@ export interface QueryFieldMeta {
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
-export const RenderedHtmlResourceType = 'rendered-html';
 export const CssResourceType = 'css';
 export const SearchEntryResourceType = 'search-entry';
 export const HtmlResourceType = 'html';
+export const IconResourceType = 'icon';
 // resource
 export type Resource =
   | ModuleResource
   | CardResource
   | PrerenderedCardResource
-  | RenderedHtmlResource
   | CssResource
   | SearchEntryResource
-  | HtmlResource;
+  | HtmlResource
+  | IconResource;
 export type ResourceMeta = ModuleMeta | Meta;
 export type LinkableResource = CardResource | FileMetaResource;
 
@@ -88,18 +88,6 @@ export type CardResourceMeta = Meta & {
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
-  // Set by the server on an HTML-backed result to mark this `card` as
-  // identity-only: identity + a `rendered-html` relationship, with the live
-  // serialization deliberately withheld (no `attributes`; hydration fetches it
-  // on demand). The authoritative wire signal that a consumer must not treat
-  // this resource as a complete instance — see `isIdentityOnlyCardResource`.
-  identityOnly?: boolean;
-  // The ancestor type this result's HTML was rendered as, echoed on an
-  // identity-only `card` so a consumer renders the hydrated/fallback card as
-  // the same type as its HTML sibling. A full live `card` never carries this
-  // (it ships the standard live wireformat); it rides only on identity-only
-  // results.
-  renderType?: CodeRef;
   // Set on a field-limited serialization: the names of the fields it carries.
   // Presence marks the resource sparse — distinguishing "only these fields
   // were loaded" from "a full card whose other fields happen to be empty" —
@@ -118,9 +106,6 @@ export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
   queryFieldDefs?: Record<string, QueryFieldMeta>;
-  // See CardResourceMeta.identityOnly — a file-meta result can likewise be
-  // HTML-backed and identity-only.
-  identityOnly?: boolean;
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
@@ -136,11 +121,6 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
-  } & {
-    // The card's rendering, when the server resolves this row to prerendered
-    // HTML. A reserved platform key (see RenderedHtmlResourceType) that can
-    // never collide with a userland @field name.
-    'rendered-html'?: Relationship;
   };
   meta: CardResourceMeta;
   links?: {
@@ -154,8 +134,6 @@ export interface FileMetaResource {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
-  } & {
-    'rendered-html'?: Relationship;
   };
   meta: FileMetaResourceResourceMeta;
   links?: {
@@ -163,33 +141,7 @@ export interface FileMetaResource {
   };
 }
 
-// One prerendered presentation of a card/file (a single format per response).
-// Its `id` is the bare card/file URL — the same id as the `card`/`file-meta`
-// resource it renders; `type` is what distinguishes them. The scoped CSS the
-// rendering needs travels as first-class `css` resources linked through
-// `styles` (deduped in `included` by identity).
-export interface RenderedHtmlResource {
-  id: string;
-  type: typeof RenderedHtmlResourceType;
-  attributes: {
-    html: string;
-    cardType: string;
-    iconHtml?: string;
-    isError?: boolean;
-  };
-  relationships: {
-    styles: {
-      data: { type: typeof CssResourceType; id: string }[];
-    };
-  };
-  // The ancestor type the HTML was rendered as (echoed from the request's
-  // resolved render type).
-  meta?: {
-    renderType?: CodeRef;
-  };
-}
-
-// A scoped stylesheet referenced by a `rendered-html` resource. The scoped-CSS
+// A scoped stylesheet referenced by an `html` rendering. The scoped-CSS
 // URL base64-embeds the whole stylesheet, so it travels exactly once here in
 // `attributes.href` (the host loads it via `loader.import`); the `id` is a
 // stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
@@ -199,6 +151,26 @@ export interface CssResource {
   type: typeof CssResourceType;
   attributes: {
     href: string;
+  };
+}
+
+// A card type's presentation descriptor — the per-type data that is identical
+// across every result of that type (its icon, display name, and code ref), so
+// it rides as its own deduped resource rather than repeated on each rendering.
+// Its `id` is the type's internal key (the `<module>/<name>` form already
+// carried as a row's `types[0]`), so identical types collapse to one
+// `(type, id)` in `included`. Reached from the `search-entry` (not the `html`)
+// so item-only / no-HTML rows resolve their type descriptor too.
+export interface IconResource {
+  id: string;
+  type: typeof IconResourceType;
+  attributes: {
+    iconHtml: string;
+    // The card def's display name (e.g. "Author").
+    displayName: string;
+    // The card def's resolved code ref — the structured form of the
+    // `<module>/<name>` the `id` encodes, so consumers needn't re-parse it.
+    codeRef: ResolvedCodeRef;
   };
 }
 
@@ -244,6 +216,12 @@ export interface SearchEntryResource {
         id: string;
       };
     };
+    // The result's card-type icon, deduped across entries of the same type.
+    // Present whenever the row carries an `icon_html`; reached here (not on
+    // `html`) so item-only / no-HTML rows resolve it too.
+    icon?: {
+      data: { type: typeof IconResourceType; id: string };
+    };
   };
 }
 
@@ -259,7 +237,6 @@ export interface HtmlResource {
     // Absent only on an error rendering with no last-known-good HTML.
     html?: string;
     cardType: string;
-    iconHtml?: string;
     isError?: boolean;
     format: PrerenderedHtmlFormat;
     // The type this rendering was rendered as — the result's own native type
@@ -324,23 +301,21 @@ export {
   isCardFields,
   isMeta,
   isRelationship,
-  isRenderedHtmlResource,
   isCssResource,
-  isIdentityOnlyCardResource,
-  isIdentityOnlyFileMetaResource,
+  isIconResource,
   isSearchEntryResource,
   isHtmlResource,
   isSparseItemResource,
 } from './card-document-shape.ts';
 
-// The map/set key for a JSON:API `(type, id)` identity pair. NUL-separated so
-// one pair can't alias another by concatenation — no resource type or id
-// contains a NUL byte.
-// `id` may be absent on an unsaved resource; the literal "undefined" segment
-// it produces is still a stable, non-aliasing key.
-export function resourceIdentity(type: string, id: string | undefined): string {
-  return `${type}\u0000${id}`;
-}
+// The map/set key for a JSON:API `(type, id)` identity pair lives in its own
+// dependency-free module so it is importable outside the card-api graph; it is
+// re-exported here so the index and existing call sites keep resolving it from
+// `resource-types`.
+export {
+  RESOURCE_IDENTITY_SEPARATOR,
+  resourceIdentity,
+} from './resource-identity.ts';
 
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
 // URL. Server and host compute it through this one helper so identical

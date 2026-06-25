@@ -402,6 +402,12 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
+      - name: Run OIDC mapping provider unit tests
+        # Fast (~no boot) and stack-independent — it only needs the warmed
+        # Synapse image — so run it once on shard 1 rather than every shard.
+        if: matrix.shardIndex == 1
+        run: pnpm test:oidc-mapping-provider
+        working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
@@ -595,7 +601,7 @@ jobs:
           cp -a .test-web-assets-artifact/. ./
       - name: Compute shard test modules
         id: shard_modules
-        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(node scripts/shard-test-modules.cjs ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
       # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub

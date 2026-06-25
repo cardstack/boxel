@@ -1,6 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import sinon from 'sinon';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
@@ -9,6 +11,7 @@ import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   REALM_FILE_CHANGES_CHANNEL,
+  REALM_INDEX_UPDATED_CHANNEL,
   RealmIndexUpdater,
   SupportedMimeType,
   param,
@@ -49,7 +52,7 @@ import {
 // transforms + scoped-css), so the invalidate lands inside the race
 // window. The observable assertion is on the subsequent request's
 // `x-boxel-cache` header — a miss proves A's cache write was discarded.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm.#transpiledModuleCache invalidate-during-transpile race',
     function (hooks) {
@@ -1691,6 +1694,38 @@ module(basename(__filename), function () {
           0,
           'L2 rows tombstoned by the worker-side NOTIFY even though startReindex never ran',
         );
+      });
+
+      test('realmIndexUpdater.fullIndex emits realm_index_updated so index-derived caches drop on every replica', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+
+        try {
+          // Bypass `Realm.startReindex` (whose .then never clears the
+          // index-derived caches anyway) and go straight through
+          // `RealmIndexUpdater.fullIndex`, mirroring the production bypass
+          // paths. The worker-side emit is the only thing that drops
+          // `#cachedRealmInfo` / `#cachedHostRoutingMap` / `#inFlightSearch`
+          // on every mounted replica after a from-scratch swap.
+          await testRealm.realmIndexUpdater.fullIndex(userInitiatedPriority);
+
+          let indexUpdatedCall = notifyStub
+            .getCalls()
+            .find(
+              (c) =>
+                c.args[0] === REALM_INDEX_UPDATED_CHANNEL &&
+                c.args[1] === realmURL.href,
+            );
+
+          assert.ok(
+            indexUpdatedCall,
+            'worker emitted realm_index_updated for the realm URL after the from-scratch swap',
+          );
+        } finally {
+          notifyStub.restore();
+        }
       });
     },
   );

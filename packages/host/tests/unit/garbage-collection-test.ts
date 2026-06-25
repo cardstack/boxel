@@ -363,6 +363,83 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
+  test('a `.json` FileDef does not collide with the same-named card id (CS-11622)', async function (assert) {
+    let referenceCount: ReferenceCount = new Map();
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
+
+    // The realm config has two identities that differ only by extension: the
+    // card `…/realm` and the file `…/realm.json`. File-meta keyed without its
+    // extension would collapse onto the card id, so peeking the card id as
+    // file-meta would wrongly find the FileDef and the card would open as a
+    // `.json` file instead of a card.
+    class RealmConfig extends CardDef {}
+    let cardId = `${testRealmURL}realm`;
+    let fileUrl = `${cardId}.json`;
+    let realmConfig = new RealmConfig();
+    store.setCard(cardId, realmConfig);
+
+    let fileDef = new FileDef({
+      id: fileUrl,
+      sourceUrl: fileUrl,
+      url: fileUrl,
+      name: 'realm.json',
+      contentType: 'application/json',
+    });
+    store.setFileMeta(fileUrl, fileDef);
+
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      fileDef,
+      'the FileDef is found by its full `.json` URL',
+    );
+    assert.strictEqual(
+      store.getFileMeta(cardId),
+      undefined,
+      'the card id does not resolve to the colliding FileDef',
+    );
+    assert.strictEqual(
+      store.getCard(cardId),
+      realmConfig,
+      'the card is still found by its (extension-less) card id',
+    );
+
+    // Deleting the file by its `.json` URL removes only the file-meta row; the
+    // same-named card must survive. The GC sweep deletes resident file-meta
+    // this way (`this.delete(fileDef.id)`), so a `.json` delete must never
+    // evict a live card.
+    store.delete(fileUrl);
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      undefined,
+      'the FileDef is removed when deleted by its `.json` URL',
+    );
+    assert.strictEqual(
+      store.getCard(cardId),
+      realmConfig,
+      'deleting the `.json` file leaves the same-named card in place',
+    );
+
+    // The inverse separation must hold too: deleting the card removes only the
+    // card and leaves the same-named FileDef untouched.
+    store.setFileMeta(fileUrl, fileDef);
+    store.delete(cardId);
+    assert.strictEqual(
+      store.getCard(cardId),
+      undefined,
+      'the card is removed when deleted by its (extension-less) id',
+    );
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      fileDef,
+      'deleting the card leaves the same-named FileDef in place',
+    );
+  });
+
   test('an instance becomes a GC candidate when its reference count drops to 0 for its remote id', async function (assert) {
     let {
       referenceCount,

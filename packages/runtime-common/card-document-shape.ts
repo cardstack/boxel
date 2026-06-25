@@ -27,9 +27,9 @@ import type {
   CssResource,
   FileMetaResource,
   HtmlResource,
+  IconResource,
   Meta,
   Relationship,
-  RenderedHtmlResource,
   Saved,
   SearchEntryResource,
 } from './resource-types.ts';
@@ -46,10 +46,10 @@ import type {
 // `FileMetaResource['type']` field types.
 const CardResourceType: CardResource['type'] = 'card';
 const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
-const RenderedHtmlResourceType: RenderedHtmlResource['type'] = 'rendered-html';
 const CssResourceType: CssResource['type'] = 'css';
 const SearchEntryResourceType: SearchEntryResource['type'] = 'search-entry';
 const HtmlResourceType: HtmlResource['type'] = 'html';
+const IconResourceType: IconResource['type'] = 'icon';
 
 // ---------------------------------------------------------------------------
 // Code refs
@@ -289,34 +289,6 @@ export function isFileMetaResource(
   return isCodeRef(adoptsFrom);
 }
 
-export function isRenderedHtmlResource(
-  resource: any,
-): resource is RenderedHtmlResource {
-  if (typeof resource !== 'object' || resource == null) {
-    return false;
-  }
-  if (resource.type !== RenderedHtmlResourceType) {
-    return false;
-  }
-  if (typeof resource.id !== 'string') {
-    return false;
-  }
-  let { attributes } = resource;
-  if (typeof attributes !== 'object' || attributes == null) {
-    return false;
-  }
-  if (
-    typeof attributes.html !== 'string' ||
-    typeof attributes.cardType !== 'string'
-  ) {
-    return false;
-  }
-  // The has-many `styles` relationship is part of the type, so a sound guard
-  // must confirm it before a consumer reads the stylesheet links.
-  let styles = resource.relationships?.styles;
-  return Boolean(styles && Array.isArray(styles.data));
-}
-
 export function isCssResource(resource: any): resource is CssResource {
   if (typeof resource !== 'object' || resource == null) {
     return false;
@@ -331,6 +303,27 @@ export function isCssResource(resource: any): resource is CssResource {
     return false;
   }
   return typeof resource.attributes.href === 'string';
+}
+
+export function isIconResource(resource: any): resource is IconResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== IconResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
+    return false;
+  }
+  return (
+    typeof attributes.iconHtml === 'string' &&
+    typeof attributes.displayName === 'string' &&
+    isResolvedCodeRef(attributes.codeRef)
+  );
 }
 
 export function isSearchEntryResource(
@@ -349,7 +342,7 @@ export function isSearchEntryResource(
   if (typeof relationships !== 'object' || relationships == null) {
     return false;
   }
-  let { html, item } = relationships;
+  let { html, item, icon } = relationships;
   if (html !== undefined) {
     if (!Array.isArray(html?.data)) {
       return false;
@@ -365,6 +358,14 @@ export function isSearchEntryResource(
       (item?.data?.type !== CardResourceType &&
         item?.data?.type !== FileMetaResourceType) ||
       typeof item.data.id !== 'string'
+    ) {
+      return false;
+    }
+  }
+  if (icon !== undefined) {
+    if (
+      icon?.data?.type !== IconResourceType ||
+      typeof icon.data.id !== 'string'
     ) {
       return false;
     }
@@ -416,38 +417,6 @@ export function isSparseItemResource(
     return false;
   }
   return Array.isArray(resource.meta?.sparseFields);
-}
-
-// An "identity-only" card: the server's representation for an HTML-backed
-// result — identity (`id`/`meta`/`links.self`) plus a `rendered-html`
-// relationship, with the live serialization deliberately withheld (no
-// `attributes`; hydration fetches it on demand).
-//
-// The definitive signal is the explicit `meta.identityOnly` flag the server
-// stamps on the wire — NOT the absence of `attributes`, which is a weak tell
-// (a full card with only relationship-typed fields can also serialize without
-// `attributes`). The flag means a consumer must not treat this resource as a
-// complete instance (it must not enter the Store; hydrate via `links.self`).
-export function isIdentityOnlyCardResource(
-  resource: any,
-): resource is CardResource {
-  if (!isCardResource(resource)) {
-    return false;
-  }
-  return resource.meta?.identityOnly === true;
-}
-
-// The `file-meta` counterpart of `isIdentityOnlyCardResource`: an HTML-backed
-// file row the server emits as identity + a `rendered-html` relationship with
-// no `attributes`, flagged `meta.identityOnly`. Hydrates to a live `FileDef`
-// via `links.self`. (A file carries no `renderType` — it renders natively.)
-export function isIdentityOnlyFileMetaResource(
-  resource: any,
-): resource is FileMetaResource {
-  if (!isFileMetaResource(resource)) {
-    return false;
-  }
-  return resource.meta?.identityOnly === true;
 }
 
 // ---------------------------------------------------------------------------

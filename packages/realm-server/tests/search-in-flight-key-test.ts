@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import searchInFlightKeyTests from '@cardstack/runtime-common/tests/search-in-flight-key-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('searchInFlightKey', function () {
     test('same query + opts produce the same key', async function (assert) {
       await runSharedTest(searchInFlightKeyTests, assert, {});

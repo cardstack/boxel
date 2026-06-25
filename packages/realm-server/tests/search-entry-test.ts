@@ -1,7 +1,9 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   buildHtmlResource,
+  buildIconResource,
   buildSearchEntryResource,
   buildSparseItemResource,
   htmlResourceId,
@@ -9,6 +11,7 @@ import {
   htmlQueryHasRenderTypePredicate,
   htmlQueryMatches,
   isHtmlResource,
+  isIconResource,
   isSearchEntryCollectionDocument,
   isSearchEntryResource,
   isSparseItemResource,
@@ -77,7 +80,7 @@ const universe: RenderingCandidate[] = [
   { format: 'head' },
 ];
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('search-entry query parser', function () {
     test('translates the canonical search-entry query', function (assert) {
       let htmlQuery: HtmlQuery = {
@@ -641,6 +644,7 @@ module(basename(__filename), function () {
         url: cardUrl,
         htmlIds: [htmlId],
         itemType: 'card',
+        iconId: `${authorRef.module}/${authorRef.name}`,
       });
       assert.deepEqual(both, {
         type: 'search-entry',
@@ -648,6 +652,12 @@ module(basename(__filename), function () {
         relationships: {
           html: { data: [{ type: 'html', id: htmlId }] },
           item: { data: { type: 'card', id: cardUrl } },
+          icon: {
+            data: {
+              type: 'icon',
+              id: `${authorRef.module}/${authorRef.name}`,
+            },
+          },
         },
       });
       assert.true(isSearchEntryResource(both));
@@ -674,7 +684,6 @@ module(basename(__filename), function () {
         renderType: authorRef,
         html: '<div>hi</div>',
         cardType: 'Author',
-        iconHtml: '<svg/>',
         cssIds: [cssId],
       });
       assert.deepEqual(resource, {
@@ -683,13 +692,40 @@ module(basename(__filename), function () {
         attributes: {
           html: '<div>hi</div>',
           cardType: 'Author',
-          iconHtml: '<svg/>',
           format: 'fitted',
           renderType: authorRef,
         },
         relationships: { styles: { data: [{ type: 'css', id: cssId }] } },
       });
       assert.true(isHtmlResource(resource));
+    });
+
+    test('buildIconResource keys on the type internal key and carries the type descriptor', function (assert) {
+      let internalKey = `${authorRef.module}/${authorRef.name}`;
+      let resource = buildIconResource({
+        internalKey,
+        iconHtml: '<svg>author</svg>',
+        displayName: 'Author',
+        codeRef: authorRef,
+      });
+      assert.deepEqual(resource, {
+        type: 'icon',
+        id: internalKey,
+        attributes: {
+          iconHtml: '<svg>author</svg>',
+          displayName: 'Author',
+          codeRef: authorRef,
+        },
+      });
+      assert.true(isIconResource(resource));
+      assert.false(
+        isIconResource({
+          type: 'icon',
+          id: internalKey,
+          attributes: { iconHtml: '<svg/>' },
+        }),
+        'an icon resource missing displayName / codeRef is rejected',
+      );
     });
 
     test('an error rendering may omit html', function (assert) {

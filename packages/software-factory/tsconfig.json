@@ -26,7 +26,12 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ]
     },
     "types": ["@cardstack/local-types", "node"]
   },
@@ -35,9 +40,10 @@
     "./scripts/**/*.ts",
     "./src/**/*",
     "./tests/**/*",
+    "./realm/**/*",
     "./playwright.config.ts",
     "./playwright.global-setup.ts",
     "./playwright.global-teardown.ts"
   ],
-  "exclude": ["./test-fixtures/**", "./realm/**/*"]
+  "exclude": ["./test-fixtures/**", "./realm/*.test.gts"]
 }

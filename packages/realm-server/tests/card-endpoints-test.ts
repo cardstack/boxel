@@ -1,10 +1,12 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readJSONSync, statSync, writeFileSync } = fsExtra;
 import type {
   Realm,
   Relationship,
@@ -94,7 +96,7 @@ function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
   return chunk;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
@@ -4612,7 +4614,7 @@ module(basename(__filename), function () {
       let favoriteSearchURL = new URL(favoriteSearchLink);
       assert.strictEqual(
         favoriteSearchURL.href.split('?')[0],
-        new URL('_search', consumerRealmURL).href,
+        new URL('_search-v2', consumerRealmURL).href,
         'favorite relationship search link targets consumer realm',
       );
       let favoriteQueryParams = parseSearchQuery(favoriteSearchURL);
@@ -4694,7 +4696,7 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(
         matchesSearchURL.href.split('?')[0],
-        new URL('_search', providerRealmURL).href,
+        new URL('_search-v2', providerRealmURL).href,
         'matches relationship search link targets provider realm',
       );
       let matchesQueryParams = parseSearchQuery(matchesSearchURL);
@@ -4747,7 +4749,7 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(
         failingSearchURL.href.split('?')[0],
-        new URL('_search', UNREACHABLE_REALM_URL).href,
+        new URL('_search-v2', UNREACHABLE_REALM_URL).href,
         'failingMatches search link targets unreachable realm',
       );
       let failingQueryParams = parseSearchQuery(failingSearchURL);

@@ -57,6 +57,34 @@ export interface BrokenLinkSummary {
   kind: 'error' | 'not-found';
 }
 
+// A failure to parse a markdown file's leading YAML frontmatter block,
+// recorded as a finding on the (still successful) index entry. The file
+// indexes fine — `extractAttributes` falls back to treating the whole file
+// as body when the frontmatter won't parse — so without this the failure is
+// invisible and any frontmatter-declared behavior (e.g. a skill's `commands`)
+// silently disappears. Surfaced on `diagnostics.frontmatterParseError` so the
+// `/_indexing-errors` surface can flag it the way it flags `brokenLinks`,
+// letting authors see and fix the YAML rather than wonder where their
+// commands went.
+export interface FrontmatterParseError {
+  // The YAML parser's error message.
+  message: string;
+  // 1-based line within the frontmatter block where the parse failed, when
+  // the parser reports a position. Omitted otherwise.
+  line?: number;
+  // 1-based column within that line, when reported.
+  column?: number;
+}
+
+// Global symbol channel used by file-def `extractAttributes` implementations
+// to route a `FrontmatterParseError` back to the host file extractor without
+// it leaking into the flat `search_doc`. Producer and consumer must agree on
+// the exact string key — exported here so callers share one source of truth
+// and a typo can't silently break the handoff.
+export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-parse-error',
+);
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -336,6 +364,11 @@ export interface FileExtractResponse {
   deps: string[];
   error?: RenderError;
   mismatch?: true;
+  // Set when the file's leading YAML frontmatter block was present but
+  // wouldn't parse. The extract still succeeds (`status: 'ready'`, body-only);
+  // the file indexer merges this onto `diagnostics.frontmatterParseError` so
+  // the failure surfaces via `/_indexing-errors` instead of vanishing.
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 export interface FileRenderResponse {
@@ -432,6 +465,12 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Frontmatter YAML that wouldn't parse during file extraction. The row
+  // still indexes (body-only); this is the only indexed signal that the
+  // file's frontmatter — and anything it declared — was dropped. Merged in
+  // by the file indexer from the extract response. Absent when the
+  // frontmatter parsed (or there was none).
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to
@@ -823,8 +862,6 @@ export type {
   CardCollectionDocument,
   FileMetaCollectionDocument,
   LinkableCollectionDocument,
-  UnifiedSearchCollectionDocument,
-  UnifiedSearchIncludedResource,
   SearchEntryCollectionDocument,
   SearchEntryIncludedResource,
   SearchEntryResults,
@@ -929,6 +966,9 @@ export interface FileChooser {
   chooseFile<T>(opts?: {
     fileType?: CodeRef;
     fileTypeName?: string;
+    // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
+    // narrowing the chooser beyond the file type.
+    fileFieldFilter?: Record<string, unknown>;
   }): Promise<undefined | T>;
 }
 
@@ -967,6 +1007,7 @@ export async function chooseCard(
 export async function chooseFile<T extends FileDef>(opts?: {
   fileType?: CodeRef;
   fileTypeName?: string;
+  fileFieldFilter?: Record<string, unknown>;
 }): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {

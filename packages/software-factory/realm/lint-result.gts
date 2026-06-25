@@ -11,7 +11,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import enumField from 'https://cardstack.com/base/enum';
-import { Project, Issue } from './darkfactory';
+import { Project, Issue } from './darkfactory.gts';
 
 export const LintResultStatusField = enumField(StringField, {
   options: [

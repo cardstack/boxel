@@ -26,39 +26,21 @@
     "skipLibCheck": true,
     "paths": {
       "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/catalog/*": [
-        "contents/*"
-      ],
-      "@cardstack/host/*": [
-        "../host/app/*"
-      ],
-      "@cardstack/host/tests/*": [
-        "../host/tests/*"
-      ],
-      "@cardstack/openrouter/*": [
-        "../openrouter-realm/*"
-      ],
-      "@cardstack/boxel-host/commands/*": [
-        "../host/app/commands/*"
-      ],
-      "@cardstack/boxel-ui": [
-        "../boxel-ui/addon"
-      ],
-      "@cardstack/boxel-ui/*": [
-        "../boxel-ui/addon/*"
-      ],
-      "*": [
-        "../host/types/*"
-      ]
+      "@cardstack/catalog/*": ["contents/*"],
+      "@cardstack/host/*": ["../host/app/*"],
+      "@cardstack/host/tests/*": ["../host/tests/*"],
+      "@cardstack/openrouter/*": ["../openrouter-realm/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "*": ["../host/types/*"]
     },
     "types": ["@cardstack/local-types", "qunit", "qunit-dom"]
   },
-  "include": [
-    "../host/types/**/*",
-    "**/*.d.ts",
-    "**/*.ts",
-    "**/*.gts"
-  ]
+  "include": ["../host/types/**/*", "**/*.d.ts", "**/*.ts", "**/*.gts"]
 }

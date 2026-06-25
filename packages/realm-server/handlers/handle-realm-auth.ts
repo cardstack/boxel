@@ -11,7 +11,7 @@ import {
   upsertSessionRoom,
   type Expression,
 } from '@cardstack/runtime-common';
-import type { RealmServerTokenClaim } from 'utils/jwt';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt.ts';
 import {

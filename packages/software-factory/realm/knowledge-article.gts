@@ -22,7 +22,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import BookOpen from '@cardstack/boxel-icons/book-open';
 
-import { AgentProfile } from './agent-profile';
+import { AgentProfile } from './agent-profile.gts';
 
 export const KnowledgeTypeField = enumField(StringField, {
   options: [
@@ -161,6 +161,7 @@ class KnowledgeArticleEdit extends Component<typeof KnowledgeArticle> {
 
 export class KnowledgeArticle extends CardDef {
   static displayName = 'Knowledge Article';
+  static icon = BookOpen;
 
   @field articleTitle = contains(StringField);
   @field articleType = contains(KnowledgeTypeField);

@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import commandParsingTests from '@cardstack/runtime-common/tests/command-parsing-utils-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('command parsing utils', function () {
     test('parseBoxelHostCommandSpecifier parses scoped command specifier', async function (assert) {
       await runSharedTest(commandParsingTests, assert, {});

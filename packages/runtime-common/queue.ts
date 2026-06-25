@@ -141,6 +141,17 @@ export class Job<T> {
   constructor(id: number, notifier: Deferred<T>) {
     this.id = id;
     this.notifier = notifier;
+    // The result promise is live from the moment the job is published,
+    // before any caller reads `.done` and attaches a handler. A job that
+    // settles to a rejection in that window — or whose result is never
+    // awaited at all — would otherwise surface as an unhandled rejection,
+    // which under native Node aborts the whole process. Awaiting `.done`
+    // is opt-in: a caller that cares about the outcome reads it and
+    // handles the rejection there, and still receives it even though this
+    // no-op ran first, because a promise delivers to every attached
+    // handler. This guard only suppresses the unhandled-rejection signal
+    // for an outcome nobody is awaiting.
+    this.notifier.promise.catch(() => {});
   }
   get done(): Promise<T> {
     return this.notifier.promise;

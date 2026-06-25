@@ -19,6 +19,7 @@ on:
       - .github/workflows/mirror-test-images.yml
       - packages/matrix/support/synapse/index.ts
       - packages/matrix/docker/smtp4dev.ts
+      - packages/matrix/docker/mock-oauth2.ts
       - mise-tasks/infra/ensure-pg
       # The realm-server start-pg.sh is a symlink to this real file (where the
       # postgres pin lives); a path filter on the symlink wouldn't see edits to
@@ -45,15 +46,18 @@ jobs:
           GHCR_PREFIX: ghcr.io/${{ github.repository }}
         run: |
           set -euo pipefail
-          # <ghcr-package-suffix>:<tag>=<docker-hub-ref>. These versions must
+          # <ghcr-package-suffix>:<tag>=<source-ref>. These versions must
           # match what runs at test time and the warm-test-images action:
           # packages/matrix/support/synapse/index.ts, packages/matrix/docker/
-          # smtp4dev.ts, mise-tasks/infra/ensure-pg, packages/postgres/scripts/
-          # start-pg.sh, and .github/actions/warm-test-images/action.yml.
+          # smtp4dev.ts, packages/matrix/docker/mock-oauth2.ts, mise-tasks/
+          # infra/ensure-pg, packages/postgres/scripts/start-pg.sh, and
+          # .github/actions/warm-test-images/action.yml.
           images=(
             "synapse:v1.126.0=matrixdotorg/synapse:v1.126.0"
             "smtp4dev:v3.1=rnwood/smtp4dev:v3.1"
             "postgres:16.3=postgres:16.3"
+            "mock-oauth2-server:4.0.1=ghcr.io/navikt/mock-oauth2-server:4.0.1"
+            "caddy:2.10.2-alpine=caddy:2.10.2-alpine"
           )
           for entry in "${images[@]}"; do
             # GHCR paths must be lowercase; the owner/repo already is, but guard.

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   baseRRI,
@@ -8,6 +9,7 @@ import {
   type CssResource,
   type FileMetaResource,
   type HtmlResource,
+  type IconResource,
   type Realm,
   type SearchEntryCollectionDocument,
   type SearchEntryResource,
@@ -48,6 +50,16 @@ function cssIn(doc: SearchEntryCollectionDocument): CssResource[] {
   );
 }
 
+function iconsIn(doc: SearchEntryCollectionDocument): IconResource[] {
+  return (doc.included ?? []).filter(
+    (resource): resource is IconResource => resource.type === 'icon',
+  );
+}
+
+function iconIdOf(entry: SearchEntryResource): string | undefined {
+  return entry.relationships.icon?.data.id;
+}
+
 function entryFor(
   doc: SearchEntryCollectionDocument,
   id: string,
@@ -59,7 +71,7 @@ function htmlIdsOf(entry: SearchEntryResource): string[] | undefined {
   return entry.relationships.html?.data.map((member) => member.id);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('searchEntries projection engine', function (hooks) {
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
@@ -164,6 +176,43 @@ module(basename(__filename), function () {
       assert.strictEqual(html.attributes.cardType, 'Person');
     });
 
+    test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      // both same-type results point at the one shared icon resource, keyed
+      // by the native-type internal key
+      assert.strictEqual(iconIdOf(entryFor(doc, johnId)!), personKey);
+      assert.strictEqual(iconIdOf(entryFor(doc, janeId)!), personKey);
+      let icons = iconsIn(doc);
+      assert.strictEqual(
+        icons.length,
+        1,
+        'the shared type icon is included exactly once',
+      );
+      assert.strictEqual(icons[0].id, personKey);
+      assert.ok(
+        icons[0].attributes.iconHtml.length > 0,
+        'the icon resource carries the icon markup',
+      );
+      // the deduped resource carries the full type descriptor
+      assert.strictEqual(
+        icons[0].attributes.displayName,
+        'Person',
+        'the type descriptor carries the card def display name',
+      );
+      assert.deepEqual(
+        icons[0].attributes.codeRef,
+        { module: `${realmHref}person`, name: 'Person' },
+        'the type descriptor carries the card def code ref',
+      );
+      // the icon no longer rides on each html rendering
+      let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
+      assert.false(
+        'iconHtml' in html.attributes,
+        'the icon moved off the html resource',
+      );
+    });
+
     test('an explicit htmlQuery selects the rendering format', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
@@ -177,6 +226,57 @@ module(basename(__filename), function () {
         normalizedHtml(htmlIn(doc, htmlId)!).includes(
           'Embedded Card Person: John',
         ),
+      );
+    });
+
+    test('html.format: head selects the document head rendering', async function (assert) {
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({
+          filterEq: { htmlQuery: { eq: { format: 'head' } } },
+          fields: { 'search-entry': ['html'] },
+        }),
+      );
+      assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'head' } });
+      // `head` is a scalar column rendered at the row's own native type, so its
+      // composite id carries the native key like the keyed formats do.
+      let htmlId = `${johnId}#head#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entryFor(doc, johnId)!), [htmlId]);
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'head');
+      assert.true(
+        normalizedHtml(html).includes('data-test-card-head-title'),
+        `head rendering carries the card head <title>: ${html.attributes.html}`,
+      );
+    });
+
+    test('html.format: head scoped to a single card URL returns only that card head markup', async function (assert) {
+      // Mirrors the host-mode published-view head prefetch: an html-only query
+      // at html.format: head, scoped to the single card by cardUrls.
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          cardUrls: [`${johnId}.json`],
+          filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
+          fields: { 'search-entry': ['html'] },
+        }),
+      );
+      assert.strictEqual(
+        doc.data.length,
+        1,
+        'only the scoped card is returned',
+      );
+      let entry = entryFor(doc, johnId)!;
+      let htmlId = `${johnId}#head#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entry), [htmlId]);
+      assert.strictEqual(
+        entry.relationships.item,
+        undefined,
+        'the html-only fieldset carries no item branch',
+      );
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'head');
+      assert.true(
+        normalizedHtml(html).includes('data-test-card-head-title'),
+        `head rendering carries the card head <title>: ${html.attributes.html}`,
       );
     });
 
@@ -318,6 +418,18 @@ module(basename(__filename), function () {
       assert.deepEqual(jane.relationships.item, {
         data: { type: 'card', id: janeId },
       });
+      // The motivating case: a no-HTML fallback row still resolves its type
+      // icon (entry-level, deduped) — a consumer can paint a placeholder icon
+      // without loading the live instance.
+      assert.strictEqual(
+        iconIdOf(jane),
+        personKey,
+        'a fallback row carries the icon relationship',
+      );
+      assert.ok(
+        iconsIn(doc).some((icon) => icon.id === personKey),
+        'the icon resource is included for the fallback row',
+      );
       let item = itemIn(doc, janeId)!;
       assert.strictEqual(item.attributes?.firstName, 'Jane');
       assert.strictEqual(item.meta.sparseFields, undefined);
