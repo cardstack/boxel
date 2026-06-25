@@ -7,8 +7,8 @@ import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
-
 import { isTesting } from '@embroider/macros';
+import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
@@ -49,6 +49,7 @@ import {
   isJsonContentType,
   SupportedMimeType,
   RealmPaths,
+  type CardAPIForMatching,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -228,6 +229,13 @@ export default class StoreService extends Service implements StoreInterface {
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
+  // Bumped whenever a hydrated card instance's fields change (edit / save).
+  // Adds and deletes are already observable through the tracked identity map
+  // (see `allCardInstances`); this signal covers the in-place mutations that
+  // leave the map's membership unchanged, so a reactive consumer like the
+  // client-side search filter recomputes on edits too — not only on the
+  // server search re-running.
+  @tracked private _instanceMutationVersion = 0;
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
@@ -754,6 +762,44 @@ export default class StoreService extends Service implements StoreInterface {
       return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
     }
     return this.store.getCardInstanceOrError<T & CardDef>(id);
+  }
+
+  // All hydrated (non-error) card instances currently in the Store. The result
+  // is the candidate set for the client-side search filter; reading it inside
+  // an autotracked computation re-runs when an instance is added or removed.
+  allCardInstances(): CardDef[] {
+    return this.store.allCardInstances();
+  }
+
+  // The file-meta counterpart of `allCardInstances`, so a file-meta search
+  // gets the same client-side candidate set as a card search.
+  allFileMetaInstances(): FileDef[] {
+    return this.store.allFileMetaInstances();
+  }
+
+  // Tracked counter bumped on every in-place field edit/save of a hydrated
+  // card. Reading it inside an autotracked computation makes that computation
+  // recompute when any Store card mutates — used by the client-side search
+  // filter to re-derive its result set without a server round-trip. Adds and
+  // removes are already covered by the tracked identity map behind
+  // `allCardInstances`.
+  get instanceMutationVersion(): number {
+    return this._instanceMutationVersion;
+  }
+
+  // The slice of the card-api module the client-side filter matcher and sort
+  // comparator need (see runtime-common's instance-filter-matcher). Loaded
+  // through the same loader-scoped cache the rest of the Store uses.
+  async getMatchAPI(): Promise<CardAPIForMatching> {
+    let api = await this.cardService.getAPI();
+    return {
+      getQueryableValue: api.getQueryableValue,
+      formatQueryValue: api.formatQueryValue,
+      peekAtField: api.peekAtField,
+      isNonPresentLink: api.isNonPresentLink,
+      getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
+      primitive: api.primitive,
+    };
   }
 
   // peekError will always return the current server state regarding errors for this id
@@ -1777,6 +1823,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     if (isCardInstance(instance)) {
+      this._instanceMutationVersion++;
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
       this.doAutoSave(instance);

@@ -459,6 +459,40 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       this.getCardItem('error', id)) as T | CardErrorJSONAPI | undefined;
   }
 
+  // All hydrated (non-error) card instances currently in the identity map.
+  // Reads the tracked `#cardInstances` map, so a caller that consumes the
+  // result inside an autotracked computation re-runs when an instance is
+  // added or removed — the candidate set for the client-side search filter.
+  // Field-level edits to an already-present instance don't change the map;
+  // those are surfaced separately by StoreService's mutation-version signal.
+  //
+  // A single instance is keyed under both its local and remote id (see
+  // setCardItem), so the map yields it more than once; collapse to a unique
+  // set so the candidate pool never contains the same card twice.
+  allCardInstances(): CardDef[] {
+    let result = new Set<CardDef>();
+    for (let instance of this.#cardInstances.values()) {
+      if (isCardInstance(instance)) {
+        result.add(instance);
+      }
+    }
+    return [...result];
+  }
+
+  // The file-meta counterpart of `allCardInstances`, reading the tracked
+  // `#fileMetaInstances` map so file-meta searches get the same client-side
+  // candidate set as card searches. Deduped to a unique set for the same
+  // reason — an instance can appear under more than one key.
+  allFileMetaInstances(): FileDef[] {
+    let result = new Set<FileDef>();
+    for (let instance of this.#fileMetaInstances.values()) {
+      if (isFileDefInstance(instance)) {
+        result.add(instance);
+      }
+    }
+    return [...result];
+  }
+
   addFileMetaInstanceOrError(
     id: string,
     instanceOrError: FileDef | CardErrorJSONAPI,
