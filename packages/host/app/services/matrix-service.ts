@@ -38,6 +38,7 @@ import {
   REPLACE_MARKER,
   SEPARATOR_MARKER,
   isCardErrorJSONAPI,
+  stringifyErrorForLog,
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
@@ -2572,7 +2573,9 @@ export default class MatrixService extends Service {
     if (userChoiceId) {
       let result = await this.store.get<SystemCard>(userChoiceId);
       if (isCardErrorJSONAPI(result)) {
-        console.error('Error loading user-chosen system card:', result);
+        console.error(
+          `Error loading user-chosen system card: ${stringifyErrorForLog(result)}`,
+        );
         userChoiceFailed = true;
       } else {
         loadedCard = result;
@@ -2586,7 +2589,9 @@ export default class MatrixService extends Service {
       } else {
         let result = await this.store.get<SystemCard>(envDefaultId);
         if (isCardErrorJSONAPI(result)) {
-          console.error('Error loading env default system card:', result);
+          console.error(
+            `Error loading env default system card: ${stringifyErrorForLog(result)}`,
+          );
           envDefaultFailed = true;
         } else {
           loadedCard = result;

@@ -3,7 +3,11 @@ import { Deferred } from './deferred.ts';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
 import { executableExtensions, logger } from './index.ts';
 
-import { CardError, iconNotFoundMessage } from './error.ts';
+import {
+  CardError,
+  iconNotFoundMessage,
+  stringifyErrorForLog,
+} from './error.ts';
 import { flatMap } from 'lodash-es';
 import {
   shouldTrackRuntimeModuleGraph,
@@ -757,7 +761,10 @@ export class Loader {
       let detail = err?.code
         ? `${err.message} (${err.code})`
         : (err?.message ?? String(err));
-      this.log.error(`fetch failed for ${url}: ${detail}`, err);
+      this.log.error(
+        `fetch failed for ${url}: ${detail}`,
+        stringifyErrorForLog(err),
+      );
 
       let synthetic = new Response(`fetch failed for ${url}: ${detail}`, {
         status: 500,
@@ -1134,7 +1141,9 @@ export class Loader {
         },
       });
     } catch (err) {
-      this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      this.log.error(
+        `fetch failed for ${moduleURL}: ${stringifyErrorForLog(err)}`,
+      ); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...
