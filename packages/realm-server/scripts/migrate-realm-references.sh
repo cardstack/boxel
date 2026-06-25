@@ -224,6 +224,14 @@ fi
 # Derive patch filename from the find/replace strings
 # e.g. @cardstack/catalog/ -> catalog, https://cardstack.com/base/ -> base
 PATCH_NAME=$(echo "$FIND_STR $REPLACEMENT" | sed -E 's|https?://[^/]*/||g; s|@cardstack/||g; s|/||g; s| |-to-|')
+# Distinguish the JSON-only and modules-only passes so running both for the
+# same find/replace (e.g. in the same directory) doesn't overwrite the first
+# pass's rollback patch with the second's.
+if [ "$JSON_ONLY" = true ]; then
+  PATCH_NAME="${PATCH_NAME}-json"
+elif [ "$MODULES_ONLY" = true ]; then
+  PATCH_NAME="${PATCH_NAME}-modules"
+fi
 PATCH_FILE="${PATCH_NAME}.patch"
 
 total_files=0
