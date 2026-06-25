@@ -463,30 +463,51 @@ function codeRefEquals(
       return true;
     }
     // The class is identified under the module spelling it was loaded from,
-    // while the filter ref can carry an equivalent spelling (RRI / real-URL /
-    // virtual-alias). Resolve both through the VirtualNetwork before comparing
-    // so the type gate doesn't drop an instance over a cosmetic URL difference
-    // — the same tolerance the server applies in `internalKeyFor`.
+    // while the filter ref can carry an equivalent spelling (prefix RRI /
+    // real-URL / virtual-alias). Reduce both to a single canonical key before
+    // comparing so the type gate doesn't drop an instance over a cosmetic URL
+    // difference — the tolerance the server applies in `internalKeyFor`.
     return (
-      resolveModuleURL(a.module, virtualNetwork) ===
-      resolveModuleURL(b.module, virtualNetwork)
+      canonicalModuleKey(a.module, virtualNetwork) ===
+      canonicalModuleKey(b.module, virtualNetwork)
     );
   }
   return isEqual(a, b);
 }
 
-function resolveModuleURL(
+// Reduce a module reference to a single canonical key, collapsing every
+// equivalent spelling the VirtualNetwork knows about so two refs that point at
+// the same module compare equal regardless of how they were written.
+function canonicalModuleKey(
   module: string,
   virtualNetwork: VirtualNetwork,
 ): string {
+  let href: string;
   try {
-    return virtualNetwork.resolveURL(module, undefined).href;
+    // Resolves a prefix-form RRI (e.g. `@cardstack/base/card-api`) to its
+    // mapped URL; an absolute URL is returned unchanged.
+    href = virtualNetwork.resolveURL(module, undefined).href;
   } catch {
-    // A reference the VirtualNetwork can't resolve (e.g. a scoped prefix it has
-    // no mapping for) falls back to its raw form; the `a.module === b.module`
-    // fast path above already covered the only way two such refs can match.
+    // Unresolvable reference (e.g. a scoped prefix with no mapping): fall back
+    // to the raw form. The `a.module === b.module` fast path already covered
+    // the only way two such refs can be equal.
     return module;
   }
+  // `resolveURL` leaves an absolute URL untouched, so a virtual spelling and
+  // its real target (registered via `addURLMapping`, e.g.
+  // `https://cardstack.com/base/…` ↔ the deployed realm URL) stay distinct.
+  // Collapse virtual onto real here; real and unmapped URLs pass through.
+  try {
+    let real = virtualNetwork.mapURL(href, 'virtual-to-real');
+    if (real) {
+      href = real.href;
+    }
+  } catch {
+    // `href` wasn't a parseable absolute URL — leave it as resolved.
+  }
+  // Collapse the real URL onto its portable prefix form when a registered realm
+  // prefix matches, so `@scope/…` and the real URL also land on one key.
+  return virtualNetwork.unresolveURL(href);
 }
 
 // -- sort comparator ---------------------------------------------------------
