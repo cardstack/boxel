@@ -135,8 +135,8 @@ elif [ $# -ge 2 ]; then
   REPLACEMENT="$1"
   shift
 else
-  echo "Usage: $0 [--dry-run] [--json-only] <find> <replace> <directory> [<directory> ...]"
-  echo "       $0 [--dry-run] [--json-only] -e <environment> -r <realm> <directory> [<directory> ...]"
+  echo "Usage: $0 [--dry-run] [--json-only] [--exclude <dir>]... <find> <replace> <directory> [<directory> ...]"
+  echo "       $0 [--dry-run] [--json-only] [--exclude <dir>]... -e <environment> -r <realm> <directory> [<directory> ...]"
   echo ""
   echo "  <find>           The string to find (URL or prefix)"
   echo "  <replace>        The replacement string"
