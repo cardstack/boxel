@@ -259,6 +259,48 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
+  // Boot assembly reads `app.boxel.realm-servers` and asks each trusted
+  // server (via `_realm-auth`) which realms the current user has. Returns
+  // the union of realm URLs across all trusted servers. assertOwnRealmServer()
+  // keeps the single-server invariant — it rejects any list that includes a
+  // server other than the user's own until multi-realm-server federation
+  // ships.
+  async fetchUserRealmsFromTrustedServers(
+    trustedServerURLs: string[],
+  ): Promise<string[]> {
+    if (trustedServerURLs.length === 0) {
+      return [];
+    }
+    // TODO: remove once multi-realm-server federation lands.
+    this.assertOwnRealmServer(trustedServerURLs);
+    await this.login();
+    let perServerRealmURLs = await Promise.all(
+      trustedServerURLs.map(async (serverURL) => {
+        let normalizedServerURL = ensureTrailingSlash(serverURL);
+        let response = await this.network.fetch(
+          `${normalizedServerURL}_realm-auth`,
+          {
+            method: 'POST',
+            headers: {
+              Accept: SupportedMimeType.JSONAPI,
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.token}`,
+            },
+          },
+        );
+        if (!response.ok) {
+          let responseText = await response.text();
+          throw new Error(
+            `Failed to fetch user realms from trusted server ${normalizedServerURL}: ${response.status} - ${responseText}`,
+          );
+        }
+        let tokens = (await response.json()) as Record<string, string>;
+        return Object.keys(tokens);
+      }),
+    );
+    return [...new Set(perServerRealmURLs.flat())];
+  }
+
   @cached
   get availableRealmIdentifiers(): RealmIdentifier[] {
     return this.availableRealms.map((r) => ri(r.url));
@@ -290,15 +332,7 @@ export default class RealmServerService extends Service {
     let testRealmOrigin = isTesting()
       ? new URL(testRealmURL).origin
       : undefined;
-    let sessionTokens: Record<string, string> = {};
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-
-    try {
-      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
-    } catch {
-      sessionTokens = {};
-    }
+    let sessionTokens = this.readSessionTokens();
 
     let realmServerURLs = new Set<string>();
 
@@ -328,6 +362,16 @@ export default class RealmServerService extends Service {
     }
 
     return [...realmServerURLs];
+  }
+
+  private readSessionTokens(): Record<string, string> {
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    try {
+      return JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      return {};
+    }
   }
 
   private normalizeRealmServerURL(url: string): string {
@@ -1181,16 +1225,7 @@ export default class RealmServerService extends Service {
   }
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
-    let sessionTokens: Record<string, string> = {};
-    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
-    if (!sessionStr) {
-      return undefined;
-    }
-    try {
-      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
-    } catch {
-      return undefined;
-    }
+    let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];

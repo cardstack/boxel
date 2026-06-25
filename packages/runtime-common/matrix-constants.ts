@@ -22,6 +22,11 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
+export const APP_BOXEL_REALM_SERVERS_EVENT_TYPE = 'app.boxel.realm-servers';
+
+export interface AppBoxelRealmServersContent {
+  realmServers: string[];
+}
 export const APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE =
   'app.boxel.workspace-favorites';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
