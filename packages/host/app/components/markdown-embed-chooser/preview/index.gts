@@ -31,11 +31,19 @@ interface EmbedSignature {
 }
 
 // The embed itself: inline placement flows within text (`<span>`), block gives
-// it its own line (`<div>`). Both render through the same CardRenderer.
+// it its own line (`<div>`). Both render through the same CardRenderer. Inline
+// atom uses `inline-flex` to align with text baseline; every other inline
+// format uses `inline-block` so the card occupies its intrinsic (or fitted)
+// width — mirrors the live markdown renderer's `--inline-embed` slot.
 const Embed: TOC<EmbedSignature> = <template>
   {{#if (eq @kind 'inline')}}
     <span
-      class='markdown-embed-preview markdown-embed-preview--inline
+      class='markdown-embed-preview
+        {{if
+          (eq @format "atom")
+          "markdown-embed-preview--inline"
+          "markdown-embed-preview--inline-embed"
+        }}
         {{if @sizeStyle "markdown-embed-preview--fitted"}}'
       style={{@sizeStyle}}
       data-test-markdown-embed-preview
@@ -70,6 +78,10 @@ const Embed: TOC<EmbedSignature> = <template>
     }
     .markdown-embed-preview--inline {
       display: inline-flex;
+      vertical-align: middle;
+    }
+    .markdown-embed-preview--inline-embed {
+      display: inline-block;
       vertical-align: middle;
     }
     .markdown-embed-preview--block {
@@ -123,20 +135,36 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
 
   // Fitted slots carry an inline width/height plus `overflow: hidden` so the
   // instance occupies the requested footprint — derived through the same helper
-  // the live markdown renderer uses (`rendered-markdown.gts`).
+  // the live markdown renderer uses (`rendered-markdown.gts`). Inline embedded
+  // and isolated have no intrinsic inline width: the default template's
+  // `width/height: 100%` resolves against the inline-block wrapper, which is
+  // itself shrink-wrapping, and the box collapses. Give the wrapper a definite
+  // footprint that matches the live renderer's loading placeholders so the
+  // preview shows a real card body.
   private get sizeStyle(): ReturnType<typeof htmlSafe> | undefined {
-    if (this.args.format !== 'fitted') {
-      return undefined;
+    let { format } = this.args;
+    if (format === 'fitted') {
+      let { width, height } = this.args.sizeSpec ?? { format: 'fitted' };
+      let { sizeStyle } = bfmRefFormatAndSize(
+        'fitted',
+        width === undefined ? undefined : String(width),
+        height === undefined ? undefined : String(height),
+      );
+      return htmlSafe(
+        sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
+      );
     }
-    let { width, height } = this.args.sizeSpec ?? { format: 'fitted' };
-    let { sizeStyle } = bfmRefFormatAndSize(
-      'fitted',
-      width === undefined ? undefined : String(width),
-      height === undefined ? undefined : String(height),
-    );
-    return htmlSafe(
-      sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
-    );
+    if (
+      this.kind === 'inline' &&
+      (format === 'embedded' || format === 'isolated')
+    ) {
+      let footprint =
+        format === 'isolated'
+          ? 'width: 24rem; height: 18.75rem'
+          : 'width: 16rem; height: 9.375rem';
+      return htmlSafe(`${footprint}; overflow: hidden`);
+    }
+    return undefined;
   }
 
   <template>

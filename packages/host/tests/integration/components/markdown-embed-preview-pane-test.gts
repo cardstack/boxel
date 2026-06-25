@@ -364,7 +364,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
     );
   });
 
-  test('inline + embedded surfaces a sizing hint (no intrinsic inline width)', async function (assert) {
+  test('isolated emits in both placements', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
     await render(
@@ -381,30 +381,88 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
       </template>,
     );
 
-    // No hint while atom (the default for inline) is selected.
+    await chooseFormat('isolated');
     assert
-      .dom('[data-test-markdown-embed-preview-warning]')
-      .doesNotExist('no hint when inline + atom is selected');
+      .dom('[data-test-markdown-embed-preview-cta]')
+      .hasText('Insert as Isolated');
+    assert
+      .dom('[data-test-markdown-embed-preview]')
+      .hasAttribute(
+        'data-test-markdown-embed-preview-format',
+        'isolated',
+        'preview switches to isolated',
+      );
 
-    await chooseFormat('embedded');
-    // Default placement for embedded is block, so still no hint yet.
-    assert
-      .dom('[data-test-markdown-embed-preview-warning]')
-      .doesNotExist('no hint when embedded + block is selected');
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `::card[${card.id} | isolated]`,
+      'block isolated emits the isolated specifier',
+    );
 
     await click('[data-test-markdown-embed-preview-inline]');
-    assert
-      .dom('[data-test-markdown-embed-preview-warning]')
-      .exists('hint appears when embedded is paired with inline');
-    assert
-      .dom('[data-test-markdown-embed-preview-warning]')
-      .hasText(/no intrinsic width/i);
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `:card[${card.id} | isolated]`,
+      'inline isolated also carries the isolated specifier',
+    );
+  });
 
-    // Switching to a sized Fitted variant removes the hint.
+  test('inline + embedded emits the explicit specifier on CTA', async function (assert) {
+    let card = await loadCard();
+    let harness = new InsertHarness();
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @target={{card}}
+              @refType='card'
+              @onInsert={{harness.onInsert}}
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    await chooseFormat('embedded');
+    await click('[data-test-markdown-embed-preview-inline]');
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `:card[${card.id} | embedded]`,
+      'inline embedded carries the embedded specifier',
+    );
+  });
+
+  test('inline + custom dimensions emit w:/h: in the inline directive', async function (assert) {
+    let card = await loadCard();
+    let harness = new InsertHarness();
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @target={{card}}
+              @refType='card'
+              @onInsert={{harness.onInsert}}
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
     await chooseFormat('tall-tile');
-    assert
-      .dom('[data-test-markdown-embed-preview-warning]')
-      .doesNotExist('Fitted with explicit dims clears the hint');
+    await fillIn('[data-test-markdown-embed-preview-width]', '321');
+    await fillIn('[data-test-markdown-embed-preview-height]', '210');
+    await click('[data-test-markdown-embed-preview-inline]');
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `:card[${card.id} | w:321 h:210]`,
+      'inline custom carries w:/h:',
+    );
   });
 
   test('refType drives the keyword (file)', async function (assert) {
@@ -434,5 +492,43 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
     await chooseFormat('embedded');
     await click('[data-test-markdown-embed-preview-cta]');
     assert.strictEqual(harness.last, `::file[${card.id} | embedded]`);
+  });
+
+  test('atom, embedded, isolated carry the has-divider modifier; fitted/custom do not', async function (assert) {
+    let card = await loadCard();
+    let harness = new InsertHarness();
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @target={{card}}
+              @refType='card'
+              @onInsert={{harness.onInsert}}
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    await click('[data-test-markdown-embed-preview-format-select]');
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
+
+    for (let value of ['atom', 'embedded', 'isolated']) {
+      assert
+        .dom(`[data-test-format-option="${value}"]`)
+        .hasClass(
+          'has-divider',
+          `${value} wrapper carries has-divider so the dropdown can paint a gap below it`,
+        );
+    }
+    for (let value of ['tall-tile', 'custom']) {
+      assert
+        .dom(`[data-test-format-option="${value}"]`)
+        .doesNotHaveClass(
+          'has-divider',
+          `${value} wrapper has no divider — only the non-fitted heads do`,
+        );
+    }
   });
 });

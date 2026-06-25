@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
@@ -11,12 +10,12 @@ import {
   Button,
 } from '@cardstack/boxel-ui/components';
 import {
-  eq,
   type FittedFormatId,
   type FittedFormatSpec,
   FITTED_FORMAT_SIZES,
   fittedFormatById,
 } from '@cardstack/boxel-ui/helpers';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import {
   serializeBfmRef,
@@ -26,40 +25,61 @@ import {
 
 import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
 
+import PlacementToggle from './placement-toggle';
 import MarkdownEmbedPreview from './preview';
 
 type EmbedFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
-type FormatCategory = 'atom' | 'embedded' | 'fitted' | 'custom';
-type OptionValue = 'atom' | 'embedded' | FittedFormatId | 'custom';
+type FormatCategory = 'atom' | 'embedded' | 'fitted' | 'isolated' | 'custom';
+type OptionValue = 'atom' | 'embedded' | 'isolated' | FittedFormatId | 'custom';
 
 interface FormatOption {
   value: OptionValue;
-  label: string;
+  formatLabel: string;
+  sizeLabel: string;
   category: FormatCategory;
+  dividerAfter?: boolean;
 }
 
-// Flat dropdown list (no group headers): Atom, Embedded, every Fitted variant,
-// then Custom — matching the designer's dropdown. `Custom` is labelled
-// `Fitted - Custom size` for grouping but is its own CTA category.
+// Flat dropdown list (no group headers): Atom, Embedded, Isolated, every
+// Fitted variant, then Custom — matching the designer's dropdown. `Custom`
+// is labelled `Fitted - Custom size` for grouping but is its own CTA
+// category. Every option works in both inline and block placement.
 function buildFormatOptions(): FormatOption[] {
   let options: FormatOption[] = [
-    { value: 'atom', label: 'Atom - Variable size', category: 'atom' },
+    {
+      value: 'atom',
+      formatLabel: 'Atom',
+      sizeLabel: 'Variable size',
+      category: 'atom',
+      dividerAfter: true,
+    },
     {
       value: 'embedded',
-      label: 'Embedded - Variable size',
+      formatLabel: 'Embedded',
+      sizeLabel: 'Variable size',
       category: 'embedded',
+      dividerAfter: true,
+    },
+    {
+      value: 'isolated',
+      formatLabel: 'Isolated',
+      sizeLabel: 'Variable size',
+      category: 'isolated',
+      dividerAfter: true,
     },
   ];
   for (let spec of FITTED_FORMAT_SIZES) {
     options.push({
       value: spec.id,
-      label: `Fitted - ${spec.title} - ${spec.width}x${spec.height}`,
+      formatLabel: 'Fitted',
+      sizeLabel: `${spec.title} (${spec.width}x${spec.height})`,
       category: 'fitted',
     });
   }
   options.push({
     value: 'custom',
-    label: 'Fitted - Custom size',
+    formatLabel: 'Fitted',
+    sizeLabel: 'Custom size',
     category: 'custom',
   });
   return options;
@@ -116,6 +136,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         return 'atom';
       case 'embedded':
         return 'embedded';
+      case 'isolated':
+        return 'isolated';
       default:
         return 'fitted';
     }
@@ -147,6 +169,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         return 'Atom';
       case 'embedded':
         return 'Embedded';
+      case 'isolated':
+        return 'Isolated';
       case 'custom':
         return 'Custom';
       case 'fitted':
@@ -169,6 +193,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         return this.kind === 'inline' ? undefined : 'atom';
       case 'embedded':
         return 'embedded';
+      case 'isolated':
+        return 'isolated';
       case 'fitted':
         return this.selectedValue;
       case 'custom':
@@ -188,22 +214,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       kind: this.kind,
       size: this.sizeSpecifier,
     });
-  }
-
-  // An inline span carrying an embedded card has no intrinsic size to flow
-  // with the surrounding text, so the preview collapses. Surface a hint so
-  // the user understands why the preview is empty and how to recover.
-  private get placementWarning(): string | undefined {
-    if (this.kind !== 'inline') {
-      return undefined;
-    }
-    if (this.category === 'embedded') {
-      return 'Inline Embedded has no intrinsic width — pick a Fitted variant (or set custom W×H) to embed within a paragraph.';
-    }
-    if (this.category === 'custom' && !(this.width && this.height)) {
-      return 'Set both width and height to render this inline embed.';
-    }
-    return undefined;
   }
 
   @action
@@ -268,6 +278,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       <div class='markdown-embed-preview-pane__header'>
         <BoxelSelect
           class='markdown-embed-preview-pane__format-select'
+          @dropdownClass='markdown-embed-preview-pane__format-dropdown'
           @options={{this.formatOptions}}
           @selected={{this.selectedOption}}
           @onChange={{this.selectFormat}}
@@ -276,7 +287,17 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
           data-test-markdown-embed-preview-format-select
           as |option|
         >
-          <span data-test-format-option={{option.value}}>{{option.label}}</span>
+          <span
+            class='markdown-embed-preview-pane__format-option
+              {{if option.dividerAfter "has-divider"}}'
+            data-test-format-option={{option.value}}
+          >
+            <span
+              class='markdown-embed-preview-pane__format-option-name'
+            >{{option.formatLabel}}</span>
+            -
+            <span>{{option.sizeLabel}}</span>
+          </span>
         </BoxelSelect>
       </div>
 
@@ -290,43 +311,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         />
       </div>
 
-      {{#if this.placementWarning}}
-        <p
-          class='markdown-embed-preview-pane__warning'
-          role='status'
-          data-test-markdown-embed-preview-warning
-        >
-          {{this.placementWarning}}
-        </p>
-      {{/if}}
-
       <footer class='markdown-embed-preview-pane__footer'>
-        <div
-          class='markdown-embed-preview-pane__toggle'
-          role='group'
-          aria-label='Embed placement'
-        >
-          <button
-            type='button'
-            class='markdown-embed-preview-pane__toggle-option
-              {{if (eq this.kind "inline") "is-active"}}'
-            aria-pressed='{{if (eq this.kind "inline") "true" "false"}}'
-            data-test-markdown-embed-preview-inline
-            {{on 'click' (fn this.setKind 'inline')}}
-          >
-            Inline
-          </button>
-          <button
-            type='button'
-            class='markdown-embed-preview-pane__toggle-option
-              {{if (eq this.kind "block") "is-active"}}'
-            aria-pressed='{{if (eq this.kind "block") "true" "false"}}'
-            data-test-markdown-embed-preview-block
-            {{on 'click' (fn this.setKind 'block')}}
-          >
-            Block
-          </button>
-        </div>
+        <PlacementToggle @selected={{this.kind}} @onChange={{this.setKind}} />
 
         {{#if this.showSizeInputs}}
           <div
@@ -340,10 +326,10 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
               aria-label='Width'
               data-test-markdown-embed-preview-width
             />
-            <span
+            <IconX
               class='markdown-embed-preview-pane__size-x'
               aria-hidden='true'
-            >×</span>
+            />
             <BoxelInput
               class='markdown-embed-preview-pane__size-input'
               @value={{this.heightInput}}
@@ -356,6 +342,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
 
         <Button
           @kind='primary'
+          @size='small'
+          class='markdown-embed-preview-pane__cta'
           data-test-markdown-embed-preview-cta
           {{on 'click' this.insert}}
         >
@@ -363,6 +351,37 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         </Button>
       </footer>
     </section>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      /* The divider sits in the gap *between* options so the row's hover /
+         selected background (painted inside the <li>'s border-box) can't
+         engulf it. The dropdown is rendered in the basic-dropdown wormhole,
+         so :deep() — which requires a scoped ancestor — can't reach it;
+         :global() with this component's unique class names is the correct
+         escape hatch. The trigger has no .ember-power-select-option
+         ancestor, so the divider is automatically suppressed there. */
+      .markdown-embed-preview-pane__format-dropdown
+        .ember-power-select-option:has(
+          .markdown-embed-preview-pane__format-option.has-divider
+        ) {
+        position: relative;
+        margin-bottom: var(--boxel-sp-xs);
+      }
+
+      .markdown-embed-preview-pane__format-dropdown
+        .ember-power-select-option:has(
+          .markdown-embed-preview-pane__format-option.has-divider
+        )::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * var(--boxel-sp-xs) / 2 - 0.5px);
+        height: 1px;
+        background-color: var(--boxel-border-color);
+        pointer-events: none;
+      }
+    </style>
     <style scoped>
       .markdown-embed-preview-pane {
         display: flex;
@@ -376,7 +395,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-xs);
+        justify-content: center;
+        padding: var(--boxel-sp-sm) var(--boxel-sp) var(--boxel-sp-xs);
       }
       .markdown-embed-preview-pane__viewport {
         flex: 1 1 auto;
@@ -387,31 +407,38 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         padding: var(--boxel-sp);
         overflow: auto;
       }
-      .markdown-embed-preview-pane__warning {
-        flex: 0 0 auto;
-        margin: 0 var(--boxel-sp) var(--boxel-sp-xxs);
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius-sm);
-        background-color: var(--boxel-warning-100, var(--boxel-100));
-        color: var(--boxel-warning-700, var(--boxel-600));
-        font: var(--boxel-font-xs);
-      }
       .markdown-embed-preview-pane__format-select {
         flex: 1 1 auto;
         min-width: 0;
+        max-width: 330px;
+        --boxel-select-trigger-padding: var(--boxel-sp-2xs);
+      }
+      .markdown-embed-preview-pane__format-option-name {
+        font-weight: 500;
       }
       .markdown-embed-preview-pane__size {
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-3xs);
+        --boxel-input-icon-size: fit-content;
       }
       .markdown-embed-preview-pane__size-input {
-        width: 4rem;
+        --boxel-input-height: 30px;
+        --boxel-input-width: 46px;
+        padding: var(--boxel-sp-4xs);
         text-align: center;
       }
+      .markdown-embed-preview-pane__size-input :deep(.boxel-input) {
+        padding: 0;
+        text-align: center;
+        font: 600 var(--boxel-font-sm);
+      }
       .markdown-embed-preview-pane__size-x {
-        color: var(--boxel-450);
+        width: 0.5rem;
+        height: 0.5rem;
+        flex: 0 0 auto;
+        --icon-color: var(--boxel-dark);
       }
       .markdown-embed-preview-pane__footer {
         flex: 0 0 auto;
@@ -421,27 +448,9 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) var(--boxel-sp) var(--boxel-sp);
       }
-      .markdown-embed-preview-pane__toggle {
-        display: inline-flex;
-        padding: 2px;
-        border-radius: 999px;
-        background-color: var(--boxel-light-200);
-      }
-      .markdown-embed-preview-pane__toggle-option {
-        appearance: none;
-        border: none;
-        background: transparent;
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
-        border-radius: 999px;
-        font: var(--boxel-font-sm);
+      .markdown-embed-preview-pane__cta {
+        --boxel-button-padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         font-weight: 600;
-        color: var(--boxel-450);
-        cursor: pointer;
-      }
-      .markdown-embed-preview-pane__toggle-option.is-active {
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        box-shadow: var(--boxel-box-shadow);
       }
     </style>
   </template>
