@@ -264,10 +264,120 @@ export class Plain extends GlimmerComponent {
 }
 `;
 
-// One usage the codemod can migrate (a single direct block) alongside one it
-// can't (a bound component invoked more than once). A half-migration would
-// rewrite the first and strand the second next to a live
-// `@context.prerenderedCardSearchComponent`. The whole file must be left
+// One component bound once and invoked several times — each invocation has its
+// own query/format and blocks. Every invocation must migrate, and the shared
+// `(component @context.…)` binding must move to the v2 member exactly once.
+const MULTI_INVOCATION = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { a: Query; b: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Board extends GlimmerComponent<Sig> {
+  <template>
+    {{#let (component @context.prerenderedCardSearchComponent) as |Search|}}
+      <Search @query={{@a}} @format='fitted' @realms={{@realms}}>
+        <:loading>Loading A…</:loading>
+        <:response as |cards|>
+          {{#each cards key='url' as |c|}}<c.component />{{/each}}
+        </:response>
+      </Search>
+      <Search @query={{@b}} @format='embedded' @realms={{@realms}}>
+        <:response as |cards|>
+          {{#each cards key='url' as |c|}}<c.component />{{/each}}
+        </:response>
+      </Search>
+    {{/let}}
+  </template>
+}
+`;
+
+// A usage with a <:meta> block — yields the same QueryResultsMeta v2 exposes as
+// results.meta, so it migrates to a {{#let results.meta as |m|}} wrapper.
+const META_BLOCK = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Counter extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
+      <:response as |cards|>
+        {{#each cards key='url' as |c|}}<c.component />{{/each}}
+      </:response>
+      <:meta as |meta|>
+        <span class='total'>{{meta.page.total}}</span>
+      </:meta>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
+// A count-only usage: an empty (param-less) <:response> paired with a <:meta>
+// count tile. The param-less response binds nothing, so it migrates verbatim
+// (empty), and the meta carries the count.
+const COUNT_ONLY = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Tile extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
+      <:response></:response>
+      <:meta as |meta|>
+        <span class='count'>{{meta.page.total}}</span>
+      </:meta>
+    </@context.prerenderedCardSearchComponent>
+  </template>
+}
+`;
+
+// A usage gated behind an `{{#if @context.prerenderedCardSearchComponent}}`
+// availability guard. The guard must move to the v2 member alongside the usage.
+const GUARDED = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Guarded extends GlimmerComponent<Sig> {
+  <template>
+    {{#if @context.prerenderedCardSearchComponent}}
+      <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
+        <:response as |cards|>
+          {{#each cards key='url' as |c|}}<c.component />{{/each}}
+        </:response>
+      </@context.prerenderedCardSearchComponent>
+    {{else}}
+      <p>not available</p>
+    {{/if}}
+  </template>
+}
+`;
+
+// One invocation the codemod can migrate alongside one it can't (an unsupported
+// :error block) — both on the same bound component. A half-migration would
+// rewrite the first and re-point the shared binding, stranding the second next
+// to a v2 component it calls with the v1 block API. The whole file must be left
 // untouched instead.
 const PARTIAL_MULTI_USAGE = `import GlimmerComponent from '@glimmer/component';
 
@@ -281,18 +391,15 @@ interface Sig {
 
 export class Mixed extends GlimmerComponent<Sig> {
   <template>
-    <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
-      <:response as |cards|>
-        {{#each cards key="url" as |card|}}<card.component />{{/each}}
-      </:response>
-    </@context.prerenderedCardSearchComponent>
-
     {{#let (component @context.prerenderedCardSearchComponent) as |Search|}}
       <Search @query={{@query}} @realms={{@realms}}>
-        <:response as |a|>{{a.length}}</:response>
+        <:response as |cards|>
+          {{#each cards key='url' as |c|}}<c.component />{{/each}}
+        </:response>
       </Search>
       <Search @query={{@query}} @realms={{@realms}}>
-        <:response as |b|>{{b.length}}</:response>
+        <:response as |cards|>{{cards.length}}</:response>
+        <:error as |e|>{{e.message}}</:error>
       </Search>
     {{/let}}
   </template>
@@ -567,6 +674,80 @@ module(basename(import.meta.filename), function () {
     });
     assert.strictEqual(status, 'unchanged');
     assert.strictEqual(output, NO_USAGE, 'byte-for-byte unchanged');
+  });
+
+  test('migrates a component bound once and invoked several times, re-pointing the binding once', function (assert) {
+    let { status, output, reasons } = transformContextSearch(MULTI_INVOCATION, {
+      filename: 'board.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.notOk(
+      output.includes('prerenderedCardSearchComponent'),
+      'no old member remains',
+    );
+    assert.strictEqual(
+      output.match(/searchResultsComponent/g)?.length,
+      1,
+      'the shared binding is re-pointed exactly once',
+    );
+    assert.strictEqual(
+      output.match(/get searchResultsQuery\b/g)?.length,
+      1,
+      'first invocation gets the base getter',
+    );
+    assert.true(
+      /get searchResultsQuery2\b/.test(output),
+      'second invocation gets its own getter',
+    );
+    assert.false(/<:response/.test(output), 'no :response blocks remain');
+  });
+
+  test('migrates a <:meta> block to a results.meta let-wrapper', function (assert) {
+    let { status, output, reasons } = transformContextSearch(META_BLOCK, {
+      filename: 'counter.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.true(
+      /\{\{#let\s+results\.meta\s+as\s+\|meta\|\}\}/.test(output),
+      `binds results.meta to the block param: ${output}`,
+    );
+    assert.true(
+      output.includes('meta.page.total'),
+      'the meta body reads the same shape verbatim',
+    );
+    assert.false(/<:meta/.test(output), 'no :meta block remains');
+  });
+
+  test('migrates a count-only usage (empty <:response> + <:meta>)', function (assert) {
+    let { status, output, reasons } = transformContextSearch(COUNT_ONLY, {
+      filename: 'tile.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.notOk(output.includes('prerenderedCardSearchComponent'));
+    assert.true(
+      /\{\{#let\s+results\.meta\s+as\s+\|meta\|\}\}/.test(output),
+      'keeps the count via results.meta',
+    );
+    assert.notOk(
+      output.includes('searchEntriesToPrerenderedCards'),
+      'no adapter needed — the param-less response binds nothing',
+    );
+    assert.false(/<:response/.test(output), 'no :response block remains');
+  });
+
+  test('rewrites an {{#if @context.…}} availability guard to the v2 member', function (assert) {
+    let { status, output, reasons } = transformContextSearch(GUARDED, {
+      filename: 'guarded.gts',
+    });
+    assert.strictEqual(status, 'transformed', reasons.join('; '));
+    assert.notOk(
+      output.includes('prerenderedCardSearchComponent'),
+      'the guard no longer references the old member',
+    );
+    assert.true(
+      /\{\{#if\s+@context\.searchResultsComponent\}\}/.test(output),
+      `the guard tracks the v2 member: ${output}`,
+    );
   });
 
   test('leaves a partially-migratable file entirely untouched rather than emit a half-migration', function (assert) {

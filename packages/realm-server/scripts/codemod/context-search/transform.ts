@@ -213,8 +213,12 @@ function transformOneTemplate(
   filename: string,
 ): { changed: boolean; output: string } {
   let ast = etr.parse(contents);
-  let invocations = findInvocations(ast, reasons, filename);
+  let invocations = findInvocations(ast);
   let changed = false;
+  // For a `{{#let (component @context.…) as |X|}}` binding, the `(component …)`
+  // SubExpression is shared across all its `<X …>` invocations. Re-point it only
+  // when every invocation migrated; track per-binding success here.
+  let bindingAllOk = new Map<any, boolean>();
   for (let invocation of invocations) {
     let transformed = tryTransformInvocation(
       invocation,
@@ -225,7 +229,44 @@ function transformOneTemplate(
       filename,
     );
     changed = changed || transformed;
+    if (invocation.subExpr) {
+      bindingAllOk.set(
+        invocation.subExpr,
+        (bindingAllOk.get(invocation.subExpr) ?? true) && transformed,
+      );
+    }
   }
+  // Re-point each bound `(component @context.…)` whose invocations all migrated.
+  // A binding with any failed invocation is left on the old member, so the
+  // file-level guard in `transformContextSearch` discards the whole module rather
+  // than ship one with some invocations on v2 and others stranded on v1.
+  for (let [subExpr, allOk] of bindingAllOk) {
+    if (allOk) {
+      subExpr.params[0] = b.path(NEW_PATH);
+      changed = true;
+    }
+  }
+  // Rewrite `{{#if @context.…}}` / `{{#unless @context.…}}` availability guards
+  // (cards defensively gate the usage on the component being provided) to the v2
+  // member, so the guard tracks the component actually rendered. Same clean
+  // param-replacement as the bindings. This is unconditional, but harmless on a
+  // module that doesn't fully migrate: its stranded element/binding keeps the old
+  // member, so the file-level guard discards every edit anyway. Any guard shape
+  // this misses simply leaves the old member in place and is reported, never
+  // shipped broken.
+  walkGlimmer(ast, (node: any) => {
+    if (
+      node.type === 'BlockStatement' &&
+      (node.path?.original === 'if' || node.path?.original === 'unless')
+    ) {
+      (node.params ?? []).forEach((p: any, i: number) => {
+        if (p?.type === 'PathExpression' && p.original === OLD_PATH) {
+          node.params[i] = b.path(NEW_PATH);
+          changed = true;
+        }
+      });
+    }
+  });
   return changed
     ? { changed: true, output: etr.print(ast) }
     : { changed: false, output: contents };
@@ -239,11 +280,7 @@ interface Invocation {
   subExpr: any | null;
 }
 
-function findInvocations(
-  ast: any,
-  reasons: string[],
-  filename: string,
-): Invocation[] {
+function findInvocations(ast: any): Invocation[] {
   let directs: any[] = [];
   let lets: { localName: string; subExpr: any; scope: any }[] = [];
 
@@ -280,12 +317,16 @@ function findInvocations(
         elements.push(node);
       }
     });
-    if (elements.length === 1) {
-      invocations.push({ element: elements[0], subExpr: binding.subExpr });
-    } else {
-      reasons.push(
-        `${filename}: <${binding.localName}> bound from (component ${OLD_PATH}) is invoked ${elements.length} times — left for hand migration`,
-      );
+    // A component bound once with `{{#let (component @context.…) as |X|}}` may be
+    // invoked any number of times within the block. Each `<X …>` is an independent
+    // usage — its own query/format/blocks — so emit one invocation per element,
+    // all sharing the binding's SubExpression (the `(component …)` whose path the
+    // v2 member moves onto; re-pointing it once per invocation is idempotent). If
+    // any one of them can't be migrated, the file-level guard in
+    // `transformContextSearch` discards the whole module, so a bound component is
+    // never left half-migrated (some invocations on v2, some stranded on v1).
+    for (let element of elements) {
+      invocations.push({ element, subExpr: binding.subExpr });
     }
   }
 
@@ -367,8 +408,10 @@ function tryTransformInvocation(
   );
   let loadingBlock = namedBlocks.find((b: any) => b.tag === ':loading');
   let responseBlock = namedBlocks.find((b: any) => b.tag === ':response');
+  let metaBlock = namedBlocks.find((b: any) => b.tag === ':meta');
   let unexpected = namedBlocks.find(
-    (b: any) => b.tag !== ':loading' && b.tag !== ':response',
+    (b: any) =>
+      b.tag !== ':loading' && b.tag !== ':response' && b.tag !== ':meta',
   );
   if (unexpected) {
     return skip(`named block ${unexpected.tag} is not supported`);
@@ -376,10 +419,26 @@ function tryTransformInvocation(
   if (!responseBlock) {
     return skip('search component has no <:response> block');
   }
-  if ((responseBlock.blockParams ?? []).length !== 1) {
-    return skip('<:response> does not yield exactly one block param');
+  let responseParams = responseBlock.blockParams ?? [];
+  if (responseParams.length > 1) {
+    return skip('<:response> yields more than one block param');
   }
-  let responseParam = responseBlock.blockParams[0];
+  // A `<:response>` with no block param renders without naming the result list:
+  // a count-only usage pairs an empty `<:response>` with a `<:meta>` count tile.
+  // Its body (if any) references nothing from the list, so it migrates verbatim
+  // with no adapter binding.
+  let responseParam: string | undefined = responseParams[0];
+  // `<:meta as |m|>` yields the same `QueryResultsMeta` v2 exposes as
+  // `results.meta`, so it migrates to a `{{#let results.meta as |m|}}` wrapper.
+  // Support zero or one block param; anything else is an unrecognized shape.
+  let metaParam: string | undefined;
+  if (metaBlock) {
+    let metaParams = metaBlock.blockParams ?? [];
+    if (metaParams.length > 1) {
+      return skip('<:meta> yields more than one block param');
+    }
+    metaParam = metaParams[0];
+  }
 
   // Decide how to migrate the <:response> body. A single direct
   // `{{#each <param>}}` whose item only touches v2-native fields
@@ -390,13 +449,16 @@ function tryTransformInvocation(
   // body keeps working verbatim with the old field names.
   let significant = significantChildren(responseBlock);
   let cleanEach =
+    responseParam != null &&
     significant.length === 1 &&
     significant[0].type === 'BlockStatement' &&
     significant[0].path?.original === 'each' &&
     significant[0].params?.[0]?.original === responseParam &&
     countPathReferences(responseBlock, responseParam) === 1;
 
-  let useShim = true;
+  // A param-less <:response> binds nothing, so it needs no adapter; otherwise
+  // default to the adapter unless the clean-each fast path applies below.
+  let useShim = Boolean(responseParam);
   if (cleanEach) {
     let itemParam = significant[0].program?.blockParams?.[0];
     if (itemParam) {
@@ -439,10 +501,13 @@ function tryTransformInvocation(
     usesArrayShim: useShim,
   });
 
-  // Move the component reference to the v2 member.
-  if (subExpr) {
-    subExpr.params[0] = b.path(NEW_PATH);
-  } else {
+  // Move the component reference to the v2 member. A direct `<@context.…>` usage
+  // re-points its own tag here. A bound usage (`{{#let (component @context.…) as
+  // |X|}}`) keeps its local tag; its binding's `(component …)` is re-pointed by
+  // the caller, and only once EVERY invocation of that binding migrated — so a
+  // binding with any un-migratable invocation stays on the old member and the
+  // whole module is discarded rather than half-migrated.
+  if (!subExpr) {
     element.tag = NEW_PATH;
   }
 
@@ -455,7 +520,11 @@ function tryTransformInvocation(
   // Blocks → a single default block yielding `results`.
   element.blockParams = ['results'];
   let bodyChildren: any[];
-  if (useShim) {
+  if (!responseParam) {
+    // Param-less <:response>: nothing reads the result list, so emit the body
+    // verbatim (empty for a count-only usage; the <:meta> below carries the count).
+    bodyChildren = responseBlock.children ?? [];
+  } else if (useShim) {
     // Bind the adapted list once to the original block param and keep the body
     // verbatim: `{{#let (searchEntriesToPrerenderedCards results.entries) as
     // |<param>|}}…body…{{/let}}`. The body keeps reading the list and its rows
@@ -499,7 +568,26 @@ function tryTransformInvocation(
       b.text('\n      '),
     );
   }
-  newChildren.push(...bodyChildren, b.text('\n    '));
+  newChildren.push(...bodyChildren);
+  if (metaBlock) {
+    // `<:meta as |m|>…</:meta>` → `{{#let results.meta as |m|}}…{{/let}}`
+    // (same `QueryResultsMeta` shape, so the body reads it verbatim). With no
+    // block param the body never names the meta, so emit it directly.
+    newChildren.push(b.text('\n      '));
+    if (metaParam) {
+      newChildren.push(
+        b.block(
+          b.path('let'),
+          [b.path('results.meta')],
+          b.hash([]),
+          b.blockItself(metaBlock.children ?? [], [metaParam]),
+        ),
+      );
+    } else {
+      newChildren.push(...(metaBlock.children ?? []));
+    }
+  }
+  newChildren.push(b.text('\n    '));
   element.children = newChildren;
 
   return true;
