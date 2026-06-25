@@ -17,6 +17,7 @@ import {
   ri,
   baseRRI,
   rri,
+  searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -2455,16 +2456,20 @@ module(basename(import.meta.filename), function () {
             .post('/_search-v2')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                'item.on': {
-                  module: `${testRealmHref}person`,
-                  name: 'Person',
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: {
+                      module: rri(`${testRealmHref}person`),
+                      name: 'Person',
+                    },
+                    eq: { firstName: 'Van Gogh' },
+                  },
                 },
-                eq: { firstName: 'Van Gogh' },
-              },
-              fields: { 'search-entry': ['item'] },
-            });
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
