@@ -332,15 +332,7 @@ export default class RealmServerService extends Service {
     let testRealmOrigin = isTesting()
       ? new URL(testRealmURL).origin
       : undefined;
-    let sessionTokens: Record<string, string> = {};
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-
-    try {
-      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
-    } catch {
-      sessionTokens = {};
-    }
+    let sessionTokens = this.readSessionTokens();
 
     let realmServerURLs = new Set<string>();
 
@@ -370,6 +362,16 @@ export default class RealmServerService extends Service {
     }
 
     return [...realmServerURLs];
+  }
+
+  private readSessionTokens(): Record<string, string> {
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    try {
+      return JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      return {};
+    }
   }
 
   private normalizeRealmServerURL(url: string): string {
@@ -1223,16 +1225,7 @@ export default class RealmServerService extends Service {
   }
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
-    let sessionTokens: Record<string, string> = {};
-    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
-    if (!sessionStr) {
-      return undefined;
-    }
-    try {
-      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
-    } catch {
-      return undefined;
-    }
+    let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
