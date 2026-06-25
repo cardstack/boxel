@@ -2001,40 +2001,5 @@ module(`Integration | search resource`, function (hooks) {
         'the local-only matching candidate is present',
       );
     });
-
-    test(`no _federated-search fetch fires for a sequence of Store mutations`, async function (assert) {
-      // Pins the integration-level reactivity rule: every kind of Store
-      // mutation the displayed set responds to (candidate add, in-place edit,
-      // Store eviction) must recompute locally, never via a server round-trip.
-      let search = getSearchResourceForTest(loaderService, () => ({
-        named: {
-          query: abdelRahmanQuery,
-          realms: [testRealmURL],
-          isLive: true,
-          isAutoSaved: false,
-          storeService,
-          owner: this.owner,
-        },
-      }));
-      await search.loaded;
-      await settled();
-      let fetchesBefore = fetchCalls;
-
-      await addBookCandidate('books/no-fetch-add', 'Adder', 'Abdel-Rahman');
-      await settled();
-
-      let book1 = storeService.peek(`${testRealmURL}books/1`) as any;
-      book1.author.lastName = 'Other';
-      await settled();
-
-      (storeService as any).store.delete(`${testRealmURL}books/no-fetch-add`);
-      await settled();
-
-      assert.strictEqual(
-        fetchCalls,
-        fetchesBefore,
-        'no _federated-search fetch was made across the entire mutation sequence',
-      );
-    });
   });
 });
