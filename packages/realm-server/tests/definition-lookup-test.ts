@@ -1740,19 +1740,33 @@ module(basename(import.meta.filename), function () {
         2,
         'invalidate dropped the in-flight entry so caller B triggered its own prerender',
       );
-      // CS-10948: A's pre-invalidation result is dropped at persist time
-      // rather than served back. lookupDefinition therefore rejects (the
-      // post-skip readFromDatabaseCache misses because invalidate also
-      // deleted the row). Only B — which started after the bump and ran a
-      // fresh prerender — returns a Definition.
-      assert.strictEqual(
-        resultA.status,
-        'rejected',
-        'A is rejected — its pre-invalidation prerender result is discarded',
-      );
+      // A's pre-invalidation prerender result (v1) is discarded at persist
+      // time rather than served back. After discarding it, A falls back to
+      // readFromDatabaseCache, and which row that finds races caller B's
+      // fresh persist: releaseGate() unparks both callers at once, so A's
+      // fallback SELECT and B's INSERT of v2 settle in nondeterministic
+      // order —
+      //   - B's v2 not yet persisted when A reads -> A misses -> A rejects.
+      //   - B's v2 already persisted              -> A returns v2.
+      // Either way the invariant holds: A never serves its own stale v1.
+      // (Asserting strictly 'rejected' picks one race winner and flakes when
+      // B's INSERT lands before A's SELECT.)
       assert.strictEqual(resultB.status, 'fulfilled');
       if (resultB.status === 'fulfilled') {
         assert.strictEqual(resultB.value?.displayName, 'CoalesceInvalidate v2');
+      }
+      if (resultA.status === 'fulfilled') {
+        assert.strictEqual(
+          resultA.value?.displayName,
+          'CoalesceInvalidate v2',
+          'A discarded its stale v1 and fell back to B’s freshly-persisted v2 (benign race: B persisted before A read)',
+        );
+      } else {
+        assert.strictEqual(
+          resultA.status,
+          'rejected',
+          'A discarded its stale v1 and its DB fallback missed (benign race: A read before B persisted)',
+        );
       }
     });
 
