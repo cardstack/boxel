@@ -1742,8 +1742,9 @@ module(basename(import.meta.filename), function () {
       );
       // A's pre-invalidation prerender result (v1) is discarded at persist
       // time rather than served back. After discarding it, A falls back to
-      // readFromDatabaseCache, and which row that finds races caller B's
-      // fresh persist: releaseGate() unparks both callers at once, so A's
+      // readFromDatabaseCache, and the row that read finds depends on a race
+      // with caller B's fresh persist: releaseGate() unparks both callers at
+      // once, so A's
       // fallback SELECT and B's INSERT of v2 settle in nondeterministic
       // order —
       //   - B's v2 not yet persisted when A reads -> A misses -> A rejects.
@@ -1759,7 +1760,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           resultA.value?.displayName,
           'CoalesceInvalidate v2',
-          'A discarded its stale v1 and fell back to B’s freshly-persisted v2 (benign race: B persisted before A read)',
+          "A discarded its stale v1 and fell back to B's freshly-persisted v2 (benign race: B persisted before A read)",
         );
       } else {
         assert.strictEqual(
