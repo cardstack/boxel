@@ -286,6 +286,11 @@ export default class FileChooserModal extends Component<Signature> {
       }
       .choose-file {
         overflow: visible;
+        flex-wrap: nowrap;
+        align-items: flex-start;
+      }
+      .choose-file :deep(.label-container) {
+        flex: 0 0 8rem;
       }
       .choose-file :deep(.content) {
         height: 230px;
@@ -294,13 +299,12 @@ export default class FileChooserModal extends Component<Signature> {
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xxs);
+        flex: 1 1 auto;
+        min-width: 0;
       }
-      .choose-file :deep(.content:focus-within) {
+      .choose-file :deep(.content:has(:focus-visible)) {
         outline: 2px solid var(--ring, var(--boxel-highlight-hover));
         outline-offset: 2px;
-      }
-      .choose-file :deep(.content [data-file-tree-nav]:focus-visible) {
-        outline: none;
       }
       .upload-progress {
         display: flex;

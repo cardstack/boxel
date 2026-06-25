@@ -238,6 +238,10 @@ export default class MiniFileChooser extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-2xs);
       }
+      .mini-file-chooser__tree:has(:focus-visible) {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: -2px;
+      }
       .mini-file-chooser__footer {
         flex: 0 0 auto;
         display: flex;
