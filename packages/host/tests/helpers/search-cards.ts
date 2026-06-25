@@ -28,14 +28,16 @@ export async function searchCardsForTest(
     ),
     opts,
   );
-  let itemIds = new Set<string>();
+  // Key by the full `(type, id)` the search-entry `item` relationship carries,
+  // not `id` alone — matches the wire contract (and the store's resolver).
+  let itemKeys = new Set<string>();
   for (let entry of doc.data) {
-    let id = entry.relationships.item?.data?.id;
-    if (id) {
-      itemIds.add(id);
+    let ref = entry.relationships.item?.data;
+    if (ref) {
+      itemKeys.add(`${ref.type}:${ref.id}`);
     }
   }
-  let itemsById = new Map<string, CardResource | FileMetaResource>();
+  let itemsByKey = new Map<string, CardResource | FileMetaResource>();
   let included: (CardResource | FileMetaResource)[] = [];
   for (let resource of doc.included ?? []) {
     if (resource.type !== 'card' && resource.type !== 'file-meta') {
@@ -44,16 +46,17 @@ export async function searchCardsForTest(
     if (resource.id == null) {
       continue;
     }
-    if (itemIds.has(resource.id)) {
-      itemsById.set(resource.id, resource);
+    let key = `${resource.type}:${resource.id}`;
+    if (itemKeys.has(key)) {
+      itemsByKey.set(key, resource);
     } else {
       included.push(resource);
     }
   }
   let data = doc.data
-    .map((entry) => entry.relationships.item?.data?.id)
-    .filter((id): id is string => typeof id === 'string')
-    .map((id) => itemsById.get(id))
+    .map((entry) => entry.relationships.item?.data)
+    .filter((ref): ref is NonNullable<typeof ref> => ref != null)
+    .map((ref) => itemsByKey.get(`${ref.type}:${ref.id}`))
     .filter((item): item is CardResource | FileMetaResource => Boolean(item));
   return { data, included, meta: doc.meta };
 }
