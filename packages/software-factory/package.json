@@ -72,7 +72,7 @@
     "tmp": "catalog:",
     "typescript": "catalog:",
     "zod": "^4.0.17",
-    "zod-from-json-schema": "^0.5.2"
+    "zod-from-json-schema": "0.5.2"
   },
   "volta": {
     "extends": "../../package.json"
