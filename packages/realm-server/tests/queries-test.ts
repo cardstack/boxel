@@ -314,5 +314,38 @@ module(basename(import.meta.filename), function () {
         'returns only realms that are both archived and owned by the user',
       );
     });
+
+    test('fetchArchivedRealmsForOwner excludes archived published snapshots', async function (assert) {
+      const owner = '@owner:localhost';
+      const sourceRealmURL = 'http://example.com/source/';
+      const publishedRealmURL = 'http://example.com/published/';
+
+      await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
+        [owner]: ['read', 'write', 'realm-owner'],
+      });
+      // Publishing grants the owner realm-owner on the published URL too.
+      await upsertPublishedRealmInRegistry(dbAdapter, {
+        publishedRealmURL,
+        publishedRealmId: uuidv4(),
+        ownerUsername: owner,
+        sourceRealmURL,
+        lastPublishedAt: Date.now(),
+      });
+      await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
+        [owner]: ['read', 'realm-owner'],
+        '*': ['read'],
+      });
+
+      await archiveRealm(dbAdapter, new URL(sourceRealmURL));
+      await archiveRealm(dbAdapter, new URL(publishedRealmURL));
+
+      let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
+
+      assert.deepEqual(
+        archived,
+        [sourceRealmURL],
+        'published snapshots are omitted even when archived and owned',
+      );
+    });
   });
 });

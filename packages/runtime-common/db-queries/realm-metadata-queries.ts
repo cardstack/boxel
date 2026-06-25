@@ -2,7 +2,12 @@
 // on realm_metadata.archived_at (NULL = active, non-null = archived at
 // that timestamp).
 import type { DBAdapter } from '../db.ts';
-import { param, query } from '../expression.ts';
+import { dbExpression, param, query } from '../expression.ts';
+
+// `now()` is Postgres-only; SQLite spells it `CURRENT_TIMESTAMP`. These
+// helpers are a shared runtime-common API, so render the timestamp
+// per-adapter rather than baking in a single dialect.
+const now = dbExpression({ pg: 'now()', sqlite: 'CURRENT_TIMESTAMP' });
 
 // Mark a realm archived. Upserts the realm_metadata row so a realm that
 // never had a metadata row (no other flags ever set) can still be
@@ -12,7 +17,12 @@ export async function archiveRealm(dbAdapter: DBAdapter, realmURL: URL) {
   await query(dbAdapter, [
     `INSERT INTO realm_metadata (url, archived_at) VALUES (`,
     param(realmURL.href),
-    `, now()) ON CONFLICT (url) DO UPDATE SET archived_at = now(), updated_at = now()`,
+    `,`,
+    now,
+    `) ON CONFLICT (url) DO UPDATE SET archived_at =`,
+    now,
+    `, updated_at =`,
+    now,
   ]);
 }
 
@@ -22,7 +32,8 @@ export async function unarchiveRealm(dbAdapter: DBAdapter, realmURL: URL) {
   await query(dbAdapter, [
     `INSERT INTO realm_metadata (url, archived_at) VALUES (`,
     param(realmURL.href),
-    `, NULL) ON CONFLICT (url) DO UPDATE SET archived_at = NULL, updated_at = now()`,
+    `, NULL) ON CONFLICT (url) DO UPDATE SET archived_at = NULL, updated_at =`,
+    now,
   ]);
 }
 
@@ -39,7 +50,10 @@ export async function isRealmArchived(
 
 // List the URLs of archived realms owned by a user. Joins archived
 // realm_metadata rows to realm_user_permissions where the user holds the
-// realm-owner permission.
+// realm-owner permission. Published snapshots are excluded: publishing
+// grants the owner realm-owner on the published URL too, so without this
+// filter an archived snapshot would surface as one of the user's
+// workspaces.
 export async function fetchArchivedRealmsForOwner(
   dbAdapter: DBAdapter,
   username: string,
@@ -50,6 +64,7 @@ export async function fetchArchivedRealmsForOwner(
      INNER JOIN realm_user_permissions rup ON rup.realm_url = rm.url
      WHERE rm.archived_at IS NOT NULL
        AND rup.realm_owner = true
+       AND rm.url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        AND rup.username =`,
     param(username),
     `ORDER BY rm.archived_at DESC`,
