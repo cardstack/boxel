@@ -135,7 +135,13 @@ const tests = Object.freeze({
   'stringifyErrorForLog falls back to name+message when an Error has no stack':
     async (assert) => {
       let err = new Error('no stack here');
-      delete (err as { stack?: unknown }).stack;
+      // Force `stack` to undefined via an own data property so the test
+      // doesn't depend on whether the engine exposes `stack` as an own
+      // property (deletable) or a prototype accessor.
+      Object.defineProperty(err, 'stack', {
+        value: undefined,
+        configurable: true,
+      });
       assert.strictEqual(stringifyErrorForLog(err), 'Error: no stack here');
     },
 
