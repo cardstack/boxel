@@ -109,7 +109,15 @@ for mapping in "${MAPPINGS[@]}"; do
   find_str="${mapping%%|*}"
   replace_str="${mapping#*|}"
   echo "=== $find_str -> $replace_str ==="
-  if ! bash "$MIGRATE" ${FLAGS[@]+"${FLAGS[@]}"} "$find_str" "$replace_str" "${DIRS[@]}"; then
+  # Assemble the underlying invocation. DIRS is always non-empty (checked
+  # above), so this array is always safe to expand, with or without flags.
+  run_args=()
+  if [ ${#FLAGS[@]} -gt 0 ]; then
+    run_args+=("${FLAGS[@]}")
+  fi
+  run_args+=("$find_str" "$replace_str")
+  run_args+=("${DIRS[@]}")
+  if ! bash "$MIGRATE" "${run_args[@]}"; then
     status=1
   fi
   echo ""

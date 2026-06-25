@@ -176,9 +176,19 @@ fi
 # Directories to skip (matched by name at any depth), e.g. --exclude
 # decommissioned to leave moved-aside / backup trees untouched.
 EXCLUDE_ARGS=()
-for d in ${EXCLUDE_DIRS[@]+"${EXCLUDE_DIRS[@]}"}; do
-  EXCLUDE_ARGS+=("--exclude-dir=$d")
-done
+if [ ${#EXCLUDE_DIRS[@]} -gt 0 ]; then
+  for d in "${EXCLUDE_DIRS[@]}"; do
+    EXCLUDE_ARGS+=("--exclude-dir=$d")
+  done
+fi
+
+# File-type + exclude args for grep, assembled once. INCLUDE_ARGS is always
+# non-empty, so this array is always safe to expand even when no excludes
+# were given.
+GREP_ARGS=("${INCLUDE_ARGS[@]}")
+if [ ${#EXCLUDE_ARGS[@]} -gt 0 ]; then
+  GREP_ARGS+=("${EXCLUDE_ARGS[@]}")
+fi
 
 # If <find> is a URL, extract the path portion for matching path-only references.
 # e.g., https://realms-staging.stack.cards/catalog/ -> /catalog/
@@ -214,9 +224,9 @@ for search_dir in "$@"; do
     [ -n "$file" ] && matching_files+=("$file")
   done < <(
     if [ "$IS_URL" = true ]; then
-      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" "${INCLUDE_ARGS[@]}" ${EXCLUDE_ARGS[@]+"${EXCLUDE_ARGS[@]}"} 2>/dev/null || true
+      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" "${GREP_ARGS[@]}" 2>/dev/null || true
     else
-      grep -rl "${FIND_STR}" "$search_dir" "${INCLUDE_ARGS[@]}" ${EXCLUDE_ARGS[@]+"${EXCLUDE_ARGS[@]}"} 2>/dev/null || true
+      grep -rl "${FIND_STR}" "$search_dir" "${GREP_ARGS[@]}" 2>/dev/null || true
     fi
   )
 
