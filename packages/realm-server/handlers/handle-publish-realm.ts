@@ -634,24 +634,42 @@ export default function handlePublishRealm({
       // registers its in-flight deferred synchronously, so Realm.indexing()
       // (which readinessCheck also awaits) reflects the reindex until it
       // completes. (Both index paths coalesce with the durability enqueue.)
-      let wasMounted = reconciler.mounted.has(publishedRealmURL);
-      reconciler
-        .lookupOrMount(publishedRealmURL)
-        .then((publishedRealm) => {
-          if (wasMounted && publishedRealm) {
-            return publishedRealm.fullIndex(userInitiatedPriority, {
-              clearLastModified: true,
-            });
-          }
-          return undefined;
-        })
-        .catch((err: unknown) => {
-          log.error(
-            `background mount/reindex failed for ${publishedRealmURL}: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-        });
+      let mountedPublishedRealm = reconciler.mounted.get(publishedRealmURL);
+      if (mountedPublishedRealm) {
+        // Republish: the realm is already mounted with a resolved #startedUp,
+        // so readinessCheck relies on indexing() to know the swapped files are
+        // still being reindexed. Call fullIndex directly (not behind a deferred
+        // `.then`) so publishFullIndex registers its in-flight deferred
+        // SYNCHRONOUSLY, before this handler returns 202 — otherwise a readiness
+        // poll arriving first would see an empty indexing() and report ready
+        // before the reindex even starts. fullIndex invalidates the cached
+        // RealmInfo first, so og:title re-bakes from the swapped realm.json
+        // (parseRealmInfo's disk overlay) in a single pass.
+        void mountedPublishedRealm
+          .fullIndex(userInitiatedPriority, { clearLastModified: true })
+          .catch((err: unknown) => {
+            log.error(
+              `background publish reindex failed for ${publishedRealmURL}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          });
+      } else {
+        // New publish (or not mounted on this instance): mount so the realm is
+        // served as soon as the 202 returns. ensureMounted publishes it into
+        // virtualNetwork synchronously; start()'s from-scratch index runs in
+        // the background and #startedUp resolves only after it completes, which
+        // readinessCheck awaits. Sibling instances lazy-mount on first request.
+        void reconciler
+          .lookupOrMount(publishedRealmURL)
+          .catch((err: unknown) => {
+            log.error(
+              `background mount failed for ${publishedRealmURL}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          });
+      }
 
       // The source realm's `RealmInfo.lastPublishedAt` map is built
       // from `realm_registry` rows joined on `source_url = sourceRealmURL`,
