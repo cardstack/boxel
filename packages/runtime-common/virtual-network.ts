@@ -556,7 +556,7 @@ const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
-function shouldRetryFetch(url: URL) {
+export function shouldRetryFetch(url: URL) {
   // Env-mode services live at `<service>.<slug>.localhost` and are
   // reached through a local Traefik. The realm-server worker fetches
   // its own realm's `_mtimes` via this hostname on boot, and if Traefik
@@ -586,6 +586,20 @@ function shouldRetryFetch(url: URL) {
   }
 
   if (retryableLocalHosts.has(url.hostname)) {
+    return true;
+  }
+
+  // CI serves the base realm from a Traefik-fronted `*.localhost` host
+  // (e.g. https://realm-server.ci.localhost/base/...) instead of the virtual
+  // https://cardstack.com/base/ URL that `baseRealm.inRealm` recognizes above.
+  // A base-realm GET that reaches here already addressed at that host is the
+  // same artifact and just as exposed to the transient fetch-vanishing, so
+  // retry it too. Scoped to the `/base/` path so sibling realms on the same
+  // host (e.g. /testuser/personal/) keep their no-retry behavior.
+  if (
+    url.hostname.endsWith('.localhost') &&
+    (url.pathname === '/base' || url.pathname.startsWith('/base/'))
+  ) {
     return true;
   }
 
