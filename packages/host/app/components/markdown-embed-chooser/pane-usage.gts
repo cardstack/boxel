@@ -20,6 +20,7 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
 
   @tracked private target: CardDef | undefined;
   @tracked private inserted: string | undefined;
+  @tracked private refType: 'card' | 'file' = 'card';
 
   @action private async onSelect(url: string) {
     let result = await this.store.get(url);
@@ -32,14 +33,18 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
     this.inserted = bfm;
   }
 
+  @action private setRefType(value: string) {
+    this.refType = value === 'file' ? 'file' : 'card';
+  }
+
   <template>
     <FreestyleUsage @name='MarkdownEmbedChooser::Pane'>
       <:description>
         The right-hand companion to the mini choosers: a live preview plus a
         format dropdown, always-on W×H inputs for Fitted (with smart variant
-        matching), an Inline/Block toggle (Block is disabled while Atom is
-        selected, since atom has no block form), and a dynamic "Insert as …"
-        CTA. The CTA fires
+        matching), an independent Inline/Block placement toggle (every format
+        works in both placements), and a dynamic "Insert as …" CTA. The CTA
+        fires
         <code>onInsert</code>
         with the serialized BFM — the host owns cursor insertion.
       </:description>
@@ -52,7 +57,7 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
             {{#if this.target}}
               <MarkdownEmbedPreviewPane
                 @target={{this.target}}
-                @refType='card'
+                @refType={{this.refType}}
                 @onInsert={{this.onInsert}}
               />
             {{else}}
@@ -72,16 +77,21 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
           @name='target'
           @description='Resolved CardDef or FileDef being previewed; its id is the BFM ref URL.'
           @required={{true}}
+          @value={{this.target}}
         />
         <Args.String
           @name='refType'
           @description="'card' or 'file' — which BFM keyword to emit."
           @required={{true}}
+          @value={{this.refType}}
+          @onInput={{this.setRefType}}
+          @options={{this.refTypeOptions}}
         />
         <Args.Action
           @name='onInsert'
-          @description='Called with the serialized BFM directive when the CTA is clicked.'
+          @description='Called with the serialized BFM directive when the CTA is clicked. Watch the "Inserted:" readout above.'
           @required={{true}}
+          @value={{this.onInsert}}
         />
       </:api>
     </FreestyleUsage>
@@ -109,4 +119,6 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
       }
     </style>
   </template>
+
+  private refTypeOptions = ['card', 'file'];
 }

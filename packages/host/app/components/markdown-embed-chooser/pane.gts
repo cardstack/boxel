@@ -159,13 +159,14 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     return `Insert as ${this.categoryLabel}`;
   }
 
-  // Size specifier for the chosen format, independent of placement: `atom` /
-  // `embedded` keywords, the variant id for a named Fitted variant, and
-  // `w:<w> h:<h>` for Custom dimensions (per CS-11674).
+  // Size specifier for the chosen format. Atom is the default for inline
+  // placement, so an inline atom embed emits the size-less `:card[url]`;
+  // every other combination carries an explicit specifier so the rendered
+  // format matches the user's choice unambiguously.
   private get sizeSpecifier(): string | undefined {
     switch (this.category) {
       case 'atom':
-        return 'atom';
+        return this.kind === 'inline' ? undefined : 'atom';
       case 'embedded':
         return 'embedded';
       case 'fitted':
@@ -183,15 +184,26 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
 
   private get bfmString(): string {
     let url = this.args.target.id;
-    // Declare intent uniformly (kind + size); the BFM serializer in
-    // runtime-common owns whether a given kind carries the size. Today it drops
-    // the size for inline (so inline emits `:card[url]`); the BFM "all formats
-    // in both modes" ticket makes inline honor it, after which this chooser
-    // emits `:card[url | spec]` with no change here.
     return serializeBfmRef(this.args.refType, url, {
       kind: this.kind,
       size: this.sizeSpecifier,
     });
+  }
+
+  // An inline span carrying an embedded card has no intrinsic size to flow
+  // with the surrounding text, so the preview collapses. Surface a hint so
+  // the user understands why the preview is empty and how to recover.
+  private get placementWarning(): string | undefined {
+    if (this.kind !== 'inline') {
+      return undefined;
+    }
+    if (this.category === 'embedded') {
+      return 'Inline Embedded has no intrinsic width — pick a Fitted variant (or set custom W×H) to embed within a paragraph.';
+    }
+    if (this.category === 'custom' && !(this.width && this.height)) {
+      return 'Set both width and height to render this inline embed.';
+    }
+    return undefined;
   }
 
   @action
@@ -277,6 +289,16 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
           @showSurroundingText={{true}}
         />
       </div>
+
+      {{#if this.placementWarning}}
+        <p
+          class='markdown-embed-preview-pane__warning'
+          role='status'
+          data-test-markdown-embed-preview-warning
+        >
+          {{this.placementWarning}}
+        </p>
+      {{/if}}
 
       <footer class='markdown-embed-preview-pane__footer'>
         <div
@@ -364,6 +386,15 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         justify-content: center;
         padding: var(--boxel-sp);
         overflow: auto;
+      }
+      .markdown-embed-preview-pane__warning {
+        flex: 0 0 auto;
+        margin: 0 var(--boxel-sp) var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        background-color: var(--boxel-warning-100, var(--boxel-100));
+        color: var(--boxel-warning-700, var(--boxel-600));
+        font: var(--boxel-font-xs);
       }
       .markdown-embed-preview-pane__format-select {
         flex: 1 1 auto;

@@ -1129,7 +1129,8 @@ module('Unit | bfm-card-references', function () {
   });
 
   module('serializeBfmSizeSpec', function () {
-    test('isolated / embedded round-trip to their keyword', function (assert) {
+    test('atom / isolated / embedded round-trip to their keyword', function (assert) {
+      assert.strictEqual(serializeBfmSizeSpec({ format: 'atom' }), 'atom');
       assert.strictEqual(
         serializeBfmSizeSpec({ format: 'isolated' }),
         'isolated',
@@ -1165,8 +1166,9 @@ module('Unit | bfm-card-references', function () {
       );
     });
 
-    test('round-trips through parseBfmSizeSpec for isolated, embedded, dims, and %', function (assert) {
+    test('round-trips through parseBfmSizeSpec for atom, isolated, embedded, dims, and %', function (assert) {
       let specs: BfmSizeSpec[] = [
+        { format: 'atom' },
         { format: 'isolated' },
         { format: 'embedded' },
         { format: 'fitted', width: 300, height: 200 },
@@ -1199,10 +1201,17 @@ module('Unit | bfm-card-references', function () {
   module('serializeBfmRef', function () {
     let url = 'https://example.com/Author/jane';
 
-    test('inline drops the size and emits the single-colon form', function (assert) {
+    test('inline with no size emits the bare single-colon form', function (assert) {
+      assert.strictEqual(
+        serializeBfmRef('card', url, { kind: 'inline' }),
+        `:card[${url}]`,
+      );
+    });
+
+    test('inline with a size appends the specifier', function (assert) {
       assert.strictEqual(
         serializeBfmRef('card', url, { kind: 'inline', size: 'tall-tile' }),
-        `:card[${url}]`,
+        `:card[${url} | tall-tile]`,
       );
     });
 

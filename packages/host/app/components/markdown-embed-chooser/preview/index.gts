@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
-  bfmBlockFormatAndSize,
+  bfmRefFormatAndSize,
   type BfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
 
@@ -129,7 +129,7 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
       return undefined;
     }
     let { width, height } = this.args.sizeSpec ?? { format: 'fitted' };
-    let { sizeStyle } = bfmBlockFormatAndSize(
+    let { sizeStyle } = bfmRefFormatAndSize(
       'fitted',
       width === undefined ? undefined : String(width),
       height === undefined ? undefined : String(height),

@@ -252,7 +252,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
       );
   });
 
-  test('fitted variant prefills W/H, emits the variant id, and inline drops the size', async function (assert) {
+  test('fitted variant prefills W/H and emits the variant id in both placements', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
     await render(
@@ -287,16 +287,14 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
       'block emits the named variant id',
     );
 
-    // The chooser passes the size for inline too, but the BFM serializer
-    // (runtime-common) currently drops it for inline, so the emitted directive
-    // is the size-less `:card[url]`. The BFM "all formats in both modes" ticket
-    // flips this to `:card[url | tall-tile]` and updates this assertion.
+    // Inline carries the size too, so the emitted directive keeps the named
+    // variant — `:card[url | tall-tile]`.
     await click('[data-test-markdown-embed-preview-inline]');
     await click('[data-test-markdown-embed-preview-cta]');
     assert.strictEqual(
       harness.last,
-      `:card[${card.id}]`,
-      'inline emission drops the size today (BFM-owned, pending the grammar ticket)',
+      `:card[${card.id} | tall-tile]`,
+      'inline carries the same size specifier as block',
     );
   });
 
@@ -364,6 +362,49 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
       `::card[${card.id} | regular-tile]`,
       'the dropdown follows the dimensions to the matching variant',
     );
+  });
+
+  test('inline + embedded surfaces a sizing hint (no intrinsic inline width)', async function (assert) {
+    let card = await loadCard();
+    let harness = new InsertHarness();
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @target={{card}}
+              @refType='card'
+              @onInsert={{harness.onInsert}}
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    // No hint while atom (the default for inline) is selected.
+    assert
+      .dom('[data-test-markdown-embed-preview-warning]')
+      .doesNotExist('no hint when inline + atom is selected');
+
+    await chooseFormat('embedded');
+    // Default placement for embedded is block, so still no hint yet.
+    assert
+      .dom('[data-test-markdown-embed-preview-warning]')
+      .doesNotExist('no hint when embedded + block is selected');
+
+    await click('[data-test-markdown-embed-preview-inline]');
+    assert
+      .dom('[data-test-markdown-embed-preview-warning]')
+      .exists('hint appears when embedded is paired with inline');
+    assert
+      .dom('[data-test-markdown-embed-preview-warning]')
+      .hasText(/no intrinsic width/i);
+
+    // Switching to a sized Fitted variant removes the hint.
+    await chooseFormat('tall-tile');
+    assert
+      .dom('[data-test-markdown-embed-preview-warning]')
+      .doesNotExist('Fitted with explicit dims clears the hint');
   });
 
   test('refType drives the keyword (file)', async function (assert) {
