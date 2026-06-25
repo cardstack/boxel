@@ -18,7 +18,10 @@
 #
 # Flags:
 #   --dry-run           Preview changes without modifying files
-#   --json-only         Only scan card JSON (skip .gts modules)
+#   --json-only         Only scan card JSON (skip .gts/.ts source modules)
+#   --modules-only      Only scan source modules (.gts/.ts), skip card JSON —
+#                       e.g. to rewrite import specifiers as a separate pass.
+#                       Mutually exclusive with --json-only.
 #   --exclude <dir>     Skip directories matching <dir> (by name, any depth).
 #                       Repeatable. e.g. --exclude decommissioned to leave
 #                       moved-aside or backup trees untouched.
@@ -36,11 +39,16 @@
 #
 # After a non-dry-run, every changed .json file is re-parsed to confirm the
 # replacement left valid JSON; a parse failure is reported and exits non-zero.
+# Source modules (.gts/.ts) are not parse-checked — a prefix swap inside an
+# import specifier can't change syntax, and the rollback patch is the backstop.
 #
 # Examples:
-#   # Convert the base virtual-alias references to RRI prefix form in card JSON,
+#   # Convert base references to RRI prefix form in card JSON,
 #   # skipping moved-aside / backup trees.
 #   ./migrate-realm-references.sh --json-only --exclude decommissioned https://cardstack.com/base/ @cardstack/base/ /persistent
+#
+#   # Rewrite base import specifiers in .gts/.ts modules (separate pass).
+#   ./migrate-realm-references.sh --modules-only --exclude decommissioned https://cardstack.com/base/ @cardstack/base/ /persistent
 #
 #   # Shortcut form (deployment-URL references)
 #   ./migrate-realm-references.sh --dry-run -e staging -r catalog /persistent/catalog /persistent/experiments
@@ -64,6 +72,7 @@ set -uo pipefail
 
 DRY_RUN=false
 JSON_ONLY=false
+MODULES_ONLY=false
 ENV=""
 REALM=""
 ERRORS=()
@@ -78,6 +87,10 @@ while [ $# -gt 0 ]; do
       ;;
     --json-only)
       JSON_ONLY=true
+      shift
+      ;;
+    --modules-only)
+      MODULES_ONLY=true
       shift
       ;;
     --exclude)
@@ -145,7 +158,8 @@ else
   echo "  -e, --environment  development | staging | production"
   echo "  -r, --realm        catalog | base | skills | openrouter"
   echo "  --dry-run          Preview changes without modifying files"
-  echo "  --json-only        Only scan card JSON (skip .gts modules)"
+  echo "  --json-only        Only scan card JSON (skip .gts/.ts modules)"
+  echo "  --modules-only     Only scan .gts/.ts modules (skip card JSON)"
   echo "  --exclude <dir>    Skip directories matching <dir> (repeatable)"
   echo ""
   echo "  Environment URL mappings:"
@@ -164,13 +178,20 @@ fi
 FIND_STR="${FIND_STR%/}/"
 REPLACEMENT="${REPLACEMENT%/}/"
 
-# Which file types to scan. Default covers both card JSON and in-realm .gts
-# modules; --json-only restricts to card documents (e.g. when .gts import
-# rewriting is handled separately).
+# Which file types to scan. Default covers card JSON plus in-realm source
+# modules (.gts/.ts). --json-only restricts to card documents; --modules-only
+# restricts to source modules (e.g. when rewriting import specifiers as a
+# separate pass). The two are mutually exclusive.
+if [ "$JSON_ONLY" = true ] && [ "$MODULES_ONLY" = true ]; then
+  echo "Error: --json-only and --modules-only are mutually exclusive" >&2
+  exit 1
+fi
 if [ "$JSON_ONLY" = true ]; then
   INCLUDE_ARGS=(--include='*.json')
+elif [ "$MODULES_ONLY" = true ]; then
+  INCLUDE_ARGS=(--include='*.gts' --include='*.ts')
 else
-  INCLUDE_ARGS=(--include='*.json' --include='*.gts')
+  INCLUDE_ARGS=(--include='*.json' --include='*.gts' --include='*.ts')
 fi
 
 # Directories to skip (matched by name at any depth), e.g. --exclude
