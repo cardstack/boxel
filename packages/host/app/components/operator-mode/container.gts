@@ -38,10 +38,10 @@ import type { CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardChooserModal from '../card-chooser/modal';
 import SearchResults from '../card-search/search-results';
+import FileChooserModal from '../file-chooser/modal';
 import PrerenderedCardSearch from '../prerendered-card-search';
 import { Submodes } from '../submode-switcher';
 
-import ChooseFileModal from './choose-file-modal';
 import CreateListingModal from './create-listing-modal';
 
 import type CardService from '../../services/card-service';
@@ -146,7 +146,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   <template>
     <div class='operator-mode' ...attributes>
-      <ChooseFileModal />
+      <FileChooserModal />
       <CreateListingModal />
       <CardChooserModal />
       <FromElseWhere @name='modal-elsewhere' />

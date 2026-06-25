@@ -52,6 +52,40 @@ QUnit.config.autostart = false;
   process.exitCode = data.testCounts.failed > 0 ? 1 : 0;
 });
 
+// Track the running test through QUnit's public callback API so the
+// unhandled-rejection handler below can attribute a leak without reaching
+// into QUnit internals.
+let currentTestName = '<no test running>';
+QUnit.testStart(({ module, name }) => {
+  currentTestName = module ? `${module} > ${name}` : name;
+});
+QUnit.testDone(() => {
+  currentTestName = '<no test running>';
+});
+
+// Native Node aborts the whole suite on the first unhandled rejection, and
+// its default dump names neither the test that leaked the promise nor a
+// usable stack. Attribute it to the running test before re-raising so the
+// failure stays fatal but becomes diagnosable instead of an opaque object
+// printed by node:internal/process/promises.
+process.on('unhandledRejection', (reason: unknown) => {
+  let testName = currentTestName;
+  let detail =
+    reason instanceof Error
+      ? (reason.stack ?? reason.message)
+      : (() => {
+          try {
+            return JSON.stringify(reason);
+          } catch {
+            return String(reason);
+          }
+        })();
+  console.error(
+    `Unhandled promise rejection during test [${testName}]:\n${detail}`,
+  );
+  throw reason;
+});
+
 QUnit.config.testTimeout = 60000;
 const testModules = process.env.TEST_MODULES?.trim();
 
