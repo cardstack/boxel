@@ -73,7 +73,7 @@ describe('file write (integration)', () => {
         attributes: { title: 'Written Card' },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },

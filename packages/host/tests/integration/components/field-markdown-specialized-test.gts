@@ -430,12 +430,12 @@ module('Integration | field markdown specialized', function (hooks) {
       };
     }
     let card = new Sample({
-      value: { module: 'https://cardstack.com/base/string', name: 'default' },
+      value: { module: '@cardstack/base/string', name: 'default' },
     });
     await renderCard(loader, card, 'isolated');
     assert.strictEqual(
       readMarkdown(this.element),
-      '`https://cardstack.com/base/string/default`',
+      '`@cardstack/base/string/default`',
     );
   });
 

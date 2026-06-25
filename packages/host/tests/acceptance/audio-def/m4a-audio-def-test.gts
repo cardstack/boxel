@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -127,7 +127,7 @@ module('Acceptance | m4a audio def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const m4aDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}m4a-audio-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}m4a-audio-def` as RealmResourceIdentifier,
     name: 'M4aDef',
   });
 

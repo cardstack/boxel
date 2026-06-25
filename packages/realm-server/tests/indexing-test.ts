@@ -399,7 +399,7 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/card-api'),
+            module: rri('@cardstack/base/card-api'),
             name: 'CardDef',
           },
         },
@@ -900,42 +900,42 @@ module(basename(import.meta.filename), function () {
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/embedded.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/isolated-and-edit.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/missing-template.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/field-edit.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'links-to-many-component.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
           fileName: 'links-to-editor.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'contains-many-component.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'field-component.gts',
         },
       ];
@@ -1131,7 +1131,7 @@ module(basename(import.meta.filename), function () {
         'deps include mismatch extractor module',
       );
       assert.ok(
-        deps.includes('https://cardstack.com/base/file-api'),
+        deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
       );
     });
@@ -1167,7 +1167,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: rri('https://cardstack.com/base/text-file-def'),
+          module: rri('@cardstack/base/text-file-def'),
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',

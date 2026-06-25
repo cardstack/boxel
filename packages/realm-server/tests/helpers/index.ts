@@ -345,6 +345,11 @@ export function cleanWhiteSpace(text: string) {
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  // Mirror the host's network.ts and main.ts symmetry: when the
+  // baseRealm fake URL is registered as a URL alias, also register the
+  // @cardstack/base/ realm-prefix mapping so unresolveURL on either
+  // form canonicalises to the same RRI.
+  virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealm);
   return virtualNetwork;
 }
 
@@ -2708,6 +2713,11 @@ async function buildBaseRealmTemplate(
       `http://127.0.0.1:${baseRealmTemplateBuilderPort}/base/`,
     );
     virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+    // Mirror the symmetry from createVirtualNetwork: register the
+    // @cardstack/base/ realm-prefix mapping too. unresolveURL on the
+    // virtual base-realm URL needs the prefix mapping to canonicalise
+    // to RRI form, matching what the host-side prerender writes.
+    virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealmURL.href);
 
     let definitionLookup = new CachingDefinitionLookup(
       dbAdapter,
@@ -2958,7 +2968,7 @@ export function realmConfigCardJSON(
       attributes: attrs,
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/realm-config',
+          module: '@cardstack/base/realm-config',
           name: 'RealmConfig',
         },
       },

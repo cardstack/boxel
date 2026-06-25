@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI, rri } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -82,7 +82,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -118,7 +118,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -376,7 +376,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -445,7 +445,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -521,7 +521,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -557,7 +557,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -2687,7 +2687,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2697,7 +2697,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2997,7 +2997,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3105,7 +3105,7 @@ module('Integration | realm', function (hooks) {
           sort: [
             {
               by: 'id',
-              on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+              on: { module: `${baseRealmRRI}card-api`, name: 'CardDef' },
             },
           ],
         }),
@@ -3304,7 +3304,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3547,7 +3547,7 @@ posts/ignore-me.gts
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'FieldDef',
               },
             },

@@ -439,7 +439,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import StringField from 'https://cardstack.com/base/string';
+        `import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 
 export class MyCard extends CardDef {
@@ -503,7 +503,7 @@ export class MyCard extends CardDef {
       assert.strictEqual(
         responseJson.output,
         `import { eq } from '@cardstack/boxel-ui/helpers';
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import MyComponent from 'somewhere';
 
@@ -682,7 +682,7 @@ export class MyCard extends CardDef {
 
       // Should use single quotes based on prettier configuration
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/string'"),
+        responseJson.output.includes("'@cardstack/base/string'"),
         'Single quotes are used for imports',
       );
       assert.ok(
@@ -715,7 +715,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import StringField from 'https://cardstack.com/base/string';
+        `import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);

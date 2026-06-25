@@ -28,7 +28,7 @@ beforeAll(async () => {
           attributes: { title: 'Keep' },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: '@cardstack/base/card-api',
               name: 'CardDef',
             },
           },
@@ -40,7 +40,7 @@ beforeAll(async () => {
           attributes: { title: 'Delete' },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: '@cardstack/base/card-api',
               name: 'CardDef',
             },
           },

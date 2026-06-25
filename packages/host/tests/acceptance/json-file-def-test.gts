@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -51,7 +51,7 @@ module('Acceptance | json file def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const jsonFileDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}json-file-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}json-file-def` as RealmResourceIdentifier,
     name: 'JsonFileDef',
   });
 

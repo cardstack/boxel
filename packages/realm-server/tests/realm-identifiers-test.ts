@@ -120,7 +120,7 @@ module(basename(import.meta.filename), function () {
           relationships: {
             theme: {
               links: {
-                self: 'https://cardstack.com/base/Theme/brand-guide',
+                self: '@cardstack/base/Theme/brand-guide',
               },
             },
           },
@@ -141,7 +141,7 @@ module(basename(import.meta.filename), function () {
       assert.ok(rel, 'relationship exists after relativization');
       assert.strictEqual(
         rel.links.self,
-        'https://cardstack.com/base/Theme/brand-guide',
+        '@cardstack/base/Theme/brand-guide',
         'absolute URL to another realm is preserved as-is',
       );
     });
@@ -418,6 +418,33 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           vn.unresolveURL('http://other.example.com/foo'),
           'http://other.example.com/foo',
+        );
+      });
+
+      test('chases through addURLMapping when the input is a virtual URL whose resolved form matches a registered prefix', function (assert) {
+        let vn = new VirtualNetwork();
+        vn.addURLMapping(
+          new URL('https://cardstack.com/base/'),
+          new URL('http://localhost:4201/base/'),
+        );
+        vn.addRealmMapping('@cardstack/base/', 'http://localhost:4201/base/');
+        assert.strictEqual(
+          vn.unresolveURL('https://cardstack.com/base/card-api'),
+          '@cardstack/base/card-api',
+          'virtual URL resolves through addURLMapping then matches @cardstack/base/',
+        );
+      });
+
+      test('returns the input unchanged when chase-through resolves but no realm prefix matches', function (assert) {
+        let vn = new VirtualNetwork();
+        vn.addURLMapping(
+          new URL('https://example.com/foo/'),
+          new URL('http://localhost:9999/foo/'),
+        );
+        assert.strictEqual(
+          vn.unresolveURL('https://example.com/foo/bar'),
+          'https://example.com/foo/bar',
+          'no realm-prefix mapping for the resolved URL — return input as-is',
         );
       });
     });

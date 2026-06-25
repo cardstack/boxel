@@ -3,7 +3,7 @@ import { cloneDeep } from 'lodash-es';
 import {
   SupportedMimeType,
   isJsonContentType,
-  baseRealm,
+  baseRealmRRI,
   inferContentType,
   unixTime,
   maxLinkDepth,
@@ -1914,6 +1914,19 @@ export function relativizeDocument(
   }
 }
 
+// A reference in scoped RRI form (e.g. `@cardstack/base/card-api`) is an
+// absolute cross-realm identifier and must never be treated as realm-relative.
+// Registered prefixes are a subset, but a scoped reference to a realm this
+// VirtualNetwork does not know is still scoped — the leading `@` is the signal.
+function isScopedReference(
+  reference: string,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  return (
+    reference.startsWith('@') || virtualNetwork.isRegisteredPrefix(reference)
+  );
+}
+
 function relativizeResource(
   resource: LooseCardResource,
   primaryURL: URL,
@@ -1926,18 +1939,21 @@ function relativizeResource(
     ? virtualNetwork.toURL(resource.id)
     : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
-    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
-    // in their canonical portable form — don't resolve or relativize them.
-    if (virtualNetwork.isRegisteredPrefix(url)) {
+    // Scoped RRIs (e.g. @cardstack/catalog/foo) are already in their canonical
+    // portable form — don't resolve or relativize them. A scoped reference is
+    // absolute and cross-realm by construction, so it is preserved verbatim
+    // whether or not this VirtualNetwork has a mapping registered for its
+    // prefix (an index engine for one realm need not know every other realm).
+    if (isScopedReference(url, virtualNetwork)) {
       return;
     }
     let urlObj = virtualNetwork.resolveURL(url, resourceURL);
     setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
-    // in their canonical portable form — don't resolve or relativize them.
-    if (virtualNetwork.isRegisteredPrefix(moduleURL)) {
+    // Scoped RRIs are already in canonical portable form — see the note in the
+    // instance-URL visitor above.
+    if (isScopedReference(moduleURL, virtualNetwork)) {
       return;
     }
     let absoluteModuleURL = virtualNetwork.resolveURL(moduleURL, resourceURL);
@@ -2070,7 +2086,7 @@ function fileResourceFromIndex(
     (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
       ? fileEntry.resource?.meta?.adoptsFrom
       : {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'FileDef',
         });
   let resourceAttributes = fileEntry.resource?.attributes ?? {};

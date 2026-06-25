@@ -246,7 +246,7 @@ const commentSpec2 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -294,7 +294,7 @@ const commentSpec1 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -386,7 +386,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -432,7 +432,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -471,7 +471,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1171,7 +1171,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1191,7 +1191,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },

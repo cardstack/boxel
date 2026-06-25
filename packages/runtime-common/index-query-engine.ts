@@ -6,8 +6,9 @@ import {
   type CodeRef,
   baseCardRef,
   internalKeyFor,
+  internalKeysFor,
   isResolvedCodeRef,
-  baseRealm,
+  baseRealmRRI,
   getSerializer,
 } from './index.ts';
 import { isValidPrerenderedHtmlFormat } from './prerendered-html-format.ts';
@@ -507,7 +508,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
+    let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -515,7 +516,13 @@ export class IndexQueryEngine {
       ...every([
         ['i.realm_url =', param(realmURL.href)],
         ['i.type =', param('file')],
-        [tableValuedEach('types'), '=', param(typeKey)],
+        any(
+          typeKeys.map((typeKey) => [
+            tableValuedEach('types'),
+            '=',
+            param(typeKey),
+          ]),
+        ),
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
@@ -530,7 +537,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
+    let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -538,7 +545,13 @@ export class IndexQueryEngine {
       ...every([
         ['i.realm_url =', param(realmURL.href)],
         ['i.type =', param('instance')],
-        [tableValuedEach('types'), '=', param(typeKey)],
+        any(
+          typeKeys.map((typeKey) => [
+            tableValuedEach('types'),
+            '=',
+            param(typeKey),
+          ]),
+        ),
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
@@ -946,11 +959,16 @@ export class IndexQueryEngine {
 
   // the type condition only consumes absolute URL card refs.
   private typeCondition(ref: CodeRef): CardExpression {
-    return [
-      tableValuedEach('types'),
-      '=',
-      param(internalKeyFor(ref, undefined, this.#virtualNetwork)),
-    ];
+    // Match any equivalent spelling of the type key (RRI / real-URL /
+    // virtual-alias), so rows indexed before references were canonicalized to
+    // RRI still satisfy the filter without a reindex or DB migration.
+    return any(
+      internalKeysFor(ref, undefined, this.#virtualNetwork).map((typeKey) => [
+        tableValuedEach('types'),
+        '=',
+        param(typeKey),
+      ]),
+    );
   }
 
   private eqCondition(
@@ -1603,7 +1621,7 @@ async function getField(
         isPrimitive: true,
         isComputed: false,
         fieldOrCard: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'StringField',
         },
       } as FieldDefinition;

@@ -132,9 +132,17 @@ export class VirtualNetwork {
   }
 
   /**
-   * Convert a resolved URL back to its registered prefix form when one
-   * matches, e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
-   * URLs that don't match any registered prefix are returned as-is.
+   * Convert a URL back to its registered prefix form when one matches,
+   * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+   *
+   * If the input doesn't directly match any realm-prefix target, and the
+   * input is URL-shaped, chase through any virtual→real URL mapping (e.g.
+   * `https://cardstack.com/base/X` → `http://localhost:4201/base/X`) and
+   * retry the realm-prefix match. This bridges the gap when a realm
+   * prefix is registered against the resolved URL but the caller hands
+   * us the unresolved virtual URL.
+   *
+   * Inputs that match no prefix and no URL mapping are returned as-is.
    */
   unresolveURL(url: string): RealmResourceIdentifier {
     for (let [prefix, target] of this.realmMappings) {
@@ -142,7 +150,58 @@ export class VirtualNetwork {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
       }
     }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      let resolved: string | undefined;
+      try {
+        resolved = this.resolveURLMapping(url, 'virtual-to-real');
+      } catch {
+        resolved = undefined;
+      }
+      if (resolved && resolved !== url) {
+        for (let [prefix, target] of this.realmMappings) {
+          if (resolved.startsWith(target)) {
+            return (prefix +
+              resolved.slice(target.length)) as RealmResourceIdentifier;
+          }
+        }
+      }
+    }
     return url as RealmResourceIdentifier;
+  }
+
+  /**
+   * Canonicalize a set of identifiers to RRI form, deduped. Distinct
+   * spellings of the same module (a real URL and its virtual alias) collapse
+   * to one RRI, so the result is uniqued — callers consume these as sets
+   * (dependency lists, etc.) and would otherwise carry duplicates.
+   */
+  unresolveURLs(urls: string[]): RealmResourceIdentifier[] {
+    return [
+      ...new Set(urls.map((url) => this.unresolveURL(url))),
+    ] as RealmResourceIdentifier[];
+  }
+
+  /**
+   * All known spellings of a (resolved) URL: the URL itself, its RRI-prefix
+   * form, and any registered virtual-alias form. Lets callers match index
+   * data persisted before references were canonicalized to RRI — which may
+   * hold the virtual-alias or real-URL spelling of a key — against the
+   * RRI-form key produced today. Returns just the input for URLs that belong
+   * to no registered realm, so normal realms are unaffected.
+   */
+  equivalentURLForms(url: string): string[] {
+    let forms = new Set<string>([url]);
+    forms.add(this.unresolveURL(url));
+    let virtual: string | undefined;
+    try {
+      virtual = this.resolveURLMapping(url, 'real-to-virtual');
+    } catch {
+      virtual = undefined;
+    }
+    if (virtual) {
+      forms.add(virtual);
+    }
+    return [...forms];
   }
 
   /**
