@@ -55,6 +55,14 @@ export class MockUtils {
     return this.testState.opts?.systemCardAccountData;
   };
 
+  getActiveRealms = () => {
+    return this.testState.opts?.activeRealms ?? [];
+  };
+
+  getActiveRealmServers = () => {
+    return this.testState.opts?.activeRealmServers ?? [];
+  };
+
   getRealmEventMessagesSince = (roomId: string, since: number) => {
     return this.testState
       .sdk!.serverState.getRoomEvents(roomId)
