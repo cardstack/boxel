@@ -589,13 +589,15 @@ export function shouldRetryFetch(url: URL) {
     return true;
   }
 
-  // CI serves the base realm from a Traefik-fronted `*.localhost` host
-  // (e.g. https://realm-server.ci.localhost/base/...) instead of the virtual
-  // https://cardstack.com/base/ URL that `baseRealm.inRealm` recognizes above.
-  // A base-realm GET that reaches here already addressed at that host is the
-  // same artifact and just as exposed to the transient fetch-vanishing, so
-  // retry it too. Scoped to the `/base/` path so sibling realms on the same
-  // host (e.g. /testuser/personal/) keep their no-retry behavior.
+  // The env-mode service stack (including env-mode CI) serves the base realm
+  // at a `*.localhost` host (e.g. https://realm-server.ci.localhost/base/...)
+  // rather than the virtual https://cardstack.com/base/ URL that
+  // `baseRealm.inRealm` recognizes above. The env-mode `.localhost` branch at
+  // the top of this function only fires in node/worker processes — it reads
+  // `process.env.BOXEL_ENVIRONMENT`, which a browser host test can't see — so
+  // without this clause a transient base-realm fetch-vanish in the browser
+  // escapes unretried. Match base artifacts by their `/base/` path so sibling
+  // realms on the same host (e.g. /testuser/personal/) keep no-retry behavior.
   if (
     url.hostname.endsWith('.localhost') &&
     (url.pathname === '/base' || url.pathname.startsWith('/base/'))
