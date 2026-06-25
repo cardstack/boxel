@@ -416,7 +416,9 @@ module('Integration | realm', function (hooks) {
             Accept: 'application/vnd.card+json',
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(searchEntryWireQueryFromQuery({}, { fields: ['item'] })),
+          body: JSON.stringify(
+            searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+          ),
         }),
       );
       let json = await response.json();
@@ -3019,7 +3021,9 @@ module('Integration | realm', function (hooks) {
           Accept: 'application/vnd.card+json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(searchEntryWireQueryFromQuery({}, { fields: ['item'] })),
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+        ),
       }),
     );
     let json = await response.json();
@@ -3115,7 +3119,10 @@ module('Integration | realm', function (hooks) {
               sort: [
                 {
                   by: 'id',
-                  on: { module: `${baseRealmRRI}card-api`, name: 'CardDef' },
+                  on: {
+                    module: rri(`${baseRealmRRI}card-api`),
+                    name: 'CardDef',
+                  },
                 },
               ],
             },
