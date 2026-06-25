@@ -20,6 +20,7 @@ import {
   withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 const paths = new RealmPaths(new URL(testRealmURL));
@@ -607,7 +608,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards by using the 'eq' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('post'),
@@ -623,7 +624,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty values`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('booking'),
@@ -639,7 +640,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find missing values`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('type-examples'),
@@ -655,7 +656,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty containsMany field and missing containsMany field`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('type-examples'),
@@ -671,7 +672,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty linksToMany field and missing linksToMany field`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('friends'),
@@ -687,7 +688,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty linksTo field`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('friend'),
@@ -703,7 +704,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards by using a computed field`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('post'),
@@ -719,7 +720,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for cards by using a linksTo field', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('friend'),
@@ -735,7 +736,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards that have code-ref queryableValue`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: baseRRI('spec'),
@@ -760,7 +761,7 @@ module(`Integration | realm querying`, function (hooks) {
       module: baseRRI('card-api'),
       name: 'FileDef',
     };
-    let result = (await queryEngine.searchCards({
+    let result = (await searchCardsForTest(queryEngine, {
       filter: {
         type: fileDefRef,
       },
@@ -784,7 +785,7 @@ module(`Integration | realm querying`, function (hooks) {
       name: 'FileDef',
     };
     let targetUrl = `${testRealmURL}files/sample.txt`;
-    let result = (await queryEngine.searchCards({
+    let result = (await searchCardsForTest(queryEngine, {
       filter: {
         on: fileDefRef,
         eq: { url: targetUrl },
@@ -809,7 +810,7 @@ module(`Integration | realm querying`, function (hooks) {
       module: baseRRI('markdown-file-def'),
       name: 'MarkdownDef',
     };
-    let result = (await queryEngine.searchCards({
+    let result = (await searchCardsForTest(queryEngine, {
       filter: {
         type: markdownRef,
       },
@@ -825,7 +826,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can combine multiple filters', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('post'),
@@ -842,7 +843,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can handle a filter with double negatives', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('post'),
@@ -858,7 +859,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can filter by card type', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         type: {
           module: testModuleRRI('article'),
@@ -873,7 +874,7 @@ module(`Integration | realm querying`, function (hooks) {
     );
 
     matching = (
-      await queryEngine.searchCards({
+      await searchCardsForTest(queryEngine, {
         filter: {
           type: {
             module: testModuleRRI('post'),
@@ -890,7 +891,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can filter on a card's own fields using range`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('post'),
@@ -910,7 +911,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test(`can filter on a nested field inside a containsMany using 'range'`, async function (assert) {
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -928,7 +929,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -947,7 +948,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can use an eq filter with a date field', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('event'),
@@ -965,7 +966,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can filter on a nested field using 'eq'`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('post'),
@@ -982,7 +983,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test(`can filter on a nested field inside a containsMany using 'eq'`, async function (assert) {
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -998,7 +999,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -1010,7 +1011,7 @@ module(`Integration | realm querying`, function (hooks) {
       assert.strictEqual(matching.length, 0, 'eq on null hosts.firstName');
     }
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -1029,7 +1030,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -1051,7 +1052,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -1067,7 +1068,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -1083,7 +1084,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: {
             module: testModuleRRI('booking'),
@@ -1104,7 +1105,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can negate a filter', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('article'),
@@ -1120,7 +1121,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can combine multiple types', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         any: [
           {
@@ -1148,7 +1149,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   // sorting
   test('can sort in alphabetical order', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'author.lastName',
@@ -1172,7 +1173,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort in reverse alphabetical order', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'author.firstName',
@@ -1201,7 +1202,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by card display name (card type shown in the interface)', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           on: baseCardRef,
@@ -1248,7 +1249,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by multiple string field conditions in given directions', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'author.lastName',
@@ -1286,7 +1287,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by number value', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'editions',
@@ -1322,7 +1323,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by date', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'pubDate',
@@ -1356,7 +1357,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by mixed field types', async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'editions',
@@ -1393,7 +1394,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'author.lastName',
@@ -1442,7 +1443,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       sort: [
         {
           by: 'author.firstName',
@@ -1482,7 +1483,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards by using the 'contains' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         contains: { cardTitle: 'ca' },
       },
@@ -1502,30 +1503,36 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search on specific card by using 'contains' filter`, async function (assert) {
-    let { data: personMatchingByTitle } = await queryEngine.searchCards({
-      filter: {
-        on: {
-          module: testModuleRRI('person'),
-          name: 'Person',
+    let { data: personMatchingByTitle } = await searchCardsForTest(
+      queryEngine,
+      {
+        filter: {
+          on: {
+            module: testModuleRRI('person'),
+            name: 'Person',
+          },
+          contains: { cardTitle: 'ca' },
         },
-        contains: { cardTitle: 'ca' },
       },
-    });
+    );
     assert.strictEqual(personMatchingByTitle.length, 2);
     assert.deepEqual(
       personMatchingByTitle.map((m) => m.id as string),
       [`${paths.url}person-card1`, `${paths.url}person-card2`],
     );
 
-    let { data: dogMatchingByFirstName } = await queryEngine.searchCards({
-      filter: {
-        on: {
-          module: testModuleRRI('dog'),
-          name: 'Dog',
+    let { data: dogMatchingByFirstName } = await searchCardsForTest(
+      queryEngine,
+      {
+        filter: {
+          on: {
+            module: testModuleRRI('dog'),
+            name: 'Dog',
+          },
+          contains: { firstName: 'go' },
         },
-        contains: { firstName: 'go' },
       },
-    });
+    );
     assert.strictEqual(dogMatchingByFirstName.length, 3);
     assert.deepEqual(
       dogMatchingByFirstName.map((m) => m.id as string),
@@ -1534,7 +1541,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'contains' filter to find 'null' values`, async function (assert) {
-    let { data: matching } = await queryEngine.searchCards({
+    let { data: matching } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: testModuleRRI('dog'),

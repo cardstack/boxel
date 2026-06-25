@@ -43,6 +43,7 @@ import {
   field,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -978,7 +979,7 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await queryEngine.searchCards({
+    let { data: cards } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: rri(`${testModuleRealm}person`),
@@ -2707,7 +2708,7 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await queryEngine.searchCards({});
+    let { data: cards } = await searchCardsForTest(queryEngine, {});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2758,7 +2759,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await queryEngine.searchCards({})).data;
+    cards = (await searchCardsForTest(queryEngine, {})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 

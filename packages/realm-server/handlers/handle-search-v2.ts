@@ -2,16 +2,19 @@ import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
+  ifNoneMatchMatches,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
   sanitizeConsumingRealmHeader,
   SearchRequestError,
   searchEntryRealms,
   sanitizeLoggingCorrelationId,
+  SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
   emitSearchTiming,
+  type Query,
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
@@ -31,7 +34,6 @@ import {
   sanitizeJobPriorityHeader,
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
-import { respondWithJobScopedSearchCache } from './handle-search.ts';
 
 // The v2 federated search: the search-entry wire model over every requested
 // realm. Parses the search-entry-rooted query (the `item.` membership query,
@@ -181,4 +183,105 @@ export default function handleSearchV2(opts: {
       emitTimeline,
     });
   };
+}
+
+// The job-scoped cache + ETag/304 protocol for the federated v2 search
+// handler. Caching is gated on:
+//   (a) `x-boxel-job-id` present and well-formed — only the indexer worker
+//       stamps it; live user / API callers never carry it and so always see
+//       fresh data,
+//   (b) `x-boxel-consuming-realm` present and well-formed — the host's render
+//       route only sets it during prerender.
+// The caller reads both headers and passes `jobId` (already gated on a
+// configured cache) and `consumingRealm`; `cacheable` is their AND.
+//
+// Cross-realm reads participate: within a single jobId, results are pinned to
+// the first observation even if a peer realm swaps its `boxel_index`
+// mid-batch — "one consolidated view of the realm-server's state per indexing
+// batch". Same-process writes (the batch's own swap) still trip
+// `Realm.update`'s onInvalidation, so the cache only freezes peer-realm swaps
+// within the job's lifetime. `multiRealmAuthorization` has already validated
+// read access to every realm, so the cache can't surface results across an
+// authorization boundary.
+//
+// The inner key is `(realms, query, opts)`; `opts` is whatever the caller
+// folds in — every request member that changes the body — so two requests
+// differing on any of them get distinct entries + ETags. The ETag is
+// opaque-but-deterministic over `(jobId, innerKey)`: identical inputs yield
+// the same value for an entry's lifetime, and a different jobId yields a
+// different value so a stale If-None-Match from a previous batch never matches
+// a fresh entry. Both the ETag and the 304 path are reached only by cacheable
+// callers; non-indexer traffic falls through to a plain fresh response.
+async function respondWithJobScopedSearchCache(
+  ctxt: Koa.Context,
+  args: {
+    searchCache: JobScopedSearchCache | undefined;
+    jobId: string | null;
+    consumingRealm: string | null;
+    realms: string[];
+    query: Query;
+    opts: unknown;
+    runSearch: () => Promise<string>;
+    emitTimeline?: () => void;
+  },
+): Promise<void> {
+  let { searchCache, jobId, consumingRealm, realms, query, opts, runSearch } =
+    args;
+  let emitTimeline = args.emitTimeline ?? (() => {});
+  let cacheable = searchCache && jobId && consumingRealm;
+
+  if (cacheable) {
+    let expectedEtag = searchCache!.computeETag({
+      jobId: jobId!,
+      realms,
+      query,
+      opts,
+    });
+    let ifNoneMatch = ctxt.get('If-None-Match');
+    if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, expectedEtag)) {
+      // Only honor 304 when the cache still has the body — a TTL-evicted slot
+      // whose ETag the caller happens to remember must fall through and
+      // re-populate, otherwise a follow-up request would find nothing to
+      // revalidate against.
+      let cached = await searchCache!.getCached({
+        jobId: jobId!,
+        realms,
+        query,
+        opts,
+      });
+      if (cached !== undefined) {
+        ctxt.status = 304;
+        ctxt.set('ETag', expectedEtag);
+        emitTimeline();
+        return;
+      }
+    }
+    let body = await searchCache!.getOrPopulate({
+      jobId: jobId!,
+      realms,
+      query,
+      opts,
+      populate: runSearch,
+    });
+    await setContextResponse(
+      ctxt,
+      new Response(body, {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          ETag: expectedEtag,
+        },
+      }),
+    );
+    emitTimeline();
+    return;
+  }
+
+  let body = await runSearch();
+  await setContextResponse(
+    ctxt,
+    new Response(body, {
+      headers: { 'content-type': SupportedMimeType.CardJson },
+    }),
+  );
+  emitTimeline();
 }

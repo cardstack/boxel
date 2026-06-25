@@ -151,7 +151,7 @@ embedded). The grammar:
 | Spec                            | Meaning                                                            |
 | ------------------------------- | ------------------------------------------------------------------ |
 | _(no spec)_                     | Default — atom inline, embedded block                              |
-| `atom`                          | Atom format (explicit)                                            |
+| `atom`                          | Atom format (explicit)                                             |
 | `embedded`                      | Embedded format (explicit)                                         |
 | `isolated`                      | Isolated format (full detailed view)                               |
 | `fitted`                        | Fitted format at its container's natural size                      |

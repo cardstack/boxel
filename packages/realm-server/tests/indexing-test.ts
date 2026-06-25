@@ -29,6 +29,7 @@ import {
   cardInfo,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
+  searchCardsForTest,
 } from './helpers/index.ts';
 import {
   depsForIndexEntry,
@@ -1619,15 +1620,18 @@ module(basename(import.meta.filename), function () {
           } as LooseSingleCardDocument),
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
+              eq: { firstName: 'Mang-Mang' },
             },
-            eq: { firstName: 'Mang-Mang' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
         assert.strictEqual(
           realm.realmIndexUpdater.stats.instancesIndexed,
@@ -2029,14 +2033,17 @@ module(basename(import.meta.filename), function () {
           export class Intentionally Thrown Error {}
         `,
         );
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            type: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
             },
           },
-        });
+        );
         assert.deepEqual(
           result,
           [],
@@ -2054,7 +2061,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
         result = (
-          await realm.realmIndexQueryEngine.searchCards({
+          await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
               type: {
                 module: rri(`${testRealm}person`),
@@ -2340,7 +2347,7 @@ module(basename(import.meta.filename), function () {
         }
 
         try {
-          await realm.realmIndexQueryEngine.searchCards({
+          await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
               on: {
                 module: rri(`${testRealm}deep-card`),
@@ -2428,7 +2435,7 @@ module(basename(import.meta.filename), function () {
           }
 
           try {
-            await realm.realmIndexQueryEngine.searchCards({
+            await searchCardsForTest(realm.realmIndexQueryEngine, {
               filter: {
                 on: {
                   module: rri(`${testRealm}deep-card`),
@@ -4308,15 +4315,18 @@ module(basename(import.meta.filename), function () {
       test('can incrementally index deleted instance', async function (assert) {
         await realm.delete('mango.json');
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
+              eq: { firstName: 'Mango' },
             },
-            eq: { firstName: 'Mango' },
           },
-        });
+        );
         assert.strictEqual(result.length, 0, 'found no documents');
         assert.strictEqual(
           realm.realmIndexUpdater.stats.instancesIndexed,
@@ -4356,15 +4366,18 @@ module(basename(import.meta.filename), function () {
       `,
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}post`),
-              name: 'Post',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
+              eq: { nickName: 'Van Gogh-poo' },
             },
-            eq: { nickName: 'Van Gogh-poo' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
       });
 
@@ -4562,29 +4575,35 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}post`),
-              name: 'Post',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
+              eq: { 'author.nickName': 'Van Gogh-poo' },
             },
-            eq: { 'author.nickName': 'Van Gogh-poo' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
       });
 
       test('can incrementally index instance that depends on deleted card source', async function (assert) {
         await realm.delete('post.gts');
         {
-          let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-            filter: {
-              type: {
-                module: rri(`${testRealm}post`),
-                name: 'Post',
+          let { data: result } = await searchCardsForTest(
+            realm.realmIndexQueryEngine,
+            {
+              filter: {
+                type: {
+                  module: rri(`${testRealm}post`),
+                  name: 'Post',
+                },
               },
             },
-          });
+          );
           assert.deepEqual(
             result,
             [],
@@ -4654,15 +4673,18 @@ module(basename(import.meta.filename), function () {
       `,
         );
         {
-          let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-            filter: {
-              on: {
-                module: rri(`${testRealm}post`),
-                name: 'Post',
+          let { data: result } = await searchCardsForTest(
+            realm.realmIndexQueryEngine,
+            {
+              filter: {
+                on: {
+                  module: rri(`${testRealm}post`),
+                  name: 'Post',
+                },
+                eq: { nickName: 'Van Gogh-poo' },
               },
-              eq: { nickName: 'Van Gogh-poo' },
             },
-          });
+          );
           assert.strictEqual(result.length, 1, 'found the post instance');
         }
       });

@@ -43,6 +43,7 @@ import {
   type Format,
 } from '../../helpers/playground';
 import { setRecentFiles } from '../../helpers/recent-files-cards';
+import { searchCardsForTest } from '../../helpers/search-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const { resolvedBaseRealmURL } = ENV;
@@ -1213,7 +1214,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
       let queryEngine = realm.realmIndexQueryEngine;
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: specRef,
           eq: {
@@ -1235,7 +1236,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
 
-      ({ data: matching } = await queryEngine.searchCards({
+      ({ data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: specRef,
           eq: {

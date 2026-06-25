@@ -7,10 +7,6 @@ import {
   type SearchEntryQuery,
 } from './search-entry.ts';
 import {
-  prerenderedSearchEntryQuery,
-  searchEntryDocToPrerenderedDoc,
-} from './search-compat.ts';
-import {
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -24,9 +20,7 @@ import {
   makeCardTypeSummaryDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type LinkableCollectionDocument,
   type SearchEntryCollectionDocument,
-  type PrerenderedCardCollectionDocument,
 } from './document-types.ts';
 import type { CardResource, Relationship } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
@@ -76,7 +70,6 @@ import {
   param,
   dbExpression,
   dbAdapterQuerier,
-  isValidPrerenderedHtmlFormat,
   type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -88,13 +81,10 @@ import {
   type FileMeta,
   type DirectoryMeta,
   type ResolvedCodeRef,
-  isResolvedCodeRef,
   type RealmPermissions,
   type RealmAction,
   type LintArgs,
   type LintResult,
-  type Query,
-  type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
   codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
@@ -103,7 +93,6 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
   type IndexedFile,
-  PRERENDERED_HTML_FORMATS,
 } from './index.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
@@ -129,7 +118,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router.ts';
-import { InvalidQueryError, assertQuery, parseQuery } from './query.ts';
+import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
 import { mergeRelationships } from './merge-relationships.ts';
@@ -950,22 +939,6 @@ export class Realm {
       .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
-      // Deprecated: legacy single-realm live-card search (the bound
-      // `searchResponse` carries the `@deprecated` tag). Prefer the v2
-      // `search-entry` endpoint `/_search-v2` (`searchEntriesResponse`), which
-      // returns one heterogeneous result stream — prerendered HTML or live
-      // serialization, the engine decides per row. Kept as a compat layer over
-      // the shared search engine; removed once every consumer is on v2.
-      .get(
-        '/_search',
-        SupportedMimeType.CardJson,
-        this.searchResponse.bind(this),
-      )
-      .query(
-        '/_search',
-        SupportedMimeType.CardJson,
-        this.searchResponse.bind(this),
-      )
       .get(
         '/_search-v2',
         SupportedMimeType.CardJson,
@@ -975,23 +948,6 @@ export class Realm {
         '/_search-v2',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-      )
-      // Deprecated: legacy single-realm prerendered-HTML search (the bound
-      // `searchPrerenderedResponse` carries the `@deprecated` tag). Prefer the v2
-      // `search-entry` endpoint `/_search-v2` (`searchEntriesResponse`), which
-      // carries the prerendered HTML and the live serialization in one
-      // heterogeneous result rather than a dedicated prerendered shape. Kept as
-      // a compat layer over the shared search engine; removed once every
-      // consumer is on v2.
-      .get(
-        '/_search-prerendered',
-        SupportedMimeType.CardJson,
-        this.searchPrerenderedResponse.bind(this),
-      )
-      .query(
-        '/_search-prerendered',
-        SupportedMimeType.CardJson,
-        this.searchPrerenderedResponse.bind(this),
       )
       .get(
         '/_types',
@@ -1592,21 +1548,15 @@ export class Realm {
   }
   #testOnlySourceCacheDelay?: () => Promise<void>;
 
-  // CS-11119: Drop every read-side cache whose content derives from
-  // server-side state — currently `#inFlightSearch` (the searchCards
-  // coalesce map, index-derived) and `#cachedRealmInfo` (cached
-  // `RealmInfo` + ETag-hash; mostly index-derived but its `visibility`
-  // field is permissions-derived per CS-11178). Called by the
-  // realm_index_updated LISTEN handler on peer instances after a swap
-  // commits — or after a `realm_permissions` PATCH lands — somewhere
-  // else in the fleet. Public so the realm-server process can wire the
-  // listener without reaching into private state. Callers awaiting a
-  // pre-clear in-flight searchCards promise still receive its
-  // pre-update result (the SQL was already in motion); only NEW callers
-  // after the clear miss the map and fire a fresh search against the
-  // now-current index.
+  // Drop every read-side cache whose content derives from server-side
+  // state — currently `#cachedRealmInfo` (cached `RealmInfo` + ETag-hash;
+  // mostly index-derived, but its `visibility` field is permissions-derived)
+  // and the cached host routing map. Called by the realm_index_updated LISTEN
+  // handler on peer instances after a swap commits — or after a
+  // `realm_permissions` PATCH lands — somewhere else in the fleet. Public so
+  // the realm-server process can wire the listener without reaching into
+  // private state.
   clearRealmIndexCaches(): void {
-    this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
   }
@@ -5344,120 +5294,6 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(
-    query: Query,
-    opts?: SearchOpts,
-  ): Promise<LinkableCollectionDocument> {
-    assertQuery(query);
-    let engineOpts = {
-      loadLinks: true as const,
-      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
-      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
-      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
-      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-      ...(opts?.timings ? { timings: opts.timings } : {}),
-      // The SQL-side `i.url IN (...)` subset filter reads `cardUrls` from the
-      // engine opts, so forward it (non-empty only — an empty array is a no-op).
-      ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
-    };
-    return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
-  }
-
-  /**
-   * @deprecated Backs the legacy `/_search` endpoint. Prefer the v2
-   * `search-entry` path — {@link Realm.searchEntriesResponse} / `/_search-v2` —
-   * which returns one heterogeneous result stream (prerendered HTML or live
-   * serialization). Retained as a compat layer over the shared search engine;
-   * removed once every consumer is on v2.
-   */
-  private async searchResponse(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    if (request.method !== 'QUERY') {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: 'method must be QUERY',
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    let cardsQuery: unknown;
-    try {
-      cardsQuery = await request.json();
-    } catch (e: any) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: `Request body is not valid JSON: ${e?.message ?? e}`,
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    try {
-      assertQuery(cardsQuery);
-      let duringPrerender = isDuringPrerenderRequest(request);
-      let doc = await this.search(cardsQuery, {
-        cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender the search skips the `loadLinks`
-        // relationship-assembly pass entirely: the host re-resolves
-        // every result card from its raw card+source file and consumes
-        // only `data[].id`, so the query-field umbrellas and the
-        // transitive `included[]` are throwaway work in this path.
-        omitIncluded: duringPrerender,
-      });
-      return createResponse({
-        body: JSON.stringify(doc, null, 2),
-        init: {
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    } catch (e) {
-      if (e instanceof InvalidQueryError) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Invalid Query',
-                message: `Invalid query: ${e.message}`,
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      // Re-throw other errors
-      throw e;
-    }
-  }
-
   // The v2 search: the parsed search-entry query (the item. membership
   // query + the applied htmlQuery + the sparse fieldset) against the
   // search-entry projection engine. Same opts threading as `search` —
@@ -5584,184 +5420,6 @@ export class Realm {
       body: JSON.stringify(result),
       init: {
         headers: { 'content-type': SupportedMimeType.JSON },
-      },
-      requestContext,
-    });
-  }
-
-  public async searchPrerendered(
-    query: Query,
-    opts: {
-      htmlFormat: PrerenderedHtmlFormat;
-      cardUrls?: string[];
-      renderType?: ResolvedCodeRef;
-    },
-  ): Promise<PrerenderedCardCollectionDocument> {
-    assertQuery(query);
-    // The legacy prerendered search expressed over the search-entry engine:
-    // both branches pinned (the `item` lets the coalescer recover a row's
-    // actual type where no rendering matched), no link expansion. The
-    // coalescer picks the requested ancestor's rendering and falls back to
-    // the native one, then flattens the first-class `css` resources into
-    // `meta.scopedCssUrls`.
-    let isFileMeta = await this.#realmIndexQueryEngine.queryTargetsFileMeta(
-      query.filter,
-    );
-    let doc = await this.#realmIndexQueryEngine.searchEntries(
-      prerenderedSearchEntryQuery(query, opts),
-    );
-    return searchEntryDocToPrerenderedDoc(doc, {
-      renderType: opts.renderType,
-      isFileMeta,
-    });
-  }
-
-  /**
-   * @deprecated Backs the legacy `/_search-prerendered` endpoint. Prefer the v2
-   * `search-entry` path — {@link Realm.searchEntriesResponse} / `/_search-v2` —
-   * which carries prerendered HTML and the live serialization in one
-   * heterogeneous result. Retained as a compat layer over the shared search
-   * engine; removed once every consumer is on v2.
-   */
-  private async searchPrerenderedResponse(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let payload: Record<string, any> | undefined;
-    let htmlFormat: string | undefined;
-    let cardUrls: string[] | string | undefined;
-    let renderType: CodeRef | undefined;
-    let query: unknown;
-
-    if (request.method !== 'QUERY') {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: 'method must be QUERY',
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    try {
-      payload = (await request.json()) as Record<string, any>;
-    } catch (e: any) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: `Request body is not valid JSON: ${e?.message ?? e}`,
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-    htmlFormat = payload.prerenderedHtmlFormat;
-    cardUrls = payload.cardUrls;
-    renderType = payload.renderType;
-    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
-    delete payload.prerenderedHtmlFormat;
-    delete payload.cardUrls;
-    delete payload.renderType;
-    query = payload;
-
-    if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`,
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    let normalizedCardUrls: string[] | undefined;
-    if (Array.isArray(cardUrls)) {
-      if (!cardUrls.every((url) => typeof url === 'string')) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Bad Request',
-                message: 'cardUrls must be a string or array of strings',
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      normalizedCardUrls = cardUrls;
-    } else if (typeof cardUrls === 'string') {
-      normalizedCardUrls = [cardUrls];
-    }
-    let normalizedRenderType = isResolvedCodeRef(renderType)
-      ? renderType
-      : undefined;
-
-    try {
-      assertQuery(query);
-    } catch (e) {
-      if (e instanceof InvalidQueryError) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Invalid Query',
-                message: `Invalid query: ${e.message}`,
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      throw e;
-    }
-
-    let doc = await this.searchPrerendered(query as Query, {
-      htmlFormat,
-      cardUrls: normalizedCardUrls,
-      renderType: normalizedRenderType,
-    });
-
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.CardJson },
       },
       requestContext,
     });

@@ -32,7 +32,6 @@ import {
   isSearchEntryCollectionDocument,
   isSparseItemResource,
   resolveFileDefCodeRef,
-  searchEntryDocToLinkableDoc,
   searchEntryWireQueryFromQuery,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
@@ -73,7 +72,6 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
-  type LinkableCollectionDocument,
   type SearchEntryResults,
   type SearchEntryWireQuery,
   type RealmIdentifier,
@@ -240,13 +238,11 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   // Coalesce concurrent same-(realms, query) `_federated-search-v2` HTTP
-  // calls during a prerender. Mirrors
-  // `RealmIndexQueryEngine.#inFlightSearch` server-side. Gated on
-  // `__boxelRenderContext` so live user searches stay uncoalesced —
-  // write-then-read freshness story unchanged outside prerender.
-  // Entries self-clear on `.finally()` via identity check.
-  private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
-    new Map();
+  // calls during a prerender. Gated on `__boxelRenderContext` so live
+  // user searches stay uncoalesced — write-then-read freshness story
+  // unchanged outside prerender. Entries self-clear on `.finally()` via
+  // identity check.
+  private inflightSearch: Map<string, Promise<SearchEntryResults>> = new Map();
   // Resolved-doc cache for same-realm `_federated-search-v2` calls during
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
@@ -268,7 +264,7 @@ export default class StoreService extends Service implements StoreInterface {
   // `job-scoped-search-cache.ts` for the server-side prior art on
   // storing resolved docs rather than promises (avoids tail-latency
   // stalls on slow first populate).
-  private searchCache: Map<string, LinkableCollectionDocument> = new Map();
+  private searchCache: Map<string, SearchEntryResults> = new Map();
   // The jobId the `searchCache` entries belong to. When a request
   // arrives carrying a different `__boxelJobId` we drop the cache
   // before serving — belt-and-braces beside `resetState()` and the
@@ -1075,10 +1071,13 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let collectionDoc = await this.fetchSearchDoc(query, realms);
 
-    // Hydrate each result into the store
+    // Hydrate each result into the store. The data-only search-entry doc
+    // carries one full `item` (`card`/`file-meta`) serialization per entry in
+    // `included`, reached through the entry's `item` relationship.
+    let items = this.itemResourcesFromSearchEntries(collectionDoc);
     let instances = (
       await Promise.all(
-        collectionDoc.data.map(async (resource) => {
+        items.map(async (resource) => {
           try {
             return await this.addResourceFromSearchData<T>(
               resource,
@@ -1098,11 +1097,10 @@ export default class StoreService extends Service implements StoreInterface {
     return { instances, meta: collectionDoc.meta };
   }
 
-  // The instances path's resolved-document layer: the legacy `Query` runs
-  // against the v2 search requesting full `item` serializations, and the
-  // search-entry document coalesces back into the legacy collection shape
-  // (`item`s as `data` in entry order, the transitive link expansion as
-  // `included`) that the hydration pipeline and the caches below consume.
+  // The instances path's resolved-document layer: the `Query` runs against
+  // the v2 search requesting full `item` serializations, and the resulting
+  // search-entry document (one `item` per entry in `included`) is what the
+  // hydration pipeline and the caches below consume.
   // Sits between `store.search` and `_federated-search-v2`.
   //
   // Two layers of dedup, both prerender-gated:
@@ -1122,7 +1120,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDoc(
     query: Query,
     realms: string[],
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
     let jobId = inPrerender
       ? ((globalThis as any).__boxelJobId as string | undefined)
@@ -1167,7 +1165,7 @@ export default class StoreService extends Service implements StoreInterface {
     let inflightKey = inPrerender
       ? searchInFlightKey(realms, query)
       : undefined;
-    let doc: LinkableCollectionDocument;
+    let doc: SearchEntryResults;
     if (inflightKey !== undefined) {
       let existing = this.inflightSearch.get(inflightKey);
       if (existing) {
@@ -1179,8 +1177,7 @@ export default class StoreService extends Service implements StoreInterface {
             // `clearInFlightSearch()` could in principle have removed
             // (and a later caller re-set) this slot while we were
             // in-flight. Only clean up if the map still points at *this*
-            // pending promise. Mirrors
-            // `RealmIndexQueryEngine.searchCards` server-side.
+            // pending promise.
             if (this.inflightSearch.get(inflightKey) === pending) {
               this.inflightSearch.delete(inflightKey);
             }
@@ -1211,12 +1208,37 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDocUncoalesced(
     query: Query,
     realms: string[],
-  ): Promise<LinkableCollectionDocument> {
-    let doc = await this.fetchSearchEntryDoc(
+  ): Promise<SearchEntryResults> {
+    return await this.fetchSearchEntryDoc(
       searchEntryWireQueryFromQuery(query, { fields: ['item'] }),
       realms,
     );
-    return searchEntryDocToLinkableDoc(doc);
+  }
+
+  // Extract the per-entry `item` (`card`/`file-meta`) serializations from a
+  // data-only search-entry document, in entry order: each entry's `item`
+  // relationship names a `(type, id)` resolved against `included`.
+  private itemResourcesFromSearchEntries(
+    doc: SearchEntryResults,
+  ): (CardResource<Saved> | FileMetaResource)[] {
+    let byKey = new Map<string, CardResource<Saved> | FileMetaResource>();
+    for (let included of doc.included ?? []) {
+      if (included.type === 'card' || included.type === 'file-meta') {
+        byKey.set(`${included.type}:${included.id}`, included);
+      }
+    }
+    let items: (CardResource<Saved> | FileMetaResource)[] = [];
+    for (let entry of doc.data) {
+      let ref = entry.relationships.item?.data;
+      if (!ref) {
+        continue;
+      }
+      let item = byKey.get(`${ref.type}:${ref.id}`);
+      if (item) {
+        items.push(item);
+      }
+    }
+    return items;
   }
 
   private async fetchSearchEntryDoc(

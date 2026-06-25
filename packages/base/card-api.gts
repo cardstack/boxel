@@ -72,7 +72,6 @@ import {
   type getCards,
   type getCardCollection,
   type Store,
-  type PrerenderedCardComponentSignature,
   type SearchResultsComponentSignature,
   type ErrorEntry,
   type Query,
@@ -345,13 +344,6 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
-  /**
-   * @deprecated Use {@link CardContext.searchResultsComponent} — the v2
-   * `<SearchResults>` surface. Retained (and still provided) during the
-   * migration window; first-party card source moves to the v2 surface via the
-   * `@context` search codemod, after which this is removed.
-   */
-  prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;
   // The v2 search rendering surface: renders the heterogeneous `search-entry`
   // stream for a `search-entry`-rooted query — prerendered HTML inert (hydrated
   // lazily) or a live card — so a card author renders results without ever

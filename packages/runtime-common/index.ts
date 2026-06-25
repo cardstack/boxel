@@ -716,11 +716,6 @@ export interface RealmCards {
   cards: CardDef[];
 }
 
-export interface RealmPrerenderedCards {
-  url: string | null;
-  realmInfo: RealmInfo;
-  prerenderedCards: PrerenderedCard[];
-}
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
@@ -773,7 +768,6 @@ export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
 export * from './unified-search.ts';
 export * from './search-entry.ts';
-export * from './search-compat.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -861,7 +855,6 @@ export type {
   SingleFileMetaDocument,
   CardCollectionDocument,
   FileMetaCollectionDocument,
-  LinkableCollectionDocument,
   SearchEntryCollectionDocument,
   SearchEntryIncludedResource,
   SearchEntryResults,
@@ -884,7 +877,6 @@ export {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
-  isLinkableCollectionDocument,
   isSearchEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
@@ -907,10 +899,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmInfo } from './realm.ts';
-import type {
-  PrerenderedCard,
-  QueryResultsMeta,
-} from './index-query-engine.ts';
+import type { QueryResultsMeta } from './index-query-engine.ts';
 
 export interface MatrixCardError {
   id?: string;
@@ -1332,7 +1321,6 @@ export function isBrowserTestEnv() {
   return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
 }
 
-export * from './prerendered-card-search.ts';
 export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
