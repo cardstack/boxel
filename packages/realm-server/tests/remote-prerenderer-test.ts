@@ -448,9 +448,7 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
   });
-});
 
-module(basename(import.meta.filename), function () {
   module('remote prerenderer timeouts', function () {
     test('does not retry when the client aborts from request timeout', async function (assert) {
       process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';
