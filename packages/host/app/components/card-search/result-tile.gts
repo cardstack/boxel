@@ -43,7 +43,7 @@ const noopPositionLabel = modifier<{
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // A search result, rendered through its `entry.component` (the unified
+    // A search result, rendered through its `entry.component` (the
     // `HydratableCard` — inert prerendered HTML or a live card). The realm and
     // recents sections pass this.
     entry?: RenderableSearchEntryLike;

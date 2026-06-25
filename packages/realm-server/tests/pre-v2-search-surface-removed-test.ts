@@ -4,16 +4,11 @@ import { basename } from 'path';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-// A grep-style guard that the superseded pre-v2 unified-search surfaces stay
-// removed. The platform's search relationships live on `search-entry` (v2), the
-// existing endpoints keep their original contracts through the compat layer,
-// and a card needs no reserved-key guard — so the pre-v2 in-place additions to
-// `/_search` and the card resource must not reappear. Each entry asserts a
-// removed identifier is absent from the source file that used to define it.
-//
-// (The prerendered compat machinery — `IndexQueryEngine.searchPrerendered`, the
-// `kind: 'render'` SQL projection, `<PrerenderedCardSearch>` — is intentionally
-// out of scope here; it is retired separately when the legacy endpoints are.)
+// A grep-style guard that the superseded pre-v2 search scaffolding stays
+// removed. The platform's search relationships live on `search-entry`, so the
+// pre-v2 in-place additions to the card resource and the old result mappers must
+// not reappear. Each entry asserts a removed identifier is absent from the
+// source file that used to define it.
 
 const packagesDir = resolve(import.meta.dirname, '..', '..');
 
@@ -31,7 +26,7 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
   },
   {
     // The pre-v2 result-mapper builders.
-    file: 'runtime-common/unified-search.ts',
+    file: 'runtime-common/search-resource-helpers.ts',
     forbidden: [
       'buildRenderedHtmlResource',
       'buildIdentityOnlyCard',

@@ -142,7 +142,7 @@ export type QueryOptions = WIPOptions & {
   timings?: RequestTimings;
 };
 
-// Selects which columns the unified `search()` projects. `dataOnly` projects
+// Selects which columns `search()` projects. `dataOnly` projects
 // the live serialization only (pristine_doc / error_doc); `renderSet` projects
 // each row's full rendering set (every per-format HTML column, JSONB maps
 // whole) plus the live serialization on every row — the caller selects

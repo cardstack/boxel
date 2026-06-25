@@ -329,7 +329,7 @@ const ALL_TEST_FILES: string[] = [
   './parse-search-url-test',
   './matches-filter-integration-test',
   './eq-containment-integration-test',
-  './unified-search-contracts-test',
+  './search-resource-helpers-test',
   './pre-v2-search-surface-removed-test',
   './search-entry-test',
   './search-entries-engine-test',

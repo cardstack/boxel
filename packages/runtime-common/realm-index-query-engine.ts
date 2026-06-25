@@ -67,7 +67,7 @@ import {
   buildCssResource,
   parseUsedRenderType,
   scopedCssHrefsFromDeps,
-} from './unified-search.ts';
+} from './search-resource-helpers.ts';
 import {
   buildHtmlResource,
   buildIconResource,
