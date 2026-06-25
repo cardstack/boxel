@@ -97,16 +97,24 @@ module('Integration | commands | publish-realm', function (hooks) {
         );
       },
     },
+    // `realm.publish` polls each target's `_readiness-check` after the 202.
+    // The endpoint matcher keys on pathname, so cover the root-domain targets
+    // (`/_readiness-check`) and the subdirectory target (`/my-space/...`).
+    // Report ready immediately so the command resolves.
+    {
+      route: '_readiness-check',
+      getResponse: async () => new Response(null, { status: 200 }),
+    },
+    {
+      route: 'my-space/_readiness-check',
+      getResponse: async () => new Response(null, { status: 200 }),
+    },
   ]);
 
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    // realm.publish polls each target's readiness after the 202; these tests
-    // assert publish resolution, not readiness, and publish to URLs with no
-    // backing realm — so report ready instantly rather than poll the network.
-    getService('realm-server').waitForRealmReady = async () => {};
     loader = getService('loader-service').loader;
     PublishTarget = (
       await loader.import<typeof BaseCommandModule>(`${baseRealm.url}command`)
