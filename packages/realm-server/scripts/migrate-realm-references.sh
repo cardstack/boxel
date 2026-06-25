@@ -13,12 +13,16 @@
 # so changes can be rolled back with: patch -R -p0 < <name>.patch
 #
 # Usage:
-#   ./migrate-realm-references.sh [--dry-run] <find> <replace> <directory> [<directory> ...]
-#   ./migrate-realm-references.sh [--dry-run] -e <environment> -r <realm> <directory> [<directory> ...]
+#   ./migrate-realm-references.sh [--dry-run] [--json-only] <find> <replace> <directory> [<directory> ...]
+#   ./migrate-realm-references.sh [--dry-run] [--json-only] -e <environment> -r <realm> <directory> [<directory> ...]
+#
+# Flags:
+#   --dry-run           Preview changes without modifying files
+#   --json-only         Only scan card JSON (skip .gts modules)
 #
 # Shortcut flags:
 #   -e, --environment   development | staging | production
-#   -r, --realm         catalog | base | skills
+#   -r, --realm         catalog | base | skills | openrouter
 #
 #   Environment URL mappings:
 #     development  -> http://localhost:4201/
@@ -27,8 +31,14 @@
 #
 #   The replacement is auto-derived as @cardstack/<realm>/
 #
+# After a non-dry-run, every changed .json file is re-parsed to confirm the
+# replacement left valid JSON; a parse failure is reported and exits non-zero.
+#
 # Examples:
-#   # Shortcut form
+#   # Convert the base virtual-alias references to RRI prefix form in card JSON.
+#   ./migrate-realm-references.sh --json-only https://cardstack.com/base/ @cardstack/base/ /persistent
+#
+#   # Shortcut form (deployment-URL references)
 #   ./migrate-realm-references.sh --dry-run -e staging -r catalog /persistent/catalog /persistent/experiments
 #
 #   # Equivalent explicit form
@@ -49,14 +59,20 @@ set -uo pipefail
 # --- Parse flags ---
 
 DRY_RUN=false
+JSON_ONLY=false
 ENV=""
 REALM=""
 ERRORS=()
+CHANGED_JSON=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)
       DRY_RUN=true
+      shift
+      ;;
+    --json-only)
+      JSON_ONLY=true
       shift
       ;;
     -e|--environment)
@@ -92,9 +108,9 @@ if [ -n "$ENV" ] || [ -n "$REALM" ]; then
   esac
 
   case "$REALM" in
-    catalog|base|skills) ;;
+    catalog|base|skills|openrouter) ;;
     *)
-      echo "Error: unknown realm '$REALM' (expected: catalog, base, skills)"
+      echo "Error: unknown realm '$REALM' (expected: catalog, base, skills, openrouter)"
       exit 1
       ;;
   esac
@@ -110,16 +126,17 @@ elif [ $# -ge 2 ]; then
   REPLACEMENT="$1"
   shift
 else
-  echo "Usage: $0 [--dry-run] <find> <replace> <directory> [<directory> ...]"
-  echo "       $0 [--dry-run] -e <environment> -r <realm> <directory> [<directory> ...]"
+  echo "Usage: $0 [--dry-run] [--json-only] <find> <replace> <directory> [<directory> ...]"
+  echo "       $0 [--dry-run] [--json-only] -e <environment> -r <realm> <directory> [<directory> ...]"
   echo ""
   echo "  <find>           The string to find (URL or prefix)"
   echo "  <replace>        The replacement string"
   echo "  <directory>      One or more realm directories to process"
   echo ""
   echo "  -e, --environment  development | staging | production"
-  echo "  -r, --realm        catalog | base | skills"
+  echo "  -r, --realm        catalog | base | skills | openrouter"
   echo "  --dry-run          Preview changes without modifying files"
+  echo "  --json-only        Only scan card JSON (skip .gts modules)"
   echo ""
   echo "  Environment URL mappings:"
   echo "    development  -> http://localhost:4201/"
@@ -136,6 +153,15 @@ fi
 # Ensure trailing slashes
 FIND_STR="${FIND_STR%/}/"
 REPLACEMENT="${REPLACEMENT%/}/"
+
+# Which file types to scan. Default covers both card JSON and in-realm .gts
+# modules; --json-only restricts to card documents (e.g. when .gts import
+# rewriting is handled separately).
+if [ "$JSON_ONLY" = true ]; then
+  INCLUDE_ARGS=(--include='*.json')
+else
+  INCLUDE_ARGS=(--include='*.json' --include='*.gts')
+fi
 
 # If <find> is a URL, extract the path portion for matching path-only references.
 # e.g., https://realms-staging.stack.cards/catalog/ -> /catalog/
@@ -171,9 +197,9 @@ for search_dir in "$@"; do
     [ -n "$file" ] && matching_files+=("$file")
   done < <(
     if [ "$IS_URL" = true ]; then
-      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true
+      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" "${INCLUDE_ARGS[@]}" 2>/dev/null || true
     else
-      grep -rl "${FIND_STR}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true
+      grep -rl "${FIND_STR}" "$search_dir" "${INCLUDE_ARGS[@]}" 2>/dev/null || true
     fi
   )
 
@@ -222,6 +248,9 @@ for search_dir in "$@"; do
       fi
       rm -f /tmp/migrate-err.$$
       echo "  Updated: $file"
+      case "$file" in
+        *.json) CHANGED_JSON+=("$file") ;;
+      esac
     fi
     total_files=$((total_files + 1))
   done
@@ -236,6 +265,31 @@ else
   echo "Done. $total_files file(s) updated."
   echo "Rollback patch saved to: $PATCH_FILE"
   echo "  To undo: patch -R -p0 < $PATCH_FILE"
+fi
+
+# Verify every changed JSON file still parses, so a bad replacement can't
+# silently corrupt a card document. Failures are reported and force a
+# non-zero exit; roll back with the patch above.
+if [ "$DRY_RUN" = false ] && [ ${#CHANGED_JSON[@]} -gt 0 ]; then
+  echo ""
+  echo "Verifying ${#CHANGED_JSON[@]} changed JSON file(s) still parse ..."
+  if ! node -e '
+    const fs = require("fs");
+    let bad = 0;
+    for (const f of process.argv.slice(1)) {
+      try {
+        JSON.parse(fs.readFileSync(f, "utf8"));
+      } catch (e) {
+        console.error("  Invalid JSON after migration: " + f + ": " + e.message);
+        bad++;
+      }
+    }
+    process.exit(bad > 0 ? 1 : 0);
+  ' "${CHANGED_JSON[@]}"; then
+    ERRORS+=("JSON validation failed for one or more migrated files (see above). Roll back with: patch -R -p0 < $PATCH_FILE")
+  else
+    echo "  All migrated JSON files parse cleanly."
+  fi
 fi
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
