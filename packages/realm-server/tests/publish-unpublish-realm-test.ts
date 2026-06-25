@@ -1339,10 +1339,20 @@ module(basename(import.meta.filename), function () {
           },
         );
 
-        // Simulate a cold instance: drop the published realm from this
-        // process's in-memory view (realms[] + reconciler.mounted), leaving
-        // only the registry row + boxel_index — the post-restart / cold-target
-        // state in which the republish handler must mount-and-reindex.
+        // Simulate a cold instance: fully drop the published realm from this
+        // process's in-memory view — realms[], reconciler.mounted, AND the
+        // virtualNetwork handle — leaving only the registry row + boxel_index,
+        // the post-restart / cold-target state in which the republish handler
+        // must mount-and-reindex. Unmounting from virtualNetwork matters: the
+        // readiness check is routed through virtualNetwork.handle, so a stale
+        // handle would answer it from the old, already-started Realm and the
+        // gating this test asserts would be bypassed.
+        let mountedPublishedRealm = testRealmServer.testingOnlyRealms.find(
+          (realm) => realm.url === publishedRealmURL,
+        );
+        if (mountedPublishedRealm) {
+          virtualNetwork.unmount(mountedPublishedRealm.handle);
+        }
         testRealmServer.testingOnlyEvictRealmFromRealmsList(publishedRealmURL);
 
         // Republish with changed source content.
