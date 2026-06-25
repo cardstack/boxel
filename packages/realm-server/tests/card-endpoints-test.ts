@@ -21,7 +21,6 @@ import {
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
@@ -2452,26 +2451,27 @@ module(basename(import.meta.filename), function () {
             'file contents are correct',
           );
 
-          let query: Query = {
-            filter: {
-              on: {
-                module: rri(`${testRealmHref}person`),
-                name: 'Person',
-              },
-              eq: {
-                firstName: 'Van Gogh',
-              },
-            },
-          };
-
           response = await request
-            .post('/_search')
+            .post('/_search-v2')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .send({ ...query });
+            .send({
+              filter: {
+                'item.on': {
+                  module: `${testRealmHref}person`,
+                  name: 'Person',
+                },
+                eq: { firstName: 'Van Gogh' },
+              },
+              fields: { 'search-entry': ['item'] },
+            });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(response.body.data.length, 1, 'found one card');
+          assert.strictEqual(
+            response.body.data.length,
+            1,
+            'found one search result',
+          );
         });
 
         test('PATCH preserves nested contains attribute values on disk', async function (assert) {
