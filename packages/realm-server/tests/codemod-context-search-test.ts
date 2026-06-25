@@ -264,6 +264,68 @@ export class Plain extends GlimmerComponent {
 }
 `;
 
+// One usage the codemod can migrate (a single direct block) alongside one it
+// can't (a bound component invoked more than once). A half-migration would
+// rewrite the first and strand the second next to a live
+// `@context.prerenderedCardSearchComponent`. The whole file must be left
+// untouched instead.
+const PARTIAL_MULTI_USAGE = `import GlimmerComponent from '@glimmer/component';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[]; context?: CardContext };
+  Element: HTMLElement;
+}
+
+export class Mixed extends GlimmerComponent<Sig> {
+  <template>
+    <@context.prerenderedCardSearchComponent @query={{@query}} @realms={{@realms}}>
+      <:response as |cards|>
+        {{#each cards key="url" as |card|}}<card.component />{{/each}}
+      </:response>
+    </@context.prerenderedCardSearchComponent>
+
+    {{#let (component @context.prerenderedCardSearchComponent) as |Search|}}
+      <Search @query={{@query}} @realms={{@realms}}>
+        <:response as |a|>{{a.length}}</:response>
+      </Search>
+      <Search @query={{@query}} @realms={{@realms}}>
+        <:response as |b|>{{b.length}}</:response>
+      </Search>
+    {{/let}}
+  </template>
+}
+`;
+
+// The member is captured into a TS getter and the template invokes it through
+// \`this\` (\`this.args.context.…\`), a shape the template pass doesn't match. It
+// must be flagged for hand migration, never silently reported as clean just
+// because no \`@context.…\` usage was reshaped.
+const UNRECOGNIZED_USAGE = `import GlimmerComponent from '@glimmer/component';
+
+import { type Query } from '@cardstack/runtime-common';
+
+interface Sig {
+  Args: { query: Query; realms: string[] };
+  Element: HTMLElement;
+}
+
+export class ViaThis extends GlimmerComponent<Sig> {
+  get searchComponent() {
+    return this.args.context?.prerenderedCardSearchComponent;
+  }
+  <template>
+    {{#let (component this.searchComponent) as |Search|}}
+      <Search @query={{@query}} @realms={{@realms}}>
+        <:response as |cards|>{{cards.length}}</:response>
+      </Search>
+    {{/let}}
+  </template>
+}
+`;
+
 module(basename(import.meta.filename), function () {
   test('transforms a representative card: renames the component, reshapes the blocks, adds the query getter + import', function (assert) {
     let { status, output, reasons } = transformContextSearch(TRANSFORMABLE, {
@@ -505,5 +567,41 @@ module(basename(import.meta.filename), function () {
     });
     assert.strictEqual(status, 'unchanged');
     assert.strictEqual(output, NO_USAGE, 'byte-for-byte unchanged');
+  });
+
+  test('leaves a partially-migratable file entirely untouched rather than emit a half-migration', function (assert) {
+    let { status, output, reasons } = transformContextSearch(
+      PARTIAL_MULTI_USAGE,
+      { filename: 'mixed.gts' },
+    );
+    assert.strictEqual(status, 'skipped', 'not reported as transformed');
+    assert.strictEqual(
+      output,
+      PARTIAL_MULTI_USAGE,
+      'byte-for-byte unchanged — no partial edits written',
+    );
+    assert.true(reasons.length > 0, 'reported for hand migration');
+    assert.true(
+      output.includes('prerenderedCardSearchComponent'),
+      'the un-migratable usage is left in place, not stranded by a partial edit',
+    );
+  });
+
+  test('flags an unrecognized usage shape for hand migration instead of silently calling it clean', function (assert) {
+    let { status, output, reasons } = transformContextSearch(
+      UNRECOGNIZED_USAGE,
+      { filename: 'via-this.gts' },
+    );
+    assert.notStrictEqual(
+      status,
+      'unchanged',
+      'a surviving member is never reported as unchanged',
+    );
+    assert.strictEqual(status, 'skipped');
+    assert.strictEqual(output, UNRECOGNIZED_USAGE, 'left untouched');
+    assert.true(
+      reasons.length > 0,
+      'surfaces a reason so the file is not silently skipped',
+    );
   });
 });

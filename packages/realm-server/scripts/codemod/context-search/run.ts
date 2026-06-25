@@ -80,13 +80,16 @@ async function main(): Promise<void> {
       continue;
     }
     if (result.status === 'transformed') {
+      // `transformed` is all-or-nothing: the transformer only reports it when
+      // the module is fully migrated (no `@context.prerenderedCardSearchComponent`
+      // left), so the written output is never a half-migrated mix.
       transformed.push(file);
       if (write && result.output !== source) {
         writeFileSync(file, await formatGts(result.output, file));
       }
-    }
-    // A file may be both transformed (some usages) and reported (others).
-    if (result.reasons.length > 0) {
+    } else if (result.reasons.length > 0) {
+      // `skipped` with reasons: at least one usage couldn't be migrated, so the
+      // whole file was left untouched and is reported for hand migration.
       reported.push({ file, reasons: result.reasons });
     }
   }

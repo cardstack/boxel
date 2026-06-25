@@ -104,13 +104,19 @@ export function transformContextSearch(
   let templatePass = transformTemplates(source, getterSpecs, reasons, filename);
 
   if (getterSpecs.length === 0) {
-    // No usage could be reshaped: either everything was reported (skipped) or
-    // the only matches were incidental.
-    return {
-      status: reasons.length > 0 ? 'skipped' : 'unchanged',
-      output: source,
-      reasons,
-    };
+    // No usage could be reshaped, yet we are past the early `!includes` guard so
+    // the old member is still in the source — either every usage was reported
+    // for hand migration, or it appears in a shape the template pass doesn't
+    // recognize (e.g. captured into a TS getter, or addressed as
+    // `this.args.context.…` rather than `@context.…`). Never call that
+    // `unchanged`: a surviving member that we neither reshaped nor reported
+    // would otherwise read as clean and silently escape the sweep. Flag it.
+    if (reasons.length === 0) {
+      reasons.push(
+        `${filename}: ${OLD_MEMBER} present but no migratable usage was recognized (unrecognized usage shape, or an incidental mention) — left for hand migration`,
+      );
+    }
+    return { status: 'skipped', output: source, reasons };
   }
 
   let tsPass = applyTsEdits(
@@ -122,6 +128,23 @@ export function transformContextSearch(
   if (!tsPass.ok) {
     // We couldn't place a getter — discard the partial template edits and leave
     // the file for hand migration rather than emit something half-migrated.
+    return { status: 'skipped', output: source, reasons };
+  }
+
+  // Never emit a half-migrated module. If the rewritten output still references
+  // the old member — because a usage was reported for hand migration, or was an
+  // unrecognized shape this pass didn't reshape — discard every edit and leave
+  // the whole file untouched for hand migration. Writing a file that mixes the
+  // new component with a stranded `@context.prerenderedCardSearchComponent` is
+  // worse than not touching it: it still breaks once the member is removed, but
+  // now also looks migrated. The residual-member check is the invariant; a usage
+  // we silently failed to recognize (so recorded no reason) is caught here too.
+  if (tsPass.output.includes(OLD_MEMBER)) {
+    if (reasons.length === 0) {
+      reasons.push(
+        `${filename}: ${OLD_MEMBER} still present after transform (unrecognized usage) — left for hand migration`,
+      );
+    }
     return { status: 'skipped', output: source, reasons };
   }
 
