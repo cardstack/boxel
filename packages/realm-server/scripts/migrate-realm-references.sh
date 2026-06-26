@@ -237,6 +237,14 @@ PATCH_FILE="${PATCH_NAME}.patch"
 total_files=0
 > "$PATCH_FILE"
 
+# Paths of .json files that were valid JSON *before* editing. The post-run
+# verification only flags a file if it was valid before and is invalid after
+# (i.e. the replacement broke it) — files that were already non-strict (e.g.
+# trailing commas, unescaped embedded source) are tolerated by the realm
+# server's parser and must not fail the migration.
+VALID_BEFORE_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-valid-before.$$")
+> "$VALID_BEFORE_FILE"
+
 for search_dir in "$@"; do
   if [ ! -d "$search_dir" ]; then
     echo "Warning: directory '$search_dir' does not exist, skipping."
@@ -262,6 +270,31 @@ for search_dir in "$@"; do
   if [ ${#matching_files[@]} -eq 0 ]; then
     echo "  No matching references found"
     continue
+  fi
+
+  # Record which matching .json files parse cleanly BEFORE editing, so the
+  # post-run verification can distinguish "the replacement broke this" from
+  # "this was already non-strict". One batched node pass per directory.
+  if [ "$DRY_RUN" = false ]; then
+    json_candidates=()
+    for f in "${matching_files[@]}"; do
+      case "$f" in
+        *.json) json_candidates+=("$f") ;;
+      esac
+    done
+    if [ ${#json_candidates[@]} -gt 0 ]; then
+      node -e '
+        const fs = require("fs");
+        for (const f of process.argv.slice(1)) {
+          try {
+            JSON.parse(fs.readFileSync(f, "utf8"));
+            console.log(f);
+          } catch (e) {
+            /* already non-strict; omit so it is not held to the after-check */
+          }
+        }
+      ' "${json_candidates[@]}" >> "$VALID_BEFORE_FILE"
+    fi
   fi
 
   # Build sed args once. For URLs, also handle path-only preceded by " or '
@@ -323,30 +356,48 @@ else
   echo "  To undo: patch -R -p0 < $PATCH_FILE"
 fi
 
-# Verify every changed JSON file still parses, so a bad replacement can't
-# silently corrupt a card document. Failures are reported and force a
-# non-zero exit; roll back with the patch above.
+# Verify the replacement didn't turn any *previously valid* JSON invalid.
+# Files that were already non-strict before editing (captured in
+# VALID_BEFORE_FILE) are tolerated by the realm server's lenient parser, so
+# they're reported as a note but don't fail the run — only a genuine
+# valid -> invalid regression forces a non-zero exit.
 if [ "$DRY_RUN" = false ] && [ ${#CHANGED_JSON[@]} -gt 0 ]; then
   echo ""
-  echo "Verifying ${#CHANGED_JSON[@]} changed JSON file(s) still parse ..."
+  echo "Verifying ${#CHANGED_JSON[@]} changed JSON file(s) ..."
   if ! node -e '
     const fs = require("fs");
-    let bad = 0;
-    for (const f of process.argv.slice(1)) {
+    const validBefore = new Set(
+      fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
+    );
+    let broke = 0;
+    let preexisting = 0;
+    for (const f of process.argv.slice(2)) {
       try {
         JSON.parse(fs.readFileSync(f, "utf8"));
       } catch (e) {
-        console.error("  Invalid JSON after migration: " + f + ": " + e.message);
-        bad++;
+        if (validBefore.has(f)) {
+          console.error("  Migration broke valid JSON: " + f + ": " + e.message);
+          broke++;
+        } else {
+          preexisting++;
+        }
       }
     }
-    process.exit(bad > 0 ? 1 : 0);
-  ' "${CHANGED_JSON[@]}"; then
-    ERRORS+=("JSON validation failed for one or more migrated files (see above). Roll back with: patch -R -p0 < $PATCH_FILE")
+    if (preexisting > 0) {
+      console.error(
+        "  Note: " + preexisting +
+        " changed file(s) were already non-strict JSON before the migration (not flagged)."
+      );
+    }
+    process.exit(broke > 0 ? 1 : 0);
+  ' "$VALID_BEFORE_FILE" "${CHANGED_JSON[@]}"; then
+    ERRORS+=("Migration turned previously-valid JSON invalid in one or more files (see above). Roll back with: patch -R -p0 < $PATCH_FILE")
   else
-    echo "  All migrated JSON files parse cleanly."
+    echo "  No previously-valid JSON was broken."
   fi
 fi
+
+rm -f "$VALID_BEFORE_FILE"
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
   echo ""
