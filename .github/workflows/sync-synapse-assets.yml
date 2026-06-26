@@ -1,10 +1,11 @@
-name: Sync Matrix Synapse Email Templates
+name: Sync Matrix Synapse Assets
 
 on:
   push:
     branches: [main]
     paths:
       - "packages/matrix/support/synapse/templates/**"
+      - "packages/matrix/support/synapse/modules/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -20,7 +21,7 @@ jobs:
   sync:
     name: sync
     runs-on: ubuntu-latest
-    concurrency: sync-synapse-templates-${{ inputs.environment || 'staging' }}
+    concurrency: sync-synapse-assets-${{ inputs.environment || 'staging' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -62,9 +63,13 @@ jobs:
         run: |
           sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}/" packages/matrix/support/synapse/templates/_base.html
 
-      - name: S3 Sync
+      - name: S3 Sync templates
         run: |
           aws s3 sync packages/matrix/support/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
+
+      - name: S3 Sync modules
+        run: |
+          aws s3 sync packages/matrix/support/synapse/modules s3://${{ env.AWS_S3_BUCKET }}/modules --exclude "test_*"
 
       - name: Restart Synapse ECS Service
         run: |

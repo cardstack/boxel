@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { fittedFormatIds } from '@cardstack/boxel-ui/helpers';
+
 import {
   extractCardReferenceUrls,
   extractFileReferenceUrls,
@@ -8,6 +10,9 @@ import {
   bfmCardReferenceExtensions,
   bfmExtensionsForKeyword,
   parseBfmSizeSpec,
+  serializeBfmSizeSpec,
+  serializeBfmRef,
+  type BfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
@@ -1120,6 +1125,132 @@ module('Unit | bfm-card-references', function () {
         format: 'fitted',
         sizeStyle: 'width: 400px',
       });
+    });
+  });
+
+  module('serializeBfmSizeSpec', function () {
+    test('atom / isolated / embedded round-trip to their keyword', function (assert) {
+      assert.strictEqual(serializeBfmSizeSpec({ format: 'atom' }), 'atom');
+      assert.strictEqual(
+        serializeBfmSizeSpec({ format: 'isolated' }),
+        'isolated',
+      );
+      assert.strictEqual(
+        serializeBfmSizeSpec({ format: 'embedded' }),
+        'embedded',
+      );
+    });
+
+    test('bare fitted with no dimensions serializes to `fitted`', function (assert) {
+      assert.strictEqual(serializeBfmSizeSpec({ format: 'fitted' }), 'fitted');
+    });
+
+    test('fitted dimensions serialize to the explicit-key form', function (assert) {
+      assert.strictEqual(
+        serializeBfmSizeSpec({ format: 'fitted', width: 300, height: 200 }),
+        'w:300 h:200',
+      );
+    });
+
+    test('percentage width is preserved', function (assert) {
+      assert.strictEqual(
+        serializeBfmSizeSpec({ format: 'fitted', width: '50%', height: 200 }),
+        'w:50% h:200',
+      );
+    });
+
+    test('a single dimension serializes on its own', function (assert) {
+      assert.strictEqual(
+        serializeBfmSizeSpec({ format: 'fitted', height: 300 }),
+        'h:300',
+      );
+    });
+
+    test('round-trips through parseBfmSizeSpec for atom, isolated, embedded, dims, and %', function (assert) {
+      let specs: BfmSizeSpec[] = [
+        { format: 'atom' },
+        { format: 'isolated' },
+        { format: 'embedded' },
+        { format: 'fitted', width: 300, height: 200 },
+        { format: 'fitted', width: '50%', height: 120 },
+        { format: 'fitted', height: 300 },
+      ];
+      for (let spec of specs) {
+        assert.deepEqual(
+          parseBfmSizeSpec(serializeBfmSizeSpec(spec)),
+          spec,
+          `round-trips ${JSON.stringify(spec)}`,
+        );
+      }
+    });
+
+    test('every named fitted id round-trips dimensionally', function (assert) {
+      for (let id of fittedFormatIds) {
+        let parsed = parseBfmSizeSpec(id)!;
+        // The serializer emits `w:N h:N`, which re-parses to the same spec —
+        // the named identity is intentionally not reconstructed.
+        assert.deepEqual(
+          parseBfmSizeSpec(serializeBfmSizeSpec(parsed)),
+          parsed,
+          `${id} round-trips dimensionally`,
+        );
+      }
+    });
+  });
+
+  module('serializeBfmRef', function () {
+    let url = 'https://example.com/Author/jane';
+
+    test('inline with no size emits the bare single-colon form', function (assert) {
+      assert.strictEqual(
+        serializeBfmRef('card', url, { kind: 'inline' }),
+        `:card[${url}]`,
+      );
+    });
+
+    test('inline with a size appends the specifier', function (assert) {
+      assert.strictEqual(
+        serializeBfmRef('card', url, { kind: 'inline', size: 'tall-tile' }),
+        `:card[${url} | tall-tile]`,
+      );
+    });
+
+    test('block with no size emits the bare double-colon form', function (assert) {
+      assert.strictEqual(
+        serializeBfmRef('card', url, { kind: 'block' }),
+        `::card[${url}]`,
+      );
+    });
+
+    test('block with a size appends the specifier', function (assert) {
+      assert.strictEqual(
+        serializeBfmRef('card', url, { kind: 'block', size: 'tall-tile' }),
+        `::card[${url} | tall-tile]`,
+      );
+      assert.strictEqual(
+        serializeBfmRef('card', url, { kind: 'block', size: 'w:300 h:200' }),
+        `::card[${url} | w:300 h:200]`,
+      );
+    });
+
+    test('defaults to block', function (assert) {
+      assert.strictEqual(serializeBfmRef('card', url), `::card[${url}]`);
+    });
+
+    test('honors the refType keyword (file)', function (assert) {
+      assert.strictEqual(
+        serializeBfmRef('file', url, { kind: 'inline' }),
+        `:file[${url}]`,
+      );
+      assert.strictEqual(
+        serializeBfmRef('file', url, { kind: 'block', size: 'embedded' }),
+        `::file[${url} | embedded]`,
+      );
+    });
+
+    test('returns empty string for a missing url', function (assert) {
+      assert.strictEqual(serializeBfmRef('card', undefined), '');
+      assert.strictEqual(serializeBfmRef('card', ''), '');
     });
   });
 });

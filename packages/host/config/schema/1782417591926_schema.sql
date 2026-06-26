@@ -137,6 +137,7 @@
    publishable BOOLEAN,
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   archived_at,
    PRIMARY KEY ( url ) 
 );
 
@@ -167,6 +168,16 @@
    realm_url TEXT NOT NULL,
    current_version INTEGER NOT NULL,
    PRIMARY KEY ( realm_url ) 
+);
+
+ CREATE TABLE IF NOT EXISTS unlisted_realm_paths (
+   id DEFAULT (hex(randomblob(16))) NOT NULL,
+   source_realm_url TEXT NOT NULL,
+   slug TEXT NOT NULL,
+   owner_user_id TEXT NOT NULL,
+   created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   PRIMARY KEY ( id ) 
 );
 
  CREATE TABLE IF NOT EXISTS webhook_commands (

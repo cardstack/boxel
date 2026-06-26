@@ -15,7 +15,7 @@ import { task } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
-import { merge } from 'lodash-es';
+import { merge, mergeWith } from 'lodash-es';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
@@ -45,10 +45,12 @@ import {
   rri,
   logger,
   formattedError,
+  stringifyErrorForLog,
   isJsonContentType,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
+  clearReplacedArrayFieldMeta,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -969,7 +971,12 @@ export default class StoreService extends Service implements StoreInterface {
       omitQueryFields: true,
     });
     if (patch.attributes) {
-      doc.data.attributes = merge(doc.data.attributes, patch.attributes);
+      doc.data.attributes = mergeWith(
+        doc.data.attributes,
+        patch.attributes,
+        (_dest, src) => (Array.isArray(src) ? src : undefined),
+      );
+      clearReplacedArrayFieldMeta(doc.data.meta, patch.attributes);
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(
@@ -2164,11 +2171,11 @@ export default class StoreService extends Service implements StoreInterface {
         status === 404 &&
         isSystemCardDefault
       );
-      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`;
+      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${stringifyErrorForLog(error)}`;
       if (shouldLogAsError) {
-        storeLogger.error(message, error);
+        storeLogger.error(message);
       } else {
-        storeLogger.debug(message, error);
+        storeLogger.debug(message);
       }
       return cardError;
     } finally {

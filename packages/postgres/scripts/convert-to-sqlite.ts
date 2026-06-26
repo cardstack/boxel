@@ -291,8 +291,12 @@ function prepareDump(sql: string): string {
 
 function getSchemaFilename(): string {
   let files = readdirSync(migrationsDir);
+  // Only timestamped migration files — ignores non-migration entries in the
+  // dir such as `package.json` (pins the dir to type:commonjs) and
+  // `.eslintrc.js`. Must stay in sync with getLatestSchemaFile in
+  // packages/host/config/environment.js, which validates the schema file name.
   let lastFile = files
-    .filter((f) => f !== '.eslintrc.js')
+    .filter((f) => /^\d+_/.test(f))
     .sort()
     .pop()!;
   return `${lastFile.replace(/_.*/, '')}_schema.sql`;

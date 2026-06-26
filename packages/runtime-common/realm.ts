@@ -23,6 +23,7 @@ import {
   type SearchEntryCollectionDocument,
 } from './document-types.ts';
 import type { CardResource, Relationship } from './resource-types.ts';
+import { clearReplacedArrayFieldMeta } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
@@ -4581,6 +4582,16 @@ export class Realm {
         included,
         realmURL: new URL(this.url),
       });
+
+      // When a patch fully replaces an array attribute, its per-index field
+      // metadata (e.g. the polymorphic type recorded at `meta.fields['items.1']`,
+      // or the array-valued `meta.fields['items']` for a composite containsMany)
+      // is stale. `mergeWith` overwrites arrays in attributes but deep-merges the
+      // `meta.fields` object, so without clearing these first the removed
+      // element's metadata survives and can be re-applied to a new entry when the
+      // array grows again. Drop the matching entries from the original before the
+      // merge so the patch's own metadata (if any) wins cleanly.
+      clearReplacedArrayFieldMeta(originalClone.meta, patch.attributes);
 
       let primaryResource = mergeWith(
         originalClone,
