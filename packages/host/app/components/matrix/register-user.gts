@@ -329,7 +329,7 @@ export default class RegisterUser extends Component<Signature> {
       }
       .secondary-cta:not(:disabled):hover,
       .secondary-cta:not(:disabled):active {
-        --boxel-button-color: #221f30;
+        --boxel-button-color: var(--auth-secondary-hover-bg);
       }
       .resend-email {
         --boxel-button-color: var(--auth-primary-bg);

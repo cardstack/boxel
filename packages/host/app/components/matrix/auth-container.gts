@@ -23,43 +23,43 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .auth {
       position: relative;
-      min-height: 100vh;
+      min-height: 100dvh;
       overflow: auto;
-      background-color: #191624;
+      background-color: var(--background);
 
       /*
        * shadcn-style aliases — BoxelInput and the secondary-dark Button kind
        * read these, so the dark theme cascades to every child of the auth
        * dispatcher (login / register / forgot-password) without per-component
-       * styling.
+       * styling. Only the values without a boxel token are spelled as raw hex.
        */
       --background: #191624;
-      --foreground: #ffffff;
+      --foreground: var(--boxel-light);
       --border: #525252;
       --muted-foreground: #7f7c8c;
-      --ring: #00ffba;
+      --ring: var(--boxel-highlight);
 
       color: var(--foreground);
 
       /*
        * Auth-page shared button palette. Component-level overrides
        * (login / register / forgot-password) read these so we don't repeat
-       * the same hex values per file.
+       * the same values per file.
        */
-      --auth-primary-bg: #00ffba;
-      --auth-primary-text: #000000;
+      --auth-primary-bg: var(--boxel-highlight);
+      --auth-primary-text: var(--boxel-dark);
       --auth-primary-disabled-bg: #444051;
       --auth-primary-disabled-text: #817c93;
-      --auth-secondary-bg: #191624;
-      --auth-secondary-border: #525252;
-      --auth-secondary-text: #ffffff;
+      --auth-secondary-bg: var(--background);
+      --auth-secondary-border: var(--border);
+      --auth-secondary-text: var(--foreground);
+      --auth-secondary-hover-bg: #221f30;
     }
     .logo {
       position: absolute;
       top: var(--boxel-sp-lg);
       left: var(--boxel-sp-lg);
       --icon-color: var(--boxel-highlight);
-      --icon-bg-color: var(--boxel-highlight);
       width: 2rem;
       height: 2rem;
     }
@@ -72,7 +72,7 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
+      min-height: 100dvh;
       padding: var(--boxel-sp-lg);
     }
     .content {

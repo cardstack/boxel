@@ -204,7 +204,7 @@ export default class Login extends Component<Signature> {
       }
       .google-button:not(:disabled):hover,
       .google-button:not(:disabled):active {
-        --boxel-button-color: #221f30;
+        --boxel-button-color: var(--auth-secondary-hover-bg);
       }
       .google-g {
         width: 1.125rem;
@@ -238,7 +238,7 @@ export default class Login extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
       }
       .register-prompt-text {
-        color: #7f7c8c;
+        color: var(--muted-foreground);
       }
       .register-link {
         background: none;

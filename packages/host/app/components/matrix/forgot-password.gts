@@ -247,7 +247,7 @@ export default class ForgotPassword extends Component<Signature> {
       }
       .secondary-cta:not(:disabled):hover,
       .secondary-cta:not(:disabled):active {
-        --boxel-button-color: #221f30;
+        --boxel-button-color: var(--auth-secondary-hover-bg);
       }
       .button :deep(.boxel-loading-indicator) {
         display: flex;
