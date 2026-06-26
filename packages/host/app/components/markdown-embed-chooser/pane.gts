@@ -406,6 +406,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         justify-content: center;
         padding: var(--boxel-sp);
         overflow: auto;
+        background-color: var(--boxel-100);
       }
       .markdown-embed-preview-pane__format-select {
         flex: 1 1 auto;

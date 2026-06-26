@@ -3,7 +3,7 @@ import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   bfmRefFormatAndSize,
@@ -44,7 +44,8 @@ const Embed: TOC<EmbedSignature> = <template>
           "markdown-embed-preview--inline"
           "markdown-embed-preview--inline-embed"
         }}
-        {{if @sizeStyle "markdown-embed-preview--fitted"}}'
+        {{if @sizeStyle "markdown-embed-preview--fitted"}}
+        {{if (not (eq @format "atom")) "markdown-embed-preview--card-frame"}}'
       style={{@sizeStyle}}
       data-test-markdown-embed-preview
       data-test-markdown-embed-preview-format={{@format}}
@@ -59,7 +60,8 @@ const Embed: TOC<EmbedSignature> = <template>
   {{else}}
     <div
       class='markdown-embed-preview markdown-embed-preview--block
-        {{if @sizeStyle "markdown-embed-preview--fitted"}}'
+        {{if @sizeStyle "markdown-embed-preview--fitted"}}
+        {{if (not (eq @format "atom")) "markdown-embed-preview--card-frame"}}'
       style={{@sizeStyle}}
       data-test-markdown-embed-preview
       data-test-markdown-embed-preview-format={{@format}}
@@ -89,6 +91,15 @@ const Embed: TOC<EmbedSignature> = <template>
     }
     .markdown-embed-preview--fitted {
       border-radius: var(--boxel-border-radius);
+      overflow: hidden;
+    }
+    /* Frame the embed so reviewers can see where the card body sits against
+       the pane background — applied for embedded/isolated/fitted, never atom
+       (which is its own pill shape). */
+    .markdown-embed-preview--card-frame {
+      border: 1px solid var(--boxel-300);
+      border-radius: var(--boxel-border-radius);
+      background-color: var(--boxel-light);
       overflow: hidden;
     }
   </style>
