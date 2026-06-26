@@ -30,11 +30,19 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
 
 import MarkdownEmbedPreviewPane, { type OptionValue } from './pane';
+import TabPills from './tab-pills';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     refType: MarkdownEmbedRefType;
+    // The chooser's active tab + switch handler. The segmented pill control
+    // lives at the top of this panel's left (search) column, so each visible
+    // tab carries its own pills directly above its search bar — matching the
+    // design where the tabs sit inside the search section, not as a
+    // full-width bar across the modal.
+    activeTab: MarkdownEmbedRefType;
+    onTabChange: (tab: MarkdownEmbedRefType) => void;
     onInsert: (bfm: string, url: string) => void;
     // Optional edit-mode preload for this tab. When set, the tab starts in
     // `current` mode showing the placed target with Replace / Remove buttons;
@@ -157,6 +165,13 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
       ...attributes
     >
       <div class='markdown-embed-chooser-tab-panel__left'>
+        {{! Both tab panels stay mounted to preserve their state, so the pills
+          render only in the active one — a single set of tabs in the DOM. }}
+        {{#if (eq @refType @activeTab)}}
+          <div class='markdown-embed-chooser-tab-panel__tabbar'>
+            <TabPills @activeTab={{@activeTab}} @onTabChange={{@onTabChange}} />
+          </div>
+        {{/if}}
         {{#if (eq this.mode 'current')}}
           <div
             class='markdown-embed-chooser-tab-panel__current'
@@ -200,42 +215,101 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         {{else}}
           <MiniFileChooser
             @onSelect={{this.onFileSelect}}
+            @onHighlight={{this.onFileSelect}}
             @selected={{this.selectedUrl}}
           />
         {{/if}}
       </div>
       <div class='markdown-embed-chooser-tab-panel__right'>
-        <MarkdownEmbedPreviewPane
-          @target={{this.selectedTarget}}
-          @refType={{@refType}}
-          @onInsert={{this.handleInsert}}
-          @initialFormat={{this.initialPaneFormat}}
-          @initialWidth={{this.initialPaneWidth}}
-          @initialHeight={{this.initialPaneHeight}}
-          @initialKind={{this.initialPaneKind}}
-          @initialTargetUrl={{@initialTarget.url}}
-          @ctaLabelOverride={{this.ctaLabelOverride}}
-          @onDirtyChange={{this.onPaneDirtyChange}}
-        />
+        {{#if this.selectedTarget}}
+          <MarkdownEmbedPreviewPane
+            @target={{this.selectedTarget}}
+            @refType={{@refType}}
+            @onInsert={{this.handleInsert}}
+            @initialFormat={{this.initialPaneFormat}}
+            @initialWidth={{this.initialPaneWidth}}
+            @initialHeight={{this.initialPaneHeight}}
+            @initialKind={{this.initialPaneKind}}
+            @initialTargetUrl={{@initialTarget.url}}
+            @ctaLabelOverride={{this.ctaLabelOverride}}
+            @onDirtyChange={{this.onPaneDirtyChange}}
+          />
+        {{else}}
+          <p
+            class='markdown-embed-chooser-tab-panel__empty'
+            data-test-markdown-embed-preview-empty
+          >
+            Search for a
+            {{@refType}}
+            &amp; preview its format here
+          </p>
+        {{/if}}
       </div>
     </div>
     <style scoped>
       .markdown-embed-chooser-tab-panel {
         display: flex;
-        gap: var(--boxel-sp);
         width: 100%;
         height: 100%;
         min-height: 0;
+        background-color: var(--boxel-light);
       }
       .markdown-embed-chooser-tab-panel__left,
       .markdown-embed-chooser-tab-panel__right {
-        flex: 1 1 0;
         min-width: 0;
         min-height: 0;
-        border: 1px solid var(--boxel-300);
-        border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        background-color: var(--boxel-light);
+      }
+      /* The chooser column is narrower than the preview column (~2:3), per the
+         design. A single full-height divider between the two columns — no boxed
+         borders, so the panels read as one continuous surface. The left
+         column stacks the tab pills above the mini chooser. */
+      .markdown-embed-chooser-tab-panel__left {
+        flex: 2 1 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--boxel-300);
+      }
+      /* Pills sit at the top of the search column, directly above the search
+         bar; the chooser below fills the remaining height. */
+      .markdown-embed-chooser-tab-panel__tabbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        padding: var(--boxel-sp-sm) var(--boxel-sp-xs) 0;
+      }
+      /* The chooser (or current-target tile) fills the column below the pills.
+         The mini choosers set their own `height: 100%`, which would resolve
+         against the full column height and overflow past the pills — grow to
+         the remaining space instead. */
+      .markdown-embed-chooser-tab-panel__left > :deep(.mini-card-chooser),
+      .markdown-embed-chooser-tab-panel__left > :deep(.mini-file-chooser),
+      .markdown-embed-chooser-tab-panel__current {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+      }
+      .markdown-embed-chooser-tab-panel__right {
+        flex: 3 1 0;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        /* The preview column reads as an off-white surface, distinct from the
+           white chooser column on the left. */
+        background-color: #fbf8f8;
+      }
+      /* Centered placeholder shown until a row is picked and its instance
+         resolves; the pane mounts in its place once a target arrives. */
+      .markdown-embed-chooser-tab-panel__empty {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: var(--boxel-sp);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        text-align: center;
       }
       .markdown-embed-chooser-tab-panel__current {
         display: flex;
@@ -243,7 +317,6 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         align-items: center;
         justify-content: center;
         gap: var(--boxel-sp);
-        height: 100%;
         padding: var(--boxel-sp);
         text-align: center;
       }

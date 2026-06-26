@@ -94,11 +94,10 @@ function buildFormatOptions(): FormatOption[] {
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // Resolved instance being previewed. Its `id` is the BFM ref URL. May be
-    // undefined when the chooser is open but the user hasn't picked a row yet;
-    // the pane keeps the format/W×H controls visible (disabled CTA) so the
-    // layout doesn't jump when a target arrives.
-    target?: CardDef | FileDef;
+    // Resolved instance being previewed. Its `id` is the BFM ref URL. Always a
+    // real target — the parent (tab-panel) only mounts the pane once a row is
+    // picked and its instance resolves, rendering its own placeholder until then.
+    target: CardDef | FileDef;
     // Which BFM keyword to emit: `:card[...]` vs `:file[...]`.
     refType: 'card' | 'file';
     // Receives the serialized BFM directive when the CTA is clicked. The host
@@ -179,7 +178,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     // `initialTargetUrl` arg wins over `args.target?.id` because the resolved
     // instance is loaded asynchronously — at construction time the parent
     // already knows the URL but the store has not yet returned the instance.
-    this.initialTargetUrl = args.initialTargetUrl ?? args.target?.id;
+    this.initialTargetUrl = args.initialTargetUrl ?? args.target.id;
   }
 
   private get selectedOption(): FormatOption {
@@ -264,7 +263,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       this.kind !== this.initialKind ||
       this.widthInput !== this.initialWidthInput ||
       this.heightInput !== this.initialHeightInput ||
-      (this.args.target?.id ?? undefined) !== this.initialTargetUrl
+      this.args.target.id !== this.initialTargetUrl
     );
   }
 
@@ -306,7 +305,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   }
 
   private get bfmString(): string {
-    let url = this.args.target?.id;
+    let url = this.args.target.id;
     if (!url) {
       return '';
     }
@@ -314,10 +313,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       kind: this.kind,
       size: this.sizeSpecifier,
     });
-  }
-
-  private get isCtaDisabled(): boolean {
-    return !this.args.target?.id;
   }
 
   @action
@@ -409,24 +404,13 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       </div>
 
       <div class='markdown-embed-preview-pane__viewport'>
-        {{#if @target}}
-          <MarkdownEmbedPreview
-            @target={{@target}}
-            @format={{this.previewFormat}}
-            @sizeSpec={{this.sizeSpec}}
-            @kind={{this.kind}}
-            @showSurroundingText={{true}}
-          />
-        {{else}}
-          <p
-            class='markdown-embed-preview-pane__empty'
-            data-test-markdown-embed-preview-empty
-          >
-            Pick a
-            {{@refType}}
-            to preview its embed.
-          </p>
-        {{/if}}
+        <MarkdownEmbedPreview
+          @target={{@target}}
+          @format={{this.previewFormat}}
+          @sizeSpec={{this.sizeSpec}}
+          @kind={{this.kind}}
+          @showSurroundingText={{true}}
+        />
       </div>
 
       <footer class='markdown-embed-preview-pane__footer'>
@@ -461,7 +445,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         <Button
           @kind='primary'
           @size='small'
-          @disabled={{this.isCtaDisabled}}
           class='markdown-embed-preview-pane__cta'
           data-test-markdown-embed-preview-cta
           {{on 'click' this.insert}}
@@ -508,7 +491,9 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         width: 100%;
         height: 100%;
         min-height: 0;
-        background-color: var(--boxel-light);
+        /* Inherit the preview column's off-white surface; the inner card
+           viewport supplies its own background. */
+        background-color: transparent;
       }
       .markdown-embed-preview-pane__header {
         flex: 0 0 auto;
@@ -526,12 +511,6 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         padding: var(--boxel-sp);
         overflow: auto;
         background-color: var(--boxel-100);
-      }
-      .markdown-embed-preview-pane__empty {
-        margin: 0;
-        font: var(--boxel-font-sm);
-        color: var(--boxel-450);
-        text-align: center;
       }
       .markdown-embed-preview-pane__format-select {
         flex: 1 1 auto;

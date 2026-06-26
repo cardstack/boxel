@@ -121,7 +121,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
     {{#if this.request}}
       <ModalContainer
         class='markdown-embed-chooser-modal'
-        @title='Embed a card or file'
+        @title=''
         @onClose={{this.handleClose}}
         @size='large'
         @centered={{true}}
@@ -134,13 +134,12 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
         data-test-markdown-embed-chooser-modal
       >
         <:content>
-          <Tabs
-            @activeTab={{this.activeTab}}
-            @onTabChange={{this.setActiveTab}}
-          >
+          <Tabs @activeTab={{this.activeTab}}>
             <:cards>
               <TabPanel
                 @refType='card'
+                @activeTab={{this.activeTab}}
+                @onTabChange={{this.setActiveTab}}
                 @onInsert={{this.handleInsertCard}}
                 @initialTarget={{this.cardInitialTarget}}
                 @onRemove={{this.handleRemove}}
@@ -149,6 +148,8 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
             <:files>
               <TabPanel
                 @refType='file'
+                @activeTab={{this.activeTab}}
+                @onTabChange={{this.setActiveTab}}
                 @onInsert={{this.handleInsertFile}}
                 @initialTarget={{this.fileInitialTarget}}
                 @onRemove={{this.handleRemove}}
@@ -159,13 +160,32 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
       </ModalContainer>
     {{/if}}
     <style scoped>
+      /* Collapse the (empty) modal header band to nothing. With @title='' and
+         no <:header> content it holds only the built-in close button, which is
+         position:absolute and out of flow — so the band disappears while the
+         × keeps floating at the modal's top-right corner. */
+      .markdown-embed-chooser-modal :deep(.dialog-box__header) {
+        min-height: 0;
+        padding: 0;
+      }
+      /* Full-bleed body: the two columns and the divider between them run to
+         the modal edges, so the content gets no padding of its own — each
+         column's inner components supply their own insets. */
       .markdown-embed-chooser-modal :deep(.dialog-box__content) {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
+        padding: 0;
       }
       :deep(.markdown-embed-chooser-modal__container) {
         height: 36rem;
+      }
+      /* Re-center the fixed-height modal box vertically. Operator mode ships a
+         global `.operator-mode .boxel-modal__inner { display: block }` that
+         outranks boxel-ui's base `.boxel-modal__inner { display: flex }`, which
+         drops the inner's flex centering and top-aligns our 36rem box. Restore
+         flex on our own inner so `@centered` actually centers it. */
+      .markdown-embed-chooser-modal > :deep(.boxel-modal__inner) {
+        display: flex;
       }
     </style>
   </template>

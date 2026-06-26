@@ -461,6 +461,11 @@ export default class PanelContent extends Component<Signature> {
       .search-sheet-content.mini :deep(.search-result-header) {
         padding-block: var(--boxel-sp-xs);
       }
+      /* The summary is 16px bold in the full sheet; in the mini envelope drop
+         it to the chooser's shared 14px scale (weight stays 600). */
+      .search-sheet-content.mini :deep(.search-result-header .summary) {
+        font: 600 var(--boxel-font-sm);
+      }
       /* Summary + Sort sit on one row, with the Sort dropdown shrunk to
          fit its label rather than padded to a comfortable touch target. */
       .search-sheet-content.mini :deep(.search-result-header .controls) {

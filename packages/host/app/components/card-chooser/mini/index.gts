@@ -82,10 +82,15 @@ export default class MiniCardChooser extends Component<Signature> {
         height: 100%;
         min-height: 0;
         background-color: var(--boxel-light);
+        /* Share the file chooser's compact scale so the two lists match when
+           toggling tabs in the markdown embed chooser. */
+        font: var(--boxel-font-sm);
       }
       .mini-card-chooser__header {
         flex: 0 0 auto;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) 0;
+        /* Small bottom inset so the search bar's 2px focus outline isn't
+           painted over by the results list sitting directly below it. */
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-4xs);
       }
       /* Pill-shaped, design-matched bar height. SearchBar's defaults are
          tuned for the full search-sheet (50px tall, generous focus ring);
