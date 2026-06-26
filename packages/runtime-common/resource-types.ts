@@ -404,7 +404,10 @@ export function isPrerenderedCardResource(
 // True when `key` is `fieldName` followed by a plain array index (e.g.
 // `items.1`), the shape `meta.fields` uses for a primitive polymorphic
 // containsMany. Excludes deeper paths like `items.1.nested`.
-function isDirectIndexedFieldKey(key: string, fieldName: string): boolean {
+export function isDirectIndexedFieldKey(
+  key: string,
+  fieldName: string,
+): boolean {
   let prefix = `${fieldName}.`;
   if (!key.startsWith(prefix)) {
     return false;

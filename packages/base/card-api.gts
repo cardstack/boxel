@@ -96,6 +96,7 @@ import {
   rri,
   type RealmResourceIdentifier,
   type VirtualNetwork,
+  isDirectIndexedFieldKey,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -4238,15 +4239,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   ): Partial<Meta>[] | undefined {
     let entry = fieldsMeta?.[key];
     return Array.isArray(entry) ? entry : undefined;
-  }
-  function isDirectIndexedFieldKey(key: string, fieldName: string): boolean {
-    let prefix = `${fieldName}.`;
-    if (!key.startsWith(prefix)) {
-      return false;
-    }
-    let suffix = key.slice(prefix.length);
-    let index = Number(suffix);
-    return Number.isInteger(index) && index >= 0 && String(index) === suffix;
   }
   function clearIndexedFieldOverrides(fieldName: string): void {
     for (let key of existingOverrides.keys()) {
