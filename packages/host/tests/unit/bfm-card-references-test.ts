@@ -6,6 +6,7 @@ import {
   extractCardReferenceUrls,
   extractFileReferenceUrls,
   extractBfmReferences,
+  extractBfmRefRanges,
   bfmRefFormatAndSize,
   bfmCardReferenceExtensions,
   bfmExtensionsForKeyword,
@@ -1251,6 +1252,73 @@ module('Unit | bfm-card-references', function () {
     test('returns empty string for a missing url', function (assert) {
       assert.strictEqual(serializeBfmRef('card', undefined), '');
       assert.strictEqual(serializeBfmRef('card', ''), '');
+    });
+  });
+
+  module('extractBfmRefRanges', function () {
+    test('returns source-byte ranges for inline and block refs', function (assert) {
+      let markdown = 'Inline :card[./mango] then\n::file[./photo.jpg]\n';
+      let ranges = extractBfmRefRanges(markdown);
+      assert.strictEqual(ranges.length, 2);
+
+      let inline = ranges[0];
+      assert.strictEqual(inline.kind, 'inline');
+      assert.strictEqual(inline.refType, 'card');
+      assert.strictEqual(inline.url, './mango');
+      assert.strictEqual(
+        markdown.slice(inline.from, inline.to),
+        ':card[./mango]',
+        'inline range round-trips through markdown.slice',
+      );
+
+      let block = ranges[1];
+      assert.strictEqual(block.kind, 'block');
+      assert.strictEqual(block.refType, 'file');
+      assert.strictEqual(block.url, './photo.jpg');
+      assert.strictEqual(
+        markdown.slice(block.from, block.to),
+        '::file[./photo.jpg]',
+        'block range round-trips through markdown.slice',
+      );
+    });
+
+    test('captures the size specifier when present', function (assert) {
+      let markdown = '::card[./mango | tall-tile]';
+      let [range] = extractBfmRefRanges(markdown);
+      assert.strictEqual(range.url, './mango');
+      assert.strictEqual(range.sizeSpec, 'tall-tile');
+      assert.strictEqual(markdown.slice(range.from, range.to), markdown);
+    });
+
+    test('skips refs inside fenced and inline code', function (assert) {
+      let markdown = [
+        '```',
+        '::card[./inside-fence]',
+        '```',
+        'See `:card[./inline-code]` and :card[./real] for real.',
+      ].join('\n');
+      let ranges = extractBfmRefRanges(markdown);
+      assert.strictEqual(ranges.length, 1, 'only the un-coded ref is returned');
+      assert.strictEqual(ranges[0].url, './real');
+    });
+
+    test('emits one range per site (no deduplication)', function (assert) {
+      let markdown = ':card[./mango] then :card[./mango]';
+      let ranges = extractBfmRefRanges(markdown);
+      assert.strictEqual(ranges.length, 2, 'both sites are surfaced');
+      assert.notStrictEqual(ranges[0].from, ranges[1].from);
+    });
+
+    test('sorts by document order', function (assert) {
+      let markdown = '::card[./second]\n:card[./first]'.replace(
+        '::card[./second]\n:card[./first]',
+        ':card[./first] then ::card[./second]',
+      );
+      let ranges = extractBfmRefRanges(markdown);
+      assert.deepEqual(
+        ranges.map((r) => r.url),
+        ['./first', './second'],
+      );
     });
   });
 });

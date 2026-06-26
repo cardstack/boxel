@@ -1820,4 +1820,82 @@ module('Integration | codemirror-context', function (hooks) {
       delete (globalThis as any).__loadCodeMirror;
     }
   });
+
+  // ── currentRef tracking (BFM directive under cursor) ──
+
+  test('onSelectionChange.currentRef reports the BFM directive under the cursor', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    try {
+      let lastInfo: any = null;
+      let content = 'Inline :card[./mango] then more text';
+      let state = cmContext.createEditorState({
+        content,
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          lastInfo = info;
+        },
+      });
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      let directiveStart = content.indexOf(':card');
+      let directiveEnd = content.indexOf(']') + 1;
+
+      // Inside the directive — currentRef populated.
+      view.dispatch({
+        selection: { anchor: directiveStart + 2, head: directiveStart + 2 },
+      });
+      assert.ok(lastInfo?.currentRef, 'currentRef is set inside the directive');
+      assert.strictEqual(lastInfo.currentRef.refType, 'card');
+      assert.strictEqual(lastInfo.currentRef.url, './mango');
+      assert.strictEqual(lastInfo.currentRef.from, directiveStart);
+      assert.strictEqual(lastInfo.currentRef.to, directiveEnd);
+
+      // Outside the directive — currentRef cleared.
+      view.dispatch({ selection: { anchor: 0, head: 0 } });
+      assert.notOk(
+        lastInfo?.currentRef,
+        'currentRef is undefined outside any directive',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('currentRef refreshes after a doc edit shifts the range', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    try {
+      let lastInfo: any = null;
+      let state = cmContext.createEditorState({
+        content: ':card[./mango]',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          lastInfo = info;
+        },
+      });
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // Prepend text — the directive shifts right by 5 chars.
+      view.dispatch({ changes: { from: 0, to: 0, insert: 'pre: ' } });
+      view.dispatch({ selection: { anchor: 7, head: 7 } });
+
+      assert.ok(lastInfo?.currentRef, 'currentRef detected after the edit');
+      assert.strictEqual(
+        lastInfo.currentRef.from,
+        5,
+        'range start tracks the edit',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
 });

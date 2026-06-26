@@ -14,6 +14,11 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  type BfmRefRange,
+  chooseMarkdownEmbed,
+  editMarkdownEmbed,
+} from '@cardstack/runtime-common/bfm-card-references';
+import {
   type BaseDef,
   type CardDef,
   type FileDef,
@@ -32,6 +37,8 @@ import ListIcon from '@cardstack/boxel-icons/list';
 import ListOrderedIcon from '@cardstack/boxel-icons/list-ordered';
 import BlockquoteIcon from '@cardstack/boxel-icons/blockquote';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import PencilIcon from '@cardstack/boxel-icons/pencil';
 
 // The CodeMirrorContext type is defined in the host app's lazy-loaded module.
 // We only use it as a type here — the actual module is loaded at runtime via
@@ -63,6 +70,9 @@ interface SelectionInfo {
   from: number;
   to: number;
   formats: SelectionFormats;
+  // BFM directive the cursor is currently inside, if any. Drives the toolbar
+  // swap between the Add-embed popover and the Edit-embed pencil.
+  currentRef?: BfmRefRange;
 }
 
 interface CodeMirrorContext {
@@ -193,7 +203,9 @@ function sameToolbarState(a: SelectionInfo, b: SelectionInfo): boolean {
     a.formats.italic === b.formats.italic &&
     a.formats.code === b.formats.code &&
     a.formats.strikethrough === b.formats.strikethrough &&
-    a.formats.link === b.formats.link
+    a.formats.link === b.formats.link &&
+    a.currentRef?.from === b.currentRef?.from &&
+    a.currentRef?.to === b.currentRef?.to
   );
 }
 
@@ -432,19 +444,84 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     let f = this.toolbarFormats;
     let pressed = (active: boolean) => (active ? 'true' : 'false');
     return [
-      { testId: 'bold', label: 'Bold', icon: BoldIcon, action: this._wrapBold, active: f.bold, ariaPressed: pressed(f.bold) },
-      { testId: 'italic', label: 'Italic', icon: ItalicIcon, action: this._wrapItalic, active: f.italic, ariaPressed: pressed(f.italic) },
-      { testId: 'strikethrough', label: 'Strikethrough', icon: StrikethroughIcon, action: this._wrapStrikethrough, active: f.strikethrough, ariaPressed: pressed(f.strikethrough) },
-      { testId: 'code', label: 'Code', icon: CodeIcon, action: this._wrapCode, active: f.code, ariaPressed: pressed(f.code) },
-      { testId: 'link', label: 'Link', icon: LinkIcon, action: this._toggleLink, active: f.link, ariaPressed: pressed(f.link) },
+      {
+        testId: 'bold',
+        label: 'Bold',
+        icon: BoldIcon,
+        action: this._wrapBold,
+        active: f.bold,
+        ariaPressed: pressed(f.bold),
+      },
+      {
+        testId: 'italic',
+        label: 'Italic',
+        icon: ItalicIcon,
+        action: this._wrapItalic,
+        active: f.italic,
+        ariaPressed: pressed(f.italic),
+      },
+      {
+        testId: 'strikethrough',
+        label: 'Strikethrough',
+        icon: StrikethroughIcon,
+        action: this._wrapStrikethrough,
+        active: f.strikethrough,
+        ariaPressed: pressed(f.strikethrough),
+      },
+      {
+        testId: 'code',
+        label: 'Code',
+        icon: CodeIcon,
+        action: this._wrapCode,
+        active: f.code,
+        ariaPressed: pressed(f.code),
+      },
+      {
+        testId: 'link',
+        label: 'Link',
+        icon: LinkIcon,
+        action: this._toggleLink,
+        active: f.link,
+        ariaPressed: pressed(f.link),
+      },
       { divider: true },
-      { testId: 'h1', label: 'Heading 1', icon: Heading1Icon, action: this._insertH1 },
-      { testId: 'h2', label: 'Heading 2', icon: Heading2Icon, action: this._insertH2 },
-      { testId: 'h3', label: 'Heading 3', icon: Heading3Icon, action: this._insertH3 },
+      {
+        testId: 'h1',
+        label: 'Heading 1',
+        icon: Heading1Icon,
+        action: this._insertH1,
+      },
+      {
+        testId: 'h2',
+        label: 'Heading 2',
+        icon: Heading2Icon,
+        action: this._insertH2,
+      },
+      {
+        testId: 'h3',
+        label: 'Heading 3',
+        icon: Heading3Icon,
+        action: this._insertH3,
+      },
       { divider: true },
-      { testId: 'bullet-list', label: 'Bullet List', icon: ListIcon, action: this._toggleBulletList },
-      { testId: 'numbered-list', label: 'Numbered List', icon: ListOrderedIcon, action: this._toggleNumberedList },
-      { testId: 'blockquote', label: 'Blockquote', icon: BlockquoteIcon, action: this._toggleBlockquote },
+      {
+        testId: 'bullet-list',
+        label: 'Bullet List',
+        icon: ListIcon,
+        action: this._toggleBulletList,
+      },
+      {
+        testId: 'numbered-list',
+        label: 'Numbered List',
+        icon: ListOrderedIcon,
+        action: this._toggleNumberedList,
+      },
+      {
+        testId: 'blockquote',
+        label: 'Blockquote',
+        icon: BlockquoteIcon,
+        action: this._toggleBlockquote,
+      },
     ];
   }
 
@@ -563,6 +640,122 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       view.dispatch({ changes });
     }
     view.focus();
+  };
+
+  // ── Markdown embed chooser (toolbar) ────────────────────────────────────
+
+  @tracked _embedPopoverOpen = false;
+
+  get _currentBfmRef(): BfmRefRange | undefined {
+    return this._selectionInfo?.currentRef;
+  }
+
+  _toggleEmbedPopover = () => {
+    this._embedPopoverOpen = !this._embedPopoverOpen;
+  };
+
+  _openEmbedChooser = async (defaultTab: 'card' | 'file') => {
+    this._embedPopoverOpen = false;
+    let result;
+    try {
+      result = await chooseMarkdownEmbed({ defaultTab });
+    } catch (e) {
+      // Bridge not registered (e.g. card running outside the host) — silently
+      // no-op so the toolbar click doesn't blow up the editor.
+      console.warn('markdown-embed chooser unavailable', e);
+      return;
+    }
+    if (!result || 'remove' in result) {
+      // Cancelled, or { remove: true } returned by mistake (no current ref to
+      // remove in Add mode) — either way, do nothing.
+      return;
+    }
+    this._insertBfm(result.bfm);
+  };
+
+  _openEditEmbed = async () => {
+    let ref = this._currentBfmRef;
+    if (!ref) return;
+    let view = this.editorView;
+    if (!view) return;
+    let result;
+    try {
+      result = await editMarkdownEmbed({
+        refType: ref.refType as 'card' | 'file',
+        url: ref.url,
+        sizeSpec: ref.sizeSpec,
+      });
+    } catch (e) {
+      console.warn('markdown-embed chooser unavailable', e);
+      return;
+    }
+    if (!result) return;
+    if ('remove' in result && result.remove) {
+      this._deleteRange(ref);
+      return;
+    }
+    this._replaceRange(ref, result.bfm);
+  };
+
+  _insertBfm = (bfm: string) => {
+    let view = this.editorView;
+    if (!view) return;
+    let { from } = view.state.selection.main;
+
+    // Inline vs block placement is encoded in the directive's `::` prefix.
+    if (bfm.startsWith('::')) {
+      let line = view.state.doc.lineAt(from);
+      let insertPos = line.to;
+      let prefix = line.text.trim() === '' ? '' : '\n';
+      view.dispatch({
+        changes: { from: insertPos, insert: `${prefix}${bfm}\n` },
+      });
+    } else {
+      view.dispatch({ changes: { from, insert: bfm } });
+    }
+    view.focus();
+
+    let onUpdate = this.args.onUpdate;
+    if (onUpdate) {
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
+      onUpdate(view.state.doc.toString());
+    }
+  };
+
+  _replaceRange = (range: BfmRefRange, replacement: string) => {
+    let view = this.editorView;
+    if (!view) return;
+    view.dispatch({
+      changes: { from: range.from, to: range.to, insert: replacement },
+    });
+    view.focus();
+    let onUpdate = this.args.onUpdate;
+    if (onUpdate) {
+      onUpdate(view.state.doc.toString());
+    }
+  };
+
+  _deleteRange = (range: BfmRefRange) => {
+    let view = this.editorView;
+    if (!view) return;
+    // Block directives sit on their own line — extend the delete to swallow
+    // the surrounding newline so we don't leave a blank line behind.
+    let doc = view.state.doc;
+    let from = range.from;
+    let to = range.to;
+    if (range.kind === 'block') {
+      if (doc.sliceString(to, to + 1) === '\n') to += 1;
+      else if (from > 0 && doc.sliceString(from - 1, from) === '\n') from -= 1;
+    }
+    view.dispatch({ changes: { from, to, insert: '' } });
+    view.focus();
+    let onUpdate = this.args.onUpdate;
+    if (onUpdate) {
+      onUpdate(view.state.doc.toString());
+    }
   };
 
   // ── Card insertion ───────────────────────────────────────────────────────
@@ -886,6 +1079,60 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             <span class='toolbar-divider'></span>
           {{/if}}
 
+          {{#if this._currentBfmRef}}
+            <button
+              class='toolbar-btn'
+              data-test-toolbar='edit-embed'
+              type='button'
+              title='Edit embed'
+              aria-label='Edit embed'
+              disabled={{not this.toolbarEnabled}}
+              {{on 'mousedown' this._preventFocusLoss}}
+              {{on 'click' this._openEditEmbed}}
+            ><PencilIcon width='16' height='16' /></button>
+          {{else}}
+            <div class='toolbar-embed-trigger'>
+              <button
+                class='toolbar-btn
+                  {{if this._embedPopoverOpen "toolbar-btn--active"}}'
+                data-test-toolbar='add-embed'
+                type='button'
+                title='Add embed'
+                aria-label='Add embed'
+                aria-haspopup='menu'
+                aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
+                disabled={{not this.toolbarEnabled}}
+                {{on 'mousedown' this._preventFocusLoss}}
+                {{on 'click' this._toggleEmbedPopover}}
+              ><PlusIcon width='16' height='16' /></button>
+              {{#if this._embedPopoverOpen}}
+                <div
+                  class='toolbar-embed-popover'
+                  role='menu'
+                  data-test-toolbar-embed-popover
+                >
+                  <button
+                    type='button'
+                    role='menuitem'
+                    class='toolbar-embed-popover__item'
+                    data-test-toolbar-embed='card'
+                    {{on 'mousedown' this._preventFocusLoss}}
+                    {{on 'click' (fn this._openEmbedChooser 'card')}}
+                  >Add a card</button>
+                  <button
+                    type='button'
+                    role='menuitem'
+                    class='toolbar-embed-popover__item'
+                    data-test-toolbar-embed='file'
+                    {{on 'mousedown' this._preventFocusLoss}}
+                    {{on 'click' (fn this._openEmbedChooser 'file')}}
+                  >Add a file</button>
+                </div>
+              {{/if}}
+            </div>
+          {{/if}}
+          <span class='toolbar-divider'></span>
+
           {{#each this.toolbarButtons as |btn|}}
             {{#if btn.divider}}
               <span class='toolbar-divider'></span>
@@ -917,89 +1164,89 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         ></div>
 
         {{! ── Card search popup ── }}
-      {{! template-lint-disable no-pointer-down-event-binding }}
-      {{#if this._cardSearchMode}}
-        <div
-          class='codemirror-card-search'
-          style={{this.menuStyle}}
-          data-test-card-search
-        >
-          <input
-            class='codemirror-card-search-input'
-            placeholder='Search cards or paste URL…'
-            aria-label='Search cards or paste URL'
-            value={{this._cardSearchText}}
-            data-codemirror-card-search-input
-            data-test-card-search-input
-            {{on 'input' this._handleCardSearchInput}}
-            {{on 'keydown' this._handleCardSearchKeydown}}
-          />
-          {{#if this.isSearchLoading}}
-            <div class='codemirror-card-search-loading'>Searching…</div>
-          {{/if}}
-          {{#if this.cardSearchResults.length}}
-            <div
-              class='codemirror-card-search-results'
-              data-test-card-search-results
-            >
-              {{#each this.cardSearchResults as |card index|}}
-                <button
-                  class='codemirror-card-search-result
-                    {{if (eq index this._cardSearchIndex) "selected"}}'
-                  data-test-card-search-result
-                  {{on 'mousedown' this._preventFocusLoss}}
-                  {{on 'click' (fn this._selectCardResult card)}}
-                >
-                  <span class='search-result-title'>{{card.title}}</span>
-                  {{#if card.id}}
-                    <span class='search-result-url'>{{card.id}}</span>
-                  {{/if}}
-                </button>
-              {{/each}}
-            </div>
-          {{/if}}
-        </div>
-      {{/if}}
+        {{! template-lint-disable no-pointer-down-event-binding }}
+        {{#if this._cardSearchMode}}
+          <div
+            class='codemirror-card-search'
+            style={{this.menuStyle}}
+            data-test-card-search
+          >
+            <input
+              class='codemirror-card-search-input'
+              placeholder='Search cards or paste URL…'
+              aria-label='Search cards or paste URL'
+              value={{this._cardSearchText}}
+              data-codemirror-card-search-input
+              data-test-card-search-input
+              {{on 'input' this._handleCardSearchInput}}
+              {{on 'keydown' this._handleCardSearchKeydown}}
+            />
+            {{#if this.isSearchLoading}}
+              <div class='codemirror-card-search-loading'>Searching…</div>
+            {{/if}}
+            {{#if this.cardSearchResults.length}}
+              <div
+                class='codemirror-card-search-results'
+                data-test-card-search-results
+              >
+                {{#each this.cardSearchResults as |card index|}}
+                  <button
+                    class='codemirror-card-search-result
+                      {{if (eq index this._cardSearchIndex) "selected"}}'
+                    data-test-card-search-result
+                    {{on 'mousedown' this._preventFocusLoss}}
+                    {{on 'click' (fn this._selectCardResult card)}}
+                  >
+                    <span class='search-result-title'>{{card.title}}</span>
+                    {{#if card.id}}
+                      <span class='search-result-url'>{{card.id}}</span>
+                    {{/if}}
+                  </button>
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
+        {{/if}}
 
-      {{! ── Format picker popup ── }}
-      {{! template-lint-disable no-pointer-down-event-binding }}
-      {{#if this._formatPickerCardUrl}}
-        <div
-          class='codemirror-format-picker'
-          style={{this.menuStyle}}
-          data-test-format-picker
-        >
-          <span class='format-picker-label'>
-            Insert "{{this._formatPickerCardTitle}}" as:
-          </span>
-          <div class='format-picker-buttons'>
+        {{! ── Format picker popup ── }}
+        {{! template-lint-disable no-pointer-down-event-binding }}
+        {{#if this._formatPickerCardUrl}}
+          <div
+            class='codemirror-format-picker'
+            style={{this.menuStyle}}
+            data-test-format-picker
+          >
+            <span class='format-picker-label'>
+              Insert "{{this._formatPickerCardTitle}}" as:
+            </span>
+            <div class='format-picker-buttons'>
+              <button
+                class='format-picker-btn'
+                data-test-format-inline
+                {{on 'mousedown' this._preventFocusLoss}}
+                {{on 'click' (fn this._insertCardWithFormat 'inline')}}
+              >
+                Inline
+              </button>
+              <button
+                class='format-picker-btn format-picker-btn--primary'
+                data-test-format-block
+                {{on 'mousedown' this._preventFocusLoss}}
+                {{on 'click' (fn this._insertCardWithFormat 'block')}}
+              >
+                Block
+              </button>
+            </div>
             <button
-              class='format-picker-btn'
-              data-test-format-inline
+              class='format-picker-dismiss'
+              data-test-format-picker-dismiss
               {{on 'mousedown' this._preventFocusLoss}}
-              {{on 'click' (fn this._insertCardWithFormat 'inline')}}
+              {{on 'click' this._dismissFormatPicker}}
             >
-              Inline
-            </button>
-            <button
-              class='format-picker-btn format-picker-btn--primary'
-              data-test-format-block
-              {{on 'mousedown' this._preventFocusLoss}}
-              {{on 'click' (fn this._insertCardWithFormat 'block')}}
-            >
-              Block
+              Cancel
             </button>
           </div>
-          <button
-            class='format-picker-dismiss'
-            data-test-format-picker-dismiss
-            {{on 'mousedown' this._preventFocusLoss}}
-            {{on 'click' this._dismissFormatPicker}}
-          >
-            Cancel
-          </button>
-        </div>
-      {{/if}}
+        {{/if}}
       </div>
 
       {{#if this.livePreview}}
@@ -1387,6 +1634,39 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           height: 18px;
           background: var(--border, var(--boxel-200));
           margin: 0 var(--boxel-sp-5xs);
+        }
+
+        .toolbar-embed-trigger {
+          position: relative;
+          display: inline-flex;
+        }
+        .toolbar-embed-popover {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          margin-top: 4px;
+          min-width: 140px;
+          background: var(--boxel-light);
+          color: var(--boxel-dark);
+          border: 1px solid var(--boxel-300);
+          border-radius: var(--boxel-border-radius);
+          box-shadow: var(--boxel-deep-box-shadow);
+          padding: var(--boxel-sp-4xs) 0;
+          z-index: 5;
+          display: flex;
+          flex-direction: column;
+        }
+        .toolbar-embed-popover__item {
+          appearance: none;
+          background: none;
+          border: none;
+          text-align: left;
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          font: var(--boxel-font-sm);
+          cursor: pointer;
+        }
+        .toolbar-embed-popover__item:hover {
+          background: var(--boxel-100);
         }
 
         .codemirror-editor-loading {

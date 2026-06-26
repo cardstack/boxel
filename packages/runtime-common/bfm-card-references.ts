@@ -328,6 +328,152 @@ export function extractBfmReferences(
   return refs;
 }
 
+// ── Markdown embed chooser bridge ──
+//
+// Lets the base-realm markdown editor (in `packages/base/`) open the host-
+// side combined chooser modal without importing host services directly. The
+// host modal registers itself on `globalThis` at mount time; runtime-common
+// exposes the typed accessors below. Mirrors the `chooseCard` / `chooseFile`
+// pattern used by other host-side modals.
+
+export interface MarkdownEmbedResult {
+  refType: 'card' | 'file';
+  url: string;
+  bfm: string;
+}
+
+export type MarkdownEmbedResolution =
+  | MarkdownEmbedResult
+  | { remove: true }
+  | undefined;
+
+export interface MarkdownEmbedInitialTarget {
+  refType: 'card' | 'file';
+  url: string;
+  // Either a pre-parsed `BfmSizeSpec` or the raw specifier text after `|`.
+  sizeSpec?: BfmSizeSpec | string;
+}
+
+export interface MarkdownEmbedChooser {
+  chooseCardOrFile(opts: {
+    defaultTab?: 'card' | 'file';
+  }): Promise<MarkdownEmbedResolution>;
+  editEmbed(
+    target: MarkdownEmbedInitialTarget,
+  ): Promise<MarkdownEmbedResolution>;
+}
+
+const MARKDOWN_EMBED_CHOOSER_KEY = '_CARDSTACK_MARKDOWN_EMBED_CHOOSER';
+
+export async function chooseMarkdownEmbed(
+  opts: { defaultTab?: 'card' | 'file' } = {},
+): Promise<MarkdownEmbedResolution> {
+  let here = globalThis as any;
+  let chooser: MarkdownEmbedChooser | undefined =
+    here[MARKDOWN_EMBED_CHOOSER_KEY];
+  if (!chooser) {
+    throw new Error(
+      `no cardstack markdown-embed chooser is available in this environment`,
+    );
+  }
+  return chooser.chooseCardOrFile(opts);
+}
+
+export async function editMarkdownEmbed(
+  target: MarkdownEmbedInitialTarget,
+): Promise<MarkdownEmbedResolution> {
+  let here = globalThis as any;
+  let chooser: MarkdownEmbedChooser | undefined =
+    here[MARKDOWN_EMBED_CHOOSER_KEY];
+  if (!chooser) {
+    throw new Error(
+      `no cardstack markdown-embed chooser is available in this environment`,
+    );
+  }
+  return chooser.editEmbed(target);
+}
+
+export interface BfmRefRange {
+  kind: 'inline' | 'block';
+  // Half-open byte range into the original markdown string: `markdown.slice(
+  // from, to)` reproduces the directive verbatim. Suitable for a CodeMirror
+  // dispatch that replaces or deletes the directive in place.
+  from: number;
+  to: number;
+  refType: string;
+  // Unresolved URL as written between `[` and `]` — callers resolve against
+  // a base URL when they need the canonical form.
+  url: string;
+  // Raw size specifier after `|` (e.g. `'embedded'`, `'tall-tile'`,
+  // `'w:400 h:200'`). Undefined when the directive has no `|` segment.
+  sizeSpec?: string;
+}
+
+/**
+ * Locates every BFM reference site in `markdown` and returns its source-byte
+ * range, refType, URL, and size specifier (verbatim — no URL resolution).
+ *
+ * Differs from `extractBfmReferences` in two ways: indices are into the
+ * ORIGINAL markdown (not a code-stripped copy), and matches are not
+ * deduplicated — every site is its own range. References inside fenced code
+ * blocks and inline code are skipped.
+ *
+ * Intended for editor-side tooling — cursor-over-ref detection, in-place
+ * replacement, deletion — where every directive needs its own `[from, to]`.
+ */
+export function extractBfmRefRanges(
+  markdown: string,
+  keywords: string[] = ['card', 'file'],
+): BfmRefRange[] {
+  // Collect code regions to skip. Sorted spans in the original markdown.
+  let codeRegions: Array<[number, number]> = [];
+  for (let m of markdown.matchAll(FENCED_CODE_RE)) {
+    codeRegions.push([m.index!, m.index! + m[0].length]);
+  }
+  for (let m of markdown.matchAll(INLINE_CODE_RE)) {
+    codeRegions.push([m.index!, m.index! + m[0].length]);
+  }
+  codeRegions.sort((a, b) => a[0] - b[0]);
+  let isInCode = (pos: number) =>
+    codeRegions.some(([s, e]) => pos >= s && pos < e);
+
+  let ranges: BfmRefRange[] = [];
+
+  for (let keyword of keywords) {
+    let escaped = escapeRegExp(keyword);
+    let blockRe = new RegExp(`^::${escaped}\\[([^\\]]+)\\]`, 'gm');
+    let inlineRe = new RegExp(`(?<!:):${escaped}\\[([^\\]]+)\\]`, 'g');
+
+    for (let match of markdown.matchAll(blockRe)) {
+      if (isInCode(match.index!)) continue;
+      let { url, specifier } = splitBfmContent(match[1]);
+      ranges.push({
+        kind: 'block',
+        from: match.index!,
+        to: match.index! + match[0].length,
+        refType: keyword,
+        url,
+        sizeSpec: specifier,
+      });
+    }
+    for (let match of markdown.matchAll(inlineRe)) {
+      if (isInCode(match.index!)) continue;
+      let { url, specifier } = splitBfmContent(match[1]);
+      ranges.push({
+        kind: 'inline',
+        from: match.index!,
+        to: match.index! + match[0].length,
+        refType: keyword,
+        url,
+        sizeSpec: specifier,
+      });
+    }
+  }
+
+  ranges.sort((a, b) => a.from - b.from);
+  return ranges;
+}
+
 /**
  * Convenience wrapper that extracts only `:card[URL]` / `::card[URL]`
  * references and returns just the resolved URL strings.
