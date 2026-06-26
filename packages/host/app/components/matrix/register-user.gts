@@ -372,6 +372,7 @@ export default class RegisterUser extends Component<Signature> {
       }
       .registration-field :deep(.error-message) {
         margin-left: 0;
+        font: 500 var(--boxel-font-xs);
       }
       .username-prefix {
         padding-right: 0;

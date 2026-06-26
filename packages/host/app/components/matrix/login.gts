@@ -152,7 +152,7 @@ export default class Login extends Component<Signature> {
       .subtitle {
         margin: 0 0 var(--boxel-sp-lg);
         color: var(--foreground);
-        font: 500 var(--boxel-font-sm);
+        font: var(--boxel-font-sm);
         line-height: 1.4;
       }
       .field {
