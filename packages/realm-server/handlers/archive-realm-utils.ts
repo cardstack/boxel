@@ -1,7 +1,8 @@
 import type Koa from 'koa';
 import {
-  ensureTrailingSlash,
   fetchRealmPermissions,
+  param,
+  query,
   type DBAdapter,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
@@ -9,9 +10,11 @@ import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
+  sendResponseForNotFound,
   sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
 } from '../middleware/index.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 export interface ArchiveTarget {
@@ -24,7 +27,12 @@ export interface ArchiveTarget {
 // request for both archive and unarchive. Returns the resolved target, or
 // null after writing the appropriate error response (caller should return).
 //
-// Authorization rules (shared by both endpoints):
+// Rules (shared by both endpoints):
+//   - body id must be a valid realm URL, else 400;
+//   - a source realm_registry row must exist for it, else 404 (a permission
+//     row alone is not proof the realm exists — a stale/manual realm-owner
+//     grant must not let an arbitrary URL be archived);
+//   - published/bootstrap realms are not archivable, else 422;
 //   - requester must be a realm-owner of the target realm, else 403;
 //   - public/catalog realms (world-readable) are not archivable, else 422.
 export async function resolveAndAuthorizeArchiveTarget(
@@ -63,9 +71,41 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  let realmURL = ensureTrailingSlash(realmId);
+  // Normalize through the shared realm-URL normalizer (strips query/fragment,
+  // exactly one trailing slash) so the lookup hits the canonical
+  // realm_registry / realm_user_permissions / realm_metadata rows. Returns
+  // null for an invalid URL → 400 rather than throwing a system error.
+  let parsedRealmURL = normalizeRealmURL(realmId);
+  if (!parsedRealmURL) {
+    await sendResponseForBadRequest(
+      ctxt,
+      `Invalid realm URL supplied: ${realmId}`,
+    );
+    return null;
+  }
+  let realmURL = parsedRealmURL.href;
+
+  // realm_registry is the source of truth for realm existence. Only source
+  // realms are archivable: published snapshots and bootstrap (base/catalog)
+  // realms are not.
+  let registryRow = (await query(dbAdapter, [
+    `SELECT kind FROM realm_registry WHERE url =`,
+    param(realmURL),
+  ])) as { kind: string }[];
+  if (registryRow.length === 0) {
+    await sendResponseForNotFound(ctxt, `Realm not found: ${realmURL}`);
+    return null;
+  }
+  if (registryRow[0].kind !== 'source') {
+    await sendResponseForUnprocessableEntity(
+      ctxt,
+      `Realm ${realmURL} is a ${registryRow[0].kind} realm and cannot be ${action}d`,
+    );
+    return null;
+  }
+
   let { user: ownerUserId } = token;
-  let permissions = await fetchRealmPermissions(dbAdapter, new URL(realmURL));
+  let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
   if (!permissions[ownerUserId]?.includes('realm-owner')) {
     await sendResponseForForbiddenRequest(
