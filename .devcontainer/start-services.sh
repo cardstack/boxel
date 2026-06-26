@@ -223,7 +223,12 @@ echo "==> Seeding reviewer Matrix user (user/password)..."
 # Access-Control-Allow-Origin). With the override, asset URLs are same-origin
 # and the realm proxies /assets, /@embroider and the favicons through to the
 # S3 bundle (HOST_URL) — see proxyAssetPaths in packages/realm-server.
-echo "==> Starting realm server..."
+#
+# The catalog realm is the heaviest to index (~1000+ files) and is optional —
+# set SKIP_CATALOG=true to leave it out for a faster, lighter preview (at the
+# cost of the catalog card library). Default: include it.
+if [ "${SKIP_CATALOG:-}" = "true" ]; then START_CATALOG=""; else START_CATALOG="true"; fi
+echo "==> Starting realm server (catalog: ${START_CATALOG:-skipped})..."
 SKIP_EXPERIMENTS=true \
 SKIP_BOXEL_HOMEPAGE=true \
 SKIP_SUBMISSION=true \
@@ -261,10 +266,10 @@ REALM_SERVER_PROXY_MATRIX_ICONS=true \
     --fromUrl='https://cardstack.com/base/' \
     --toUrl="${REALM_SERVER_URL}/base/" \
     \
-    --path='../catalog/contents' \
-    --username='catalog_realm' \
-    --fromUrl='@cardstack/catalog/' \
-    --toUrl="${REALM_SERVER_URL}/catalog/" \
+    ${START_CATALOG:+--path='../catalog/contents'} \
+    ${START_CATALOG:+--username='catalog_realm'} \
+    ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
+    ${START_CATALOG:+--toUrl="${REALM_SERVER_URL}/catalog/"} \
     \
     --path='../skills-realm/contents' \
     --username='skills_realm' \
