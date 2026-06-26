@@ -31,7 +31,6 @@ import MiniFileChooserUsage from '@cardstack/host/components/file-chooser/mini/u
 import MarkdownEmbedPreviewPaneUsage from '@cardstack/host/components/markdown-embed-chooser/pane-usage';
 import MarkdownEmbedPreviewUsage from '@cardstack/host/components/markdown-embed-chooser/preview/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
@@ -88,7 +87,6 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       getCardCollection,
       store: this.store,
       commandContext: this.commandService.commandContext,
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
       searchResultsComponent: SearchResults,
     };
   }
