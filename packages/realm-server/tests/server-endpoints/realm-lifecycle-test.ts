@@ -216,7 +216,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         {
           // owner can search in the realm
           let response = await context.request
-            .post(`${new URL(realmURL).pathname}_search-v2`)
+            .post(`${new URL(realmURL).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set(
@@ -284,7 +284,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
         {
           let response = await context.request
-            .post(`${new URL(realmURL).pathname}_search-v2`)
+            .post(`${new URL(realmURL).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set(

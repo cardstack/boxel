@@ -378,12 +378,12 @@ export class SkillList extends vscode.TreeItem {
       headers['Authorization'] = jwt;
     }
 
-    // `_search-v2` speaks the search-entry wire grammar: entry membership is
+    // `_search` speaks the search-entry wire grammar: entry membership is
     // addressed through `item.` (the card serialization), so the type anchor
     // is `item.on` and sort keys carry the `item.` prefix. Request the
     // data-only fieldset (`fields[search-entry]=item`) — skill discovery never
     // renders HTML, so each entry carries only its full `item` serialization.
-    const searchUrl = new URL('./_search-v2', this.realmUrl);
+    const searchUrl = new URL('./_search', this.realmUrl);
     const query = {
       sort: [
         {

@@ -2658,17 +2658,17 @@ module(basename(import.meta.filename), function () {
               [testUserId]: ['read', 'write', 'realm-owner'],
             },
             fileSystem: {
-              'v2-search.gts': `
+              'card-search.gts': `
               import { CardDef, Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
-              export class V2SearchResult extends CardDef {
-                static displayName = 'V2 Search Result';
+              export class CardSearchResult extends CardDef {
+                static displayName = 'Card Search Result';
                 @field label = contains(StringField);
                 static fitted = class extends Component<typeof this> {
                   <template>
-                    <div class="v2-search-result-sentinel" data-test-v2-result-value>{{@model.label}}</div>
+                    <div class="card-search-result-sentinel" data-test-card-result-value>{{@model.label}}</div>
                     <style scoped>
-                      .v2-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
+                      .card-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
                     </style>
                   </template>
                 };
@@ -2676,15 +2676,15 @@ module(basename(import.meta.filename), function () {
                 static isolated = this.fitted;
               }
 
-              export class V2SearchInner extends CardDef {
-                static displayName = 'V2 Search Inner';
+              export class CardSearchInner extends CardDef {
+                static displayName = 'Card Search Inner';
                 static isolated = class extends Component<typeof this> {
                   get query() {
                     return {
                       filter: {
                         'item.on': {
-                          module: new URL('./v2-search', import.meta.url).href,
-                          name: 'V2SearchResult',
+                          module: new URL('./card-search', import.meta.url).href,
+                          name: 'CardSearchResult',
                         },
                       },
                       realms: [new URL('./', import.meta.url).href],
@@ -2692,35 +2692,35 @@ module(basename(import.meta.filename), function () {
                   }
 
                   <template>
-                    <div data-test-v2-search-host-ran>v2 host ran</div>
+                    <div data-test-card-search-host-ran>host ran</div>
                     {{#if @context.searchResultsComponent}}
                       <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-v2-search-component-missing>missing</div>
+                      <div data-test-card-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
             `,
-              'v2-search-inner.json': {
+              'card-search-inner.json': {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: rri('./v2-search'),
-                      name: 'V2SearchInner',
+                      module: rri('./card-search'),
+                      name: 'CardSearchInner',
                     },
                   },
                 },
               },
-              'v2-search-result-1.json': {
+              'card-search-result-1.json': {
                 data: {
                   attributes: {
-                    label: 'V2_RESULT_VALUE',
+                    label: 'CARD_RESULT_VALUE',
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./v2-search'),
-                      name: 'V2SearchResult',
+                      module: rri('./card-search'),
+                      name: 'CardSearchResult',
                     },
                   },
                 },
@@ -2785,27 +2785,27 @@ module(basename(import.meta.filename), function () {
         },
       });
 
-      test('v2 search prerenders the live rendered result, beating stale indexed HTML and keeping its unique scoped CSS', async function (assert) {
-        const cardURL = `${realmURL}v2-search-inner`;
-        const sentinel = 'SENTINEL_STALE_V2_HTML';
+      test('search prerenders the live rendered result, beating stale indexed HTML and keeping its unique scoped CSS', async function (assert) {
+        const cardURL = `${realmURL}card-search-inner`;
+        const sentinel = 'SENTINEL_STALE_CARD_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
 
         try {
           let indexedRows = await dbAdapter.execute(
             `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
-            { bind: [`${realmURL}%v2-search%`] },
+            { bind: [`${realmURL}%card-search%`] },
           );
           assert.ok(
             indexedRows.length > 0,
-            `expected indexed rows for v2-search fixtures, got: ${JSON.stringify(indexedRows)}`,
+            `expected indexed rows for card-search fixtures, got: ${JSON.stringify(indexedRows)}`,
           );
 
           // Plant a stale indexed rendering for the result so a live win is
           // observable: the prerendered search must re-render the result from
           // its card+source, not echo this indexed HTML.
           await overrideIndexedIsolatedHTML(
-            `${realmURL}v2-search-result-1`,
+            `${realmURL}card-search-result-1`,
             `<div data-test-stale-card-html>${sentinel}</div>`,
           );
 
@@ -2823,7 +2823,7 @@ module(basename(import.meta.filename), function () {
           );
 
           assert.ok(
-            isolatedHTML.includes('V2_RESULT_VALUE'),
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
             `isolated html includes the live result value: ${isolatedHTML}`,
           );
           assert.notOk(
@@ -2831,11 +2831,11 @@ module(basename(import.meta.filename), function () {
             `isolated html does not include the stale indexed sentinel: ${isolatedHTML}`,
           );
           assert.ok(
-            isolatedHTML.includes('v2-search-result-sentinel'),
+            isolatedHTML.includes('card-search-result-sentinel'),
             `isolated html includes the result's unique css class: ${isolatedHTML}`,
           );
           assert.ok(
-            /v2-search-result-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
+            /card-search-result-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
               isolatedHTML,
             ),
             `isolated html keeps the scoped css marker on the live result: ${isolatedHTML}`,
@@ -2845,7 +2845,7 @@ module(basename(import.meta.filename), function () {
         }
       });
 
-      test('v2 search prerenders a FileDef result and renders live over stale indexed HTML', async function (assert) {
+      test('search prerenders a FileDef result and renders live over stale indexed HTML', async function (assert) {
         const cardURL = `${realmURL}file-search-inner`;
         const sentinel = 'SENTINEL_STALE_FILE_HTML';
         let realmServerPatch =
@@ -2897,14 +2897,14 @@ module(basename(import.meta.filename), function () {
         }
       });
 
-      test('a card rendering the v2 @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
-        // The v2 search resource registers its in-flight fetch with the render
+      test('a card rendering the @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
+        // The search resource registers its in-flight fetch with the render
         // store's readiness signal, so the /render settle loop waits for results
         // before HTML capture. Without that wiring the search resolves only
         // after capture and the prerendered html shows an empty result list —
         // the bug this test guards. Driven through the real prerenderer (the
         // host test harness can't cover the /render route).
-        const cardURL = `${realmURL}v2-search-inner`;
+        const cardURL = `${realmURL}card-search-inner`;
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
 
@@ -2926,16 +2926,16 @@ module(basename(import.meta.filename), function () {
           );
 
           assert.ok(
-            isolatedHTML.includes('data-test-v2-search-host-ran'),
-            `the v2 host template ran: ${isolatedHTML}`,
+            isolatedHTML.includes('data-test-card-search-host-ran'),
+            `the host template ran: ${isolatedHTML}`,
           );
           assert.notOk(
-            isolatedHTML.includes('data-test-v2-search-component-missing'),
-            'the v2 searchResultsComponent is provided in the render context',
+            isolatedHTML.includes('data-test-card-search-component-missing'),
+            'the searchResultsComponent is provided in the render context',
           );
           assert.ok(
-            isolatedHTML.includes('V2_RESULT_VALUE'),
-            `prerendered html includes the v2 search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `prerendered html includes the search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
           );
         } finally {
           await realmServerPatch.restore();

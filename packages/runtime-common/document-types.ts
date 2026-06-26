@@ -25,7 +25,7 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   meta: QueryResultsMeta;
 }
 
-// The v2 search response: heterogeneous `search-entry` resources in `data`,
+// The search response: heterogeneous `search-entry` resources in `data`,
 // with everything they compose — `html` renderings (plus their deduped `css`
 // stylesheets) and/or `card`/`file-meta` `item` serializations — riding in
 // `included`. Which branches appear per entry is governed by the query's
@@ -48,7 +48,7 @@ export interface SearchEntryCollectionDocument {
   };
 }
 
-// The public-API name for the raw v2 wire format a programmatic
+// The public-API name for the raw search-entry wire format a programmatic
 // `searchEntries` caller receives.
 export type SearchEntryResults = SearchEntryCollectionDocument;
 

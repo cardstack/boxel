@@ -109,10 +109,10 @@ export default class CreateListingModal extends Component<Signature> {
     return [...new Set(realms)];
   }
 
-  // The v2 `search-entry` query for the selected example cards: scoped to the
+  // The `search-entry` query for the selected example cards: scoped to the
   // chosen card URLs (matched by index file URL, hence the `.json`-suffixed
   // `selectedExampleCardUrls`) and their realms, with the `atom` rendering
-  // bound through the filter's `htmlQuery` (the v2 way to select a prerendered
+  // bound through the filter's `htmlQuery` (the way to select a prerendered
   // format). The eq carries only that binding, which the engine lifts out,
   // leaving the result set scoped purely by `cardUrls`.
   private get exampleSearchQuery(): SearchEntryWireQuery {

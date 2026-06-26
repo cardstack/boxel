@@ -11,7 +11,7 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
-  module('Realm-specific Endpoints | _search-v2', function (hooks) {
+  module('Realm-specific Endpoints | _search', function (hooks) {
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
     let request: SuperTest<Test>;
@@ -31,7 +31,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       request = args.request;
       let realmURL = new URL(testRealm.url);
       realmHref = realmURL.href;
-      searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search-v2`;
+      searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search`;
       personKey = `${realmHref}person/Person`;
       johnId = `${realmHref}john`;
       janeId = `${realmHref}jane`;

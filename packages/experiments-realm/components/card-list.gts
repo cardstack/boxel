@@ -21,8 +21,8 @@ interface CardListSignature {
   Element: HTMLElement;
 }
 export class CardList extends GlimmerComponent<CardListSignature> {
-  // The v2 `search-entry`-rooted query, adapted from the incoming v1 `Query`.
-  // `embedded` is bound through the query's `htmlQuery` field (the v2 way to
+  // The `search-entry`-rooted query, adapted from the incoming `Query`.
+  // `embedded` is bound through the query's `htmlQuery` field (the way to
   // select a prerendered format); a bare `eq.format` would be read as an
   // `item.` field path and rejected.
   get searchResultsQuery(): SearchEntryWireQuery {

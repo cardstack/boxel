@@ -254,7 +254,7 @@ module('Integration | Component | search-results', function (hooks) {
     await getService('realm').login(testRealmURL);
   });
 
-  // Stub the v2 fetch with a manufactured document and short-circuit the
+  // Stub the fetch with a manufactured document and short-circuit the
   // stylesheet import for its fake css href. Returns the restore thunk.
   function stubSearchEntries(doc: SearchEntryResults): () => void {
     let originalSearchEntries = storeService.searchEntries.bind(storeService);

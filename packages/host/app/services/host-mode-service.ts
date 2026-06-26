@@ -304,7 +304,7 @@ export default class HostModeService extends Service {
     ) {
       realmServerURL = hostModeOrigin;
     }
-    let searchURL = new URL('_federated-search-v2', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
     // The head markup is the `head` rendering of the card's `search-entry`:
     // an html-only query at `html.format: head`, scoped to the single card.

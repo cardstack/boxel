@@ -19,7 +19,7 @@ All examples below assume `client` is a `BoxelCLIClient` instance.
 
 ## Federated search
 
-Search across one or more realms via `/_federated-search-v2`. Query syntax matches the Boxel realm search format.
+Search across one or more realms via `/_federated-search`. Query syntax matches the Boxel realm search format.
 
 ### CLI
 

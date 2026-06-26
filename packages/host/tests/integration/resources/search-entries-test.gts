@@ -314,7 +314,7 @@ module('Integration | search-entries resource', function (hooks) {
       assert.strictEqual(
         trackedLoads[0],
         load,
-        'the registered load is the in-flight v2 search',
+        'the registered load is the in-flight search',
       );
       assert.true(
         renderStore.loadGeneration > generationBefore,

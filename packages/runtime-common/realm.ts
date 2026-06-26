@@ -941,12 +941,12 @@ export class Realm {
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get(
-        '/_search-v2',
+        '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
       )
       .query(
-        '/_search-v2',
+        '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
       )
@@ -5309,7 +5309,7 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  // The v2 search: the parsed search-entry query (the item. membership
+  // The search: the parsed search-entry query (the item. membership
   // query + the applied htmlQuery + the sparse fieldset) against the
   // search-entry projection engine. Same opts threading as `search` —
   // `cardUrls` rides inside the SearchEntryQuery itself.

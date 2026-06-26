@@ -236,7 +236,7 @@ export class RealmIndexQueryEngine {
     return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
-  // The v2 search-entry engine. Runs the parsed search-entry query — the
+  // The search-entry engine. Runs the parsed search-entry query — the
   // `item.` membership query against the SQL core, then the htmlQuery
   // evaluated per candidate rendering in this mapper — and assembles a
   // heterogeneous `search-entry` document: one entry per result, with the
@@ -1180,7 +1180,7 @@ export class RealmIndexQueryEngine {
       };
       let realmList = realms ?? (realm ? [realm] : [realmHref]);
       // Resolve the cross-realm query-backed field against the peer realm's
-      // v2 `/_search-v2` endpoint, data-only: the legacy card-rooted query
+      // `/_search` endpoint, data-only: the legacy card-rooted query
       // translates to the search-entry wire grammar, and the `item` fieldset
       // makes every entry carry its full `card`/`file-meta` serialization.
       let wireQuery = searchEntryWireQueryFromQuery(

@@ -410,7 +410,7 @@ module('Integration | realm', function (hooks) {
     {
       let response = await handle(
         realm,
-        new Request(`${testRealmURL}root/_search-v2`, {
+        new Request(`${testRealmURL}root/_search`, {
           method: 'QUERY',
           headers: {
             Accept: 'application/vnd.card+json',
@@ -3015,7 +3015,7 @@ module('Integration | realm', function (hooks) {
     });
     let response = await handle(
       realm,
-      new Request(`${testRealmURL}_search-v2`, {
+      new Request(`${testRealmURL}_search`, {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
@@ -3107,7 +3107,7 @@ module('Integration | realm', function (hooks) {
 
     let response = await handle(
       realm,
-      new Request(`${testRealmURL}_search-v2`, {
+      new Request(`${testRealmURL}_search`, {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
@@ -3135,7 +3135,7 @@ module('Integration | realm', function (hooks) {
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
-    // v2 `/_search-v2` returns `search-entry` resources in `data` (each just an
+    // `/_search` returns `search-entry` resources in `data` (each just an
     // id + refs); the full card resources — the matched results themselves and
     // their `loadLinks`-expanded relationship targets — travel in `included`.
     let entries = json.data as any[];

@@ -433,7 +433,7 @@ module('Acceptance | host mode tests', function (hooks) {
     let realFetch = globalThis.fetch;
     globalThis.fetch = async (input: any, init?: any) => {
       let url = typeof input === 'string' ? input : (input?.url ?? '');
-      if (url.includes('_federated-search-v2') && init?.body) {
+      if (url.includes('_federated-search') && init?.body) {
         let body = JSON.parse(init.body);
         if (body?.filter?.eq?.htmlQuery) {
           capturedHeadQuery = body;
@@ -482,7 +482,7 @@ module('Acceptance | host mode tests', function (hooks) {
     try {
       await visit('/test/Pet/mango.json');
 
-      // The request is the v2 head query: html-only fieldset, the `head`
+      // The request is the head query: html-only fieldset, the `head`
       // htmlQuery, scoped to the visited card.
       assert.deepEqual(
         capturedHeadQuery?.fields,

@@ -4,9 +4,9 @@ import { basename } from 'path';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-// A grep-style guard that the superseded pre-v2 search scaffolding stays
+// A grep-style guard that the superseded search scaffolding stays
 // removed. The platform's search relationships live on `search-entry`, so the
-// pre-v2 in-place additions to the card resource and the old result mappers must
+// superseded in-place additions to the card resource and the old result mappers must
 // not reappear. Each entry asserts a removed identifier is absent from the
 // source file that used to define it.
 
@@ -25,7 +25,7 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
     forbidden: ['RenderedHtmlResource', "'rendered-html'", 'identityOnly'],
   },
   {
-    // The pre-v2 result-mapper builders.
+    // The superseded result-mapper builders.
     file: 'runtime-common/search-resource-helpers.ts',
     forbidden: [
       'buildRenderedHtmlResource',
@@ -34,7 +34,7 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
     ],
   },
   {
-    // The pre-v2 shape predicates.
+    // The superseded shape predicates.
     file: 'runtime-common/card-document-shape.ts',
     forbidden: [
       'isRenderedHtmlResource',
@@ -60,7 +60,7 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
     forbidden: ['searchUnified'],
   },
   {
-    // The pre-v2 federated document type — narrowed back to the original
+    // The superseded federated document type — narrowed back to the original
     // `LinkableCollectionDocument`.
     file: 'runtime-common/document-types.ts',
     forbidden: [
@@ -76,9 +76,9 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
 ];
 
 module(basename(import.meta.filename), function () {
-  module('pre-v2 search surfaces removed', function () {
+  module('superseded search surfaces removed', function () {
     for (let { file, forbidden } of GUARDS) {
-      test(`${file} carries no pre-v2 search surface`, function (assert) {
+      test(`${file} carries no superseded search surface`, function (assert) {
         let contents = source(file);
         for (let token of forbidden) {
           assert.false(
