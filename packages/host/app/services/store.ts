@@ -51,6 +51,7 @@ import {
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
+  clearReplacedArrayFieldMeta,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -979,6 +980,7 @@ export default class StoreService extends Service implements StoreInterface {
         patch.attributes,
         (_dest, src) => (Array.isArray(src) ? src : undefined),
       );
+      clearReplacedArrayFieldMeta(doc.data.meta, patch.attributes);
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(

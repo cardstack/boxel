@@ -3,7 +3,11 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { localId, type SingleCardDocument } from '@cardstack/runtime-common';
+import {
+  fields,
+  localId,
+  type SingleCardDocument,
+} from '@cardstack/runtime-common';
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
@@ -52,6 +56,8 @@ module('Integration | commands | patch-instance', function (hooks) {
 
   hooks.beforeEach(async function () {
     commandService = getService('command-service');
+    class SpecialStringA extends StringField {}
+    class SpecialStringB extends StringField {}
     class Person extends CardDef {
       @field name = contains(StringField);
       @field nickNames = containsMany(StringField);
@@ -64,8 +70,16 @@ module('Integration | commands | patch-instance', function (hooks) {
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          'person.gts': { Person },
+          'person.gts': { Person, SpecialStringA, SpecialStringB },
           'Person/hassan.json': new Person({ name: 'Hassan' }),
+          'Person/polymorphic-nicknames.json': new Person({
+            name: 'Polymorphic Nicknames',
+            nickNames: ['Alpha', 'Beta'],
+            [fields]: {
+              'nickNames.0': SpecialStringA,
+              'nickNames.1': SpecialStringB,
+            },
+          }),
           'Person/jade.json': new Person({ name: 'Jade' }),
           'Person/queenzy.json': new Person({ name: 'Queenzy' }),
           'Person/germaine.json': new Person({ name: 'Germaine' }),
@@ -260,6 +274,70 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes?.nickNames,
       ['Paper'],
       'the containsMany array was fully replaced, not index-merged',
+    );
+  });
+
+  test<TestContextWithSave>('patching a polymorphic containsMany field clears stale field metadata', async function (assert) {
+    let patchInstanceCommand = new PatchCardInstanceCommand(
+      commandService.commandContext,
+      {
+        cardType: PersonDef,
+      },
+    );
+    let cardId = `${testRealmURL}Person/polymorphic-nicknames`;
+    let saves = 0;
+    let savedDoc: SingleCardDocument | undefined;
+    this.onSave((saveURL, doc) => {
+      if (saveURL.href === cardId && typeof doc !== 'string') {
+        saves++;
+        savedDoc = doc as SingleCardDocument;
+      }
+    });
+
+    await patchInstanceCommand.execute({
+      cardId,
+      patch: { attributes: { nickNames: ['Beta'] } },
+    });
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for the first save',
+    });
+
+    assert.deepEqual(
+      savedDoc?.data.attributes?.nickNames,
+      ['Beta'],
+      'the shorter array was persisted',
+    );
+    assert.strictEqual(
+      savedDoc?.data.meta.fields?.['nickNames.0'],
+      undefined,
+      'first index metadata was cleared on replacement',
+    );
+    assert.strictEqual(
+      savedDoc?.data.meta.fields?.['nickNames.1'],
+      undefined,
+      'second index metadata was cleared on replacement',
+    );
+
+    let savesAfterShrink = saves;
+    await patchInstanceCommand.execute({
+      cardId,
+      patch: { attributes: { nickNames: ['Beta', 'Gamma'] } },
+    });
+    await waitUntil(() => saves > savesAfterShrink, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for the second save',
+    });
+
+    assert.deepEqual(
+      savedDoc?.data.attributes?.nickNames,
+      ['Beta', 'Gamma'],
+      'the expanded array was persisted without a reload',
+    );
+    assert.strictEqual(
+      savedDoc?.data.meta.fields?.['nickNames.1'],
+      undefined,
+      'old second index metadata did not come back after expanding',
     );
   });
 
