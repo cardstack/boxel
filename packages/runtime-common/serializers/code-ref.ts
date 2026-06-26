@@ -9,9 +9,7 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index.ts';
-import { resolveModuleHref } from '../code-ref.ts';
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
-import type { VirtualNetwork } from '../virtual-network.ts';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -32,40 +30,33 @@ export function serialize(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
-    virtualNetwork?: VirtualNetwork;
   },
 ): ResolvedCodeRef | {} {
   // The recursive serialize path through a non-primitive `Contains` field
   // intentionally isolates the inner card's serialization from the outer
   // card's opts (see `Contains.serialize` in card-api.gts), so opts can
-  // arrive here as `undefined` or as a synthesized `{ overrides }` object
-  // with no `virtualNetwork`. URL-form refs can still be resolved with
-  // plain URL math; prefix-form refs need a VN and are left alone.
+  // arrive here as `undefined` or as a synthesized `{ overrides }` object.
+  // Identifiers are canonical RRI, so this is pure URL/path math: URL-form
+  // refs resolve against a URL base; prefix-form refs are already portable
+  // and are preserved by `codeRefAdjustments`.
   if (!opts) {
     return { ...codeRef };
   }
-  let vn = opts.virtualNetwork;
   let baseURL: URL | undefined;
   if (opts.relativeTo instanceof URL) {
     baseURL = opts.relativeTo;
-  } else if (typeof opts.relativeTo === 'string') {
-    if (vn) {
-      baseURL = vn.toURL(opts.relativeTo);
-    } else if (
-      opts.relativeTo.startsWith('http://') ||
-      opts.relativeTo.startsWith('https://')
-    ) {
-      baseURL = new URL(opts.relativeTo);
-    }
-  } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    if (vn) {
-      baseURL = vn.toURL(doc.data.id);
-    } else if (
-      doc.data.id.startsWith('http://') ||
-      doc.data.id.startsWith('https://')
-    ) {
-      baseURL = new URL(doc.data.id);
-    }
+  } else if (
+    typeof opts.relativeTo === 'string' &&
+    (opts.relativeTo.startsWith('http://') ||
+      opts.relativeTo.startsWith('https://'))
+  ) {
+    baseURL = new URL(opts.relativeTo);
+  } else if (
+    doc?.data?.id &&
+    typeof doc.data.id === 'string' &&
+    (doc.data.id.startsWith('http://') || doc.data.id.startsWith('https://'))
+  ) {
+    baseURL = new URL(doc.data.id);
   }
   return {
     ...codeRef,
@@ -94,17 +85,14 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   if (!store) {
     // Reached only by direct test callers that bypass the framework
-    // protocol; the framework's field-deserialize path always supplies
-    // a store. Without a VN we can't resolve prefix-form refs or
-    // round-trip URL-form refs through registered mappings, so leave
-    // the codeRef untouched.
+    // protocol; the framework's field-deserialize path always supplies a
+    // store. Preserve the historical "leave the codeRef untouched" behavior
+    // for that path.
     return { ...codeRef } as BaseInstanceType<T>;
   }
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, relativeTo, {
-      virtualNetwork: store.virtualNetwork,
-    }),
+    ...codeRefAdjustments(codeRef, relativeTo, {}),
   } as BaseInstanceType<T>;
 }
 
@@ -115,7 +103,6 @@ function codeRefAdjustments(
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
-    virtualNetwork?: VirtualNetwork;
   },
 ) {
   if (!codeRef) {
@@ -124,41 +111,41 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
-  // opts may arrive without a VN — the recursive non-primitive-Contains
-  // serialize path isolates inner cards from the outer card's opts, and
-  // `deserializeAbsolute` may also be called without a store. URL-like
-  // refs still resolve through plain URL math; bare specifiers fall
-  // through to the loader's importMap shim via the surrounding try/catch.
-  let vn = opts?.virtualNetwork;
+  // Identifiers are canonical RRI here, so resolution is plain URL math —
+  // no VirtualNetwork. A URL-form module joins against a URL-form base; a
+  // scoped RRI / bare specifier is already portable and is preserved.
+  let urlBase: URL | string | undefined =
+    relativeTo instanceof URL
+      ? relativeTo
+      : typeof relativeTo === 'string' &&
+          (relativeTo.startsWith('http://') ||
+            relativeTo.startsWith('https://'))
+        ? relativeTo
+        : undefined;
   let resolve = (ref: string) => {
-    if (vn) {
-      return resolveModuleHref(ref, relativeTo, vn);
-    }
     if (!isUrlLike(ref)) {
       throw new Error(
-        `Cannot resolve bare package specifier "${ref}" — no matching prefix mapping registered`,
+        `Cannot resolve bare package specifier "${ref}" — not a URL`,
       );
     }
-    return new URL(ref, relativeTo).href;
+    return new URL(ref, urlBase).href;
   };
   if (!isUrlLike(codeRef.module)) {
     // A scoped RRI (e.g. `@cardstack/base/card-api`) is already the canonical,
     // deployment-independent portable form. Preserve it verbatim rather than
-    // resolving it to a concrete realm URL: resolution maps the prefix to the
-    // serializing realm's real base URL, baking an environment-specific (and
-    // possibly cross-origin) URL into the stored card and defeating the
-    // portability the RRI exists to provide. (A URL-form alias is left as-is
-    // by `resolveURL`, so this matches how the alias form round-trips.)
-    if (vn?.isRegisteredPrefix(codeRef.module)) {
+    // resolving it to a concrete realm URL: resolution would bake an
+    // environment-specific (and possibly cross-origin) URL into the stored
+    // card and defeat the portability the RRI exists to provide.
+    if (codeRef.module.startsWith('@')) {
       let module: string = codeRef.module;
       if (opts?.trimExecutableExtension) {
         module = trimExecutableExtension(rri(module));
       }
       return { module };
     }
-    // Otherwise it is a loader-only bare specifier (e.g. a boxel-host
-    // command). Try registered prefix mappings, and if unresolvable leave it
-    // for the loader's importMap shim via the surrounding try/catch.
+    // Otherwise it is a non-scoped bare specifier. Try plain URL resolution,
+    // and if unresolvable leave it for the loader's importMap shim via the
+    // surrounding try/catch.
     try {
       let resolved = resolve(codeRef.module);
       if (resolved !== codeRef.module) {

@@ -127,6 +127,53 @@ export function maybeRelativeReference(
   return reference instanceof URL ? reference.href : reference;
 }
 
+// Synthetic origin used to borrow the URL parser's path-normalization for
+// prefix-form RRI bases. The host is invalid-by-construction so it can never
+// collide with a real realm URL.
+const RRI_SYNTHETIC_ORIGIN = 'https://rri.invalid';
+
+// Resolve a (possibly relative) reference against `relativeTo`, in RRI space,
+// without consulting realm mappings — the inverse of `relativeReference`.
+// Identifiers are already in canonical RRI form once they reach here (a card's
+// own id / a relationship `links.self`), so this is pure form-preserving path
+// math:
+//   - an absolute reference (URL form, or `@scope/name` prefix form) is already
+//     canonical — returned unchanged;
+//   - a relative reference is joined onto the base. A URL-form base uses the
+//     native URL parser; a prefix-form base borrows the parser via a synthetic
+//     origin, then the `@scope/name` namespace is restored.
+// Falls back to the reference unchanged when there is no usable base.
+export function resolveRRIReference(
+  reference: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+): string {
+  if (
+    reference.startsWith('http://') ||
+    reference.startsWith('https://') ||
+    reference.startsWith('@')
+  ) {
+    return reference;
+  }
+  if (relativeTo == null) {
+    return reference;
+  }
+  let base = relativeTo instanceof URL ? relativeTo.href : relativeTo;
+  if (base.startsWith('http://') || base.startsWith('https://')) {
+    return new URL(reference, base).href;
+  }
+  // Prefix-form RRI base. The namespace is the first two segments
+  // (`@scope/name`), matching `sharedNamespace`; the remainder is the in-realm
+  // path the reference resolves against.
+  let parts = base.split('/');
+  if (parts.length >= 2 && parts[0].startsWith('@')) {
+    let namespace = `${parts[0]}/${parts[1]}`;
+    let path = base.slice(namespace.length) || '/';
+    let resolved = new URL(reference, `${RRI_SYNTHETIC_ORIGIN}${path}`);
+    return `${namespace}${resolved.pathname}${resolved.search}${resolved.hash}`;
+  }
+  return reference;
+}
+
 export function trimJsonExtension(str: string) {
   return str.replace(/\.json$/, '');
 }

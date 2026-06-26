@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 
 import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
 import {
-  VirtualNetwork,
   baseRealm,
   loadCardDef,
   rri,
@@ -195,7 +194,6 @@ module('code-ref', function (hooks) {
     let doc = { data: { id: base.href } };
     let serialized = CodeRefSerializer.serialize(ref, doc, undefined, {
       relativeTo: base,
-      virtualNetwork: new VirtualNetwork(),
     }) as any;
     assert.strictEqual(
       serialized.module,

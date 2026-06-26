@@ -93,6 +93,7 @@ import {
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
   rri,
+  resolveRRIReference,
   type RealmResourceIdentifier,
   type VirtualNetwork,
   isDirectIndexedFieldKey,
@@ -1433,7 +1434,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveRef(store.virtualNetwork, reference, relativeTo);
+    let href = resolveRef(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -2006,11 +2007,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveRef(
-          store.virtualNetwork,
-          reference,
-          relativeTo,
-        );
+        let normalizedReference = resolveRef(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2463,11 +2460,7 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
-        return resolveRef(
-          getStore(value).virtualNetwork,
-          maybeRelativeReference,
-          value[relativeTo],
-        );
+        return resolveRef(maybeRelativeReference, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2498,11 +2491,7 @@ export class BaseDef {
             if (isNonPresentLink(rawValue)) {
               let normalizedId = rawValue.reference;
               if (value[relativeTo]) {
-                normalizedId = resolveRef(
-                  getStore(value).virtualNetwork,
-                  normalizedId,
-                  value[relativeTo],
-                );
+                normalizedId = resolveRef(normalizedId, value[relativeTo]);
               }
               return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
             }
@@ -3472,11 +3461,7 @@ function lazilyLoadLink(
     inflightLinkLoads.set(instance, inflightLoads);
   }
   let store = getStore(instance);
-  let reference = resolveRef(
-    store.virtualNetwork,
-    link,
-    instance.id ?? instance[relativeTo],
-  );
+  let reference = resolveRef(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   if (promise) {
@@ -3592,7 +3577,6 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3680,7 +3664,6 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -4819,35 +4802,16 @@ export function virtualNetworkFor(
   }
 }
 
-// Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the supplied VirtualNetwork. When the caller can't supply
-// one (test stubs, detached instances), fall back to plain URL math: it
-// covers URL-form refs and relative refs against URL-form bases. Prefix-form
-// refs and refs against prefix-form bases can't be resolved without a VN —
-// `new URL()` throws on those, so we return the raw reference unchanged
-// instead of bubbling the error to callers (e.g. relationship deserialize
-// uses the returned string as a "did this resolve?" signal).
+// Resolve a (possibly relative) reference to its absolute canonical RRI,
+// relative to `relativeTo`. Identifiers are canonical RRI by the time they
+// reach here, so this is pure form-preserving path math (see
+// `resolveRRIReference`) — no VirtualNetwork, no realm-mapping lookup. The
+// returned string is used as an opaque store key / "did this resolve?" signal.
 function resolveRef(
-  virtualNetwork: VirtualNetwork | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
-  if (virtualNetwork) {
-    return virtualNetwork.resolveURL(reference, relativeTo).href;
-  }
-  let base: URL | string | undefined;
-  if (relativeTo instanceof URL) {
-    base = relativeTo;
-  } else if (typeof relativeTo === 'string') {
-    if (relativeTo.startsWith('http://') || relativeTo.startsWith('https://')) {
-      base = relativeTo;
-    }
-  }
-  try {
-    return new URL(reference, base).href;
-  } catch {
-    return reference;
-  }
+  return resolveRRIReference(reference, relativeTo);
 }
 
 function myLoader(): Loader {
