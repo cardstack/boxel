@@ -1,6 +1,7 @@
 import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { cleanContent } from '@cardstack/runtime-common/ai';
+import { LOAD_SKILL_TOOL_NAME } from './load-skill.ts';
 
 export default class ResponseState {
   latestReasoning: string = '';
@@ -50,6 +51,11 @@ export default class ResponseState {
           return false;
         }
         if (name === 'checkCorrectness') {
+          return false;
+        }
+        // loadSkill runs inside the bot, not on the host — never surface it as
+        // a command request for the user to execute.
+        if (name === LOAD_SKILL_TOOL_NAME) {
           return false;
         }
         if (this.allowedToolNames && !this.allowedToolNames.has(name)) {

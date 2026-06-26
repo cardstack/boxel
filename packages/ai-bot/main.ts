@@ -35,6 +35,11 @@ import {
 
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
+import { loadSkillTool } from './lib/load-skill.ts';
+import {
+  buildLoadSkillFollowup,
+  LOAD_SKILL_MAX_ROUNDS,
+} from './lib/load-skill-loop.ts';
 import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
@@ -104,14 +109,21 @@ class Assistant {
     );
   }
 
-  getResponse(prompt: PromptParts, senderMatrixUserId?: string) {
+  getResponse(
+    prompt: PromptParts,
+    senderMatrixUserId?: string,
+    // Lets the loadSkill loop re-run a turn with tool results appended without
+    // rebuilding the rest of the prompt.
+    messagesOverride?: ChatCompletionMessageParam[],
+  ) {
     if (!prompt.model) {
       throw new Error('Model is required');
     }
 
     let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
       model: this.getModel(prompt),
-      messages: prompt.messages as ChatCompletionMessageParam[],
+      messages:
+        messagesOverride ?? (prompt.messages as ChatCompletionMessageParam[]),
     };
 
     if (prompt.reasoningEffort !== undefined) {
@@ -125,6 +137,13 @@ class Assistant {
     ) {
       request.tools = prompt.tools;
       request.tool_choice = prompt.toolChoice;
+    }
+
+    // Offer the bot-executed loadSkill tool whenever delegation is configured,
+    // even in rooms that carry no other tools. Inert otherwise: with no secret
+    // the manager is disabled and the tool is never advertised.
+    if (prompt.toolsSupported === true && this.delegatedRealmSessions.enabled) {
+      request.tools = [...(request.tools ?? []), loadSkillTool];
     }
 
     if (senderMatrixUserId) {
@@ -485,68 +504,113 @@ Common issues are:
                   model: promptParts.model,
                 });
               }
-              const runner = assistant
-                .getResponse(promptParts, senderMatrixUserId)
-                .on('chunk', async (chunk, snapshot) => {
-                  log.info(`[${eventId}] Received chunk %s`, chunk.id);
-                  if (profEnabled() && firstChunkAt == null) {
-                    firstChunkAt = Date.now();
-                    profNote(eventId, 'llm:ttft', {
-                      ms: firstChunkAt - requestStart,
-                      model: promptParts.model,
-                    });
-                  }
-                  generationId = chunk.id;
-                  if (chunk.usage && (chunk.usage as any).cost != null) {
-                    costInUsd = (chunk.usage as any).cost;
-                  }
-                  let activeGeneration = activeGenerations.get(room.roomId);
-                  if (activeGeneration) {
-                    activeGeneration.lastGeneratedChunkId = generationId;
-                  }
-
-                  let chunkProcessingResult = await profTime(
-                    eventId,
-                    'llm:chunk:onChunk',
-                    async () => responder.onChunk(chunk, snapshot),
-                  );
-                  let chunkProcessingResultError = chunkProcessingResult.find(
-                    (promiseResult) =>
-                      promiseResult &&
-                      'errorMessage' in promiseResult &&
-                      promiseResult.errorMessage != null,
-                  ) as { errorMessage: string } | undefined;
-
-                  if (chunkProcessingResultError) {
-                    chunkHandlingError =
-                      chunkProcessingResultError.errorMessage;
-
-                    // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-                    // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-                    // where the await responder.finalize() is called (the catch block below will handle this)
-                    runner.abort();
-                  }
-                })
-                .on('error', async (error) => {
-                  await responder.onError(error);
-                });
-
-              activeGenerations.set(room.roomId, {
-                responder,
-                runner,
-                lastGeneratedChunkId: generationId,
-                completionPromise: generationCompletionPromise,
-              });
+              // Messages for the current round. The loadSkill loop appends the
+              // assistant's tool call and the fetched skill content here, then
+              // generates again.
+              let workingMessages: ChatCompletionMessageParam[] =
+                promptParts.messages as ChatCompletionMessageParam[];
+              let loadSkillRounds = 0;
 
               try {
-                await profTime(eventId, 'llm:finalChatCompletion', async () =>
-                  runner.finalChatCompletion(),
-                );
-                log.info(`[${eventId}] Generation complete`);
-                await profTime(eventId, 'response:finalize', async () =>
-                  responder.finalize(),
-                );
-                log.info(`[${eventId}] Response finalized`);
+                // Usually one pass. When the model calls only the bot-executed
+                // loadSkill tool, run those calls and generate again with the
+                // results in context, up to LOAD_SKILL_MAX_ROUNDS.
+                for (;;) {
+                  let roundCostInUsd: number | undefined;
+                  const runner = assistant
+                    .getResponse(
+                      promptParts,
+                      senderMatrixUserId,
+                      workingMessages,
+                    )
+                    .on('chunk', async (chunk, snapshot) => {
+                      log.info(`[${eventId}] Received chunk %s`, chunk.id);
+                      if (profEnabled() && firstChunkAt == null) {
+                        firstChunkAt = Date.now();
+                        profNote(eventId, 'llm:ttft', {
+                          ms: firstChunkAt - requestStart,
+                          model: promptParts.model,
+                        });
+                      }
+                      generationId = chunk.id;
+                      if (chunk.usage && (chunk.usage as any).cost != null) {
+                        roundCostInUsd = (chunk.usage as any).cost;
+                      }
+                      let activeGeneration = activeGenerations.get(room.roomId);
+                      if (activeGeneration) {
+                        activeGeneration.lastGeneratedChunkId = generationId;
+                      }
+
+                      let chunkProcessingResult = await profTime(
+                        eventId,
+                        'llm:chunk:onChunk',
+                        async () => responder.onChunk(chunk, snapshot),
+                      );
+                      let chunkProcessingResultError =
+                        chunkProcessingResult.find(
+                          (promiseResult) =>
+                            promiseResult &&
+                            'errorMessage' in promiseResult &&
+                            promiseResult.errorMessage != null,
+                        ) as { errorMessage: string } | undefined;
+
+                      if (chunkProcessingResultError) {
+                        chunkHandlingError =
+                          chunkProcessingResultError.errorMessage;
+
+                        // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                        // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                        // where the await responder.finalize() is called (the catch block below will handle this)
+                        runner.abort();
+                      }
+                    })
+                    .on('error', async (error) => {
+                      await responder.onError(error);
+                    });
+
+                  activeGenerations.set(room.roomId, {
+                    responder,
+                    runner,
+                    lastGeneratedChunkId: generationId,
+                    completionPromise: generationCompletionPromise,
+                  });
+
+                  let completion = await profTime(
+                    eventId,
+                    'llm:finalChatCompletion',
+                    async () => runner.finalChatCompletion(),
+                  );
+                  // Each round's chunk usage reports that round's running total;
+                  // sum them so billing sees the whole turn.
+                  if (typeof roundCostInUsd === 'number') {
+                    costInUsd = (costInUsd ?? 0) + roundCostInUsd;
+                  }
+
+                  let message = completion.choices?.[0]?.message;
+                  if (
+                    message &&
+                    senderMatrixUserId &&
+                    assistant.delegatedRealmSessions.enabled &&
+                    loadSkillRounds < LOAD_SKILL_MAX_ROUNDS
+                  ) {
+                    let followup = await buildLoadSkillFollowup(message, {
+                      onBehalfOf: senderMatrixUserId,
+                      delegatedRealmSessions: assistant.delegatedRealmSessions,
+                    });
+                    if (followup.length > 0) {
+                      workingMessages = [...workingMessages, ...followup];
+                      loadSkillRounds++;
+                      continue;
+                    }
+                  }
+
+                  log.info(`[${eventId}] Generation complete`);
+                  await profTime(eventId, 'response:finalize', async () =>
+                    responder.finalize(),
+                  );
+                  log.info(`[${eventId}] Response finalized`);
+                  break;
+                }
               } catch (error) {
                 // When the cancel handler aborts the runner,
                 // finalChatCompletion() throws APIUserAbortError.
