@@ -19,6 +19,7 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
+import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import {
   isMatrixError,
@@ -100,19 +101,22 @@ export default class Login extends Component<Signature> {
         {{#if this.error}}
           <div class='error' data-test-login-error>{{this.error}}</div>
         {{/if}}
-        <span class='or'>or</span>
         {{#if this.showGoogleButton}}
           <Button
-            class='button google-button'
+            class='button secondary-cta google-button'
             data-test-google-login-btn
-            @kind='secondary'
+            @kind='secondary-dark'
             @loading={{this.doGoogleSso.isRunning}}
             {{on 'click' this.startGoogleSso}}
-          >Sign in with Google</Button>
+          >
+            <GoogleColor class='google-g' />
+            Sign in with Google
+          </Button>
         {{/if}}
         <Button
-          class='button'
+          class='button secondary-cta'
           data-test-register-user
+          @kind='secondary-dark'
           {{on 'click' (fn @setMode 'register')}}
         >Create a new Boxel account</Button>
       </form>
@@ -125,6 +129,7 @@ export default class Login extends Component<Signature> {
       }
       .title {
         font: 600 var(--boxel-font-md);
+        color: var(--foreground);
         margin-bottom: var(--boxel-sp-sm);
         padding: 0;
       }
@@ -141,7 +146,7 @@ export default class Login extends Component<Signature> {
         padding: 0;
         margin-bottom: var(--boxel-sp-lg);
         margin-left: auto;
-        color: var(--boxel-dark);
+        color: var(--foreground);
         font: 500 var(--boxel-font-xs);
       }
       .forgot-password:hover {
@@ -157,12 +162,24 @@ export default class Login extends Component<Signature> {
         justify-content: center;
         align-items: center;
       }
-      .google-button {
-        margin-bottom: var(--boxel-sp-sm);
+      .secondary-cta {
+        /* Sit a hair lighter than the page bg so the dark CTAs pop. */
+        --boxel-button-color: var(--boxel-700);
+        margin-top: var(--boxel-sp-sm);
       }
-      .or {
-        margin: var(--boxel-sp-sm) auto;
-        font: 500 var(--boxel-font-sm);
+      .secondary-cta:not(:disabled):hover,
+      .secondary-cta:not(:disabled):active {
+        --boxel-button-color: var(--boxel-600);
+      }
+      .google-button {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .google-g {
+        width: 1.125rem;
+        height: 1.125rem;
+        flex-shrink: 0;
       }
       .error {
         color: var(--boxel-error-100);

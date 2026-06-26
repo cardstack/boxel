@@ -220,10 +220,10 @@ export default class RegisterUser extends Component<Signature> {
             @loading={{this.doRegistrationFlow.isRunning}}
             {{on 'click' this.register}}
           >Create Account</Button>
-          <span class='or'>or</span>
           <Button
             data-test-cancel-btn
-            class='button'
+            class='button secondary-cta'
+            @kind='secondary-dark'
             {{on 'click' (fn @setMode 'login')}}
           >Login with an existing account</Button>
         </div>
@@ -232,7 +232,11 @@ export default class RegisterUser extends Component<Signature> {
     <style scoped>
       .title {
         font: 600 var(--boxel-font-md);
+        color: var(--foreground);
         margin-bottom: var(--boxel-sp-sm);
+      }
+      p {
+        color: var(--foreground);
       }
       .button-wrapper {
         width: 100%;
@@ -241,6 +245,7 @@ export default class RegisterUser extends Component<Signature> {
         flex-direction: column;
         justify-content: center;
         align-items: center;
+        gap: var(--boxel-sp-sm);
       }
       .button {
         --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
@@ -248,15 +253,19 @@ export default class RegisterUser extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         width: 100%;
       }
-      .or {
-        margin: var(--boxel-sp-sm);
-        font: 500 var(--boxel-font-sm);
+      .secondary-cta {
+        /* Sit a hair lighter than the page bg so the dark CTA pops. */
+        --boxel-button-color: var(--boxel-700);
+      }
+      .secondary-cta:not(:disabled):hover,
+      .secondary-cta:not(:disabled):active {
+        --boxel-button-color: var(--boxel-600);
       }
       .registration-field {
         margin-top: var(--boxel-sp);
       }
       .registration-field :deep(.text-accessory) {
-        color: var(--boxel-450);
+        color: var(--muted-foreground);
       }
       .registration-field :deep(.validation-icon-container.invalid) {
         display: none;
@@ -293,6 +302,7 @@ export default class RegisterUser extends Component<Signature> {
         list-style-position: inside;
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
+        color: var(--foreground);
       }
       .email-validation-instruction li {
         margin-bottom: var(--boxel-sp-sm);

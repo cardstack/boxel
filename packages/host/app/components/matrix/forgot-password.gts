@@ -72,10 +72,10 @@ export default class ForgotPassword extends Component<Signature> {
           @loading={{this.sendEmailValidationTask.isRunning}}
           {{on 'click' this.sendEmailValidation}}
         >Reset Your Password</Button>
-        <span class='or'>or</span>
         <Button
-          class='button'
+          class='button secondary-cta'
           data-test-cancel-reset-password-btn
+          @kind='secondary-dark'
           {{on 'click' (fn @setMode 'login')}}
         >Back to login</Button>
       </div>
@@ -171,6 +171,7 @@ export default class ForgotPassword extends Component<Signature> {
     <style scoped>
       .title {
         font: 600 var(--boxel-font-md);
+        color: var(--foreground);
         margin-bottom: var(--boxel-sp);
       }
       .info {
@@ -178,6 +179,7 @@ export default class ForgotPassword extends Component<Signature> {
         margin-bottom: var(--boxel-sp-sm);
         letter-spacing: var(--boxel-lsp);
         line-height: 20px;
+        color: var(--foreground);
       }
       .field {
         margin-top: var(--boxel-sp);
@@ -212,19 +214,24 @@ export default class ForgotPassword extends Component<Signature> {
         justify-content: center;
         align-items: center;
         margin-top: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-sm);
       }
       .button-wrapper button {
         margin: 0;
         width: 100%;
       }
-      .or {
-        margin: var(--boxel-sp-sm);
-        font: 500 var(--boxel-font-sm);
-      }
       .button {
         --boxel-button-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         width: fit-content;
         min-width: 148px;
+      }
+      .secondary-cta {
+        /* Sit a hair lighter than the page bg so the dark CTA pops. */
+        --boxel-button-color: var(--boxel-700);
+      }
+      .secondary-cta:not(:disabled):hover,
+      .secondary-cta:not(:disabled):active {
+        --boxel-button-color: var(--boxel-600);
       }
       .button :deep(.boxel-loading-indicator) {
         display: flex;
@@ -236,6 +243,7 @@ export default class ForgotPassword extends Component<Signature> {
         list-style-position: inside;
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
+        color: var(--foreground);
       }
       .email-validation-instruction li {
         margin-bottom: var(--boxel-sp-sm);
@@ -248,6 +256,7 @@ export default class ForgotPassword extends Component<Signature> {
         text-align: center;
       }
       .error a {
+        color: var(--boxel-highlight);
         text-decoration: underline;
       }
     </style>
