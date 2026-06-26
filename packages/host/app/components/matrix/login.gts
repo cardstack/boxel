@@ -184,11 +184,11 @@ export default class Login extends Component<Signature> {
         justify-content: center;
         align-items: center;
       }
-      [data-test-login-btn] {
+      .kind-primary {
         --boxel-button-color: var(--auth-primary-bg);
         --boxel-button-text-color: var(--auth-primary-text);
       }
-      [data-test-login-btn]:disabled {
+      .kind-primary:disabled {
         --boxel-button-color: var(--auth-primary-disabled-bg);
         --boxel-button-text-color: var(--auth-primary-disabled-text);
         --boxel-button-border: none;

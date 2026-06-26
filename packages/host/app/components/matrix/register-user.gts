@@ -311,13 +311,11 @@ export default class RegisterUser extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         width: 100%;
       }
-      [data-test-register-btn],
-      [data-test-next-btn] {
+      .kind-primary {
         --boxel-button-color: var(--auth-primary-bg);
         --boxel-button-text-color: var(--auth-primary-text);
       }
-      [data-test-register-btn]:disabled,
-      [data-test-next-btn]:disabled {
+      .kind-primary:disabled {
         --boxel-button-color: var(--auth-primary-disabled-bg);
         --boxel-button-text-color: var(--auth-primary-disabled-text);
         --boxel-button-border: none;
@@ -330,15 +328,6 @@ export default class RegisterUser extends Component<Signature> {
       .secondary-cta:not(:disabled):hover,
       .secondary-cta:not(:disabled):active {
         --boxel-button-color: var(--auth-secondary-hover-bg);
-      }
-      .resend-email {
-        --boxel-button-color: var(--auth-primary-bg);
-        --boxel-button-text-color: var(--auth-primary-text);
-      }
-      .resend-email:disabled {
-        --boxel-button-color: var(--auth-primary-disabled-bg);
-        --boxel-button-text-color: var(--auth-primary-disabled-text);
-        --boxel-button-border: none;
       }
       .registration-field {
         margin-top: var(--boxel-sp);

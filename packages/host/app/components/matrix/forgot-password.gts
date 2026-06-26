@@ -225,17 +225,11 @@ export default class ForgotPassword extends Component<Signature> {
         width: fit-content;
         min-width: 148px;
       }
-      [data-test-reset-your-password-btn],
-      [data-test-resend-validation-btn],
-      [data-test-reset-password-btn],
-      [data-test-back-to-login-btn] {
+      .kind-primary {
         --boxel-button-color: var(--auth-primary-bg);
         --boxel-button-text-color: var(--auth-primary-text);
       }
-      [data-test-reset-your-password-btn]:disabled,
-      [data-test-resend-validation-btn]:disabled,
-      [data-test-reset-password-btn]:disabled,
-      [data-test-back-to-login-btn]:disabled {
+      .kind-primary:disabled {
         --boxel-button-color: var(--auth-primary-disabled-bg);
         --boxel-button-text-color: var(--auth-primary-disabled-text);
         --boxel-button-border: none;
