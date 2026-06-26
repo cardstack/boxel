@@ -60,7 +60,7 @@ export default class RegisterUser extends Component<Signature> {
   <template>
     {{#if (eq this.currentPage 'awaiting-validation')}}
       <span class='title' data-test-email-validation>Please check your email to
-        complete registration.</span>
+        complete registration</span>
       <ul class='email-validation-instruction'>
         <li>Leave this window open while we verify your email</li>
         <li>This screen will update once your email is verified</li>
@@ -74,16 +74,17 @@ export default class RegisterUser extends Component<Signature> {
         @loading={{this.validateEmail.isRunning}}
       >Resend Email</Button>
     {{else if (eq this.currentPage 'account-creation')}}
-      <span class='title' data-test-email-validation-complete>
-        Email validation complete
-      </span>
-      <p>
-        Please wait as we set up your account.
-      </p>
-      <LoadingIndicator />
+      <div class='centered-loading'>
+        <span class='loading-title' data-test-email-validation-complete>Email
+          validation complete</span>
+        <p class='loading-message'>Please wait as we set up your account.</p>
+        <LoadingIndicator class='loading-spinner' />
+      </div>
     {{else if (eq this.currentPage 'token-form')}}
+      <span class='title'>Boxel is currently invite-only.<br />Enter your invite
+        code here.</span>
       <FieldContainer
-        @label='This site is currently invite-only. Enter your invite code here.'
+        @label='Your invite code'
         @tag='label'
         class='registration-field'
         @vertical={{true}}
@@ -92,6 +93,7 @@ export default class RegisterUser extends Component<Signature> {
           data-test-token-field
           @state={{this.tokenInputState}}
           @value={{this.token}}
+          @placeholder='Enter invite code'
           @errorMessage={{this.tokenError}}
           @onInput={{this.setToken}}
         />
@@ -119,6 +121,7 @@ export default class RegisterUser extends Component<Signature> {
             data-test-name-field
             @state={{this.nameInputState}}
             @value={{this.name}}
+            @placeholder='Enter your name'
             @errorMessage={{this.nameError}}
             @onInput={{this.setName}}
             @onBlur={{this.checkName}}
@@ -136,6 +139,7 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='email'
             @state={{this.emailInputState}}
             @value={{this.email}}
+            @placeholder='Enter your email'
             @errorMessage={{this.emailError}}
             @onInput={{this.setEmail}}
             @onBlur={{this.checkEmail}}
@@ -154,6 +158,7 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='username'
             @state={{this.usernameInputState}}
             @value={{this.username}}
+            @placeholder='Your username'
             @errorMessage={{this.usernameError}}
             @onInput={{this.setUsername}}
             @onBlur={{this.checkUsername}}
@@ -166,6 +171,11 @@ export default class RegisterUser extends Component<Signature> {
               <Accessories.Text>{{matrixServerName}}</Accessories.Text>
             </:after>
           </BoxelInputGroup>
+          {{#if this.isUsernameValidAndAvailable}}
+            <p class='validation-hint' data-test-username-available><CheckMark
+                class='validation-hint-icon'
+              />name available</p>
+          {{/if}}
         </FieldContainer>
         <FieldContainer
           @label='Password'
@@ -180,11 +190,17 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='new-password'
             @type='password'
             @value={{this.password}}
+            @placeholder='Your password'
             @state={{this.passwordInputState}}
             @errorMessage={{this.passwordError}}
             @onInput={{this.setPassword}}
             @onBlur={{this.checkPassword}}
           />
+          {{#if this.isPasswordValid}}
+            <p class='validation-hint' data-test-password-valid><CheckMark
+                class='validation-hint-icon'
+              />password is valid</p>
+          {{/if}}
         </FieldContainer>
         <FieldContainer
           @label='Confirm Password'
@@ -199,11 +215,17 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='new-password'
             @type='password'
             @value={{this.confirmPassword}}
+            @placeholder='Re-enter your password'
             @state={{this.confirmPasswordInputState}}
             @errorMessage={{this.confirmPasswordError}}
             @onInput={{this.setConfirmPassword}}
             @onBlur={{this.checkConfirmPassword}}
           />
+          {{#if this.isConfirmPasswordValid}}
+            <p class='validation-hint' data-test-passwords-match><CheckMark
+                class='validation-hint-icon'
+              />passwords match</p>
+          {{/if}}
         </FieldContainer>
         {{#if this.formError}}
           <div
@@ -237,6 +259,42 @@ export default class RegisterUser extends Component<Signature> {
       }
       p {
         color: var(--foreground);
+      }
+      .centered-loading {
+        align-self: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        text-align: center;
+      }
+      .loading-title {
+        font: 600 var(--boxel-font-md);
+        color: var(--foreground);
+      }
+      .loading-message {
+        margin: 0;
+        color: var(--foreground);
+        font: 500 var(--boxel-font-sm);
+      }
+      .loading-spinner {
+        --boxel-loading-indicator-size: var(--boxel-icon-md);
+        --loading-indicator-color: var(--boxel-highlight);
+        margin-top: var(--boxel-sp-xs);
+      }
+      .validation-hint {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        margin: var(--boxel-sp-xxs) 0 0;
+        color: var(--muted-foreground);
+        font: 500 var(--boxel-font-xs);
+      }
+      .validation-hint-icon {
+        --icon-color: var(--boxel-highlight);
+        width: 0.875rem;
+        height: 0.875rem;
+        flex-shrink: 0;
       }
       .button-wrapper {
         width: 100%;
@@ -308,11 +366,11 @@ export default class RegisterUser extends Component<Signature> {
         margin-bottom: var(--boxel-sp-sm);
       }
       .resend-email {
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        --boxel-button-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         --boxel-button-font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
-        width: fit-content;
-        min-width: 148px;
+        width: 100%;
+        margin-top: var(--boxel-sp);
       }
       .error-message {
         color: var(--boxel-error-100);
@@ -445,6 +503,31 @@ export default class RegisterUser extends Component<Signature> {
 
   private get isNextButtonDisabled() {
     return !this.token || this.doRegistrationFlow.isRunning;
+  }
+
+  private get isUsernameValidAndAvailable() {
+    return (
+      Boolean(this.username) &&
+      !this.usernameError &&
+      !this.checkUsernameAvailability.isRunning &&
+      this.isUsernameAvailable
+    );
+  }
+
+  private get isPasswordValid() {
+    return (
+      Boolean(this.password) &&
+      !this.passwordError &&
+      isValidPassword(this.password)
+    );
+  }
+
+  private get isConfirmPasswordValid() {
+    return (
+      Boolean(this.confirmPassword) &&
+      !this.confirmPasswordError &&
+      this.confirmPassword === this.password
+    );
   }
 
   private get nameInputState() {
