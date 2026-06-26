@@ -44,10 +44,8 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
 import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
-import handleSearch from './handlers/handle-search.ts';
 import handleSearchV2 from './handlers/handle-search-v2.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
-import handleSearchPrerendered from './handlers/handle-search-prerendered.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
@@ -202,17 +200,6 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
-  // Deprecated: legacy federated live-card search (the bound `handleSearch`
-  // carries the `@deprecated` tag). Prefer the v2 `search-entry`
-  // endpoint `/_federated-search-v2` (`handleSearchV2`), which returns one
-  // heterogeneous result stream — prerendered HTML or live serialization. Kept
-  // as a compat layer over the shared search engine; removed once every
-  // consumer is on v2.
-  router.all(
-    '/_federated-search',
-    multiRealmAuthorization(args),
-    handleSearch({ reconciler: args.reconciler, searchCache }),
-  );
   router.all(
     '/_federated-search-v2',
     multiRealmAuthorization(args),
@@ -233,17 +220,6 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
     }),
-  );
-  // Deprecated: legacy federated prerendered-HTML search (the bound
-  // `handleSearchPrerendered` carries the `@deprecated` tag). Prefer the v2
-  // `search-entry` endpoint `/_federated-search-v2` (`handleSearchV2`), which
-  // carries prerendered HTML and the live serialization in one heterogeneous
-  // result rather than a dedicated prerendered shape. Kept as a compat layer
-  // over the shared search engine; removed once every consumer is on v2.
-  router.all(
-    '/_federated-search-prerendered',
-    multiRealmAuthorization(args),
-    handleSearchPrerendered({ reconciler: args.reconciler, searchCache }),
   );
   router.post(
     '/_prerender-card',

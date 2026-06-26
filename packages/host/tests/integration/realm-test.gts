@@ -6,7 +6,12 @@ import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { baseRealm, baseRealmRRI, rri } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  baseRealmRRI,
+  rri,
+  searchEntryWireQueryFromQuery,
+} from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -43,6 +48,7 @@ import {
   field,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -404,12 +410,15 @@ module('Integration | realm', function (hooks) {
     {
       let response = await handle(
         realm,
-        new Request(`${testRealmURL}root/_search`, {
+        new Request(`${testRealmURL}root/_search-v2`, {
           method: 'QUERY',
           headers: {
             Accept: 'application/vnd.card+json',
+            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify(
+            searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+          ),
         }),
       );
       let json = await response.json();
@@ -978,7 +987,7 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await queryEngine.searchCards({
+    let { data: cards } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: rri(`${testModuleRealm}person`),
@@ -2707,7 +2716,7 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await queryEngine.searchCards({});
+    let { data: cards } = await searchCardsForTest(queryEngine, {});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2758,7 +2767,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await queryEngine.searchCards({})).data;
+    cards = (await searchCardsForTest(queryEngine, {})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
@@ -3006,12 +3015,15 @@ module('Integration | realm', function (hooks) {
     });
     let response = await handle(
       realm,
-      new Request(`${testRealmURL}_search`, {
+      new Request(`${testRealmURL}_search-v2`, {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+        ),
       }),
     );
     let json = await response.json();
@@ -3095,32 +3107,43 @@ module('Integration | realm', function (hooks) {
 
     let response = await handle(
       realm,
-      new Request(`${testRealmURL}_search`, {
+      new Request(`${testRealmURL}_search-v2`, {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          sort: [
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery(
             {
-              by: 'id',
-              on: { module: `${baseRealmRRI}card-api`, name: 'CardDef' },
+              sort: [
+                {
+                  by: 'id',
+                  on: {
+                    module: rri(`${baseRealmRRI}card-api`),
+                    name: 'CardDef',
+                  },
+                },
+              ],
             },
-          ],
-        }),
+            { fields: ['item'] },
+          ),
+        ),
       }),
     );
     let json = await response.json();
-    delete json.included?.[0].meta.lastModified;
-    delete json.included?.[0].meta.resourceCreatedAt;
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
-    let resources = json.data as any[];
-    assert.strictEqual(resources.length, 3, 'returns 3 cards');
+    // v2 `/_search-v2` returns `search-entry` resources in `data` (each just an
+    // id + refs); the full card resources — the matched results themselves and
+    // their `loadLinks`-expanded relationship targets — travel in `included`.
+    let entries = json.data as any[];
+    assert.strictEqual(entries.length, 3, 'returns 3 search entries');
     assert.strictEqual(json.meta.page.total, 3, 'meta page total is 3');
 
-    let mango = resources.find((r) => r.id === `${testRealmURL}dir/mango`);
+    let included = (json.included ?? []) as any[];
+    let mango = included.find((r) => r.id === `${testRealmURL}dir/mango`);
     assert.ok(mango, 'mango is in results');
     assert.strictEqual(mango.attributes.firstName, 'Mango', 'mango name');
     assert.strictEqual(
@@ -3144,7 +3167,7 @@ module('Integration | realm', function (hooks) {
       'mango createdAt',
     );
 
-    let mariko = resources.find((r) => r.id === `${testRealmURL}dir/mariko`);
+    let mariko = included.find((r) => r.id === `${testRealmURL}dir/mariko`);
     assert.ok(mariko, 'mariko is in results');
     assert.strictEqual(
       mariko.attributes.fullName,
@@ -3162,7 +3185,7 @@ module('Integration | realm', function (hooks) {
       'mariko createdAt',
     );
 
-    let vanGogh = resources.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
+    let vanGogh = included.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
     assert.ok(vanGogh, 'vanGogh is in results');
     assert.strictEqual(
       vanGogh.relationships.owner.links.self,
@@ -3185,9 +3208,8 @@ module('Integration | realm', function (hooks) {
       'vanGogh createdAt',
     );
 
-    let included = (json.included ?? []) as any[];
     let hassan = included.find((r) => r.id === `${testModuleRealm}hassan`);
-    assert.ok(hassan, 'hassan is included');
+    assert.ok(hassan, 'hassan (cross-realm linksTo target) is included');
     assert.strictEqual(
       hassan.relationships['cardInfo.theme'].links.self,
       null,

@@ -18,9 +18,15 @@ import type {
   Plan,
   RealmAdapter,
   DefinitionLookup,
+  Query,
+  CardResource,
+  FileMetaResource,
+  QueryResultsMeta,
 } from '@cardstack/runtime-common';
 import {
   Realm,
+  searchEntryWireQueryFromQuery,
+  parseSearchEntryQueryFromPayload,
   baseRealm,
   VirtualNetwork,
   Worker,
@@ -105,6 +111,61 @@ function environmentPortOffset(): number {
 }
 
 /** Return a test port, shifted by a per-environment offset when needed. */
+// Test-only: fetch the card/file-meta serializations matching a card-rooted
+// `Query` through the v2 search-entry engine, returning them in the
+// `{ data, meta }` collection shape index assertions read. Requests the
+// data-only fieldset (one full `item` per entry).
+export async function searchCardsForTest(
+  engine: Realm['realmIndexQueryEngine'],
+  cardQuery: Query,
+  opts?: Parameters<Realm['realmIndexQueryEngine']['searchEntries']>[1],
+): Promise<{
+  data: (CardResource | FileMetaResource)[];
+  included: (CardResource | FileMetaResource)[];
+  meta: QueryResultsMeta;
+}> {
+  let doc = await engine.searchEntries(
+    parseSearchEntryQueryFromPayload(
+      searchEntryWireQueryFromQuery(cardQuery, { fields: ['item'] }),
+    ),
+    opts,
+  );
+  // The top-level result items (one per entry, by the entry's `item` rel) land
+  // in `data`; every other linked card/file-meta resource is sideloaded in
+  // `included` — the legacy collection shape these assertions read.
+  // Key by the full `(type, id)` the search-entry `item` relationship carries,
+  // not `id` alone — matches the wire contract (and the store's resolver).
+  let itemKeys = new Set<string>();
+  for (let entry of doc.data) {
+    let ref = entry.relationships.item?.data;
+    if (ref) {
+      itemKeys.add(`${ref.type}:${ref.id}`);
+    }
+  }
+  let itemsByKey = new Map<string, CardResource | FileMetaResource>();
+  let included: (CardResource | FileMetaResource)[] = [];
+  for (let resource of doc.included ?? []) {
+    if (resource.type !== 'card' && resource.type !== 'file-meta') {
+      continue;
+    }
+    if (resource.id == null) {
+      continue;
+    }
+    let key = `${resource.type}:${resource.id}`;
+    if (itemKeys.has(key)) {
+      itemsByKey.set(key, resource);
+    } else {
+      included.push(resource);
+    }
+  }
+  let data = doc.data
+    .map((entry) => entry.relationships.item?.data)
+    .filter((ref): ref is NonNullable<typeof ref> => ref != null)
+    .map((ref) => itemsByKey.get(`${ref.type}:${ref.id}`))
+    .filter((item): item is CardResource | FileMetaResource => Boolean(item));
+  return { data, included, meta: doc.meta };
+}
+
 export function testPort(basePort: number): number {
   return basePort + environmentPortOffset();
 }

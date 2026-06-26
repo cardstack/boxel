@@ -60,9 +60,8 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import { htmlComponent } from '../../lib/html-component';
+import { knownFileMetaUrls } from '../../lib/known-file-meta-urls';
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
-
-import { knownFileMetaUrls } from '../prerendered-card-search';
 
 import Overlays from './overlays';
 

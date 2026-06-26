@@ -11,7 +11,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 import type { ComponentLike } from '@glint/template';
 
-// Stand-in for a search result's `entry.component` (the unified HydratableCard
+// Stand-in for a search result's `entry.component` (the `HydratableCard`
 // that paints inert prerendered HTML or a live card).
 const StubComponent: ComponentLike<{ Args: {}; Element: Element }> = <template>
   <div data-test-stub-card>Authenticated Image Tester preview</div>

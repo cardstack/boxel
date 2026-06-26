@@ -21,7 +21,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/card-search/search-results';
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type StoreService from '@cardstack/host/services/store';
@@ -46,20 +45,15 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 // The v2 search surface is the card-facing `@context.searchResultsComponent`,
-// codified at the type level: the member exists, carries the v2 component
-// contract, and the deprecated `prerenderedCardSearchComponent` rendering
-// surface stays alongside it through the migration window. These fail the
-// type-check (and so the suite) if that converged shape ever erodes.
+// codified at the type level: the member exists and carries the v2 component
+// contract. This fails the type-check (and so the suite) if that shape ever
+// erodes.
 type Assert<T extends true> = T;
 
 type CardContextExposesSearchResults = Assert<
   CardContext['searchResultsComponent'] extends typeof GlimmerComponent<SearchResultsComponentSignature>
     ? true
     : false
->;
-
-type CardContextKeepsDeprecatedPrerendered = Assert<
-  'prerenderedCardSearchComponent' extends keyof CardContext ? true : false
 >;
 
 type CardContextKeepsInstancesSurface = Assert<
@@ -77,10 +71,10 @@ const BOOK_1 = `${testRealmURL}books/1`;
 const BOOK_2 = `${testRealmURL}books/2`;
 
 // Provides the full converged card `@context` the host hands a card —
-// instances (`getCard` / `getCards` / `getCardCollection` / `store`) plus both
-// rendering surfaces (the v2 `searchResultsComponent` and the deprecated
-// `prerenderedCardSearchComponent`) — and yields it so a consumer template can
-// render `<context.searchResultsComponent />` exactly as a card author would.
+// instances (`getCard` / `getCards` / `getCardCollection` / `store`) plus the
+// v2 `searchResultsComponent` rendering surface — and yields it so a consumer
+// template can render `<context.searchResultsComponent />` exactly as a card
+// author would.
 // `GetCardContextName` is provided too so the nested hydratable rows resolve
 // their live instances, the way the route wires it.
 class CardSearchContext extends GlimmerComponent<{
@@ -98,7 +92,6 @@ class CardSearchContext extends GlimmerComponent<{
       getCards: store.getSearchResource.bind(store),
       getCardCollection,
       store,
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
       searchResultsComponent: SearchResults,
     };
   }
@@ -206,9 +199,6 @@ module(
             {{#if context.searchResultsComponent}}
               <span data-test-has-search-results>yes</span>
             {{/if}}
-            {{#if context.prerenderedCardSearchComponent}}
-              <span data-test-has-prerendered>yes</span>
-            {{/if}}
           </CardSearchContext>
         </template>,
       );
@@ -216,11 +206,6 @@ module(
       assert
         .dom('[data-test-has-search-results]')
         .exists('the v2 searchResultsComponent is exposed on @context');
-      assert
-        .dom('[data-test-has-prerendered]')
-        .exists(
-          'the deprecated prerenderedCardSearchComponent stays exposed alongside it',
-        );
 
       // The instances surface (getCard / getCards / getCardCollection /
       // store.search) coexisting on the same `@context` is pinned by the
@@ -228,10 +213,9 @@ module(
       // template `{{#if}}` truthiness check can't assert their presence.
       let witnesses: [
         CardContextExposesSearchResults,
-        CardContextKeepsDeprecatedPrerendered,
         CardContextKeepsInstancesSurface,
-      ] = [true, true, true];
-      assert.deepEqual(witnesses, [true, true, true]);
+      ] = [true, true];
+      assert.deepEqual(witnesses, [true, true]);
     });
 
     hooks.afterEach(function () {

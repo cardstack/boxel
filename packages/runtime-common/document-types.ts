@@ -1,8 +1,4 @@
-import type { RealmInfo } from './realm.ts';
-import type {
-  QueryResultsMeta,
-  PrerenderedCard,
-} from './index-query-engine.ts';
+import type { QueryResultsMeta } from './index-query-engine.ts';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
 import {
   type CardResource,
@@ -11,13 +7,11 @@ import {
   type HtmlQuery,
   type HtmlResource,
   type IconResource,
-  type PrerenderedCardResource,
   type Saved,
   type SearchEntryResource,
   type Unsaved,
   isCardResource,
   isFileMetaResource,
-  isPrerenderedCardResource,
   isSearchEntryResource,
 } from './resource-types.ts';
 
@@ -29,15 +23,6 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
   included?: (FileMetaResource | CardResource<Saved>)[];
   meta: QueryResultsMeta;
-}
-
-export interface PrerenderedCardCollectionDocument {
-  data: PrerenderedCardResource[];
-  meta: QueryResultsMeta & {
-    scopedCssUrls?: string[];
-    realmInfo?: RealmInfo;
-    isFileMeta?: boolean;
-  };
 }
 
 // The v2 search response: heterogeneous `search-entry` resources in `data`,
@@ -73,12 +58,6 @@ export interface SingleFileMetaDocument {
 }
 export interface FileMetaCollectionDocument {
   data: FileMetaResource[];
-  included?: (FileMetaResource | CardResource<Saved>)[];
-  meta: QueryResultsMeta;
-}
-
-export interface LinkableCollectionDocument {
-  data: (CardResource<Saved> | FileMetaResource)[];
   included?: (FileMetaResource | CardResource<Saved>)[];
   meta: QueryResultsMeta;
 }
@@ -134,12 +113,6 @@ export function isFileMetaCollectionDocument(
   return data.every((resource) => isFileMetaResource(resource));
 }
 
-export function isLinkableCollectionDocument(
-  doc: any,
-): doc is LinkableCollectionDocument {
-  return isCardCollectionDocument(doc) || isFileMetaCollectionDocument(doc);
-}
-
 export function isSearchEntryCollectionDocument(
   doc: any,
 ): doc is SearchEntryCollectionDocument {
@@ -175,64 +148,6 @@ export function isSearchEntryCollectionDocument(
     }
   }
   return data.every((resource) => isSearchEntryResource(resource));
-}
-
-export function isPrerenderedCardCollectionDocument(
-  doc: any,
-): doc is PrerenderedCardCollectionDocument {
-  if (typeof doc !== 'object' || doc == null) {
-    return false;
-  }
-  if (!('data' in doc) || !('meta' in doc)) {
-    return false;
-  }
-  let { data } = doc;
-  if (!Array.isArray(data)) {
-    return false;
-  }
-  return data.every((resource) => isPrerenderedCardResource(resource));
-}
-
-export function transformResultsToPrerenderedCardsDoc(results: {
-  prerenderedCards: PrerenderedCard[];
-  scopedCssUrls: string[];
-  meta: QueryResultsMeta & {
-    scopedCssUrls?: string[];
-    realmInfo?: RealmInfo;
-    isFileMeta?: boolean;
-  };
-}): PrerenderedCardCollectionDocument {
-  let { prerenderedCards, scopedCssUrls, meta } = results;
-
-  let data = prerenderedCards.map((card) => {
-    let resource: PrerenderedCardResource = {
-      type: 'prerendered-card',
-      id: card.url,
-      attributes: {
-        html: card.html || '',
-        ...(card.cardType ? { cardType: card.cardType } : {}),
-        ...(card.iconHtml ? { iconHtml: card.iconHtml } : {}),
-        ...(card.isError ? { isError: true as const } : {}),
-      },
-      relationships: {
-        'prerendered-card-css': {
-          data: [],
-        },
-      },
-      meta: {},
-    };
-    if (card.usedRenderType) {
-      resource.meta.adoptsFrom = card.usedRenderType;
-    }
-    return resource;
-  });
-
-  meta.scopedCssUrls = scopedCssUrls;
-
-  return {
-    data,
-    meta,
-  };
 }
 
 export type CardTypeSummaryKind = 'instance' | 'file';

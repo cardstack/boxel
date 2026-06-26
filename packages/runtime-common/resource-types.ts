@@ -30,7 +30,6 @@ export const IconResourceType = 'icon';
 export type Resource =
   | ModuleResource
   | CardResource
-  | PrerenderedCardResource
   | CssResource
   | SearchEntryResource
   | HtmlResource
@@ -262,27 +261,6 @@ export type LooseLinkableResource<T extends LinkableResource> = Omit<
 export type LooseCardResource = LooseLinkableResource<CardResource>;
 export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
 
-//prerendered cards
-export interface PrerenderedCardResource {
-  id: string;
-  type: 'prerendered-card';
-  attributes: {
-    html: string;
-    cardType?: string;
-    iconHtml?: string;
-    isError?: true;
-  };
-  relationships: {
-    'prerendered-card-css': {
-      data: { id: string }[];
-    };
-  };
-  meta: Partial<Meta>;
-  links?: {
-    self?: string;
-  };
-}
-
 //validation - modules
 export function isModuleResource(resource: any): resource is ModuleResource {
   if (typeof resource !== 'object' || resource == null) {
@@ -380,25 +358,6 @@ export function extractRelationshipIds(
     }
   }
   return ids;
-}
-
-//validation - prerendered cards
-export function isPrerenderedCardResource(
-  resource: any,
-): resource is PrerenderedCardResource {
-  if (typeof resource !== 'object' || resource == null) {
-    return false;
-  }
-  if ('id' in resource && typeof resource.id !== 'string') {
-    return false;
-  }
-  if ('type' in resource && resource.type !== 'prerendered-card') {
-    return false;
-  }
-  if ('attributes' in resource && typeof resource.attributes !== 'object') {
-    return false;
-  }
-  return true;
 }
 
 // True when `key` is `fieldName` followed by a plain array index (e.g.

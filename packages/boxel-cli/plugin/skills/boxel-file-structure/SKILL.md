@@ -256,7 +256,7 @@ import { Skill } from 'https://cardstack.com/base/skill';
 
 ## Query Structure (for API searches)
 
-When using the `/_search` API endpoint:
+When searching with `boxel search`:
 
 ```json
 {
