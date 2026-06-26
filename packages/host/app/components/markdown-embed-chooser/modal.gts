@@ -69,6 +69,11 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
   }
 
   @action
+  private handleRemove() {
+    this.markdownEmbedChooser.resolve({ remove: true });
+  }
+
+  @action
   private handleClose() {
     this.markdownEmbedChooser.resolve(undefined);
   }
@@ -78,6 +83,18 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
     if ((event as KeyboardEvent).key === 'Escape') {
       this.handleClose();
     }
+  }
+
+  // Edit-mode preload is scoped to the matching tab. The other tab still
+  // opens its mini chooser per Zeplin 08B.
+  private get cardInitialTarget() {
+    let it = this.request?.initialTarget;
+    return it?.refType === 'card' ? it : undefined;
+  }
+
+  private get fileInitialTarget() {
+    let it = this.request?.initialTarget;
+    return it?.refType === 'file' ? it : undefined;
   }
 
   <template>
@@ -102,10 +119,20 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
             @onTabChange={{this.setActiveTab}}
           >
             <:cards>
-              <TabPanel @refType='card' @onInsert={{this.handleInsertCard}} />
+              <TabPanel
+                @refType='card'
+                @onInsert={{this.handleInsertCard}}
+                @initialTarget={{this.cardInitialTarget}}
+                @onRemove={{this.handleRemove}}
+              />
             </:cards>
             <:files>
-              <TabPanel @refType='file' @onInsert={{this.handleInsertFile}} />
+              <TabPanel
+                @refType='file'
+                @onInsert={{this.handleInsertFile}}
+                @initialTarget={{this.fileInitialTarget}}
+                @onRemove={{this.handleRemove}}
+              />
             </:files>
           </Tabs>
         </:content>

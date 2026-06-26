@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -30,7 +31,12 @@ import MarkdownEmbedPreview from './preview';
 
 type EmbedFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type FormatCategory = 'atom' | 'embedded' | 'fitted' | 'isolated' | 'custom';
-type OptionValue = 'atom' | 'embedded' | 'isolated' | FittedFormatId | 'custom';
+export type OptionValue =
+  | 'atom'
+  | 'embedded'
+  | 'isolated'
+  | FittedFormatId
+  | 'custom';
 
 interface FormatOption {
   value: OptionValue;
@@ -98,6 +104,21 @@ interface Signature {
     // Receives the serialized BFM directive when the CTA is clicked. The host
     // owns actual cursor insertion (a later ticket).
     onInsert: (bfm: string) => void;
+    // Edit-mode preload: seed the format dropdown, W×H inputs, and placement
+    // toggle from the BFM directive the user is editing. Read once at
+    // construction; later updates are ignored so the pane is free to mutate
+    // its own state as the user edits.
+    initialFormat?: OptionValue;
+    initialWidth?: number | string;
+    initialHeight?: number;
+    initialKind?: 'inline' | 'block';
+    // Fired with `true` once the pane's state diverges from the initial
+    // preload (and back to `false` if it matches again). The parent uses this
+    // to flip the CTA label between 'DONE' and 'ACCEPT' in edit mode.
+    onDirtyChange?: (dirty: boolean) => void;
+    // Overrides the dynamic "Insert as …" CTA label. Used in edit mode to
+    // show 'DONE' (clean) or 'ACCEPT' (dirty) per the design spec.
+    ctaLabelOverride?: string;
   };
 }
 
@@ -115,6 +136,43 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   // throw away the user's keystrokes. `%` widths are preserved verbatim.
   @tracked private widthInput = '';
   @tracked private heightInput = '';
+
+  // Frozen snapshot of the initial pane state, captured once on mount from the
+  // edit-mode preload args. Used by `dirty` to detect divergence so the parent
+  // can flip the CTA between DONE and ACCEPT.
+  private initialSelectedValue: OptionValue;
+  private initialKind: 'inline' | 'block';
+  private initialWidthInput: string;
+  private initialHeightInput: string;
+  private initialTargetUrl: string | undefined;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    if (args.initialFormat !== undefined) {
+      this.selectedValue = args.initialFormat;
+    }
+    if (args.initialKind !== undefined) {
+      this.kind = args.initialKind;
+    } else if (args.initialFormat !== undefined) {
+      // Mirror `selectFormat`'s placement default (atom → inline, sized →
+      // block) when no explicit initial kind is supplied.
+      let cat = this.formatOptions.find(
+        (o) => o.value === args.initialFormat,
+      )?.category;
+      this.kind = cat === 'atom' ? 'inline' : 'block';
+    }
+    if (args.initialWidth !== undefined) {
+      this.widthInput = String(args.initialWidth);
+    }
+    if (args.initialHeight !== undefined) {
+      this.heightInput = String(args.initialHeight);
+    }
+    this.initialSelectedValue = this.selectedValue;
+    this.initialKind = this.kind;
+    this.initialWidthInput = this.widthInput;
+    this.initialHeightInput = this.heightInput;
+    this.initialTargetUrl = args.target?.id;
+  }
 
   private get selectedOption(): FormatOption {
     return (
@@ -183,8 +241,36 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   }
 
   private get ctaLabel(): string {
+    if (this.args.ctaLabelOverride !== undefined) {
+      return this.args.ctaLabelOverride;
+    }
     return `Insert as ${this.categoryLabel}`;
   }
+
+  // True once any tracked piece of state (format, placement, W×H, or the
+  // resolved target URL) has diverged from the constructor snapshot. The
+  // parent watches via `onDirtyChange` to drive its CTA label.
+  get isDirty(): boolean {
+    return (
+      this.selectedValue !== this.initialSelectedValue ||
+      this.kind !== this.initialKind ||
+      this.widthInput !== this.initialWidthInput ||
+      this.heightInput !== this.initialHeightInput ||
+      (this.args.target?.id ?? undefined) !== this.initialTargetUrl
+    );
+  }
+
+  // Re-runs on every render. Auto-tracking re-evaluates `isDirty` whenever any
+  // of its dependencies changes; the equality guard keeps onDirtyChange from
+  // firing on every render in addition to genuine transitions.
+  private lastReportedDirty: boolean | undefined;
+  private reportDirty = () => {
+    let dirty = this.isDirty;
+    if (dirty !== this.lastReportedDirty) {
+      this.lastReportedDirty = dirty;
+      this.args.onDirtyChange?.(dirty);
+    }
+  };
 
   // Size specifier for the chosen format. Atom is the default for inline
   // placement, so an inline atom embed emits the size-less `:card[url]`;
@@ -282,6 +368,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   }
 
   <template>
+    {{this.reportDirty}}
     <section
       class='markdown-embed-preview-pane'
       data-test-markdown-embed-preview-pane

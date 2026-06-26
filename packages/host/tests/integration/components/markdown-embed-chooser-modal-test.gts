@@ -200,6 +200,114 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     );
   });
 
+  test('edit mode preloads the matching tab in current view', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: mango,
+      sizeSpec: 'embedded',
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // Cards tab opens in 'current' mode (the placed target tile, not the
+    // chooser); the files tab still shows its chooser per Zeplin 08B.
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
+      )
+      .exists('cards tab shows the current-target tile');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="file"] [data-test-mini-file-chooser]',
+      )
+      .exists('files tab still mounts its chooser');
+
+    // CTA seeds at DONE (initial preload, nothing edited yet).
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
+      )
+      .hasText('DONE', 'edit-mode CTA reads DONE while the form is clean');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
+  test('Remove resolves the deferred with { remove: true }', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: mango,
+      sizeSpec: 'embedded',
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+    await click('[data-test-markdown-embed-chooser-remove]');
+    let result = await pending;
+    assert.deepEqual(
+      result,
+      { remove: true },
+      'Remove resolves the deferred with the remove sentinel',
+    );
+  });
+
+  test('Replace swaps the current-target tile back to the mini chooser', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: mango,
+      sizeSpec: 'embedded',
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+    await click('[data-test-markdown-embed-chooser-replace]');
+
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
+      )
+      .doesNotExist('current-target tile is hidden after Replace');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-mini-card-chooser]',
+      )
+      .exists('mini chooser is exposed for picking a new card');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
   test('picking a card resolves the deferred with the serialized BFM', async function (assert) {
     await render(
       <template>
