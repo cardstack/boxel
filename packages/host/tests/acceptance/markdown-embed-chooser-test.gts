@@ -8,6 +8,8 @@ import {
 
 import { module, test } from 'qunit';
 
+import cmContext from '@cardstack/host/lib/codemirror-context';
+
 import {
   setupAuthEndpoints,
   setupLocalIndexing,
@@ -188,8 +190,9 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     let editorEl = document.querySelector(
       `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
     ) as HTMLElement | null;
-    // @ts-ignore — CodeMirror attaches `cmView` to the editor root.
-    let docText = editorEl?.cmView?.view?.state.doc.toString();
+    let docText = editorEl
+      ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()
+      : undefined;
     assert.strictEqual(
       docText,
       `:card[${mangoId}]`,
@@ -222,14 +225,13 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     let editorEl = document.querySelector(
       `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
     ) as HTMLElement | null;
-    // @ts-ignore — CodeMirror attaches `cmView` to the editor root.
-    let view = editorEl?.cmView?.view;
+    let view = editorEl ? cmContext.EditorView.findFromDOM(editorEl) : null;
     assert.ok(view, 'codemirror view is reachable');
-    view.focus();
-    view.dispatch({
+    view!.focus();
+    view!.dispatch({
       changes: { from: 0, insert: `:card[${mangoId}]` },
     });
-    view.dispatch({ selection: { anchor: 3, head: 3 } });
+    view!.dispatch({ selection: { anchor: 3, head: 3 } });
 
     await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
     assert

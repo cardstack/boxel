@@ -213,6 +213,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
           @initialWidth={{this.initialPaneWidth}}
           @initialHeight={{this.initialPaneHeight}}
           @initialKind={{this.initialPaneKind}}
+          @initialTargetUrl={{@initialTarget.url}}
           @ctaLabelOverride={{this.ctaLabelOverride}}
           @onDirtyChange={{this.onPaneDirtyChange}}
         />

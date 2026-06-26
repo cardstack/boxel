@@ -247,12 +247,12 @@ module('Integration | codemirror embed toolbar', function (hooks) {
     });
 
     // Drop the cursor inside the directive by dispatching against the
-    // CodeMirror view (the contenteditable .cm-content sits on the view).
+    // CodeMirror view. `EditorView.findFromDOM` walks up from any node
+    // under the editor; the cmContext exposes the constructor.
     let editor = document.querySelector(
       '[data-test-codemirror-editor] .cm-editor',
     ) as HTMLElement | null;
-    // @ts-ignore — `cmView` is attached by CodeMirror to the editor root.
-    let view = editor?.cmView?.view;
+    let view = editor ? cmContext.EditorView.findFromDOM(editor) : null;
     view?.focus();
     view?.dispatch({ selection: { anchor: 3, head: 3 } });
 

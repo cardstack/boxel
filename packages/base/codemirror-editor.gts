@@ -1086,7 +1086,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
               type='button'
               title='Edit embed'
               aria-label='Edit embed'
-              disabled={{not this.toolbarEnabled}}
               {{on 'mousedown' this._preventFocusLoss}}
               {{on 'click' this._openEditEmbed}}
             ><PencilIcon width='16' height='16' /></button>
@@ -1101,7 +1100,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 aria-label='Add embed'
                 aria-haspopup='menu'
                 aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
-                disabled={{not this.toolbarEnabled}}
                 {{on 'mousedown' this._preventFocusLoss}}
                 {{on 'click' this._toggleEmbedPopover}}
               ><PlusIcon width='16' height='16' /></button>

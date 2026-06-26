@@ -1310,9 +1310,8 @@ module('Unit | bfm-card-references', function () {
     });
 
     test('sorts by document order', function (assert) {
-      let markdown = '::card[./second]\n:card[./first]'.replace(
-        '::card[./second]\n:card[./first]',
-        ':card[./first] then ::card[./second]',
+      let markdown = [':card[./first] inline', '', '::card[./second]'].join(
+        '\n',
       );
       let ranges = extractBfmRefRanges(markdown);
       assert.deepEqual(

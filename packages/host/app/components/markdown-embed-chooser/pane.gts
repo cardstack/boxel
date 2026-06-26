@@ -112,6 +112,11 @@ interface Signature {
     initialWidth?: number | string;
     initialHeight?: number;
     initialKind?: 'inline' | 'block';
+    // URL of the placed target the user is editing. Distinct from
+    // `target.id` because the resolved instance arrives asynchronously —
+    // without this, the dirty check would briefly flip true as soon as the
+    // target loads.
+    initialTargetUrl?: string;
     // Fired with `true` once the pane's state diverges from the initial
     // preload (and back to `false` if it matches again). The parent uses this
     // to flip the CTA label between 'DONE' and 'ACCEPT' in edit mode.
@@ -171,7 +176,10 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     this.initialKind = this.kind;
     this.initialWidthInput = this.widthInput;
     this.initialHeightInput = this.heightInput;
-    this.initialTargetUrl = args.target?.id;
+    // `initialTargetUrl` arg wins over `args.target?.id` because the resolved
+    // instance is loaded asynchronously — at construction time the parent
+    // already knows the URL but the store has not yet returned the instance.
+    this.initialTargetUrl = args.initialTargetUrl ?? args.target?.id;
   }
 
   private get selectedOption(): FormatOption {
