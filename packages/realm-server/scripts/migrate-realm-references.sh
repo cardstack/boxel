@@ -25,6 +25,9 @@
 #   --exclude <dir>     Skip directories matching <dir> (by name, any depth).
 #                       Repeatable. e.g. --exclude decommissioned to leave
 #                       moved-aside or backup trees untouched.
+#   -j, --jobs <n>      Number of parallel workers (default 16). Files are
+#                       edited concurrently to hide per-file I/O latency on
+#                       networked filesystems (e.g. EFS).
 #
 # Shortcut flags:
 #   -e, --environment   development | staging | production
@@ -73,10 +76,10 @@ set -uo pipefail
 DRY_RUN=false
 JSON_ONLY=false
 MODULES_ONLY=false
+JOBS=16
 ENV=""
 REALM=""
 ERRORS=()
-CHANGED_JSON=()
 EXCLUDE_DIRS=()
 
 while [ $# -gt 0 ]; do
@@ -84,6 +87,10 @@ while [ $# -gt 0 ]; do
     --dry-run)
       DRY_RUN=true
       shift
+      ;;
+    -j|--jobs)
+      JOBS="$2"
+      shift 2
       ;;
     --json-only)
       JSON_ONLY=true
@@ -245,6 +252,63 @@ total_files=0
 VALID_BEFORE_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-valid-before.$$")
 > "$VALID_BEFORE_FILE"
 
+# --- Parallel processing scratch ---
+# Files are processed concurrently (xargs -P) because the per-file work is
+# I/O-latency-bound on networked filesystems (EFS). Each worker writes its own
+# patch fragment (concurrent appends to one shared patch file would interleave
+# and corrupt it) and appends results to shared list files; everything is
+# aggregated after the directory loop.
+FRAGMENTS_DIR=$(mktemp -d 2>/dev/null || echo "/tmp/migrate-frags.$$")
+mkdir -p "$FRAGMENTS_DIR"
+CHANGED_JSON_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-changed-json.$$")
+PROCESSED_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-processed.$$")
+WORKER_ERRORS_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-werr.$$")
+> "$CHANGED_JSON_FILE"
+> "$PROCESSED_FILE"
+> "$WORKER_ERRORS_FILE"
+
+# Worker: process a batch of files passed as positional args. Reconstructs the
+# sed program from exported scalars (arrays can't be exported across xargs).
+# Runs in its own `bash -c`, so results go to the shared files above.
+process_files() {
+  local frag="$FRAGMENTS_DIR/frag.$$"
+  local file tmp
+  for file in "$@"; do
+    tmp="$file.tmp.$$"
+    if [ "$IS_URL" = true ]; then
+      if ! sed -e "s|${FIND_STR}|${REPLACEMENT}|g" \
+               -e "s|\"${REALM_PATH}|\"${REPLACEMENT}|g" \
+               -e "s|'${REALM_PATH}|'${REPLACEMENT}|g" \
+               "$file" > "$tmp" 2>/dev/null; then
+        printf '%s\n' "Error processing $file" >> "$WORKER_ERRORS_FILE"
+        rm -f "$tmp"
+        continue
+      fi
+    else
+      if ! sed -e "s|${FIND_STR}|${REPLACEMENT}|g" "$file" > "$tmp" 2>/dev/null; then
+        printf '%s\n' "Error processing $file" >> "$WORKER_ERRORS_FILE"
+        rm -f "$tmp"
+        continue
+      fi
+    fi
+    diff -u --label "$file" --label "$file" "$file" "$tmp" >> "$frag" 2>/dev/null || true
+    printf '%s\n' "$file" >> "$PROCESSED_FILE"
+    if [ "$DRY_RUN" = true ]; then
+      rm -f "$tmp"
+    elif mv "$tmp" "$file" 2>/dev/null; then
+      case "$file" in
+        *.json) printf '%s\n' "$file" >> "$CHANGED_JSON_FILE" ;;
+      esac
+    else
+      printf '%s\n' "Error replacing $file" >> "$WORKER_ERRORS_FILE"
+      rm -f "$tmp"
+    fi
+  done
+}
+export -f process_files
+export FIND_STR REPLACEMENT IS_URL REALM_PATH DRY_RUN
+export FRAGMENTS_DIR CHANGED_JSON_FILE PROCESSED_FILE WORKER_ERRORS_FILE
+
 for search_dir in "$@"; do
   if [ ! -d "$search_dir" ]; then
     echo "Warning: directory '$search_dir' does not exist, skipping."
@@ -297,53 +361,24 @@ for search_dir in "$@"; do
     fi
   fi
 
-  # Build sed args once. For URLs, also handle path-only preceded by " or '
-  DQ='"'
-  if [ "$IS_URL" = true ]; then
-    SED_ARGS=(-e "s|${FIND_STR}|${REPLACEMENT}|g"
-              -e "s|${DQ}${REALM_PATH}|${DQ}${REPLACEMENT}|g"
-              -e "s|'${REALM_PATH}|'${REPLACEMENT}|g")
-  else
-    SED_ARGS=(-e "s|${FIND_STR}|${REPLACEMENT}|g")
-  fi
+  echo "  ${#matching_files[@]} file(s) to process (jobs=$JOBS) ..."
 
-  for file in "${matching_files[@]}"; do
-    if ! sed "${SED_ARGS[@]}" "$file" > "$file.tmp" 2>/tmp/migrate-err.$$; then
-      err="Error processing $file: $(cat /tmp/migrate-err.$$)"
-      echo "  $err"
-      ERRORS+=("$err")
-      rm -f "$file.tmp" /tmp/migrate-err.$$
-      continue
-    fi
-    rm -f /tmp/migrate-err.$$
-
-    # Append unified diff to the patch file (use --label so both sides show the real path)
-    { diff -u --label "$file" --label "$file" "$file" "$file.tmp" || true; } >> "$PATCH_FILE"
-
-    if [ "$DRY_RUN" = true ]; then
-      echo ""
-      echo "  Would update: $file"
-      { diff --unified=0 "$file" "$file.tmp" || true; } | tail -n +3 | grep '^[+-]' | while IFS= read -r line; do
-        echo "    $line"
-      done
-      rm -f "$file.tmp"
-    else
-      if ! mv "$file.tmp" "$file" 2>/tmp/migrate-err.$$; then
-        err="Error replacing $file: $(cat /tmp/migrate-err.$$)"
-        echo "  $err"
-        ERRORS+=("$err")
-        rm -f "$file.tmp" /tmp/migrate-err.$$
-        continue
-      fi
-      rm -f /tmp/migrate-err.$$
-      echo "  Updated: $file"
-      case "$file" in
-        *.json) CHANGED_JSON+=("$file") ;;
-      esac
-    fi
-    total_files=$((total_files + 1))
-  done
+  # Process this directory's matching files concurrently. NUL-delimited so any
+  # path (spaces/newlines) is safe; -n batches files per worker to amortize the
+  # bash fork; -P runs JOBS workers at once to hide per-file EFS latency.
+  printf '%s\0' "${matching_files[@]}" \
+    | xargs -0 -P "$JOBS" -n 50 bash -c 'process_files "$@"' _
 done
+
+# --- Aggregate parallel results ---
+if ls "$FRAGMENTS_DIR"/frag.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/frag.* >> "$PATCH_FILE"
+fi
+total_files=$(wc -l < "$PROCESSED_FILE" 2>/dev/null | tr -d '[:space:]')
+[ -z "$total_files" ] && total_files=0
+while IFS= read -r werr; do
+  [ -n "$werr" ] && ERRORS+=("$werr")
+done < "$WORKER_ERRORS_FILE"
 
 echo ""
 if [ "$DRY_RUN" = true ]; then
@@ -361,17 +396,21 @@ fi
 # VALID_BEFORE_FILE) are tolerated by the realm server's lenient parser, so
 # they're reported as a note but don't fail the run — only a genuine
 # valid -> invalid regression forces a non-zero exit.
-if [ "$DRY_RUN" = false ] && [ ${#CHANGED_JSON[@]} -gt 0 ]; then
+changed_json_count=$(wc -l < "$CHANGED_JSON_FILE" 2>/dev/null | tr -d '[:space:]')
+[ -z "$changed_json_count" ] && changed_json_count=0
+if [ "$DRY_RUN" = false ] && [ "$changed_json_count" -gt 0 ]; then
   echo ""
-  echo "Verifying ${#CHANGED_JSON[@]} changed JSON file(s) ..."
+  echo "Verifying $changed_json_count changed JSON file(s) ..."
+  # Both path lists are read from files (not argv) so this scales past ARG_MAX.
   if ! node -e '
     const fs = require("fs");
     const validBefore = new Set(
       fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
     );
+    const changed = fs.readFileSync(process.argv[2], "utf8").split("\n").filter(Boolean);
     let broke = 0;
     let preexisting = 0;
-    for (const f of process.argv.slice(2)) {
+    for (const f of changed) {
       try {
         JSON.parse(fs.readFileSync(f, "utf8"));
       } catch (e) {
@@ -390,14 +429,15 @@ if [ "$DRY_RUN" = false ] && [ ${#CHANGED_JSON[@]} -gt 0 ]; then
       );
     }
     process.exit(broke > 0 ? 1 : 0);
-  ' "$VALID_BEFORE_FILE" "${CHANGED_JSON[@]}"; then
+  ' "$VALID_BEFORE_FILE" "$CHANGED_JSON_FILE"; then
     ERRORS+=("Migration turned previously-valid JSON invalid in one or more files (see above). Roll back with: patch -R -p0 < $PATCH_FILE")
   else
     echo "  No previously-valid JSON was broken."
   fi
 fi
 
-rm -f "$VALID_BEFORE_FILE"
+rm -f "$VALID_BEFORE_FILE" "$CHANGED_JSON_FILE" "$PROCESSED_FILE" "$WORKER_ERRORS_FILE"
+rm -rf "$FRAGMENTS_DIR"
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
   echo ""
