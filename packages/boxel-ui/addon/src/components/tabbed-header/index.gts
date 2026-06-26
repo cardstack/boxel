@@ -10,7 +10,7 @@ interface Signature {
   Args: {
     activeTabId?: string;
     headerBackgroundColor?: string;
-    headerTitle: string;
+    headerTitle?: string;
     setActiveTab: (tabId: string) => void;
     tabs: Array<{
       displayName: string;
@@ -31,17 +31,19 @@ export default class TabbedHeader extends Component<Signature> {
     <header
       class='app-header'
       style={{cssVar
-        header-background-color=@headerBackgroundColor
-        header-text-color=(getContrastColor @headerBackgroundColor)
+        boxel-header-background=@headerBackgroundColor
+        boxel-header-foreground=(getContrastColor @headerBackgroundColor)
       }}
       ...attributes
     >
-      <div class='app-title-group'>
-        {{#if (has-block 'headerIcon')}}
-          {{yield to='headerIcon'}}
-        {{/if}}
-        <h1 class='app-title'>{{@headerTitle}}</h1>
-      </div>
+      {{#if @headerTitle}}
+        <div class='app-title-group'>
+          {{#if (has-block 'headerIcon')}}
+            {{yield to='headerIcon'}}
+          {{/if}}
+          <h1 class='app-title'>{{@headerTitle}}</h1>
+        </div>
+      {{/if}}
 
       <div class='app-content'>
         <nav class='app-nav'>
@@ -70,9 +72,18 @@ export default class TabbedHeader extends Component<Signature> {
     </header>
     <style scoped>
       .app-header {
-        padding: 0 var(--boxel-sp-lg);
-        background-color: var(--header-background-color, var(--boxel-light));
-        color: var(--header-text-color, var(--boxel-dark));
+        --_header-background-color: var(
+          --boxel-header-background,
+          var(--sidebar, var(--card))
+        );
+        --_header-text-color: var(
+          --boxel-header-foreground,
+          var(--sidebar-foreground, var(--card-foreground))
+        );
+        padding-top: var(--boxel-sp-3xs);
+        padding-inline: var(--boxel-sp-lg);
+        background-color: var(--_header-background-color);
+        color: var(--_header-text-color);
       }
       .app-title-group {
         padding: var(--boxel-sp-xs) 0;
@@ -82,9 +93,10 @@ export default class TabbedHeader extends Component<Signature> {
       }
       .app-title {
         margin: 0;
-        font: 900 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
+        font-weight: var(--boxel-header-title-font-weight, 900);
+        font-size: var(--boxel-header-title-font-size, var(--boxel-font-size));
+        letter-spacing: var(--boxel-header-title-lsp, var(--boxel-lsp-xl));
+        text-transform: var(--boxel-header-title-transform, uppercase);
       }
       .app-content {
         display: flex;
@@ -94,7 +106,8 @@ export default class TabbedHeader extends Component<Signature> {
         gap: var(--boxel-sp-lg);
       }
       .app-nav {
-        font: 500 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
         letter-spacing: var(--boxel-lsp-sm);
         flex: 1;
       }
@@ -107,20 +120,21 @@ export default class TabbedHeader extends Component<Signature> {
         flex-flow: row wrap;
       }
       .app-tab-list a {
+        display: block;
         height: 100%;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-2xs);
         border-bottom: 4px solid transparent;
         transition:
           border-bottom-color 0.3s ease-in-out,
           font-weight 0.3s ease-in-out;
       }
       .app-tab-list a.active {
-        color: var(--header-text-color, var(--boxel-dark));
-        border-bottom-color: var(--header-text-color, var(--boxel-dark));
+        color: var(--_header-text-color);
+        border-bottom-color: var(--_header-text-color);
         font-weight: 600;
       }
       .app-tab-list a:hover:not(:disabled) {
-        color: var(--header-text-color, var(--boxel-dark));
+        color: var(--_header-text-color);
         font-weight: 600;
       }
       /* this prevents layout shift when text turns bold on hover/active */
