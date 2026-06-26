@@ -18,10 +18,13 @@ import { ensureTrailingSlash } from './paths.ts';
 // node consumers only — it pulls in node `crypto`, so it is
 // deliberately not re-exported from the package barrel that browser code loads.
 
+// Wire header names are kept as the original `x-boxel-delegation-*` that the
+// realm-server endpoint (#5287) already ships, so this change is code-only and
+// never alters the on-the-wire protocol.
 export const DELEGATED_REALM_SESSION_TIMESTAMP_HEADER =
-  'x-boxel-delegated-realm-session-timestamp';
+  'x-boxel-delegation-timestamp';
 export const DELEGATED_REALM_SESSION_SIGNATURE_HEADER =
-  'x-boxel-delegated-realm-session-signature';
+  'x-boxel-delegation-signature';
 
 // ±60s window on the request timestamp. Cheap and stateless — it bounds the
 // replay window for a captured request without a server-side nonce store.
