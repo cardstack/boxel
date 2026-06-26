@@ -254,6 +254,15 @@ module(basename(import.meta.filename), function () {
           'pending',
           'status is pending — client should poll _readiness-check',
         );
+        assert.strictEqual(
+          response.headers['location'],
+          `${response.body.data.attributes.publishedRealmURL}_readiness-check`,
+          'Location points at the readiness-check status monitor for the 202',
+        );
+        assert.ok(
+          response.headers['retry-after'],
+          'Retry-After hints the readiness poll interval',
+        );
 
         // Phase 3: publish only writes registry + NOTIFY + enqueues
         // an indexing job. Drive a reconcile pass to mount the new
@@ -1248,6 +1257,144 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // CS-11362. A republish that lands on an instance which does not have
+      // the realm mounted — after a restart, or when the load balancer routes
+      // the publish to a cold replica — must still gate _readiness-check on the
+      // reindex of the swapped files. The realm already has index rows, so
+      // Realm.#startup skips a from-scratch index and #startedUp resolves
+      // immediately; the durability reindex job is not in this Realm's
+      // indexing() deferreds. So readiness could return 200 before the
+      // clearLastModified reindex lands, letting the host open stale content.
+      // Unlike the test above (which waits on boxel_index and would pass even
+      // with that bug, since the durability job is eventually consistent), this
+      // asserts the gating invariant: once readiness reports ready, the
+      // published index already reflects the updated source.
+      test('a cold republish does not report ready before the swapped files are reindexed (CS-11362)', async function (assert) {
+        let sourceRealmURL = new URL(sourceRealmUrlString);
+        let sourceRealmFsPath = join(
+          dir.name,
+          'realm_server_3',
+          ...sourceRealmURL.pathname.split('/').filter(Boolean),
+        );
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
+        let publishedRealmHost = new URL(publishedRealmURL).host;
+        let publishedRealmPath = new URL(publishedRealmURL).pathname;
+        let cardFilename = 'sentinel-card.json';
+        let initialName = `sentinel-initial-${uuidv4()}`;
+        let updatedName = `sentinel-updated-${uuidv4()}`;
+        let buildCardJson = (name: string) => ({
+          data: {
+            type: 'card',
+            id: `${sourceRealmUrlString}sentinel-card`,
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        });
+        let auth = `Bearer ${createRealmServerJWT(
+          { user: ownerUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`;
+        let publishBody = JSON.stringify({
+          sourceRealmURL: sourceRealmUrlString,
+          publishedRealmURL,
+        });
+        let publishedSearchDocMatches = async (name: string) =>
+          (
+            await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index
+                 WHERE realm_url = $1
+                   AND type = 'instance'
+                   AND search_doc::text LIKE '%' || $2 || '%'
+                 LIMIT 1`,
+              { bind: [publishedRealmURL, name] },
+            )
+          ).length > 0;
+
+        // First publish with the initial sentinel; wait for it to be indexed.
+        writeJsonSync(
+          join(sourceRealmFsPath, cardFilename),
+          buildCardJson(initialName),
+        );
+        let firstResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(publishBody);
+        assert.strictEqual(firstResponse.status, 202, 'first publish accepted');
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () =>
+            (await publishedSearchDocMatches(initialName)) ? true : undefined,
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'initial sentinel never indexed for published realm',
+          },
+        );
+
+        // Simulate a cold instance: fully drop the published realm from this
+        // process's in-memory view — realms[], reconciler.mounted, AND the
+        // virtualNetwork handle — leaving only the registry row + boxel_index,
+        // the post-restart / cold-target state in which the republish handler
+        // must mount-and-reindex. Unmounting from virtualNetwork matters: the
+        // readiness check is routed through virtualNetwork.handle, so a stale
+        // handle would answer it from the old, already-started Realm and the
+        // gating this test asserts would be bypassed.
+        let mountedPublishedRealm = testRealmServer.testingOnlyRealms.find(
+          (realm) => realm.url === publishedRealmURL,
+        );
+        if (mountedPublishedRealm) {
+          virtualNetwork.unmount(mountedPublishedRealm.handle);
+        }
+        testRealmServer.testingOnlyEvictRealmFromRealmsList(publishedRealmURL);
+
+        // Republish with changed source content.
+        writeJsonSync(
+          join(sourceRealmFsPath, cardFilename),
+          buildCardJson(updatedName),
+        );
+        let secondResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(publishBody);
+        assert.strictEqual(
+          secondResponse.status,
+          202,
+          'cold republish accepted',
+        );
+
+        // _readiness-check must block on the in-flight reindex, so by the time
+        // it returns 200 the published index already reflects the update. (The
+        // route only matches the RealmInfo mime, so set Accept accordingly.)
+        let readinessResponse = await request
+          .get(`${publishedRealmPath}_readiness-check`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'application/vnd.api+json');
+        assert.strictEqual(
+          readinessResponse.status,
+          200,
+          'readiness check reports ready',
+        );
+
+        assert.true(
+          await publishedSearchDocMatches(updatedName),
+          'published index reflects the updated sentinel once readiness reports ready',
+        );
+        assert.false(
+          await publishedSearchDocMatches(initialName),
+          'published index no longer references the initial sentinel once readiness reports ready',
+        );
+      });
+
       test('POST /_unpublish-realm can unpublish realm successfully', async function (assert) {
         // First publish a realm
         let publishResponse = await request
@@ -1271,6 +1418,26 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(publishResponse.status, 202, 'Publish succeeds');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
+
+        // Publish returns 202 before indexing finishes: drive a reconcile
+        // pass to mount the published realm, then wait for the from-scratch
+        // index to populate boxel_index before asserting on it.
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index WHERE realm_url = $1 LIMIT 1`,
+              { bind: [publishedRealmURL] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'boxel_index entries for published realm did not appear',
+          },
+        );
 
         // Verify that boxel_index entries exist before unpublishing
         let indexResultsBefore = await dbAdapter.execute(

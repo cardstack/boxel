@@ -1097,6 +1097,16 @@ export class Realm {
     requestContext: RequestContext,
   ) {
     await this.#startedUp.promise;
+    // #startedUp is a one-time gate that resolves after the first start()'s
+    // from-scratch index. On a republish the realm is already mounted with a
+    // resolved #startedUp, so awaiting it alone would report ready before the
+    // reindex of the swapped files completes. Also await any in-flight full or
+    // incremental index so a publish poll only succeeds once the just-published
+    // content is indexed and viewable.
+    let inflight = this.indexing();
+    if (inflight) {
+      await inflight;
+    }
 
     return createResponse({
       body: null,
