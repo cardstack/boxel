@@ -23,9 +23,9 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .auth {
       position: relative;
-      min-height: 100%;
+      min-height: 100vh;
       overflow: auto;
-      background-color: var(--boxel-dark);
+      background-color: #191624;
 
       /*
        * shadcn-style aliases — BoxelInput and the secondary-dark Button kind
@@ -33,13 +33,26 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
        * dispatcher (login / register / forgot-password) without per-component
        * styling.
        */
-      --background: var(--boxel-dark);
-      --foreground: var(--boxel-light);
-      --border: rgba(255, 255, 255, 0.35);
-      --muted-foreground: var(--boxel-form-control-dark-mode-placeholder-color);
-      --ring: var(--boxel-highlight);
+      --background: #191624;
+      --foreground: #ffffff;
+      --border: #525252;
+      --muted-foreground: #7f7c8c;
+      --ring: #00ffba;
 
       color: var(--foreground);
+
+      /*
+       * Auth-page shared button palette. Component-level overrides
+       * (login / register / forgot-password) read these so we don't repeat
+       * the same hex values per file.
+       */
+      --auth-primary-bg: #00ffba;
+      --auth-primary-text: #000000;
+      --auth-primary-disabled-bg: #444051;
+      --auth-primary-disabled-text: #817c93;
+      --auth-secondary-bg: #191624;
+      --auth-secondary-border: #525252;
+      --auth-secondary-text: #ffffff;
     }
     .logo {
       position: absolute;
@@ -59,7 +72,7 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      min-height: 100%;
+      min-height: 100vh;
       padding: var(--boxel-sp-lg);
     }
     .content {

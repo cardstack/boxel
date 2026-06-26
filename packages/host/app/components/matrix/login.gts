@@ -168,7 +168,7 @@ export default class Login extends Component<Signature> {
         padding: 0;
         margin-bottom: var(--boxel-sp-lg);
         margin-left: auto;
-        color: var(--foreground);
+        color: var(--muted-foreground);
         font: 500 var(--boxel-font-xs);
       }
       .forgot-password:hover {
@@ -184,9 +184,19 @@ export default class Login extends Component<Signature> {
         justify-content: center;
         align-items: center;
       }
+      [data-test-login-btn] {
+        --boxel-button-color: var(--auth-primary-bg);
+        --boxel-button-text-color: var(--auth-primary-text);
+      }
+      [data-test-login-btn]:disabled {
+        --boxel-button-color: var(--auth-primary-disabled-bg);
+        --boxel-button-text-color: var(--auth-primary-disabled-text);
+        --boxel-button-border: none;
+      }
       .google-button {
-        /* Sit a hair lighter than the page bg so the dark CTA pops. */
-        --boxel-button-color: var(--boxel-700);
+        --boxel-button-color: var(--auth-secondary-bg);
+        --boxel-button-text-color: var(--auth-secondary-text);
+        --boxel-button-border: 1px solid var(--auth-secondary-border);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
@@ -194,7 +204,7 @@ export default class Login extends Component<Signature> {
       }
       .google-button:not(:disabled):hover,
       .google-button:not(:disabled):active {
-        --boxel-button-color: var(--boxel-600);
+        --boxel-button-color: #221f30;
       }
       .google-g {
         width: 1.125rem;
@@ -228,7 +238,7 @@ export default class Login extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
       }
       .register-prompt-text {
-        color: var(--muted-foreground);
+        color: #7f7c8c;
       }
       .register-link {
         background: none;

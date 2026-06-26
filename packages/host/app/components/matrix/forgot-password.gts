@@ -225,13 +225,29 @@ export default class ForgotPassword extends Component<Signature> {
         width: fit-content;
         min-width: 148px;
       }
+      [data-test-reset-your-password-btn],
+      [data-test-resend-validation-btn],
+      [data-test-reset-password-btn],
+      [data-test-back-to-login-btn] {
+        --boxel-button-color: var(--auth-primary-bg);
+        --boxel-button-text-color: var(--auth-primary-text);
+      }
+      [data-test-reset-your-password-btn]:disabled,
+      [data-test-resend-validation-btn]:disabled,
+      [data-test-reset-password-btn]:disabled,
+      [data-test-back-to-login-btn]:disabled {
+        --boxel-button-color: var(--auth-primary-disabled-bg);
+        --boxel-button-text-color: var(--auth-primary-disabled-text);
+        --boxel-button-border: none;
+      }
       .secondary-cta {
-        /* Sit a hair lighter than the page bg so the dark CTA pops. */
-        --boxel-button-color: var(--boxel-700);
+        --boxel-button-color: var(--auth-secondary-bg);
+        --boxel-button-text-color: var(--auth-secondary-text);
+        --boxel-button-border: 1px solid var(--auth-secondary-border);
       }
       .secondary-cta:not(:disabled):hover,
       .secondary-cta:not(:disabled):active {
-        --boxel-button-color: var(--boxel-600);
+        --boxel-button-color: #221f30;
       }
       .button :deep(.boxel-loading-indicator) {
         display: flex;
