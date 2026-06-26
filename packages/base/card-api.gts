@@ -96,6 +96,7 @@ import {
   rri,
   type RealmResourceIdentifier,
   type VirtualNetwork,
+  isDirectIndexedFieldKey,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -2491,37 +2492,37 @@ export class BaseDef {
           // membership from `relationships.{field}.data` separately.
           .filter(([, field]) => !field?.queryDefinition)
           .map(([fieldName, field]) => {
-          let rawValue = peekAtField(value, fieldName);
-          if (field?.fieldType === 'linksToMany') {
+            let rawValue = peekAtField(value, fieldName);
+            if (field?.fieldType === 'linksToMany') {
+              return [
+                fieldName,
+                field
+                  .queryableValue(rawValue, [value, ...stack])
+                  ?.map((v: any) => {
+                    return { ...v, id: makeAbsoluteURL(v.id) };
+                  }) ?? null,
+              ];
+            }
+            if (isNonPresentLink(rawValue)) {
+              let normalizedId = rawValue.reference;
+              if (value[relativeTo]) {
+                normalizedId = resolveRef(
+                  getStore(value).virtualNetwork,
+                  normalizedId,
+                  value[relativeTo],
+                );
+              }
+              return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
+            }
+            // Reuse the value we already peeked above instead of re-reading
+            // through the descriptor — for computed fields the descriptor
+            // get path re-invokes `computeVia`, doubling the work for every
+            // contains/contains-many/links-to field in the search doc.
             return [
               fieldName,
-              field
-                .queryableValue(rawValue, [value, ...stack])
-                ?.map((v: any) => {
-                  return { ...v, id: makeAbsoluteURL(v.id) };
-                }) ?? null,
+              getQueryableValue(field!, rawValue, [value, ...stack]),
             ];
-          }
-          if (isNonPresentLink(rawValue)) {
-            let normalizedId = rawValue.reference;
-            if (value[relativeTo]) {
-              normalizedId = resolveRef(
-                getStore(value).virtualNetwork,
-                normalizedId,
-                value[relativeTo],
-              );
-            }
-            return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
-          }
-          // Reuse the value we already peeked above instead of re-reading
-          // through the descriptor — for computed fields the descriptor
-          // get path re-invokes `computeVia`, doubling the work for every
-          // contains/contains-many/links-to field in the search doc.
-          return [
-            fieldName,
-            getQueryableValue(field!, rawValue, [value, ...stack]),
-          ];
-        }),
+          }),
       );
     }
   }
@@ -4239,6 +4240,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     let entry = fieldsMeta?.[key];
     return Array.isArray(entry) ? entry : undefined;
   }
+  function clearIndexedFieldOverrides(fieldName: string): void {
+    for (let key of existingOverrides.keys()) {
+      if (isDirectIndexedFieldKey(key, fieldName)) {
+        existingOverrides.delete(key);
+      }
+    }
+  }
   function isAssignableToField(
     overrideCard: typeof BaseDef,
     fieldCard: typeof BaseDef,
@@ -4350,6 +4358,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       let resourceMetaFields = resource.meta?.fields;
       let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
+        clearIndexedFieldOverrides(fieldName);
         if (primitive in field.card) {
           if (Array.isArray(value)) {
             for (let [index] of value.entries()) {
@@ -4838,10 +4847,7 @@ function resolveRef(
   if (relativeTo instanceof URL) {
     base = relativeTo;
   } else if (typeof relativeTo === 'string') {
-    if (
-      relativeTo.startsWith('http://') ||
-      relativeTo.startsWith('https://')
-    ) {
+    if (relativeTo.startsWith('http://') || relativeTo.startsWith('https://')) {
       base = relativeTo;
     }
   }

@@ -401,6 +401,53 @@ export function isPrerenderedCardResource(
   return true;
 }
 
+// True when `key` is `fieldName` followed by a plain array index (e.g.
+// `items.1`), the shape `meta.fields` uses for a primitive polymorphic
+// containsMany. Excludes deeper paths like `items.1.nested`.
+export function isDirectIndexedFieldKey(
+  key: string,
+  fieldName: string,
+): boolean {
+  let prefix = `${fieldName}.`;
+  if (!key.startsWith(prefix)) {
+    return false;
+  }
+  let suffix = key.slice(prefix.length);
+  let index = Number(suffix);
+  return Number.isInteger(index) && index >= 0 && String(index) === suffix;
+}
+
+// Remove the field metadata describing an array attribute that a patch fully
+// replaces. A merge that overwrites arrays in `attributes` still deep-merges the
+// `meta.fields` object, so without this the removed elements' per-index metadata
+// survives and can be re-applied to a new entry when the array grows again.
+// Covers both serialization shapes: the array-valued `meta.fields[fieldName]` of
+// a composite containsMany and the per-index `meta.fields['fieldName.0']` keys of
+// a primitive polymorphic containsMany.
+export function clearReplacedArrayFieldMeta(
+  meta: Partial<Meta> | undefined,
+  attributes: Record<string, unknown> | undefined,
+): void {
+  if (!meta?.fields || !attributes) {
+    return;
+  }
+  let fields = meta.fields;
+  for (let [fieldName, value] of Object.entries(attributes)) {
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    delete fields[fieldName];
+    for (let metaKey of Object.keys(fields)) {
+      if (isDirectIndexedFieldKey(metaKey, fieldName)) {
+        delete fields[metaKey];
+      }
+    }
+  }
+  if (Object.keys(fields).length === 0) {
+    delete meta.fields;
+  }
+}
+
 export function modulesConsumedInMeta(meta: Partial<Meta>): string[] {
   let modules: string[] = [];
   if (meta.adoptsFrom) {
