@@ -8,12 +8,12 @@ let log = logger('ai-bot:load-skill');
 
 export const LOAD_SKILL_TOOL_NAME = 'loadSkill';
 
-// Tier 2/3 of the pull model (CS-11554). The model calls `loadSkill` to pull a
-// skill's full instructions on demand instead of having every skill body pushed
-// into the prompt up front. ai-bot executes it in-process: it mints a
-// delegated, user-scoped realm token (CS-11553) and fetches the file over HTTP,
-// so the bot can only read what the requesting human can already read, and the
-// content is always live (no Matrix snapshots, no host round-trip).
+// On-demand skill loading. The model calls `loadSkill` to pull a skill's full
+// instructions only when it needs them, instead of having every skill body
+// pushed into the prompt up front. ai-bot executes it in-process: it mints a
+// delegated, user-scoped realm token and fetches the file over HTTP, so the bot
+// can only read what the requesting human can already read, and the content is
+// always live (no Matrix snapshots, no host round-trip).
 export const loadSkillTool: Tool = {
   type: 'function',
   function: {
