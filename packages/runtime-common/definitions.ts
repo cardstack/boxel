@@ -194,19 +194,28 @@ export async function validateSearchablePaths(
   for (let [fieldName, defId] of Object.entries(definition.fields)) {
     let fieldDef = definition.fieldDefs[defId];
     let searchable = fieldDef?.searchable;
-    if (searchable == null || searchable === true) {
+    // `null` / `false` / omitted = not searchable; `true` = the always-valid
+    // self link. None carry a path to resolve. Mirrors `seedSearchableRoutes`.
+    if (searchable == null || searchable === true || searchable === false) {
       continue;
     }
-    let paths = typeof searchable === 'string' ? [searchable] : searchable;
-    if (paths.length === 0) {
-      continue;
-    }
+    let paths =
+      typeof searchable === 'string'
+        ? [searchable]
+        : Array.isArray(searchable)
+          ? searchable
+          : [];
     // A path is rooted at this field's target type. If we can't even identify
     // that target, none of the paths can be followed.
     let targetDef = isResolvedCodeRef(fieldDef.fieldOrCard)
       ? await lookupDefinition(fieldDef.fieldOrCard)
       : undefined;
     for (let path of paths) {
+      // A non-string entry is malformed and names nothing; an empty string is
+      // the self link (no deeper path to resolve). Both are valid, not issues.
+      if (typeof path !== 'string' || path === '') {
+        continue;
+      }
       let resolved = targetDef
         ? await getFieldDef(targetDef, path, lookupDefinition)
         : undefined;

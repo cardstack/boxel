@@ -2,12 +2,13 @@
  * searchable-parity-diff — compare a realm's LIVE search docs (store-driven,
  * from `boxel_index`) against the searchable-driven generator's output, per card.
  *
- * This is the POST-MIGRATION parity validator for the "generate search doc from
- * field definitions only" project. It is meaningful only after the migration
- * (CS-11723) has annotated a realm's cards with `searchable` so the new
- * generator reproduces today's depth; before then the two paths differ by
- * design (the new spec keeps `{ id }` for every relationship; the store-driven
- * path omits unused links via `usedLinksToFieldsOnly`). The CI fixture test in
+ * This is the realm-scale parity validator for the "generate search doc from
+ * field definitions only" project. It is meaningful only once a realm's cards
+ * carry `searchable` annotations that make the new generator reproduce the
+ * depth the store-driven path produces; without those annotations the two
+ * paths differ by design (the searchable-driven spec keeps `{ id }` for every
+ * relationship; the store-driven path omits unused links via
+ * `usedLinksToFieldsOnly`). The CI fixture test in
  * `packages/host/tests/integration/searchable-search-doc-test.gts` covers the
  * generator's behavior; this script is the realm-scale before/after check.
  *
@@ -29,13 +30,15 @@
  * is ignored. With `--ignore-shallow-links`, a relationship that is `{ id }`-only
  * (or null) on one side and absent on the other is treated as equivalent — the
  * known, intended `{ id }`-vs-omitted difference — so the report surfaces only
- * divergences that matter for the cutover (changed expansions, missing data).
+ * divergences that matter (changed expansions, missing data).
  *
  * Usage:
  *   node packages/realm-server/scripts/searchable-parity-diff.ts \
  *     --live live.json --generated generated.json [--ignore-shallow-links]
  */
 import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import stringify from 'safe-stable-stringify';
 
 type SearchDoc = Record<string, unknown>;
 type DocMap = Record<string, SearchDoc>;
@@ -64,44 +67,34 @@ function parseArgs(argv: string[]) {
   };
 }
 
-// A relationship slot captured as `{ id }`-only (or null) carries no contained
-// data — it's a bare reference. The store-driven path omits unused links
-// entirely while the new path keeps the `{ id }`; under --ignore-shallow-links
-// both forms are treated as "no data here".
-// Order-insensitive serialization for comparison: object keys are sorted at
-// every level (array order is preserved). Postgres `jsonb` and JS object
-// construction can emit the same data with different key order, so a plain
-// `JSON.stringify` comparison would report noisy false divergences.
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value) ?? 'null';
-  }
-  if (Array.isArray(value)) {
-    return '[' + value.map(stableStringify).join(',') + ']';
-  }
-  let v = value as Record<string, unknown>;
-  return (
-    '{' +
-    Object.keys(v)
-      .sort()
-      .map((k) => JSON.stringify(k) + ':' + stableStringify(v[k]))
-      .join(',') +
-    '}'
-  );
-}
-
-function isShallowLink(value: unknown): boolean {
+// A relationship slot is "shallow" when it carries no contained data beyond a
+// bare reference: `null`, a bare `{ id }`, or a plural whose every element is
+// shallow (an empty plural included). The store-driven path omits unused links
+// while this generator keeps the `{ id }`, so under --ignore-shallow-links a
+// shallow-vs-absent slot is treated as equivalent — see `diffDoc`.
+export function isShallowLink(value: unknown): boolean {
   if (value == null) return true;
-  // A `linksToMany` slot is shallow when every element is shallow (and an
-  // empty plural is shallow too) — so an unrendered plural relationship that
-  // the new path keeps as `[{ id }]` vs the store-driven `absent` is ignored.
   if (Array.isArray(value)) return value.every(isShallowLink);
   if (typeof value !== 'object') return false;
   let keys = Object.keys(value as object);
   return keys.length === 1 && keys[0] === 'id';
 }
 
-function diffDoc(
+// The bare reference ids carried by a shallow slot, flattened across a plural.
+// A `null` / absent / empty slot contributes none. Used to tell the intended
+// omit-vs-keep-`{id}` difference (one side has no ids) apart from a CHANGED
+// reference (`{id:A}` vs `{id:B}`), which is a real divergence worth reporting.
+export function shallowIds(value: unknown): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.flatMap(shallowIds);
+  if (typeof value === 'object') {
+    let id = (value as { id?: unknown }).id;
+    return typeof id === 'string' ? [id] : [];
+  }
+  return [];
+}
+
+export function diffDoc(
   live: SearchDoc,
   generated: SearchDoc,
   ignoreShallowLinks: boolean,
@@ -114,18 +107,28 @@ function diffDoc(
   let l = strip(live ?? {});
   let g = strip(generated ?? {});
   let keys = new Set([...Object.keys(l), ...Object.keys(g)]);
-  for (let key of [...keys].sort()) {
+  for (let key of keys) {
+    let lPresent = key in l;
+    let gPresent = key in g;
     let lv = (l as SearchDoc)[key];
     let gv = (g as SearchDoc)[key];
     if (ignoreShallowLinks && isShallowLink(lv) && isShallowLink(gv)) {
-      continue;
+      let lIds = shallowIds(lv);
+      let gIds = shallowIds(gv);
+      // Omit-vs-keep-`{id}` (one side carries no ids) is the intended,
+      // ignored difference. A changed reference (both sides present, ids
+      // differ) is a real divergence and falls through to be reported.
+      if (lIds.length === 0 || gIds.length === 0) {
+        continue;
+      }
+      if (stringify(lIds) === stringify(gIds)) {
+        continue;
+      }
     }
-    let ls = stableStringify(lv);
-    let gs = stableStringify(gv);
+    let ls = lPresent ? (stringify(lv) ?? 'null') : 'absent';
+    let gs = gPresent ? (stringify(gv) ?? 'null') : 'absent';
     if (ls !== gs) {
-      diffs.push(
-        `    ${key}: live=${ls ?? 'absent'} generated=${gs ?? 'absent'}`,
-      );
+      diffs.push(`    ${key}: live=${ls} generated=${gs}`);
     }
   }
   return diffs;
@@ -142,7 +145,7 @@ function main() {
   let divergent = 0;
   let onlyLive = 0;
   let onlyGenerated = 0;
-  for (let url of [...urls].sort()) {
+  for (let url of urls) {
     if (!(url in generatedDocs)) {
       onlyLive++;
       console.log(`MISSING from generated: ${url}`);
@@ -174,4 +177,8 @@ function main() {
   }
 }
 
-main();
+// Run only when invoked directly as a script — importing the pure functions
+// above (e.g. from a test) must not execute the file I/O in `main`.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

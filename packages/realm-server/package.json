@@ -76,6 +76,7 @@
     "qs": "catalog:",
     "qunit": "catalog:",
     "recast": "catalog:",
+    "safe-stable-stringify": "catalog:",
     "sane": "catalog:",
     "sinon": "catalog:",
     "start-server-and-test": "catalog:",
