@@ -690,8 +690,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       return;
     }
     if (!result) return;
-    if ('remove' in result && result.remove) {
-      this._deleteRange(ref);
+    if ('remove' in result) {
+      if (result.remove) {
+        this._deleteRange(ref);
+      }
       return;
     }
     this._replaceRange(ref, result.bfm);

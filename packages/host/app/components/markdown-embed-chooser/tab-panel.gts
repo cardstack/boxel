@@ -107,7 +107,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     if (this.args.refType === 'file') {
       return fileNameFromUrl(t.id ?? this.selectedUrl ?? '');
     }
-    return (t as CardDef).title ?? t.id ?? this.selectedUrl ?? '';
+    return (t as CardDef).cardTitle ?? t.id ?? this.selectedUrl ?? '';
   }
 
   @action
