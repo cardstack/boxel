@@ -20,6 +20,7 @@ import {
   contains,
   linksTo,
   CardDef,
+  FieldDef,
   StringField,
   searchDocFromFields,
 } from '../helpers/base-realm';
@@ -77,6 +78,23 @@ module('Integration | searchable search doc', function (hooks) {
       @field title = contains(StringField);
       @field author = linksTo(Author); // not searchable → {id}
     }
+    // Self-referential link for the cycle-clip case.
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field name = contains(StringField);
+      @field friend = linksTo(() => Person, { searchable: true });
+    }
+    // A FieldDef that itself holds a link, so a route can pass THROUGH a
+    // contained value to reach a deeper link (contains-routing).
+    class ArticleMeta extends FieldDef {
+      static displayName = 'ArticleMeta';
+      @field editor = linksTo(Author);
+    }
+    class ArticleContains extends CardDef {
+      static displayName = 'ArticleContains';
+      @field title = contains(StringField);
+      @field meta = contains(ArticleMeta, { searchable: 'editor' });
+    }
 
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -84,6 +102,8 @@ module('Integration | searchable search doc', function (hooks) {
         'agent.gts': { Agent },
         'author.gts': { Author },
         'article.gts': { ArticleSelf, ArticleDeep, ArticleShallow },
+        'person.gts': { Person },
+        'article-contains.gts': { ArticleContains, ArticleMeta },
         'Agent/a1.json': {
           data: {
             type: 'card',
@@ -155,6 +175,55 @@ module('Integration | searchable search doc', function (hooks) {
             },
           },
         },
+        // A self link (friend → itself) for the cycle-clip case.
+        'Person/p1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/p1`,
+            attributes: { name: 'Solo' },
+            relationships: {
+              friend: { links: { self: `${testRealmURL}Person/p1` } },
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}person`, name: 'Person' },
+            },
+          },
+        },
+        // author points at a card that does not exist (broken / 404 target).
+        'ArticleSelf/broken.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}ArticleSelf/broken`,
+            attributes: { title: 'Broken' },
+            relationships: {
+              author: { links: { self: `${testRealmURL}Author/missing` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}article`,
+                name: 'ArticleSelf',
+              },
+            },
+          },
+        },
+        // meta is a contained value whose `editor` link is reached via the
+        // route `meta.editor` declared on the indexed card.
+        'ArticleContains/c1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}ArticleContains/c1`,
+            attributes: { title: 'Contains', meta: {} },
+            relationships: {
+              'meta.editor': { links: { self: `${testRealmURL}Author/au1` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}article-contains`,
+                name: 'ArticleContains',
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -205,6 +274,33 @@ module('Integration | searchable search doc', function (hooks) {
       doc.author,
       { id: authorUrl },
       'an unannotated link is captured as { id } only',
+    );
+  });
+
+  test('a self-referential link clips the cycle to { id }', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}Person/p1`);
+    assert.deepEqual(
+      doc.friend,
+      { id: `${testRealmURL}Person/p1` },
+      'a self link clips to { id } via the cycle guard',
+    );
+  });
+
+  test('a searchable link to a missing target degrades to { id }', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}ArticleSelf/broken`);
+    assert.deepEqual(
+      doc.author,
+      { id: `${testRealmURL}Author/missing` },
+      'an unloadable link keeps its reference as { id }',
+    );
+  });
+
+  test('a route through a contained field reaches a deeper link', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}ArticleContains/c1`);
+    assert.strictEqual(
+      doc.meta?.editor?.name,
+      'Jo',
+      'the route `meta.editor` expands the link beneath the contained value',
     );
   });
 });

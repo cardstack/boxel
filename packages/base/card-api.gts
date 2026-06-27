@@ -4575,6 +4575,7 @@ export async function searchDocFromFields(
     instance,
     routes,
     [],
+    getStore(instance),
   )) as Record<string, any>;
 }
 
@@ -4639,16 +4640,23 @@ async function loadSearchableTarget(
   if (resident && (resident as any)[isSavedInstance] === true) {
     return resident;
   }
-  let cardDoc = await store.loadCardDocument(reference);
-  if (isCardError(cardDoc)) {
+  // A missing / broken / unloadable target degrades to `{ id }` upstream. The
+  // store may surface that either as a returned `CardError` or a thrown
+  // rejection (e.g. a 404 / invalid-URL on the load path), so guard both.
+  try {
+    let cardDoc = await store.loadCardDocument(reference);
+    if (isCardError(cardDoc)) {
+      return undefined;
+    }
+    return (await createFromSerialized(
+      cardDoc.data,
+      cardDoc,
+      cardDoc.data.id!,
+      { store },
+    )) as CardDef;
+  } catch {
     return undefined;
   }
-  return (await createFromSerialized(
-    cardDoc.data,
-    cardDoc,
-    cardDoc.data.id!,
-    { store },
-  )) as CardDef;
 }
 
 // Core recursion. `fieldCard` is the DECLARED type to enumerate; `value` is the
@@ -4659,6 +4667,10 @@ async function searchableQueryableValue(
   value: any,
   routes: string[],
   stack: BaseDef[],
+  // Threaded from the indexed instance rather than re-derived per value: a
+  // contained FieldDef value may not be store-associated, but its nested links
+  // must still load against the owner's store.
+  store: CardStore,
 ): Promise<any> {
   if (primitive in fieldCard) {
     if (fieldSerializer in fieldCard) {
@@ -4683,7 +4695,6 @@ async function searchableQueryableValue(
   ) {
     return { id: valueId };
   }
-  let store = getStore(value);
   let makeAbsoluteURL = (reference: string) =>
     value[relativeTo]
       ? resolveRef(store.virtualNetwork, reference, value[relativeTo])
@@ -4704,7 +4715,13 @@ async function searchableQueryableValue(
       case 'contains': {
         entries.push([
           fieldName,
-          await searchableQueryableValue(field!.card, rawValue, tails, nextStack),
+          await searchableQueryableValue(
+            field!.card,
+            rawValue,
+            tails,
+            nextStack,
+            store,
+          ),
         ]);
         break;
       }
@@ -4723,6 +4740,7 @@ async function searchableQueryableValue(
             item,
             tails,
             nextStack,
+            store,
           );
           if (v != null) {
             items.push(v);
@@ -4802,7 +4820,7 @@ async function searchableLink(
     }
     target = loaded;
   }
-  return await searchableQueryableValue(field.card, target, tails, stack);
+  return await searchableQueryableValue(field.card, target, tails, stack, store);
 }
 
 // A `linksToMany` value: per-slot `{ id }` / expansion, with the same
@@ -4852,6 +4870,7 @@ async function searchableLinksToMany(
       target,
       tails,
       stack,
+      store,
     );
     if (expanded != null) {
       out.push(
