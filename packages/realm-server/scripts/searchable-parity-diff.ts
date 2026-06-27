@@ -68,6 +68,28 @@ function parseArgs(argv: string[]) {
 // data — it's a bare reference. The store-driven path omits unused links
 // entirely while the new path keeps the `{ id }`; under --ignore-shallow-links
 // both forms are treated as "no data here".
+// Order-insensitive serialization for comparison: object keys are sorted at
+// every level (array order is preserved). Postgres `jsonb` and JS object
+// construction can emit the same data with different key order, so a plain
+// `JSON.stringify` comparison would report noisy false divergences.
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'null';
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(stableStringify).join(',') + ']';
+  }
+  let v = value as Record<string, unknown>;
+  return (
+    '{' +
+    Object.keys(v)
+      .sort()
+      .map((k) => JSON.stringify(k) + ':' + stableStringify(v[k]))
+      .join(',') +
+    '}'
+  );
+}
+
 function isShallowLink(value: unknown): boolean {
   if (value == null) return true;
   // A `linksToMany` slot is shallow when every element is shallow (and an
@@ -98,8 +120,8 @@ function diffDoc(
     if (ignoreShallowLinks && isShallowLink(lv) && isShallowLink(gv)) {
       continue;
     }
-    let ls = JSON.stringify(lv);
-    let gs = JSON.stringify(gv);
+    let ls = stableStringify(lv);
+    let gs = stableStringify(gv);
     if (ls !== gs) {
       diffs.push(
         `    ${key}: live=${ls ?? 'absent'} generated=${gs ?? 'absent'}`,
