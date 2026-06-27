@@ -70,6 +70,10 @@ function parseArgs(argv: string[]) {
 // both forms are treated as "no data here".
 function isShallowLink(value: unknown): boolean {
   if (value == null) return true;
+  // A `linksToMany` slot is shallow when every element is shallow (and an
+  // empty plural is shallow too) — so an unrendered plural relationship that
+  // the new path keeps as `[{ id }]` vs the store-driven `absent` is ignored.
+  if (Array.isArray(value)) return value.every(isShallowLink);
   if (typeof value !== 'object') return false;
   let keys = Object.keys(value as object);
   return keys.length === 1 && keys[0] === 'id';

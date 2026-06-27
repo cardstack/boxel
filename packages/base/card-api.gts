@@ -4814,9 +4814,14 @@ async function searchableLink(
   }
   let target = rawValue as CardDef;
   if (isNotLoadedValue(rawValue)) {
-    let loaded = await loadSearchableTarget(store, rawValue.reference);
+    // Resolve a relative reference (e.g. `./hassan`) against the owner's
+    // `relativeTo` before the store lookup/load — the same as the lazy link
+    // getter. The store can't `toURL` a relative string, which would otherwise
+    // degrade an expandable searchable link to `{ id }`.
+    let resolvedRef = makeAbsoluteURL(rawValue.reference);
+    let loaded = await loadSearchableTarget(store, resolvedRef);
     if (loaded == null) {
-      return { id: makeAbsoluteURL(rawValue.reference) };
+      return { id: resolvedRef };
     }
     target = loaded;
   }
@@ -4858,9 +4863,11 @@ async function searchableLinksToMany(
     }
     let target = item as CardDef;
     if (isNotLoadedValue(item)) {
-      let loaded = await loadSearchableTarget(store, item.reference);
+      // Resolve a relative reference before the load — see `searchableLink`.
+      let resolvedRef = makeAbsoluteURL(item.reference);
+      let loaded = await loadSearchableTarget(store, resolvedRef);
       if (loaded == null) {
-        out.push({ id: makeAbsoluteURL(item.reference) });
+        out.push({ id: resolvedRef });
         continue;
       }
       target = loaded;
