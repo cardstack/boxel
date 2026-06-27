@@ -567,7 +567,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
-  // The v2 `search-entry` queries for the instance chooser, adapted from the
+  // The `search-entry` queries for the instance chooser, adapted from the
   // legacy `Query` getters above. The default fieldset resolves to fitted HTML
   // (the format these searches used), so no `htmlQuery` override is needed.
   private get searchResultsQuery(): SearchEntryWireQuery | undefined {
@@ -959,8 +959,8 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
 
     let selectedCardId = this.dropdownSelection.card.id;
-    // `entry.id` is the bare card URL already (the v2 identity strips the
-    // `.json` the dropdown selection also omits), so they compare directly.
+    // `entry.id` is the bare card URL already (the search-entry identity strips
+    // the `.json` the dropdown selection also omits), so they compare directly.
     let card = entries.find((c) => c.id === selectedCardId);
     return card;
   };

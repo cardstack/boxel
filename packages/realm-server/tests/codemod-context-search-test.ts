@@ -143,7 +143,7 @@ export class AppGrid extends GlimmerComponent<Sig> {
 `;
 
 // The body reaches into per-card fields (`cardType`, `iconHtml`) that live under
-// `entry.html` in the v2 shape — no safe mechanical mapping, so it's reported.
+// `entry.html` in the search-entry shape — no safe mechanical mapping, so it's reported.
 const COMPLEX_PER_CARD_FIELDS = `import GlimmerComponent from '@glimmer/component';
 
 import { type CardContext } from 'https://cardstack.com/base/card-api';
@@ -266,7 +266,7 @@ export class Plain extends GlimmerComponent {
 
 // One component bound once and invoked several times — each invocation has its
 // own query/format and blocks. Every invocation must migrate, and the shared
-// `(component @context.…)` binding must move to the v2 member exactly once.
+// `(component @context.…)` binding must move to the search-entry member exactly once.
 const MULTI_INVOCATION = `import GlimmerComponent from '@glimmer/component';
 
 import { type CardContext } from 'https://cardstack.com/base/card-api';
@@ -296,7 +296,7 @@ export class Board extends GlimmerComponent<Sig> {
 }
 `;
 
-// A usage with a <:meta> block — yields the same QueryResultsMeta v2 exposes as
+// A usage with a <:meta> block — yields the same QueryResultsMeta search-entry exposes as
 // results.meta, so it migrates to a {{#let results.meta as |m|}} wrapper.
 const META_BLOCK = `import GlimmerComponent from '@glimmer/component';
 
@@ -348,7 +348,7 @@ export class Tile extends GlimmerComponent<Sig> {
 `;
 
 // A usage gated behind an `{{#if @context.prerenderedCardSearchComponent}}`
-// availability guard. The guard must move to the v2 member alongside the usage.
+// availability guard. The guard must move to the search-entry member alongside the usage.
 const GUARDED = `import GlimmerComponent from '@glimmer/component';
 
 import { type CardContext } from 'https://cardstack.com/base/card-api';
@@ -377,7 +377,7 @@ export class Guarded extends GlimmerComponent<Sig> {
 // One invocation the codemod can migrate alongside one it can't (an unsupported
 // :error block) — both on the same bound component. A half-migration would
 // rewrite the first and re-point the shared binding, stranding the second next
-// to a v2 component it calls with the v1 block API. The whole file must be left
+// to a search-entry component it calls with the deprecated block API. The whole file must be left
 // untouched instead.
 const PARTIAL_MULTI_USAGE = `import GlimmerComponent from '@glimmer/component';
 
@@ -440,7 +440,7 @@ module(basename(import.meta.filename), function () {
     });
     assert.strictEqual(status, 'transformed', reasons.join('; '));
 
-    // component reference moves to the v2 surface
+    // component reference moves to the search-entry surface
     assert.true(
       output.includes('@context.searchResultsComponent'),
       'invokes @context.searchResultsComponent',
@@ -450,7 +450,7 @@ module(basename(import.meta.filename), function () {
       'no reference to the deprecated component remains',
     );
 
-    // a typed getter wraps the incoming v1 query through the sanctioned adapter
+    // a typed getter wraps the incoming deprecated query through the sanctioned adapter
     assert.true(
       /get searchResultsQuery\(\)\s*:\s*SearchEntryWireQuery/.test(output),
       'adds a typed searchResultsQuery getter',
@@ -461,7 +461,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.true(
       output.includes('realms: this.args.realms'),
-      'carries @realms into the v2 query',
+      'carries @realms into the search-entry query',
     );
     assert.true(
       /import\s*\{[^}]*searchEntryWireQueryFromQuery[^}]*\}\s*from\s*['"]@cardstack\/runtime-common['"]/.test(
@@ -493,7 +493,7 @@ module(basename(import.meta.filename), function () {
       ':response becomes {{#each results.entries}}',
     );
     // the author's loop variable is preserved (minimal churn); only the result
-    // array source and the per-item `.url` field are remapped to the v2 shape
+    // array source and the per-item `.url` field are remapped to the search-entry shape
     assert.true(
       output.includes('<card.component'),
       'the loop variable and <card.component /> invocation are preserved',
@@ -580,7 +580,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.true(
       output.includes('@context.searchResultsComponent'),
-      'uses the v2 member',
+      'uses the search-entry member',
     );
     assert.true(
       output.includes('searchEntriesToPrerenderedCards'),
@@ -735,7 +735,7 @@ module(basename(import.meta.filename), function () {
     assert.false(/<:response/.test(output), 'no :response block remains');
   });
 
-  test('rewrites an {{#if @context.…}} availability guard to the v2 member', function (assert) {
+  test('rewrites an {{#if @context.…}} availability guard to the search-entry member', function (assert) {
     let { status, output, reasons } = transformContextSearch(GUARDED, {
       filename: 'guarded.gts',
     });
@@ -746,7 +746,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.true(
       /\{\{#if\s+@context\.searchResultsComponent\}\}/.test(output),
-      `the guard tracks the v2 member: ${output}`,
+      `the guard tracks the search-entry member: ${output}`,
     );
   });
 

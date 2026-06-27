@@ -433,7 +433,7 @@ class RealmCardIngester extends RealmSyncBase {
   private async searchCards(
     query: Record<string, unknown>,
   ): Promise<CardResource[]> {
-    // Query the SOURCE realm's own `_search-v2` directly rather than the
+    // Query the SOURCE realm's own `_search` directly rather than the
     // profile-scoped federated search. A shared/published source realm (e.g.
     // the catalog) isn't in the active profile's federated set, so federated
     // search returns nothing for it — which is why instances and Specs went
@@ -444,7 +444,7 @@ class RealmCardIngester extends RealmSyncBase {
     // for normal and published realms (the v1 `data`-vs-`included` split
     // disappears — every match is an entry that references its item).
     let res = await this.authenticator.authedRealmFetch(
-      `${this.realmRoot}_search-v2`,
+      `${this.realmRoot}_search`,
       {
         method: 'QUERY',
         headers: {

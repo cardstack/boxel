@@ -112,7 +112,7 @@ function environmentPortOffset(): number {
 
 /** Return a test port, shifted by a per-environment offset when needed. */
 // Test-only: fetch the card/file-meta serializations matching a card-rooted
-// `Query` through the v2 search-entry engine, returning them in the
+// `Query` through the search-entry engine, returning them in the
 // `{ data, meta }` collection shape index assertions read. Requests the
 // data-only fieldset (one full `item` per entry).
 export async function searchCardsForTest(

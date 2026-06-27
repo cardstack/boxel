@@ -44,8 +44,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-// The v2 search surface is the card-facing `@context.searchResultsComponent`,
-// codified at the type level: the member exists and carries the v2 component
+// The search surface is the card-facing `@context.searchResultsComponent`,
+// codified at the type level: the member exists and carries the component
 // contract. This fails the type-check (and so the suite) if that shape ever
 // erodes.
 type Assert<T extends true> = T;
@@ -72,7 +72,7 @@ const BOOK_2 = `${testRealmURL}books/2`;
 
 // Provides the full converged card `@context` the host hands a card —
 // instances (`getCard` / `getCards` / `getCardCollection` / `store`) plus the
-// v2 `searchResultsComponent` rendering surface — and yields it so a consumer
+// `searchResultsComponent` rendering surface — and yields it so a consumer
 // template can render `<context.searchResultsComponent />` exactly as a card
 // author would.
 // `GetCardContextName` is provided too so the nested hydratable rows resolve
@@ -142,7 +142,7 @@ module(
       await getService('realm').login(testRealmURL);
     });
 
-    test('a card renders the v2 search-entry stream via @context.searchResultsComponent', async function (assert) {
+    test('a card renders the search-entry stream via @context.searchResultsComponent', async function (assert) {
       let query: SearchEntryWireQuery = {
         filter: { 'item.on': bookRef },
         realms: [testRealmURL],
@@ -188,7 +188,7 @@ module(
       );
     });
 
-    test('the converged @context exposes the v2 + deprecated rendering surfaces and the instances surface', async function (assert) {
+    test('the converged @context exposes the search-entry + deprecated rendering surfaces and the instances surface', async function (assert) {
       // The yielded `@context` carries both rendering surfaces and the
       // instances surface at once — a card author reads them straight off
       // `@context`. The compile-time witnesses below pin the same shape at the
@@ -205,7 +205,7 @@ module(
 
       assert
         .dom('[data-test-has-search-results]')
-        .exists('the v2 searchResultsComponent is exposed on @context');
+        .exists('the searchResultsComponent is exposed on @context');
 
       // The instances surface (getCard / getCards / getCardCollection /
       // store.search) coexisting on the same `@context` is pinned by the

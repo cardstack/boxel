@@ -345,7 +345,7 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
-  // The v2 search rendering surface: renders the heterogeneous `search-entry`
+  // The search rendering surface: renders the heterogeneous `search-entry`
   // stream for a `search-entry`-rooted query — prerendered HTML inert (hydrated
   // lazily) or a live card — so a card author renders results without ever
   // branching on prerendered-vs-live. Supersedes `prerenderedCardSearchComponent`.

@@ -45,9 +45,9 @@ import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 
 // ---------------------------------------------------------------------------
-// The v2 search-entry query.
+// The search-entry query.
 //
-// A v2 request is one query rooted on `search-entry`. Entry MEMBERSHIP is
+// A search-entry request is one query rooted on `search-entry`. Entry MEMBERSHIP is
 // addressed through `item.` (the card/file serialization) with the standard
 // operator-keyed filter grammar (`eq` / `contains` / `in` / `range` / `any` /
 // `every` / `not` / `matches`) — only the addressing changes:
@@ -124,7 +124,7 @@ export interface SearchEntryFieldset {
   itemAsFallback: boolean;
 }
 
-// The parsed form of a v2 request: the legacy `Query` for the SQL core (the
+// The parsed form of a search-entry request: the legacy `Query` for the SQL core (the
 // `item.` addressing stripped), the applied (bound or defaulted) htmlQuery,
 // and the parsed sparse fieldset. The compat layer constructs this directly
 // from a legacy request — it does not round-trip through the wire grammar.
@@ -423,7 +423,7 @@ function translateFilterNode(
       );
     }
   }
-  // A node carrying only the type anchor is the v2 spelling of a pure
+  // A node carrying only the type anchor is the search-entry spelling of a pure
   // card-type filter.
   let keys = Object.keys(out);
   if (keys.length === 1 && keys[0] === 'on') {
@@ -660,8 +660,8 @@ export function parseSearchEntryQueryFromPayload(
 }
 
 // ---------------------------------------------------------------------------
-// The wire grammar — what a v2 client sends to `_search-v2` /
-// `_federated-search-v2`. `SearchEntryWireQuery` is the search-entry-rooted
+// The wire grammar — what a client sends to `_search` /
+// `_federated-search`. `SearchEntryWireQuery` is the search-entry-rooted
 // request body: entry membership addressed through `item.` paths (`item.on`
 // as the type anchor), the htmlQuery bound in the filter's top-level `eq`,
 // and the sparse fieldset under `fields[search-entry]`.
@@ -669,7 +669,8 @@ export function parseSearchEntryQueryFromPayload(
 // `searchEntryWireQueryFromQuery` translates a legacy card-rooted `Query`
 // into that grammar — the exact inverse of the parser's addressing strip
 // (round-trip parity is pinned by test) — so an instances-level caller can
-// keep authoring the legacy query shape while the request runs against v2.
+// keep authoring the legacy query shape while the request runs against the
+// search-entry engine.
 // ---------------------------------------------------------------------------
 
 export interface SearchEntryWireSortExpression {
@@ -739,7 +740,7 @@ export function searchEntryWireQueryFromQuery(
 ): SearchEntryWireQuery {
   // the legacy `realm`/`realms` members are deliberately not carried — the
   // caller addresses realms at the request level; `asData`/`fields` are the
-  // legacy data path's members and have no wire spelling here (the v2
+  // legacy data path's members and have no wire spelling here (the
   // projection is `opts.fields`, the `fields[search-entry]` sparse fieldset)
   let wire: SearchEntryWireQuery = {};
   if (query.filter) {
@@ -853,7 +854,7 @@ export async function searchEntryRealms(
 }
 
 // ---------------------------------------------------------------------------
-// Builders for the v2 resources. The projection engine runs these per row
+// Builders for the search-entry resources. The projection engine runs these per row
 // when assembling a `search-entry` document; keeping them pure (no SQL, no
 // realm state) lets the shapes be unit-tested directly. The `css` resource
 // builder is shared with the pre-existing search paths (`buildCssResource`).

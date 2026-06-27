@@ -198,7 +198,7 @@ let { data: matching, meta } = await indexer.search({
 
 ## HTTP API
 
-The TypeScript API described above is exposed by the realm server over HTTP as the `search-entry` API: `/_search-v2` at a realm root (a single realm) and `/_federated-search-v2` on the realm server (across realms). Both speak the `search-entry` wire query — build one from an ordinary `Query` with `searchEntryWireQueryFromQuery` — sent as the request body with the `QUERY` method. An Accept header of `application/vnd.card+json` must be sent.
+The TypeScript API described above is exposed by the realm server over HTTP as the `search-entry` API: `/_search` at a realm root (a single realm) and `/_federated-search` on the realm server (across realms). Both speak the `search-entry` wire query — build one from an ordinary `Query` with `searchEntryWireQueryFromQuery` — sent as the request body with the `QUERY` method. An Accept header of `application/vnd.card+json` must be sent.
 
 ### Example
 
@@ -221,7 +221,7 @@ let query: Query = {
 };
 
 let response = await request
-  .post(`/_search-v2`)
+  .post(`/_search`)
   .set('Accept', 'application/vnd.card+json')
   .set('Content-Type', 'application/json')
   .set('X-HTTP-Method-Override', 'QUERY')

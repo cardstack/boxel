@@ -1,6 +1,6 @@
 ---
 name: search
-description: The search surface across the platform is the `search-entry` API — realm endpoints `/_search-v2` + `/_federated-search-v2`, the host resource `getSearchEntriesResource`, the `<SearchResults>` component (provided to cards as `@context.searchResultsComponent`), and the `RenderableSearchEntryLike` row view-model. Use whenever adding a search/query call site, choosing which search API to call, reviewing or refactoring search code, or writing a card that lists/queries other cards.
+description: The search surface across the platform is the `search-entry` API — realm endpoints `/_search` + `/_federated-search`, the host resource `getSearchEntriesResource`, the `<SearchResults>` component (provided to cards as `@context.searchResultsComponent`), and the `RenderableSearchEntryLike` row view-model. Use whenever adding a search/query call site, choosing which search API to call, reviewing or refactoring search code, or writing a card that lists/queries other cards.
 ---
 
 # Search — the `search-entry` API
@@ -15,7 +15,7 @@ card — it renders the entry transparently.**
 
 | When you need to…                    | Use                                                                     |
 | ------------------------------------ | ----------------------------------------------------------------------- |
-| Search from the realm / over HTTP    | `/_search-v2`, `/_federated-search-v2`                                  |
+| Search from the realm / over HTTP    | `/_search`, `/_federated-search`                                        |
 | Fetch results in a host resource     | `getSearchEntriesResource` (`host/app/resources/search-entries`)        |
 | Render a result list in host UI      | `<SearchResults>` (`host/app/components/card-search/search-results`)    |
 | Render a result list from a **card** | `@context.searchResultsComponent`                                       |
@@ -25,8 +25,8 @@ card — it renders the entry transparently.**
 
 ## Realm server / API
 
-- `/_search-v2` (single realm — `Realm.searchEntriesResponse`) and
-  `/_federated-search-v2` (realm-server — `handleSearchV2`) emit the
+- `/_search` (single realm — `Realm.searchEntriesResponse`) and
+  `/_federated-search` (realm-server — `handleSearch`) emit the
   `search-entry` document natively (heterogeneous `html` / `item` results).
 
 ## Host

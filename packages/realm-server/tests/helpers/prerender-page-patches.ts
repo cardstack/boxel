@@ -111,7 +111,7 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
   // Server-side deterministic delay:
   // This makes query timing explicit/reproducible so tests can assert that
   // prerender waited for query resolution instead of "winning a race" by
-  // chance. The prerender tab's host reaches the realm through the v2
+  // chance. The prerender tab's host reaches the realm through the
   // federated search, so the hook point is `searchEntries`.
   let originalSearchEntries = RuntimeRealm.prototype.searchEntries;
   let delayedSearchRequestCount = 0;
@@ -141,7 +141,7 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
       // The patch has been torn down — the test no longer cares about this
       // search and the realm fixture (including its pg pool) may already be
       // closed. Return an empty collection rather than reaching into a
-      // potentially-dead adapter; the caller (handle-search-v2/
+      // potentially-dead adapter; the caller (handle-search/
       // searchEntryRealms) will discard the result.
       return {
         data: [],
@@ -192,10 +192,7 @@ export function installSearchRequestObserverPatch(): {
         let url = request.url?.();
         if (
           !url ||
-          (!url.endsWith('/_federated-search') &&
-            !url.endsWith('/_federated-search-v2') &&
-            !url.endsWith('/_search') &&
-            !url.endsWith('/_search-v2'))
+          (!url.endsWith('/_federated-search') && !url.endsWith('/_search'))
         ) {
           return;
         }

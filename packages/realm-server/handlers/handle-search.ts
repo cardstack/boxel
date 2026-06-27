@@ -35,17 +35,15 @@ import {
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
 
-// The v2 federated search: the search-entry wire model over every requested
+// The federated search: the search-entry wire model over every requested
 // realm. Parses the search-entry-rooted query (the `item.` membership query,
 // the `htmlQuery` binding, the sparse fieldset), fans out to each realm's
 // `searchEntries`, and merges the per-realm documents (`included` deduped by
-// `(type, id)`). Cache + ETag ride the same job-scoped protocol as the
-// existing federated handlers; the inner key folds every request member that
-// changes the body — the membership query plus the applied htmlQuery, the
-// fieldset, and any `cardUrls` subset — so two v2 requests differing on any
-// of them get distinct entries + ETags, and the v2 keys can't collide with
-// the other endpoints' (whose key opts carry different members).
-export default function handleSearchV2(opts: {
+// `(type, id)`). Cache + ETag ride the job-scoped search-cache protocol; the
+// inner key folds every request member that changes the body — the membership
+// query plus the applied htmlQuery, the fieldset, and any `cardUrls` subset —
+// so two requests differing on any of them get distinct entries + ETags.
+export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;
 }): (ctxt: Koa.Context) => Promise<void> {
@@ -185,7 +183,7 @@ export default function handleSearchV2(opts: {
   };
 }
 
-// The job-scoped cache + ETag/304 protocol for the federated v2 search
+// The job-scoped cache + ETag/304 protocol for the federated search
 // handler. Caching is gated on:
 //   (a) `x-boxel-job-id` present and well-formed — only the indexer worker
 //       stamps it; live user / API callers never carry it and so always see

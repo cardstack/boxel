@@ -354,7 +354,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
         { fields: ['item'] },
       );
       let response = await this.network.authedFetch(
-        new URL('_search-v2', realmURL).href,
+        new URL('_search', realmURL).href,
         {
           method: 'QUERY',
           headers: {
@@ -383,10 +383,10 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
           }
         } else {
           // A 200 that isn't a search-entry document is unexpected for
-          // /_search-v2; surface it rather than silently treating every model
+          // /_search; surface it rather than silently treating every model
           // as new (same best-effort fallback as the catch below).
           console.warn(
-            'Unexpected /_search-v2 response shape, treating all models as new',
+            'Unexpected /_search response shape, treating all models as new',
           );
         }
       }

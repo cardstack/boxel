@@ -73,7 +73,7 @@ export function registerDefaultRoutes() {
 
 function registerSearchRoutes() {
   registerRealmServerRoute({
-    path: '/_federated-search-v2',
+    path: '/_federated-search',
     handler: async (req, _url) => {
       let realmList: string[];
       let payload: unknown;
@@ -97,7 +97,7 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      // Mirror the realm-server's `handle-search-v2`: read the client's
+      // Mirror the realm-server's `handle-search`: read the client's
       // correlation id off the request and thread it into searchEntryRealms,
       // so the real `realm:search-timing` line is emitted (and observable by
       // host integration tests) keyed by the id the client minted.
@@ -403,10 +403,10 @@ function registerAuthRoutes() {
   });
 }
 
-// The v2 search-entry searchable-realm resolver. In-process registry
+// The search-entry searchable-realm resolver. In-process registry
 // realms expose `searchEntries` directly; a live remote realm (base, skills,
 // catalog on localhost:4201) is reached by passing the original wire payload
-// through to its per-realm `_search-v2` endpoint — the parsed query the
+// through to its per-realm `_search` endpoint — the parsed query the
 // fan-out hands us is the server's internal form and has no wire spelling,
 // so the passthrough closes over the raw payload instead.
 function getSearchEntrySearchableRealmForURL(
@@ -440,7 +440,7 @@ function getSearchEntrySearchableRealmForURL(
         string,
         unknown
       >;
-      let url = new URL('_search-v2', resolvedRealmURL);
+      let url = new URL('_search', resolvedRealmURL);
       let response = await globalThis.fetch(url.href, {
         method: 'QUERY',
         headers: {
@@ -452,7 +452,7 @@ function getSearchEntrySearchableRealmForURL(
       if (!response.ok) {
         let responseText = await response.text();
         throw new Error(
-          `Remote realm search-v2 failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
+          `Remote realm search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
         );
       }
       return (await response.json()) as SearchEntryCollectionDocument;

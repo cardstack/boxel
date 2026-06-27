@@ -4,7 +4,7 @@ description: Federated search across one or more Boxel realms. Use when the user
 
 # Federated search
 
-Wraps `boxel search`, which sends a query to the realm-server's `_federated-search-v2` endpoint and aggregates results across realms the active profile can read.
+Wraps `boxel search`, which sends a query to the realm-server's `_federated-search` endpoint and aggregates results across realms the active profile can read.
 
 ## When the user asks to...
 
