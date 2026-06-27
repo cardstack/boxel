@@ -323,12 +323,10 @@ export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 // searchable; a dotted path makes a deeper (n+1) link searchable, routed from
 // this field's target through its links — naming intermediate contained
 // fields as segments to reach a link beneath them; an array combines routes.
-// Omitted — or `false` — leaves the link as `{ id }` only (`false` is the
-// explicit form, e.g. to turn off a link a parent class made searchable). On a
-// `contains`/`containsMany` field (whose value is always present) a path is
-// therefore only meaningful to make a link reached *through* that contained
-// value searchable.
-export type Searchable = boolean | string | string[];
+// Omitted leaves the link as `{ id }` only. On a `contains`/`containsMany`
+// field (whose value is always present) a path is therefore only meaningful to
+// make a link reached *through* that contained value searchable.
+export type Searchable = true | string | string[];
 
 interface Options {
   computeVia?: () => unknown;
@@ -4547,11 +4545,6 @@ export function searchDoc<CardT extends BaseDefConstructor>(
     any
   >;
 }
-
-// The searchable-driven search-doc generator lives in its own module to keep
-// this one focused on the field/card runtime. Re-exported here so the loaded
-// `card-api` module surface still carries it for consumers that read it there.
-export { searchDocFromFields } from './searchable';
 
 function makeDescriptor<
   CardT extends BaseDefConstructor,

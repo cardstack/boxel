@@ -194,9 +194,11 @@ export async function validateSearchablePaths(
   for (let [fieldName, defId] of Object.entries(definition.fields)) {
     let fieldDef = definition.fieldDefs[defId];
     let searchable = fieldDef?.searchable;
-    // `null` / `false` / omitted = not searchable; `true` = the always-valid
-    // self link. None carry a path to resolve. Mirrors `seedSearchableRoutes`.
-    if (searchable == null || searchable === true || searchable === false) {
+    // Omitted = no annotation; `true` = the always-valid self link. Neither
+    // carries a path to resolve. A malformed value (not a string or array —
+    // e.g. a stray `false`) yields no paths via the fallback below, so it can't
+    // throw. Mirrors `seedSearchableRoutes`.
+    if (searchable == null || searchable === true) {
       continue;
     }
     let paths =

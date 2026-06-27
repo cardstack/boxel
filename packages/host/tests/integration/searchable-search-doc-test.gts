@@ -157,7 +157,8 @@ module('Integration | searchable search doc', function (hooks) {
     class ArticleFalse extends CardDef {
       static displayName = 'ArticleFalse';
       @field title = contains(StringField);
-      @field author = linksTo(Author, { searchable: false }); // explicit opt-out
+      // `false` is not a valid searchable value — exercised as bad input.
+      @field author = linksTo(Author, { searchable: false as any });
     }
 
     // ---- cycles ------------------------------------------------------------
@@ -760,7 +761,7 @@ module('Integration | searchable search doc', function (hooks) {
     assert.deepEqual(doc.author, { id: authorUrl }, 'null → { id }');
   });
 
-  test('searchable: false leaves the link as { id }', async function (assert) {
+  test('a `false` searchable value (bad input) leaves the link as { id }', async function (assert) {
     let doc = await loadAndGenerate(`${testRealmURL}ArticleFalse/f1`);
     assert.deepEqual(doc.author, { id: authorUrl }, 'false → { id }');
   });

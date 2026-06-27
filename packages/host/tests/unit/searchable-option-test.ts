@@ -122,8 +122,8 @@ module('Unit | searchable option', function (hooks) {
       });
     }
     // A FieldDef that itself declares a link, so a `searchable` path can route
-    // *through* a contained value to reach a deeper link (the §4 citations
-    // case). FieldDefs may declare linksTo — see e.g. base/skill-reference.
+    // *through* a contained value to reach a deeper link. FieldDefs may declare
+    // linksTo — see e.g. base/skill-reference.
     class Citation extends FieldDef {
       @field label = contains(StringField);
       @field article = linksTo(() => Author);
