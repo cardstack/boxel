@@ -376,15 +376,25 @@ export async function buildModuleModel(
 // resolving each dotted path against the definition graph. Findings are
 // recorded (never thrown) onto `meta.diagnostics` so an un-routable path
 // surfaces in `modules.diagnostics` rather than silently making nothing
-// searchable. Inert until a field actually declares `searchable`: with none
-// present `validateSearchablePaths` walks the fields, finds nothing to resolve,
-// and never touches the loader. The whole pass is best-effort — any failure is
-// logged and yields no findings rather than breaking the definition build.
+// searchable. Inert until a field actually declares `searchable`: when no
+// built definition carries one we return before importing card-api or touching
+// the loader at all. The whole pass is best-effort — any failure is logged and
+// yields no findings rather than breaking the definition build.
 async function validateModuleSearchablePaths(
   definitions: { [name: string]: ModuleDefinitionResult | ErrorEntry },
   context: ModuleModelContext,
 ): Promise<SearchablePathDiagnostic[]> {
   let issues: SearchablePathDiagnostic[] = [];
+  let hasAnnotation = Object.values(definitions).some(
+    (entry) =>
+      entry.type === 'definition' &&
+      Object.values(entry.definition.fieldDefs).some(
+        (fieldDef) => fieldDef.searchable != null,
+      ),
+  );
+  if (!hasAnnotation) {
+    return issues;
+  }
   try {
     let loader = context.loaderService.loader;
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);

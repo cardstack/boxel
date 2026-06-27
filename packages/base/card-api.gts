@@ -317,12 +317,15 @@ export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 
 // Declares which links a field makes searchable — i.e. which linked cards are
 // pulled into the search doc rather than left as a bare `{ id }` reference.
-// Contained fields are always included regardless, so `searchable` never
-// applies to them. `true` makes the immediate ("self") link searchable; a
-// dotted path makes a deeper (n+1) link searchable, routed from this field's
-// target through its own links (intermediate contained fields named as
-// segments); an array combines multiple routes. Omitted leaves the link as
-// `{ id }` only.
+// `searchable` only ever governs links: a contained value is always included
+// once its owner is in the doc, so `searchable` never decides whether a
+// contained field appears. `true` makes the immediate ("self") link
+// searchable; a dotted path makes a deeper (n+1) link searchable, routed from
+// this field's target through its links — naming intermediate contained
+// fields as segments to reach a link beneath them; an array combines routes.
+// Omitted leaves the link as `{ id }` only. On a `contains`/`containsMany`
+// field (whose value is always present) a path is therefore only meaningful to
+// make a link reached *through* that contained value searchable.
 export type Searchable = true | string | string[];
 
 interface Options {

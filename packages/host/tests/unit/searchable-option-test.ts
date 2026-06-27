@@ -9,6 +9,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  getFieldDef,
   validateSearchablePaths,
   type CodeRef,
   type Definition,
@@ -38,6 +39,8 @@ module('Unit | searchable option', function (hooks) {
     Author: typeof CardDef;
     Address: typeof CardDef;
     Employer: typeof CardDef;
+    Citation: typeof CardDef;
+    Journal: typeof CardDef;
     Country: typeof CardDef;
   };
   let virtualNetwork: VirtualNetwork;
@@ -118,6 +121,26 @@ module('Unit | searchable option', function (hooks) {
         searchable: ['address.city', 'nope'],
       });
     }
+    // A FieldDef that itself declares a link, so a `searchable` path can route
+    // *through* a contained value to reach a deeper link (the §4 citations
+    // case). FieldDefs may declare linksTo — see e.g. base/skill-reference.
+    class Citation extends FieldDef {
+      @field label = contains(StringField);
+      @field article = linksTo(() => Author);
+    }
+    // Exercises contains/containsMany routing through a contained FieldDef's
+    // link. `Journal` yields exactly one issue (badCitations) so the count is
+    // an assertable signal.
+    class Journal extends CardDef {
+      @field title = contains(StringField);
+      @field citations = containsMany(Citation, {
+        searchable: 'article.name',
+      });
+      @field lead = contains(Citation, { searchable: 'article' });
+      @field badCitations = containsMany(Citation, {
+        searchable: 'article.bogus',
+      });
+    }
     // Used for option-plumbing + projection coverage across all four field
     // kinds; never validated, so the annotation values are arbitrary.
     class Sample extends CardDef {
@@ -137,6 +160,8 @@ module('Unit | searchable option', function (hooks) {
     loader.shimModule(`${testRealmURL}address`, { Address });
     loader.shimModule(`${testRealmURL}author`, { Author });
     loader.shimModule(`${testRealmURL}article`, { Article });
+    loader.shimModule(`${testRealmURL}citation`, { Citation });
+    loader.shimModule(`${testRealmURL}journal`, { Journal });
     loader.shimModule(`${testRealmURL}sample`, { Sample });
 
     cards = {
@@ -145,6 +170,8 @@ module('Unit | searchable option', function (hooks) {
       Author: Author as unknown as typeof CardDef,
       Address: Address as unknown as typeof CardDef,
       Employer: Employer as unknown as typeof CardDef,
+      Citation: Citation as unknown as typeof CardDef,
+      Journal: Journal as unknown as typeof CardDef,
       Country,
     };
   });
@@ -249,6 +276,79 @@ module('Unit | searchable option', function (hooks) {
     assert.notOk(
       issues.some((i) => i.fieldName === 'combo'),
       'combo (both legs resolvable) produced no issue',
+    );
+
+    // Positively confirm, for a path that exists, both that the raw annotation
+    // is stored on the owning field's definition item and that the path
+    // actually resolves through the graph — not merely "no issue".
+    let articleDef = buildDefinition(cards.Article);
+    let reviewerDef = articleDef.fieldDefs[articleDef.fields['reviewer']];
+    assert.strictEqual(
+      reviewerDef.searchable,
+      'address',
+      'reviewer field def carries the raw searchable annotation',
+    );
+    let reviewerTarget = await lookup(reviewerDef.fieldOrCard);
+    let resolvedAddress = await getFieldDef(reviewerTarget!, 'address', lookup);
+    assert.strictEqual(
+      resolvedAddress?.type,
+      'contains',
+      "reviewer's 'address' resolves to Author.address against the graph",
+    );
+    let publisherDef = articleDef.fieldDefs[articleDef.fields['publisher']];
+    let publisherTarget = await lookup(publisherDef.fieldOrCard);
+    let resolvedHq = await getFieldDef(
+      publisherTarget!,
+      'employer.headquarters',
+      lookup,
+    );
+    assert.strictEqual(
+      resolvedHq?.type,
+      'linksTo',
+      "publisher's 'employer.headquarters' resolves across two link hops",
+    );
+  });
+
+  test('searchable paths route through a contained FieldDef to a deeper link', async function (assert) {
+    let lookup = makeLookup();
+    let issues = await validateSearchablePaths(
+      buildDefinition(cards.Journal),
+      lookup,
+    );
+    assert.notOk(
+      issues.some((i) => i.fieldName === 'citations'),
+      "'article.name' routes through the contained Citation's link and resolves",
+    );
+    assert.notOk(
+      issues.some((i) => i.fieldName === 'lead'),
+      "'article' resolves to the contained FieldDef's own link",
+    );
+    assert.deepEqual(
+      issues.map((i) => `${i.fieldName}:${i.path}`),
+      ['badCitations:article.bogus'],
+      'only the path with a nonexistent segment beyond the link is recorded',
+    );
+  });
+
+  test('skips searchable: true and omitted, and flags every dotted path when the target is unresolvable', async function (assert) {
+    // A lookup that resolves nothing: `true` (self link) and omitted fields are
+    // still skipped without a lookup, while every dotted path is flagged
+    // because its target type can't be resolved.
+    let issues = await validateSearchablePaths(
+      buildDefinition(cards.Article),
+      async () => undefined,
+    );
+    assert.notOk(
+      issues.some((i) => i.fieldName === 'author'),
+      'searchable: true carries no path and is never flagged',
+    );
+    assert.notOk(
+      issues.some((i) => i.fieldName === 'title'),
+      'an unannotated field is skipped',
+    );
+    assert.ok(
+      issues.some((i) => i.fieldName === 'reviewer' && i.path === 'address'),
+      'a dotted path whose target cannot be resolved is flagged',
     );
   });
 
