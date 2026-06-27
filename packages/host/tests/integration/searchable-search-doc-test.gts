@@ -177,6 +177,24 @@ module('Integration | searchable search doc', function (hooks) {
             },
           },
         },
+        // Same as s1 but the author link is RELATIVE — the generator must
+        // resolve it before the targeted load, or the link wrongly degrades.
+        'ArticleSelf/rel.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}ArticleSelf/rel`,
+            attributes: { title: 'Relative' },
+            relationships: {
+              author: { links: { self: '../Author/au1' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}article`,
+                name: 'ArticleSelf',
+              },
+            },
+          },
+        },
         'ArticleDeep/d1.json': {
           data: {
             type: 'card',
@@ -355,6 +373,15 @@ module('Integration | searchable search doc', function (hooks) {
       doc.author?.agent,
       { id: agentUrl },
       "the target's own searchable link is NOT expanded",
+    );
+  });
+
+  test('a relative link reference is resolved before the targeted load', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}ArticleSelf/rel`);
+    assert.strictEqual(
+      doc.author?.name,
+      'Jo',
+      'a relative `links.self` resolves and the searchable link expands',
     );
   });
 
