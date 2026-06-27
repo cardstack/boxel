@@ -16,6 +16,8 @@ import {
   type ResolvedCodeRef,
   type ErrorEntry,
   type ModuleDefinitionResult,
+  type PrerenderResponseMeta,
+  type SearchablePathDiagnostic,
   isBaseDef,
   baseCardRef,
   baseRealm,
@@ -30,6 +32,7 @@ import {
   parseRenderRouteOptions,
   SupportedMimeType,
   getFieldDefinitions,
+  validateSearchablePaths,
   CardError,
   unixTime,
   type RealmResourceIdentifier,
@@ -69,6 +72,11 @@ export type Model = {
     [name: string]: ModuleDefinitionResult | ErrorEntry;
   };
   error?: ErrorEntry;
+  // Definition-build diagnostics (currently the `searchable`-path validation
+  // findings) ride here so they JSON-round-trip into the `ModuleRenderResponse`
+  // and persist to `modules.diagnostics` via `flattenPrerenderMeta`. Absent
+  // when there's nothing to report.
+  meta?: PrerenderResponseMeta;
 };
 
 interface CardType {
@@ -331,6 +339,11 @@ export async function buildModuleModel(
         }
       }
 
+      let searchablePathIssues = await validateModuleSearchablePaths(
+        definitions,
+        context,
+      );
+
       return {
         id,
         nonce,
@@ -340,6 +353,9 @@ export async function buildModuleModel(
         createdAt,
         isShimmed,
         definitions,
+        ...(searchablePathIssues.length > 0
+          ? { meta: { diagnostics: { searchablePathIssues } } }
+          : {}),
       };
     });
   } catch (err: any) {
@@ -354,6 +370,65 @@ export async function buildModuleModel(
     }
     throw err;
   }
+}
+
+// Validate the `searchable` annotations on every definition this module built,
+// resolving each dotted path against the definition graph. Findings are
+// recorded (never thrown) onto `meta.diagnostics` so an un-routable path
+// surfaces in `modules.diagnostics` rather than silently making nothing
+// searchable. Inert until a field actually declares `searchable`: with none
+// present `validateSearchablePaths` walks the fields, finds nothing to resolve,
+// and never touches the loader. The whole pass is best-effort — any failure is
+// logged and yields no findings rather than breaking the definition build.
+async function validateModuleSearchablePaths(
+  definitions: { [name: string]: ModuleDefinitionResult | ErrorEntry },
+  context: ModuleModelContext,
+): Promise<SearchablePathDiagnostic[]> {
+  let issues: SearchablePathDiagnostic[] = [];
+  try {
+    let loader = context.loaderService.loader;
+    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let lookupDefinition = async (
+      codeRef: CodeRef,
+    ): Promise<Definition | undefined> => {
+      try {
+        let card = await loadCardDef(codeRef, { loader });
+        let { fields, fieldDefs } = getFieldDefinitions(api, card);
+        return {
+          codeRef,
+          fields,
+          fieldDefs,
+          type: isCardDef(card) ? 'card-def' : 'field-def',
+          displayName: isCardDef(card) ? card.displayName : null,
+        };
+      } catch (err: any) {
+        console.warn(
+          `searchable validation: could not resolve definition ${JSON.stringify(
+            codeRef,
+          )}: ${err.message}`,
+        );
+        return undefined;
+      }
+    };
+    for (let [codeRef, entry] of Object.entries(definitions)) {
+      if (entry.type !== 'definition') {
+        continue;
+      }
+      let found = await validateSearchablePaths(
+        entry.definition,
+        lookupDefinition,
+      );
+      for (let { fieldName, path } of found) {
+        console.warn(
+          `searchable validation: unresolvable path "${path}" on field "${fieldName}" of ${codeRef}`,
+        );
+        issues.push({ codeRef, fieldName, path });
+      }
+    }
+  } catch (err: any) {
+    console.warn(`searchable validation: unexpected failure: ${err.message}`);
+  }
+  return issues;
 }
 
 async function makeDefinition(
