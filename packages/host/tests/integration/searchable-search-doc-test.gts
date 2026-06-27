@@ -127,6 +127,19 @@ module('Integration | searchable search doc', function (hooks) {
       @field title = contains(StringField);
       @field author = linksTo(SimpleAuthor, { searchable: true });
     }
+    // Two links on one target, so an array `searchable` combining both routes
+    // expands both.
+    class Pair extends CardDef {
+      static displayName = 'Pair';
+      @field name = contains(StringField);
+      @field left = linksTo(Agent);
+      @field right = linksTo(Agent);
+    }
+    class ArticleArray extends CardDef {
+      static displayName = 'ArticleArray';
+      @field title = contains(StringField);
+      @field pair = linksTo(Pair, { searchable: ['left', 'right'] });
+    }
 
     ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -138,6 +151,8 @@ module('Integration | searchable search doc', function (hooks) {
         'article-contains.gts': { ArticleContains, ArticleMeta },
         'simple-author.gts': { SimpleAuthor, FancyAuthor },
         'parity.gts': { ParityArticle, ArticleSubtype },
+        'pair.gts': { Pair },
+        'article-array.gts': { ArticleArray },
         'Agent/a1.json': {
           data: {
             type: 'card',
@@ -338,6 +353,36 @@ module('Integration | searchable search doc', function (hooks) {
             },
           },
         },
+        'Pair/p1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pair/p1`,
+            attributes: { name: 'Pair' },
+            relationships: {
+              left: { links: { self: `${testRealmURL}Agent/a1` } },
+              right: { links: { self: `${testRealmURL}Agent/a1` } },
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}pair`, name: 'Pair' },
+            },
+          },
+        },
+        'ArticleArray/arr1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}ArticleArray/arr1`,
+            attributes: { title: 'Array' },
+            relationships: {
+              pair: { links: { self: `${testRealmURL}Pair/p1` } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}article-array`,
+                name: 'ArticleArray',
+              },
+            },
+          },
+        },
       },
     }));
   });
@@ -427,6 +472,20 @@ module('Integration | searchable search doc', function (hooks) {
       doc.author,
       { id: `${testRealmURL}Author/missing` },
       'an unloadable link keeps its reference as { id }',
+    );
+  });
+
+  test('an array searchable combines multiple routes', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}ArticleArray/arr1`);
+    assert.strictEqual(
+      doc.pair?.left?.name,
+      'Agent Smith',
+      'the first route in the array (`left`) expands',
+    );
+    assert.strictEqual(
+      doc.pair?.right?.name,
+      'Agent Smith',
+      'the second route in the array (`right`) expands',
     );
   });
 
