@@ -12,5 +12,6 @@ import './modality-test.ts';
 import './locking-test.ts';
 import './interrupt-test.ts';
 import './credit-tracking-test.ts';
+import './user-delegated-realm-server-session-test.ts';
 
 QUnit.start();

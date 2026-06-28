@@ -31,6 +31,10 @@ import { resolve as pathResolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import { startFactoryRealmServer } from '@cardstack/realm-test-harness';
+import {
+  searchEntryWireQueryFromQuery,
+  type Query,
+} from '@cardstack/runtime-common';
 
 import { realmSnapshotDir } from './paths.ts';
 
@@ -166,7 +170,7 @@ function jsonRequest(
 function searchRequest(
   realmURL: URL,
   bearerToken: string,
-  body: unknown,
+  query: unknown,
 ): Request {
   let url = new URL('_search', realmURL);
   return new Request(url, {
@@ -176,7 +180,12 @@ function searchRequest(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bearerToken}`,
     },
-    body: JSON.stringify(body),
+    // The search endpoint takes a search-entry-rooted query; benchmark the
+    // data-only fieldset (one full `item` per result), the closest analogue
+    // to the legacy live-card search response.
+    body: JSON.stringify(
+      searchEntryWireQueryFromQuery(query as Query, { fields: ['item'] }),
+    ),
   });
 }
 

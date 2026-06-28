@@ -30,7 +30,6 @@ export const IconResourceType = 'icon';
 export type Resource =
   | ModuleResource
   | CardResource
-  | PrerenderedCardResource
   | CssResource
   | SearchEntryResource
   | HtmlResource
@@ -194,7 +193,7 @@ export interface HtmlQueryLeaf {
   renderType?: CodeRef;
 }
 
-// One v2 search result. A platform resource — never a userland card — so its
+// One search result. A platform resource — never a userland card — so its
 // relationships cannot collide with user `@field` names. Its `id` is the bare
 // card/file URL, shared with its `item` (`card`/`file-meta`) serialization;
 // `type` is the discriminator. The branches are composition: the `html`
@@ -225,7 +224,7 @@ export interface SearchEntryResource {
   };
 }
 
-// One prerendered rendering of a card/file: a v2 resource whose `id` is the
+// One prerendered rendering of a card/file: a platform resource whose `id` is the
 // (card URL, format, renderType) composite (see `htmlResourceId`), so each
 // rendering of a card — per format × render type — is an independently
 // cacheable/dedupable resource. The scoped CSS it needs travels as
@@ -261,27 +260,6 @@ export type LooseLinkableResource<T extends LinkableResource> = Omit<
 
 export type LooseCardResource = LooseLinkableResource<CardResource>;
 export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
-
-//prerendered cards
-export interface PrerenderedCardResource {
-  id: string;
-  type: 'prerendered-card';
-  attributes: {
-    html: string;
-    cardType?: string;
-    iconHtml?: string;
-    isError?: true;
-  };
-  relationships: {
-    'prerendered-card-css': {
-      data: { id: string }[];
-    };
-  };
-  meta: Partial<Meta>;
-  links?: {
-    self?: string;
-  };
-}
 
 //validation - modules
 export function isModuleResource(resource: any): resource is ModuleResource {
@@ -382,23 +360,51 @@ export function extractRelationshipIds(
   return ids;
 }
 
-//validation - prerendered cards
-export function isPrerenderedCardResource(
-  resource: any,
-): resource is PrerenderedCardResource {
-  if (typeof resource !== 'object' || resource == null) {
+// True when `key` is `fieldName` followed by a plain array index (e.g.
+// `items.1`), the shape `meta.fields` uses for a primitive polymorphic
+// containsMany. Excludes deeper paths like `items.1.nested`.
+export function isDirectIndexedFieldKey(
+  key: string,
+  fieldName: string,
+): boolean {
+  let prefix = `${fieldName}.`;
+  if (!key.startsWith(prefix)) {
     return false;
   }
-  if ('id' in resource && typeof resource.id !== 'string') {
-    return false;
+  let suffix = key.slice(prefix.length);
+  let index = Number(suffix);
+  return Number.isInteger(index) && index >= 0 && String(index) === suffix;
+}
+
+// Remove the field metadata describing an array attribute that a patch fully
+// replaces. A merge that overwrites arrays in `attributes` still deep-merges the
+// `meta.fields` object, so without this the removed elements' per-index metadata
+// survives and can be re-applied to a new entry when the array grows again.
+// Covers both serialization shapes: the array-valued `meta.fields[fieldName]` of
+// a composite containsMany and the per-index `meta.fields['fieldName.0']` keys of
+// a primitive polymorphic containsMany.
+export function clearReplacedArrayFieldMeta(
+  meta: Partial<Meta> | undefined,
+  attributes: Record<string, unknown> | undefined,
+): void {
+  if (!meta?.fields || !attributes) {
+    return;
   }
-  if ('type' in resource && resource.type !== 'prerendered-card') {
-    return false;
+  let fields = meta.fields;
+  for (let [fieldName, value] of Object.entries(attributes)) {
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    delete fields[fieldName];
+    for (let metaKey of Object.keys(fields)) {
+      if (isDirectIndexedFieldKey(metaKey, fieldName)) {
+        delete fields[metaKey];
+      }
+    }
   }
-  if ('attributes' in resource && typeof resource.attributes !== 'object') {
-    return false;
+  if (Object.keys(fields).length === 0) {
+    delete meta.fields;
   }
-  return true;
 }
 
 export function modulesConsumedInMeta(meta: Partial<Meta>): string[] {

@@ -97,6 +97,18 @@ module('Integration | commands | publish-realm', function (hooks) {
         );
       },
     },
+    // `realm.publish` polls each target's `_readiness-check` after the 202.
+    // The endpoint matcher keys on pathname, so cover the root-domain targets
+    // (`/_readiness-check`) and the subdirectory target (`/my-space/...`).
+    // Report ready immediately so the command resolves.
+    {
+      route: '_readiness-check',
+      getResponse: async () => new Response(null, { status: 200 }),
+    },
+    {
+      route: 'my-space/_readiness-check',
+      getResponse: async () => new Response(null, { status: 200 }),
+    },
   ]);
 
   setupRealmCacheTeardown(hooks);

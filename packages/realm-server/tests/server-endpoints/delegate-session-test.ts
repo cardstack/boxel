@@ -14,10 +14,10 @@ import {
   testRealmURL,
 } from '../helpers/index.ts';
 import {
-  DELEGATION_SIGNATURE_HEADER,
-  DELEGATION_TIMESTAMP_HEADER,
-  delegationSignature,
-} from '../../utils/delegation.ts';
+  DELEGATED_REALM_SESSION_SIGNATURE_HEADER,
+  DELEGATED_REALM_SESSION_TIMESTAMP_HEADER,
+  delegatedRealmSessionSignature,
+} from '@cardstack/runtime-common/user-delegated-realm-server-session';
 
 const onBehalfOf = '@jane:localhost';
 // A user with no permission rows on the test realm.
@@ -37,7 +37,7 @@ function signedPost(
   let timestamp = String(opts.timestamp ?? Date.now());
   let signature =
     opts.signature ??
-    delegationSignature(
+    delegatedRealmSessionSignature(
       opts.secret ?? aiBotDelegationSecret,
       timestamp,
       rawBody,
@@ -46,10 +46,10 @@ function signedPost(
     .post('/_delegate-session')
     .set('Content-Type', 'application/json');
   if (!opts.omitTimestamp) {
-    req = req.set(DELEGATION_TIMESTAMP_HEADER, timestamp);
+    req = req.set(DELEGATED_REALM_SESSION_TIMESTAMP_HEADER, timestamp);
   }
   if (!opts.omitSignature) {
-    req = req.set(DELEGATION_SIGNATURE_HEADER, signature);
+    req = req.set(DELEGATED_REALM_SESSION_SIGNATURE_HEADER, signature);
   }
   return req.send(rawBody);
 }

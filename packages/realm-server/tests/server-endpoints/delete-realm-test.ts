@@ -14,7 +14,12 @@ import {
   query,
 } from '@cardstack/runtime-common';
 
-import { insertJob, insertUser, realmSecretSeed } from '../helpers/index.ts';
+import {
+  insertJob,
+  insertUser,
+  realmSecretSeed,
+  waitUntil,
+} from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { setupServerEndpointsTest } from './helpers.ts';
 
@@ -143,6 +148,25 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     // pass to mount the published realm so the spy assertions below
     // observe its post-DELETE unmount.
     await context.testRealmServer.testingOnlyReconcile();
+
+    // Publish returns 202 before indexing finishes, and the mount kicks the
+    // published realm's index in the background — its realm_versions rows are
+    // written when that index completes. Wait for them before asserting they
+    // exist below.
+    await waitUntil(
+      async () => {
+        let rows = await context.dbAdapter.execute(
+          `SELECT 1 FROM realm_versions WHERE realm_url = '${publishedRealmURL}' LIMIT 1`,
+        );
+        return rows.length > 0 ? rows : undefined;
+      },
+      {
+        timeout: 30_000,
+        interval: 100,
+        timeoutMessage:
+          'published realm_versions rows did not appear after publish',
+      },
+    );
 
     let sourceIndexURL = `${realmURL}cleanup-${uuidv4()}.json`;
     let publishedIndexURL = `${publishedRealmURL}cleanup-${uuidv4()}.json`;

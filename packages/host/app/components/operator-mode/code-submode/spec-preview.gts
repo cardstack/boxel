@@ -104,11 +104,6 @@ interface ContentSignature {
   };
 }
 
-type SpecPreviewCardContext = Omit<
-  CardContext,
-  'prerenderedCardSearchComponent'
->;
-
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -129,7 +124,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
-  private get context(): SpecPreviewCardContext {
+  private get context(): CardContext {
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,

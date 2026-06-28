@@ -2658,153 +2658,17 @@ module(basename(import.meta.filename), function () {
               [testUserId]: ['read', 'write', 'realm-owner'],
             },
             fileSystem: {
-              'prerendered-search-live.gts': `
-              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
-
-              export class LiveSearchResult extends CardDef {
-                static displayName = 'Live Search Result';
-                @field cardTitle = contains(StringField);
-
-                static fitted = class extends Component<typeof this> {
-                  <template>
-                    <div class="live-search-css-sentinel" data-test-live-card-value>{{@model.cardTitle}}</div>
-                    <style scoped>
-                      .live-search-css-sentinel {
-                        border-top: 4px solid rgb(1, 2, 3);
-                      }
-                    </style>
-                  </template>
-                };
-
-                static embedded = this.fitted;
-                static isolated = this.fitted;
-              }
-
-              export class LiveSearchInner extends CardDef {
-                static displayName = 'Live Search Inner';
-                static isolated = class extends Component<typeof this> {
-                  get realmHref() {
-                    let id = this.args.model?.id;
-                    if (!id) {
-                      return '';
-                    }
-                    return new URL('.', id).href;
-                  }
-
-                  get query() {
-                    return {
-                      filter: {
-                        type: {
-                          module: new URL('./prerendered-search-live', import.meta.url).href,
-                          name: 'LiveSearchResult',
-                        },
-                      },
-                      page: {
-                        size: 10,
-                        number: 0,
-                      },
-                    };
-                  }
-
-                  get realms() {
-                    return [new URL('./', import.meta.url).href];
-                  }
-
-                  <template>
-                    <div data-test-live-search-host-ran>Host ran</div>
-                    <div data-test-live-search-realm>{{this.realmHref}}</div>
-                    {{#if @context.prerenderedCardSearchComponent}}
-                      <@context.prerenderedCardSearchComponent
-                        @query={{this.query}}
-                        @format='fitted'
-                        @realms={{this.realms}}
-                        @isLive={{true}}
-                      >
-                        <:loading>
-                          <div data-test-live-search-loading>Loading...</div>
-                        </:loading>
-                        <:response as |cards|>
-                          {{#each cards as |card|}}
-                            <div data-test-live-search-card={{card.url}}>
-                              <card.component />
-                            </div>
-                          {{/each}}
-                        </:response>
-                        <:meta as |meta|>
-                          <div data-test-live-search-total>{{meta.page.total}}</div>
-                        </:meta>
-                      </@context.prerenderedCardSearchComponent>
-                    {{else}}
-                      <div data-test-live-search-component-missing>missing</div>
-                    {{/if}}
-                  </template>
-                };
-              }
-
-              export class LiveSearchHost extends CardDef {
-                static displayName = 'Live Search Host';
-                @field child = linksTo(() => LiveSearchInner);
-
-                static isolated = class extends Component<typeof this> {
-                  <template>
-                    <@fields.child @format='isolated' />
-                  </template>
-                };
-
-                static embedded = this.isolated;
-              }
-            `,
-              'live-search-host.json': {
-                data: {
-                  relationships: {
-                    child: {
-                      links: {
-                        self: './live-search-inner',
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchHost',
-                    },
-                  },
-                },
-              },
-              'live-search-inner.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchInner',
-                    },
-                  },
-                },
-              },
-              'live-search-result-1.json': {
-                data: {
-                  attributes: {
-                    cardTitle: 'LIVE_RESULT_VALUE',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchResult',
-                    },
-                  },
-                },
-              },
-              'v2-search.gts': `
+              'card-search.gts': `
               import { CardDef, Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
-              export class V2SearchResult extends CardDef {
-                static displayName = 'V2 Search Result';
+              export class CardSearchResult extends CardDef {
+                static displayName = 'Card Search Result';
                 @field label = contains(StringField);
                 static fitted = class extends Component<typeof this> {
                   <template>
-                    <div class="v2-search-result-sentinel" data-test-v2-result-value>{{@model.label}}</div>
+                    <div class="card-search-result-sentinel" data-test-card-result-value>{{@model.label}}</div>
                     <style scoped>
-                      .v2-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
+                      .card-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
                     </style>
                   </template>
                 };
@@ -2812,15 +2676,15 @@ module(basename(import.meta.filename), function () {
                 static isolated = this.fitted;
               }
 
-              export class V2SearchInner extends CardDef {
-                static displayName = 'V2 Search Inner';
+              export class CardSearchInner extends CardDef {
+                static displayName = 'Card Search Inner';
                 static isolated = class extends Component<typeof this> {
                   get query() {
                     return {
                       filter: {
                         'item.on': {
-                          module: new URL('./v2-search', import.meta.url).href,
-                          name: 'V2SearchResult',
+                          module: new URL('./card-search', import.meta.url).href,
+                          name: 'CardSearchResult',
                         },
                       },
                       realms: [new URL('./', import.meta.url).href],
@@ -2828,45 +2692,45 @@ module(basename(import.meta.filename), function () {
                   }
 
                   <template>
-                    <div data-test-v2-search-host-ran>v2 host ran</div>
+                    <div data-test-card-search-host-ran>host ran</div>
                     {{#if @context.searchResultsComponent}}
                       <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-v2-search-component-missing>missing</div>
+                      <div data-test-card-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
             `,
-              'v2-search-inner.json': {
+              'card-search-inner.json': {
                 data: {
                   meta: {
                     adoptsFrom: {
-                      module: rri('./v2-search'),
-                      name: 'V2SearchInner',
+                      module: rri('./card-search'),
+                      name: 'CardSearchInner',
                     },
                   },
                 },
               },
-              'v2-search-result-1.json': {
+              'card-search-result-1.json': {
                 data: {
                   attributes: {
-                    label: 'V2_RESULT_VALUE',
+                    label: 'CARD_RESULT_VALUE',
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./v2-search'),
-                      name: 'V2SearchResult',
+                      module: rri('./card-search'),
+                      name: 'CardSearchResult',
                     },
                   },
                 },
               },
-              'live-file-search-card.gts': `
-              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              'file-search.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               import { rri } from '@cardstack/runtime-common';
 
-              export class LiveFileSearchInner extends CardDef {
-                static displayName = 'Live File Search Inner';
+              export class FileSearchInner extends CardDef {
+                static displayName = 'File Search Inner';
                 static isolated = class extends Component<typeof this> {
                   get realmHref() {
                     let id = this.args.model?.id;
@@ -2879,94 +2743,37 @@ module(basename(import.meta.filename), function () {
                   get query() {
                     return {
                       filter: {
-                        on: {
+                        'item.on': {
                           module: rri('@cardstack/base/card-api'),
                           name: 'FileDef',
                         },
-                        eq: {
-                          url: \`\${this.realmHref}live-file.live\`,
-                        },
                       },
-                      page: {
-                        size: 10,
-                        number: 0,
-                      },
+                      realms: [new URL('./', import.meta.url).href],
                     };
                   }
 
-                  get realms() {
-                    return [new URL('./', import.meta.url).href];
-                  }
-
                   <template>
-                    <div data-test-live-file-search-host-ran>File Host ran</div>
-                    {{#if @context.prerenderedCardSearchComponent}}
-                      <@context.prerenderedCardSearchComponent
-                        @query={{this.query}}
-                        @format='embedded'
-                        @realms={{this.realms}}
-                        @isLive={{true}}
-                      >
-                        <:response as |cards|>
-                          {{#each cards as |card|}}
-                            <div data-test-live-file-search-card={{card.url}}>
-                              <card.component />
-                            </div>
-                          {{/each}}
-                        </:response>
-                      </@context.prerenderedCardSearchComponent>
+                    <div data-test-file-search-host-ran>File Host ran</div>
+                    {{#if @context.searchResultsComponent}}
+                      <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-live-file-search-component-missing>missing</div>
+                      <div data-test-file-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
-
-              export class LiveFileSearchHost extends CardDef {
-                static displayName = 'Live File Search Host';
-                @field cardTitle = contains(StringField);
-                @field child = linksTo(() => LiveFileSearchInner);
-
-                static isolated = class extends Component<typeof this> {
-                  <template>
-                    <@fields.child @format='isolated' />
-                  </template>
-                };
-
-                static embedded = this.isolated;
-              }
             `,
-              'live-file-search-host.json': {
+              'file-search-inner.json': {
                 data: {
-                  attributes: {
-                    cardTitle: 'Live File Search Host',
-                  },
-                  relationships: {
-                    child: {
-                      links: {
-                        self: './live-file-search-inner',
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./live-file-search-card'),
-                      name: 'LiveFileSearchHost',
+                      module: rri('./file-search'),
+                      name: 'FileSearchInner',
                     },
                   },
                 },
               },
-              'live-file-search-inner.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./live-file-search-card'),
-                      name: 'LiveFileSearchInner',
-                    },
-                  },
-                },
-              },
-              'live-file.live': 'LIVE_FILE_VALUE',
+              'hello.md': '# Hello from FileDef content',
             },
           },
         ],
@@ -2978,25 +2785,27 @@ module(basename(import.meta.filename), function () {
         },
       });
 
-      test('card prerendered search uses live rendered CardDef HTML and keeps unique CSS', async function (assert) {
-        const cardURL = `${realmURL}live-search-host`;
+      test('search prerenders the live rendered result, beating stale indexed HTML and keeping its unique scoped CSS', async function (assert) {
+        const cardURL = `${realmURL}card-search-inner`;
         const sentinel = 'SENTINEL_STALE_CARD_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
-        let searchRequestObserverPatch = installSearchRequestObserverPatch();
 
         try {
           let indexedRows = await dbAdapter.execute(
             `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
-            { bind: [`${realmURL}%live-search%`] },
+            { bind: [`${realmURL}%card-search%`] },
           );
           assert.ok(
             indexedRows.length > 0,
-            `expected indexed rows for live-search fixtures, got: ${JSON.stringify(indexedRows)}`,
+            `expected indexed rows for card-search fixtures, got: ${JSON.stringify(indexedRows)}`,
           );
 
+          // Plant a stale indexed rendering for the result so a live win is
+          // observable: the prerendered search must re-render the result from
+          // its card+source, not echo this indexed HTML.
           await overrideIndexedIsolatedHTML(
-            `${realmURL}live-search-result-1`,
+            `${realmURL}card-search-result-1`,
             `<div data-test-stale-card-html>${sentinel}</div>`,
           );
 
@@ -3012,45 +2821,50 @@ module(basename(import.meta.filename), function () {
           let isolatedHTML = cleanWhiteSpace(
             result.response.isolatedHTML ?? '',
           );
-          let searchRequests = searchRequestObserverPatch.getRequests();
-          assert.ok(
-            searchRequests.length > 0,
-            `observed federated search requests: ${JSON.stringify(searchRequests)}`,
-          );
 
           assert.ok(
-            isolatedHTML.includes('LIVE_RESULT_VALUE'),
-            `isolated html includes live card value: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `isolated html includes the live result value: ${isolatedHTML}`,
           );
           assert.notOk(
             isolatedHTML.includes(sentinel),
-            `isolated html does not include stale indexed sentinel: ${isolatedHTML}`,
+            `isolated html does not include the stale indexed sentinel: ${isolatedHTML}`,
           );
           assert.ok(
-            isolatedHTML.includes('live-search-css-sentinel'),
-            `isolated html includes unique live card css class: ${isolatedHTML}`,
+            isolatedHTML.includes('card-search-result-sentinel'),
+            `isolated html includes the result's unique css class: ${isolatedHTML}`,
           );
           assert.ok(
-            /live-search-css-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
+            /card-search-result-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
               isolatedHTML,
             ),
-            `isolated html keeps scoped css marker on live result: ${isolatedHTML}`,
+            `isolated html keeps the scoped css marker on the live result: ${isolatedHTML}`,
           );
         } finally {
-          searchRequestObserverPatch.restore();
           await realmServerPatch.restore();
         }
       });
 
-      test('card prerendered search uses live rendered FileDef HTML', async function (assert) {
-        const cardURL = `${realmURL}live-file-search-host`;
+      test('search prerenders a FileDef result and renders live over stale indexed HTML', async function (assert) {
+        const cardURL = `${realmURL}file-search-inner`;
         const sentinel = 'SENTINEL_STALE_FILE_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
 
         try {
+          // Diagnostic: confirm the file is indexed so an empty result set
+          // localizes to the prerender search path, not a missing index row.
+          let fileRows = await dbAdapter.execute(
+            `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
+            { bind: [`${realmURL}%hello.md%`] },
+          );
+          assert.ok(
+            fileRows.length > 0,
+            `expected an indexed row for hello.md, got: ${JSON.stringify(fileRows)}`,
+          );
+
           await overrideIndexedIsolatedHTML(
-            `${realmURL}live-file.live`,
+            `${realmURL}hello.md`,
             `<article data-test-stale-file-html>${sentinel}</article>`,
           );
 
@@ -3067,31 +2881,30 @@ module(basename(import.meta.filename), function () {
             result.response.isolatedHTML ?? '',
           );
 
+          // The per-result wrapper is `data-test-search-result={{entry.id}}`, so
+          // the file's URL appearing proves a file entry was surfaced (and not
+          // the empty result list a dropped file would leave).
           assert.ok(
-            isolatedHTML.includes('live-file.live'),
-            `isolated html includes live FileDef fallback value: ${isolatedHTML}`,
+            isolatedHTML.includes('hello.md'),
+            `isolated html surfaces the FileDef result identity: ${isolatedHTML}`,
           );
           assert.notOk(
             isolatedHTML.includes(sentinel),
-            `isolated html does not include stale file sentinel: ${isolatedHTML}`,
-          );
-          assert.ok(
-            isolatedHTML.includes('data-test-live-file-search-card'),
-            `isolated html includes live FileDef search result wrapper: ${isolatedHTML}`,
+            `isolated html does not include the stale file sentinel: ${isolatedHTML}`,
           );
         } finally {
           await realmServerPatch.restore();
         }
       });
 
-      test('a card rendering the v2 @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
-        // The v2 search resource registers its in-flight fetch with the render
+      test('a card rendering the @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
+        // The search resource registers its in-flight fetch with the render
         // store's readiness signal, so the /render settle loop waits for results
         // before HTML capture. Without that wiring the search resolves only
         // after capture and the prerendered html shows an empty result list —
         // the bug this test guards. Driven through the real prerenderer (the
         // host test harness can't cover the /render route).
-        const cardURL = `${realmURL}v2-search-inner`;
+        const cardURL = `${realmURL}card-search-inner`;
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
 
@@ -3113,16 +2926,16 @@ module(basename(import.meta.filename), function () {
           );
 
           assert.ok(
-            isolatedHTML.includes('data-test-v2-search-host-ran'),
-            `the v2 host template ran: ${isolatedHTML}`,
+            isolatedHTML.includes('data-test-card-search-host-ran'),
+            `the host template ran: ${isolatedHTML}`,
           );
           assert.notOk(
-            isolatedHTML.includes('data-test-v2-search-component-missing'),
-            'the v2 searchResultsComponent is provided in the render context',
+            isolatedHTML.includes('data-test-card-search-component-missing'),
+            'the searchResultsComponent is provided in the render context',
           );
           assert.ok(
-            isolatedHTML.includes('V2_RESULT_VALUE'),
-            `prerendered html includes the v2 search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `prerendered html includes the search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
           );
         } finally {
           await realmServerPatch.restore();

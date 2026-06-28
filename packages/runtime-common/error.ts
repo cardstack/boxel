@@ -639,6 +639,30 @@ export function coerceErrorMessage(err: unknown, placeholder: string): string {
   return placeholder;
 }
 
+// Render an unknown error as a single log-safe string. Passing an Error (or any
+// object) as a console argument serializes to "[object Object]" in
+// text-captured console output (e.g. CI test logs), and `JSON.stringify` of an
+// Error yields "{}" because its `message`/`stack` are non-enumerable — both
+// drop the stack, which is the detail that localizes a transient failure.
+// Prefer the stack for Errors, a JSON dump for plain / JSON:API error objects,
+// and fall back to `coerceErrorMessage` for everything else.
+export function stringifyErrorForLog(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ?? `${err.name}: ${err.message}`;
+  }
+  if (err != null && typeof err === 'object') {
+    try {
+      let json = JSON.stringify(err);
+      if (json && json !== '{}') {
+        return json;
+      }
+    } catch {
+      // not serializable (e.g. circular references) — fall through
+    }
+  }
+  return coerceErrorMessage(err, '(no error detail available)');
+}
+
 export function responseWithError(
   error: CardError,
   requestContext: RequestContext,

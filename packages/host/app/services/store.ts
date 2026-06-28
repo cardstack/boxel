@@ -15,7 +15,7 @@ import { task } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
-import { merge } from 'lodash-es';
+import { merge, mergeWith } from 'lodash-es';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
@@ -32,7 +32,6 @@ import {
   isSearchEntryCollectionDocument,
   isSparseItemResource,
   resolveFileDefCodeRef,
-  searchEntryDocToLinkableDoc,
   searchEntryWireQueryFromQuery,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
@@ -46,10 +45,12 @@ import {
   rri,
   logger,
   formattedError,
+  stringifyErrorForLog,
   isJsonContentType,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
+  clearReplacedArrayFieldMeta,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -74,7 +75,6 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
-  type LinkableCollectionDocument,
   type SearchEntryResults,
   type SearchEntryWireQuery,
   type RealmIdentifier,
@@ -247,15 +247,13 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
-  // Coalesce concurrent same-(realms, query) `_federated-search-v2` HTTP
-  // calls during a prerender. Mirrors
-  // `RealmIndexQueryEngine.#inFlightSearch` server-side. Gated on
-  // `__boxelRenderContext` so live user searches stay uncoalesced —
-  // write-then-read freshness story unchanged outside prerender.
-  // Entries self-clear on `.finally()` via identity check.
-  private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
-    new Map();
-  // Resolved-doc cache for same-realm `_federated-search-v2` calls during
+  // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
+  // calls during a prerender. Gated on `__boxelRenderContext` so live
+  // user searches stay uncoalesced — write-then-read freshness story
+  // unchanged outside prerender. Entries self-clear on `.finally()` via
+  // identity check.
+  private inflightSearch: Map<string, Promise<SearchEntryResults>> = new Map();
+  // Resolved-doc cache for same-realm `_federated-search` calls during
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
   // in-flight Map and the cache is populated on resolve. Keyed by
@@ -276,7 +274,7 @@ export default class StoreService extends Service implements StoreInterface {
   // `job-scoped-search-cache.ts` for the server-side prior art on
   // storing resolved docs rather than promises (avoids tail-latency
   // stalls on slow first populate).
-  private searchCache: Map<string, LinkableCollectionDocument> = new Map();
+  private searchCache: Map<string, SearchEntryResults> = new Map();
   // The jobId the `searchCache` entries belong to. When a request
   // arrives carrying a different `__boxelJobId` we drop the cache
   // before serving — belt-and-braces beside `resetState()` and the
@@ -973,7 +971,12 @@ export default class StoreService extends Service implements StoreInterface {
       omitQueryFields: true,
     });
     if (patch.attributes) {
-      doc.data.attributes = merge(doc.data.attributes, patch.attributes);
+      doc.data.attributes = mergeWith(
+        doc.data.attributes,
+        patch.attributes,
+        (_dest, src) => (Array.isArray(src) ? src : undefined),
+      );
+      clearReplacedArrayFieldMeta(doc.data.meta, patch.attributes);
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(
@@ -1024,7 +1027,7 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  // Instances only: the query runs against the v2 search requesting full
+  // Instances only: the query runs against the search requesting full
   // `item` serializations, the results hydrate into the store, and the caller
   // gets instances back. For the raw search-entry wire format (HTML
   // renderings, field-limited serializations, the document itself) use
@@ -1069,7 +1072,7 @@ export default class StoreService extends Service implements StoreInterface {
     return opts?.includeMeta ? result : result.instances;
   }
 
-  // The raw v2 wire format: heterogeneous `search-entry` resources with the
+  // The raw wire format: heterogeneous `search-entry` resources with the
   // `html` / `item` branches the query's `fields[search-entry]` selects.
   // Nothing is hydrated into the store.
   async searchEntries(
@@ -1122,10 +1125,13 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let collectionDoc = await this.fetchSearchDoc(query, realms);
 
-    // Hydrate each result into the store
+    // Hydrate each result into the store. The data-only search-entry doc
+    // carries one full `item` (`card`/`file-meta`) serialization per entry in
+    // `included`, reached through the entry's `item` relationship.
+    let items = this.itemResourcesFromSearchEntries(collectionDoc);
     let instances = (
       await Promise.all(
-        collectionDoc.data.map(async (resource) => {
+        items.map(async (resource) => {
           try {
             return await this.addResourceFromSearchData<T>(
               resource,
@@ -1145,12 +1151,11 @@ export default class StoreService extends Service implements StoreInterface {
     return { instances, meta: collectionDoc.meta };
   }
 
-  // The instances path's resolved-document layer: the legacy `Query` runs
-  // against the v2 search requesting full `item` serializations, and the
-  // search-entry document coalesces back into the legacy collection shape
-  // (`item`s as `data` in entry order, the transitive link expansion as
-  // `included`) that the hydration pipeline and the caches below consume.
-  // Sits between `store.search` and `_federated-search-v2`.
+  // The instances path's resolved-document layer: the `Query` runs against
+  // the search requesting full `item` serializations, and the resulting
+  // search-entry document (one `item` per entry in `included`) is what the
+  // hydration pipeline and the caches below consume.
+  // Sits between `store.search` and `_federated-search`.
   //
   // Two layers of dedup, both prerender-gated:
   //
@@ -1169,7 +1174,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDoc(
     query: Query,
     realms: string[],
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
     let jobId = inPrerender
       ? ((globalThis as any).__boxelJobId as string | undefined)
@@ -1214,7 +1219,7 @@ export default class StoreService extends Service implements StoreInterface {
     let inflightKey = inPrerender
       ? searchInFlightKey(realms, query)
       : undefined;
-    let doc: LinkableCollectionDocument;
+    let doc: SearchEntryResults;
     if (inflightKey !== undefined) {
       let existing = this.inflightSearch.get(inflightKey);
       if (existing) {
@@ -1226,8 +1231,7 @@ export default class StoreService extends Service implements StoreInterface {
             // `clearInFlightSearch()` could in principle have removed
             // (and a later caller re-set) this slot while we were
             // in-flight. Only clean up if the map still points at *this*
-            // pending promise. Mirrors
-            // `RealmIndexQueryEngine.searchCards` server-side.
+            // pending promise.
             if (this.inflightSearch.get(inflightKey) === pending) {
               this.inflightSearch.delete(inflightKey);
             }
@@ -1258,12 +1262,37 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDocUncoalesced(
     query: Query,
     realms: string[],
-  ): Promise<LinkableCollectionDocument> {
-    let doc = await this.fetchSearchEntryDoc(
+  ): Promise<SearchEntryResults> {
+    return await this.fetchSearchEntryDoc(
       searchEntryWireQueryFromQuery(query, { fields: ['item'] }),
       realms,
     );
-    return searchEntryDocToLinkableDoc(doc);
+  }
+
+  // Extract the per-entry `item` (`card`/`file-meta`) serializations from a
+  // data-only search-entry document, in entry order: each entry's `item`
+  // relationship names a `(type, id)` resolved against `included`.
+  private itemResourcesFromSearchEntries(
+    doc: SearchEntryResults,
+  ): (CardResource<Saved> | FileMetaResource)[] {
+    let byKey = new Map<string, CardResource<Saved> | FileMetaResource>();
+    for (let included of doc.included ?? []) {
+      if (included.type === 'card' || included.type === 'file-meta') {
+        byKey.set(`${included.type}:${included.id}`, included);
+      }
+    }
+    let items: (CardResource<Saved> | FileMetaResource)[] = [];
+    for (let entry of doc.data) {
+      let ref = entry.relationships.item?.data;
+      if (!ref) {
+        continue;
+      }
+      let item = byKey.get(`${ref.type}:${ref.id}`);
+      if (item) {
+        items.push(item);
+      }
+    }
+    return items;
   }
 
   private async fetchSearchEntryDoc(
@@ -1274,7 +1303,7 @@ export default class StoreService extends Service implements StoreInterface {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_federated-search-v2', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetchForRealms(
       searchURL.href,
       realms,
@@ -2142,11 +2171,11 @@ export default class StoreService extends Service implements StoreInterface {
         status === 404 &&
         isSystemCardDefault
       );
-      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`;
+      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${stringifyErrorForLog(error)}`;
       if (shouldLogAsError) {
-        storeLogger.error(message, error);
+        storeLogger.error(message);
       } else {
-        storeLogger.debug(message, error);
+        storeLogger.debug(message);
       }
       return cardError;
     } finally {

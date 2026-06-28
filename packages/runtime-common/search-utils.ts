@@ -1,18 +1,7 @@
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { logger } from './log.ts';
-import { resourceIdentity } from './resource-types.ts';
 import { ensureTrailingSlash } from './paths.ts';
-import { assertQuery, InvalidQueryError, type Query } from './query.ts';
-import { RequestTimings } from './request-timings.ts';
-import {
-  isValidPrerenderedHtmlFormat,
-  PRERENDERED_HTML_FORMATS,
-  type PrerenderedHtmlFormat,
-} from './prerendered-html-format.ts';
-import type {
-  PrerenderedCardCollectionDocument,
-  LinkableCollectionDocument,
-} from './document-types.ts';
+import type { Query } from './query.ts';
+import type { RequestTimings } from './request-timings.ts';
 import { SupportedMimeType } from './router.ts';
 
 export type SearchRequestErrorCode =
@@ -23,11 +12,6 @@ export type SearchRequestErrorCode =
   | 'invalid-render'
   | 'invalid-prerendered-html-format';
 
-type PrerenderedRenderType = {
-  module: RealmResourceIdentifier;
-  name: string;
-};
-
 export class SearchRequestError extends Error {
   code: SearchRequestErrorCode;
 
@@ -36,50 +20,6 @@ export class SearchRequestError extends Error {
     this.code = code;
     this.name = 'SearchRequestError';
   }
-}
-
-function normalizeStringParam(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    typeof value[0] === 'string'
-  ) {
-    return value[0];
-  }
-  return undefined;
-}
-
-function normalizeStringArrayParam(value: unknown): string[] | undefined {
-  if (Array.isArray(value)) {
-    if (!value.every((entry) => typeof entry === 'string')) {
-      return undefined;
-    }
-    return value;
-  }
-  if (typeof value === 'string') {
-    return [value];
-  }
-  return undefined;
-}
-
-function normalizeRenderType(
-  value: unknown,
-): PrerenderedRenderType | undefined {
-  if (
-    value &&
-    typeof value === 'object' &&
-    'module' in value &&
-    'name' in value
-  ) {
-    let { module, name } = value as { module?: unknown; name?: unknown };
-    if (typeof module === 'string' && typeof name === 'string') {
-      return { module: module as RealmResourceIdentifier, name };
-    }
-  }
-  return undefined;
 }
 
 export function parseRealmsParam(url: URL): string[] {
@@ -161,178 +101,6 @@ export function resolveSearchRequestMethod(request: Request): string {
   return method;
 }
 
-export async function parseSearchQueryFromRequest(
-  request: Request,
-): Promise<Query> {
-  let payload = await parseSearchRequestPayload(request);
-  return parseSearchQueryFromPayload(payload);
-}
-
-export function parseSearchQueryFromPayload(payload: unknown): Query {
-  let cardsQuery = payload;
-  try {
-    assertQuery(cardsQuery);
-  } catch (e) {
-    if (e instanceof InvalidQueryError) {
-      throw new SearchRequestError(
-        'invalid-query',
-        `Invalid query: ${e.message}`,
-      );
-    }
-    throw e;
-  }
-
-  return cardsQuery as Query;
-}
-
-export async function parsePrerenderedSearchRequestFromRequest(
-  request: Request,
-): Promise<{
-  cardsQuery: Query;
-  htmlFormat: PrerenderedHtmlFormat;
-  cardUrls?: string[];
-  renderType?: PrerenderedRenderType;
-}> {
-  let payload = await parseSearchRequestPayload(request);
-  return parsePrerenderedSearchRequestFromPayload(payload);
-}
-
-export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
-  cardsQuery: Query;
-  htmlFormat: PrerenderedHtmlFormat;
-  cardUrls?: string[];
-  renderType?: PrerenderedRenderType;
-} {
-  let cardsQuery: unknown;
-  let htmlFormat: string | undefined;
-  let cardUrls: string[] | undefined;
-  let renderType: PrerenderedRenderType | undefined;
-
-  let payloadRecord =
-    payload && typeof payload === 'object'
-      ? (payload as Record<string, any>)
-      : {};
-  htmlFormat = normalizeStringParam(payloadRecord.prerenderedHtmlFormat);
-  let hasCardUrls = 'cardUrls' in payloadRecord;
-  cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
-  if (hasCardUrls && !cardUrls) {
-    throw new SearchRequestError(
-      'invalid-query',
-      'cardUrls must be a string or array of strings',
-    );
-  }
-  renderType = normalizeRenderType(payloadRecord.renderType);
-  let {
-    prerenderedHtmlFormat: _remove1,
-    cardUrls: _remove2,
-    renderType: _remove3,
-    ...rest
-  } = payloadRecord;
-  cardsQuery = rest;
-
-  if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
-    throw new SearchRequestError(
-      'invalid-prerendered-html-format',
-      `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join(', ')} to use this endpoint`,
-    );
-  }
-
-  try {
-    assertQuery(cardsQuery);
-  } catch (e) {
-    if (e instanceof InvalidQueryError) {
-      throw new SearchRequestError(
-        'invalid-query',
-        `Invalid query: ${e.message}`,
-      );
-    }
-    throw e;
-  }
-
-  return {
-    cardsQuery: cardsQuery as Query,
-    htmlFormat,
-    cardUrls,
-    renderType,
-  };
-}
-
-// The federated merge: concatenate `data` in realm order, sum
-// `meta.page.total`, and dedupe `included` by the JSON:API identity pair
-// `(type, id)`. The `included` holds transitively-linked `card` / `file-meta`
-// resources, so a linked card referenced by results from more than one realm
-// travels exactly once.
-export function combineSearchResults(
-  docs: LinkableCollectionDocument[],
-): LinkableCollectionDocument {
-  let combined: LinkableCollectionDocument = {
-    data: [],
-    meta: { page: { total: 0 } },
-  };
-  let included: NonNullable<LinkableCollectionDocument['included']> = [];
-  let includedByIdentity = new Set<string>();
-
-  for (let doc of docs) {
-    combined.data.push(...doc.data);
-    combined.meta.page.total += doc.meta?.page?.total ?? 0;
-    if (doc.included) {
-      for (let resource of doc.included) {
-        if (resource.id) {
-          // NUL-separated so a `(type, id)` pair can't alias another by
-          // concatenation (no resource type or id contains a NUL byte).
-          let identity = resourceIdentity(resource.type, resource.id);
-          if (includedByIdentity.has(identity)) {
-            continue;
-          }
-          includedByIdentity.add(identity);
-        }
-        included.push(resource);
-      }
-    }
-  }
-
-  if (included.length > 0) {
-    combined.included = included;
-  }
-
-  return combined;
-}
-
-// Merges results into the prerendered-card document shape: CSS folds into a
-// flat `meta.scopedCssUrls` Set and "is this a file?" rides in
-// `meta.isFileMeta`. This contrasts with `combineSearchResults`, where CSS is a
-// first-class `css` resource deduped inside `included` and the resource `type`
-// distinguishes a card from a file.
-export function combinePrerenderedSearchResults(
-  docs: PrerenderedCardCollectionDocument[],
-): PrerenderedCardCollectionDocument {
-  let combined: PrerenderedCardCollectionDocument = {
-    data: [],
-    meta: { page: { total: 0 } },
-  };
-  let scopedCssUrls = new Set<string>();
-
-  for (let doc of docs) {
-    combined.data.push(...doc.data);
-    combined.meta.page.total += doc.meta?.page?.total ?? 0;
-    for (let url of doc.meta?.scopedCssUrls ?? []) {
-      scopedCssUrls.add(url);
-    }
-  }
-
-  if (scopedCssUrls.size > 0) {
-    combined.meta.scopedCssUrls = [...scopedCssUrls];
-  }
-  if (docs.length === 1 && docs[0]?.meta?.realmInfo) {
-    combined.meta.realmInfo = docs[0].meta.realmInfo;
-  }
-  if (docs.some((doc) => doc.meta?.isFileMeta)) {
-    combined.meta.isFileMeta = true;
-  }
-
-  return combined;
-}
-
 // Shared opts contract for the federated-search path, kept in one place so
 // SearchableRealm.search, searchRealms, and Realm.search can't drift —
 // dropping a field here (e.g. priority) silently breaks the threading from
@@ -361,14 +129,6 @@ export type SearchOpts = {
   // applies it as a SQL `i.url IN (...)` filter, so it must reach the engine
   // opts — not only the cache key — for the subset to actually narrow results.
   cardUrls?: string[];
-};
-
-type SearchableRealm = {
-  search: (
-    query: Query,
-    opts?: SearchOpts,
-  ) => Promise<LinkableCollectionDocument>;
-  url?: string;
 };
 
 // Indirection so a host integration test can deterministically capture
@@ -431,80 +191,6 @@ export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
   return results.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   );
-}
-
-export async function searchRealms(
-  realms: Array<SearchableRealm | null | undefined>,
-  query: Query,
-  opts?: SearchOpts,
-): Promise<LinkableCollectionDocument> {
-  // Instrument only when the caller threaded a correlation id. The
-  // prerendered host stamps one; live SPA / API traffic does not — so
-  // normal traffic allocates no collector and emits no line.
-  //
-  // Two callers: the realm-server's `handle-search` threads a collector it
-  // owns (so it can emit one complete request→response line itself —
-  // `opts.timings` is set, `ownsTimings` is false, we don't emit), and the
-  // host-test realm-server mock calls us with just a `loggingCorrelationId` (we create
-  // the collector and emit the line ourselves, which the host test observes).
-  let ownsTimings = Boolean(opts?.loggingCorrelationId) && !opts?.timings;
-  let timings =
-    opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
-  let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
-  let startedAt = ownsTimings ? Date.now() : 0;
-  let docs = await fanOutRealmSearch(
-    realms,
-    query,
-    (realm) => realm.search(query, perRealmOpts),
-    (label, queryLabel) =>
-      `searchRealms realm search failed: ${label} query=${queryLabel}`,
-  );
-  // `realm.search` returns the live-card document; the merge concatenates
-  // `data` and dedupes `included` by `(type, id)`.
-  let combined = combineSearchResults(docs);
-  if (timings) {
-    timings.incr('results', combined.data?.length ?? 0);
-  }
-  if (ownsTimings && timings) {
-    emitSearchTiming(
-      `corr=${opts!.loggingCorrelationId}` +
-        ` realms=${realms.filter((realm) => Boolean(realm)).length}` +
-        ` total=${Date.now() - startedAt}ms ` +
-        timings.toLogFragment(),
-    );
-  }
-  return combined;
-}
-
-type PrerenderedSearchableRealm = {
-  searchPrerendered: (
-    query: Query,
-    opts: {
-      htmlFormat: PrerenderedHtmlFormat;
-      cardUrls?: string[];
-      renderType?: PrerenderedRenderType;
-    },
-  ) => Promise<PrerenderedCardCollectionDocument>;
-  url?: string;
-};
-
-export async function searchPrerenderedRealms(
-  realms: Array<PrerenderedSearchableRealm | null | undefined>,
-  query: Query,
-  opts: {
-    htmlFormat: PrerenderedHtmlFormat;
-    cardUrls?: string[];
-    renderType?: PrerenderedRenderType;
-  },
-): Promise<PrerenderedCardCollectionDocument> {
-  let docs = await fanOutRealmSearch(
-    realms,
-    query,
-    (realm) => realm.searchPrerendered(query, opts),
-    (label, queryLabel) =>
-      `searchPrerenderedRealms realm search failed: ${label} query=${queryLabel} htmlFormat=${opts.htmlFormat}`,
-  );
-  return combinePrerenderedSearchResults(docs);
 }
 
 export type SearchErrorBody = {

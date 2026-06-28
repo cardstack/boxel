@@ -36,12 +36,7 @@ import type {
   RealmIdentifier,
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
-import {
-  normalizeQueryForSignature,
-  sortKeysDeep,
-  type Filter,
-  type Query,
-} from './query.ts';
+import type { Filter, Query } from './query.ts';
 import { CardError, type SerializedError } from './error.ts';
 import {
   isCodeRef,
@@ -53,7 +48,6 @@ import {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   type SingleCardDocument,
-  type LinkableCollectionDocument,
   type SearchEntryCollectionDocument,
   type SearchEntryIncludedResource,
   isSearchEntryCollectionDocument,
@@ -73,7 +67,7 @@ import {
   buildCssResource,
   parseUsedRenderType,
   scopedCssHrefsFromDeps,
-} from './unified-search.ts';
+} from './search-resource-helpers.ts';
 import {
   buildHtmlResource,
   buildIconResource,
@@ -87,10 +81,6 @@ import {
   type RenderingCandidate,
   type SearchEntryQuery,
 } from './search-entry.ts';
-import {
-  liveSearchEntryQuery,
-  searchEntryDocToLinkableDoc,
-} from './search-compat.ts';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
 import {
   normalizeQueryDefinition,
@@ -190,37 +180,6 @@ type QueryFieldErrorDetail = {
   status?: number;
 };
 
-// Stable digest key for searchCards in-flight dedup. Returns undefined if
-// the inputs can't be serialized deterministically — caller falls back to
-// running uncoalesced so dedup is best-effort, never a correctness boundary.
-export function searchInFlightKey(
-  realmURL: string,
-  query: Query,
-  opts: Options | undefined,
-): string | undefined {
-  // Encode the tuple as a JSON array (not a delimited string) so user-supplied
-  // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
-  // collide with the delimiter and cause unrelated searches to coalesce.
-  try {
-    // `timings` is a per-request diagnostic collector, not part of the
-    // result-shaping opts. Exclude it from the key so it can't perturb the
-    // in-flight coalescing — two otherwise-identical searches must still
-    // dedupe even though each carries its own collector.
-    let keyOpts = opts;
-    if (opts && 'timings' in opts) {
-      let { timings: _omitTimings, ...rest } = opts;
-      keyOpts = rest;
-    }
-    return JSON.stringify([
-      realmURL,
-      normalizeQueryForSignature(query),
-      keyOpts ? sortKeysDeep(keyOpts) : null,
-    ]);
-  } catch {
-    return undefined;
-  }
-}
-
 function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
@@ -246,40 +205,6 @@ export class RealmIndexQueryEngine {
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
-  // In-flight dedup for searchCards: concurrent callers asking for the same
-  // (realm, query, opts) share one in-flight promise instead of each running
-  // an independent SQL + loadLinks walk.
-  //
-  // Safety: this layer is user-agnostic. Per-realm read authorization is
-  // enforced by realm-server middleware (multiRealmAuthorization) BEFORE the
-  // request reaches Realm.search → searchCards; once we're here, every
-  // authorized caller for the same (realm, query, opts) is entitled to the
-  // same bytes. The key intentionally omits caller identity. If per-card
-  // visibility-by-user is ever added at this layer, this key must grow to
-  // include the caller's identity, or the dedup must be moved up the stack
-  // to where auth-equivalence is established.
-  //
-  // The shared resolved document is treated as read-only by all callers
-  // (Realm.search → JSON.stringify → HTTP response). Do not mutate the
-  // returned doc.
-  #inFlightSearch = new Map<string, Promise<LinkableCollectionDocument>>();
-
-  // Drop every pending in-flight entry. Callers that registered before the
-  // drop continue to await their existing promise (the underlying SQL was
-  // already in motion); only *new* callers after the drop will miss the map
-  // and fire a fresh search against the now-current index. Wire this to any
-  // event that means "boxel_index has just moved" — typically a worker's
-  // batch.done() swap reaching this realm-server process.
-  //
-  // The clear is local-process only. Cross-process invalidation (peer
-  // realm-server replicas serving live `_search` while a different worker
-  // commits a swap) is closed by Phase 2's NOTIFY-driven eviction. Within a
-  // single process — which covers dev, single-instance deployments, and the
-  // realm-server-drives-its-own-indexing path — this method closes the
-  // post-swap-staleness window.
-  clearInFlightSearch(): void {
-    this.#inFlightSearch.clear();
-  }
 
   constructor({
     realm,
@@ -311,66 +236,7 @@ export class RealmIndexQueryEngine {
     return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
-  async searchCards(
-    query: Query,
-    opts?: Options,
-  ): Promise<LinkableCollectionDocument> {
-    let key = searchInFlightKey(this.#realm.url, query, opts);
-    if (key !== undefined) {
-      let existing = this.#inFlightSearch.get(key);
-      if (existing) {
-        // A concurrent identical search is already running; this follower
-        // awaits its result instead of re-running the work. Record that wait
-        // as `coalescedWait` on the follower's own collector so its
-        // `realm:search-timing` line reflects the time spent — otherwise the
-        // follower would show no `sql`/`loadLinks` and look misleadingly
-        // instant exactly under the concurrent search load we're diagnosing.
-        return opts?.timings
-          ? await opts.timings.time('coalescedWait', () => existing)
-          : await existing;
-      }
-      let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
-        // Identity-check before deletion: a concurrent invalidation path
-        // could in principle replace the entry. Only clean up if the map
-        // still points at *this* pending promise. Mirrors
-        // CachingDefinitionLookup#inFlight.
-        if (this.#inFlightSearch.get(key) === pending) {
-          this.#inFlightSearch.delete(key);
-        }
-      });
-      this.#inFlightSearch.set(key, pending);
-      return await pending;
-    }
-    return await this.searchCardsUncoalesced(query, opts);
-  }
-
-  private async searchCardsUncoalesced(
-    query: Query,
-    opts?: Options,
-  ): Promise<LinkableCollectionDocument> {
-    // The legacy live search expressed over the search-entry engine: full
-    // `item` serializations (the engine's file dispatch and loadLinks pass
-    // included), coalesced back to the legacy document at the edge — where
-    // the legacy sparse fieldset (`query.fields`) projects `data` with the
-    // legacy semantics. `linkFields` scopes the link expansion exactly as
-    // the legacy pass did — selected by the query's actual dispatch, since a
-    // request may carry fieldsets for both types.
-    let linkFields: string[] | undefined;
-    if (query.fields) {
-      let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
-      linkFields = isFileMetaQuery
-        ? query.fields['file-meta']
-        : query.fields['card'];
-    }
-    let engineOpts = linkFields ? { ...opts, linkFields } : opts;
-    let doc = await this.searchEntries(
-      liveSearchEntryQuery(query, { cardUrls: opts?.cardUrls }),
-      engineOpts,
-    );
-    return searchEntryDocToLinkableDoc(doc, { fields: query.fields });
-  }
-
-  // The v2 search-entry engine. Runs the parsed search-entry query — the
+  // The search-entry engine. Runs the parsed search-entry query — the
   // `item.` membership query against the SQL core, then the htmlQuery
   // evaluated per candidate rendering in this mapper — and assembles a
   // heterogeneous `search-entry` document: one entry per result, with the
@@ -582,11 +448,7 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<SearchEntryCollectionDocument> {
     let { itemQuery: query, htmlQuery, fieldset } = searchEntryQuery;
-    let {
-      includeErrors: _includeErrors,
-      renderType: _renderType,
-      ...fileOpts
-    } = opts ?? {};
+    let { includeErrors: _includeErrors, ...fileOpts } = opts ?? {};
     let runSql = () =>
       this.#indexQueryEngine.searchFiles(
         new URL(this.#realm.url),
@@ -832,99 +694,6 @@ export class RealmIndexQueryEngine {
     );
 
     return results;
-  }
-
-  async searchPrerendered(query: Query, opts?: Options) {
-    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
-    if (isFileMetaQuery) {
-      // File-meta prerendered search currently returns non-error rows.
-      let { includeErrors: _includeErrors, ...fileSearchOpts } = opts ?? {};
-      let { files, meta } = await this.#indexQueryEngine.searchFiles(
-        new URL(this.#realm.url),
-        query,
-        fileSearchOpts,
-      );
-
-      let scopedCssUrls = new Set<string>();
-      let prerenderedCards = files.map((file) => {
-        (file.deps ?? []).forEach((dep) => {
-          if (isScopedCSSRequest(dep)) {
-            scopedCssUrls.add(dep);
-          }
-        });
-        return this.fileEntryToPrerenderedCard(file, opts);
-      });
-
-      return {
-        prerenderedCards,
-        scopedCssUrls: [...scopedCssUrls],
-        meta: { ...meta, isFileMeta: true as const },
-      };
-    }
-    return await this.#indexQueryEngine.searchPrerendered(
-      new URL(this.#realm.url),
-      query,
-      opts,
-    );
-  }
-
-  private fileEntryToPrerenderedCard(file: IndexedFile, opts?: Options) {
-    let html: string | null = null;
-    let usedRenderTypeKey: string | undefined;
-    switch (opts?.htmlFormat) {
-      case 'head':
-        html = file.headHtml;
-        break;
-      case 'embedded':
-      case 'fitted': {
-        let htmlByType =
-          opts.htmlFormat === 'embedded' ? file.embeddedHtml : file.fittedHtml;
-        if (htmlByType) {
-          if (opts.renderType) {
-            let renderTypeKey = internalKeyFor(
-              opts.renderType,
-              undefined,
-              this.#realm.virtualNetwork,
-            );
-            if (htmlByType[renderTypeKey] != null) {
-              html = htmlByType[renderTypeKey];
-              usedRenderTypeKey = renderTypeKey;
-            }
-          }
-          if (html == null) {
-            let defaultTypeKey = file.types?.[0];
-            if (defaultTypeKey && htmlByType[defaultTypeKey] != null) {
-              html = htmlByType[defaultTypeKey];
-              usedRenderTypeKey = defaultTypeKey;
-            }
-          }
-        }
-        break;
-      }
-      case 'atom':
-      default:
-        html = file.atomHtml;
-    }
-
-    if (!usedRenderTypeKey) {
-      usedRenderTypeKey = file.types?.[0];
-    }
-
-    let usedRenderType: ResolvedCodeRef | undefined;
-    if (usedRenderTypeKey) {
-      let codeRef = codeRefFromInternalKey(usedRenderTypeKey);
-      if (isResolvedCodeRef(codeRef)) {
-        usedRenderType = codeRef;
-      }
-    }
-
-    return {
-      url: file.canonicalURL,
-      html,
-      ...(file.displayNames?.[0] ? { cardType: file.displayNames[0] } : {}),
-      ...(file.iconHtml ? { iconHtml: file.iconHtml } : {}),
-      ...(usedRenderType ? { usedRenderType } : {}),
-    };
   }
 
   async getCardDependencies(url: URL): Promise<string[]> {
@@ -1411,7 +1180,7 @@ export class RealmIndexQueryEngine {
       };
       let realmList = realms ?? (realm ? [realm] : [realmHref]);
       // Resolve the cross-realm query-backed field against the peer realm's
-      // v2 `/_search-v2` endpoint, data-only: the legacy card-rooted query
+      // `/_search` endpoint, data-only: the legacy card-rooted query
       // translates to the search-entry wire grammar, and the `item` fieldset
       // makes every entry carry its full `card`/`file-meta` serialization.
       let wireQuery = searchEntryWireQueryFromQuery(
@@ -1503,10 +1272,7 @@ export class RealmIndexQueryEngine {
   }
 
   private async attachRealmInfo(
-    doc:
-      | SingleCardDocument
-      | LinkableCollectionDocument
-      | SearchEntryCollectionDocument,
+    doc: SingleCardDocument | SearchEntryCollectionDocument,
   ): Promise<void> {
     let realmInfo = await this.#realm.getRealmInfo();
     let resources = Array.isArray(doc.data) ? doc.data : [doc.data];

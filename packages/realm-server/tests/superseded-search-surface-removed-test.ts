@@ -4,16 +4,11 @@ import { basename } from 'path';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-// A grep-style guard that the superseded pre-v2 unified-search surfaces stay
-// removed. The platform's search relationships live on `search-entry` (v2), the
-// existing endpoints keep their original contracts through the compat layer,
-// and a card needs no reserved-key guard — so the pre-v2 in-place additions to
-// `/_search` and the card resource must not reappear. Each entry asserts a
-// removed identifier is absent from the source file that used to define it.
-//
-// (The prerendered compat machinery — `IndexQueryEngine.searchPrerendered`, the
-// `kind: 'render'` SQL projection, `<PrerenderedCardSearch>` — is intentionally
-// out of scope here; it is retired separately when the legacy endpoints are.)
+// A grep-style guard that the superseded search scaffolding stays
+// removed. The platform's search relationships live on `search-entry`, so the
+// superseded in-place additions to the card resource and the old result mappers must
+// not reappear. Each entry asserts a removed identifier is absent from the
+// source file that used to define it.
 
 const packagesDir = resolve(import.meta.dirname, '..', '..');
 
@@ -30,8 +25,8 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
     forbidden: ['RenderedHtmlResource', "'rendered-html'", 'identityOnly'],
   },
   {
-    // The pre-v2 result-mapper builders.
-    file: 'runtime-common/unified-search.ts',
+    // The superseded result-mapper builders.
+    file: 'runtime-common/search-resource-helpers.ts',
     forbidden: [
       'buildRenderedHtmlResource',
       'buildIdentityOnlyCard',
@@ -39,7 +34,7 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
     ],
   },
   {
-    // The pre-v2 shape predicates.
+    // The superseded shape predicates.
     file: 'runtime-common/card-document-shape.ts',
     forbidden: [
       'isRenderedHtmlResource',
@@ -65,7 +60,7 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
     forbidden: ['searchUnified'],
   },
   {
-    // The pre-v2 federated document type — narrowed back to the original
+    // The superseded federated document type — narrowed back to the original
     // `LinkableCollectionDocument`.
     file: 'runtime-common/document-types.ts',
     forbidden: [
@@ -81,9 +76,9 @@ const GUARDS: { file: string; forbidden: string[] }[] = [
 ];
 
 module(basename(import.meta.filename), function () {
-  module('pre-v2 search surfaces removed', function () {
+  module('superseded search surfaces removed', function () {
     for (let { file, forbidden } of GUARDS) {
-      test(`${file} carries no pre-v2 search surface`, function (assert) {
+      test(`${file} carries no superseded search surface`, function (assert) {
         let contents = source(file);
         for (let token of forbidden) {
           assert.false(

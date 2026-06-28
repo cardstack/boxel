@@ -34,7 +34,7 @@ export interface SearchEntryRendering {
   cssUrls: string[];
 }
 
-// One v2 search result as a renderable view-model. `component` renders the
+// One search result as a renderable view-model. `component` renders the
 // result transparently — prerendered HTML inert (hydrated lazily) or a live
 // card — so a consumer renders `<entry.component />` without ever branching on
 // prerendered-vs-live. `html` / `item` are the raw branches, exposed for custom
@@ -75,7 +75,7 @@ export interface SearchResultsYield {
   errors: ErrorEntry[] | undefined;
 }
 
-// The card-facing contract for the v2 search component the host provides on
+// The card-facing contract for the search component the host provides on
 // `@context` (`@context.searchResultsComponent`). It consumes the heterogeneous
 // `search-entry` stream for a `search-entry`-rooted query and renders it
 // transparently — prerendered HTML inert (hydrated lazily) or the live
@@ -85,7 +85,7 @@ export interface SearchResultsYield {
 export interface SearchResultsComponentSignature {
   Element: HTMLElement;
   Args: {
-    // The `search-entry`-rooted v2 query. Re-issued live on invalidation;
+    // The `search-entry`-rooted query. Re-issued live on invalidation;
     // changing it re-runs the search. Undefined → idle (no results).
     query: SearchEntryWireQuery | undefined;
     // The hydration gesture for HTML-backed rows — a host-UX choice, never on

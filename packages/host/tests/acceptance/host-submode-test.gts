@@ -688,6 +688,9 @@ module('Acceptance | host submode', function (hooks) {
 
         getService('realm-server').publishRealm = publishRealm;
         getService('realm-server').unpublishRealm = unpublishRealm;
+        // realm.publish polls readiness after the 202; these tests drive
+        // publish timing via publishDeferred, so report ready instantly.
+        getService('realm-server').waitForRealmReady = async () => {};
         // The publish modal asks the server for the unlisted-link slug on open;
         // default it so the unlisted card renders a URL (not a stuck "Generating
         // link…") in tests that don't exercise it. Tests that do use

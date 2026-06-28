@@ -211,7 +211,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -283,7 +283,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -333,7 +333,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -410,7 +410,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -454,7 +454,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -641,7 +641,7 @@ module(
         let url = new URL(request.url);
 
         // Track client-side search requests
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -731,7 +731,7 @@ module(
       let handler = async (request: Request) => {
         let url = new URL(request.url);
 
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -787,7 +787,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -865,7 +865,7 @@ module(
       let handler = async (request: Request) => {
         let url = new URL(request.url);
 
-        if (url.pathname.endsWith('/_federated-search-v2')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
 
