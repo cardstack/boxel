@@ -9,6 +9,7 @@
  */
 
 import type { BoxelCLIClient, SearchResult } from '@cardstack/boxel-cli/api';
+import { delay } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -40,10 +41,6 @@ export function toRealmRelativePath(id: string, realmUrl: string): string {
 
 /** Default delay between empty-result retries in {@link searchUntilNonEmpty}. */
 export const SEARCH_RETRY_DELAY_MS = 1000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Run a realm-index search, retrying while the result set is empty.
