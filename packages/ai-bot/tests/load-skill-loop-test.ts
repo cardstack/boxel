@@ -24,7 +24,7 @@ function deps(body = 'SKILL BODY') {
   return {
     calls,
     onBehalfOf: ON_BEHALF_OF,
-    delegatedRealmSessions: {
+    delegatedUserRealmSessions: {
       getToken: async (a: { onBehalfOf: string; realm: string }) => {
         calls.push(a);
         return 'tok';

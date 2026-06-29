@@ -7,16 +7,12 @@ import {
   LOAD_SKILL_TOOL_NAME,
   type LoadSkillArgs,
 } from './load-skill.ts';
-import type { DelegatedRealmSessionManager } from './user-delegated-realm-server-session.ts';
-
-// Cap on how many loadSkill rounds a single user turn may drive, so a model
-// that keeps asking for more skills can't loop the bot indefinitely.
-export const LOAD_SKILL_MAX_ROUNDS = 4;
+import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 
 export interface LoadSkillLoopDeps {
   onBehalfOf: string;
-  delegatedRealmSessions: Pick<
-    DelegatedRealmSessionManager,
+  delegatedUserRealmSessions: Pick<
+    DelegatedUserRealmSessionManager,
     'getToken' | 'invalidate'
   >;
   fetch?: typeof globalThis.fetch;

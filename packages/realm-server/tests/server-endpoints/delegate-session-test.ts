@@ -14,9 +14,9 @@ import {
   testRealmURL,
 } from '../helpers/index.ts';
 import {
-  DELEGATED_REALM_SESSION_SIGNATURE_HEADER,
-  DELEGATED_REALM_SESSION_TIMESTAMP_HEADER,
-  delegatedRealmSessionSignature,
+  DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER,
+  DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER,
+  delegatedUserRealmSessionSignature,
 } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 
 const onBehalfOf = '@jane:localhost';
@@ -37,7 +37,7 @@ function signedPost(
   let timestamp = String(opts.timestamp ?? Date.now());
   let signature =
     opts.signature ??
-    delegatedRealmSessionSignature(
+    delegatedUserRealmSessionSignature(
       opts.secret ?? aiBotDelegationSecret,
       timestamp,
       rawBody,
@@ -46,10 +46,10 @@ function signedPost(
     .post('/_delegate-session')
     .set('Content-Type', 'application/json');
   if (!opts.omitTimestamp) {
-    req = req.set(DELEGATED_REALM_SESSION_TIMESTAMP_HEADER, timestamp);
+    req = req.set(DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER, timestamp);
   }
   if (!opts.omitSignature) {
-    req = req.set(DELEGATED_REALM_SESSION_SIGNATURE_HEADER, signature);
+    req = req.set(DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER, signature);
   }
   return req.send(rawBody);
 }

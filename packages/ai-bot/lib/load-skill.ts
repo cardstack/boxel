@@ -1,8 +1,8 @@
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-import { DelegatedRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
+import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
-import type { DelegatedRealmSessionManager } from './user-delegated-realm-server-session.ts';
+import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 
 let log = logger('ai-bot:load-skill');
 
@@ -68,10 +68,6 @@ export function skillFileUrl({ realm, name, path }: LoadSkillArgs): string {
   return new URL(rel, ensureTrailingSlash(realm)).href;
 }
 
-// Upper bound on skill content fed back to the model, so a large references/
-// file can't blow up the prompt (and bill) of the following round.
-const MAX_SKILL_CONTENT_LENGTH = 100_000;
-
 // Executes a loadSkill tool call inside the bot process: mints a delegated,
 // read-only token for `onBehalfOf` scoped to `realm`, then GETs the skill file
 // as raw source. Never throws — returns a result the caller hands back to the
@@ -81,12 +77,12 @@ export async function executeLoadSkill(
   args: LoadSkillArgs,
   {
     onBehalfOf,
-    delegatedRealmSessions,
+    delegatedUserRealmSessions,
     fetch = globalThis.fetch,
   }: {
     onBehalfOf: string;
-    delegatedRealmSessions: Pick<
-      DelegatedRealmSessionManager,
+    delegatedUserRealmSessions: Pick<
+      DelegatedUserRealmSessionManager,
       'getToken' | 'invalidate'
     >;
     fetch?: typeof globalThis.fetch;
@@ -99,12 +95,12 @@ export async function executeLoadSkill(
   let attempt = async (): Promise<{ response?: Response; error?: string }> => {
     let token: string;
     try {
-      token = await delegatedRealmSessions.getToken({
+      token = await delegatedUserRealmSessions.getToken({
         onBehalfOf,
         realm: args.realm,
       });
     } catch (e: any) {
-      if (e instanceof DelegatedRealmSessionError) {
+      if (e instanceof DelegatedUserRealmSessionError) {
         if (e.kind === 'disabled') {
           return {
             error:
@@ -145,7 +141,7 @@ export async function executeLoadSkill(
   // A cached token whose access was revoked inside its staleness window gets a
   // 401/403. Drop it and try once with a freshly minted token before failing.
   if (response && (response.status === 401 || response.status === 403)) {
-    delegatedRealmSessions.invalidate({ onBehalfOf, realm: args.realm });
+    delegatedUserRealmSessions.invalidate({ onBehalfOf, realm: args.realm });
     ({ response, error } = await attempt());
     if (error) {
       return { ok: false, error };
@@ -159,9 +155,5 @@ export async function executeLoadSkill(
     };
   }
 
-  let content = await response.text();
-  if (content.length > MAX_SKILL_CONTENT_LENGTH) {
-    content = content.slice(0, MAX_SKILL_CONTENT_LENGTH) + '\n\n…[truncated]';
-  }
-  return { ok: true, url, content };
+  return { ok: true, url, content: await response.text() };
 }

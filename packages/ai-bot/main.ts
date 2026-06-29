@@ -34,12 +34,9 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug.ts';
-import { DelegatedRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
+import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import { loadSkillTool } from './lib/load-skill.ts';
-import {
-  buildLoadSkillFollowup,
-  LOAD_SKILL_MAX_ROUNDS,
-} from './lib/load-skill-loop.ts';
+import { buildLoadSkillFollowup } from './lib/load-skill-loop.ts';
 import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
@@ -93,7 +90,7 @@ class Assistant {
   // Mints user-scoped, read-only realm tokens on demand. Inert unless
   // AI_BOT_DELEGATION_SECRET is configured; the pull-model skill loader is its
   // consumer.
-  delegatedRealmSessions: DelegatedRealmSessionManager;
+  delegatedUserRealmSessions: DelegatedUserRealmSessionManager;
 
   constructor(client: MatrixClient, id: string, aiBotInstanceId: string) {
     this.openai = new OpenAI({
@@ -104,7 +101,7 @@ class Assistant {
     this.client = client;
     this.pgAdapter = new PgAdapter();
     this.aiBotInstanceId = aiBotInstanceId;
-    this.delegatedRealmSessions = new DelegatedRealmSessionManager(
+    this.delegatedUserRealmSessions = new DelegatedUserRealmSessionManager(
       process.env.AI_BOT_DELEGATION_SECRET,
     );
   }
@@ -284,7 +281,7 @@ Common issues are:
           .getJoinedMembers()
           .filter((member) => member.userId !== aiBotUserId).length;
         let skillLoadingAllowed =
-          assistant.delegatedRealmSessions.enabled &&
+          assistant.delegatedUserRealmSessions.enabled &&
           humanRoomMemberCount === 1;
 
         if (event.event.origin_server_ts! < startTime) {
@@ -523,12 +520,11 @@ Common issues are:
               // generates again.
               let workingMessages: ChatCompletionMessageParam[] =
                 promptParts.messages as ChatCompletionMessageParam[];
-              let loadSkillRounds = 0;
 
               try {
                 // Usually one pass. When the model calls only the bot-executed
                 // loadSkill tool, run those calls and generate again with the
-                // results in context, up to LOAD_SKILL_MAX_ROUNDS.
+                // results in context, repeating until it stops asking.
                 for (;;) {
                   let roundCostInUsd: number | undefined;
                   const runner = assistant
@@ -602,19 +598,14 @@ Common issues are:
                   }
 
                   let message = completion.choices?.[0]?.message;
-                  if (
-                    message &&
-                    senderMatrixUserId &&
-                    skillLoadingAllowed &&
-                    loadSkillRounds < LOAD_SKILL_MAX_ROUNDS
-                  ) {
+                  if (message && senderMatrixUserId && skillLoadingAllowed) {
                     let followup = await buildLoadSkillFollowup(message, {
                       onBehalfOf: senderMatrixUserId,
-                      delegatedRealmSessions: assistant.delegatedRealmSessions,
+                      delegatedUserRealmSessions:
+                        assistant.delegatedUserRealmSessions,
                     });
                     if (followup.length > 0) {
                       workingMessages = [...workingMessages, ...followup];
-                      loadSkillRounds++;
                       continue;
                     }
                   }

@@ -2,13 +2,13 @@ import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
 import {
-  requestDelegatedRealmSession,
-  verifyDelegatedRealmSessionRequest,
-  DelegatedRealmSessionError,
-  DELEGATED_REALM_SESSION_TIMESTAMP_HEADER,
-  DELEGATED_REALM_SESSION_SIGNATURE_HEADER,
+  requestDelegatedUserRealmSession,
+  verifyDelegatedUserRealmSessionRequest,
+  DelegatedUserRealmSessionError,
+  DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER,
+  DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER,
 } from '@cardstack/runtime-common/user-delegated-realm-server-session';
-import { DelegatedRealmSessionManager } from '../lib/user-delegated-realm-server-session.ts';
+import { DelegatedUserRealmSessionManager } from '../lib/user-delegated-realm-server-session.ts';
 
 const SECRET = 'shared-secret-under-test';
 const ON_BEHALF_OF = '@example-user:boxel.ai';
@@ -62,7 +62,7 @@ module('delegated realm session client', () => {
       });
     });
 
-    await requestDelegatedRealmSession({
+    await requestDelegatedUserRealmSession({
       realmServerURL: 'https://realm.example.com',
       secret: SECRET,
       onBehalfOf: ON_BEHALF_OF,
@@ -72,16 +72,16 @@ module('delegated realm session client', () => {
     });
 
     let headers = captured!.headers as Record<string, string>;
-    let result = verifyDelegatedRealmSessionRequest({
+    let result = verifyDelegatedUserRealmSessionRequest({
       secret: SECRET,
-      timestamp: headers[DELEGATED_REALM_SESSION_TIMESTAMP_HEADER],
-      signature: headers[DELEGATED_REALM_SESSION_SIGNATURE_HEADER],
+      timestamp: headers[DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER],
+      signature: headers[DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER],
       rawBody: captured!.body as string,
       now,
     });
     assert.true(result.ok, 'server verifier accepts the client signature');
     assert.strictEqual(
-      headers[DELEGATED_REALM_SESSION_TIMESTAMP_HEADER],
+      headers[DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER],
       String(now),
       'timestamp header carries the signing time',
     );
@@ -95,7 +95,7 @@ module('delegated realm session client', () => {
         permissions: ['read'],
       }),
     );
-    await requestDelegatedRealmSession({
+    await requestDelegatedUserRealmSession({
       realmServerURL: 'https://realm.example.com',
       secret: SECRET,
       onBehalfOf: ON_BEHALF_OF,
@@ -110,7 +110,7 @@ module('delegated realm session client', () => {
     assert.strictEqual(calls[0].init.method, 'POST');
   });
 
-  test('maps status codes to typed DelegatedRealmSessionError kinds', async () => {
+  test('maps status codes to typed DelegatedUserRealmSessionError kinds', async () => {
     let cases: { status: number; kind: string }[] = [
       { status: 503, kind: 'disabled' },
       { status: 403, kind: 'forbidden' },
@@ -121,7 +121,7 @@ module('delegated realm session client', () => {
     for (let { status, kind } of cases) {
       let { fetch } = recordingFetch(() => new Response('nope', { status }));
       try {
-        await requestDelegatedRealmSession({
+        await requestDelegatedUserRealmSession({
           realmServerURL: 'https://realm.example.com',
           secret: SECRET,
           onBehalfOf: ON_BEHALF_OF,
@@ -132,11 +132,11 @@ module('delegated realm session client', () => {
         assert.true(false, `expected ${status} to throw`);
       } catch (e) {
         assert.true(
-          e instanceof DelegatedRealmSessionError,
-          `${status} → DelegatedRealmSessionError`,
+          e instanceof DelegatedUserRealmSessionError,
+          `${status} → DelegatedUserRealmSessionError`,
         );
         assert.strictEqual(
-          (e as DelegatedRealmSessionError).kind,
+          (e as DelegatedUserRealmSessionError).kind,
           kind,
           `${status} → ${kind}`,
         );
@@ -145,16 +145,19 @@ module('delegated realm session client', () => {
   });
 });
 
-module('DelegatedRealmSessionManager', () => {
+module('DelegatedUserRealmSessionManager', () => {
   test('is disabled and throws when no secret is configured', async () => {
-    let manager = new DelegatedRealmSessionManager(undefined);
+    let manager = new DelegatedUserRealmSessionManager(undefined);
     assert.false(manager.enabled, 'manager reports disabled');
     try {
       await manager.getToken({ onBehalfOf: ON_BEHALF_OF, realm: REALM });
       assert.true(false, 'expected getToken to throw');
     } catch (e) {
-      assert.true(e instanceof DelegatedRealmSessionError);
-      assert.strictEqual((e as DelegatedRealmSessionError).kind, 'disabled');
+      assert.true(e instanceof DelegatedUserRealmSessionError);
+      assert.strictEqual(
+        (e as DelegatedUserRealmSessionError).kind,
+        'disabled',
+      );
     }
   });
 
@@ -168,7 +171,7 @@ module('DelegatedRealmSessionManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedRealmSessionManager(SECRET, {
+    let manager = new DelegatedUserRealmSessionManager(SECRET, {
       fetch,
       now: () => now,
     });
@@ -191,7 +194,7 @@ module('DelegatedRealmSessionManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedRealmSessionManager(SECRET, {
+    let manager = new DelegatedUserRealmSessionManager(SECRET, {
       fetch,
       now: () => now,
     });
@@ -211,7 +214,7 @@ module('DelegatedRealmSessionManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedRealmSessionManager(SECRET, {
+    let manager = new DelegatedUserRealmSessionManager(SECRET, {
       fetch,
       now: () => now,
     });
@@ -238,7 +241,7 @@ module('DelegatedRealmSessionManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedRealmSessionManager(SECRET, {
+    let manager = new DelegatedUserRealmSessionManager(SECRET, {
       fetch,
       now: () => now,
     });
@@ -263,7 +266,7 @@ module('DelegatedRealmSessionManager', () => {
         permissions: ['read'],
       }),
     );
-    let manager = new DelegatedRealmSessionManager(SECRET, {
+    let manager = new DelegatedUserRealmSessionManager(SECRET, {
       fetch,
       now: () => now,
     });

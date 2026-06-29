@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import { DelegatedRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
+import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import {
   executeLoadSkill,
   skillFileUrl,
@@ -29,7 +29,7 @@ function recordingFetch(
   return { fetch, calls };
 }
 
-// A stand-in for DelegatedRealmSessionManager that records getToken calls and
+// A stand-in for DelegatedUserRealmSessionManager that records getToken calls and
 // either returns a token or throws a scripted error.
 function stubSessions(result: { token: string } | { throws: unknown }): {
   getToken: (args: { onBehalfOf: string; realm: string }) => Promise<string>;
@@ -103,7 +103,7 @@ module('executeLoadSkill', () => {
 
     let result = await executeLoadSkill(
       { realm: REALM, name: 'trip-planner' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
 
     assert.deepEqual(sessions.calls, [
@@ -130,7 +130,7 @@ module('executeLoadSkill', () => {
     );
     await executeLoadSkill(
       { realm: REALM, name: 'trip-planner', path: 'api-notes.md' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.strictEqual(
       calls[0].url,
@@ -145,7 +145,7 @@ module('executeLoadSkill', () => {
     );
     let result = await executeLoadSkill(
       { realm: REALM, name: 'nope' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok, 'result not ok');
     assert.true(
@@ -156,14 +156,14 @@ module('executeLoadSkill', () => {
 
   test('reports a clear message when delegation is disabled', async () => {
     let sessions = stubSessions({
-      throws: new DelegatedRealmSessionError('disabled', 'off'),
+      throws: new DelegatedUserRealmSessionError('disabled', 'off'),
     });
     let { fetch, calls } = recordingFetch(
       () => new Response('', { status: 200 }),
     );
     let result = await executeLoadSkill(
       { realm: REALM, name: 'trip-planner' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok);
     assert.true(
@@ -175,12 +175,12 @@ module('executeLoadSkill', () => {
 
   test('reports no-access when the user lacks read on the realm', async () => {
     let sessions = stubSessions({
-      throws: new DelegatedRealmSessionError('forbidden', 'nope', 403),
+      throws: new DelegatedUserRealmSessionError('forbidden', 'nope', 403),
     });
     let { fetch } = recordingFetch(() => new Response('', { status: 200 }));
     let result = await executeLoadSkill(
       { realm: REALM, name: 'trip-planner' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok);
     assert.true(
@@ -201,7 +201,7 @@ module('executeLoadSkill', () => {
 
     let result = await executeLoadSkill(
       { realm: REALM, name: 'trip-planner' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
 
     assert.true(result.ok, 'succeeds on the retry');
@@ -212,19 +212,5 @@ module('executeLoadSkill', () => {
       'dropped the stale token once',
     );
     assert.strictEqual(sessions.calls.length, 2, 're-minted a fresh token');
-  });
-
-  test('truncates oversized content', async () => {
-    let sessions = stubSessions({ token: 'tok' });
-    let big = 'x'.repeat(200_000);
-    let { fetch } = recordingFetch(() => new Response(big, { status: 200 }));
-    let result = await executeLoadSkill(
-      { realm: REALM, name: 'huge' },
-      { onBehalfOf: ON_BEHALF_OF, delegatedRealmSessions: sessions, fetch },
-    );
-    assert.true(result.ok);
-    let content = (result as { ok: true; content: string }).content;
-    assert.true(content.length < big.length, 'content was capped');
-    assert.true(content.endsWith('[truncated]'), 'truncation marked');
   });
 });
