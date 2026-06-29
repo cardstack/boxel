@@ -1,7 +1,9 @@
 // Apply the derived `searchable` annotations to a repo-backed realm's source
 // (base / experiments / openrouter / software-factory in the monorepo; catalog
 // / skills / homepage in their own repos). Dry-run by default (prints a diff +
-// report); pass `--write` to edit in place and format through prettier.
+// report); pass `--write` to edit in place. Output is recast's (untouched code
+// preserved byte-for-byte); final formatting of touched regions is the commit's
+// `eslint --fix`, not standalone prettier (which reformats .gts templates).
 //
 //   node scripts/codemod/searchable/apply-local.ts \
 //     --realm-root ../experiments-realm \
@@ -29,8 +31,6 @@ import {
 import { join, resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-
-import * as prettier from 'prettier';
 
 import { routesToFieldSearchable, type DerivedDef } from './derive.ts';
 import {
@@ -114,18 +114,6 @@ function buildRawRoutes(
     }
   }
   return routesByRelKey;
-}
-
-async function format(code: string, filepath: string): Promise<string> {
-  try {
-    let cfg = await prettier.resolveConfig(filepath);
-    return await prettier.format(code, { ...cfg, filepath: resolve(filepath) });
-  } catch (err) {
-    process.stderr.write(
-      `  ! prettier failed for ${filepath} (${(err as Error).message}); using unformatted\n`,
-    );
-    return code;
-  }
 }
 
 function gitDiff(original: string, updated: string, label: string): string {
@@ -267,7 +255,13 @@ async function main(): Promise<void> {
     allSkipped.push(...result.skipped);
     if (result.status !== 'transformed') continue;
 
-    let formatted = await format(result.output, mod.filename);
+    // recast preserves untouched code (and <template> blocks) byte-for-byte;
+    // the inserted `searchable` is already repo-style (single-quoted, inline).
+    // We deliberately DON'T run standalone prettier here — for .gts/.ts the repo
+    // formats via eslint (eslint-plugin-prettier), and standalone prettier's
+    // template path reformats unrelated lines in drifted files. The commit's
+    // `eslint --fix` finalizes the touched regions.
+    let formatted = result.output;
     if (formatted === mod.source) continue;
     changedFiles.push(mod.filename);
 

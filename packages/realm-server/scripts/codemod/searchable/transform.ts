@@ -168,16 +168,21 @@ function findObjectProp(objExpr: any, name: string): any {
   );
 }
 
-// Render a Searchable as JS literal source. Double quotes here; the repo's
-// prettier pass (run by the caller) normalizes to the project's quote style.
+// Render a Searchable as JS literal source. Single quotes to match the repo's
+// eslint/prettier style (the caller doesn't reformat .gts standalone — eslint
+// --fix is the formatting authority at commit). Path segments are field
+// identifiers / dotted paths, so they never contain a quote to escape.
+function quote(s: string): string {
+  return `'${s}'`;
+}
 function searchableLiteralSource(value: Searchable): string {
   if (value === true) {
     return 'true';
   }
   if (typeof value === 'string') {
-    return JSON.stringify(value);
+    return quote(value);
   }
-  return '[' + value.map((s) => JSON.stringify(s)).join(', ') + ']';
+  return '[' + value.map((s) => quote(s)).join(', ') + ']';
 }
 
 // Build AST nodes by parsing a snippet (matching context-search's approach) so
@@ -403,7 +408,12 @@ export function transformSearchable(
     return { status: 'unchanged', output: source, changes, skipped, unapplied };
   }
 
-  let printed = recastPrint(ast).code;
+  // recast only applies these to the regions it REPRINTS (the field calls we
+  // touched); untouched code is copied verbatim. They keep the reprinted
+  // options object repo-conformant (trailing comma, single quotes) so the diff
+  // shows only our edit — important because base `.gts` can't be eslint --fix'd
+  // (its <template> trips eslint's parser; it lints via ember-template-lint).
+  let printed = recastPrint(ast, { trailingComma: true, quote: 'single' }).code;
   let output = placeholderJSToGJS(printed);
   return { status: 'transformed', output, changes, skipped, unapplied };
 }
