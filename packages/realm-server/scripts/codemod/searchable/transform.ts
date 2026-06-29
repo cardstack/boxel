@@ -89,8 +89,15 @@ export interface TransformResult {
 export interface TransformOptions {
   filename: string;
   // Returns the policy for a class by its declared name, or undefined when the
-  // caller has nothing to apply (the class still gets `isUsed` stripped).
+  // caller has nothing to apply for it.
   policyForClass: (className: string | null) => ClassPolicy | undefined;
+  // Strip the `isUsed` option. OFF by default: the old (still-authoritative)
+  // search-doc generation honors `isUsed` to force non-rendered links into the
+  // doc, so stripping it before the cutover would shallow those links on the
+  // next reindex. Adding `searchable` is inert under old gen, so we add now and
+  // strip `isUsed` only when the cutover removes the `usedLinksToFieldsOnly`
+  // logic (turn this on then).
+  stripIsUsed?: boolean;
 }
 
 function recastParseJs(src: string, filename: string): any {
@@ -262,6 +269,7 @@ function rewriteFieldProperty(
   changes: AppliedChange[],
   skipped: SkippedField[],
   filename: string,
+  stripIsUsed: boolean,
 ): string | null {
   let call = classProp.value;
   if (!call || call.type !== 'CallExpression') {
@@ -291,8 +299,9 @@ function rewriteFieldProperty(
   let applied: AppliedChange = { className, fieldName, fieldType };
   let changed = false;
 
-  // 1) Strip isUsed (unconditional).
-  if (hasOptions) {
+  // 1) Strip isUsed — only when explicitly enabled (the cutover); see
+  //    TransformOptions.stripIsUsed.
+  if (hasOptions && stripIsUsed) {
     let before = optionsArg.properties.length;
     optionsArg.properties = optionsArg.properties.filter(
       (p: any) => propKeyName(p?.key) !== 'isUsed' || p.computed,
@@ -387,6 +396,7 @@ export function transformSearchable(
           changes,
           skipped,
           opts.filename,
+          opts.stripIsUsed ?? false,
         );
         if (name) {
           declaredFields.add(name);

@@ -50,6 +50,7 @@ interface Args {
   realmUrls: string[];
   derivations: string[];
   write: boolean;
+  stripIsUsed: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -57,9 +58,11 @@ function parseArgs(argv: string[]): Args {
   let realmUrls: string[] = [];
   let derivations: string[] = [];
   let write = false;
+  let stripIsUsed = false;
   for (let i = 0; i < argv.length; i++) {
     let a = argv[i];
     if (a === '--write') write = true;
+    else if (a === '--strip-isused') stripIsUsed = true;
     else if (a === '--realm-root') realmRoot = argv[++i];
     else if (a === '--realm-url') realmUrls.push(argv[++i]);
     else if (a === '--derivation') derivations.push(argv[++i]);
@@ -67,10 +70,10 @@ function parseArgs(argv: string[]): Args {
   }
   if (!realmRoot || realmUrls.length === 0 || derivations.length === 0) {
     throw new Error(
-      'usage: --realm-root <dir> --realm-url <url>… --derivation <json>… [--write]',
+      'usage: --realm-root <dir> --realm-url <url>… --derivation <json>… [--write] [--strip-isused]',
     );
   }
-  return { realmRoot, realmUrls, derivations, write };
+  return { realmRoot, realmUrls, derivations, write, stripIsUsed };
 }
 
 function collectSourceFiles(root: string): string[] {
@@ -244,6 +247,7 @@ async function main(): Promise<void> {
       result = transformSearchable(mod.source, {
         filename: mod.filename,
         policyForClass,
+        stripIsUsed: args.stripIsUsed,
       });
     } catch (err) {
       unparseable.push({

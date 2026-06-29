@@ -32,6 +32,16 @@ Pipeline:
    default); the deployed crawl `boxel file write`s only the changed modules of
    hosted/user realms and republishes published realms.
 
+### `isUsed` is kept until the cutover
+
+By default the codemod **adds `searchable` only** and leaves `isUsed` in place.
+The old store-driven generation (still authoritative until CS-11724) honors
+`isUsed` to force non-rendered links into the search doc; stripping it now would
+shallow those links on the reindex this codemod triggers, while the new
+`searchable` annotation stays inert under old gen. So `isUsed` removal is
+deferred to the cutover — pass `--strip-isused` then (CS-11724 strips `isUsed`
+across all realms in the same change that makes `searchable` authoritative).
+
 ## Usage
 
 Derive (DB read stays in `psql` as `claude_readonly_user`; node never connects):

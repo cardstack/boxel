@@ -14,20 +14,36 @@ import {
 function run(
   source: string,
   policies: Record<string, ClassPolicy> = {},
-  filename = 'card.gts',
+  opts: { stripIsUsed?: boolean; filename?: string } = {},
 ) {
   return transformSearchable(source, {
-    filename,
+    filename: opts.filename ?? 'card.gts',
     policyForClass: (name) => (name ? policies[name] : undefined),
+    stripIsUsed: opts.stripIsUsed,
   });
 }
 
-test('strips isUsed and adds observed searchable: true', () => {
+test('by default KEEPS isUsed (old gen still honors it) and adds searchable', () => {
   let src = `import { field, linksTo, CardDef } from './card-api';
 export class Author extends CardDef {
   @field blog = linksTo(Blog, { isUsed: true });
 }`;
   let res = run(src, { Author: { observed: { blog: true } } });
+  assert.equal(res.status, 'transformed');
+  assert.ok(res.output.includes('isUsed: true'), 'isUsed kept by default');
+  assert.match(res.output, /searchable: true/);
+});
+
+test('strips isUsed and adds observed searchable when --strip-isused', () => {
+  let src = `import { field, linksTo, CardDef } from './card-api';
+export class Author extends CardDef {
+  @field blog = linksTo(Blog, { isUsed: true });
+}`;
+  let res = run(
+    src,
+    { Author: { observed: { blog: true } } },
+    { stripIsUsed: true },
+  );
   assert.equal(res.status, 'transformed');
   assert.ok(!res.output.includes('isUsed'), 'isUsed removed');
   assert.match(res.output, /linksTo\(Blog, \{\s*searchable: true\s*\}\)/);
@@ -81,7 +97,11 @@ test('query-backed field: isUsed stripped, searchable NOT added', () => {
   });
 }`;
   // Even if (hypothetically) observed has an entry, query-backed is inert.
-  let res = run(src, { A: { observed: { linkedCards: true } } });
+  let res = run(
+    src,
+    { A: { observed: { linkedCards: true } } },
+    { stripIsUsed: true },
+  );
   assert.ok(!res.output.includes('isUsed'), 'isUsed removed');
   assert.ok(
     !res.output.includes('searchable'),
@@ -94,7 +114,11 @@ test('thunk target () => Team is preserved', () => {
   let src = `export class A extends CardDef {
   @field team = linksTo(() => Team, { isUsed: true });
 }`;
-  let res = run(src, { A: { observed: { team: true } } });
+  let res = run(
+    src,
+    { A: { observed: { team: true } } },
+    { stripIsUsed: true },
+  );
   assert.match(
     res.output,
     /linksTo\(\(\) => Team, \{\s*searchable: true\s*\}\)/,
@@ -140,7 +164,7 @@ test('empty options after stripping isUsed drops the {} arg', () => {
   let src = `export class A extends CardDef {
   @field author = linksTo(Author, { isUsed: true });
 }`;
-  let res = run(src, {}); // no policy → only isUsed stripping
+  let res = run(src, {}, { stripIsUsed: true }); // no policy → only isUsed stripping
   assert.equal(res.status, 'transformed');
   assert.match(res.output, /linksTo\(Author\)/);
   assert.ok(!res.output.includes('isUsed'));
@@ -157,7 +181,11 @@ export class A extends CardDef {
     </template>
   };
 }`;
-  let res = run(src, { A: { observed: { author: true } } });
+  let res = run(
+    src,
+    { A: { observed: { author: true } } },
+    { stripIsUsed: true },
+  );
   assert.ok(res.output.includes('<template>'), 'template preserved');
   assert.ok(
     res.output.includes('{{@model.author.name}}'),
@@ -221,10 +249,14 @@ test('multiple defs in one module are handled independently', () => {
 export class B extends CardDef {
   @field y = linksTo(Y);
 }`;
-  let res = run(src, {
-    A: { observed: { x: true } },
-    B: { observed: {} }, // had instances but y stayed shallow
-  });
+  let res = run(
+    src,
+    {
+      A: { observed: { x: true } },
+      B: { observed: {} }, // had instances but y stayed shallow
+    },
+    { stripIsUsed: true },
+  );
   assert.match(res.output, /linksTo\(X, \{\s*searchable: true\s*\}\)/);
   assert.match(res.output, /linksTo\(Y\)/); // B.y untouched (shallow)
   assert.ok(!res.output.includes('isUsed'));
