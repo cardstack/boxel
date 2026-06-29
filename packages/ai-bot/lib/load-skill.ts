@@ -19,10 +19,9 @@ export const loadSkillTool: Tool = {
   function: {
     name: LOAD_SKILL_TOOL_NAME,
     description:
-      "Load a skill's instructions on demand. Returns the SKILL.md body for a " +
-      "skill in a realm, or — with `path` — a single file under the skill's " +
-      'references/ directory. Use this to get the full instructions for a skill ' +
-      'you have only seen listed by name, or a reference file it cites.',
+      "Read a skill file on demand: a skill's SKILL.md, or a file it " +
+      "references. Use this to get a skill's full instructions, or a reference " +
+      'it cites, when you only have it listed.',
     parameters: {
       type: 'object',
       properties: {
@@ -30,43 +29,30 @@ export const loadSkillTool: Tool = {
           type: 'string',
           description:
             'Realm URL the skill lives in, e.g. https://app.boxel.ai/user/jane/. ' +
-            'Use a realm advertised in the room or referenced in the conversation.',
+            'Scopes the read to that realm; the file must be inside it.',
         },
-        name: {
+        url: {
           type: 'string',
           description:
-            'The skill directory name under skills/, e.g. trip-planner.',
-        },
-        path: {
-          type: 'string',
-          description:
-            "Optional file under the skill's references/ directory, e.g. " +
-            'api-notes.md. Omit to load SKILL.md.',
+            "Full URL of the file to read — the skill's SKILL.md, or a file it " +
+            'references. The realm and these URLs are given to you together.',
         },
       },
-      required: ['realm', 'name'],
+      required: ['realm', 'url'],
     },
   },
 };
 
 export interface LoadSkillArgs {
+  // Realm root the read is scoped to (what the delegated token is minted for).
   realm: string;
-  name: string;
-  path?: string;
+  // Full URL of the file to read; must be inside `realm`.
+  url: string;
 }
 
 export type LoadSkillResult =
   | { ok: true; url: string; content: string }
   | { ok: false; error: string };
-
-// The realm file a loadSkill call resolves to: SKILL.md by default, or a single
-// file under references/ when `path` is given.
-export function skillFileUrl({ realm, name, path }: LoadSkillArgs): string {
-  let rel = path
-    ? `skills/${name}/references/${path}`
-    : `skills/${name}/SKILL.md`;
-  return new URL(rel, ensureTrailingSlash(realm)).href;
-}
 
 // Executes a loadSkill tool call inside the bot process: mints a delegated,
 // read-only token for `onBehalfOf` scoped to `realm`, then GETs the skill file
@@ -88,7 +74,13 @@ export async function executeLoadSkill(
     fetch?: typeof globalThis.fetch;
   },
 ): Promise<LoadSkillResult> {
-  let url = skillFileUrl(args);
+  let url = args.url;
+
+  // The delegated token is scoped to `realm`; a file outside it would be
+  // rejected by the realm server anyway, so fail clearly up front.
+  if (!url.startsWith(ensureTrailingSlash(args.realm))) {
+    return { ok: false, error: `${url} is not inside realm ${args.realm}` };
+  }
 
   // One mint+fetch attempt. `redirect: 'manual'` keeps a stray redirect from
   // being silently followed (it surfaces as a non-2xx instead).

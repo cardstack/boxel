@@ -59,8 +59,8 @@ export async function buildLoadSkillFollowup(
     } catch {
       args = undefined;
     }
-    if (!args || !args.realm || !args.name) {
-      content = 'Error: loadSkill needs a realm and a skill name.';
+    if (!args || !args.realm || !args.url) {
+      content = 'Error: loadSkill needs a realm and a url.';
     } else {
       let result = await executeLoadSkill(args, deps);
       content = result.ok ? result.content : `Error: ${result.error}`;

@@ -5,13 +5,14 @@ import { SupportedMimeType } from '@cardstack/runtime-common';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import {
   executeLoadSkill,
-  skillFileUrl,
   loadSkillTool,
   LOAD_SKILL_TOOL_NAME,
 } from '../lib/load-skill.ts';
 
 const ON_BEHALF_OF = '@user:localhost';
 const REALM = 'https://localhost:4201/user/jane/';
+const SKILL_URL =
+  'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md';
 
 // A fake fetch that records each call and returns a scripted Response.
 function recordingFetch(
@@ -29,8 +30,8 @@ function recordingFetch(
   return { fetch, calls };
 }
 
-// A stand-in for DelegatedUserRealmSessionManager that records getToken calls and
-// either returns a token or throws a scripted error.
+// A stand-in for DelegatedUserRealmSessionManager that records getToken calls
+// and either returns a token or throws a scripted error.
 function stubSessions(result: { token: string } | { throws: unknown }): {
   getToken: (args: { onBehalfOf: string; realm: string }) => Promise<string>;
   invalidate: (args: { onBehalfOf: string; realm: string }) => void;
@@ -62,57 +63,26 @@ module('loadSkill tool definition', () => {
     let required = (loadSkillTool.function.parameters as any)
       .required as string[];
     assert.true(required.includes('realm'), 'realm is required');
-    assert.true(required.includes('name'), 'name is required');
-    assert.false(required.includes('path'), 'path is optional');
-  });
-});
-
-module('skillFileUrl', () => {
-  test('resolves SKILL.md when no path is given', () => {
-    assert.strictEqual(
-      skillFileUrl({ realm: REALM, name: 'trip-planner' }),
-      'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md',
-    );
-  });
-
-  test('resolves a references/ file when path is given', () => {
-    assert.strictEqual(
-      skillFileUrl({
-        realm: REALM,
-        name: 'trip-planner',
-        path: 'api-notes.md',
-      }),
-      'https://localhost:4201/user/jane/skills/trip-planner/references/api-notes.md',
-    );
-  });
-
-  test('tolerates a realm URL without a trailing slash', () => {
-    assert.strictEqual(
-      skillFileUrl({ realm: 'https://localhost:4201/user/jane', name: 's' }),
-      'https://localhost:4201/user/jane/skills/s/SKILL.md',
-    );
+    assert.true(required.includes('url'), 'url is required');
   });
 });
 
 module('executeLoadSkill', () => {
-  test('mints a token for the user/realm and returns the SKILL.md source', async () => {
+  test('mints a token for the realm and returns the file source', async () => {
     let sessions = stubSessions({ token: 'tok-123' });
     let { fetch, calls } = recordingFetch(
       () => new Response('# Trip Planner\n\ninstructions', { status: 200 }),
     );
 
     let result = await executeLoadSkill(
-      { realm: REALM, name: 'trip-planner' },
+      { realm: REALM, url: SKILL_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
 
     assert.deepEqual(sessions.calls, [
       { onBehalfOf: ON_BEHALF_OF, realm: REALM },
     ]);
-    assert.strictEqual(
-      calls[0].url,
-      'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md',
-    );
+    assert.strictEqual(calls[0].url, SKILL_URL, 'fetches the given url');
     let headers = calls[0].init.headers as Record<string, string>;
     assert.strictEqual(headers['Authorization'], 'Bearer tok-123');
     assert.strictEqual(headers['Accept'], SupportedMimeType.CardSource);
@@ -123,19 +93,26 @@ module('executeLoadSkill', () => {
     );
   });
 
-  test('loads a references/ file when path is given', async () => {
+  test('rejects a url outside the realm without minting or fetching', async () => {
     let sessions = stubSessions({ token: 'tok' });
     let { fetch, calls } = recordingFetch(
-      () => new Response('ref', { status: 200 }),
+      () => new Response('x', { status: 200 }),
     );
-    await executeLoadSkill(
-      { realm: REALM, name: 'trip-planner', path: 'api-notes.md' },
+    let result = await executeLoadSkill(
+      {
+        realm: REALM,
+        url: 'https://localhost:4201/user/someone-else/skills/x/SKILL.md',
+      },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
-    assert.strictEqual(
-      calls[0].url,
-      'https://localhost:4201/user/jane/skills/trip-planner/references/api-notes.md',
+    assert.false(result.ok);
+    assert.true(
+      (result as { ok: false; error: string }).error.includes(
+        'not inside realm',
+      ),
     );
+    assert.strictEqual(sessions.calls.length, 0, 'no token minted');
+    assert.strictEqual(calls.length, 0, 'no fetch attempted');
   });
 
   test('returns an error result when the file is missing (404)', async () => {
@@ -144,7 +121,7 @@ module('executeLoadSkill', () => {
       () => new Response('not found', { status: 404 }),
     );
     let result = await executeLoadSkill(
-      { realm: REALM, name: 'nope' },
+      { realm: REALM, url: SKILL_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok, 'result not ok');
@@ -162,7 +139,7 @@ module('executeLoadSkill', () => {
       () => new Response('', { status: 200 }),
     );
     let result = await executeLoadSkill(
-      { realm: REALM, name: 'trip-planner' },
+      { realm: REALM, url: SKILL_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok);
@@ -179,7 +156,7 @@ module('executeLoadSkill', () => {
     });
     let { fetch } = recordingFetch(() => new Response('', { status: 200 }));
     let result = await executeLoadSkill(
-      { realm: REALM, name: 'trip-planner' },
+      { realm: REALM, url: SKILL_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok);
@@ -200,7 +177,7 @@ module('executeLoadSkill', () => {
     });
 
     let result = await executeLoadSkill(
-      { realm: REALM, name: 'trip-planner' },
+      { realm: REALM, url: SKILL_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
 

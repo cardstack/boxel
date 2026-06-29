@@ -6,6 +6,8 @@ import { LOAD_SKILL_TOOL_NAME } from '../lib/load-skill.ts';
 
 const ON_BEHALF_OF = '@user:localhost';
 const REALM = 'https://localhost:4201/user/jane/';
+const SKILL_URL =
+  'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md';
 
 function assistantMessage(toolCalls: any[]): any {
   return { role: 'assistant', content: null, tool_calls: toolCalls };
@@ -48,7 +50,7 @@ module('buildLoadSkillFollowup', () => {
   test('runs loadSkill calls and returns assistant turn + one tool result each', async () => {
     let d = deps('# Trip Planner');
     let msg = assistantMessage([
-      loadSkillCall('c1', { realm: REALM, name: 'trip-planner' }),
+      loadSkillCall('c1', { realm: REALM, url: SKILL_URL }),
     ]);
     let out = await buildLoadSkillFollowup(msg, d);
 
@@ -63,7 +65,7 @@ module('buildLoadSkillFollowup', () => {
   test('does not loop when host-dispatched tool calls are mixed in', async () => {
     let d = deps();
     let msg = assistantMessage([
-      loadSkillCall('c1', { realm: REALM, name: 'trip-planner' }),
+      loadSkillCall('c1', { realm: REALM, url: SKILL_URL }),
       {
         id: 'c2',
         type: 'function',
@@ -99,7 +101,7 @@ module('buildLoadSkillFollowup', () => {
         status: 404,
       })) as unknown as typeof globalThis.fetch;
     let msg = assistantMessage([
-      loadSkillCall('c1', { realm: REALM, name: 'missing' }),
+      loadSkillCall('c1', { realm: REALM, url: SKILL_URL }),
     ]);
     let out = await buildLoadSkillFollowup(msg, d);
     assert.true((out[1] as any).content.includes('404'));
