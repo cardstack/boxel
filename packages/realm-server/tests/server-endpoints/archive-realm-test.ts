@@ -3,8 +3,10 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  FROM_SCRATCH_JOB_TIMEOUT_SEC,
   insertPermissions,
   isRealmArchived,
+  systemInitiatedPriority,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { realmSecretSeed } from '../helpers/index.ts';
@@ -116,6 +118,44 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           return args?.realmUrls?.includes(realmURL);
         }),
         'a full-reindex job was enqueued for the restored realm',
+      );
+    });
+
+    test('POST /_archive-realm cancels pending indexing jobs for the realm', async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = makeRealmURL();
+      await seedSourceRealm(realmURL, {
+        [owner]: ['read', 'write', 'realm-owner'],
+      });
+
+      let pending = await context.publisher.publish<void>({
+        jobType: 'from-scratch-index',
+        concurrencyGroup: `indexing:${realmURL}`,
+        timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+        priority: systemInitiatedPriority,
+        args: {
+          realmURL,
+          realmUsername: 'archive-owner',
+          clearLastModified: false,
+        },
+      });
+
+      let response = await context.request
+        .post('/_archive-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authHeader(owner))
+        .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let rows = (await context.dbAdapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [pending.id] },
+      )) as { status: string }[];
+      assert.strictEqual(
+        rows[0]?.status,
+        'rejected',
+        'the pending indexing job is marked rejected',
       );
     });
 
