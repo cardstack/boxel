@@ -11,11 +11,13 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import enumField from 'https://cardstack.com/base/enum';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { Project, Issue } from './darkfactory.gts';
 import {
   ResultFittedCard,
   type ResultMetaItem,
 } from './result-fitted-card.gts';
+import { ResultIsolatedCard } from './result-isolated-card.gts';
 
 import ListChecks from '@cardstack/boxel-icons/list-checks';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -322,234 +324,196 @@ export class LintResult extends CardDef {
       return this.args.model.status;
     }
 
+    get titleText() {
+      return `Lint Run #${this.args.model.sequenceNumber ?? '?'}`;
+    }
+
     <template>
-      <article class='surface'>
-        <header>
-          <div class='header-row'>
-            <strong>LintResult #{{@model.sequenceNumber}}</strong>
-            <span
-              class='status status-{{this.displayStatus}}'
-            >{{this.displayStatus}}</span>
-          </div>
-          <div class='summary'>
-            {{@model.filesClean}}/{{@model.filesChecked}}
-            files clean
-            {{#if @model.totalErrors}}
-              ,
+      <ResultIsolatedCard
+        @title={{this.titleText}}
+        @status={{this.displayStatus}}
+        @emptyLabel='No Files'
+        @durationMs={{@model.durationMs}}
+        @hasProject={{@model.project}}
+        @hasIssue={{@model.issue}}
+        @hasError={{@model.errorMessage}}
+      >
+        <:summary>
+          <span>{{@model.filesClean}}/{{@model.filesChecked}}
+            files clean{{#if @model.totalErrors}},
               {{@model.totalErrors}}
-              error(s)
-            {{/if}}
-            {{#if @model.totalWarnings}}
-              ,
+              error(s){{/if}}{{#if @model.totalWarnings}},
               {{@model.totalWarnings}}
-              warning(s)
-            {{/if}}
-            {{#if @model.durationMs}}
-              in
-              {{@model.durationMs}}ms
-            {{/if}}
-          </div>
-        </header>
-
-        {{#if @model.project}}
-          <section>
-            <h2>Project</h2>
-            <div class='linked-card'>
-              <@fields.project @format='embedded' />
-            </div>
-          </section>
-        {{/if}}
-
-        {{#if @model.issue}}
-          <section>
-            <h2>Issue</h2>
-            <div class='linked-card'>
-              <@fields.issue @format='embedded' />
-            </div>
-          </section>
-        {{/if}}
-
-        {{#if @model.errorMessage}}
-          <section>
-            <h2>Error</h2>
-            <p class='error-message'>{{@model.errorMessage}}</p>
-          </section>
-        {{/if}}
-
-        {{#if @model.fileResults.length}}
-          <section>
-            <h2>File Results</h2>
-            {{#each @model.fileResults as |fileResult|}}
-              <div
-                class='file-group
-                  {{unless fileResult.passed "file-has-errors"}}'
-              >
-                <div class='file-group-header'>
-                  <span class='file-group-name'>{{fileResult.file}}</span>
-                  {{#if fileResult.passed}}
-                    <span class='file-group-status has-passes'>clean</span>
-                  {{else}}
-                    <span class='file-group-status has-errors'>
-                      {{fileResult.errorCount}}
-                      error(s)
-                      {{#if fileResult.warningCount}}
-                        ,
-                        {{fileResult.warningCount}}
-                        warning(s)
-                      {{/if}}
-                    </span>
-                  {{/if}}
-                </div>
-                {{#if fileResult.totalCount}}
-                  <div class='file-group-violations'>
-                    {{#each fileResult.violations as |violation|}}
-                      <div class='violation-item'>
-                        <div class='violation-item-row'>
-                          <span
-                            class='violation-severity severity-{{violation.severity}}'
-                            role='img'
-                            aria-label='{{violation.severity}}'
-                          >{{violation.severityIcon}}</span>
-                          <span
-                            class='violation-location'
-                          >{{violation.line}}:{{violation.column}}</span>
-                          <span
-                            class='violation-message'
-                          >{{violation.message}}</span>
-                          {{#if violation.rule}}
-                            <span
-                              class='violation-rule'
-                            >[{{violation.rule}}]</span>
+              warning(s){{/if}}</span>
+        </:summary>
+        <:project><@fields.project @format='embedded' /></:project>
+        <:issue><@fields.issue @format='embedded' /></:issue>
+        <:error>{{@model.errorMessage}}</:error>
+        <:details>
+          {{#if @model.fileResults.length}}
+            <section class='detail-section'>
+              <h2>File Results</h2>
+              <div class='detail-groups'>
+                {{#each @model.fileResults as |fileResult|}}
+                  <div
+                    class='detail-group
+                      {{unless fileResult.passed "has-errors"}}'
+                  >
+                    <div class='detail-group-header'>
+                      <span class='detail-group-name'>{{fileResult.file}}</span>
+                      {{#if fileResult.passed}}
+                        <span class='group-status clean'>clean</span>
+                      {{else}}
+                        <span class='group-status errors'>
+                          {{fileResult.errorCount}}
+                          error(s)
+                          {{#if fileResult.warningCount}}
+                            ,
+                            {{fileResult.warningCount}}
+                            warning(s)
                           {{/if}}
-                        </div>
+                        </span>
+                      {{/if}}
+                    </div>
+                    {{#if fileResult.totalCount}}
+                      <div class='violation-rows'>
+                        {{#each fileResult.violations as |violation|}}
+                          <div class='violation-row'>
+                            {{#if (eq violation.severity 'error')}}
+                              <CircleX
+                                class='sev-icon sev-error'
+                                width='14'
+                                height='14'
+                                aria-label='error'
+                              />
+                            {{else}}
+                              <CircleAlert
+                                class='sev-icon sev-warning'
+                                width='14'
+                                height='14'
+                                aria-label='warning'
+                              />
+                            {{/if}}
+                            <span
+                              class='violation-location'
+                            >{{violation.line}}:{{violation.column}}</span>
+                            <span
+                              class='violation-message'
+                            >{{violation.message}}</span>
+                            {{#if violation.rule}}
+                              <span
+                                class='violation-rule'
+                              >[{{violation.rule}}]</span>
+                            {{/if}}
+                          </div>
+                        {{/each}}
                       </div>
-                    {{/each}}
+                    {{/if}}
                   </div>
-                {{/if}}
+                {{/each}}
               </div>
-            {{/each}}
-          </section>
-        {{/if}}
-      </article>
+            </section>
+          {{/if}}
+        </:details>
+      </ResultIsolatedCard>
       <style scoped>
-        .surface {
-          padding: 1.5rem;
+        .detail-section {
           display: grid;
-          gap: 1rem;
+          gap: var(--boxel-sp-xs);
         }
-        .linked-card {
-          margin-bottom: 0.5rem;
-        }
-        .header-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .status {
-          font-size: 0.75rem;
+        .detail-section > h2 {
+          margin: 0;
+          font: 600 var(--boxel-font-sm);
           text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
+          letter-spacing: 0.06em;
+          color: var(--muted-foreground, var(--boxel-500));
         }
-        .status-passed {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
+        .detail-groups {
+          display: grid;
+          gap: var(--boxel-sp-sm);
         }
-        .status-failed {
-          color: var(--boxel-red, #dc2626);
-          background: #fef2f2;
+        .detail-group {
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 60%,
+              transparent
+            );
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-sm);
         }
-        .status-error {
-          color: var(--boxel-orange, #ea580c);
-          background: #fff7ed;
+        .detail-group.has-errors {
+          border-color: color-mix(
+            in oklch,
+            oklch(55% 0.22 25) 50%,
+            transparent
+          );
         }
-        .status-running {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
-        }
-        .status-empty {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
-        }
-        .summary {
-          font-size: 0.9rem;
-          color: var(--muted-foreground);
-        }
-        .error-message {
-          color: var(--boxel-red, #dc2626);
-          font-family: monospace;
-          font-size: 0.85rem;
-          white-space: pre-wrap;
-        }
-        .file-group {
-          border: 1px solid var(--boxel-200, #e5e7eb);
-          border-radius: 0.5rem;
-          padding: 0.75rem;
-          margin-bottom: 0.75rem;
-        }
-        .file-has-errors {
-          border-color: var(--boxel-red, #dc2626);
-        }
-        .file-group-header {
+        .detail-group-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding-bottom: 0.5rem;
-          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
-          margin-bottom: 0.5rem;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          margin-bottom: var(--boxel-sp-xs);
         }
-        .file-group-name {
+        .detail-group-name {
           font-weight: 600;
-          font-size: 0.9rem;
-          font-family: monospace;
+          font-size: var(--boxel-font-size-sm);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          word-break: break-all;
         }
-        .file-group-status {
-          font-size: 0.8rem;
-          color: var(--boxel-400, #9ca3af);
+        .group-status {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
         }
-        .file-group-status.has-passes {
-          color: var(--boxel-green, #16a34a);
+        .group-status.clean {
+          color: oklch(60% 0.17 150);
         }
-        .file-group-status.has-errors {
-          color: var(--boxel-red, #dc2626);
+        .group-status.errors {
+          color: oklch(55% 0.22 25);
         }
-        .file-group-violations {
+        .violation-rows {
           display: grid;
-          gap: 0.25rem;
+          gap: var(--boxel-sp-4xs);
         }
-        .violation-item-row {
+        .violation-row {
           display: flex;
           align-items: baseline;
-          gap: 0.5rem;
-          padding: 0.25rem 0;
-          font-size: 0.85rem;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
         }
-        .violation-severity {
-          font-weight: bold;
-          width: 1.25rem;
-          text-align: center;
+        .sev-icon {
           flex-shrink: 0;
+          align-self: center;
         }
-        .violation-severity.severity-error {
-          color: var(--boxel-red, #dc2626);
+        .sev-error {
+          color: oklch(55% 0.22 25);
         }
-        .violation-severity.severity-warning {
-          color: var(--boxel-orange, #ea580c);
+        .sev-warning {
+          color: oklch(68% 0.17 55);
         }
         .violation-location {
-          color: var(--muted-foreground);
-          font-family: monospace;
-          font-size: 0.8rem;
           flex-shrink: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: var(--boxel-font-size-xs);
         }
         .violation-message {
           flex: 1;
         }
         .violation-rule {
-          color: var(--boxel-400, #9ca3af);
-          font-size: 0.75rem;
           flex-shrink: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+          font-size: var(--boxel-font-size-xs);
         }
       </style>
     </template>

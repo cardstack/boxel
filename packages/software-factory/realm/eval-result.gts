@@ -16,6 +16,7 @@ import {
   ResultFittedCard,
   type ResultMetaItem,
 } from './result-fitted-card.gts';
+import { ResultIsolatedCard } from './result-isolated-card.gts';
 
 import Code from '@cardstack/boxel-icons/code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -191,180 +192,136 @@ export class EvalResult extends CardDef {
       return this.args.model.status;
     }
 
+    get titleText() {
+      return `Eval Run #${this.args.model.sequenceNumber ?? '?'}`;
+    }
+
     <template>
-      <article class='surface'>
-        <header>
-          <div class='header-row'>
-            <strong>EvalResult #{{@model.sequenceNumber}}</strong>
-            <span
-              class='status status-{{this.displayStatus}}'
-            >{{this.displayStatus}}</span>
-          </div>
-          <div class='summary'>
-            {{@model.modulesPassed}}/{{@model.modulesChecked}}
-            modules passed
-            {{#if @model.modulesWithErrors}}
-              ,
+      <ResultIsolatedCard
+        @title={{this.titleText}}
+        @status={{this.displayStatus}}
+        @emptyLabel='No Modules'
+        @durationMs={{@model.durationMs}}
+        @hasProject={{@model.project}}
+        @hasIssue={{@model.issue}}
+        @hasError={{@model.errorMessage}}
+      >
+        <:summary>
+          <span>{{@model.modulesPassed}}/{{@model.modulesChecked}}
+            modules passed{{#if @model.modulesWithErrors}},
               {{@model.modulesWithErrors}}
-              error(s)
-            {{/if}}
-            {{#if @model.durationMs}}
-              in
-              {{@model.durationMs}}ms
-            {{/if}}
-          </div>
-        </header>
-
-        {{#if @model.project}}
-          <section>
-            <h2>Project</h2>
-            <div class='linked-card'>
-              <@fields.project @format='embedded' />
-            </div>
-          </section>
-        {{/if}}
-
-        {{#if @model.issue}}
-          <section>
-            <h2>Issue</h2>
-            <div class='linked-card'>
-              <@fields.issue @format='embedded' />
-            </div>
-          </section>
-        {{/if}}
-
-        {{#if @model.errorMessage}}
-          <section>
-            <h2>Error</h2>
-            <p class='error-message'>{{@model.errorMessage}}</p>
-          </section>
-        {{/if}}
-
-        {{#if @model.moduleResults.length}}
-          <section>
-            <h2>Module Results</h2>
-            {{#each @model.moduleResults as |moduleResult|}}
-              <div
-                class='module-group
-                  {{if moduleResult.hasError "module-has-errors"}}'
-              >
-                <div class='module-group-header'>
-                  <span class='module-group-name'>{{moduleResult.path}}</span>
-                  {{#if moduleResult.hasError}}
-                    <span class='module-group-status has-errors'>error</span>
-                  {{else}}
-                    <span class='module-group-status has-passes'>passed</span>
-                  {{/if}}
-                </div>
-                {{#if moduleResult.error}}
-                  <div class='module-group-error'>
-                    <pre class='error-code-block'>{{moduleResult.error}}</pre>
+              error(s){{/if}}</span>
+        </:summary>
+        <:project><@fields.project @format='embedded' /></:project>
+        <:issue><@fields.issue @format='embedded' /></:issue>
+        <:error>{{@model.errorMessage}}</:error>
+        <:details>
+          {{#if @model.moduleResults.length}}
+            <section class='detail-section'>
+              <h2>Module Results</h2>
+              <div class='detail-groups'>
+                {{#each @model.moduleResults as |moduleResult|}}
+                  <div
+                    class='detail-group
+                      {{if moduleResult.hasError "has-errors"}}'
+                  >
+                    <div class='detail-group-header'>
+                      <span
+                        class='detail-group-name'
+                      >{{moduleResult.path}}</span>
+                      {{#if moduleResult.hasError}}
+                        <span class='group-status errors'>error</span>
+                      {{else}}
+                        <span class='group-status clean'>passed</span>
+                      {{/if}}
+                    </div>
+                    {{#if moduleResult.error}}
+                      <pre class='error-code-block'>{{moduleResult.error}}</pre>
+                    {{/if}}
                   </div>
-                {{/if}}
+                {{/each}}
               </div>
-            {{/each}}
-          </section>
-        {{/if}}
-      </article>
+            </section>
+          {{/if}}
+        </:details>
+      </ResultIsolatedCard>
       <style scoped>
-        .surface {
-          padding: 1.5rem;
+        .detail-section {
           display: grid;
-          gap: 1rem;
+          gap: var(--boxel-sp-xs);
         }
-        .linked-card {
-          margin-bottom: 0.5rem;
-        }
-        .header-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .status {
-          font-size: 0.75rem;
+        .detail-section > h2 {
+          margin: 0;
+          font: 600 var(--boxel-font-sm);
           text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
+          letter-spacing: 0.06em;
+          color: var(--muted-foreground, var(--boxel-500));
         }
-        .status-passed {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
+        .detail-groups {
+          display: grid;
+          gap: var(--boxel-sp-sm);
         }
-        .status-failed {
-          color: var(--boxel-red, #dc2626);
-          background: #fef2f2;
+        .detail-group {
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 60%,
+              transparent
+            );
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-sm);
         }
-        .status-error {
-          color: var(--boxel-orange, #ea580c);
-          background: #fff7ed;
+        .detail-group.has-errors {
+          border-color: color-mix(
+            in oklch,
+            oklch(55% 0.22 25) 50%,
+            transparent
+          );
         }
-        .status-running {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
-        }
-        .status-empty {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
-        }
-        .summary {
-          font-size: 0.9rem;
-          color: var(--muted-foreground);
-        }
-        .error-message {
-          color: var(--boxel-red, #dc2626);
-          font-family: monospace;
-          font-size: 0.85rem;
-          white-space: pre-wrap;
-        }
-        .module-group {
-          border: 1px solid var(--boxel-200, #e5e7eb);
-          border-radius: 0.5rem;
-          padding: 0.75rem;
-          margin-bottom: 0.75rem;
-        }
-        .module-has-errors {
-          border-color: var(--boxel-red, #dc2626);
-        }
-        .module-group-header {
+        .detail-group-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding-bottom: 0.5rem;
-          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
-          margin-bottom: 0.5rem;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          margin-bottom: var(--boxel-sp-xs);
         }
-        .module-group-name {
+        .detail-group-name {
           font-weight: 600;
-          font-size: 0.9rem;
-          font-family: monospace;
+          font-size: var(--boxel-font-size-sm);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          word-break: break-all;
         }
-        .module-group-status {
-          font-size: 0.8rem;
-          color: var(--boxel-400, #9ca3af);
+        .group-status {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
         }
-        .module-group-status.has-passes {
-          color: var(--boxel-green, #16a34a);
+        .group-status.clean {
+          color: oklch(60% 0.17 150);
         }
-        .module-group-status.has-errors {
-          color: var(--boxel-red, #dc2626);
-        }
-        .module-group-error {
-          padding: 0.5rem;
+        .group-status.errors {
+          color: oklch(55% 0.22 25);
         }
         .error-code-block {
-          color: var(--boxel-red, #dc2626);
-          background: var(--boxel-100, #f3f4f6);
-          border: 1px solid var(--boxel-200, #e5e7eb);
-          border-radius: 0.375rem;
-          padding: 0.75rem;
-          font-family: monospace;
-          font-size: 0.8rem;
+          margin: 0;
+          padding: var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius);
+          background: color-mix(in oklch, oklch(55% 0.22 25) 8%, transparent);
+          color: oklch(55% 0.22 25);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: var(--boxel-font-size-xs);
           white-space: pre-wrap;
           word-break: break-word;
           max-height: 15rem;
           overflow-y: auto;
-          margin: 0;
           line-height: 1.4;
         }
       </style>

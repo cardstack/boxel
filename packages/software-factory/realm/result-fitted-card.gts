@@ -14,6 +14,41 @@ export interface ResultMetaItem {
   tone?: ResultMetaTone;
 }
 
+// Shared status → presentation mapping, used by both the fitted and isolated
+// result views. `status` is the already-resolved display status, including the
+// synthetic 'empty' value.
+export function resultStatusLabel(status?: string, emptyLabel?: string) {
+  switch (status) {
+    case 'passed':
+      return 'Passed';
+    case 'failed':
+      return 'Failed';
+    case 'error':
+      return 'Error';
+    case 'running':
+      return 'Running';
+    case 'empty':
+      return emptyLabel ?? 'Empty';
+    default:
+      return 'Unknown';
+  }
+}
+
+export function resultStatusColor(status?: string) {
+  switch (status) {
+    case 'passed':
+      return 'oklch(60% 0.17 150)';
+    case 'failed':
+      return 'oklch(55% 0.22 25)';
+    case 'error':
+      return 'oklch(68% 0.17 55)';
+    case 'running':
+      return 'oklch(60% 0.16 250)';
+    default:
+      return 'var(--muted-foreground, var(--boxel-500))';
+  }
+}
+
 interface Signature {
   Args: {
     // Eyebrow icon and label, rendered as "<label> #<sequenceNumber>".
@@ -35,35 +70,11 @@ interface Signature {
 
 export class ResultFittedCard extends GlimmerComponent<Signature> {
   get statusLabel() {
-    switch (this.args.status) {
-      case 'passed':
-        return 'Passed';
-      case 'failed':
-        return 'Failed';
-      case 'error':
-        return 'Error';
-      case 'running':
-        return 'Running';
-      case 'empty':
-        return this.args.emptyLabel ?? 'Empty';
-      default:
-        return 'Unknown';
-    }
+    return resultStatusLabel(this.args.status, this.args.emptyLabel);
   }
 
   get statusColor() {
-    switch (this.args.status) {
-      case 'passed':
-        return 'oklch(60% 0.17 150)';
-      case 'failed':
-        return 'oklch(55% 0.22 25)';
-      case 'error':
-        return 'oklch(68% 0.17 55)';
-      case 'running':
-        return 'oklch(60% 0.16 250)';
-      default:
-        return 'var(--muted-foreground, var(--boxel-500))';
-    }
+    return resultStatusColor(this.args.status);
   }
 
   <template>
@@ -181,10 +192,12 @@ export class ResultFittedCard extends GlimmerComponent<Signature> {
       .meta-muted {
         color: var(--muted-foreground, var(--boxel-500));
       }
-      /* Shrink the title in very short strips */
+      /* Shrink the title to a single line in very short strips */
       @container fitted-card (height < 65px) {
         .result-fitted {
           --fc-title-font-size: var(--boxel-font-size-xs);
+          --fc-title-line-clamp: 1;
+          --fc-content-padding: 0 var(--boxel-sp-4xs);
         }
       }
       /* Show the status badge in the top-right on wide, short badge layouts */
