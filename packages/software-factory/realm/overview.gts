@@ -199,14 +199,16 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
   // One query per validation type, newest run first. Grouping by type keeps
   // the whole pipeline (parse → lint → eval → instantiate → test) legible at a
   // glance; each result card already names its issue, so issue context isn't
-  // lost by dropping the per-issue grouping.
+  // lost by dropping the per-issue grouping. Sort by `runAt` (a global
+  // timestamp): `sequenceNumber` restarts at 1 per issue slug, so it would rank
+  // an older issue's run #5 ahead of a newer issue's run #1.
   validationQueryForType = (
     ref: (typeof VALIDATION_TYPE_GROUPS)[number]['ref'],
   ): SearchEntryWireQuery => {
     return {
       ...searchEntryWireQueryFromQuery({
         filter: { type: ref },
-        sort: [{ by: 'sequenceNumber', on: ref, direction: 'desc' }],
+        sort: [{ by: 'runAt', on: ref, direction: 'desc' }],
       }),
       realms: this.validationRealms,
     };
