@@ -7,6 +7,7 @@ import { archiveRealm, unarchiveRealm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   testRealmHref,
+  testRealmURLFor,
   createJWT,
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -145,4 +146,101 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
   });
+
+  // The seal must not leak a private realm's existence or archived state to
+  // callers who can't prove access: the archived response is reserved for
+  // callers who would otherwise reach the content. A caller who fails
+  // authentication or authorization gets the same 401/403 they would on an
+  // active private realm.
+  module(
+    'archived seal does not disclose to unauthorized callers',
+    function (hooks) {
+      let testRealm: Realm;
+      let request: SuperTest<Test>;
+      let dbAdapter: PgAdapter;
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        // A private realm: no `*` permission.
+        realmURL: testRealmURLFor('private-archived/'),
+        permissions: {
+          owner: ['read', 'write', 'realm-owner'],
+        },
+        onRealmSetup(args: {
+          testRealm: Realm;
+          request: SuperTest<Test>;
+          dbAdapter: PgAdapter;
+        }) {
+          testRealm = args.testRealm;
+          request = args.request;
+          dbAdapter = args.dbAdapter;
+        },
+      });
+
+      // Address content under the realm's own path prefix (the realm is mounted
+      // at `/private-archived/`, not the server root).
+      function path(suffix: string) {
+        return `${new URL(testRealm.url).pathname.replace(/\/$/, '')}${suffix}`;
+      }
+
+      test('a private archived realm returns the normal 401/403 to callers who cannot prove access, and the archived marker only to authorized callers', async function (assert) {
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+
+        // Unauthenticated: the normal missing-auth 401, with no hint that the
+        // realm exists or is archived.
+        let anonymous = await request
+          .get(path('/_info'))
+          .set('Accept', 'application/vnd.api+json');
+        assert.strictEqual(
+          anonymous.status,
+          401,
+          'unauthenticated caller gets 401',
+        );
+        assert.notStrictEqual(
+          anonymous.get('X-Boxel-Realm-Archived'),
+          'true',
+          'unauthenticated caller is not told the realm is archived',
+        );
+
+        // Authenticated but holding no permission on this realm: the normal 403
+        // authorization failure, still with no archived disclosure.
+        let stranger = await request
+          .get(path('/_info'))
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'stranger', [])}`,
+          );
+        assert.strictEqual(
+          stranger.status,
+          403,
+          'unauthorized caller gets 403',
+        );
+        assert.notStrictEqual(
+          stranger.get('X-Boxel-Realm-Archived'),
+          'true',
+          'unauthorized caller is not told the realm is archived',
+        );
+
+        // The owner could otherwise reach the content, so they see the seal.
+        let owner = await request
+          .get(path('/_info'))
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'owner', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
+        assert.strictEqual(owner.status, 403, 'authorized owner gets 403');
+        assert.strictEqual(
+          owner.get('X-Boxel-Realm-Archived'),
+          'true',
+          'authorized owner sees the archived marker',
+        );
+      });
+    },
+  );
 });

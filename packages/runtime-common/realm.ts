@@ -2768,22 +2768,29 @@ export class Realm {
 
     try {
       if (!isLocal) {
-        // An archived realm is sealed for everyone, owner included, so every
-        // external content request is short-circuited with 403 (archived)
-        // regardless of permission. The operational `_readiness-check` (the
-        // realm's only public endpoint) is exempt so health probes don't read
-        // an archived realm as down. The archive-management endpoints live on
-        // the realm SERVER router and never reach this boundary, so they stay
-        // reachable. Read fresh (no memoization) for the same reason
-        // createRequestContext does: a peer replica's archive/unarchive must
-        // take effect here without a restart.
+        await this.checkPermission(request, requestContext, requiredPermission);
+        // An archived realm is sealed for everyone, owner included: once a
+        // caller is authorized, every external content request is
+        // short-circuited with 403 (archived). The seal runs AFTER
+        // checkPermission so an unauthenticated or unauthorized caller to a
+        // private realm gets the normal 401/403 and never learns the realm
+        // exists or is archived — only callers who could otherwise reach the
+        // content see the sealed response. A public realm's readers are
+        // authorized by checkPermission, so they do see the seal (the realm's
+        // existence is already public). The seal is method-agnostic, so reads
+        // and writes are blocked by this one check. The operational
+        // `_readiness-check` (the realm's only public endpoint) is exempt so
+        // health probes don't read an archived realm as down. The
+        // archive-management endpoints live on the realm SERVER router and
+        // never reach this boundary, so they stay reachable. Read fresh (no
+        // memoization) for the same reason createRequestContext does: a peer
+        // replica's archive/unarchive must take effect here without a restart.
         if (
           !lookupRouteTable(this.#publicEndpoints, this.paths, request) &&
           (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
         ) {
           throw new ArchivedRealmError(`Realm ${this.url} is archived`);
         }
-        await this.checkPermission(request, requestContext, requiredPermission);
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -3675,19 +3682,6 @@ export class Realm {
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
   ) {
-    // Defense-in-depth for the sealed-realm boundary: independent of the
-    // archived check in internalHandle, deny any mutating request (write or
-    // realm-owner) to an archived realm here at the write authorization
-    // chokepoint, so a write can never slip through if the boundary check is
-    // ever bypassed. Placed before the public-readable / public-writable early
-    // return so a public-writable archived realm is sealed too.
-    if (
-      requiredPermission !== 'read' &&
-      (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
-    ) {
-      throw new ArchivedRealmError(`Realm ${this.url} is archived`);
-    }
-
     let realmPermissions = requestContext.permissions;
     if (
       requiredPermission !== 'realm-owner' &&
