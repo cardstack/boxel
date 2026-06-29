@@ -120,12 +120,6 @@ export interface LinkRelationshipToCardOptions {
   search: () => Promise<SearchResult>;
   /** Build the relationship `self` link from the found card's id. */
   buildLink: (targetId: string, realmUrl: string) => string;
-  /**
-   * Choose which result's id to link when the search returns more than one.
-   * Receives the truthy ids in result order; defaults to the first (let the
-   * search's own `sort` decide). Pure id ordering — return a member of `ids`.
-   */
-  selectId?: (ids: string[]) => string;
   /** Logger for the calling module. */
   log: Logger;
   /** Retry an empty search this many times. See {@link searchUntilNonEmpty}. */
@@ -156,7 +150,6 @@ export async function linkRelationshipToCard(
     targetLabel,
     search,
     buildLink,
-    selectId,
     log,
   } = options;
 
@@ -185,7 +178,7 @@ export async function linkRelationshipToCard(
     );
     return false;
   }
-  let targetId = selectId ? selectId(ids) : ids[0];
+  let targetId = ids[0];
   if (ids.length > 1) {
     log.warn(`Found ${ids.length} ${targetLabel}(s); linking ${targetId}`);
   }
