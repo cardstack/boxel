@@ -970,6 +970,56 @@ export class IndexQueryEngine {
     );
   }
 
+  // The card's primary `id` and a FileDef's `url` index in URL form, but a
+  // query may now arrive with a canonical-RRI (prefix) value. For these
+  // reference fields, expand each value to its equivalent spellings — real-URL,
+  // RRI-prefix, and any virtual-alias — via the realm's VirtualNetwork, and
+  // match against any of them. This mirrors how the `types` column tolerates
+  // mixed spellings (`internalKeysFor` / `equivalentURLForms`), so a filter
+  // value matches the indexed reference regardless of which form it was stored
+  // in — no reindex or DB migration. A URL-form value still matches (it is one
+  // of its own equivalent forms), so existing callers are unaffected.
+  private isReferenceFilterField(key: string): boolean {
+    let leaf = key.split('.').pop();
+    return leaf === 'id' || leaf === 'url';
+  }
+
+  private expandReferenceFilterValues(
+    key: string,
+    values: JSONTypes.Value[],
+  ): JSONTypes.Value[] {
+    if (!this.isReferenceFilterField(key)) {
+      return values;
+    }
+    let expanded: JSONTypes.Value[] = [];
+    let seen = new Set<string>();
+    for (let value of values) {
+      if (typeof value !== 'string') {
+        expanded.push(value);
+        continue;
+      }
+      let forms: string[];
+      try {
+        // Resolve RRI/URL to a real URL first (the server's VN owns the realm
+        // mappings), then enumerate equivalent spellings — same composition
+        // `internalKeysFor` uses for type keys.
+        forms = this.#virtualNetwork.equivalentURLForms(
+          this.#virtualNetwork.toURL(value).href,
+        );
+      } catch {
+        // Unresolvable (e.g. a bare local id) — match the value as given.
+        forms = [value];
+      }
+      for (let form of forms) {
+        if (!seen.has(form)) {
+          seen.add(form);
+          expanded.push(form);
+        }
+      }
+    }
+    return expanded;
+  }
+
   private eqCondition(
     filter: EqFilter,
     on: CodeRef,
@@ -1101,6 +1151,10 @@ export class IndexQueryEngine {
         }),
       ];
     }
+    // Note: the canonical-RRI tolerance (see `expandReferenceFilterValues`) is
+    // applied to `in` filters only. `eq` on a reference field keeps exact-match
+    // semantics so a singular `.id` eq is still served by the `@>` GIN
+    // containment path below; canonical-RRI reference matching uses `in`.
     let query = fieldQuery(key, onRef, false, 'filter');
     let v = fieldValue(key, [param(value)], onRef, 'filter');
     // At positive polarity a singular-path string `eq` can be served by the GIN
@@ -1140,7 +1194,10 @@ export class IndexQueryEngine {
       // Empty set matches nothing
       return ['false'];
     }
-    let nonNullValues = values.filter((v) => v !== null);
+    let nonNullValues = this.expandReferenceFilterValues(
+      key,
+      values.filter((v) => v !== null),
+    );
     let hasNull = values.some((v) => v === null);
 
     let conditions: CardExpression[] = [];

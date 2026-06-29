@@ -15,7 +15,10 @@ import {
   type SearchEntryResource,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  searchCardsForTest,
+} from './helpers/index.ts';
 
 function htmlIn(
   doc: SearchEntryCollectionDocument,
@@ -174,6 +177,46 @@ module(basename(import.meta.filename), function () {
       });
       assert.true(normalizedHtml(html).includes('Fitted Card Person: John'));
       assert.strictEqual(html.attributes.cardType, 'Person');
+    });
+
+    test('an id filter in canonical-RRI (prefix) form matches the card indexed under its URL-form id', async function (assert) {
+      // The realm has no registered prefix by default; register one so a
+      // canonical-RRI value resolves, and remove it afterward so the cached
+      // realm is left as we found it.
+      testRealm.virtualNetwork.addRealmMapping('@test-prefix/', realmHref);
+      try {
+        let prefixJohnId = `@test-prefix/${johnId.slice(realmHref.length)}`;
+
+        let { data: byPrefix } = await searchCardsForTest(
+          testRealm.realmIndexQueryEngine,
+          {
+            // Match rich-markdown's `linkedCards` query shape: a bare id filter
+            // with no type anchor (the primary `id` is not a definition field).
+            filter: { in: { id: [rri(prefixJohnId)] } },
+          },
+        );
+        assert.deepEqual(
+          byPrefix.map((r) => r.id),
+          [rri(johnId)],
+          'prefix-form id value matches the card indexed under its URL-form id',
+        );
+
+        // The URL-form value still matches (it is one of its own equivalent
+        // forms) — existing callers are unaffected.
+        let { data: byUrl } = await searchCardsForTest(
+          testRealm.realmIndexQueryEngine,
+          {
+            filter: { in: { id: [rri(johnId)] } },
+          },
+        );
+        assert.deepEqual(
+          byUrl.map((r) => r.id),
+          [rri(johnId)],
+          'URL-form id value still matches',
+        );
+      } finally {
+        testRealm.virtualNetwork.removeRealmMapping('@test-prefix/');
+      }
     });
 
     test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
