@@ -12,6 +12,15 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import enumField from 'https://cardstack.com/base/enum';
 import { Project, Issue } from './darkfactory.gts';
+import {
+  ResultFittedCard,
+  type ResultMetaItem,
+} from './result-fitted-card.gts';
+
+import ListChecks from '@cardstack/boxel-icons/list-checks';
+import CircleCheck from '@cardstack/boxel-icons/circle-check';
+import CircleX from '@cardstack/boxel-icons/circle-x';
+import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 
 export const LintResultStatusField = enumField(StringField, {
   options: [
@@ -225,7 +234,7 @@ export class LintResult extends CardDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: LintResult) {
       let seq = this.sequenceNumber ?? '?';
       let status = this.status ?? 'unknown';
@@ -252,93 +261,51 @@ export class LintResult extends CardDef {
       return this.args.model.status;
     }
 
+    get titleText() {
+      return this.args.model.issue?.summary ?? 'Lint Run';
+    }
+
+    get metaItems(): ResultMetaItem[] {
+      let m = this.args.model;
+      let items: ResultMetaItem[] = [
+        {
+          icon: CircleCheck,
+          text: `${m.filesClean}/${m.filesChecked} clean`,
+          tone: 'clean',
+        },
+      ];
+      if (m.totalErrors) {
+        items.push({
+          icon: CircleX,
+          text: `${m.totalErrors} error(s)`,
+          tone: 'error',
+        });
+      }
+      if (m.totalWarnings) {
+        items.push({
+          icon: CircleAlert,
+          text: `${m.totalWarnings} warning(s)`,
+          tone: 'warning',
+        });
+      }
+      return items;
+    }
+
     <template>
-      <div class='lint-result compact'>
-        <div class='header'>
-          <strong>#{{@model.sequenceNumber}}</strong>
-          <span
-            class='status status-{{this.displayStatus}}'
-          >{{this.displayStatus}}</span>
-        </div>
-        {{#if @model.issue}}
-          <div class='issue-name'>{{@model.issue.summary}}</div>
-        {{/if}}
-        <div class='counts'>
-          {{@model.filesClean}}/{{@model.filesChecked}}
-          files clean
-          {{#if @model.totalErrors}}
-            <span class='error-label'>
-              ({{@model.totalErrors}}
-              error(s))
-            </span>
-          {{/if}}
-          {{#if @model.durationMs}}
-            <span class='duration'>{{@model.durationMs}}ms</span>
-          {{/if}}
-        </div>
-      </div>
-      <style scoped>
-        .lint-result {
-          display: grid;
-          gap: 0.25rem;
-        }
-        .compact {
-          padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
-        }
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .status {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
-        }
-        .status-passed {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
-        }
-        .status-failed {
-          color: var(--boxel-red, #dc2626);
-          background: #fef2f2;
-        }
-        .status-error {
-          color: var(--boxel-orange, #ea580c);
-          background: #fff7ed;
-        }
-        .status-running {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
-        }
-        .status-empty {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
-        }
-        .issue-name {
-          font-size: 0.8rem;
-          color: var(--muted-foreground);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .counts {
-          font-size: 0.85rem;
-          color: var(--muted-foreground);
-        }
-        .error-label {
-          color: var(--boxel-red, #dc2626);
-        }
-        .duration {
-          margin-left: 0.5rem;
-          font-size: 0.75rem;
-        }
-      </style>
+      <ResultFittedCard
+        @icon={{ListChecks}}
+        @label='Lint'
+        @sequenceNumber={{@model.sequenceNumber}}
+        @status={{this.displayStatus}}
+        @emptyLabel='No Files'
+        @title={{this.titleText}}
+        @durationMs={{@model.durationMs}}
+        @metaItems={{this.metaItems}}
+      >
+        <:subtitle>
+          {{#if @model.project}}<@fields.project @format='atom' />{{/if}}
+        </:subtitle>
+      </ResultFittedCard>
     </template>
   };
 

@@ -13,6 +13,15 @@ import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
 import { Project, Issue } from './darkfactory.gts';
+import {
+  ResultFittedCard,
+  type ResultMetaItem,
+} from './result-fitted-card.gts';
+
+import FlaskConical from '@cardstack/boxel-icons/flask-conical';
+import CircleCheck from '@cardstack/boxel-icons/circle-check';
+import CircleX from '@cardstack/boxel-icons/circle-x';
+import CircleMinus from '@cardstack/boxel-icons/circle-minus';
 
 export const TestRunStatusField = enumField(StringField, {
   options: [
@@ -245,7 +254,7 @@ export class TestRun extends CardDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TestRun) {
       let seq = this.sequenceNumber ?? '?';
       let status = this.status ?? 'unknown';
@@ -269,94 +278,51 @@ export class TestRun extends CardDef {
       return this.args.model.status;
     }
 
+    get titleText() {
+      return this.args.model.issue?.summary ?? 'Test Run';
+    }
+
+    get metaItems(): ResultMetaItem[] {
+      let m = this.args.model;
+      let items: ResultMetaItem[] = [
+        {
+          icon: CircleCheck,
+          text: `${m.passedCount}/${this.total} passed`,
+          tone: 'clean',
+        },
+      ];
+      if (m.failedCount) {
+        items.push({
+          icon: CircleX,
+          text: `${m.failedCount} failed`,
+          tone: 'error',
+        });
+      }
+      if (m.skippedCount) {
+        items.push({
+          icon: CircleMinus,
+          text: `${m.skippedCount} skipped`,
+          tone: 'muted',
+        });
+      }
+      return items;
+    }
+
     <template>
-      <div class='test-run compact'>
-        <div class='header'>
-          <strong>#{{@model.sequenceNumber}}</strong>
-          <span
-            class='status status-{{this.displayStatus}}'
-          >{{this.displayStatus}}</span>
-        </div>
-        {{#if @model.issue}}
-          <div class='issue-name'>{{@model.issue.summary}}</div>
-        {{/if}}
-        <div class='counts'>
-          {{@model.passedCount}}/{{this.total}}
-          passed
-          {{#if @model.skippedCount}}
-            <span class='skipped-label'>
-              ({{@model.skippedCount}}
-              skipped)
-            </span>
-          {{/if}}
-          {{#if @model.durationMs}}
-            <span class='duration'>{{@model.durationMs}}ms</span>
-          {{/if}}
-        </div>
-      </div>
-      <style scoped>
-        .test-run {
-          display: grid;
-          gap: 0.25rem;
-        }
-        .compact {
-          padding: 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          background: var(--card);
-        }
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .status {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          font-weight: 600;
-          padding: 0.125rem 0.5rem;
-          border-radius: 0.25rem;
-        }
-        .status-passed {
-          color: var(--boxel-green, #16a34a);
-          background: #f0fdf4;
-        }
-        .status-failed {
-          color: var(--boxel-red, #dc2626);
-          background: #fef2f2;
-        }
-        .status-error {
-          color: var(--boxel-orange, #ea580c);
-          background: #fff7ed;
-        }
-        .status-running {
-          color: var(--boxel-blue, #2563eb);
-          background: #eff6ff;
-        }
-        .status-empty {
-          color: var(--boxel-400, #9ca3af);
-          background: #f9fafb;
-        }
-        .issue-name {
-          font-size: 0.8rem;
-          color: var(--muted-foreground);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .counts {
-          font-size: 0.85rem;
-          color: var(--muted-foreground);
-        }
-        .skipped-label {
-          color: var(--boxel-400, #9ca3af);
-          font-style: italic;
-        }
-        .duration {
-          margin-left: 0.5rem;
-          font-size: 0.75rem;
-        }
-      </style>
+      <ResultFittedCard
+        @icon={{FlaskConical}}
+        @label='Tests'
+        @sequenceNumber={{@model.sequenceNumber}}
+        @status={{this.displayStatus}}
+        @emptyLabel='No Tests'
+        @title={{this.titleText}}
+        @durationMs={{@model.durationMs}}
+        @metaItems={{this.metaItems}}
+      >
+        <:subtitle>
+          {{#if @model.project}}<@fields.project @format='atom' />{{/if}}
+        </:subtitle>
+      </ResultFittedCard>
     </template>
   };
 
