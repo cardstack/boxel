@@ -62,9 +62,18 @@ done
 echo "[start] Registering Matrix users (idempotent)…"
 mise exec -- pnpm --dir=packages/matrix register-all || true
 
+# Restore the realm index from the CI cache if one's available, so the stack
+# comes up without re-rendering every card. On success, tell the realm-server
+# to trust the imported index instead of doing a full index on startup.
+FULL_INDEX_FLAG=""
+if "$REPO_ROOT/.devcontainer/claude-web-import-index.sh"; then
+  FULL_INDEX_FLAG="REALM_SERVER_FULL_INDEX_ON_STARTUP=false"
+fi
+
 echo "[start] Launching the stack (mise run dev-all)…"
 exec env \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
   PUPPETEER_DISABLE_SANDBOX=true \
+  ${FULL_INDEX_FLAG} \
   mise run dev-all
