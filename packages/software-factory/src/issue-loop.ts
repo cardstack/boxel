@@ -665,12 +665,18 @@ export async function runIssueLoop(
     });
 
     // The bootstrap issue is what creates (and syncs) the IssueTracker
-    // board. Fire the hook the moment its cycle finishes so the realm index
-    // can be linked to the board now — rather than after the whole backlog
-    // drains, which a stalled or interrupted implementation issue may never
-    // reach. There is only ever one bootstrap issue, so this fires at most
-    // once. The link is best-effort and must not abort the loop.
-    if (onBootstrapComplete && issue.issueType === 'bootstrap') {
+    // board. Fire the hook the moment its cycle finishes successfully so the
+    // realm index can be linked to the board now — rather than after the whole
+    // backlog drains, which a stalled or interrupted implementation issue may
+    // never reach. Gated on `exitReason === 'done'`: a bootstrap that ended
+    // blocked or out of iterations may never have created the board, so wiring
+    // it would be premature. There is only ever one bootstrap issue, so this
+    // fires at most once. The link is best-effort and must not abort the loop.
+    if (
+      onBootstrapComplete &&
+      issue.issueType === 'bootstrap' &&
+      exitReason === 'done'
+    ) {
       try {
         await onBootstrapComplete();
       } catch (err) {

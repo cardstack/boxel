@@ -868,6 +868,39 @@ module('issue-loop > onBootstrapComplete hook', function () {
     assert.strictEqual(hookCalls, 0, 'hook only fires for the bootstrap issue');
   });
 
+  test('does not fire when the bootstrap issue ends blocked', async function (assert) {
+    let store = bootstrapSeedStore();
+    // Bootstrap agent gives up before creating the board.
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [{ tool: 'read_file', args: { path: 'brief.md' } }],
+          updateIssue: { id: 'seed', status: 'blocked' },
+        },
+      ],
+      store,
+    );
+
+    let hookCalls = 0;
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () => new NoOpValidator(),
+        onBootstrapComplete: async () => {
+          hookCalls++;
+        },
+      }),
+    );
+
+    assert.strictEqual(result.issueResults[0].exitReason, 'blocked');
+    assert.strictEqual(
+      hookCalls,
+      0,
+      'hook does not fire when the bootstrap issue did not complete',
+    );
+  });
+
   test('a throwing hook is swallowed and does not abort the loop', async function (assert) {
     let store = bootstrapSeedStore();
     let agent = boardWritingAgent(store);

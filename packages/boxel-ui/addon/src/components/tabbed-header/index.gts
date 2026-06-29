@@ -54,6 +54,7 @@ export default class TabbedHeader extends Component<Signature> {
                   href='#{{tab.tabId}}'
                   {{on 'click' (fn @setActiveTab tab.tabId)}}
                   class={{if (eq @activeTabId tab.tabId) 'active'}}
+                  data-tab-label={{tab.displayName}}
                   data-test-tab-label={{tab.displayName}}
                 >
                   {{tab.displayName}}
@@ -137,10 +138,13 @@ export default class TabbedHeader extends Component<Signature> {
         color: var(--_header-text-color);
         font-weight: 600;
       }
-      /* this prevents layout shift when text turns bold on hover/active */
+      /* Reserve the bold width up front so the label doesn't reflow when it
+         turns bold on hover/active. Sourced from data-tab-label (not the
+         data-test-* attribute, which the consuming app strips in production
+         builds — leaving the ghost empty and the shift unmitigated). */
       .app-tab-list a::after {
         display: block;
-        content: attr(data-test-tab-label);
+        content: attr(data-tab-label);
         height: 0;
         visibility: hidden;
         user-select: none;
