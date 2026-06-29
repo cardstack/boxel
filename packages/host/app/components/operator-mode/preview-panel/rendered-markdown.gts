@@ -163,7 +163,6 @@ export default class RenderedMarkdown extends Component<Signature> {
     return extractCardReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
-      this.network.virtualNetwork,
     );
   }
 
@@ -173,7 +172,6 @@ export default class RenderedMarkdown extends Component<Signature> {
     return extractFileReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
-      this.network.virtualNetwork,
     );
   }
 
