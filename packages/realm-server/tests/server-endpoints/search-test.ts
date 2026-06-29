@@ -25,7 +25,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
-  module('Realm Server Endpoints | /_federated-search-v2', function (hooks) {
+  module('Realm Server Endpoints | /_federated-search', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;
     let request: SuperTest<Test>;
@@ -164,7 +164,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     }
 
     function postSearch(body: Record<string, unknown>) {
-      let searchURL = new URL('/_federated-search-v2', testRealm.url);
+      let searchURL = new URL('/_federated-search', testRealm.url);
       return request
         .post(`${searchURL.pathname}${searchURL.search}`)
         .set('Accept', 'application/vnd.card+json')
@@ -174,7 +174,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         .send(body);
     }
 
-    test('QUERY /_federated-search-v2 federates search-entry results across realms', async function (assert) {
+    test('QUERY /_federated-search federates search-entry results across realms', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
         realms: [testRealm.url, secondaryRealm.url],

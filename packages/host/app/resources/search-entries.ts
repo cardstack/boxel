@@ -47,11 +47,11 @@ import type StoreService from '../services/store';
 const waiter = buildWaiter('search-entries-resource:search-waiter');
 
 // `SearchEntryRendering` is the card-facing rendering view-model (it rides the
-// v2 `@context` search surface), so it lives in runtime-common; re-exported
+// `@context` search surface), so it lives in runtime-common; re-exported
 // here because this resource builds it and call sites import it from here.
 export type { SearchEntryRendering };
 
-// One v2 search result, joined from the wire document: the `search-entry`
+// One search result, joined from the wire document: the `search-entry`
 // resource plus the `html` renderings and/or `item` serialization it
 // references in `included`. An empty `html` array means the entry matched but
 // no rendering satisfies the query's htmlQuery yet — the invalidation re-run
@@ -475,7 +475,7 @@ function buildRendering(
   };
 }
 
-// The one v2 host live-search resource: issues the `search-entry` wire query
+// The one host live-search resource: issues the `search-entry` wire query
 // through `StoreService.searchEntries`, subscribes to each searched realm,
 // and re-runs on incremental index events with a per-realm partial refresh.
 // Realms ride in the query's `realms` member; omitted, every available realm

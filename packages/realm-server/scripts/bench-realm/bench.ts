@@ -172,7 +172,7 @@ function searchRequest(
   bearerToken: string,
   query: unknown,
 ): Request {
-  let url = new URL('_search-v2', realmURL);
+  let url = new URL('_search', realmURL);
   return new Request(url, {
     method: 'QUERY',
     headers: {
@@ -180,9 +180,9 @@ function searchRequest(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bearerToken}`,
     },
-    // The v2 endpoint takes a search-entry-rooted query; benchmark the
+    // The search endpoint takes a search-entry-rooted query; benchmark the
     // data-only fieldset (one full `item` per result), the closest analogue
-    // to what the legacy `/_search` returned.
+    // to the legacy live-card search response.
     body: JSON.stringify(
       searchEntryWireQueryFromQuery(query as Query, { fields: ['item'] }),
     ),

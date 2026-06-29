@@ -502,7 +502,7 @@ module('Integration | card-chooser', function (hooks) {
       await focus('[data-test-search-field]');
 
       // Type one keystroke at a time. Each keystroke updates the search key,
-      // which re-runs the v2 search resource and re-renders the result
+      // which re-runs the search resource and re-renders the result
       // sections. If that churned the field — a resource rebuilt per render, or
       // non-memoized view-models re-mounting an ancestor — Glimmer would
       // replace the field with a new element and it would lose focus

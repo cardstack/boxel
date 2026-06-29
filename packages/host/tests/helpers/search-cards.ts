@@ -9,7 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 
 // Test-only: fetch the card/file-meta serializations matching a card-rooted
-// `Query` through the v2 search-entry engine, returning them in the
+// `Query` through the search-entry engine, returning them in the
 // `{ data, included, meta }` collection shape index assertions read. Requests
 // the data-only fieldset (one full `item` per entry); the top-level items land
 // in `data`, their transitively-linked resources in `included`.

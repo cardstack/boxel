@@ -80,7 +80,7 @@ function formatFromHtmlQuery(
   return 'fitted';
 }
 
-// One v2 search result as a renderable view-model. Wraps the resource's raw
+// One search result as a renderable view-model. Wraps the resource's raw
 // `SearchEntry`, exposing the chosen `html` rendering, the raw `item`
 // serialization, and a ready-to-render `component` that renders HTML inert (and
 // hydrates it lazily) or resolves a full live row — so a consumer renders
@@ -305,7 +305,7 @@ export class RenderableSearchEntries {
   }
 }
 
-// Build the render-stable view-model layer over a v2 search. Call exactly once
+// Build the render-stable view-model layer over a search. Call exactly once
 // per owner (a class field), never inside a getter or during render: it creates
 // one `getSearchEntriesResource` parented to `owner`, and per-render calls would
 // pile up live resources. Vary the search through the `getQuery` thunk (re-read

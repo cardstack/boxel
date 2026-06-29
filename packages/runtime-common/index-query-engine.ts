@@ -146,7 +146,7 @@ export type QueryOptions = WIPOptions & {
 // the live serialization only (pristine_doc / error_doc); `renderSet` projects
 // each row's full rendering set (every per-format HTML column, JSONB maps
 // whole) plus the live serialization on every row — the caller selects
-// renderings from the set (the v2 htmlQuery evaluation).
+// renderings from the set (the htmlQuery evaluation).
 export type SearchProjection = { kind: 'dataOnly' } | { kind: 'renderSet' };
 
 export interface WIPOptions {

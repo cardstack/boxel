@@ -331,7 +331,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     } as Query;
   }
 
-  // The v2 `search-entry`-rooted query, adapted from the v1 `query` above.
+  // The `search-entry`-rooted query, adapted from the `query` above.
   // `fitted` is the default rendering, so no `htmlQuery` binding is needed.
   // Undefined (no active tab ref) leaves the search component idle.
   get searchResultsQuery(): SearchEntryWireQuery | undefined {

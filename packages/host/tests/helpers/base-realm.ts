@@ -29,6 +29,7 @@ import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-number';
 import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as RichMarkdownModule from 'https://cardstack.com/base/rich-markdown';
+import type * as SearchableModule from 'https://cardstack.com/base/searchable';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
@@ -159,6 +160,8 @@ let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let rawSerializeCard: (typeof CardAPIModule)['serializeCard'];
 let rawSerializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
+let searchDoc: (typeof CardAPIModule)['searchDoc'];
+let searchDocFromFields: (typeof SearchableModule)['searchDocFromFields'];
 
 // Test-side wrappers around the raw card-api serialize functions that
 // auto-supply `virtualNetwork` from the active loader. Tests that need a
@@ -387,6 +390,7 @@ async function initialize() {
     getBrokenLinks,
     getDataBucket,
     getQueryableValue,
+    searchDoc,
     subscribeToChanges,
     unsubscribeFromChanges,
     flushLogs,
@@ -399,6 +403,12 @@ async function initialize() {
     CardInfoField,
     Theme,
   } = cardAPI);
+
+  // The searchable-driven generator lives in its own base module, not on
+  // card-api (so it stays out of every card's dependency closure).
+  searchDocFromFields = (
+    await loader.import<typeof SearchableModule>(`${baseRealm.url}searchable`)
+  ).searchDocFromFields;
 
   enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
     .default;
@@ -470,6 +480,8 @@ export {
   getBrokenLinks,
   getDataBucket,
   getQueryableValue,
+  searchDoc,
+  searchDocFromFields,
   subscribeToChanges,
   unsubscribeFromChanges,
   flushLogs,

@@ -2453,7 +2453,7 @@ module(basename(import.meta.filename), function () {
           );
 
           response = await request
-            .post('/_search-v2')
+            .post('/_search')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(
@@ -4619,7 +4619,7 @@ module(basename(import.meta.filename), function () {
       let favoriteSearchURL = new URL(favoriteSearchLink);
       assert.strictEqual(
         favoriteSearchURL.href.split('?')[0],
-        new URL('_search-v2', consumerRealmURL).href,
+        new URL('_search', consumerRealmURL).href,
         'favorite relationship search link targets consumer realm',
       );
       let favoriteQueryParams = parseSearchQuery(favoriteSearchURL);
@@ -4701,7 +4701,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         matchesSearchURL.href.split('?')[0],
-        new URL('_search-v2', providerRealmURL).href,
+        new URL('_search', providerRealmURL).href,
         'matches relationship search link targets provider realm',
       );
       let matchesQueryParams = parseSearchQuery(matchesSearchURL);
@@ -4754,7 +4754,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         failingSearchURL.href.split('?')[0],
-        new URL('_search-v2', UNREACHABLE_REALM_URL).href,
+        new URL('_search', UNREACHABLE_REALM_URL).href,
         'failingMatches search link targets unreachable realm',
       );
       let failingQueryParams = parseSearchQuery(failingSearchURL);

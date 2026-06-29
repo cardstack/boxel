@@ -18,7 +18,7 @@ import type { HydrationMode } from './hydratable-card';
 
 import type StoreService from '../../services/store';
 
-// The one v2 search component family. Consumes the heterogeneous `search-entry`
+// The one search component family. Consumes the heterogeneous `search-entry`
 // stream from `getSearchEntriesResource` (through the shared render-stable
 // view-model layer) and renders it transparently — prerendered HTML inert (the
 // fast path, hydrated lazily on interaction) or the live serialization. Used

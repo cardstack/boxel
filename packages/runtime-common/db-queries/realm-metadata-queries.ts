@@ -67,7 +67,9 @@ export async function fetchArchivedRealmsForOwner(
        AND rm.url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        AND rup.username =`,
     param(username),
-    `ORDER BY rm.archived_at DESC`,
+    // Secondary sort on url keeps ordering deterministic when several realms
+    // share an archived_at second (SQLite's CURRENT_TIMESTAMP is 1s-resolution).
+    `ORDER BY rm.archived_at DESC, rm.url ASC`,
   ])) as { url: string }[];
   return results.map((r) => r.url);
 }

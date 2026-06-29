@@ -20,7 +20,7 @@ export interface SearchCommandOptions {
   profileManager?: ProfileManager;
 }
 
-// `_federated-search-v2` speaks the search-entry wire grammar: one query
+// `_federated-search` speaks the search-entry wire grammar: one query
 // rooted on `search-entry`, where entry membership is addressed through
 // `item.` (the card/file serialization). The type anchor is `item.on` and the
 // field paths inside the filter operators carry the `item.` prefix. Callers
@@ -110,10 +110,10 @@ interface SearchEntryRequestBody {
 }
 
 /**
- * Build a v2 search-entry request body from a card-rooted query: the
+ * Build a search-entry request body from a card-rooted query: the
  * `item.`-addressed filter/sort plus the data-only fieldset. Pass `realms` for
- * the federated `_federated-search-v2`; omit it to query a single realm's own
- * `_search-v2`.
+ * the federated `_federated-search`; omit it to query a single realm's own
+ * `_search`.
  */
 export function searchEntryRequestBody(
   query: Record<string, unknown>,
@@ -200,7 +200,7 @@ export function itemsFromSearchEntryDoc(
 }
 
 /**
- * Federated search across one or more realms via the `_federated-search-v2`
+ * Federated search across one or more realms via the `_federated-search`
  * server endpoint.
  *
  * Sends the search-entry-rooted query as a QUERY request requesting the
@@ -224,7 +224,7 @@ export async function search(
   }
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-  let searchUrl = `${realmServerUrl}/_federated-search-v2`;
+  let searchUrl = `${realmServerUrl}/_federated-search`;
 
   let realms = (Array.isArray(realmUrls) ? realmUrls : [realmUrls]).map(
     ensureTrailingSlash,

@@ -193,7 +193,7 @@ export interface HtmlQueryLeaf {
   renderType?: CodeRef;
 }
 
-// One v2 search result. A platform resource — never a userland card — so its
+// One search result. A platform resource — never a userland card — so its
 // relationships cannot collide with user `@field` names. Its `id` is the bare
 // card/file URL, shared with its `item` (`card`/`file-meta`) serialization;
 // `type` is the discriminator. The branches are composition: the `html`
@@ -224,7 +224,7 @@ export interface SearchEntryResource {
   };
 }
 
-// One prerendered rendering of a card/file: a v2 resource whose `id` is the
+// One prerendered rendering of a card/file: a platform resource whose `id` is the
 // (card URL, format, renderType) composite (see `htmlResourceId`), so each
 // rendering of a card — per format × render type — is an independently
 // cacheable/dedupable resource. The scoped CSS it needs travels as

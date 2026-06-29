@@ -247,13 +247,13 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
-  // Coalesce concurrent same-(realms, query) `_federated-search-v2` HTTP
+  // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
   // calls during a prerender. Gated on `__boxelRenderContext` so live
   // user searches stay uncoalesced — write-then-read freshness story
   // unchanged outside prerender. Entries self-clear on `.finally()` via
   // identity check.
   private inflightSearch: Map<string, Promise<SearchEntryResults>> = new Map();
-  // Resolved-doc cache for same-realm `_federated-search-v2` calls during
+  // Resolved-doc cache for same-realm `_federated-search` calls during
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
   // in-flight Map and the cache is populated on resolve. Keyed by
@@ -1025,7 +1025,7 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  // Instances only: the query runs against the v2 search requesting full
+  // Instances only: the query runs against the search requesting full
   // `item` serializations, the results hydrate into the store, and the caller
   // gets instances back. For the raw search-entry wire format (HTML
   // renderings, field-limited serializations, the document itself) use
@@ -1070,7 +1070,7 @@ export default class StoreService extends Service implements StoreInterface {
     return opts?.includeMeta ? result : result.instances;
   }
 
-  // The raw v2 wire format: heterogeneous `search-entry` resources with the
+  // The raw wire format: heterogeneous `search-entry` resources with the
   // `html` / `item` branches the query's `fields[search-entry]` selects.
   // Nothing is hydrated into the store.
   async searchEntries(
@@ -1150,10 +1150,10 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // The instances path's resolved-document layer: the `Query` runs against
-  // the v2 search requesting full `item` serializations, and the resulting
+  // the search requesting full `item` serializations, and the resulting
   // search-entry document (one `item` per entry in `included`) is what the
   // hydration pipeline and the caches below consume.
-  // Sits between `store.search` and `_federated-search-v2`.
+  // Sits between `store.search` and `_federated-search`.
   //
   // Two layers of dedup, both prerender-gated:
   //
@@ -1301,7 +1301,7 @@ export default class StoreService extends Service implements StoreInterface {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_federated-search-v2', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetchForRealms(
       searchURL.href,
       realms,

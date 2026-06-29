@@ -4382,7 +4382,7 @@ module('Integration | serialization', function (hooks) {
     let favoriteSearchURL = new URL(favoriteSearchLink!);
     assert.strictEqual(
       favoriteSearchURL.href.split('?')[0],
-      new URL('_search-v2', testRealmURL).href,
+      new URL('_search', testRealmURL).href,
       'favorite search link points to canonical search endpoint',
     );
     let favoriteQueryParams = parseQueryString(
@@ -4411,7 +4411,7 @@ module('Integration | serialization', function (hooks) {
     let matchesSearchURL = new URL(matchesSearchLink!);
     assert.strictEqual(
       matchesSearchURL.href.split('?')[0],
-      new URL('_search-v2', testRealmURL).href,
+      new URL('_search', testRealmURL).href,
       'matches search link points to canonical search endpoint',
     );
     let matchesQueryParams = parseQueryString(
@@ -4454,7 +4454,7 @@ module('Integration | serialization', function (hooks) {
     let emptyMatchesSearchURL = new URL(emptyMatchesSearchLink!);
     assert.strictEqual(
       emptyMatchesSearchURL.href.split('?')[0],
-      new URL('_search-v2', testRealmURL).href,
+      new URL('_search', testRealmURL).href,
       'emptyMatches search link points to canonical search endpoint',
     );
 

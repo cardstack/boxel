@@ -19,6 +19,8 @@ import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
+import handleArchiveRealm from './handlers/handle-archive-realm.ts';
+import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
 import {
   healthCheck,
   jwtMiddleware,
@@ -44,7 +46,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
 import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
-import handleSearchV2 from './handlers/handle-search-v2.ts';
+import handleSearch from './handlers/handle-search.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
@@ -201,9 +203,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.all(
-    '/_federated-search-v2',
+    '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearchV2({ reconciler: args.reconciler, searchCache }),
+    handleSearch({ reconciler: args.reconciler, searchCache }),
   );
   router.all(
     '/_federated-info',
@@ -265,6 +267,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_unpublish-realm',
     jwtMiddleware(args.realmSecretSeed),
     handleUnpublishRealm(args),
+  );
+  router.post(
+    '/_archive-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleArchiveRealm(args),
+  );
+  router.post(
+    '/_unarchive-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnarchiveRealm(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with
