@@ -278,7 +278,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('fetchArchivedRealmsForOwner returns only the owner’s archived realms', async function (assert) {
+    test("fetchArchivedRealmsForOwner returns only the owner's archived realms", async function (assert) {
       const owner = '@owner:localhost';
       const otherOwner = '@other:localhost';
 

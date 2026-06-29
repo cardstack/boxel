@@ -291,6 +291,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-endpoints/reindex-test',
   './realm-endpoints/search-test',
   './realm-endpoints/user-test',
+  './server-endpoints/archive-realm-test',
   './server-endpoints/authentication-test',
   './server-endpoints/bot-commands-test',
   './server-endpoints/bot-registration-test',
