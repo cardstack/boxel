@@ -3,8 +3,11 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  archiveRealm,
   insertPermissions,
   isRealmArchived,
+  param,
+  query,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { realmSecretSeed } from '../helpers/index.ts';
@@ -219,6 +222,215 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await isRealmArchived(context.dbAdapter, new URL(publishedRealmURL)),
         'published realm is not archived',
       );
+    });
+  });
+
+  module('GET /_archived-realms', function (hooks) {
+    let context = setupServerEndpointsTest(hooks);
+
+    function makeRealmURL() {
+      return `${testRealmURL.origin}/archived-${uuidv4()}/`;
+    }
+
+    // Seed an archived realm owned by `owner`: a realm_registry row, its
+    // permissions, and the archive flag.
+    async function seedArchivedRealm(
+      realmURL: string,
+      owner: string,
+      extraPermissions: RealmPermissions = {},
+    ) {
+      await insertSourceRealmInRegistry(context.dbAdapter, {
+        url: realmURL,
+        diskId: uuidv4(),
+        ownerUsername: owner,
+      });
+      await insertPermissions(context.dbAdapter, new URL(realmURL), {
+        [owner]: ['read', 'write', 'realm-owner'],
+        ...extraPermissions,
+      });
+      await archiveRealm(context.dbAdapter, new URL(realmURL));
+    }
+
+    // Insert an indexed RealmConfig card (at `<realmURL>realm`) so the
+    // endpoint can read display metadata the way it does for a real realm.
+    async function seedRealmConfigInIndex(
+      realmURL: string,
+      attributes: {
+        name?: string;
+        iconURL?: string | null;
+        backgroundURL?: string | null;
+      },
+    ) {
+      let configURL = `${realmURL}realm`;
+      let pristineDoc = {
+        id: configURL,
+        type: 'card',
+        attributes: {
+          cardInfo: attributes.name ? { name: attributes.name } : {},
+          ...(attributes.iconURL !== undefined
+            ? { iconURL: attributes.iconURL }
+            : {}),
+          ...(attributes.backgroundURL !== undefined
+            ? { backgroundURL: attributes.backgroundURL }
+            : {}),
+        },
+      };
+      await query(context.dbAdapter, [
+        `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at) VALUES (`,
+        param(configURL),
+        `,`,
+        param(configURL),
+        `,`,
+        param(realmURL),
+        `,`,
+        param(1),
+        `,`,
+        param('instance'),
+        `,`,
+        param(JSON.stringify(pristineDoc)),
+        `::jsonb,`,
+        param(JSON.stringify({})),
+        `::jsonb,`,
+        `'[]'::jsonb,`,
+        `'[]'::jsonb,`,
+        param(false),
+        `,`,
+        param(false),
+        `,`,
+        param(Date.now()),
+        `)`,
+      ]);
+    }
+
+    function findEntry(body: any, realmURL: string) {
+      return (body.data as any[]).find((d) => d.id === realmURL);
+    }
+
+    test("returns the caller's archived realms with display metadata", async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = makeRealmURL();
+      await seedArchivedRealm(realmURL, owner);
+      await seedRealmConfigInIndex(realmURL, {
+        name: 'My Archived Workspace',
+        iconURL: 'https://example.com/icon.png',
+        backgroundURL: 'https://example.com/bg.jpg',
+      });
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(owner));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entry = findEntry(response.body, realmURL);
+      assert.ok(entry, 'the archived realm is present');
+      assert.strictEqual(entry.type, 'realm');
+      assert.strictEqual(
+        entry.attributes.name,
+        'My Archived Workspace',
+        'name comes from the indexed RealmConfig',
+      );
+      assert.strictEqual(
+        entry.attributes.iconURL,
+        'https://example.com/icon.png',
+        'iconURL comes from the indexed RealmConfig',
+      );
+      assert.strictEqual(
+        entry.attributes.backgroundURL,
+        'https://example.com/bg.jpg',
+        'backgroundURL comes from the indexed RealmConfig',
+      );
+      assert.ok(
+        entry.attributes.archivedAt,
+        'archivedAt timestamp is included',
+      );
+    });
+
+    test('does not leak archived realms the caller does not own', async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const otherOwner = '@other-owner:localhost';
+      const ownedURL = makeRealmURL();
+      const otherURL = makeRealmURL();
+      await seedArchivedRealm(ownedURL, owner);
+      // owner can read otherURL but is not its owner
+      await seedArchivedRealm(otherURL, otherOwner, {
+        [owner]: ['read'],
+      });
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(owner));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(findEntry(response.body, ownedURL), 'owned realm is present');
+      assert.notOk(
+        findEntry(response.body, otherURL),
+        "another owner's archived realm is not leaked",
+      );
+    });
+
+    test("excludes the caller's non-archived realms", async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const archivedURL = makeRealmURL();
+      const activeURL = makeRealmURL();
+      await seedArchivedRealm(archivedURL, owner);
+      // An owned but never-archived realm.
+      await insertSourceRealmInRegistry(context.dbAdapter, {
+        url: activeURL,
+        diskId: uuidv4(),
+        ownerUsername: owner,
+      });
+      await insertPermissions(context.dbAdapter, new URL(activeURL), {
+        [owner]: ['read', 'write', 'realm-owner'],
+      });
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(owner));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        findEntry(response.body, archivedURL),
+        'archived realm is present',
+      );
+      assert.notOk(
+        findEntry(response.body, activeURL),
+        'active (non-archived) realm is excluded',
+      );
+    });
+
+    test('falls back to a URL-derived name when no RealmConfig is indexed', async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = `${testRealmURL.origin}/no-config-realm/`;
+      await seedArchivedRealm(realmURL, owner);
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(owner));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entry = findEntry(response.body, realmURL);
+      assert.ok(entry, 'the archived realm is present');
+      assert.strictEqual(
+        entry.attributes.name,
+        'no-config-realm',
+        'name falls back to the last URL path segment',
+      );
+    });
+
+    test('returns an empty list when the caller has no archived realms', async function (assert) {
+      const owner = '@no-archives-owner:localhost';
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(owner));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body.data, [], 'data is an empty array');
     });
   });
 });

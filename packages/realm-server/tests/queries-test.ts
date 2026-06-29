@@ -309,9 +309,13 @@ module(basename(import.meta.filename), function () {
       let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
 
       assert.deepEqual(
-        archived,
+        archived.map((r) => r.url),
         [archivedOwned],
         'returns only realms that are both archived and owned by the user',
+      );
+      assert.ok(
+        archived[0]?.archivedAt,
+        'each archived realm carries its archived_at timestamp',
       );
     });
 
@@ -342,7 +346,7 @@ module(basename(import.meta.filename), function () {
       let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
 
       assert.deepEqual(
-        archived,
+        archived.map((r) => r.url),
         [sourceRealmURL],
         'published snapshots are omitted even when archived and owned',
       );
