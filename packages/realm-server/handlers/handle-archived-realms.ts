@@ -117,10 +117,19 @@ export default function handleArchivedRealms({
           typeof cardInfo.name === 'string' && cardInfo.name.length > 0
             ? cardInfo.name
             : fallbackName(url);
-        let iconURL =
-          typeof attrs.iconURL === 'string'
-            ? attrs.iconURL
-            : (iconURLFor(name) ?? null);
+        let iconURL: string | null;
+        if (typeof attrs.iconURL === 'string') {
+          iconURL = attrs.iconURL;
+        } else if (config && 'iconURL' in attrs) {
+          // The icon was explicitly cleared on an indexed realm. Preserve the
+          // null rather than synthesizing one, matching how RealmConfig
+          // parsing treats an explicit null (see Realm#parseRealmInfo).
+          iconURL = null;
+        } else {
+          // No indexed config (or no iconURL field) — fall back to a letter
+          // icon so the chooser still has something to show.
+          iconURL = iconURLFor(name) ?? null;
+        }
         let backgroundURL =
           typeof attrs.backgroundURL === 'string' ? attrs.backgroundURL : null;
         let attributes: ArchivedRealmAttributes = {

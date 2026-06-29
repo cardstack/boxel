@@ -401,6 +401,31 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('preserves an explicitly cleared (null) icon rather than synthesizing one', async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = makeRealmURL();
+      await seedArchivedRealm(realmURL, owner);
+      // An indexed RealmConfig whose icon was cleared to null.
+      await seedRealmConfigInIndex(realmURL, {
+        name: 'Cleared Icon Workspace',
+        iconURL: null,
+      });
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(owner));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entry = findEntry(response.body, realmURL);
+      assert.ok(entry, 'the archived realm is present');
+      assert.strictEqual(
+        entry.attributes.iconURL,
+        null,
+        'an explicitly cleared icon stays null and is not synthesized',
+      );
+    });
+
     test('falls back to a URL-derived name when no RealmConfig is indexed', async function (assert) {
       const owner = '@archive-owner:localhost';
       const realmURL = `${testRealmURL.origin}/no-config-realm/`;
