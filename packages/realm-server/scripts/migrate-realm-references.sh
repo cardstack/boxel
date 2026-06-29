@@ -263,6 +263,10 @@ mkdir -p "$FRAGMENTS_DIR"
 CHANGED_JSON_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-changed-json.$$")
 PROCESSED_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-processed.$$")
 WORKER_ERRORS_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-werr.$$")
+# Per-directory scratch holding the .json paths fed to the pre-edit validator,
+# one per line. Streamed via a file (not argv) so a directory with enough
+# matching files never exceeds ARG_MAX. Rebuilt each directory iteration.
+JSON_CANDIDATES_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-json-candidates.$$")
 > "$CHANGED_JSON_FILE"
 > "$PROCESSED_FILE"
 > "$WORKER_ERRORS_FILE"
@@ -338,18 +342,24 @@ for search_dir in "$@"; do
 
   # Record which matching .json files parse cleanly BEFORE editing, so the
   # post-run verification can distinguish "the replacement broke this" from
-  # "this was already non-strict". One batched node pass per directory.
+  # "this was already non-strict". The candidate list is streamed through a
+  # file (not node argv) so a directory with thousands of matches can't exceed
+  # ARG_MAX, and the validator's exit status is checked: if pre-validation
+  # fails we skip editing this directory rather than proceed with an
+  # incomplete valid-before set (which would let a real corruption pass the
+  # after-check unflagged).
   if [ "$DRY_RUN" = false ]; then
-    json_candidates=()
+    > "$JSON_CANDIDATES_FILE"
     for f in "${matching_files[@]}"; do
       case "$f" in
-        *.json) json_candidates+=("$f") ;;
+        *.json) printf '%s\n' "$f" >> "$JSON_CANDIDATES_FILE" ;;
       esac
     done
-    if [ ${#json_candidates[@]} -gt 0 ]; then
-      node -e '
+    if [ -s "$JSON_CANDIDATES_FILE" ]; then
+      if ! node -e '
         const fs = require("fs");
-        for (const f of process.argv.slice(1)) {
+        const files = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean);
+        for (const f of files) {
           try {
             JSON.parse(fs.readFileSync(f, "utf8"));
             console.log(f);
@@ -357,7 +367,12 @@ for search_dir in "$@"; do
             /* already non-strict; omit so it is not held to the after-check */
           }
         }
-      ' "${json_candidates[@]}" >> "$VALID_BEFORE_FILE"
+      ' "$JSON_CANDIDATES_FILE" >> "$VALID_BEFORE_FILE"; then
+        err="Pre-migration JSON validation failed for $search_dir; skipping its edits to avoid masking corruption"
+        echo "  $err" >&2
+        ERRORS+=("$err")
+        continue
+      fi
     fi
   fi
 
@@ -436,7 +451,7 @@ if [ "$DRY_RUN" = false ] && [ "$changed_json_count" -gt 0 ]; then
   fi
 fi
 
-rm -f "$VALID_BEFORE_FILE" "$CHANGED_JSON_FILE" "$PROCESSED_FILE" "$WORKER_ERRORS_FILE"
+rm -f "$VALID_BEFORE_FILE" "$CHANGED_JSON_FILE" "$PROCESSED_FILE" "$WORKER_ERRORS_FILE" "$JSON_CANDIDATES_FILE"
 rm -rf "$FRAGMENTS_DIR"
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
