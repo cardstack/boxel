@@ -19,7 +19,6 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 export interface ArchiveTarget {
   realmURL: string;
-  ownerUserId: string;
   permissions: RealmPermissions;
 }
 
@@ -63,7 +62,11 @@ export async function resolveAndAuthorizeArchiveTarget(
   }
 
   let realmId = json?.data?.id;
-  if (typeof realmId !== 'string' || realmId.length === 0) {
+  if (
+    json?.data?.type !== 'realm' ||
+    typeof realmId !== 'string' ||
+    realmId.length === 0
+  ) {
     await sendResponseForBadRequest(
       ctxt,
       'Request body must be JSON-API with { data: { type: "realm", id: <realmURL> } }',
@@ -125,5 +128,5 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  return { realmURL, ownerUserId, permissions };
+  return { realmURL, permissions };
 }

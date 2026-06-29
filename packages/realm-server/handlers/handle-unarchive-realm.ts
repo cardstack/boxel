@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   createResponse,
+  isRealmArchived,
   logger,
   SupportedMimeType,
   systemInitiatedPriority,
@@ -33,19 +34,26 @@ export default function handleUnarchiveRealm({
     let { realmURL, permissions } = target;
 
     try {
+      // Capture archived state before clearing it: only a realm that was
+      // actually archived needs its index rebuilt. Unarchiving an already-active
+      // realm is a no-op and must not kick off an expensive full reindex.
+      let wasArchived = await isRealmArchived(dbAdapter, new URL(realmURL));
+
       await unarchiveRealm(dbAdapter, new URL(realmURL));
 
-      // A realm's index is left to rot while it is archived, so restoring it
-      // requires a full reindex to rebuild boxel_index from disk. Enqueue
-      // (rather than awaiting) so the response returns promptly; the indexer
-      // owns how a restored realm is brought back into the index sweep.
-      await queue.publish<void>({
-        jobType: `full-reindex`,
-        concurrencyGroup: `full-reindex-group`,
-        timeout: 6 * 60,
-        priority: systemInitiatedPriority,
-        args: { realmUrls: [realmURL] },
-      });
+      if (wasArchived) {
+        // A realm's index is left to rot while it is archived, so restoring it
+        // requires a full reindex to rebuild boxel_index from disk. Enqueue
+        // (rather than awaiting) so the response returns promptly; the indexer
+        // owns how a restored realm is brought back into the index sweep.
+        await queue.publish<void>({
+          jobType: `full-reindex`,
+          concurrencyGroup: `full-reindex-group`,
+          timeout: 6 * 60,
+          priority: systemInitiatedPriority,
+          args: { realmUrls: [realmURL] },
+        });
+      }
 
       let response = createResponse({
         body: JSON.stringify(
