@@ -413,12 +413,12 @@ export async function runFactoryEntrypoint(
   let linkBoard = dependencies?.linkRealmIndexBoard ?? linkBoardToRealmIndex;
   let linkSeedProject =
     dependencies?.linkBootstrapIssueProject ?? linkProjectToSeedIssue;
-  let wireBootstrapArtifacts = async ({ waitForIndex = false } = {}) => {
+  let wireBootstrapArtifacts = async ({ waitForIndex = true } = {}) => {
     // The board/Project are pushed to the realm fire-and-forget (no
-    // waitForIndex), so a search right after can race the indexer. The
-    // backstop is the last chance to wire the links, so it retries on an
-    // empty result; the in-loop hook stays opportunistic (no retries) since
-    // the backstop covers anything it misses.
+    // waitForIndex), so a search right after can race the indexer. Both the
+    // in-loop hook and the post-loop backstop therefore retry on an empty
+    // result: the hook is the only wiring a run that stalls or is interrupted
+    // before the backstop ever gets, so it can't afford to lose that race.
     let searchRetries = waitForIndex ? BOOTSTRAP_LINK_SEARCH_RETRIES : 0;
     let linkArgs = {
       client,
@@ -479,10 +479,11 @@ export async function runFactoryEntrypoint(
 
   // Backstop after the loop returns. The bootstrap-complete hook above is the
   // primary trigger (it fires even when the loop never reaches here), but this
-  // re-wires idempotently for runs that complete normally and covers the case
-  // where the hook's search briefly raced the realm index. A no-op when the
-  // board and project are already linked. Best-effort, like the hook: a wiring
-  // failure here must not turn an otherwise-successful run into a failure.
+  // re-wires idempotently for runs that complete normally, covering the case
+  // where the hook exhausted its retry budget before the index caught up. A
+  // no-op when the board and project are already linked. Best-effort, like the
+  // hook: a wiring failure here must not turn an otherwise-successful run into
+  // a failure.
   if (targetRealm.createdRealm) {
     try {
       await wireBootstrapArtifacts({ waitForIndex: true });
