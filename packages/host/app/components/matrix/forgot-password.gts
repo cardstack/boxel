@@ -11,18 +11,18 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import {
-  Button,
-  FieldContainer,
-  BoxelInput,
-} from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   isMatrixError,
   isValidPassword,
 } from '@cardstack/host/lib/matrix-utils';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import AuthButton from './auth-button';
+import AuthFormField from './auth-form-field';
 
 import type { AuthMode } from './auth';
 
@@ -46,12 +46,7 @@ export default class ForgotPassword extends Component<Signature> {
     }}
       <span class='title'>Forgot your password?</span>
       <p class='info'>Enter email to receive a reset password link.</p>
-      <FieldContainer
-        @label='Email Address'
-        @tag='label'
-        @vertical={{true}}
-        class='field'
-      >
+      <AuthFormField @label='Email Address'>
         <BoxelInput
           data-test-email-field
           type='text'
@@ -62,22 +57,20 @@ export default class ForgotPassword extends Component<Signature> {
           @value={{this.email}}
           @onInput={{this.setEmail}}
         />
-      </FieldContainer>
+      </AuthFormField>
       <div class='button-wrapper'>
-        <Button
-          class='button'
+        <AuthButton
           data-test-reset-your-password-btn
-          @kind='primary'
+          @variant='primary'
           @disabled={{this.isForgotPasswordBtnDisabled}}
           @loading={{this.sendEmailValidationTask.isRunning}}
           {{on 'click' this.sendEmailValidation}}
-        >Reset Your Password</Button>
-        <Button
-          class='button secondary-cta'
+        >Reset Your Password</AuthButton>
+        <AuthButton
           data-test-cancel-reset-password-btn
-          @kind='secondary-dark'
+          @variant='secondary'
           {{on 'click' (fn @setMode 'login')}}
-        >Back to login</Button>
+        >Back to login</AuthButton>
       </div>
     {{else if (eq this.state.type 'waitForEmailValidation')}}
       <span class='title' data-test-email-validation>Please check your email to
@@ -87,22 +80,16 @@ export default class ForgotPassword extends Component<Signature> {
         <li>We've sent an email to <b>{{this.state.email}}</b></li>
         <li>Click on the link within the email to reset your password</li>
       </ul>
-      <Button
-        class='button'
+      <AuthButton
         data-test-resend-validation-btn
-        @kind='primary'
+        @variant='primary'
         @disabled={{this.sendEmailValidationTask.isRunning}}
         @loading={{this.sendEmailValidationTask.isRunning}}
         {{on 'click' this.resendEmailValidation}}
-      >Resend Email</Button>
+      >Resend Email</AuthButton>
     {{else if (eq this.state.type 'resetPassword')}}
       <span class='title'>Reset your password</span>
-      <FieldContainer
-        @label='Enter New Password'
-        @tag='label'
-        @vertical={{true}}
-        class='field'
-      >
+      <AuthFormField @label='Enter New Password'>
         <BoxelInput
           data-test-password-field
           type='password'
@@ -114,13 +101,8 @@ export default class ForgotPassword extends Component<Signature> {
           @onInput={{this.setPassword}}
           @onBlur={{this.checkPassword}}
         />
-      </FieldContainer>
-      <FieldContainer
-        @label='Re-Enter New Password'
-        @tag='label'
-        @vertical={{true}}
-        class='field'
-      >
+      </AuthFormField>
+      <AuthFormField @label='Re-Enter New Password'>
         <BoxelInput
           data-test-confirm-password-field
           type='password'
@@ -132,16 +114,15 @@ export default class ForgotPassword extends Component<Signature> {
           @onInput={{this.setConfirmPassword}}
           @onBlur={{this.checkConfirmPassword}}
         />
-      </FieldContainer>
+      </AuthFormField>
       <div class='button-wrapper'>
-        <Button
-          class='button'
+        <AuthButton
           data-test-reset-password-btn
-          @kind='primary'
+          @variant='primary'
           @disabled={{this.isResetPasswordBtnDisabled}}
           @loading={{this.resetPassword.isRunning}}
           {{on 'click' (perform this.resetPassword)}}
-        >Reset Password</Button>
+        >Reset Password</AuthButton>
       </div>
       {{#if this.isResetPasswordParamsError}}
         <span class='error' data-test-reset-password-error>Unable to reset your
@@ -159,12 +140,11 @@ export default class ForgotPassword extends Component<Signature> {
       <p class='info'>Your password has been successfully reset. You can use the
         link below to sign into your Boxel account with your new password.</p>
       <div class='button-wrapper'>
-        <Button
-          class='button'
+        <AuthButton
           data-test-back-to-login-btn
-          @kind='primary'
+          @variant='primary'
           {{on 'click' this.returnToLogin}}
-        >Sign In to Boxel</Button>
+        >Sign In to Boxel</AuthButton>
       </div>
     {{/if}}
 
@@ -181,32 +161,6 @@ export default class ForgotPassword extends Component<Signature> {
         line-height: 20px;
         color: var(--foreground);
       }
-      .field {
-        margin-top: var(--boxel-sp);
-      }
-      .field :deep(input:autofill) {
-        transition:
-          background-color 0s 600000s,
-          color 0s 600000s;
-      }
-      .field :deep(.validation-icon-container.invalid) {
-        display: none;
-      }
-      .field :deep(.boxel-input-group--invalid > :nth-last-child(2)) {
-        border-top-right-radius: var(--boxel-input-group-border-radius);
-        border-bottom-right-radius: var(--boxel-input-group-border-radius);
-        border-right-width: var(--boxel-input-group-interior-border-width);
-      }
-      .field
-        :deep(
-          .boxel-input-group:not(.boxel-input-group--invalid)
-            > :nth-last-child(2)
-        ) {
-        padding-right: 0;
-      }
-      .field :deep(.error-message) {
-        margin-left: 0;
-      }
       .button-wrapper {
         width: 100%;
         display: flex;
@@ -215,38 +169,6 @@ export default class ForgotPassword extends Component<Signature> {
         align-items: center;
         margin-top: var(--boxel-sp-lg);
         gap: var(--boxel-sp-sm);
-      }
-      .button-wrapper button {
-        margin: 0;
-        width: 100%;
-      }
-      .button {
-        --boxel-button-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
-        width: fit-content;
-        min-width: 148px;
-      }
-      .kind-primary {
-        --boxel-button-color: var(--auth-primary-bg);
-        --boxel-button-text-color: var(--auth-primary-text);
-      }
-      .kind-primary:disabled {
-        --boxel-button-color: var(--auth-primary-disabled-bg);
-        --boxel-button-text-color: var(--auth-primary-disabled-text);
-        --boxel-button-border: none;
-      }
-      .secondary-cta {
-        --boxel-button-color: var(--auth-secondary-bg);
-        --boxel-button-text-color: var(--auth-secondary-text);
-        --boxel-button-border: 1px solid var(--auth-secondary-border);
-      }
-      .secondary-cta:not(:disabled):hover,
-      .secondary-cta:not(:disabled):active {
-        --boxel-button-color: var(--auth-secondary-hover-bg);
-      }
-      .button :deep(.boxel-loading-indicator) {
-        display: flex;
-        justify-content: center;
-        align-items: center;
       }
       .email-validation-instruction {
         padding: 0;
@@ -262,7 +184,7 @@ export default class ForgotPassword extends Component<Signature> {
         color: var(--boxel-error-100);
         padding: 0;
         font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-xxs) auto 0 auto;
+        margin: var(--boxel-sp-2xs) auto 0 auto;
         text-align: center;
       }
       .error a {
@@ -309,18 +231,18 @@ export default class ForgotPassword extends Component<Signature> {
   }
 
   private get isForgotPasswordBtnDisabled() {
-    return (
-      !this.email || this.emailError || this.sendEmailValidationTask.isRunning
+    return Boolean(
+      !this.email || this.emailError || this.sendEmailValidationTask.isRunning,
     );
   }
 
   private get isResetPasswordBtnDisabled() {
-    return (
+    return Boolean(
       !this.password ||
       !this.confirmPassword ||
       this.passwordError ||
       this.confirmPasswordError ||
-      this.resetPassword.isRunning
+      this.resetPassword.isRunning,
     );
   }
 

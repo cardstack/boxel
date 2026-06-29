@@ -12,13 +12,10 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-
 import {
   BoxelInput,
   BoxelInputGroup,
-  Button,
-  FieldContainer,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
@@ -32,6 +29,9 @@ import {
   type InteractiveAuth,
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import AuthButton from './auth-button';
+import AuthFormField from './auth-form-field';
 
 import type { AuthMode } from './auth';
 import type {
@@ -65,14 +65,14 @@ export default class RegisterUser extends Component<Signature> {
         <li>Leave this window open while we verify your email</li>
         <li>This screen will update once your email is verified</li>
       </ul>
-      <Button
+      <AuthButton
         data-test-resend-validation
         {{on 'click' this.resendValidation}}
         class='resend-email'
-        @kind='primary'
+        @variant='primary'
         @disabled={{this.validateEmail.isRunning}}
         @loading={{this.validateEmail.isRunning}}
-      >Resend Email</Button>
+      >Resend Email</AuthButton>
     {{else if (eq this.currentPage 'account-creation')}}
       <div class='centered-loading'>
         <span class='loading-title' data-test-email-validation-complete>Email
@@ -83,12 +83,7 @@ export default class RegisterUser extends Component<Signature> {
     {{else if (eq this.currentPage 'token-form')}}
       <span class='title'>Boxel is currently invite-only.<br />Enter your invite
         code here.</span>
-      <FieldContainer
-        @label='Your invite code'
-        @tag='label'
-        class='registration-field'
-        @vertical={{true}}
-      >
+      <AuthFormField @label='Your invite code'>
         <BoxelInput
           data-test-token-field
           @state={{this.tokenInputState}}
@@ -97,26 +92,20 @@ export default class RegisterUser extends Component<Signature> {
           @errorMessage={{this.tokenError}}
           @onInput={{this.setToken}}
         />
-      </FieldContainer>
+      </AuthFormField>
       <div class='button-wrapper'>
-        <Button
+        <AuthButton
           data-test-next-btn
-          class='button'
-          @kind='primary'
+          @variant='primary'
           @disabled={{this.isNextButtonDisabled}}
           @loading={{this.doRegistrationFlow.isRunning}}
           {{on 'click' this.sendToken}}
-        >Next</Button>
+        >Next</AuthButton>
       </div>
     {{else if (eq this.currentPage 'registration-form')}}
       <span class='title'>Create a Boxel Account</span>
       <form data-test-register-form {{on 'submit' this.register}}>
-        <FieldContainer
-          @label='Your Name'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        <AuthFormField @label='Your Name'>
           <BoxelInput
             data-test-name-field
             @state={{this.nameInputState}}
@@ -126,13 +115,8 @@ export default class RegisterUser extends Component<Signature> {
             @onInput={{this.setName}}
             @onBlur={{this.checkName}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Email'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Email'>
           <BoxelInput
             data-test-email-field
             name='email'
@@ -144,13 +128,8 @@ export default class RegisterUser extends Component<Signature> {
             @onInput={{this.setEmail}}
             @onBlur={{this.checkEmail}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Username'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Username'>
           <BoxelInputGroup
             data-test-username-field
             id='boxel-register-username'
@@ -176,13 +155,8 @@ export default class RegisterUser extends Component<Signature> {
                 class='validation-hint-icon'
               />name available</p>
           {{/if}}
-        </FieldContainer>
-        <FieldContainer
-          @label='Password'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Password'>
           <BoxelInput
             data-test-password-field
             id='boxel-register-password'
@@ -201,13 +175,8 @@ export default class RegisterUser extends Component<Signature> {
                 class='validation-hint-icon'
               />password is valid</p>
           {{/if}}
-        </FieldContainer>
-        <FieldContainer
-          @label='Confirm Password'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Confirm Password'>
           <BoxelInput
             data-test-confirm-password-field
             id='boxel-register-confirm-password'
@@ -226,7 +195,7 @@ export default class RegisterUser extends Component<Signature> {
                 class='validation-hint-icon'
               />passwords match</p>
           {{/if}}
-        </FieldContainer>
+        </AuthFormField>
         {{#if this.formError}}
           <div
             class='error-message'
@@ -234,20 +203,18 @@ export default class RegisterUser extends Component<Signature> {
           >{{this.formError}}</div>
         {{/if}}
         <div class='button-wrapper'>
-          <Button
+          <AuthButton
             data-test-register-btn
-            class='button'
-            @kind='primary'
+            @variant='primary'
             @disabled={{this.isRegisterButtonDisabled}}
             @loading={{this.doRegistrationFlow.isRunning}}
             {{on 'click' this.register}}
-          >Create Account</Button>
-          <Button
+          >Create Account</AuthButton>
+          <AuthButton
             data-test-cancel-btn
-            class='button secondary-cta'
-            @kind='secondary-dark'
+            @variant='secondary'
             {{on 'click' (fn @setMode 'login')}}
-          >Login with an existing account</Button>
+          >Login with an existing account</AuthButton>
         </div>
       </form>
     {{/if}}
@@ -285,8 +252,8 @@ export default class RegisterUser extends Component<Signature> {
       .validation-hint {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxxs);
-        margin: var(--boxel-sp-xxs) 0 0;
+        gap: var(--boxel-sp-3xs);
+        margin: var(--boxel-sp-2xs) 0 0;
         color: var(--muted-foreground);
         font: 500 var(--boxel-font-xs);
       }
@@ -305,64 +272,6 @@ export default class RegisterUser extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-sm);
       }
-      .button {
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-        --boxel-button-font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-        width: 100%;
-      }
-      .kind-primary {
-        --boxel-button-color: var(--auth-primary-bg);
-        --boxel-button-text-color: var(--auth-primary-text);
-      }
-      .kind-primary:disabled {
-        --boxel-button-color: var(--auth-primary-disabled-bg);
-        --boxel-button-text-color: var(--auth-primary-disabled-text);
-        --boxel-button-border: none;
-      }
-      .secondary-cta {
-        --boxel-button-color: var(--auth-secondary-bg);
-        --boxel-button-text-color: var(--auth-secondary-text);
-        --boxel-button-border: 1px solid var(--auth-secondary-border);
-      }
-      .secondary-cta:not(:disabled):hover,
-      .secondary-cta:not(:disabled):active {
-        --boxel-button-color: var(--auth-secondary-hover-bg);
-      }
-      .registration-field {
-        margin-top: var(--boxel-sp);
-      }
-      .registration-field :deep(.text-accessory) {
-        color: var(--muted-foreground);
-      }
-      .registration-field :deep(.validation-icon-container.invalid) {
-        display: none;
-      }
-      .registration-field :deep(.validation-icon-container.valid svg) {
-        height: var(--boxel-sp-xs);
-      }
-      .registration-field
-        :deep(.boxel-input-group--invalid > :nth-last-child(2)) {
-        border-top-right-radius: var(--boxel-input-group-border-radius);
-        border-bottom-right-radius: var(--boxel-input-group-border-radius);
-        border-right-width: var(--boxel-input-group-interior-border-width);
-      }
-      .registration-field
-        :deep(
-          .boxel-input-group:not(.boxel-input-group--invalid)
-            > :nth-last-child(2)
-        ) {
-        padding-right: 0;
-      }
-      .registration-field :deep(input:autofill) {
-        transition:
-          background-color 0s 600000s,
-          color 0s 600000s;
-      }
-      .registration-field :deep(.error-message) {
-        margin-left: 0;
-        font: 500 var(--boxel-font-xs);
-      }
       .username-prefix {
         padding-right: 0;
       }
@@ -377,10 +286,6 @@ export default class RegisterUser extends Component<Signature> {
         margin-bottom: var(--boxel-sp-sm);
       }
       .resend-email {
-        --boxel-button-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
-        --boxel-button-font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-        width: 100%;
         margin-top: var(--boxel-sp);
       }
       .error-message {
@@ -485,10 +390,10 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   private get isRegisterButtonDisabled() {
-    return (
+    return Boolean(
       this.hasRegistrationMissingField ||
       this.hasRegistrationError ||
-      this.doRegistrationFlow.isRunning
+      this.doRegistrationFlow.isRunning,
     );
   }
 

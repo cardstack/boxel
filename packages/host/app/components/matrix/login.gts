@@ -16,7 +16,6 @@ import moment from 'moment';
 
 import {
   Button,
-  FieldContainer,
   BoxelInput,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
@@ -28,6 +27,9 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import AuthButton from './auth-button';
+import AuthFormField from './auth-form-field';
 
 import type { AuthMode } from './auth';
 import type { LoginResponse } from 'matrix-js-sdk';
@@ -58,26 +60,21 @@ export default class Login extends Component<Signature> {
       {{/if}}
       <form data-test-login-form {{on 'submit' this.login}}>
         {{#if this.showGoogleButton}}
-          <Button
-            class='button google-button'
+          <AuthButton
+            class='google-button'
             data-test-google-login-btn
-            @kind='secondary-dark'
+            @variant='google'
             @loading={{this.doGoogleSso.isRunning}}
             {{on 'click' this.startGoogleSso}}
           >
             <GoogleColor class='google-g' />
             Continue with Google
-          </Button>
+          </AuthButton>
           <div class='divider' aria-hidden='true'>
             <span class='divider-label'>OR USE YOUR EMAIL</span>
           </div>
         {{/if}}
-        <FieldContainer
-          @label='Email Address or Username'
-          @tag='label'
-          @vertical={{true}}
-          class='field'
-        >
+        <AuthFormField @label='Email Address or Username'>
           <BoxelInput
             data-test-username-field
             type='text'
@@ -89,13 +86,8 @@ export default class Login extends Component<Signature> {
             @onInput={{this.setUsername}}
             @onKeyPress={{this.handleEnter}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Password'
-          @tag='label'
-          @vertical={{true}}
-          class='field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Password'>
           <BoxelInput
             data-test-password-field
             type='password'
@@ -107,22 +99,21 @@ export default class Login extends Component<Signature> {
             @onInput={{this.setPassword}}
             @onKeyPress={{this.handleEnter}}
           />
-        </FieldContainer>
+        </AuthFormField>
         <Button
           @kind='text-only'
           class='forgot-password'
           data-test-forgot-password
           {{on 'click' (fn @setMode 'forgot-password')}}
         >Forgot password?</Button>
-        <Button
-          class='button'
+        <AuthButton
           data-test-login-btn
-          @kind='primary'
+          @variant='primary'
           @disabled={{this.isLoginButtonDisabled}}
           @loading={{this.doLogin.isRunning}}
           {{on 'click' this.login}}
         >
-          Sign In</Button>
+          Sign In</AuthButton>
         {{#if this.error}}
           <div class='error' data-test-login-error>{{this.error}}</div>
         {{/if}}
@@ -155,14 +146,6 @@ export default class Login extends Component<Signature> {
         font: var(--boxel-font-sm);
         line-height: 1.4;
       }
-      .field {
-        margin-top: var(--boxel-sp);
-      }
-      .field :deep(input:autofill) {
-        transition:
-          background-color 0s 600000s,
-          color 0s 600000s;
-      }
       .forgot-password {
         border: none;
         padding: 0;
@@ -175,36 +158,8 @@ export default class Login extends Component<Signature> {
         color: var(--boxel-highlight);
         background-color: transparent;
       }
-      .button {
-        --boxel-button-padding: var(--boxel-sp-sm);
-        width: 100%;
-      }
-      .button :deep(.boxel-loading-indicator) {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .kind-primary {
-        --boxel-button-color: var(--auth-primary-bg);
-        --boxel-button-text-color: var(--auth-primary-text);
-      }
-      .kind-primary:disabled {
-        --boxel-button-color: var(--auth-primary-disabled-bg);
-        --boxel-button-text-color: var(--auth-primary-disabled-text);
-        --boxel-button-border: none;
-      }
       .google-button {
-        --boxel-button-color: var(--auth-secondary-bg);
-        --boxel-button-text-color: var(--auth-secondary-text);
-        --boxel-button-border: 1px solid var(--auth-secondary-border);
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-sm);
-      }
-      .google-button:not(:disabled):hover,
-      .google-button:not(:disabled):active {
-        --boxel-button-color: var(--auth-secondary-hover-bg);
       }
       .google-g {
         width: 1.125rem;
@@ -233,7 +188,7 @@ export default class Login extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         margin: var(--boxel-sp) 0 0;
         font: 500 var(--boxel-font-sm);
       }
@@ -271,7 +226,7 @@ export default class Login extends Component<Signature> {
         color: var(--boxel-error-100);
         padding: 0;
         font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-xxs) auto 0 auto;
+        margin: var(--boxel-sp-2xs) auto 0 auto;
       }
     </style>
   </template>
@@ -314,8 +269,8 @@ export default class Login extends Component<Signature> {
   }
 
   private get isLoginButtonDisabled() {
-    return (
-      !this.username || !this.password || this.error || this.doLogin.isRunning
+    return Boolean(
+      !this.username || !this.password || this.error || this.doLogin.isRunning,
     );
   }
 
