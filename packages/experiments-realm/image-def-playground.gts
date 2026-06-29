@@ -25,10 +25,10 @@ export class ImageDefPlayground extends CardDef {
   @field description = contains(StringField);
 
   // Single image link (accepts any ImageDef)
-  @field featuredImage = linksTo(ImageDef);
+  @field featuredImage = linksTo(ImageDef, { searchable: true });
 
   // Multiple image links
-  @field gallery = linksToMany(ImageDef);
+  @field gallery = linksToMany(ImageDef, { searchable: true });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

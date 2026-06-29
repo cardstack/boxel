@@ -68,5 +68,5 @@ export class GameSlot extends CardDef {
 export class PickupGamesScheduler extends CardDef {
   static displayName = 'Pickup Games Scheduler';
   static icon = CalendarClockIcon;
-  @field gameSlots = linksToMany(GameSlot);
+  @field gameSlots = linksToMany(GameSlot, { searchable: true });
 }
