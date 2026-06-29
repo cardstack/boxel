@@ -4859,11 +4859,13 @@ export function virtualNetworkFor(
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
 // string through the supplied VirtualNetwork. When the caller can't supply
 // one (test stubs, detached instances), fall back to plain URL math: it
-// covers URL-form refs and relative refs against URL-form bases. Prefix-form
-// refs and refs against prefix-form bases can't be resolved without a VN —
-// `new URL()` throws on those, so we return the raw reference unchanged
-// instead of bubbling the error to callers (e.g. relationship deserialize
-// uses the returned string as a "did this resolve?" signal).
+// covers URL-form refs and relative refs against URL-form bases. A scoped
+// prefix-form RRI (`@scope/realm/...`) has no meaning without realm mappings,
+// and `new URL('@scope/realm/x', urlBase)` would NOT throw — it silently
+// path-joins the reference into a bogus URL (it only throws when there is no
+// base at all). So return such references unchanged rather than fabricating a
+// URL; relationship deserialize treats an unresolved reference as a "not
+// loaded" signal.
 export function resolveRef(
   virtualNetwork: VirtualNetwork | undefined,
   reference: string,
@@ -4871,6 +4873,9 @@ export function resolveRef(
 ): string {
   if (virtualNetwork) {
     return virtualNetwork.resolveURL(reference, relativeTo).href;
+  }
+  if (reference.startsWith('@')) {
+    return reference;
   }
   let base: URL | string | undefined;
   if (relativeTo instanceof URL) {

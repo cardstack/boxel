@@ -297,6 +297,22 @@ export class VirtualNetwork {
       return reference as RealmResourceIdentifier;
     }
 
+    // An `@`-scoped reference is RRI prefix form for a realm this network has
+    // no mapping registered for. It is absolute and cross-realm by
+    // construction, so it cannot be resolved here — and the URL-relative
+    // fallback below would silently path-join it into a bogus URL
+    // (e.g. `https://realm/card/@cardstack/base/x`), producing broken links
+    // and dependency entries. Fail loudly so a missing realm mapping surfaces
+    // at resolution time. (Serialization/relativization preserves scoped refs
+    // verbatim and never reaches this method — see `isScopedReference` in
+    // realm-index-query-engine; `canonicalURL` catches this and keeps the
+    // reference in clean prefix form.)
+    if (reference.startsWith('@')) {
+      throw new Error(
+        `Cannot resolve "${reference}": it is a scoped realm-prefix (RRI) reference, but this VirtualNetwork has no mapping registered for that prefix`,
+      );
+    }
+
     // "/" and "~/" are not valid RRI reference forms
     if (reference.startsWith('/') || reference.startsWith('~/')) {
       throw new Error(

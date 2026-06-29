@@ -670,6 +670,51 @@ module(basename(import.meta.filename), function () {
         );
       });
     });
+
+    module('scoped relationship-link resolution', function () {
+      // A relationship link (links.self) to an instance in another realm is
+      // written in scoped RRI prefix form — e.g. a homepage card linking to a
+      // base-realm Theme instance. It must resolve to that realm (not be
+      // path-joined onto the referring card's URL) when the prefix is
+      // registered, and must fail loudly — not silently mangle — when it isn't.
+      test('resolves a scoped instance link to its realm when the prefix is registered', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveURL(
+            '@cardstack/base/Theme/boxel-brand-guide',
+            new URL('http://localhost:4201/homepage/Site/boxel-site.json'),
+          ).href,
+          'http://localhost:4201/base/Theme/boxel-brand-guide',
+        );
+      });
+
+      test('keeps a registered scoped link in canonical prefix form', function (assert) {
+        let vn = makeVN();
+        assert.strictEqual(
+          vn.resolveRRI(
+            '@cardstack/base/Theme/boxel-brand-guide',
+            rri('http://localhost:4201/homepage/Site/boxel-site.json'),
+          ),
+          '@cardstack/base/Theme/boxel-brand-guide',
+        );
+      });
+
+      test('throws for a scoped link whose prefix has no registered mapping, instead of silently mangling', function (assert) {
+        // Without the guard, resolving against the referring card's URL
+        // produced a bogus path-join like
+        // `http://localhost:4201/homepage/Site/@cardstack/base/Theme/...`,
+        // which 404s and surfaces only as a confusing downstream error.
+        let vn = new VirtualNetwork();
+        assert.throws(
+          () =>
+            vn.resolveURL(
+              '@cardstack/base/Theme/boxel-brand-guide',
+              new URL('http://localhost:4201/homepage/Site/boxel-site.json'),
+            ),
+          /no mapping registered for that prefix/,
+        );
+      });
+    });
   });
 
   module('VirtualNetwork.fetch with RRI', function (hooks) {
