@@ -4864,7 +4864,7 @@ export function virtualNetworkFor(
 // `new URL()` throws on those, so we return the raw reference unchanged
 // instead of bubbling the error to callers (e.g. relationship deserialize
 // uses the returned string as a "did this resolve?" signal).
-function resolveRef(
+export function resolveRef(
   virtualNetwork: VirtualNetwork | undefined,
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,

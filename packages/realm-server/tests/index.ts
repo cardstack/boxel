@@ -224,6 +224,7 @@ const ALL_TEST_FILES: string[] = [
   './codemod-context-search-test',
   './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
+  './searchable-parity-diff-test',
   './file-watcher-events-test',
   './full-index-on-startup-test',
   './full-reindex-test',
