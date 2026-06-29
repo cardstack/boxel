@@ -30,6 +30,7 @@ import {
   issuePriorityOptions,
   issueStatusOptions,
   issueTypeOptions,
+  type Option,
 } from './kanban-config.gts';
 import { EmptyState } from './empty-state.gts';
 import { StatusPill } from './status-pill.gts';
@@ -81,12 +82,6 @@ interface FunnelRow {
   label: string;
   color: string | undefined;
   count: number;
-}
-
-interface Option {
-  value: string;
-  label: string;
-  color?: string;
 }
 
 type SetupStatus = 'done' | 'active' | 'upcoming';
