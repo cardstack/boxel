@@ -268,10 +268,12 @@ VALID_BEFORE_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-valid-before.$$")
 
 # --- Parallel processing scratch ---
 # Files are processed concurrently (xargs -P) because the per-file work is
-# I/O-latency-bound on networked filesystems (EFS). Each worker writes its own
-# patch fragment (concurrent appends to one shared patch file would interleave
-# and corrupt it) and appends results to shared list files; everything is
-# aggregated after the directory loop.
+# I/O-latency-bound on networked filesystems (EFS). Each worker writes ONLY to
+# its own per-PID fragment files under FRAGMENTS_DIR (one stream each for the
+# patch, processed-file list, errors, and changed-JSON list) and never to a
+# shared file — so there are no cross-process appends to serialize (append
+# atomicity is not guaranteed on NFS/EFS). The fragments are concatenated into
+# the aggregate files below after the directory loop.
 FRAGMENTS_DIR=$(mktemp -d 2>/dev/null || echo "/tmp/migrate-frags.$$")
 mkdir -p "$FRAGMENTS_DIR"
 CHANGED_JSON_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-changed-json.$$")
@@ -287,9 +289,13 @@ JSON_CANDIDATES_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-json-candidates.
 
 # Worker: process a batch of files passed as positional args. Reconstructs the
 # sed program from exported scalars (arrays can't be exported across xargs).
-# Runs in its own `bash -c`, so results go to the shared files above.
+# Runs in its own `bash -c`; all output goes to this worker's own per-PID
+# fragment files (never to a shared file), aggregated after the loop.
 process_files() {
-  local frag="$FRAGMENTS_DIR/frag.$$"
+  local patch="$FRAGMENTS_DIR/patch.$$"
+  local processed="$FRAGMENTS_DIR/processed.$$"
+  local errors="$FRAGMENTS_DIR/errors.$$"
+  local changed="$FRAGMENTS_DIR/changed.$$"
   local file tmp
   for file in "$@"; do
     tmp="$file.tmp.$$"
@@ -298,34 +304,33 @@ process_files() {
                -e "s|\"${REALM_PATH}|\"${REPLACEMENT}|g" \
                -e "s|'${REALM_PATH}|'${REPLACEMENT}|g" \
                "$file" > "$tmp" 2>/dev/null; then
-        printf '%s\n' "Error processing $file" >> "$WORKER_ERRORS_FILE"
+        printf '%s\n' "Error processing $file" >> "$errors"
         rm -f "$tmp"
         continue
       fi
     else
       if ! sed -e "s|${FIND_STR}|${REPLACEMENT}|g" "$file" > "$tmp" 2>/dev/null; then
-        printf '%s\n' "Error processing $file" >> "$WORKER_ERRORS_FILE"
+        printf '%s\n' "Error processing $file" >> "$errors"
         rm -f "$tmp"
         continue
       fi
     fi
-    diff -u --label "$file" --label "$file" "$file" "$tmp" >> "$frag" 2>/dev/null || true
-    printf '%s\n' "$file" >> "$PROCESSED_FILE"
+    diff -u --label "$file" --label "$file" "$file" "$tmp" >> "$patch" 2>/dev/null || true
+    printf '%s\n' "$file" >> "$processed"
     if [ "$DRY_RUN" = true ]; then
       rm -f "$tmp"
     elif mv "$tmp" "$file" 2>/dev/null; then
       case "$file" in
-        *.json) printf '%s\n' "$file" >> "$CHANGED_JSON_FILE" ;;
+        *.json) printf '%s\n' "$file" >> "$changed" ;;
       esac
     else
-      printf '%s\n' "Error replacing $file" >> "$WORKER_ERRORS_FILE"
+      printf '%s\n' "Error replacing $file" >> "$errors"
       rm -f "$tmp"
     fi
   done
 }
 export -f process_files
-export FIND_STR REPLACEMENT IS_URL REALM_PATH DRY_RUN
-export FRAGMENTS_DIR CHANGED_JSON_FILE PROCESSED_FILE WORKER_ERRORS_FILE
+export FIND_STR REPLACEMENT IS_URL REALM_PATH DRY_RUN FRAGMENTS_DIR
 
 for search_dir in "$@"; do
   if [ ! -d "$search_dir" ]; then
@@ -399,9 +404,20 @@ for search_dir in "$@"; do
     | xargs -0 -P "$JOBS" -n 50 bash -c 'process_files "$@"' _
 done
 
-# --- Aggregate parallel results ---
-if ls "$FRAGMENTS_DIR"/frag.* >/dev/null 2>&1; then
-  cat "$FRAGMENTS_DIR"/frag.* >> "$PATCH_FILE"
+# --- Aggregate per-worker fragments ---
+# Each worker wrote its own per-PID files, so concatenation order is the only
+# thing left to decide here; every stream is line-oriented and order-insensitive.
+if ls "$FRAGMENTS_DIR"/patch.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/patch.* >> "$PATCH_FILE"
+fi
+if ls "$FRAGMENTS_DIR"/processed.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/processed.* > "$PROCESSED_FILE"
+fi
+if ls "$FRAGMENTS_DIR"/errors.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/errors.* > "$WORKER_ERRORS_FILE"
+fi
+if ls "$FRAGMENTS_DIR"/changed.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/changed.* > "$CHANGED_JSON_FILE"
 fi
 total_files=$(wc -l < "$PROCESSED_FILE" 2>/dev/null | tr -d '[:space:]')
 [ -z "$total_files" ] && total_files=0
