@@ -75,12 +75,23 @@ class HostContextProvider extends GlimmerComponent<{
 }
 
 // Tracked content harness so the editor's onUpdate updates the same
-// `@content` arg we read for assertions.
+// `@content` arg we read for assertions. `calls` counts onUpdate invocations
+// so a test can prove a single edit doesn't save twice.
 class ContentHarness {
   @tracked content = '';
+  calls = 0;
   set = (text: string) => {
+    this.calls += 1;
     this.content = text;
   };
+}
+
+// The editor debounces saves by SAVE_DEBOUNCE_MS (500ms); a raw setTimeout is
+// not tracked by `settled()`, so wait it out explicitly to catch a stray
+// debounced save firing after the immediate one.
+const SAVE_DEBOUNCE_MS = 500;
+function waitOutDebounce() {
+  return new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 200));
 }
 
 async function loadCodeMirrorEditor() {
@@ -160,6 +171,9 @@ module('Integration | codemirror embed toolbar', function (hooks) {
   });
 
   const mango = `${testRealmURL}books/mango`;
+  // Same URL length as mango so an in-place swap leaves the directive's
+  // from/to unchanged — the exact case `sameToolbarState` must not dedupe away.
+  const manga = `${testRealmURL}books/manga`;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Book extends CardDef {
@@ -172,6 +186,7 @@ module('Integration | codemirror embed toolbar', function (hooks) {
       contents: {
         'book.gts': { Book },
         'books/mango.json': new Book({ title: 'Mango' }),
+        'books/manga.json': new Book({ title: 'Manga' }),
       },
     });
     await getService('realm').login(testRealmURL);
@@ -279,5 +294,121 @@ module('Integration | codemirror embed toolbar', function (hooks) {
       '',
       'Remove deletes the directive from the source',
     );
+  });
+
+  test('Remove saves exactly once (no duplicate debounced save)', async function (assert) {
+    let harness = new ContentHarness();
+    harness.content = `:card[${mango}]`;
+    await renderEditorAndModal({ CodeMirrorEditor, harness });
+
+    await waitFor('[data-test-codemirror-editor] .cm-content', {
+      timeout: 5000,
+    });
+    let editor = document.querySelector(
+      '[data-test-codemirror-editor] .cm-editor',
+    ) as HTMLElement | null;
+    let view = editor ? cmContext.EditorView.findFromDOM(editor) : null;
+    view?.focus();
+    view?.dispatch({ selection: { anchor: 3, head: 3 } });
+
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+    await click('[data-test-markdown-embed-chooser-remove]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    assert.strictEqual(harness.calls, 1, 'the delete saved immediately, once');
+    await waitOutDebounce();
+    assert.strictEqual(
+      harness.calls,
+      1,
+      'no second save fires after the debounce window',
+    );
+  });
+
+  test('Accepting an edit saves exactly once (no duplicate debounced save)', async function (assert) {
+    let harness = new ContentHarness();
+    harness.content = `:card[${mango}]`;
+    await renderEditorAndModal({ CodeMirrorEditor, harness });
+
+    await waitFor('[data-test-codemirror-editor] .cm-content', {
+      timeout: 5000,
+    });
+    let editor = document.querySelector(
+      '[data-test-codemirror-editor] .cm-editor',
+    ) as HTMLElement | null;
+    let view = editor ? cmContext.EditorView.findFromDOM(editor) : null;
+    view?.focus();
+    view?.dispatch({ selection: { anchor: 3, head: 3 } });
+
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // Change the format so the CTA becomes ACCEPT, then accept the edit — this
+    // routes through `_replaceRange`, which must also cancel the debounce.
+    await click('[data-test-markdown-embed-preview-format-select]');
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
+    await click('[data-test-format-option="embedded"]');
+    await click('[data-test-markdown-embed-preview-cta]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    assert.strictEqual(
+      harness.content,
+      `::card[${mango} | embedded]`,
+      'the edit replaced the directive in place',
+    );
+    assert.strictEqual(harness.calls, 1, 'the replace saved immediately, once');
+    await waitOutDebounce();
+    assert.strictEqual(
+      harness.calls,
+      1,
+      'no second save fires after the debounce window',
+    );
+  });
+
+  test('an in-place URL edit refreshes the directive the pencil acts on', async function (assert) {
+    let content = `:card[${mango}]`;
+    let harness = new ContentHarness();
+    harness.content = content;
+    await renderEditorAndModal({ CodeMirrorEditor, harness });
+
+    await waitFor('[data-test-codemirror-editor] .cm-content', {
+      timeout: 5000,
+    });
+    let editor = document.querySelector(
+      '[data-test-codemirror-editor] .cm-editor',
+    ) as HTMLElement | null;
+    let view = editor ? cmContext.EditorView.findFromDOM(editor) : null;
+    view?.focus();
+    view?.dispatch({ selection: { anchor: 3, head: 3 } });
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+
+    // Rewrite the URL's last character in place (mango → manga) without moving
+    // the cursor. The directive keeps the same from/to, so a from/to-only
+    // comparison would keep targeting the stale URL.
+    let oPos = content.lastIndexOf('mango') + 'mango'.length - 1;
+    view?.dispatch({ changes: { from: oPos, to: oPos + 1, insert: 'a' } });
+    await settled();
+
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-current-label]', {
+      timeout: 5000,
+    });
+    assert
+      .dom('[data-test-markdown-embed-chooser-current-label]')
+      .hasText(
+        'Manga',
+        'the pencil edits the freshly-typed URL, not the stale one',
+      );
+
+    // (sanity) the edited document holds the new URL.
+    assert.strictEqual(harness.content, `:card[${manga}]`);
   });
 });

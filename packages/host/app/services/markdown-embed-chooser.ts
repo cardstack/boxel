@@ -25,6 +25,10 @@ export interface MarkdownEmbedInitialTarget {
   // Either a pre-parsed `BfmSizeSpec` (from extractBfmRefRanges) or the raw
   // specifier text after `|`. The pane parses the string form itself.
   sizeSpec?: BfmSizeSpec | string;
+  // The directive's placement (`::` block vs `:` inline). Carried separately
+  // from `sizeSpec` so a size-less block directive (`::card[url]`) seeds block
+  // placement instead of collapsing to an inline atom.
+  kind?: 'inline' | 'block';
 }
 
 export interface MarkdownEmbedChooserRequest {

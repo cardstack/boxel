@@ -83,6 +83,18 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
   });
 
   const mango = `${testRealmURL}books/mango`;
+  const readme = `${testRealmURL}readme.txt`;
+
+  // Open the format dropdown scoped to one tab-panel and pick an option. The
+  // dropdown renders in the power-select wormhole, so the option selector is
+  // global once the menu is open.
+  async function chooseFormatIn(tab: 'card' | 'file', value: string) {
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="${tab}"] [data-test-markdown-embed-preview-format-select]`,
+    );
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
+    await click(`[data-test-format-option="${value}"]`);
+  }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Book extends CardDef {
@@ -97,6 +109,7 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
         'books/mango.json': new Book({ title: 'Mango' }),
         'books/vincent.json': new Book({ title: 'Vincent' }),
         'notes/hello.txt': 'hello',
+        'readme.txt': 'readme',
       },
     });
     await getService('realm').login(testRealmURL);
@@ -348,6 +361,112 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       result,
       { refType: 'card', url: mango, bfm: `:card[${mango}]` },
       'resolves with the serialized BFM directive for the picked card',
+    );
+  });
+
+  test('the chosen format sticks when switching from the cards tab to the files tab', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.chooseCardOrFile({ defaultTab: 'card' });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // Pick a card and switch its format away from the default atom.
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+    );
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await chooseFormatIn('card', 'embedded');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
+      )
+      .hasText('Insert as Embedded');
+
+    // Switch to the files tab and pick a file: the preview format carries over
+    // rather than resetting to atom (the two tabs share one format selection).
+    await click('[data-test-markdown-embed-chooser-tab="file"]');
+    await waitFor(
+      '[data-test-mini-file-chooser] [data-test-file="readme.txt"]',
+      {
+        timeout: 5000,
+      },
+    );
+    await click('[data-test-mini-file-chooser] [data-test-file="readme.txt"]');
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="file"] [data-test-markdown-embed-preview-cta]:not([disabled])',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="file"] [data-test-markdown-embed-preview-cta]',
+      )
+      .hasText('Insert as Embedded', 'the format stuck across the tab switch');
+
+    await click(
+      '[data-test-markdown-embed-chooser-tab-panel="file"] [data-test-markdown-embed-preview-cta]',
+    );
+    let result = await pending;
+    assert.deepEqual(
+      result,
+      { refType: 'file', url: readme, bfm: `::file[${readme} | embedded]` },
+      'the file directive carries the format chosen on the cards tab',
+    );
+  });
+
+  test('editing a size-less block directive preserves block placement', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // `::card[url]` — block placement, no size specifier.
+    let pending = svc.editEmbed({ refType: 'card', url: mango, kind: 'block' });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // Clean preload, so the CTA reads DONE; the seeded format reflects what a
+    // size-less block embed actually renders as (embedded), not inline atom.
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
+      )
+      .hasText('DONE', 'a clean edit keeps the DONE label');
+
+    await click(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
+    );
+    let result = await pending;
+    assert.deepEqual(
+      result,
+      { refType: 'card', url: mango, bfm: `::card[${mango} | embedded]` },
+      'DONE re-serializes a block directive — not a collapsed inline atom',
     );
   });
 });

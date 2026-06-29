@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
@@ -17,6 +17,7 @@ import type {
   MarkdownEmbedRefType,
 } from '@cardstack/host/services/markdown-embed-chooser';
 
+import EmbedFormatSelection, { deriveFormatSeeds } from './format-selection';
 import TabPanel from './tab-panel';
 import Tabs from './tabs';
 
@@ -59,6 +60,19 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
 
   private get request() {
     return this.markdownEmbedChooser.currentRequest;
+  }
+
+  // One format/placement/size selection shared by both tabs so the choice
+  // sticks across a tab switch. `@cached` keyed on the tracked `request`
+  // rebuilds it once per chooser invocation (seeded from the edited directive
+  // in edit mode) while returning the same instance across tab switches within
+  // the same open session.
+  @cached
+  get selection(): EmbedFormatSelection {
+    let it = this.request?.initialTarget;
+    return new EmbedFormatSelection(
+      it ? deriveFormatSeeds(it.sizeSpec, it.kind) : {},
+    );
   }
 
   get activeTab(): MarkdownEmbedRefType {
@@ -141,6 +155,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
                 @activeTab={{this.activeTab}}
                 @onTabChange={{this.setActiveTab}}
                 @onInsert={{this.handleInsertCard}}
+                @selection={{this.selection}}
                 @initialTarget={{this.cardInitialTarget}}
                 @onRemove={{this.handleRemove}}
               />
@@ -151,6 +166,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
                 @activeTab={{this.activeTab}}
                 @onTabChange={{this.setActiveTab}}
                 @onInsert={{this.handleInsertFile}}
+                @selection={{this.selection}}
                 @initialTarget={{this.fileInitialTarget}}
                 @onRemove={{this.handleRemove}}
               />

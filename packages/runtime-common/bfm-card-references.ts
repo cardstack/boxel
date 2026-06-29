@@ -352,6 +352,10 @@ export interface MarkdownEmbedInitialTarget {
   url: string;
   // Either a pre-parsed `BfmSizeSpec` or the raw specifier text after `|`.
   sizeSpec?: BfmSizeSpec | string;
+  // The directive's placement (`::` block vs `:` inline), carried separately
+  // from `sizeSpec` so a size-less block directive seeds block placement
+  // instead of collapsing to an inline atom.
+  kind?: 'inline' | 'block';
 }
 
 export interface MarkdownEmbedChooser {
@@ -395,9 +399,10 @@ export async function editMarkdownEmbed(
 
 export interface BfmRefRange {
   kind: 'inline' | 'block';
-  // Half-open byte range into the original markdown string: `markdown.slice(
-  // from, to)` reproduces the directive verbatim. Suitable for a CodeMirror
-  // dispatch that replaces or deletes the directive in place.
+  // Half-open range into the original markdown string as UTF-16 code-unit
+  // offsets (i.e. JS string indices, the same units CodeMirror positions use):
+  // `markdown.slice(from, to)` reproduces the directive verbatim. Suitable for
+  // a CodeMirror dispatch that replaces or deletes the directive in place.
   from: number;
   to: number;
   refType: string;
@@ -410,8 +415,9 @@ export interface BfmRefRange {
 }
 
 /**
- * Locates every BFM reference site in `markdown` and returns its source-byte
- * range, refType, URL, and size specifier (verbatim — no URL resolution).
+ * Locates every BFM reference site in `markdown` and returns its source
+ * character range (UTF-16 code-unit offsets), refType, URL, and size specifier
+ * (verbatim — no URL resolution).
  *
  * Differs from `extractBfmReferences` in two ways: indices are into the
  * ORIGINAL markdown (not a code-stripped copy), and matches are not

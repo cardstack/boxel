@@ -12,11 +12,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { isCardErrorJSONAPI } from '@cardstack/runtime-common';
 
-import {
-  type BfmSizeSpec,
-  fileNameFromUrl,
-  parseBfmSizeSpec,
-} from '@cardstack/runtime-common/bfm-card-references';
+import { fileNameFromUrl } from '@cardstack/runtime-common/bfm-card-references';
 
 import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import MiniFileChooser from '@cardstack/host/components/file-chooser/mini';
@@ -29,8 +25,10 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
 
-import MarkdownEmbedPreviewPane, { type OptionValue } from './pane';
+import MarkdownEmbedPreviewPane from './pane';
 import TabPills from './tab-pills';
+
+import type EmbedFormatSelection from './format-selection';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -44,9 +42,13 @@ interface Signature {
     activeTab: MarkdownEmbedRefType;
     onTabChange: (tab: MarkdownEmbedRefType) => void;
     onInsert: (bfm: string, url: string) => void;
+    // The shared format/placement/size selection, owned by the modal and
+    // passed to both tabs' panes so the choice sticks across a tab switch.
+    selection: EmbedFormatSelection;
     // Optional edit-mode preload for this tab. When set, the tab starts in
-    // `current` mode showing the placed target with Replace / Remove buttons;
-    // the pane is seeded with the matching size + placement.
+    // `current` mode showing the placed target with Replace / Remove buttons.
+    // (The pane's format seed comes from the shared `@selection`, which the
+    // modal seeds from this same target.)
     initialTarget?: MarkdownEmbedInitialTarget;
     // Fired when the user clicks "Remove" in `current` mode. The modal
     // resolves its deferred with `{ remove: true }`.
@@ -67,12 +69,6 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
   @tracked private selectedTarget: CardDef | FileDef | undefined;
   @tracked private selectedUrl: string | undefined;
   @tracked private mode: 'choose' | 'current' = 'choose';
-  @tracked private dirty = false;
-
-  private initialPaneFormat: OptionValue | undefined;
-  private initialPaneWidth: number | string | undefined;
-  private initialPaneHeight: number | undefined;
-  private initialPaneKind: 'inline' | 'block' | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -80,11 +76,6 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     if (it) {
       this.mode = 'current';
       this.selectedUrl = it.url;
-      let derived = derivePaneSeeds(normalizeSizeSpec(it.sizeSpec));
-      this.initialPaneFormat = derived.format;
-      this.initialPaneWidth = derived.width;
-      this.initialPaneHeight = derived.height;
-      this.initialPaneKind = derived.kind;
       this.loadTarget.perform(it.url, it.refType);
     }
   }
@@ -93,12 +84,27 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     return !!this.args.initialTarget;
   }
 
+  // URL currently staged for insertion: the resolved target wins, falling back
+  // to the picked URL while its instance is still loading.
+  private get currentUrl(): string | undefined {
+    return this.selectedTarget?.id ?? this.selectedUrl;
+  }
+
+  // In edit mode, the user has diverged once either the shared format selection
+  // changed or they swapped in a different target (Replace).
+  private get targetChanged(): boolean {
+    let initial = this.args.initialTarget?.url;
+    if (initial === undefined) return false;
+    return this.currentUrl !== initial;
+  }
+
   // 'DONE' until the user diverges from the initial preload, 'ACCEPT' once
   // they do — matches Zeplin 08B. Non-edit (choose) tabs keep the dynamic
   // "Insert as …" label.
   private get ctaLabelOverride(): string | undefined {
     if (!this.isEditMode) return undefined;
-    return this.dirty ? 'ACCEPT' : 'DONE';
+    let dirty = this.args.selection.isDirty || this.targetChanged;
+    return dirty ? 'ACCEPT' : 'DONE';
   }
 
   private get currentTargetLabel(): string {
@@ -121,9 +127,13 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
   }
 
   // Restart on every pick so a slow earlier load can't stomp the newer one.
+  // Clear `selectedTarget` up front so the pane unmounts to its placeholder
+  // while the new instance loads — otherwise a quick Insert during the load
+  // window would serialize the previously-resolved target's URL.
   private loadTarget = restartableTask(
     async (url: string, refType: MarkdownEmbedRefType) => {
       this.selectedUrl = url;
+      this.selectedTarget = undefined;
       let result =
         refType === 'card'
           ? await this.store.get(url)
@@ -138,14 +148,9 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   @action
   private handleInsert(bfm: string) {
-    let url = this.selectedTarget?.id ?? this.selectedUrl;
+    let url = this.currentUrl;
     if (!url) return;
     this.args.onInsert(bfm, url);
-  }
-
-  @action
-  private onPaneDirtyChange(dirty: boolean) {
-    this.dirty = dirty;
   }
 
   @action
@@ -225,14 +230,9 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
           <MarkdownEmbedPreviewPane
             @target={{this.selectedTarget}}
             @refType={{@refType}}
+            @selection={{@selection}}
             @onInsert={{this.handleInsert}}
-            @initialFormat={{this.initialPaneFormat}}
-            @initialWidth={{this.initialPaneWidth}}
-            @initialHeight={{this.initialPaneHeight}}
-            @initialKind={{this.initialPaneKind}}
-            @initialTargetUrl={{@initialTarget.url}}
             @ctaLabelOverride={{this.ctaLabelOverride}}
-            @onDirtyChange={{this.onPaneDirtyChange}}
           />
         {{else}}
           <p
@@ -295,8 +295,8 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         flex-direction: column;
         min-height: 0;
         /* The preview column reads as an off-white surface, distinct from the
-           white chooser column on the left. */
-        background-color: #fbf8f8;
+           white chooser column on the left — same token as the inner viewport. */
+        background-color: var(--boxel-100);
       }
       /* Centered placeholder shown until a row is picked and its instance
          resolves; the pane mounts in its place once a target arrives. */
@@ -330,43 +330,4 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-function normalizeSizeSpec(
-  input: BfmSizeSpec | string | undefined,
-): BfmSizeSpec | undefined {
-  if (!input) return undefined;
-  if (typeof input === 'string') {
-    return parseBfmSizeSpec(input) ?? undefined;
-  }
-  return input;
-}
-
-interface PaneSeeds {
-  format?: OptionValue;
-  width?: number | string;
-  height?: number;
-  kind?: 'inline' | 'block';
-}
-
-function derivePaneSeeds(spec: BfmSizeSpec | undefined): PaneSeeds {
-  if (!spec) {
-    return {};
-  }
-  if (spec.format === 'atom') {
-    return { format: 'atom', kind: 'inline' };
-  }
-  if (spec.format === 'embedded') {
-    return { format: 'embedded', kind: 'block' };
-  }
-  if (spec.format === 'isolated') {
-    return { format: 'isolated', kind: 'block' };
-  }
-  // Fitted with optional W×H.
-  return {
-    format: 'custom',
-    width: spec.width,
-    height: spec.height,
-    kind: 'block',
-  };
 }

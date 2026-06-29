@@ -13,6 +13,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
+import EmbedFormatSelection from './format-selection';
 import MarkdownEmbedPreviewPane from './pane';
 
 export default class MarkdownEmbedPreviewPaneUsage extends Component {
@@ -21,6 +22,7 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
   @tracked private target: CardDef | undefined;
   @tracked private inserted: string | undefined;
   @tracked private refType: 'card' | 'file' = 'card';
+  private selection = new EmbedFormatSelection();
 
   @action private async onSelect(url: string) {
     let result = await this.store.get(url);
@@ -58,6 +60,7 @@ export default class MarkdownEmbedPreviewPaneUsage extends Component {
               <MarkdownEmbedPreviewPane
                 @target={{this.target}}
                 @refType={{this.refType}}
+                @selection={{this.selection}}
                 @onInsert={{this.onInsert}}
               />
             {{else}}

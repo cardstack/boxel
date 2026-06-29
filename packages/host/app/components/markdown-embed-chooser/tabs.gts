@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import type { MarkdownEmbedRefType } from '@cardstack/host/services/markdown-embed-chooser';
 
@@ -28,8 +28,10 @@ const MarkdownEmbedChooserTabs: TemplateOnlyComponent<Signature> = <template>
       role='tabpanel'
       id='markdown-embed-chooser-panel-cards'
       aria-labelledby='markdown-embed-chooser-tab-cards'
-      class='markdown-embed-chooser-tabs__panel
-        {{unless (eq @activeTab "card") "is-hidden"}}'
+      class={{cn
+        'markdown-embed-chooser-tabs__panel'
+        is-hidden=(unless (eq @activeTab 'card') true)
+      }}
       data-test-markdown-embed-chooser-panel='card'
     >
       {{yield to='cards'}}
@@ -38,8 +40,10 @@ const MarkdownEmbedChooserTabs: TemplateOnlyComponent<Signature> = <template>
       role='tabpanel'
       id='markdown-embed-chooser-panel-files'
       aria-labelledby='markdown-embed-chooser-tab-files'
-      class='markdown-embed-chooser-tabs__panel
-        {{unless (eq @activeTab "file") "is-hidden"}}'
+      class={{cn
+        'markdown-embed-chooser-tabs__panel'
+        is-hidden=(unless (eq @activeTab 'file') true)
+      }}
       data-test-markdown-embed-chooser-panel='file'
     >
       {{yield to='files'}}

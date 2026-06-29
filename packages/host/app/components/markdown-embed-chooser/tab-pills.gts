@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import type { MarkdownEmbedRefType } from '@cardstack/host/services/markdown-embed-chooser';
 
@@ -33,8 +33,10 @@ const MarkdownEmbedChooserTabPills: TemplateOnlyComponent<Signature> =
         aria-controls='markdown-embed-chooser-panel-cards'
         aria-selected={{if (eq @activeTab 'card') 'true' 'false'}}
         tabindex={{if (eq @activeTab 'card') '0' '-1'}}
-        class='markdown-embed-chooser-tab-pills__tab
-          {{if (eq @activeTab "card") "is-active"}}'
+        class={{cn
+          'markdown-embed-chooser-tab-pills__tab'
+          is-active=(eq @activeTab 'card')
+        }}
         data-test-markdown-embed-chooser-tab='card'
         {{on 'click' (fn @onTabChange 'card')}}
       >
@@ -47,8 +49,10 @@ const MarkdownEmbedChooserTabPills: TemplateOnlyComponent<Signature> =
         aria-controls='markdown-embed-chooser-panel-files'
         aria-selected={{if (eq @activeTab 'file') 'true' 'false'}}
         tabindex={{if (eq @activeTab 'file') '0' '-1'}}
-        class='markdown-embed-chooser-tab-pills__tab
-          {{if (eq @activeTab "file") "is-active"}}'
+        class={{cn
+          'markdown-embed-chooser-tab-pills__tab'
+          is-active=(eq @activeTab 'file')
+        }}
         data-test-markdown-embed-chooser-tab='file'
         {{on 'click' (fn @onTabChange 'file')}}
       >

@@ -205,7 +205,13 @@ function sameToolbarState(a: SelectionInfo, b: SelectionInfo): boolean {
     a.formats.strikethrough === b.formats.strikethrough &&
     a.formats.link === b.formats.link &&
     a.currentRef?.from === b.currentRef?.from &&
-    a.currentRef?.to === b.currentRef?.to
+    a.currentRef?.to === b.currentRef?.to &&
+    // Compare the directive's contents too — an in-place edit (URL/spec/kind
+    // change) can leave from/to unchanged but must still refresh the toolbar so
+    // the pencil edits the current ref, not a stale one.
+    a.currentRef?.url === b.currentRef?.url &&
+    a.currentRef?.sizeSpec === b.currentRef?.sizeSpec &&
+    a.currentRef?.kind === b.currentRef?.kind
   );
 }
 
@@ -684,6 +690,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         refType: ref.refType as 'card' | 'file',
         url: ref.url,
         sizeSpec: ref.sizeSpec,
+        kind: ref.kind,
       });
     } catch (e) {
       console.warn('markdown-embed chooser unavailable', e);
@@ -736,6 +743,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
     let onUpdate = this.args.onUpdate;
     if (onUpdate) {
+      // The dispatch above scheduled a debounced save via `onDocChange`; cancel
+      // it so the immediate save below isn't duplicated.
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
       onUpdate(view.state.doc.toString());
     }
   };
@@ -756,6 +769,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
     let onUpdate = this.args.onUpdate;
     if (onUpdate) {
+      // Cancel the debounced save the dispatch scheduled so we don't save twice.
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
       onUpdate(view.state.doc.toString());
     }
   };
@@ -1100,20 +1118,14 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 type='button'
                 title='Add embed'
                 aria-label='Add embed'
-                aria-haspopup='menu'
                 aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
                 {{on 'mousedown' this._preventFocusLoss}}
                 {{on 'click' this._toggleEmbedPopover}}
               ><PlusIcon width='16' height='16' /></button>
               {{#if this._embedPopoverOpen}}
-                <div
-                  class='toolbar-embed-popover'
-                  role='menu'
-                  data-test-toolbar-embed-popover
-                >
+                <div class='toolbar-embed-popover' data-test-toolbar-embed-popover>
                   <button
                     type='button'
-                    role='menuitem'
                     class='toolbar-embed-popover__item'
                     data-test-toolbar-embed='card'
                     {{on 'mousedown' this._preventFocusLoss}}
@@ -1121,7 +1133,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                   >Add a card</button>
                   <button
                     type='button'
-                    role='menuitem'
                     class='toolbar-embed-popover__item'
                     data-test-toolbar-embed='file'
                     {{on 'mousedown' this._preventFocusLoss}}
