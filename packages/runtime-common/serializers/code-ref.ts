@@ -8,6 +8,7 @@ import {
   isUrlLike,
   isResolvedCodeRef,
   executableExtensions,
+  resolveRRIReference,
 } from '../index.ts';
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
 // We only use a subset of SerializeOpts here; accept any to align with the
@@ -42,25 +43,31 @@ export function serialize(
   if (!opts) {
     return { ...codeRef };
   }
-  let baseURL: URL | undefined;
+  // Preserve the base's form: a prefix-form RRI base stays prefix-form so a
+  // relative module resolves against it in RRI space (`codeRefAdjustments`
+  // handles both forms). Falls back to the doc's own (canonical) id.
+  let base: RealmResourceIdentifier | URL | undefined;
   if (opts.relativeTo instanceof URL) {
-    baseURL = opts.relativeTo;
+    base = opts.relativeTo;
   } else if (
     typeof opts.relativeTo === 'string' &&
     (opts.relativeTo.startsWith('http://') ||
-      opts.relativeTo.startsWith('https://'))
+      opts.relativeTo.startsWith('https://') ||
+      opts.relativeTo.startsWith('@'))
   ) {
-    baseURL = new URL(opts.relativeTo);
+    base = rri(opts.relativeTo);
   } else if (
     doc?.data?.id &&
     typeof doc.data.id === 'string' &&
-    (doc.data.id.startsWith('http://') || doc.data.id.startsWith('https://'))
+    (doc.data.id.startsWith('http://') ||
+      doc.data.id.startsWith('https://') ||
+      doc.data.id.startsWith('@'))
   ) {
-    baseURL = new URL(doc.data.id);
+    base = rri(doc.data.id);
   }
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, baseURL, opts),
+    ...codeRefAdjustments(codeRef, base, opts),
   };
 }
 
@@ -111,60 +118,11 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
-  // Identifiers are canonical RRI here, so resolution is plain URL math —
-  // no VirtualNetwork. A URL-form module joins against a URL-form base; a
-  // scoped RRI / bare specifier is already portable and is preserved.
-  let urlBase: URL | string | undefined =
-    relativeTo instanceof URL
-      ? relativeTo
-      : typeof relativeTo === 'string' &&
-          (relativeTo.startsWith('http://') ||
-            relativeTo.startsWith('https://'))
-        ? relativeTo
-        : undefined;
-  let resolve = (ref: string) => {
-    if (!isUrlLike(ref)) {
-      throw new Error(
-        `Cannot resolve bare package specifier "${ref}" — not a URL`,
-      );
-    }
-    return new URL(ref, urlBase).href;
-  };
-  if (!isUrlLike(codeRef.module)) {
-    // A scoped RRI (e.g. `@cardstack/base/card-api`) is already the canonical,
-    // deployment-independent portable form. Preserve it verbatim rather than
-    // resolving it to a concrete realm URL: resolution would bake an
-    // environment-specific (and possibly cross-origin) URL into the stored
-    // card and defeat the portability the RRI exists to provide.
-    if (codeRef.module.startsWith('@')) {
-      let module: string = codeRef.module;
-      if (opts?.trimExecutableExtension) {
-        module = trimExecutableExtension(rri(module));
-      }
-      return { module };
-    }
-    // Otherwise it is a non-scoped bare specifier. Try plain URL resolution,
-    // and if unresolvable leave it for the loader's importMap shim via the
-    // surrounding try/catch.
-    try {
-      let resolved = resolve(codeRef.module);
-      if (resolved !== codeRef.module) {
-        let module: string = resolved;
-        if (opts?.trimExecutableExtension) {
-          module = trimExecutableExtension(rri(module));
-        }
-        if (opts?.allowRelative && opts?.maybeRelativeReference) {
-          module = opts.maybeRelativeReference(module);
-        }
-        return { module };
-      }
-    } catch {
-      // not resolvable, skip
-    }
-    return {};
-  }
-  if (relativeTo) {
-    let module: string = resolve(codeRef.module);
+  // Identifiers are canonical RRI here, so resolution is RRI-space reference
+  // math — no VirtualNetwork. `resolveRRIReference` joins a relative module
+  // against either a URL-form base or a prefix-form RRI base, and returns
+  // absolute (URL- or prefix-form) references unchanged.
+  let finalize = (module: string) => {
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
@@ -172,6 +130,30 @@ function codeRefAdjustments(
       module = opts.maybeRelativeReference(module);
     }
     return { module };
+  };
+  if (!isUrlLike(codeRef.module)) {
+    // A scoped RRI (e.g. `@cardstack/base/card-api`) is already the canonical,
+    // deployment-independent portable form. Preserve it verbatim rather than
+    // resolving it to a concrete realm URL: resolution would bake an
+    // environment-specific (and possibly cross-origin) URL into the stored
+    // card and defeat the portability the RRI exists to provide. (No
+    // `maybeRelativeReference` — a scoped RRI is already portable.)
+    if (codeRef.module.startsWith('@')) {
+      let module: string = codeRef.module;
+      if (opts?.trimExecutableExtension) {
+        module = trimExecutableExtension(rri(module));
+      }
+      return { module };
+    }
+    // Otherwise it is a non-scoped bare specifier (e.g. an npm package import).
+    // Leave it for the loader's importMap shim.
+    return {};
+  }
+  if (relativeTo) {
+    // URL-form or `./`/`../`/`/`-relative module. Resolve in RRI space so a
+    // relative module resolves against a prefix-form RRI base (e.g. `./person`
+    // relative to `@cardstack/catalog/specs/foo`) as well as a URL base.
+    return finalize(resolveRRIReference(codeRef.module, relativeTo));
   }
   return {};
 }
