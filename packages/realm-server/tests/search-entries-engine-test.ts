@@ -151,6 +151,16 @@ module(basename(import.meta.filename), function () {
             },
           },
         },
+        // Over-match guard: stores the trailing-slash (toURL-normalized) form of
+        // home's url, so a `url` filter for the no-slash value must NOT match it.
+        'home-slash.json': {
+          data: {
+            attributes: { url: 'https://example.com/' },
+            meta: {
+              adoptsFrom: { module: rri('./webpage'), name: 'WebPage' },
+            },
+          },
+        },
         'hello.md': '# Hello from FileDef content',
       },
       onRealmSetup,
@@ -235,11 +245,12 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('an exact `in` filter on an ordinary `url` field still matches its raw stored value', async function (assert) {
-      // `url` here is an ordinary StringField, not a reference. Its stored value
-      // has no trailing slash; reference-form expansion normalizes through
-      // `toURL` (which appends one). The original value must be preserved so
-      // this exact filter keeps matching.
+    test('an exact `in` filter on an ordinary `url` field matches exactly and does not over-match', async function (assert) {
+      // `url` here is an ordinary StringField, not a reference, and a URL-form
+      // value is not a registered prefix — so it is matched exactly as given,
+      // neither dropped (no normalized substitution) nor broadened. The `home`
+      // and `home-slash` fixtures differ only by a trailing slash, so a filter
+      // for the no-slash value must match `home` only.
       let { data } = await searchCardsForTest(testRealm.realmIndexQueryEngine, {
         filter: {
           on: { module: rri(`${realmHref}webpage`), name: 'WebPage' },
@@ -249,7 +260,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         data.map((r) => r.id),
         [rri(`${realmHref}home`)],
-        'the card storing the exact raw url value still matches the exact filter',
+        'matches only the exact raw value; the trailing-slash card is not over-matched',
       );
     });
 

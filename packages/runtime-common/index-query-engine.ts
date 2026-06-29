@@ -972,18 +972,18 @@ export class IndexQueryEngine {
 
   // The card's primary `id` and a FileDef's `url` index in URL form, but a
   // query may now arrive with a canonical-RRI (prefix) value. For filter paths
-  // whose leaf is `id`/`url`, additionally match each value's equivalent
-  // spellings — real-URL, RRI-prefix, and any virtual-alias — via the realm's
-  // VirtualNetwork. This mirrors how the `types` column tolerates mixed
-  // spellings (`internalKeysFor` / `equivalentURLForms`), so a reference filter
-  // matches the indexed value regardless of which form it was stored in — no
-  // reindex or DB migration.
+  // whose leaf is `id`/`url`, a prefix-form value additionally matches its
+  // equivalent spellings — real-URL, RRI-prefix, and any virtual-alias — via
+  // the realm's VirtualNetwork. This mirrors how the `types` column tolerates
+  // mixed spellings (`internalKeysFor` / `equivalentURLForms`), so a reference
+  // filter matches the URL-indexed value without a reindex or DB migration.
   //
-  // These leaf names also occur on ordinary user-data fields (a contained
-  // `url` StringField, a FieldDef `id`), where an `in` filter is an exact
-  // string comparison. To preserve that, the original value is always kept in
-  // the expanded set — the equivalent forms are only ever added, never
-  // substituted — so existing exact filters keep matching.
+  // Only a *prefix-form* value (one that starts with a registered realm prefix)
+  // is expanded. These leaf names also occur on ordinary user-data fields (a
+  // contained `url` StringField, a FieldDef `id`) whose values are plain
+  // strings or URLs and whose `in` filter is an exact string comparison —
+  // those are matched exactly as given, gaining no extra normalized spellings,
+  // so exact semantics are preserved for non-reference fields.
   private isReferenceFilterField(key: string): boolean {
     let leaf = key.split('.').pop();
     return leaf === 'id' || leaf === 'url';
@@ -1003,20 +1003,24 @@ export class IndexQueryEngine {
         expanded.push(value);
         continue;
       }
-      // Always keep the original value so an exact `in` match on an ordinary
-      // (non-reference) `id`/`url` field is preserved.
+      // Match the value as given by default — this preserves exact `in`
+      // semantics for URL-form refs and for ordinary (non-reference) `id`/`url`
+      // user-data fields.
       let forms: string[] = [value];
-      try {
-        // Resolve RRI/URL to a real URL first (the server's VN owns the realm
-        // mappings), then enumerate equivalent spellings — same composition
-        // `internalKeysFor` uses for type keys.
-        forms.push(
-          ...this.#virtualNetwork.equivalentURLForms(
-            this.#virtualNetwork.toURL(value).href,
-          ),
-        );
-      } catch {
-        // Unresolvable (e.g. a bare local id) — match the value as given.
+      if (this.#virtualNetwork.isRegisteredPrefix(value)) {
+        try {
+          // A prefix-form RRI: resolve to its real URL (the server's VN owns
+          // the realm mappings), then enumerate equivalent spellings — same
+          // composition `internalKeysFor` uses for type keys — so it matches
+          // the URL-form indexed reference.
+          forms.push(
+            ...this.#virtualNetwork.equivalentURLForms(
+              this.#virtualNetwork.toURL(value).href,
+            ),
+          );
+        } catch {
+          // Unresolvable prefix — match the value as given.
+        }
       }
       for (let form of forms) {
         if (!seen.has(form)) {
