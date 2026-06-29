@@ -539,7 +539,7 @@ export class Document extends CardDef {
               </button>
             </div>
 
-            {{! template-lint-disable no-invalid-interactive*/}}
+            {{! template-lint-disable no-invalid-interactive}}
             <nav class='toc-navigation' {{on 'click' this.handleTocClick}}>
               {{#if @model.content}}
                 <div class='toc-section'>

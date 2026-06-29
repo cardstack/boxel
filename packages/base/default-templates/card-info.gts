@@ -167,6 +167,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
                   (getFieldIcon @model item.key)
                 }}
                 data-test-edit-preview={{item.key}}
+                data-edit-preview-field={{item.key}}
               >
                 {{#if item.value}}
                   <Field @format='atom' />
@@ -406,7 +407,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .null-preview {
         color: var(--muted-foreground, var(--boxel-450));
       }
-      .default-preview :deep([data-test-edit-preview='cardThumbnailURL']) {
+      .default-preview :deep([data-edit-preview-field='cardThumbnailURL']) {
         overflow-wrap: anywhere;
         min-width: 0;
       }
