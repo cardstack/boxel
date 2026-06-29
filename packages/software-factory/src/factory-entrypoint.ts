@@ -427,8 +427,14 @@ export async function runFactoryEntrypoint(
       darkfactoryModuleUrl,
       searchRetries,
     };
-    let boardLinked = await linkBoard(linkArgs);
-    let projectLinked = await linkSeedProject(linkArgs);
+    // The two links patch independent files (index.json vs the seed issue)
+    // and share no state, so run them concurrently. When the realm has
+    // neither card yet, each search otherwise burns its full retry budget in
+    // turn; overlapping them halves the worst-case wait.
+    let [boardLinked, projectLinked] = await Promise.all([
+      linkBoard(linkArgs),
+      linkSeedProject(linkArgs),
+    ]);
     if (boardLinked || projectLinked) {
       await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
     }
