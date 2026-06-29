@@ -12,9 +12,9 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
 
-// CS-11664: an archived realm is sealed for everyone (owner included). Every
-// content request to its boundary returns 403 with an "archived" marker, while
-// the operational `_readiness-check` stays reachable and unarchiving lifts the
+// An archived realm is sealed for everyone (owner included): every content
+// request to its boundary returns 403 with an "archived" marker, while the
+// operational `_readiness-check` stays reachable and unarchiving lifts the
 // seal.
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('archived realm seal', function (hooks) {
