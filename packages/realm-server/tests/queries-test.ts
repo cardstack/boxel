@@ -141,6 +141,100 @@ module(basename(import.meta.filename), function () {
         'filters out published realms when fetching all permissions',
       );
     });
+
+    test('excludes archived realms by default; includeArchived re-includes them', async function (assert) {
+      const ownerUserId = '@owner:localhost';
+      const activeOwned = 'http://example.com/active-owned/';
+      const archivedOwned = 'http://example.com/archived-owned/';
+      const activePublic = 'http://example.com/active-public/';
+      const archivedPublic = 'http://example.com/archived-public/';
+
+      await insertPermissions(dbAdapter, new URL(activeOwned), {
+        [ownerUserId]: ['read', 'write', 'realm-owner'],
+      });
+      await insertPermissions(dbAdapter, new URL(archivedOwned), {
+        [ownerUserId]: ['read', 'write', 'realm-owner'],
+      });
+      // Archiving via the endpoint is forbidden for public realms, but the
+      // helper itself doesn't enforce that — directly seed an archived
+      // public realm to exercise the public-read arm of the UNION too.
+      await insertPermissions(dbAdapter, new URL(activePublic), {
+        '*': ['read'],
+      });
+      await insertPermissions(dbAdapter, new URL(archivedPublic), {
+        '*': ['read'],
+      });
+      await archiveRealm(dbAdapter, new URL(archivedOwned));
+      await archiveRealm(dbAdapter, new URL(archivedPublic));
+
+      let active = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+      });
+      assert.deepEqual(
+        Object.keys(active).sort(),
+        [activeOwned, activePublic].sort(),
+        'default enumeration excludes archived realms in both UNION arms',
+      );
+
+      let withArchived = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+        includeArchived: true,
+      });
+      assert.deepEqual(
+        Object.keys(withArchived).sort(),
+        [activeOwned, activePublic, archivedOwned, archivedPublic].sort(),
+        'includeArchived re-includes archived realms in both arms',
+      );
+
+      let activeOwnersOnly = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+        onlyOwnRealms: true,
+      });
+      assert.deepEqual(
+        Object.keys(activeOwnersOnly).sort(),
+        [activeOwned].sort(),
+        'onlyOwnRealms also excludes archived realms by default',
+      );
+
+      let ownersWithArchived = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+        onlyOwnRealms: true,
+        includeArchived: true,
+      });
+      assert.deepEqual(
+        Object.keys(ownersWithArchived).sort(),
+        [activeOwned, archivedOwned].sort(),
+        'onlyOwnRealms + includeArchived returns the owner archived realm too',
+      );
+    });
+
+    test('an unarchived realm is enumerated again', async function (assert) {
+      const ownerUserId = '@owner:localhost';
+      const realmURL = 'http://example.com/restored/';
+
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        [ownerUserId]: ['read', 'write', 'realm-owner'],
+      });
+      await archiveRealm(dbAdapter, new URL(realmURL));
+
+      let archivedView = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+      });
+      assert.false(
+        realmURL in archivedView,
+        'archived realm is not enumerated',
+      );
+
+      await unarchiveRealm(dbAdapter, new URL(realmURL));
+      let restoredView = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+      });
+      assert.deepEqual(
+        restoredView[realmURL],
+        ['read', 'write', 'realm-owner'],
+        'unarchived realm is enumerated again',
+      );
+    });
   });
 
   module('fetchAllRealmsWithOwners', function (hooks) {
