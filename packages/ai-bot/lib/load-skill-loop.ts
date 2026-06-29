@@ -15,7 +15,10 @@ export const LOAD_SKILL_MAX_ROUNDS = 4;
 
 export interface LoadSkillLoopDeps {
   onBehalfOf: string;
-  delegatedRealmSessions: Pick<DelegatedRealmSessionManager, 'getToken'>;
+  delegatedRealmSessions: Pick<
+    DelegatedRealmSessionManager,
+    'getToken' | 'invalidate'
+  >;
   fetch?: typeof globalThis.fetch;
 }
 

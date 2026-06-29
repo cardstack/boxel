@@ -29,6 +29,7 @@ function deps(body = 'SKILL BODY') {
         calls.push(a);
         return 'tok';
       },
+      invalidate: () => {},
     },
     fetch: (async () =>
       new Response(body, {

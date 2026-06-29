@@ -115,6 +115,10 @@ class Assistant {
     // Lets the loadSkill loop re-run a turn with tool results appended without
     // rebuilding the rest of the prompt.
     messagesOverride?: ChatCompletionMessageParam[],
+    // Whether to offer the bot-executed loadSkill tool. The caller decides
+    // (delegation configured + a single-human room); the bot never advertises
+    // a tool it won't run.
+    offerLoadSkill = false,
   ) {
     if (!prompt.model) {
       throw new Error('Model is required');
@@ -139,10 +143,9 @@ class Assistant {
       request.tool_choice = prompt.toolChoice;
     }
 
-    // Offer the bot-executed loadSkill tool whenever delegation is configured,
-    // even in rooms that carry no other tools. Inert otherwise: with no secret
-    // the manager is disabled and the tool is never advertised.
-    if (prompt.toolsSupported === true && this.delegatedRealmSessions.enabled) {
+    // Offer the bot-executed loadSkill tool when the caller allows it, even in
+    // rooms that carry no other tools.
+    if (prompt.toolsSupported === true && offerLoadSkill) {
       request.tools = [...(request.tools ?? []), loadSkillTool];
     }
 
@@ -272,6 +275,17 @@ Common issues are:
         if (!room) {
           return;
         }
+
+        // Pull-model skills are read on behalf of the single human in the room
+        // (the message sender). In a room with more than one human, "the user"
+        // is ambiguous, so the bot must not read any realm on someone's behalf:
+        // disable skill loading entirely there.
+        let humanRoomMemberCount = room
+          .getJoinedMembers()
+          .filter((member) => member.userId !== aiBotUserId).length;
+        let skillLoadingAllowed =
+          assistant.delegatedRealmSessions.enabled &&
+          humanRoomMemberCount === 1;
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -522,6 +536,7 @@ Common issues are:
                       promptParts,
                       senderMatrixUserId,
                       workingMessages,
+                      skillLoadingAllowed,
                     )
                     .on('chunk', async (chunk, snapshot) => {
                       log.info(`[${eventId}] Received chunk %s`, chunk.id);
@@ -590,7 +605,7 @@ Common issues are:
                   if (
                     message &&
                     senderMatrixUserId &&
-                    assistant.delegatedRealmSessions.enabled &&
+                    skillLoadingAllowed &&
                     loadSkillRounds < LOAD_SKILL_MAX_ROUNDS
                   ) {
                     let followup = await buildLoadSkillFollowup(message, {

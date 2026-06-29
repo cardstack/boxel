@@ -68,6 +68,10 @@ export function skillFileUrl({ realm, name, path }: LoadSkillArgs): string {
   return new URL(rel, ensureTrailingSlash(realm)).href;
 }
 
+// Upper bound on skill content fed back to the model, so a large references/
+// file can't blow up the prompt (and bill) of the following round.
+const MAX_SKILL_CONTENT_LENGTH = 100_000;
+
 // Executes a loadSkill tool call inside the bot process: mints a delegated,
 // read-only token for `onBehalfOf` scoped to `realm`, then GETs the skill file
 // as raw source. Never throws — returns a result the caller hands back to the
@@ -81,60 +85,83 @@ export async function executeLoadSkill(
     fetch = globalThis.fetch,
   }: {
     onBehalfOf: string;
-    delegatedRealmSessions: Pick<DelegatedRealmSessionManager, 'getToken'>;
+    delegatedRealmSessions: Pick<
+      DelegatedRealmSessionManager,
+      'getToken' | 'invalidate'
+    >;
     fetch?: typeof globalThis.fetch;
   },
 ): Promise<LoadSkillResult> {
   let url = skillFileUrl(args);
 
-  let token: string;
-  try {
-    token = await delegatedRealmSessions.getToken({
-      onBehalfOf,
-      realm: args.realm,
-    });
-  } catch (e: any) {
-    if (e instanceof DelegatedRealmSessionError) {
-      if (e.kind === 'disabled') {
-        return {
-          ok: false,
-          error: 'skill loading is unavailable (delegation is not configured)',
-        };
+  // One mint+fetch attempt. `redirect: 'manual'` keeps a stray redirect from
+  // being silently followed (it surfaces as a non-2xx instead).
+  let attempt = async (): Promise<{ response?: Response; error?: string }> => {
+    let token: string;
+    try {
+      token = await delegatedRealmSessions.getToken({
+        onBehalfOf,
+        realm: args.realm,
+      });
+    } catch (e: any) {
+      if (e instanceof DelegatedRealmSessionError) {
+        if (e.kind === 'disabled') {
+          return {
+            error:
+              'skill loading is unavailable (delegation is not configured)',
+          };
+        }
+        if (e.kind === 'forbidden') {
+          return { error: `no read access to ${args.realm}` };
+        }
       }
-      if (e.kind === 'forbidden') {
-        return { ok: false, error: `no read access to ${args.realm}` };
-      }
+      log.error(
+        `loadSkill: could not obtain a delegated token for ${args.realm}: ${
+          e?.message ?? e
+        }`,
+      );
+      return { error: `could not obtain realm access for ${args.realm}` };
     }
-    log.error(
-      `loadSkill: could not obtain a delegated token for ${args.realm}: ${
-        e?.message ?? e
-      }`,
-    );
+    try {
+      return {
+        response: await fetch(url, {
+          redirect: 'manual',
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      };
+    } catch (e: any) {
+      log.error(`loadSkill: fetch failed for ${url}: ${e?.message ?? e}`);
+      return { error: `could not fetch ${url}` };
+    }
+  };
+
+  let { response, error } = await attempt();
+  if (error) {
+    return { ok: false, error };
+  }
+  // A cached token whose access was revoked inside its staleness window gets a
+  // 401/403. Drop it and try once with a freshly minted token before failing.
+  if (response && (response.status === 401 || response.status === 403)) {
+    delegatedRealmSessions.invalidate({ onBehalfOf, realm: args.realm });
+    ({ response, error } = await attempt());
+    if (error) {
+      return { ok: false, error };
+    }
+  }
+
+  if (!response || !response.ok) {
     return {
       ok: false,
-      error: `could not obtain realm access for ${args.realm}`,
+      error: `could not load ${url} (HTTP ${response?.status ?? 'unknown'})`,
     };
   }
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-        Authorization: `Bearer ${token}`,
-      },
-    });
-  } catch (e: any) {
-    log.error(`loadSkill: fetch failed for ${url}: ${e?.message ?? e}`);
-    return { ok: false, error: `could not fetch ${url}` };
+  let content = await response.text();
+  if (content.length > MAX_SKILL_CONTENT_LENGTH) {
+    content = content.slice(0, MAX_SKILL_CONTENT_LENGTH) + '\n\n…[truncated]';
   }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      error: `could not load ${url} (HTTP ${response.status})`,
-    };
-  }
-
-  return { ok: true, url, content: await response.text() };
+  return { ok: true, url, content };
 }
