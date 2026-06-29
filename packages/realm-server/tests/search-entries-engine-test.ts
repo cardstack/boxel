@@ -135,6 +135,22 @@ module(basename(import.meta.filename), function () {
             },
           },
         },
+        'webpage.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class WebPage extends CardDef {
+            @field url = contains(StringField);
+          }
+        `,
+        'home.json': {
+          data: {
+            attributes: { url: 'https://example.com' },
+            meta: {
+              adoptsFrom: { module: rri('./webpage'), name: 'WebPage' },
+            },
+          },
+        },
         'hello.md': '# Hello from FileDef content',
       },
       onRealmSetup,
@@ -217,6 +233,24 @@ module(basename(import.meta.filename), function () {
       } finally {
         testRealm.virtualNetwork.removeRealmMapping('@test-prefix/');
       }
+    });
+
+    test('an exact `in` filter on an ordinary `url` field still matches its raw stored value', async function (assert) {
+      // `url` here is an ordinary StringField, not a reference. Its stored value
+      // has no trailing slash; reference-form expansion normalizes through
+      // `toURL` (which appends one). The original value must be preserved so
+      // this exact filter keeps matching.
+      let { data } = await searchCardsForTest(testRealm.realmIndexQueryEngine, {
+        filter: {
+          on: { module: rri(`${realmHref}webpage`), name: 'WebPage' },
+          in: { url: ['https://example.com'] },
+        },
+      });
+      assert.deepEqual(
+        data.map((r) => r.id),
+        [rri(`${realmHref}home`)],
+        'the card storing the exact raw url value still matches the exact filter',
+      );
     });
 
     test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
