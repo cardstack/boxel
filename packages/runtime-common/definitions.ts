@@ -6,7 +6,10 @@ import {
   type CodeRef,
 } from './index.ts';
 import type { SerializerName } from './serializers/index.ts';
-import type { FieldType } from 'https://cardstack.com/base/card-api';
+import type {
+  FieldType,
+  Searchable,
+} from 'https://cardstack.com/base/card-api';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { Query } from './query.ts';
@@ -18,6 +21,11 @@ export interface FieldDefinition {
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
   query?: Query;
+  // Raw `searchable` annotation mirrored from the field descriptor (the source
+  // of truth in `card-api.gts`). Carried here for the loaderless query compiler
+  // and definition-build validation — not a pre-resolved plan. Persisted as
+  // plain JSON in `modules.definitions`; omitted when the field declares none.
+  searchable?: Searchable;
 }
 
 // `Definition.fields` only carries the **immediate** field map. Dotted
@@ -92,6 +100,7 @@ export function getFieldDefinitions(
           ? (field.card[fieldSerializer] as SerializerName)
           : undefined,
       query: queryDefinition,
+      searchable: field.searchable,
     };
     fields[fieldName] = intern(def);
   }
@@ -149,4 +158,62 @@ export async function getFieldDef(
     current = next;
   }
   return undefined;
+}
+
+// A `searchable` annotation path that didn't resolve against the definition
+// graph during definition build. Recorded (never thrown) into
+// `modules.diagnostics` so a typo / removed field / un-routable segment
+// surfaces where authors can see it instead of silently making nothing
+// searchable. Carries no owning-codeRef — the caller tags each finding with
+// the definition it came from when aggregating across a module.
+export interface SearchablePathIssue {
+  // The immediate field (on the validated definition) carrying the annotation.
+  fieldName: string;
+  // The dotted `searchable` path that failed to resolve.
+  path: string;
+}
+
+// Validate every field's `searchable` annotation on `definition` against the
+// definition graph. A path is rooted at the annotated field's TARGET type
+// (`fieldOrCard`), matching the search-doc semantics: `searchable: 'address'`
+// on `author = linksTo(Author)` names Author's `address` link, so the path
+// resolves against Author — not against the card declaring `author`. The
+// `true` form (the immediate "self" link) carries no path and is always valid;
+// an omitted annotation is skipped. Returns one issue per path that
+// `getFieldDef` can't resolve and never throws — definition build is decoupled
+// in time from the edit that introduced a bad path, so a throw would surface at
+// a confusing moment, and the query-time check is the loud backstop if the
+// intended path is ever actually queried. `lookupDefinition` resolves a CodeRef
+// to its `Definition`; returning undefined for an unloadable ref makes every
+// path under it unresolvable (recorded), which is the intended behavior.
+export async function validateSearchablePaths(
+  definition: Pick<Definition, 'fields' | 'fieldDefs'>,
+  lookupDefinition: (codeRef: CodeRef) => Promise<Definition | undefined>,
+): Promise<SearchablePathIssue[]> {
+  let issues: SearchablePathIssue[] = [];
+  for (let [fieldName, defId] of Object.entries(definition.fields)) {
+    let fieldDef = definition.fieldDefs[defId];
+    let searchable = fieldDef?.searchable;
+    if (searchable == null || searchable === true) {
+      continue;
+    }
+    let paths = typeof searchable === 'string' ? [searchable] : searchable;
+    if (paths.length === 0) {
+      continue;
+    }
+    // A path is rooted at this field's target type. If we can't even identify
+    // that target, none of the paths can be followed.
+    let targetDef = isResolvedCodeRef(fieldDef.fieldOrCard)
+      ? await lookupDefinition(fieldDef.fieldOrCard)
+      : undefined;
+    for (let path of paths) {
+      let resolved = targetDef
+        ? await getFieldDef(targetDef, path, lookupDefinition)
+        : undefined;
+      if (!resolved) {
+        issues.push({ fieldName, path });
+      }
+    }
+  }
+  return issues;
 }
