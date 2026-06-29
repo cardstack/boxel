@@ -3,7 +3,6 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   buildCssResource,
-  combineSearchResults,
   cssResourceId,
   isCssResource,
   parseUsedRenderType,
@@ -11,7 +10,6 @@ import {
   scopedCssHrefsFromDeps,
   type CardResource,
   type CssResource,
-  type LinkableCollectionDocument,
 } from '@cardstack/runtime-common';
 
 const realmURL = 'http://localhost:4201/test/';
@@ -79,84 +77,6 @@ module(basename(import.meta.filename), function () {
   // The federated merge for the live-card document: concatenate `data` in
   // realm order, sum `meta.page.total`, and dedupe `included` by the JSON:API
   // identity pair `(type, id)`.
-  module('combineSearchResults (federated merge)', function () {
-    test('dedupes `included` by (type, id): a linked card shared across realms travels once', function (assert) {
-      let linkedId = rri(`${realmURL}Tag/1`);
-      let linkedCard = (): CardResource => ({
-        type: 'card',
-        id: linkedId,
-        attributes: { name: 'green' },
-        meta: { adoptsFrom: { module: rri(`${realmURL}tag`), name: 'Tag' } },
-        links: { self: linkedId },
-      });
-
-      let docA: LinkableCollectionDocument = {
-        data: [fullCard()],
-        included: [linkedCard()],
-        meta: { page: { total: 1 } },
-      };
-
-      // A second realm's result: a distinct card that links the same Tag.
-      let url2 = rri(`${realmURL}Author/2`);
-      let docB: LinkableCollectionDocument = {
-        data: [
-          {
-            type: 'card',
-            id: url2,
-            attributes: { name: 'Van Gogh' },
-            meta: { adoptsFrom: authorRef },
-            links: { self: url2 },
-          },
-        ],
-        included: [linkedCard()],
-        meta: { page: { total: 1 } },
-      };
-
-      let merged = combineSearchResults([docA, docB]);
-      let included = merged.included ?? [];
-
-      assert.strictEqual(merged.data.length, 2, 'both result cards survive');
-      assert.strictEqual(
-        included.filter((r) => r.type === 'card' && r.id === linkedId).length,
-        1,
-        'the shared linked card appears exactly once',
-      );
-      assert.strictEqual(merged.meta.page.total, 2, 'page totals sum');
-    });
-
-    test('concatenates `data` in realm order, sums `meta.page.total`, and omits an empty `included`', function (assert) {
-      let a = rri(`${realmURL}A`);
-      let b = rri(`${realmURL}B`);
-      let mk = (
-        id: ReturnType<typeof rri>,
-        total: number,
-      ): LinkableCollectionDocument => ({
-        data: [
-          {
-            type: 'card',
-            id,
-            attributes: {},
-            meta: { adoptsFrom: authorRef },
-            links: { self: id },
-          },
-        ],
-        meta: { page: { total } },
-      });
-
-      let merged = combineSearchResults([mk(a, 3), mk(b, 5)]);
-      assert.deepEqual(
-        merged.data.map((r) => r.id),
-        [a, b],
-        'data preserves realm order',
-      );
-      assert.strictEqual(merged.meta.page.total, 8, 'page totals sum');
-      assert.notOk(
-        'included' in merged,
-        'no included key when nothing to include',
-      );
-    });
-  });
-
   // Pure helpers shared by the search result mappers.
   module('search resource helpers (render-type + css)', function () {
     test('parseUsedRenderType splits "<module>/<name>" into a CodeRef', function (assert) {

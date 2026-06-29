@@ -29,7 +29,7 @@ import CardRenderer from '../card-renderer';
 
 import SearchResultError from './search-result-error';
 
-// `HydrationMode` is the card-facing contract (it rides the v2 `@context`
+// `HydrationMode` is the card-facing contract (it rides the `@context`
 // search surface), so it lives in runtime-common; re-exported here because this
 // is where it's consumed and where call sites have long imported it.
 export type { HydrationMode };

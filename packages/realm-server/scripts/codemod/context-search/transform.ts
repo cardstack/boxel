@@ -1,14 +1,14 @@
 // Codemod that migrates first-party card source off the deprecated
-// `@context.prerenderedCardSearchComponent` and onto the v2
+// `@context.prerenderedCardSearchComponent` and onto the
 // `@context.searchResultsComponent` surface.
 //
 // A usage migrates when its `@query`/`@realms`/`@cardUrls` are simple paths. The
 // legacy args fold into a `search-entry`-rooted query built by a generated
-// getter (wrapping the v1 `Query` through `searchEntryWireQueryFromQuery`); a
+// getter (wrapping the deprecated `Query` through `searchEntryWireQueryFromQuery`); a
 // static or dynamic `@format` binds through the query's `htmlQuery` (a dynamic
 // format guarded by `isValidPrerenderedHtmlFormat`, mirroring base CardsGrid).
 //
-// A `<:response>` body that only iterates the result list and reads v2-native
+// A `<:response>` body that only iterates the result list and reads search-entry-native
 // per-row fields (`url`/`isError`/`component`) is rewritten minimally. A body
 // that yields the row onward, reaches into legacy-only fields (`cardType`/…), or
 // hands the whole list to other markup (a child component, …) is migrated by
@@ -64,10 +64,10 @@ const KNOWN_ARGS = new Set([
   '@isLive',
 ]);
 
-// Per-item fields that map cleanly onto the v2 `entry`. `url` becomes `id`;
+// Per-item fields that map cleanly onto the search-entry `entry`. `url` becomes `id`;
 // `isError` and the per-item `component` carry over unchanged. Anything else
 // (`cardType`/`iconHtml`/`hasHtml`/`realmUrl`/`usedRenderType`) lives under
-// `entry.html` in v2 and has no safe mechanical rewrite.
+// `entry.html` in the search-entry shape and has no safe mechanical rewrite.
 const ITEM_FIELD_RENAMES: Record<string, string> = { url: 'id' };
 const ALLOWED_ITEM_FIELDS = new Set(['url', 'isError', 'component']);
 
@@ -239,7 +239,7 @@ function transformOneTemplate(
   // Re-point each bound `(component @context.…)` whose invocations all migrated.
   // A binding with any failed invocation is left on the old member, so the
   // file-level guard in `transformContextSearch` discards the whole module rather
-  // than ship one with some invocations on v2 and others stranded on v1.
+  // than ship one with some invocations on the search-entry member and others stranded on the deprecated one.
   for (let [subExpr, allOk] of bindingAllOk) {
     if (allOk) {
       subExpr.params[0] = b.path(NEW_PATH);
@@ -247,7 +247,7 @@ function transformOneTemplate(
     }
   }
   // Rewrite `{{#if @context.…}}` / `{{#unless @context.…}}` availability guards
-  // (cards defensively gate the usage on the component being provided) to the v2
+  // (cards defensively gate the usage on the component being provided) to the search-entry
   // member, so the guard tracks the component actually rendered. Same clean
   // param-replacement as the bindings. This is unconditional, but harmless on a
   // module that doesn't fully migrate: its stranded element/binding keeps the old
@@ -276,7 +276,7 @@ interface Invocation {
   // The angle-bracket invocation whose args/blocks get reshaped.
   element: any;
   // For the `{{#let (component @context.…) as |X|}}` form, the SubExpression
-  // whose component path must move to the v2 member.
+  // whose component path must move to the search-entry member.
   subExpr: any | null;
 }
 
@@ -321,10 +321,10 @@ function findInvocations(ast: any): Invocation[] {
     // invoked any number of times within the block. Each `<X …>` is an independent
     // usage — its own query/format/blocks — so emit one invocation per element,
     // all sharing the binding's SubExpression (the `(component …)` whose path the
-    // v2 member moves onto; re-pointing it once per invocation is idempotent). If
+    // search-entry member moves onto; re-pointing it once per invocation is idempotent). If
     // any one of them can't be migrated, the file-level guard in
     // `transformContextSearch` discards the whole module, so a bound component is
-    // never left half-migrated (some invocations on v2, some stranded on v1).
+    // never left half-migrated (some invocations on the search-entry member, some stranded on the deprecated one).
     for (let element of elements) {
       invocations.push({ element, subExpr: binding.subExpr });
     }
@@ -428,7 +428,7 @@ function tryTransformInvocation(
   // Its body (if any) references nothing from the list, so it migrates verbatim
   // with no adapter binding.
   let responseParam: string | undefined = responseParams[0];
-  // `<:meta as |m|>` yields the same `QueryResultsMeta` v2 exposes as
+  // `<:meta as |m|>` yields the same `QueryResultsMeta` search-entry exposes as
   // `results.meta`, so it migrates to a `{{#let results.meta as |m|}}` wrapper.
   // Support zero or one block param; anything else is an unrecognized shape.
   let metaParam: string | undefined;
@@ -441,7 +441,7 @@ function tryTransformInvocation(
   }
 
   // Decide how to migrate the <:response> body. A single direct
-  // `{{#each <param>}}` whose item only touches v2-native fields
+  // `{{#each <param>}}` whose item only touches search-entry-native fields
   // (`url`/`isError`/`component`) is rewritten minimally. Anything else — a body
   // that yields the row onward, reaches into legacy-only fields, or hands the
   // whole list to other markup (a child component, etc.) — is migrated by
@@ -501,7 +501,7 @@ function tryTransformInvocation(
     usesArrayShim: useShim,
   });
 
-  // Move the component reference to the v2 member. A direct `<@context.…>` usage
+  // Move the component reference to the search-entry member. A direct `<@context.…>` usage
   // re-points its own tag here. A bound usage (`{{#let (component @context.…) as
   // |X|}}`) keeps its local tag; its binding's `(component …)` is re-pointed by
   // the caller, and only once EVERY invocation of that binding migrated — so a
@@ -690,7 +690,7 @@ function ensureRuntimeCommonImport(
 }
 
 // Insert the module-local legacy-shape array adapter once, after the imports.
-// It maps each v2 `entry` to the legacy `PrerenderedCardLike` field names so a
+// It maps each search-entry `entry` to the legacy `PrerenderedCardLike` field names so a
 // migrated body (and the components it hands rows to) keeps working unchanged.
 function insertArrayShim(ast: any, filename: string): void {
   let body = ast.program.body;

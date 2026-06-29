@@ -28,8 +28,6 @@ import SearchResults from '@cardstack/host/components/card-search/search-results
 import HostModeContent from '@cardstack/host/components/host-mode/content';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
 
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
-
 import config from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
@@ -148,7 +146,6 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCardCollection: this.getCardCollection,
       store: this.store,
       commandContext: this.commandContext,
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
       searchResultsComponent: SearchResults,
       mode: this.hostModeService.isActive ? 'host' : 'operator',
       submode: this.hostModeService.isActive

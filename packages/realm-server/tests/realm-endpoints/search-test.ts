@@ -2,1367 +2,271 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import {
-  baseRealmRRI,
-  baseRRI,
-  type Realm,
-  rri,
-} from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
+import { rri, type Realm } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupPermissionedRealmCached,
-  createJWT,
   testRealmURLFor,
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
-  module('Realm-specific Endpoints | _search', function () {
+  module('Realm-specific Endpoints | _search', function (hooks) {
     let testRealm: Realm;
+    let dbAdapter: PgAdapter;
     let request: SuperTest<Test>;
-    let realmURL: URL;
     let realmHref: string;
     let searchPath: string;
+    let personKey: string;
+    let johnId: string;
+    let janeId: string;
 
     function onRealmSetup(args: {
       testRealm: Realm;
+      dbAdapter: PgAdapter;
       request: SuperTest<Test>;
     }) {
       testRealm = args.testRealm;
+      dbAdapter = args.dbAdapter;
       request = args.request;
-      realmURL = new URL(testRealm.url);
+      let realmURL = new URL(testRealm.url);
       realmHref = realmURL.href;
       searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search`;
+      personKey = `${realmHref}person/Person`;
+      johnId = `${realmHref}john`;
+      janeId = `${realmHref}jane`;
     }
 
-    function buildPersonQuery(firstName = 'Mango'): Query {
-      return {
-        filter: {
-          on: {
-            module: rri(`${realmHref}person`),
-            name: 'Person',
-          },
-          eq: {
-            firstName,
+    setupPermissionedRealmCached(hooks, {
+      realmURL: testRealmURLFor('test/'),
+      permissions: { '*': ['read'] },
+      fileSystem: {
+        'person.gts': `
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Person extends CardDef {
+            @field firstName = contains(StringField);
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                Embedded Card Person: <@fields.firstName/>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                Fitted Card Person: <@fields.firstName/>
+              </template>
+            }
+          }
+        `,
+        'john.json': {
+          data: {
+            attributes: { firstName: 'John' },
+            meta: {
+              adoptsFrom: { module: rri('./person'), name: 'Person' },
+            },
           },
         },
+        'jane.json': {
+          data: {
+            attributes: { firstName: 'Jane' },
+            meta: {
+              adoptsFrom: { module: rri('./person'), name: 'Person' },
+            },
+          },
+        },
+      },
+      onRealmSetup,
+    });
+
+    function postSearch(body: Record<string, unknown>) {
+      return request
+        .post(searchPath)
+        .set('Accept', 'application/vnd.card+json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .send(body);
+    }
+
+    function personFilter(extraEq: Record<string, unknown> = {}) {
+      return {
+        'item.on': { module: `${realmHref}person`, name: 'Person' },
+        ...(Object.keys(extraEq).length > 0 ? { eq: extraEq } : {}),
       };
     }
 
-    function buildFileDefQuery(): Query {
-      return {
-        filter: {
-          type: {
-            module: baseRRI('card-api'),
-            name: 'FileDef',
-          },
-        },
-      };
-    }
-
-    module('QUERY request (public realm)', function (_hooks) {
-      let query = () => buildPersonQuery('Mango');
-
-      module('public readable realm', function (hooks) {
-        // Uses `realistic` because tests in this module depend on
-        // multiple Person instances (pagination), FileDef instances
-        // beyond person.gts (file-meta queries), and the kitchen-sink
-        // content variety (sparse-fieldsets backward-compat). Sibling
-        // modules below only ever query for Mango and stay on `simple`.
-        setupPermissionedRealmCached(hooks, {
-          fixture: 'realistic',
-          permissions: {
-            '*': ['read'],
-          },
-          realmURL: testRealmURLFor('test/'),
-          onRealmSetup,
-        });
-
-        test('serves a /_search QUERY request', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(query());
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.get('X-boxel-realm-url'),
-            realmHref,
-            'realm url header is correct',
-          );
-          assert.strictEqual(
-            response.get('X-boxel-realm-public-readable'),
-            'true',
-            'realm is public readable',
-          );
-          let json = response.body;
-          assert.strictEqual(
-            json.data.length,
-            1,
-            'the card is returned in the search results',
-          );
-          assert.strictEqual(
-            json.data[0].id,
-            `${realmHref}person-1`,
-            'card ID is correct',
-          );
-          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
-        });
-
-        test('gets no results when asking for a type that the realm does not have knowledge of', async function (assert) {
-          let unknownTypeQuery: Query = {
-            filter: {
-              on: {
-                module: rri('http://some-realm-server/some-realm/some-card'),
-                name: 'SomeCard',
-              },
-              eq: {
-                firstName: 'Mango',
-              },
-            },
-          };
-
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(unknownTypeQuery);
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-
-          assert.strictEqual(
-            json.data.length,
-            0,
-            'returned results count is correct',
-          );
-          assert.strictEqual(json.meta.page.total, 0, 'total count is correct');
-        });
-
-        test('can paginate search results', async function (assert) {
-          // Query for all persons to get multiple results
-          let paginationQuery: Query = {
-            filter: {
-              type: {
-                module: rri(`${realmHref}person`),
-                name: 'Person',
-              },
-            },
-            page: {
-              number: 0,
-              size: 1,
-            },
-            sort: [
-              {
-                by: 'firstName',
-                on: {
-                  module: rri(`${realmHref}person`),
-                  name: 'Person',
-                },
-                direction: 'asc',
-              },
-            ],
-          };
-
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(paginationQuery);
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-
-          assert.strictEqual(json.data.length, 1, 'first page has 1 result');
-          assert.ok(json.meta, 'response includes meta');
-          assert.ok(json.meta.page, 'meta includes page info');
-          assert.strictEqual(json.meta.page.total, 3, 'total count is correct');
-
-          // Get the second page
-          paginationQuery.page = { number: 1, size: 1 };
-          response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(paginationQuery);
-
-          assert.strictEqual(
-            response.status,
-            200,
-            'HTTP 200 status for second page',
-          );
-          let json2 = response.body;
-
-          assert.strictEqual(json2.data.length, 1, 'second page has 1 result');
-          assert.strictEqual(
-            json2.meta.page.total,
-            3,
-            'total count is correct',
-          );
-
-          // Ensure different results on different pages
-          assert.notStrictEqual(
-            json.data[0].id,
-            json2.data[0].id,
-            'different pages should return different results',
-          );
-        });
-
-        test('serves file-meta results when querying for FileDef', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(buildFileDefQuery());
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as { data: { id?: string; type: string }[] };
-
-          assert.ok(json.data.length > 0, 'file-meta results are returned');
-          assert.ok(
-            json.data.every((entry) => entry.type === 'file-meta'),
-            'all results are file-meta resources',
-          );
-          assert.ok(
-            json.data.some((entry) => entry.id === `${realmHref}dir/foo.txt`),
-            'expected file-meta entry is present',
-          );
-        });
-
-        test('filters file-meta results by url', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: {
-                  module: `${baseRealmRRI}card-api`,
-                  name: 'FileDef',
-                },
-                eq: {
-                  url: `${realmHref}dir/foo.txt`,
-                },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as { data: { id?: string; type: string }[] };
-
-          assert.deepEqual(
-            json.data.map((entry) => entry.id),
-            [`${realmHref}dir/foo.txt`],
-            'url filter returns matching file-meta entry',
-          );
-          assert.strictEqual(
-            json.data[0]?.type,
-            'file-meta',
-            'url filter returns file-meta resource',
-          );
-        });
-
-        test('filters file-meta results by FileDef subclass type', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                type: {
-                  module: `${baseRealmRRI}markdown-file-def`,
-                  name: 'MarkdownDef',
-                },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as { data: { id?: string; type: string }[] };
-
-          assert.ok(
-            json.data.some((entry) => entry.id === `${realmHref}sample.md`),
-            'returns file-meta entries for subclass FileDef type',
-          );
-        });
-
-        test('sparse fieldsets: empty fields returns resources with no attributes', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFileDefQuery(),
-              fields: { 'file-meta': [] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as {
-            data: {
-              id?: string;
-              type: string;
-              attributes?: Record<string, any>;
-              meta?: Record<string, any>;
-              links?: Record<string, any>;
-            }[];
-          };
-
-          assert.ok(json.data.length > 0, 'results are returned');
-          for (let entry of json.data) {
-            assert.strictEqual(
-              entry.type,
-              'file-meta',
-              'resource type is preserved',
-            );
-            assert.ok(entry.id, 'resource id is preserved');
-            assert.ok(entry.meta, 'resource meta is preserved');
-            assert.deepEqual(
-              entry.attributes,
-              {},
-              'attributes are empty when fields is empty array',
-            );
-          }
-        });
-
-        test('sparse fieldsets: specific fields returns only those attributes', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFileDefQuery(),
-              fields: { 'file-meta': ['name', 'url'] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as {
-            data: {
-              id?: string;
-              type: string;
-              attributes?: Record<string, any>;
-            }[];
-          };
-
-          assert.ok(json.data.length > 0, 'results are returned');
-          for (let entry of json.data) {
-            let attrKeys = Object.keys(entry.attributes ?? {});
-            assert.ok(
-              attrKeys.every((k) => ['name', 'url'].includes(k)),
-              `attributes only contain requested fields, got: ${attrKeys.join(', ')}`,
-            );
-            assert.notStrictEqual(
-              entry.attributes?.name,
-              undefined,
-              'name attribute is present',
-            );
-            assert.notStrictEqual(
-              entry.attributes?.url,
-              undefined,
-              'url attribute is present',
-            );
-          }
-        });
-
-        test('sparse fieldsets: invalid fields value returns 400', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFileDefQuery(),
-              fields: { 'file-meta': 'not-an-array' },
-              asData: true,
-            });
-
-          assert.strictEqual(
-            response.status,
-            400,
-            'returns 400 for invalid fields value',
-          );
-        });
-
-        test('sparse fieldsets: fields without asData returns 400', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFileDefQuery(),
-              fields: { 'file-meta': ['name'] },
-            });
-
-          assert.strictEqual(
-            response.status,
-            400,
-            'returns 400 when fields is specified without asData: true',
-          );
-        });
-
-        test('query without fields returns all attributes (backward compat)', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(buildFileDefQuery());
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as {
-            data: {
-              id?: string;
-              type: string;
-              attributes?: Record<string, any>;
-            }[];
-          };
-
-          assert.ok(json.data.length > 0, 'results are returned');
-          let entry = json.data.find((e) => e.id === `${realmHref}dir/foo.txt`);
-          assert.ok(entry, 'expected entry is present');
-          assert.ok(entry!.attributes, 'attributes are present');
-          assert.ok(
-            Object.keys(entry!.attributes!).length > 0,
-            'attributes are populated when fields is not specified',
-          );
-          assert.notStrictEqual(
-            entry!.attributes?.name,
-            undefined,
-            'name attribute is present',
-          );
-          assert.notStrictEqual(
-            entry!.attributes?.url,
-            undefined,
-            'url attribute is present',
-          );
-        });
-
-        test('sparse fieldsets for cards: empty fields returns card resources with no attributes', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildPersonQuery('Mango'),
-              fields: { card: [] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as {
-            data: {
-              id?: string;
-              type: string;
-              attributes?: Record<string, any>;
-              meta?: Record<string, any>;
-              links?: Record<string, any>;
-            }[];
-          };
-
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          let entry = json.data[0];
-          assert.strictEqual(entry.type, 'card', 'resource type is preserved');
-          assert.ok(entry.id, 'resource id is preserved');
-          assert.ok(entry.meta, 'resource meta is preserved');
-          assert.deepEqual(
-            entry.attributes,
-            {},
-            'attributes are empty when fields is empty array',
-          );
-        });
-
-        test('sparse fieldsets for cards: specific fields returns only those attributes', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildPersonQuery('Mango'),
-              fields: { card: ['firstName'] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as {
-            data: {
-              id?: string;
-              type: string;
-              attributes?: Record<string, any>;
-            }[];
-          };
-
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          let entry = json.data[0];
-          let attrKeys = Object.keys(entry.attributes ?? {});
-          assert.deepEqual(
-            attrKeys,
-            ['firstName'],
-            'only requested field is present',
-          );
-          assert.strictEqual(
-            entry.attributes?.firstName,
-            'Mango',
-            'firstName value is correct',
-          );
-        });
-
-        test('sparse fieldsets for cards: query without fields returns all attributes', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(buildPersonQuery('Mango'));
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body as {
-            data: {
-              id?: string;
-              type: string;
-              attributes?: Record<string, any>;
-            }[];
-          };
-
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          let entry = json.data[0];
-          assert.ok(entry!.attributes, 'attributes are present');
-          assert.ok(
-            Object.keys(entry!.attributes!).length > 0,
-            'attributes are populated when fields is not specified',
-          );
-          assert.strictEqual(
-            entry.attributes?.firstName,
-            'Mango',
-            'firstName attribute is present',
-          );
-        });
-
-        test('coalesces concurrent searchCards calls with identical query+opts', async function (assert) {
-          let q = buildPersonQuery('Mango');
-          let [a, b] = await Promise.all([
-            testRealm.realmIndexQueryEngine.searchCards(q, {
-              loadLinks: true,
-            }),
-            testRealm.realmIndexQueryEngine.searchCards(q, {
-              loadLinks: true,
-            }),
-          ]);
-          assert.strictEqual(
-            a,
-            b,
-            'concurrent identical calls share the same resolved doc instance',
-          );
-        });
-
-        test('does not coalesce when filter differs', async function (assert) {
-          let [a, b] = await Promise.all([
-            testRealm.realmIndexQueryEngine.searchCards(
-              buildPersonQuery('Mango'),
-              { loadLinks: true },
-            ),
-            testRealm.realmIndexQueryEngine.searchCards(
-              buildPersonQuery('does-not-exist'),
-              { loadLinks: true },
-            ),
-          ]);
-          assert.notStrictEqual(
-            a,
-            b,
-            'concurrent calls with different filters produce independent results',
-          );
-        });
-
-        test('cleans up in-flight slot after settlement (sequential calls produce fresh results)', async function (assert) {
-          let q = buildPersonQuery('Mango');
-          let a = await testRealm.realmIndexQueryEngine.searchCards(q, {
-            loadLinks: true,
-          });
-          let b = await testRealm.realmIndexQueryEngine.searchCards(q, {
-            loadLinks: true,
-          });
-          assert.notStrictEqual(
-            a,
-            b,
-            'a sequential call after settlement produces a fresh doc (slot was released)',
-          );
-        });
+    test('default fieldset: html-backed entries with the default htmlQuery echoed', async function (assert) {
+      let response = await postSearch({ filter: personFilter() });
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.strictEqual(json.meta.page.total, 2);
+      assert.deepEqual(
+        json.meta.htmlQuery,
+        { eq: { format: 'fitted' } },
+        'the applied default htmlQuery is echoed once at the document level',
+      );
+      let htmlId = `${johnId}#fitted#${personKey}`;
+      let entry = json.data.find((e: { id: string }) => e.id === johnId);
+      assert.deepEqual(entry.relationships.html, {
+        data: [{ type: 'html', id: htmlId }],
       });
+      assert.strictEqual(entry.relationships.item, undefined);
+      let html = json.included.find(
+        (r: { type: string; id: string }) =>
+          r.type === 'html' && r.id === htmlId,
+      );
+      assert.strictEqual(html.attributes.format, 'fitted');
+      assert.deepEqual(html.attributes.renderType, {
+        module: `${realmHref}person`,
+        name: 'Person',
+      });
+      assert.true(
+        html.attributes.html
+          .replace(/\s+/g, ' ')
+          .includes('Fitted Card Person: John'),
+      );
+    });
 
-      module('fields-based link loading', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          permissions: {
-            '*': ['read'],
+    test('a disjunctive htmlQuery returns several renderings per entry', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter({
+          htmlQuery: {
+            any: [{ eq: { format: 'fitted' } }, { eq: { format: 'embedded' } }],
           },
-          realmURL: testRealmURLFor('test/'),
-          fileSystem: {
-            'friend.gts': `
-              import {
-                contains,
-                linksTo,
-                linksToMany,
-                field,
-                CardDef,
-                Component,
-              } from 'https://cardstack.com/base/card-api';
-              import StringField from 'https://cardstack.com/base/string';
+        }),
+      });
+      assert.strictEqual(response.status, 200);
+      let entry = response.body.data.find(
+        (e: { id: string }) => e.id === johnId,
+      );
+      let ids = entry.relationships.html.data.map(
+        (member: { id: string }) => member.id,
+      );
+      assert.deepEqual(
+        [...ids].sort(),
+        [
+          `${johnId}#embedded#${personKey}`,
+          `${johnId}#fitted#${personKey}`,
+        ].sort(),
+      );
+      for (let id of ids) {
+        assert.true(
+          response.body.included.some(
+            (r: { type: string; id: string }) =>
+              r.type === 'html' && r.id === id,
+          ),
+          `rendering ${id} is included`,
+        );
+      }
+    });
 
-              export class Friend extends CardDef {
-                @field firstName = contains(StringField);
-                @field friend = linksTo(() => Friend);
-                @field friends = linksToMany(() => Friend);
-                static isolated = class Isolated extends Component<typeof this> {
-                  <template>
-                    <@fields.firstName />
-                  </template>
-                };
-              }
-            `,
-            'friend-1.json': {
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'Alice',
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: './friend-2',
-                    },
-                  },
-                  'friends.0': {
-                    links: {
-                      self: './friend-2',
-                    },
-                  },
-                  'friends.1': {
-                    links: {
-                      self: './friend-3',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./friend'),
-                    name: 'Friend',
-                  },
-                },
-              },
-            },
-            'friend-2.json': {
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'Bob',
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: './friend-3',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./friend'),
-                    name: 'Friend',
-                  },
-                },
-              },
-            },
-            'friend-3.json': {
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'Charlie',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./friend'),
-                    name: 'Friend',
-                  },
-                },
-              },
-            },
-          },
-          onRealmSetup,
-        });
+    test('fields[search-entry]=item: full serializations, htmlQuery inert', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter({ htmlQuery: { eq: { format: 'embedded' } } }),
+        fields: { 'search-entry': ['item'] },
+      });
+      assert.strictEqual(response.status, 200);
+      let json = response.body;
+      assert.strictEqual(
+        json.meta.htmlQuery,
+        undefined,
+        'no echo when the html branch is not in play',
+      );
+      let entry = json.data.find((e: { id: string }) => e.id === johnId);
+      assert.strictEqual(entry.relationships.html, undefined);
+      assert.deepEqual(entry.relationships.item, {
+        data: { type: 'card', id: johnId },
+      });
+      let item = json.included.find(
+        (r: { type: string; id: string }) =>
+          r.type === 'card' && r.id === johnId,
+      );
+      assert.strictEqual(item.attributes.firstName, 'John');
+      assert.strictEqual(item.meta.sparseFields, undefined);
+      assert.false(
+        json.included.some((r: { type: string }) => r.type === 'html'),
+      );
+    });
 
-        function buildFriendQuery(firstName: string): Query {
-          return {
-            filter: {
-              on: {
-                module: rri(`${realmHref}friend`),
-                name: 'Friend',
-              },
-              eq: {
-                firstName,
-              },
-            },
-          };
-        }
+    test('fields[search-entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        fields: { 'search-entry': ['item.firstName'] },
+      });
+      assert.strictEqual(response.status, 200);
+      let item = response.body.included.find(
+        (r: { type: string; id: string }) =>
+          r.type === 'card' && r.id === johnId,
+      );
+      assert.deepEqual(item.attributes, { firstName: 'John' });
+      assert.deepEqual(item.meta.sparseFields, ['firstName']);
+    });
 
-        test('fields with relationship field name loads that relationship into included', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFriendQuery('Alice'),
-              fields: { card: ['firstName', 'friend'] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          assert.strictEqual(
-            json.data[0].attributes.firstName,
-            'Alice',
-            'correct card returned',
-          );
-          assert.ok(json.included, 'included array is present');
-          assert.ok(json.included.length > 0, 'included has resources');
-          let includedIds = json.included.map((r: { id: string }) => r.id);
-          assert.ok(
-            includedIds.some((id: string) => id.includes('friend-2')),
-            'linked friend resource is in included',
-          );
-        });
-
-        test('fields with only attribute field names does not load links', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFriendQuery('Alice'),
-              fields: { card: ['firstName'] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          assert.strictEqual(
-            json.data[0].attributes.firstName,
-            'Alice',
-            'correct card returned',
-          );
-          assert.strictEqual(
-            json.included,
-            undefined,
-            'no included array when fields has no relationship names',
-          );
-        });
-
-        test('fields filter applies only at root level - nested relationships are fully loaded', async function (assert) {
-          // Alice links to Bob via `friend`, and Bob links to Charlie via
-          // `friend`. When we request only `friend` in fields, Bob's nested
-          // link to Charlie should also be included because linkFields is
-          // cleared for recursive link loading.
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFriendQuery('Alice'),
-              fields: { card: ['friend'] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          assert.ok(json.included, 'included array is present');
-          let includedIds = json.included.map((r: { id: string }) => r.id);
-          assert.ok(
-            includedIds.some((id: string) => id.includes('friend-2')),
-            'directly linked friend (Bob) is in included',
-          );
-          assert.ok(
-            includedIds.some((id: string) => id.includes('friend-3')),
-            "Bob's nested friend (Charlie) is also in included",
-          );
-        });
-
-        test('fields with linksToMany relationship loads those links', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              ...buildFriendQuery('Alice'),
-              fields: { card: ['friends'] },
-              asData: true,
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-          assert.strictEqual(json.data.length, 1, 'one result is returned');
-          assert.ok(json.included, 'included array is present');
-          let includedIds = json.included.map((r: { id: string }) => r.id);
-          assert.ok(
-            includedIds.some((id: string) => id.includes('friend-2')),
-            'first linked friend is in included',
-          );
-          assert.ok(
-            includedIds.some((id: string) => id.includes('friend-3')),
-            'second linked friend is in included',
-          );
-        });
+    test('fields[search-entry]=html,item: both branches on every entry', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        fields: { 'search-entry': ['html', 'item'] },
+      });
+      assert.strictEqual(response.status, 200);
+      let entry = response.body.data.find(
+        (e: { id: string }) => e.id === johnId,
+      );
+      assert.deepEqual(entry.relationships.html, {
+        data: [{ type: 'html', id: `${johnId}#fitted#${personKey}` }],
+      });
+      assert.deepEqual(entry.relationships.item, {
+        data: { type: 'card', id: johnId },
       });
     });
 
-    module('QUERY request (permissioned realm)', function (_hooks) {
-      let query = () => buildPersonQuery('Mango');
-
-      module('public readable realm', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
-          permissions: {
-            '*': ['read'],
-          },
-          realmURL: testRealmURLFor('test/'),
-          onRealmSetup,
-        });
-
-        test('serves a /_search QUERY request', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .send(query())
-            .set('Accept', 'application/vnd.card+json')
-            .set('Content-Type', 'application/json')
-            .set('X-HTTP-Method-Override', 'QUERY'); // Use method override since supertest doesn't support QUERY directly
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.get('X-boxel-realm-url'),
-            realmHref,
-            'realm url header is correct',
-          );
-          assert.strictEqual(
-            response.get('X-boxel-realm-public-readable'),
-            'true',
-            'realm is public readable',
-          );
-          let json = response.body;
-          assert.strictEqual(
-            json.data.length,
-            1,
-            'the card is returned in the search results',
-          );
-          assert.strictEqual(
-            json.data[0].id,
-            `${realmHref}person-1`,
-            'card ID is correct',
-          );
-          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
-        });
-
-        test('handles complex queries in request body', async function (assert) {
-          let complexQuery = {
-            filter: {
-              on: {
-                module: `${realmHref}person`,
-                name: 'Person',
-              },
-              any: [
-                { eq: { firstName: 'Mango' } },
-                { eq: { firstName: 'Tango' } },
-              ],
-            },
-            sort: [
-              {
-                by: 'firstName',
-                on: { module: `${realmHref}person`, name: 'Person' },
-                direction: 'asc',
-              },
-            ],
-          };
-
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(complexQuery);
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-          assert.ok(json.data, 'response has data');
-          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
-        });
+    test('mixed index: fallback per the fieldset', async function (assert) {
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      // default mode: the fallback row carries item and omits html
+      let response = await postSearch({ filter: personFilter() });
+      let jane = response.body.data.find(
+        (e: { id: string }) => e.id === janeId,
+      );
+      assert.strictEqual(jane.relationships.html, undefined);
+      assert.deepEqual(jane.relationships.item, {
+        data: { type: 'card', id: janeId },
       });
-
-      module('permissioned realm', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
-          permissions: {
-            john: ['read'],
-            '@node-test_realm:localhost': ['read', 'realm-owner'],
-          },
-          realmURL: testRealmURLFor('test/'),
-          onRealmSetup,
-        });
-
-        test('401 with invalid JWT', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Authorization', `Bearer invalid-token`)
-            .send(query());
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('401 without a JWT', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send(query()); // no Authorization header
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('403 without permission', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`)
-            .send(query());
-
-          assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        });
-
-        test('200 with permission', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
-            )
-            .send(query());
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        });
+      // a pinned html branch keeps membership visible with an empty array
+      let pinned = await postSearch({
+        filter: personFilter(),
+        fields: { 'search-entry': ['html'] },
       });
-
-      module('search query validation', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
-          permissions: {
-            '*': ['read'],
-            '@node-test_realm:localhost': ['read', 'realm-owner'],
-          },
-          realmURL: testRealmURLFor('test/'),
-          onRealmSetup,
-        });
-
-        test('400 with invalid query schema', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({ invalid: 'query structure' });
-
-          assert.strictEqual(response.status, 400, 'HTTP 400 status');
-          assert.ok(
-            response.body.errors[0].message.includes('Invalid query'),
-            'Error message indicates invalid query',
-          );
-        });
-
-        test('400 with invalid filter logic', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                badOperator: { firstName: 'Mango' },
-              },
-            });
-
-          assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        });
-      });
+      let pinnedJane = pinned.body.data.find(
+        (e: { id: string }) => e.id === janeId,
+      );
+      assert.deepEqual(
+        pinnedJane.relationships.html,
+        { data: [] },
+        'matched, no rendering yet',
+      );
+      assert.strictEqual(pinnedJane.relationships.item, undefined);
     });
 
-    module("'in' filter (postgres)", function () {
-      let testRealm: Realm;
-      let request: SuperTest<Test>;
-      let realmHref: string;
-      let searchPath: string;
-
-      function onRealmSetup(args: {
-        testRealm: Realm;
-        request: SuperTest<Test>;
-      }) {
-        testRealm = args.testRealm;
-        request = args.request;
-        let realmURL = new URL(testRealm.url);
-        realmHref = realmURL.href;
-        searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search`;
-      }
-
-      function personType() {
-        return {
-          module: `${realmHref}person`,
-          name: 'Person',
-        };
-      }
-
-      module('public readable realm', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          permissions: {
-            '*': ['read'],
-          },
-          realmURL: testRealmURLFor('in-test/'),
-          fileSystem: {
-            'person.gts': `
-              import { contains, field, CardDef, Component } from 'https://cardstack.com/base/card-api';
-              import StringField from 'https://cardstack.com/base/string';
-              export class Person extends CardDef {
-                static displayName = 'Person';
-                @field firstName = contains(StringField);
-                @field city = contains(StringField);
-                @field cardTitle = contains(StringField, {
-                  computeVia: function (this: Person) {
-                    return this.firstName;
-                  },
-                });
-                static isolated = class Isolated extends Component<typeof this> {
-                  <template><h1><@fields.firstName /></h1></template>
-                };
-              }
-            `,
-            'mango.json': {
-              data: {
-                type: 'card',
-                attributes: { firstName: 'Mango', city: 'Barksville' },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./person'),
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-            'vangogh.json': {
-              data: {
-                type: 'card',
-                attributes: { firstName: 'Van Gogh', city: 'Barksville' },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./person'),
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-            'ringo.json': {
-              data: {
-                type: 'card',
-                attributes: { firstName: 'Ringo', city: 'Waggington' },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./person'),
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-          },
-          onRealmSetup,
-        });
-
-        test(`can filter using 'in' with multiple values`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                in: { firstName: ['Mango', 'Ringo'] },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.body.meta.page.total,
-            2,
-            'total count is correct',
-          );
-          let ids = response.body.data.map((d: any) => d.id).sort();
-          assert.deepEqual(
-            ids,
-            [`${realmHref}mango`, `${realmHref}ringo`],
-            'correct cards returned',
-          );
-        });
-
-        test(`can filter using 'in' with a single value`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                in: { firstName: ['Mango'] },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.body.meta.page.total,
-            1,
-            'total count is correct',
-          );
-          assert.strictEqual(
-            response.body.data[0].id,
-            `${realmHref}mango`,
-            'correct card returned',
-          );
-        });
-
-        test(`can filter using 'in' with an empty array`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                in: { firstName: [] },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.body.meta.page.total,
-            0,
-            'returns no results for empty array',
-          );
-        });
-
-        test(`can filter using 'in' with null values`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                in: { firstName: ['Mango', null] },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          // Mango matches 'Mango', no cards have null firstName
-          assert.ok(
-            response.body.meta.page.total >= 1,
-            'returns at least the matching card',
-          );
-          let ids = response.body.data.map((d: any) => d.id);
-          assert.ok(
-            ids.includes(`${realmHref}mango`),
-            'Mango is in the results',
-          );
-        });
-
-        test(`can filter using 'in' on a different field`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                in: { city: ['Waggington'] },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.body.meta.page.total,
-            1,
-            'total count is correct',
-          );
-          assert.strictEqual(
-            response.body.data[0].id,
-            `${realmHref}ringo`,
-            'correct card returned',
-          );
-        });
-
-        test(`can filter using 'in' with the id field`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                in: {
-                  id: [`${realmHref}mango`, `${realmHref}ringo`],
-                },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.body.meta.page.total,
-            2,
-            'total count is correct',
-          );
-          let ids = response.body.data.map((d: any) => d.id).sort();
-          assert.deepEqual(
-            ids,
-            [`${realmHref}mango`, `${realmHref}ringo`],
-            'correct cards returned by id',
-          );
-        });
-
-        test(`can negate an 'in' filter with 'not'`, async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                on: personType(),
-                not: { in: { firstName: ['Mango', 'Ringo'] } },
-              },
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(
-            response.body.meta.page.total,
-            1,
-            'total count is correct',
-          );
-          assert.strictEqual(
-            response.body.data[0].id,
-            `${realmHref}vangogh`,
-            'correct card returned',
-          );
-        });
+    test('rejects malformed requests', async function (assert) {
+      let badHtmlQuery = await postSearch({
+        filter: personFilter({ htmlQuery: { eq: {} } }),
       });
-    });
+      assert.strictEqual(badHtmlQuery.status, 400);
+      assert.true(
+        badHtmlQuery.body.errors[0].message.includes('unconstrained'),
+      );
 
-    module('numeric sort (postgres)', function () {
-      let testRealm: Realm;
-      let request: SuperTest<Test>;
-      let realmHref: string;
-      let searchPath: string;
+      let badMember = await postSearch({ render: {} });
+      assert.strictEqual(badMember.status, 400);
+      assert.true(
+        badMember.body.errors[0].message.includes('unknown member "render"'),
+      );
 
-      function onRealmSetup(args: {
-        testRealm: Realm;
-        request: SuperTest<Test>;
-      }) {
-        testRealm = args.testRealm;
-        request = args.request;
-        let realmURL = new URL(testRealm.url);
-        realmHref = realmURL.href;
-        searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search`;
-      }
-
-      function bookType() {
-        return {
-          module: `${realmHref}book`,
-          name: 'Book',
-        };
-      }
-
-      module('public readable realm', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          permissions: {
-            '*': ['read'],
-          },
-          realmURL: testRealmURLFor('numeric-sort-test/'),
-          fileSystem: {
-            'book.gts': `
-              import { contains, field, CardDef, Component } from 'https://cardstack.com/base/card-api';
-              import StringField from 'https://cardstack.com/base/string';
-              import NumberField from 'https://cardstack.com/base/number';
-              export class Book extends CardDef {
-                static displayName = 'Book';
-                @field title = contains(StringField);
-                @field editions = contains(NumberField);
-                static isolated = class Isolated extends Component<typeof this> {
-                  <template><h1><@fields.title /></h1></template>
-                };
-              }
-            `,
-            'book-a.json': {
-              data: {
-                type: 'card',
-                attributes: { title: 'Book A', editions: 3 },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./book'),
-                    name: 'Book',
-                  },
-                },
-              },
-            },
-            'book-b.json': {
-              data: {
-                type: 'card',
-                attributes: { title: 'Book B', editions: 200 },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./book'),
-                    name: 'Book',
-                  },
-                },
-              },
-            },
-            'book-c.json': {
-              data: {
-                type: 'card',
-                attributes: { title: 'Book C', editions: 10 },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./book'),
-                    name: 'Book',
-                  },
-                },
-              },
-            },
-          },
-          onRealmSetup,
-        });
-
-        test('sorts by numeric field in correct numeric order (not lexicographic)', async function (assert) {
-          let response = await request
-            .post(searchPath)
-            .set('Accept', 'application/vnd.card+json')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .send({
-              filter: {
-                type: bookType(),
-              },
-              sort: [
-                {
-                  by: 'editions',
-                  on: bookType(),
-                  direction: 'asc',
-                },
-              ],
-            });
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.deepEqual(
-            response.body.data.map((d: any) => d.id),
-            [`${realmHref}book-a`, `${realmHref}book-c`, `${realmHref}book-b`],
-            'books sorted numerically: 3, 10, 200 (not lexicographic "10", "200", "3")',
-          );
-        });
-      });
+      let get = await request
+        .get(searchPath)
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(get.status, 400);
+      assert.true(get.body.errors[0].message.includes('method must be QUERY'));
     });
   });
 });

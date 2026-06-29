@@ -136,7 +136,7 @@ interface Signature {
   Blocks: {};
 }
 
-// The results pane of the search sheet / card chooser. Renders through the v2
+// The results pane of the search sheet / card chooser. Renders through the
 // `<SearchResults>` component family: one instance for the realm search, a
 // nested one for recents (with the live-recents fallback layered in), then hands
 // their yielded `search-entry` streams to `<SheetResults>`, which lays them out
@@ -183,7 +183,7 @@ export default class PanelContent extends Component<Signature> {
     return this.cardResource?.isLoaded ?? false;
   }
 
-  // The v2 `search-entry` query for the main realm search, built from the
+  // The `search-entry` query for the main realm search, built from the
   // shared `Query` builder via `searchEntryWireQueryFromQuery`. Fitted is the
   // default rendering, so no `htmlQuery` override is needed; realms ride
   // alongside. Undefined leaves the search idle (the skip cases: empty search
@@ -206,7 +206,7 @@ export default class PanelContent extends Component<Signature> {
       ),
       realms: this.args.realmFilter.selectedURLs,
       // Cap each realm's results at the focused-section display limit — the
-      // most the sheet ever shows in one section. The v2 search applies
+      // most the sheet ever shows in one section. The search applies
       // `page.size` per realm (so every realm section is still represented) and
       // still reports the full match count in `meta.page.total` (which drives
       // the result-count summary), so this only trims rows the sheet would
@@ -263,7 +263,7 @@ export default class PanelContent extends Component<Signature> {
         cardUrls: this.recentCardUrls,
       };
     }
-    // No selected realm hosts a recent card. The v2 search treats an empty
+    // No selected realm hosts a recent card. The search treats an empty
     // `realms` array as "search every realm", which — with the `cardUrls`
     // constraint still matching them — would resurface recents from realms the
     // user filtered out. Suppress the recents query instead, so a filtered-out

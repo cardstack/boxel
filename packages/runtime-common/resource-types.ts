@@ -30,7 +30,6 @@ export const IconResourceType = 'icon';
 export type Resource =
   | ModuleResource
   | CardResource
-  | PrerenderedCardResource
   | CssResource
   | SearchEntryResource
   | HtmlResource
@@ -194,7 +193,7 @@ export interface HtmlQueryLeaf {
   renderType?: CodeRef;
 }
 
-// One v2 search result. A platform resource — never a userland card — so its
+// One search result. A platform resource — never a userland card — so its
 // relationships cannot collide with user `@field` names. Its `id` is the bare
 // card/file URL, shared with its `item` (`card`/`file-meta`) serialization;
 // `type` is the discriminator. The branches are composition: the `html`
@@ -225,7 +224,7 @@ export interface SearchEntryResource {
   };
 }
 
-// One prerendered rendering of a card/file: a v2 resource whose `id` is the
+// One prerendered rendering of a card/file: a platform resource whose `id` is the
 // (card URL, format, renderType) composite (see `htmlResourceId`), so each
 // rendering of a card — per format × render type — is an independently
 // cacheable/dedupable resource. The scoped CSS it needs travels as
@@ -261,27 +260,6 @@ export type LooseLinkableResource<T extends LinkableResource> = Omit<
 
 export type LooseCardResource = LooseLinkableResource<CardResource>;
 export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
-
-//prerendered cards
-export interface PrerenderedCardResource {
-  id: string;
-  type: 'prerendered-card';
-  attributes: {
-    html: string;
-    cardType?: string;
-    iconHtml?: string;
-    isError?: true;
-  };
-  relationships: {
-    'prerendered-card-css': {
-      data: { id: string }[];
-    };
-  };
-  meta: Partial<Meta>;
-  links?: {
-    self?: string;
-  };
-}
 
 //validation - modules
 export function isModuleResource(resource: any): resource is ModuleResource {
@@ -380,25 +358,6 @@ export function extractRelationshipIds(
     }
   }
   return ids;
-}
-
-//validation - prerendered cards
-export function isPrerenderedCardResource(
-  resource: any,
-): resource is PrerenderedCardResource {
-  if (typeof resource !== 'object' || resource == null) {
-    return false;
-  }
-  if ('id' in resource && typeof resource.id !== 'string') {
-    return false;
-  }
-  if ('type' in resource && resource.type !== 'prerendered-card') {
-    return false;
-  }
-  if ('attributes' in resource && typeof resource.attributes !== 'object') {
-    return false;
-  }
-  return true;
 }
 
 // True when `key` is `fieldName` followed by a plain array index (e.g.

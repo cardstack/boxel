@@ -140,14 +140,14 @@ module('Integration | commands | sync-openrouter-models', function (hooks) {
     return capturedOperations.find((op) => op.href === href);
   }
 
-  test('discovers existing OpenRouterModel slugs through /_search-v2', async function (assert) {
+  test('discovers existing OpenRouterModel slugs through /_search', async function (assert) {
     // The API still lists gpt-4 (slug openai-gpt-4) and introduces a new model
     // (slug google-gemini-pro); the pre-existing legacy-model is absent.
     apiModels = [{ id: 'openai/gpt-4' }, { id: 'google/gemini-pro' }];
 
     let result = await runSync();
 
-    // The existing, still-listed model is discovered via v2, so it is updated
+    // The existing, still-listed model is discovered via search, so it is updated
     // in place rather than re-added.
     assert.strictEqual(
       opFor('OpenRouterModel/openai-gpt-4.json')?.op,
@@ -162,8 +162,8 @@ module('Integration | commands | sync-openrouter-models', function (hooks) {
       'previously unknown model resolves to an add',
     );
 
-    // The existing model the API no longer lists is discovered via v2 and
-    // marked deprecated — this op only exists because v2 surfaced its slug.
+    // The existing model the API no longer lists is discovered via search and
+    // marked deprecated — this op only exists because the search surfaced its slug.
     let legacyOp = opFor('OpenRouterModel/legacy-model.json');
     assert.strictEqual(
       legacyOp?.op,
@@ -177,7 +177,7 @@ module('Integration | commands | sync-openrouter-models', function (hooks) {
 
     assert.ok(
       result.status.includes('1 deprecated'),
-      'status reports the one deprecated model discovered via v2',
+      'status reports the one deprecated model discovered via search',
     );
   });
 });

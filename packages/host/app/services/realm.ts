@@ -627,7 +627,14 @@ class RealmResource {
         this._publishingRealms.push(url);
 
         try {
-          return await this.realmServer.publishRealm(this.url, url);
+          let result = await this.realmServer.publishRealm(this.url, url);
+          // `_publish-realm` returns 202 before the published realm is
+          // indexed. Keep the "Publishing…" state until the realm passes its
+          // readiness check so "Open Site" only enables once the page is
+          // actually viewable. Poll the URL the server actually published to —
+          // a server-side domain override can make that differ from `url`.
+          await this.realmServer.waitForRealmReady(result.publishedRealmURL);
+          return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
           throw error; // Re-throw so Promise.allSettled can capture it as rejected

@@ -63,6 +63,7 @@ import {
   removeRecentCards,
   assertRecentFileURLs,
 } from '../../helpers/recent-files-cards';
+import { searchCardsForTest } from '../../helpers/search-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
@@ -1554,14 +1555,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'recent file count is correct',
       );
 
-      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Person',
+      let { data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Person',
+            },
           },
         },
-      });
+      );
       assert.strictEqual(results.length, 0);
 
       await openFileInPlayground('person.gts', testRealmURL, {
@@ -1585,14 +1589,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-option-index]')
         .exists({ count: 1 }, 'new card shows up in instance chooser dropdown');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Person',
+      ({ data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Person',
+            },
           },
         },
-      }));
+      ));
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, newCardId);
     });
@@ -1600,14 +1607,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('does not autogenerate card instance if one exists in the realm but is not in recent cards', async function (assert) {
       removeRecentFiles();
       const cardId = `${testRealmURL}Person/pet-mango`;
-      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Pet',
+      let { data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Pet',
+            },
           },
         },
-      });
+      );
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
 
@@ -1624,14 +1634,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').exists({ count: 1 });
       assert.dom('[data-option-index="0"]').containsText('Mango');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Pet',
+      ({ data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Pet',
+            },
           },
         },
-      }));
+      ));
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
     });

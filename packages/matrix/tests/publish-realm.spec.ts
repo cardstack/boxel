@@ -280,6 +280,9 @@ test.describe('Publish realm', () => {
     page,
     request,
   }) => {
+    // Two full publish+index cycles plus a readiness wait — give this E2E
+    // flow more than the default per-attempt budget.
+    test.setTimeout(120_000);
     // CS-11043 regression net. The bug was: a republish reported success
     // server-side but the published URL kept serving the previous publish's
     // rendered HTML, sometimes for tens of hours. Every existing
@@ -463,15 +466,24 @@ test.describe('Publish realm', () => {
       .click();
     let secondTab = await secondTabPromise;
     await secondTab.waitForLoadState();
-    // Generous retry budget: if waitForResponse above was downgraded
-    // to null, the publish may not yet be done by the time we land on
-    // the published URL. The assertion retries until the sentinel
-    // appears or this budget expires, which gives slow republishes
-    // room to land without flapping the test.
-    await expect(secondTab.locator('[data-test-sentinel-output]')).toHaveText(
-      updatedSentinel,
-      { timeout: 120_000 },
-    );
+    // The publish handler returns 202 before the reindex finishes, and a tab
+    // that loaded before it landed won't re-fetch on its own — so reload until
+    // the published URL serves the updated sentinel. The retry budget gives the
+    // background reindex room to settle.
+    await expect
+      .poll(
+        async () => {
+          await secondTab.reload({ waitUntil: 'domcontentloaded' });
+          return (
+            (await secondTab
+              .locator('[data-test-sentinel-output]')
+              .textContent()
+              .catch(() => null)) ?? ''
+          );
+        },
+        { timeout: 60_000, intervals: [2_000] },
+      )
+      .toBe(updatedSentinel);
     await expect(secondTab.locator('body')).not.toContainText(initialSentinel);
     await secondTab.close();
     await page.bringToFront();

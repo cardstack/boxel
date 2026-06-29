@@ -10,8 +10,10 @@
 # conversion. If a realm regains a virtual alias, add a mapping to MAPPINGS
 # below and it is picked up automatically.
 #
-# Pass-through flags (--dry-run, --json-only, --exclude <dir>) are forwarded to
-# each underlying run; each run writes its own rollback .patch.
+# Pass-through flags (--dry-run, --json-only, --modules-only, --exclude <dir>)
+# are forwarded to each underlying run; each run writes its own rollback .patch.
+# --json-only converts card JSON, --modules-only converts .gts/.ts import
+# specifiers, and neither converts both.
 #
 # --persistent <root> targets exactly the realm directories the server mounts
 # (the REALM_DIRS list below, joined to <root>) instead of taking explicit
@@ -30,6 +32,9 @@
 #
 #   # Apply it
 #   ./migrate-realms-to-rri.sh --json-only --persistent /persistent
+#
+#   # Rewrite .gts/.ts import specifiers (separate pass)
+#   ./migrate-realms-to-rri.sh --modules-only --persistent /persistent
 #
 #   # Or target explicit directories
 #   ./migrate-realms-to-rri.sh --json-only /persistent/base /persistent/realms
@@ -64,7 +69,7 @@ DIRS=()
 PERSISTENT_ROOT=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dry-run|--json-only)
+    --dry-run|--json-only|--modules-only)
       FLAGS+=("$1")
       shift
       ;;

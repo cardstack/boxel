@@ -1106,8 +1106,10 @@ export class RealmServer {
           // prerender tab, or any in-DevTools fetch) get a response
           // whose `headers.get('ETag')` is `null` even though the
           // server emitted one — making the entire revalidation
-          // protocol invisible to JS.
-          exposeHeaders: 'ETag',
+          // protocol invisible to JS. Location/Retry-After are likewise
+          // non-safelisted; expose them so a cross-origin client can read
+          // the async-publish status monitor target off the 202 response.
+          exposeHeaders: 'ETag, Location, Retry-After',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its

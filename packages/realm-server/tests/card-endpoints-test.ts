@@ -17,11 +17,11 @@ import {
   ri,
   baseRRI,
   rri,
+  searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
@@ -2452,26 +2452,31 @@ module(basename(import.meta.filename), function () {
             'file contents are correct',
           );
 
-          let query: Query = {
-            filter: {
-              on: {
-                module: rri(`${testRealmHref}person`),
-                name: 'Person',
-              },
-              eq: {
-                firstName: 'Van Gogh',
-              },
-            },
-          };
-
           response = await request
             .post('/_search')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .send({ ...query });
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: {
+                      module: rri(`${testRealmHref}person`),
+                      name: 'Person',
+                    },
+                    eq: { firstName: 'Van Gogh' },
+                  },
+                },
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(response.body.data.length, 1, 'found one card');
+          assert.strictEqual(
+            response.body.data.length,
+            1,
+            'found one search result',
+          );
         });
 
         test('PATCH preserves nested contains attribute values on disk', async function (assert) {
@@ -4614,7 +4619,7 @@ module(basename(import.meta.filename), function () {
       let favoriteSearchURL = new URL(favoriteSearchLink);
       assert.strictEqual(
         favoriteSearchURL.href.split('?')[0],
-        new URL('_search-v2', consumerRealmURL).href,
+        new URL('_search', consumerRealmURL).href,
         'favorite relationship search link targets consumer realm',
       );
       let favoriteQueryParams = parseSearchQuery(favoriteSearchURL);
@@ -4696,7 +4701,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         matchesSearchURL.href.split('?')[0],
-        new URL('_search-v2', providerRealmURL).href,
+        new URL('_search', providerRealmURL).href,
         'matches relationship search link targets provider realm',
       );
       let matchesQueryParams = parseSearchQuery(matchesSearchURL);
@@ -4749,7 +4754,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         failingSearchURL.href.split('?')[0],
-        new URL('_search-v2', UNREACHABLE_REALM_URL).href,
+        new URL('_search', UNREACHABLE_REALM_URL).href,
         'failingMatches search link targets unreachable realm',
       );
       let failingQueryParams = parseSearchQuery(failingSearchURL);

@@ -17,11 +17,12 @@ import type RealmService from '../services/realm';
 import type { PublishabilityViolation } from '../services/realm';
 
 // Publishes a realm to one or more destinations (subdirectory Boxel Spaces or
-// custom domains). The command resolves once the realm-server accepts each
-// publish request and reports per-target status. Indexed-and-viewable
-// readiness is not awaited here: realm `index` events aren't delivered to the
-// run-command/prerender context, so a caller that needs the published realm
-// ready polls its `_readiness-check` over HTTP instead.
+// custom domains) and reports per-target status. `_publish-realm` returns 202
+// before the published realm is indexed, so `realm.publish` polls each
+// target's `_readiness-check` over HTTP before resolving — the command
+// thus completes only once every published realm is indexed and viewable.
+// (Readiness is polled over HTTP rather than awaited via realm `index` events,
+// which aren't delivered to the run-command/prerender context.)
 export default class PublishRealmCommand extends HostBaseCommand<
   typeof BaseCommandModule.PublishRealmInput,
   typeof BaseCommandModule.PublishRealmResult

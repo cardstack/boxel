@@ -56,6 +56,22 @@ const baselineDelta = (entry) => {
   return entry?.delta_mb;
 };
 
+// The largest delta the module has produced in the recent window. The hard
+// (build-blocking) gate measures the regression from this ceiling, not the
+// mean: some modules legitimately swing run-to-run by >100MB because their
+// post-GC boundary delta depends on whether the settle-GC fully drains a large
+// transient before the measurement. Such a module must not hard-fail on a value
+// it has already exhibited — only on one that clears its observed ceiling by the
+// hard threshold. When a module's variance is low (ceiling ≈ mean) this is
+// equivalent to the mean-based gate. Falls back to the pre-rolling-window
+// `delta_mb` shape so older baseline files keep working until main upgrades them.
+const baselineCeiling = (entry) => {
+  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
+    return Math.max(...entry.samples);
+  }
+  return entry?.delta_mb;
+};
+
 const fmtSamples = (entry) =>
   Array.isArray(entry?.samples) && entry.samples.length > 0
     ? `[${entry.samples.map((s) => s.toFixed(1)).join(', ')}]`
@@ -87,13 +103,21 @@ for (const [mod, data] of Object.entries(current)) {
   // Only flag increases
   if (diff <= 0) continue;
 
+  // The soft (warning, non-blocking) gate stays anchored to the mean so a module
+  // trending upward still surfaces early. The hard (build-blocking) gate is
+  // anchored to the recent ceiling: it fires only when the current run clears
+  // the highest recent sample by the hard threshold, so a high-variance module
+  // can't be blocked by a value inside its own observed range.
+  const ceiling = Math.max(baselineCeiling(base) ?? baseDelta, 0);
+  const hardDiff = data.delta_mb - ceiling;
+
   const softThreshold = Math.max(SOFT_ABSOLUTE_MB, effectiveBase * SOFT_RELATIVE);
   const hardThreshold = Math.max(HARD_ABSOLUTE_MB, effectiveBase * HARD_RELATIVE);
 
   const pct = effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
   const samples = fmtSamples(base);
 
-  if (diff >= hardThreshold) {
+  if (hardDiff >= hardThreshold) {
     failures.push({
       mod,
       baseline: effectiveBase,

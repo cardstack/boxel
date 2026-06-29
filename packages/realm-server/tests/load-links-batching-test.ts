@@ -7,7 +7,10 @@ import type {
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  searchCardsForTest,
+} from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4451/test/');
 const NUM_SOURCES = 50;
@@ -128,7 +131,8 @@ module(basename(import.meta.filename), function () {
           return originalExecute(sql, opts);
         };
 
-        let result = await realm.realmIndexQueryEngine.searchCards(
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
           {
             filter: {
               type: { module: rri(`${testRealm}source`), name: 'Source' },
