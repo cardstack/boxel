@@ -142,6 +142,11 @@ const RRI_SYNTHETIC_ORIGIN = 'https://rri.invalid';
 //   - a relative reference is joined onto the base. A URL-form base uses the
 //     native URL parser; a prefix-form base borrows the parser via a synthetic
 //     origin, then the `@scope/name` namespace is restored.
+//   - a `$REALM/`-rooted reference resolves against the realm root. Mapping-free,
+//     the realm root is derivable only from a prefix-form base, where it is the
+//     `@scope/name` namespace. (A URL-form base implies an unmapped realm, where
+//     resolving the realm root requires realm mappings — `resolveRRI` likewise
+//     has no realm root to resolve against there.)
 // Falls back to the reference unchanged when there is no usable base.
 export function resolveRRIReference(
   reference: string,
@@ -158,6 +163,17 @@ export function resolveRRIReference(
     return reference;
   }
   let base = relativeTo instanceof URL ? relativeTo.href : relativeTo;
+  // `$REALM/` — resolve against the realm root (the `@scope/name` namespace of a
+  // prefix-form base). Must run before ordinary path joining, which would treat
+  // `$REALM` as a path segment.
+  if (reference.startsWith('$REALM/')) {
+    let path = reference.slice('$REALM/'.length);
+    let parts = base.split('/');
+    if (parts.length >= 2 && parts[0].startsWith('@')) {
+      return `${parts[0]}/${parts[1]}/${path}`;
+    }
+    return reference;
+  }
   if (base.startsWith('http://') || base.startsWith('https://')) {
     return new URL(reference, base).href;
   }
