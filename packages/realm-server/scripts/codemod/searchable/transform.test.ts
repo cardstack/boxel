@@ -23,7 +23,7 @@ function run(
   });
 }
 
-test('by default KEEPS isUsed (old gen still honors it) and adds searchable', () => {
+test('by default KEEPS isUsed (store-driven generation honors it) and adds searchable', () => {
   let src = `import { field, linksTo, CardDef } from './card-api';
 export class Author extends CardDef {
   @field blog = linksTo(Blog, { isUsed: true });

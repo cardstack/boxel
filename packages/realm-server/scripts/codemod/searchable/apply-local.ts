@@ -49,7 +49,7 @@ import {
 
 // Routes that resolve to a field on one of these platform-root types are left
 // shallow (their declaring def is the universal base, so annotating it deepens
-// every card's search doc). The only such field today is CardDef.cardInfo.
+// every card's search doc). In practice that is CardDef.cardInfo.
 const PLATFORM_ROOT_CLASSES = new Set(['CardDef', 'FieldDef', 'BaseDef']);
 
 interface Args {

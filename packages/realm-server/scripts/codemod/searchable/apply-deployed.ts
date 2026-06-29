@@ -11,7 +11,7 @@
 //
 // DRY-RUN by default — no realm is modified. The DB read that produced the
 // derivation already happened (read-only). This script only pulls (read) +
-// reports, until --write is given. boxel-cli reads BOXEL_REALM_SECRET_SEED from
+// reports; it writes nothing unless --write is given. boxel-cli reads BOXEL_REALM_SECRET_SEED from
 // the environment; source ~/.boxel-secrets/<env>.env before running so the seed
 // stays out of argv/logs.
 

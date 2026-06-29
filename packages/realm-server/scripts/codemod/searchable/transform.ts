@@ -91,12 +91,13 @@ export interface TransformOptions {
   // Returns the policy for a class by its declared name, or undefined when the
   // caller has nothing to apply for it.
   policyForClass: (className: string | null) => ClassPolicy | undefined;
-  // Strip the `isUsed` option. OFF by default: the old (still-authoritative)
-  // search-doc generation honors `isUsed` to force non-rendered links into the
-  // doc, so stripping it before the cutover would shallow those links on the
-  // next reindex. Adding `searchable` is inert under old gen, so we add now and
-  // strip `isUsed` only when the cutover removes the `usedLinksToFieldsOnly`
-  // logic (turn this on then).
+  // Strip the `isUsed` option. OFF by default: store-driven search-doc
+  // generation honors `isUsed` (via `usedLinksToFieldsOnly`) to force
+  // non-rendered links into the doc, so stripping it while generation still
+  // reads `isUsed` drops those links from the doc on the next reindex. Adding
+  // `searchable` does not affect store-driven generation, so it is safe to add
+  // regardless; enable this only once search-doc generation is driven by
+  // `searchable` rather than `isUsed`.
   stripIsUsed?: boolean;
 }
 
@@ -299,7 +300,7 @@ function rewriteFieldProperty(
   let applied: AppliedChange = { className, fieldName, fieldType };
   let changed = false;
 
-  // 1) Strip isUsed — only when explicitly enabled (the cutover); see
+  // 1) Strip isUsed — only when explicitly enabled; see
   //    TransformOptions.stripIsUsed.
   if (hasOptions && stripIsUsed) {
     let before = optionsArg.properties.length;
