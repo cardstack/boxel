@@ -21,6 +21,7 @@ import handlePublishRealm from './handlers/handle-publish-realm.ts';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
 import handleArchiveRealm from './handlers/handle-archive-realm.ts';
 import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
+import handleArchivedRealms from './handlers/handle-archived-realms.ts';
 import {
   healthCheck,
   jwtMiddleware,
@@ -277,6 +278,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_unarchive-realm',
     jwtMiddleware(args.realmSecretSeed),
     handleUnarchiveRealm(args),
+  );
+  router.get(
+    '/_archived-realms',
+    jwtMiddleware(args.realmSecretSeed),
+    handleArchivedRealms(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with
