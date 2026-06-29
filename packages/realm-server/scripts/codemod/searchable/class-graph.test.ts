@@ -113,6 +113,17 @@ test('pruneRoute keeps the full route when a target type is not loaded', () => {
   assert.equal(r.reason, 'unvalidated');
 });
 
+test('pruneRoute drops a bare-self route on a contains/containsMany field', () => {
+  let g = graph();
+  // Headquarters.city = contains(StringField): a bare `city` route is inert
+  // (contained values are always in the doc) — drop it. This is the
+  // schema-free derivation mistaking a contained value with an `id`-named
+  // field for a link.
+  let r = pruneRoute(g, 'crm/headquarters/Headquarters', 'city');
+  assert.equal(r.kept, null);
+  assert.equal(r.reason, 'contains-self');
+});
+
 test('pruneRoute truncates a nested polymorphic crossing to the concrete prefix', () => {
   let g = graph();
   // owner = linksTo(Company); add a polymorphic field on Company via a route

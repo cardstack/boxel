@@ -266,7 +266,13 @@ function fieldInfoOf(
   return graph.get(decl.relKey)!.fields.get(fieldName);
 }
 
-export type PruneReason = 'polymorphic' | 'unresolved' | 'unvalidated';
+export type PruneReason =
+  | 'polymorphic'
+  | 'unresolved'
+  | 'unvalidated'
+  | 'contains-self';
+
+const CONTAINS_FNS = new Set(['contains', 'containsMany']);
 
 export interface PruneResult {
   kept: string | null; // the valid prefix route, or null if nothing survives
@@ -284,6 +290,7 @@ export function pruneRoute(
   let segments = route.split('.');
   let curType: string | undefined = rootRelKey;
   let kept: string[] = [];
+  let reason: PruneReason | undefined;
   for (let i = 0; i < segments.length; i++) {
     let seg = segments[i];
     if (!curType) {
@@ -292,21 +299,18 @@ export function pruneRoute(
       // KEEP the rest of the route to preserve parity, and flag for review.
       // Only CONFIRMED polymorphic / non-declared segments are ever pruned.
       for (let j = i; j < segments.length; j++) kept.push(segments[j]);
-      return { kept: kept.join('.'), reason: 'unvalidated' };
+      reason = 'unvalidated';
+      break;
     }
     let fi = fieldInfoOf(graph, curType, seg);
     if (!fi) {
       // `curType` IS a loaded class but doesn't declare `seg` → subtype bloat.
-      return {
-        kept: kept.length ? kept.join('.') : null,
-        reason: 'unresolved',
-      };
+      reason = 'unresolved';
+      break;
     }
     if (fi.polymorphic) {
-      return {
-        kept: kept.length ? kept.join('.') : null,
-        reason: 'polymorphic',
-      };
+      reason = 'polymorphic';
+      break;
     }
     kept.push(seg);
     curType =
@@ -314,5 +318,17 @@ export function pruneRoute(
         ? fi.targetRelKey
         : undefined;
   }
-  return { kept: kept.join('.') };
+  // A bare-self route on a contains/containsMany field is inert: contained
+  // values are always in the search doc, so `searchable` on such a field only
+  // means something via a DEEPER route (a tail). A route that is (or truncated
+  // down to) just the bare contains field is the schema-free derivation
+  // mistaking a contained composite that carries an `id`-named field for a
+  // link — drop it. Checked at every exit (a deeper route can truncate here).
+  if (kept.length === 1) {
+    let headFi = fieldInfoOf(graph, rootRelKey, kept[0]);
+    if (headFi && CONTAINS_FNS.has(headFi.fieldType)) {
+      return { kept: null, reason: 'contains-self' };
+    }
+  }
+  return { kept: kept.length ? kept.join('.') : null, reason };
 }

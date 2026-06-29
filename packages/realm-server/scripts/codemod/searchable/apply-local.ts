@@ -45,6 +45,11 @@ import {
   type SourceModule,
 } from './class-graph.ts';
 
+// Routes that resolve to a field on one of these platform-root types are left
+// shallow (their declaring def is the universal base, so annotating it deepens
+// every card's search doc). The only such field today is CardDef.cardInfo.
+const PLATFORM_ROOT_CLASSES = new Set(['CardDef', 'FieldDef', 'BaseDef']);
+
 interface Args {
   realmRoot: string;
   realmUrls: string[];
@@ -97,10 +102,19 @@ function relModulePath(root: string, file: string): string {
     .replace(/\.(gts|ts)$/, '');
 }
 
-// relKey (`<relpath>/<ClassName>`) -> unioned routes, scoped to realm URLs.
+// relKey (`<relpath>/<ClassName>`) -> unioned routes for this realm. Matching is
+// by DEFKEY PREFIX, not the row's realm_url: a def's internal key (`types[0]`)
+// can use either the realm's https URL OR a `@cardstack/<realm>/` canonical
+// prefix (base / catalog / skills register the latter), and the same canonical
+// def is shared across every realm that instantiates it. So pass every prefix
+// form a realm's defs can carry (its staging + prod URLs and, for the platform
+// realms, the `@cardstack/<realm>/` form); each def is stripped of whichever
+// prefix it matches. A def whose key matches none of this realm's prefixes
+// (e.g. an `@cardstack/base/...` def instantiated inside catalog) is left to its
+// own realm's run.
 function buildRawRoutes(
   derivations: string[],
-  realmUrls: Set<string>,
+  prefixes: string[],
 ): Map<string, Set<string>> {
   let routesByRelKey = new Map<string, Set<string>>();
   for (let path of derivations) {
@@ -108,9 +122,9 @@ function buildRawRoutes(
       defs: DerivedDef[];
     };
     for (let def of payload.defs) {
-      if (!realmUrls.has(def.realmURL)) continue;
-      if (!def.defKey.startsWith(def.realmURL)) continue;
-      let relKey = def.defKey.slice(def.realmURL.length);
+      let prefix = prefixes.find((p) => def.defKey.startsWith(p));
+      if (!prefix) continue;
+      let relKey = def.defKey.slice(prefix.length);
       let set = routesByRelKey.get(relKey);
       if (!set) routesByRelKey.set(relKey, (set = new Set()));
       for (let r of def.routes) set.add(r);
@@ -155,7 +169,7 @@ async function main(): Promise<void> {
   let graph = buildClassGraph(modules);
 
   // 2) Raw observed routes per leaf def, then HOIST to the declaring class.
-  let raw = buildRawRoutes(args.derivations, new Set(args.realmUrls));
+  let raw = buildRawRoutes(args.derivations, args.realmUrls);
   let finalRoutes = new Map<string, Set<string>>();
   let noLocalClass: { relKey: string; fields: Record<string, unknown> }[] = [];
   let platformInherited: { leaf: string; route: string; base: string }[] = [];
@@ -176,7 +190,21 @@ async function main(): Promise<void> {
         ? route.slice(0, route.indexOf('.'))
         : route;
       let decl = findDeclaringClass(graph, leafRelKey, head);
-      if (decl.kind === 'local') {
+      if (
+        decl.kind === 'local' &&
+        PLATFORM_ROOT_CLASSES.has(graph.get(decl.relKey)!.className)
+      ) {
+        // The head field is declared by a platform-root type (CardDef's
+        // `cardInfo`, etc.). Annotating it deepens EVERY card's search doc — a
+        // platform-wide blast radius we deliberately leave shallow (deepen later
+        // via a base edit + reindex if ever wanted). Holds even when processing
+        // base itself, where CardDef is a local class.
+        platformInherited.push({
+          leaf: leafRelKey,
+          route,
+          base: graph.get(decl.relKey)!.className,
+        });
+      } else if (decl.kind === 'local') {
         let set = finalRoutes.get(decl.relKey);
         if (!set) finalRoutes.set(decl.relKey, (set = new Set()));
         set.add(route);
