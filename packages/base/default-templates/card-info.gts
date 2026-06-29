@@ -200,7 +200,8 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               {{on 'click' this.toggleThumbnailEditor}}
               data-test-toggle-thumbnail-editor
             >
-              Change Thumbnail
+              Change
+              {{#unless @hideThemeChooser}}Theme & {{/unless}}Thumbnail
             </Button>
           </div>
         </:label>
@@ -240,10 +241,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             @icon={{ImageIcon}}
             data-test-field='cardInfo-thumbnailURL'
           >
-            <div
-              class='thumbnail-picker'
-              data-thumbnail-picker-controls
-            >
+            <div class='thumbnail-picker' data-thumbnail-picker-controls>
               <div class='thumbnail-picker-inputs'>
                 <span
                   class='thumbnail-picker-input-slot'
