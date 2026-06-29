@@ -138,11 +138,24 @@ export async function fetchUserPermissions(
   args: {
     userId: string;
     onlyOwnRealms?: boolean;
+    // Archived realms are sealed: by default they're omitted from this
+    // enumeration so _realm-auth, multi-realm authorization, the indexer
+    // sweep, etc. see only active realms. Set true to include them.
+    // The archive-management endpoints reach archived realms by URL via
+    // fetchRealmPermissions / fetchArchivedRealmsForOwner instead, so
+    // they bypass this filter and don't need the opt-in.
+    includeArchived?: boolean;
   },
 ): Promise<{
   [realm: string]: RealmAction[];
 }> {
-  const { userId, onlyOwnRealms = false } = args;
+  const { userId, onlyOwnRealms = false, includeArchived = false } = args;
+  // Render the archive predicate inline rather than appending a fragment:
+  // the `false` branch's UNION applies the filter to both arms, so a
+  // single composable expression keeps the two arms in sync.
+  const excludeArchivedSql = includeArchived
+    ? ''
+    : `AND realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)`;
   let permissions: {
     realm_url: string;
     read: boolean;
@@ -156,7 +169,8 @@ export async function fetchUserPermissions(
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
       `AND realm_owner = true
-       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
+       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+       ${excludeArchivedSql}`,
     ])) as {
       realm_url: string;
       read: boolean;
@@ -170,12 +184,14 @@ export async function fetchUserPermissions(
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
       `AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+       ${excludeArchivedSql}
        UNION
        SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
        AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
       param(userId),
       `)
-       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
+       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+       ${excludeArchivedSql}`,
     ])) as {
       realm_url: string;
       read: boolean;
