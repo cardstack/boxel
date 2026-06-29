@@ -4,6 +4,10 @@ import { RealmPaths, logger } from './index.ts';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
+// Thrown at the realm request boundary when a request targets an archived
+// (sealed) realm. Surfaced as a 403 carrying an "archived" marker so the
+// client can render the sealed state rather than a generic forbidden error.
+export class ArchivedRealmError extends Error {}
 // A `const` object (rather than a TS `enum`) so the declaration is
 // erasable and runs under Node's native `--experimental-strip-types`.
 export const AuthenticationErrorMessages = {

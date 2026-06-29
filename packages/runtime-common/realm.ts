@@ -60,6 +60,7 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
+  isRealmArchived,
   baseRealm,
   maybeURL,
   insertPermissions,
@@ -112,6 +113,7 @@ import {
 import { transpileJS } from './transpile.ts';
 import type { Method, RouteTable } from './router.ts';
 import {
+  ArchivedRealmError,
   AuthenticationError,
   AuthenticationErrorMessages,
   AuthorizationError,
@@ -2767,6 +2769,28 @@ export class Realm {
     try {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
+        // An archived realm is sealed for everyone, owner included: once a
+        // caller is authorized, every external content request is
+        // short-circuited with 403 (archived). The seal runs AFTER
+        // checkPermission so an unauthenticated or unauthorized caller to a
+        // private realm gets the normal 401/403 and never learns the realm
+        // exists or is archived — only callers who could otherwise reach the
+        // content see the sealed response. A public realm's readers are
+        // authorized by checkPermission, so they do see the seal (the realm's
+        // existence is already public). The seal is method-agnostic, so reads
+        // and writes are blocked by this one check. The operational
+        // `_readiness-check` (the realm's only public endpoint) is exempt so
+        // health probes don't read an archived realm as down. The
+        // archive-management endpoints live on the realm SERVER router and
+        // never reach this boundary, so they stay reachable. Read fresh (no
+        // memoization) for the same reason createRequestContext does: a peer
+        // replica's archive/unarchive must take effect here without a restart.
+        if (
+          !lookupRouteTable(this.#publicEndpoints, this.paths, request) &&
+          (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
+        ) {
+          throw new ArchivedRealmError(`Realm ${this.url} is archived`);
+        }
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -2786,6 +2810,34 @@ export class Realm {
           init: {
             status: 401,
             headers: {
+              'X-Boxel-Realm-Url': requestContext.realm.url,
+            },
+          },
+          requestContext,
+        });
+      }
+
+      if (e instanceof ArchivedRealmError) {
+        // 403 (not 404) carrying an "archived" marker — both a dedicated
+        // header and a JSON:API error with a stable `code` — so the client can
+        // distinguish a sealed realm from a generic forbidden response and
+        // render the right message.
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '403',
+                code: 'archived',
+                title: 'Realm Archived',
+                detail: e.message,
+              },
+            ],
+          }),
+          init: {
+            status: 403,
+            headers: {
+              'content-type': SupportedMimeType.JSONAPI,
+              'X-Boxel-Realm-Archived': 'true',
               'X-Boxel-Realm-Url': requestContext.realm.url,
             },
           },
