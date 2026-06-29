@@ -8,6 +8,7 @@ import {
   buildClassGraph,
   findDeclaringClass,
   pruneRoute,
+  isCardDef,
   type SourceModule,
 } from './class-graph.ts';
 
@@ -57,9 +58,53 @@ const PORTFOLIO = mod(
    }`,
 );
 
+const BRAND_GUIDE = mod(
+  'brand-guide',
+  `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
+   import StringField from 'https://cardstack.com/base/string';
+   export default class BrandGuide extends CardDef {
+     @field tagline = contains(StringField);
+     @field owner = linksTo(Company);
+   }`,
+);
+const NOTE_FIELD = mod(
+  'note-field',
+  `import { field, contains, FieldDef } from 'https://cardstack.com/base/card-api';
+   import StringField from 'https://cardstack.com/base/string';
+   export class NoteField extends FieldDef {
+     @field text = contains(StringField);
+   }`,
+);
+
 function graph() {
   return buildClassGraph([CONTACT, CUSTOMER, COMPANY, HQ, PORTFOLIO]);
 }
+
+function graphPlus() {
+  return buildClassGraph([
+    CONTACT,
+    CUSTOMER,
+    COMPANY,
+    HQ,
+    PORTFOLIO,
+    BRAND_GUIDE,
+    NOTE_FIELD,
+  ]);
+}
+
+test('default-exported class is keyed by export name `default`', () => {
+  let g = graphPlus();
+  assert.ok(g.has('brand-guide/default'), 'keyed as <module>/default');
+  // and aliased under its local name for same-realm refs
+  assert.ok(g.has('brand-guide/BrandGuide'), 'local-name alias present');
+});
+
+test('isCardDef: CardDef chain true, FieldDef chain false', () => {
+  let g = graphPlus();
+  assert.equal(isCardDef(g, 'brand-guide/default'), true);
+  assert.equal(isCardDef(g, 'crm/customer/Customer'), true); // extends Contact extends CardDef
+  assert.equal(isCardDef(g, 'note-field/NoteField'), false);
+});
 
 test('findDeclaringClass hoists an inherited field to its declaring class', () => {
   let g = graph();

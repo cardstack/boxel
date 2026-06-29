@@ -42,6 +42,7 @@ import {
   buildClassGraph,
   findDeclaringClass,
   pruneRoute,
+  isCardDef,
   type SourceModule,
 } from './class-graph.ts';
 
@@ -115,8 +116,12 @@ function relModulePath(root: string, file: string): string {
 function buildRawRoutes(
   derivations: string[],
   prefixes: string[],
-): Map<string, Set<string>> {
+): { routesByRelKey: Map<string, Set<string>>; instanceRelKeys: Set<string> } {
   let routesByRelKey = new Map<string, Set<string>>();
+  // Every def of this realm that HAD indexed instances (even if all its
+  // relationships stayed shallow → empty routes). Used to tell a shallow-but-
+  // observed def (leave alone) from a zero-instance def (default to depth-1).
+  let instanceRelKeys = new Set<string>();
   for (let path of derivations) {
     let payload = JSON.parse(readFileSync(path, 'utf8')) as {
       defs: DerivedDef[];
@@ -125,12 +130,14 @@ function buildRawRoutes(
       let prefix = prefixes.find((p) => def.defKey.startsWith(p));
       if (!prefix) continue;
       let relKey = def.defKey.slice(prefix.length);
+      instanceRelKeys.add(relKey);
+      if (def.routes.length === 0) continue;
       let set = routesByRelKey.get(relKey);
       if (!set) routesByRelKey.set(relKey, (set = new Set()));
       for (let r of def.routes) set.add(r);
     }
   }
-  return routesByRelKey;
+  return { routesByRelKey, instanceRelKeys };
 }
 
 function gitDiff(original: string, updated: string, label: string): string {
@@ -169,7 +176,10 @@ async function main(): Promise<void> {
   let graph = buildClassGraph(modules);
 
   // 2) Raw observed routes per leaf def, then HOIST to the declaring class.
-  let raw = buildRawRoutes(args.derivations, args.realmUrls);
+  let { routesByRelKey: raw, instanceRelKeys } = buildRawRoutes(
+    args.derivations,
+    args.realmUrls,
+  );
   let finalRoutes = new Map<string, Set<string>>();
   let noLocalClass: { relKey: string; fields: Record<string, unknown> }[] = [];
   let platformInherited: { leaf: string; route: string; base: string }[] = [];
@@ -260,14 +270,24 @@ async function main(): Promise<void> {
 
   for (let mod of modules) {
     let policyForClass = (
-      className: string | null,
+      exportName: string | null,
     ): ClassPolicy | undefined => {
-      if (!className) return undefined;
-      let relKey = `${mod.modPath}/${className}`;
+      if (!exportName) return undefined;
+      let relKey = `${mod.modPath}/${exportName}`;
       let routes = prunedRoutes.get(relKey);
-      if (!routes) return undefined;
-      appliedRelKeys.add(relKey);
-      return { observed: routesToFieldSearchable(routes) };
+      if (routes) {
+        appliedRelKeys.add(relKey);
+        return { observed: routesToFieldSearchable(routes) };
+      }
+      // No observed routes. If the def had indexed instances, its relationships
+      // were genuinely shallow — leave them. If it had ZERO instances (absent
+      // from the derivation) and is an instantiable card def, default its
+      // relationships to depth-1 (`searchable: true`) for resilience (§6).
+      if (!instanceRelKeys.has(relKey) && isCardDef(graph, relKey)) {
+        appliedRelKeys.add(relKey);
+        return { defaultRelationshipsToTrue: true };
+      }
+      return undefined;
     };
 
     let result;

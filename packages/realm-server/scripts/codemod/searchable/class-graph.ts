@@ -156,10 +156,17 @@ function analyzeModule(mod: SourceModule, graph: Map<string, ClassNode>): void {
       collectClassNames(node.declaration);
   }
 
-  let handleClass = (decl: any) => {
-    if (decl?.type !== 'ClassDeclaration' || !decl.id?.name) return;
-    let className = decl.id.name;
-    let relKey = `${mod.modPath}/${className}`;
+  let handleClass = (decl: any, exportName: string | null) => {
+    if (decl?.type !== 'ClassDeclaration') return;
+    let className: string | null = decl.id?.name ?? null;
+    // Key by EXPORT name — that's what `boxel_index.types[0]` / `adoptsFrom`
+    // record. A default-exported card def is `<module>/default` in the DB even
+    // when the class has a local name, and an anonymous default export has no
+    // class name at all. Fall back to the class name for non-exported / local
+    // classes referenced by name.
+    let keyName = exportName ?? className;
+    if (!keyName) return;
+    let relKey = `${mod.modPath}/${keyName}`;
     let fields = new Map<string, FieldInfo>();
     for (let m of decl.body?.body ?? []) {
       if (m.type !== 'ClassProperty' && m.type !== 'PropertyDefinition')
@@ -190,7 +197,12 @@ function analyzeModule(mod: SourceModule, graph: Map<string, ClassNode>): void {
       });
     }
 
-    let node: ClassNode = { relKey, className, modPath: mod.modPath, fields };
+    let node: ClassNode = {
+      relKey,
+      className: className ?? keyName,
+      modPath: mod.modPath,
+      fields,
+    };
     let supIdent = typeIdentifier(decl.superClass);
     if (
       decl.superClass?.type === 'Identifier' ||
@@ -208,14 +220,20 @@ function analyzeModule(mod: SourceModule, graph: Map<string, ClassNode>): void {
       node.externalName = '(computed)';
     }
     graph.set(relKey, node);
+    // Also register under the local class name so same-realm `extends`/field
+    // refs that name a default-exported class resolve. The export-name key is
+    // the canonical one (matches the DB); the alias just aids local resolution.
+    if (className && className !== keyName) {
+      graph.set(`${mod.modPath}/${className}`, node);
+    }
   };
 
   for (let node of ast.program.body) {
     if (node.type === 'ExportNamedDeclaration' && node.declaration)
-      handleClass(node.declaration);
+      handleClass(node.declaration, node.declaration.id?.name ?? null);
     else if (node.type === 'ExportDefaultDeclaration' && node.declaration)
-      handleClass(node.declaration);
-    else handleClass(node);
+      handleClass(node.declaration, 'default');
+    else handleClass(node, node.id?.name ?? null);
   }
 }
 
@@ -253,6 +271,30 @@ export function findDeclaringClass(
     return { kind: 'unknown' };
   }
   return { kind: 'unknown' };
+}
+
+// Does `relKey`'s extends chain terminate at the platform card root (CardDef)?
+// Used to scope zero-instance defaulting to instantiable card defs (a FieldDef
+// is never a top-level instance, so defaulting its links would be inert noise).
+// A chain that exits to FieldDef/BaseDef, or that we can't resolve, is not a
+// card def.
+export function isCardDef(
+  graph: Map<string, ClassNode>,
+  relKey: string,
+): boolean {
+  let seen = new Set<string>();
+  let cur: string | undefined = relKey;
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    let node = graph.get(cur);
+    if (!node) return false;
+    if (node.superRelKey) {
+      cur = node.superRelKey;
+      continue;
+    }
+    return node.externalName === 'CardDef';
+  }
+  return false;
 }
 
 // FieldInfo for `fieldName` on `classRelKey`, walking up the extends chain.

@@ -373,12 +373,33 @@ export function transformSearchable(
   let skipped: SkippedField[] = [];
   let unapplied: UnappliedObserved[] = [];
 
+  // The policy is keyed by EXPORT name (what the DB records): `default` for a
+  // default-exported class (regardless of its local name), else the class name.
+  let exportNameByNode = new Map<any, string>();
+  for (let stmt of ast.program.body) {
+    if (
+      stmt.type === 'ExportDefaultDeclaration' &&
+      stmt.declaration?.type === 'ClassDeclaration'
+    ) {
+      exportNameByNode.set(stmt.declaration, 'default');
+    } else if (
+      stmt.type === 'ExportNamedDeclaration' &&
+      stmt.declaration?.type === 'ClassDeclaration' &&
+      stmt.declaration.id?.name
+    ) {
+      exportNameByNode.set(stmt.declaration, stmt.declaration.id.name);
+    } else if (stmt.type === 'ClassDeclaration' && stmt.id?.name) {
+      exportNameByNode.set(stmt, stmt.id.name);
+    }
+  }
+
   walk(ast.program, (node: any) => {
     if (node.type !== 'ClassDeclaration' && node.type !== 'ClassExpression') {
       return;
     }
     let className = classNameOf(node);
-    let policy = opts.policyForClass(className);
+    let lookupName = exportNameByNode.get(node) ?? className;
+    let policy = opts.policyForClass(lookupName);
     let body = node.body?.body;
     if (!Array.isArray(body)) {
       return;
