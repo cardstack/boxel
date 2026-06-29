@@ -9,9 +9,9 @@
  */
 
 import type { BoxelCLIClient, SearchResult } from '@cardstack/boxel-cli/api';
-import { delay } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { delay } from '@cardstack/runtime-common/utils';
 
 import type { Logger } from './logger.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
