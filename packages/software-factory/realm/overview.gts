@@ -345,12 +345,24 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
                 >
                   <span class='gs-step-mark'>
                     {{#if (eq step.status 'done')}}
-                      <CircleCheck class='gs-icon done' aria-hidden='true' />
+                      <CircleCheck
+                        class='gs-icon done'
+                        width='20'
+                        height='20'
+                        aria-hidden='true'
+                      />
                     {{else if (eq step.status 'active')}}
-                      <CircleDot class='gs-icon active' aria-hidden='true' />
+                      <CircleDot
+                        class='gs-icon active'
+                        width='20'
+                        height='20'
+                        aria-hidden='true'
+                      />
                     {{else}}
                       <CircleDashed
                         class='gs-icon upcoming'
+                        width='20'
+                        height='20'
                         aria-hidden='true'
                       />
                     {{/if}}
@@ -482,7 +494,12 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
           <div class='overview-grid'>
             <section class='widget'>
               <h3 class='widget-title'>
-                <CircleAlert class='widget-icon' aria-hidden='true' />
+                <CircleAlert
+                  class='widget-icon'
+                  width='16'
+                  height='16'
+                  aria-hidden='true'
+                />
                 Needs Attention
               </h3>
               {{#if this.blockedIssues.length}}
@@ -551,7 +568,12 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
 
           <section class='widget'>
             <h3 class='widget-title'>
-              <BookOpen class='widget-icon' aria-hidden='true' />
+              <BookOpen
+                class='widget-icon'
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />
               Knowledge Articles
             </h3>
             {{#if this.validationRealms.length}}
@@ -722,8 +744,6 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
         font-weight: 600;
       }
       .widget-icon {
-        width: 1rem;
-        height: 1rem;
         color: var(--muted-foreground, var(--boxel-500));
       }
       .funnel,
@@ -872,10 +892,6 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
         width: 1.5rem;
         flex-shrink: 0;
         padding-top: 0.1rem;
-      }
-      .gs-icon {
-        width: 1.25rem;
-        height: 1.25rem;
       }
       .gs-icon.done,
       .gs-icon.active {
