@@ -89,6 +89,20 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -j|--jobs)
+      if [ $# -lt 2 ]; then
+        echo "Error: $1 requires a value (a positive integer)" >&2
+        exit 1
+      fi
+      case "$2" in
+        ''|*[!0-9]*)
+          echo "Error: $1 must be a positive integer (got '$2')" >&2
+          exit 1
+          ;;
+      esac
+      if [ "$2" -lt 1 ]; then
+        echo "Error: $1 must be at least 1 (got '$2')" >&2
+        exit 1
+      fi
       JOBS="$2"
       shift 2
       ;;
