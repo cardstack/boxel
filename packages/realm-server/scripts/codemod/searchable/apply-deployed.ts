@@ -27,7 +27,6 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { createHmac } from 'node:crypto';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..', '..', '..'); // packages/realm-server/scripts/codemod/searchable -> repo root
@@ -86,91 +85,41 @@ function boxel(env: string, args: string[], timeoutMs = 240000): string {
   });
 }
 
-const CARD_SOURCE_MIME = 'application/vnd.card+source';
-
-// The realm-server's shared bot user id is `@realm_server:<host>`, where host is
-// the last two labels of the realm's hostname (or `localhost`). Matches
-// deriveHostFromRealmUrl / deriveBotUserId in boxel-cli's seed-auth.
-function deriveHost(realmUrl: string): string {
-  let h = new URL(realmUrl).hostname;
-  if (h === 'localhost' || h.endsWith('.localhost')) return 'localhost';
-  return h.split('.').slice(-2).join('.');
-}
-
-// Mint the same realm JWT the SeedAuthenticator does (HS256 over the seed). We
-// sign it directly (node crypto) rather than going through boxel-cli's standalone
-// file-write command, whose bundled dist currently fails the fetch; a raw fetch
-// with this token is verified to work, and lets us write ONLY changed modules
-// (no realm-wide sync). Seed is read from the environment, never logged.
-function mintJwt(realmUrl: string, seed: string): string {
-  let origin = new URL(realmUrl).origin + '/';
-  let now = Math.floor(Date.now() / 1000);
-  let claims = {
-    user: `@realm_server:${deriveHost(realmUrl)}`,
-    realm: new URL(realmUrl).href,
-    permissions: [] as string[],
-    realmServerURL: origin,
-    iat: now,
-    exp: now + 7 * 24 * 60 * 60,
-  };
-  let b64 = (o: unknown) =>
-    Buffer.from(JSON.stringify(o)).toString('base64url');
-  let head = b64({ alg: 'HS256', typ: 'JWT' });
-  let body = b64(claims);
-  let sig = createHmac('sha256', seed)
-    .update(`${head}.${body}`)
-    .digest('base64url');
-  return `${head}.${body}.${sig}`;
-}
-
-function seedFor(env: string): string {
-  let seed = process.env.BOXEL_REALM_SECRET_SEED;
-  if (!seed) {
-    throw new Error(
-      `--write needs BOXEL_REALM_SECRET_SEED set (source ~/.boxel-secrets/${env}.env before running)`,
-    );
-  }
-  return seed;
-}
-
-async function readRealmFile(
-  realmUrl: string,
-  relPath: string,
-  seed: string,
-): Promise<string | null> {
-  let url = new URL(relPath, realmUrl).href;
-  let r = await fetch(url, {
-    headers: {
-      Authorization: mintJwt(realmUrl, seed),
-      Accept: CARD_SOURCE_MIME,
-    },
-  });
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`read ${relPath} → HTTP ${r.status}`);
-  return r.text();
-}
-
-async function writeRealmFile(
+// Write one module via boxel-cli `file write` (content passed through a temp
+// file). boxel-cli mints the realm JWT from the seed itself — no sync, just the
+// one changed module.
+function writeRealmFile(
+  env: string,
   realmUrl: string,
   relPath: string,
   content: string,
-  seed: string,
-): Promise<void> {
-  let url = new URL(relPath, realmUrl).href;
-  let r = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: mintJwt(realmUrl, seed),
-      Accept: CARD_SOURCE_MIME,
-      'Content-Type': CARD_SOURCE_MIME,
-    },
-    body: content,
-  });
-  if (!r.ok) {
-    throw new Error(
-      `write ${relPath} → HTTP ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`,
-    );
+): void {
+  let tmp = join(mkdtempSync(join(tmpdir(), 'searchable-write-')), 'content');
+  try {
+    writeFileSync(tmp, content);
+    boxel(env, ['file', 'write', relPath, '--realm', realmUrl, '--file', tmp]);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+// Read one module back via boxel-cli `file read --json`. Returns the content, or
+// null if the file isn't there.
+function readRealmFile(
+  env: string,
+  realmUrl: string,
+  relPath: string,
+): string | null {
+  let out = boxel(env, [
+    'file',
+    'read',
+    relPath,
+    '--realm',
+    realmUrl,
+    '--json',
+  ]);
+  let parsed = JSON.parse(out);
+  return parsed.ok ? (parsed.content ?? null) : null;
 }
 
 // Which source realms have >=1 annotated def? Match annotated defKeys (https)
@@ -293,7 +242,6 @@ async function main(): Promise<void> {
     `Crawling ${realms.length} realm(s), concurrency ${args.concurrency}, write=${args.write}\n`,
   );
 
-  let seed = args.write ? seedFor(args.env) : '';
   let idx = 0;
   let changedRealms = 0;
   let wroteModules = 0;
@@ -313,9 +261,9 @@ async function main(): Promise<void> {
         let written: string[] = [];
         if (args.write) {
           for (let { path, content } of changed) {
-            await writeRealmFile(realmUrl, path, content, seed);
+            writeRealmFile(args.env, realmUrl, path, content);
             // Read back to confirm the write landed with our content.
-            let after = await readRealmFile(realmUrl, path, seed);
+            let after = readRealmFile(args.env, realmUrl, path);
             if (after !== content) {
               throw new Error(
                 `verify ${path}: written content did not round-trip`,
