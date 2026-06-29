@@ -23,7 +23,7 @@
 // reduce each field's routes to the minimal `Searchable`.
 //
 // Resolving routes against the declared link types (dropping the unqueryable
-// polymorphic-subtype expansion of §4) and defaulting zero-instance defs to
+// polymorphic-subtype expansion) and defaulting zero-instance defs to
 // `searchable: true` are NOT done here — they need the source schema and are
 // handled in the apply/rewrite phase. This module only turns observed docs
 // into observed routes.
@@ -85,7 +85,7 @@ function routesForFieldValue(field: string, value: unknown): string[] {
   if (isPlainObject(value)) {
     // A contained composite (contains): always in the doc, no `id`. It emits no
     // route of its own; it only forwards deeper link routes, prefixed by its
-    // field name (the `signOff.editor` shape from §4).
+    // field name.
     return collectRoutesForNode(value).map((tail) => `${field}.${tail}`);
   }
   // Scalar (string / number / boolean / null) or a primitive contains/
@@ -221,7 +221,7 @@ export interface DerivedDef {
 // Streaming accumulator: feed it every `(defKey, realmURL, searchDoc)` instance
 // row and it unions the routes per def. Defs that never appear here have zero
 // indexed instances — the apply phase defaults their relationship fields to
-// `searchable: true` (depth-1) for resilience (§6).
+// `searchable: true` (depth-1) for resilience.
 export class DerivationAccumulator {
   // defKey -> { realmURL, routes, count }
   #byDef = new Map<

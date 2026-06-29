@@ -27,6 +27,7 @@ import {
   statSync,
   readdirSync,
   mkdtempSync,
+  rmSync,
 } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -144,21 +145,28 @@ function gitDiff(original: string, updated: string, label: string): string {
   let dir = mkdtempSync(join(tmpdir(), 'searchable-diff-'));
   let a = join(dir, 'a');
   let b = join(dir, 'b');
-  writeFileSync(a, original);
-  writeFileSync(b, updated);
   try {
-    execFileSync(
-      'git',
-      ['--no-pager', 'diff', '--no-index', '--no-color', a, b],
-      {
-        encoding: 'utf8',
-      },
-    );
-    return '';
-  } catch (err: any) {
-    return ((err.stdout as string) ?? '')
-      .replace(new RegExp(a, 'g'), `a/${label}`)
-      .replace(new RegExp(b, 'g'), `b/${label}`);
+    writeFileSync(a, original);
+    writeFileSync(b, updated);
+    try {
+      execFileSync(
+        'git',
+        ['--no-pager', 'diff', '--no-index', '--no-color', a, b],
+        { encoding: 'utf8' },
+      );
+      return '';
+    } catch (err: any) {
+      // git diff exits non-zero when there IS a diff. Rewrite the temp paths to
+      // the realm-relative label via literal split/join (the paths can contain
+      // regex metacharacters, so a RegExp would be wrong).
+      return ((err.stdout as string) ?? '')
+        .split(a)
+        .join(`a/${label}`)
+        .split(b)
+        .join(`b/${label}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 
@@ -282,7 +290,7 @@ async function main(): Promise<void> {
       // No observed routes. If the def had indexed instances, its relationships
       // were genuinely shallow — leave them. If it had ZERO instances (absent
       // from the derivation) and is an instantiable card def, default its
-      // relationships to depth-1 (`searchable: true`) for resilience (§6).
+      // relationships to depth-1 (`searchable: true`) for resilience.
       if (!instanceRelKeys.has(relKey) && isCardDef(graph, relKey)) {
         appliedRelKeys.add(relKey);
         return { defaultRelationshipsToTrue: true };

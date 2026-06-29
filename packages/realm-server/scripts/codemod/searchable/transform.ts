@@ -2,22 +2,22 @@
 // module and a per-class policy (what the DB derivation observed, plus whether
 // a def had zero instances), it:
 //
-//   * strips every `isUsed` option from relationship/field declarations
-//     (unconditionally — the option is going away);
 //   * adds/updates a `searchable` option on a relationship/field declaration to
-//     the value the derivation observed; and
+//     the value the derivation observed;
 //   * for a zero-instance card def (no search doc to read), defaults each of its
 //     non-query-backed `linksTo` / `linksToMany` fields to `searchable: true`
-//     (depth-1) for resilience.
+//     (depth-1) for resilience; and
+//   * strips the `isUsed` option, but only when `stripIsUsed` is set (see that
+//     option) — by default `isUsed` is left in place.
 //
 // Query-backed relationships (an options object carrying a `query`) are never
 // annotated — `searchable` is inert on them — though their `isUsed` is still
-// stripped.
+// stripped when `stripIsUsed` is set.
 //
-// It reuses the exact gjsToPlaceholderJS → recast/@babel → placeholderJSToGJS
-// pipeline the `context-search` codemod uses, so `<template>` blocks survive and
-// formatting is preserved for everything it doesn't touch. A module whose source
-// can't be parsed throws — the caller skips and reports it (§6).
+// It reuses the gjsToPlaceholderJS → recast/@babel → placeholderJSToGJS pipeline,
+// so `<template>` blocks survive and formatting is preserved for everything it
+// doesn't touch. A module whose source can't be parsed throws — the caller skips
+// and reports it.
 
 import { parse as recastParse, print as recastPrint } from 'recast';
 import { parse as babelParse } from '@babel/parser';

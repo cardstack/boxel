@@ -58,7 +58,14 @@ function parseArgs(argv: string[]): Args {
     else if (f === '--realm') a.realm = argv[++i];
     else throw new Error(`unknown arg: ${f}`);
   }
-  if (!a.env || a.derivations.length === 0 || !a.registry || !a.out) {
+  if (a.env !== 'staging' && a.env !== 'prod') {
+    // Restricted to a fixed set — `env` is interpolated into the bash command
+    // that sources the seed file, so it must never carry arbitrary text.
+    throw new Error(
+      `--env must be 'staging' or 'prod' (got ${JSON.stringify(a.env)})`,
+    );
+  }
+  if (a.derivations.length === 0 || !a.registry || !a.out) {
     throw new Error(
       'usage: --env <staging|prod> --derivation <json>… --registry <json> --out <report> [--concurrency N] [--limit N] [--realm url] [--write]',
     );
