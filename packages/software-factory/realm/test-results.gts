@@ -158,9 +158,9 @@ export class TestModuleResult extends FieldDef {
             <span class='module-counts'>
               {{@model.passedCount}}/{{@model.totalCount}}
               passed
-              {{#if this.args.model.skippedCount}}
+              {{#if @model.skippedCount}}
                 <span class='skipped-label'>
-                  ({{this.args.model.skippedCount}}
+                  ({{@model.skippedCount}}
                   skipped)
                 </span>
               {{/if}}
