@@ -137,8 +137,8 @@ const RRI_SYNTHETIC_ORIGIN = 'https://rri.invalid';
 // Identifiers are already in canonical RRI form once they reach here (a card's
 // own id / a relationship `links.self`), so this is pure form-preserving path
 // math:
-//   - an absolute reference (URL form, or `@scope/name` prefix form) is already
-//     canonical — returned unchanged;
+//   - an absolute reference (any `<scheme>:` URL, or `@scope/name` prefix form)
+//     is already canonical — returned unchanged;
 //   - a relative reference is joined onto the base. A URL-form base uses the
 //     native URL parser; a prefix-form base borrows the parser via a synthetic
 //     origin, then the `@scope/name` namespace is restored.
@@ -153,9 +153,13 @@ export function resolveRRIReference(
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   if (
-    reference.startsWith('http://') ||
-    reference.startsWith('https://') ||
-    reference.startsWith('@')
+    reference.startsWith('@') ||
+    // Any absolute-URL scheme (`http:`/`https:`, but also `data:`, `blob:`,
+    // `mailto:`, …) is already canonical — return it unchanged rather than
+    // treating it as a relative reference to join against the base. Matches an
+    // RFC 3986 scheme (`ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`) followed
+    // by `:`; relative refs (`./`, `../`, `/`, bare names) have no scheme.
+    /^[a-z][a-z0-9+.-]*:/i.test(reference)
   ) {
     return reference;
   }

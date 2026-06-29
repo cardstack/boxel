@@ -209,6 +209,22 @@ module('Unit | url', function () {
       );
     });
 
+    test('returns other absolute-URL schemes unchanged (not rewritten into prefix form)', function (assert) {
+      // Any `<scheme>:` URL is absolute; against a prefix-form base it must be
+      // returned as-is, not joined into the `@scope/name` namespace.
+      for (let ref of [
+        'data:image/png;base64,AAAA',
+        'blob:https://a.com/abc-123',
+        'mailto:someone@example.com',
+      ]) {
+        assert.strictEqual(
+          resolveRRIReference(ref, rri('@cardstack/base/fields/number')),
+          ref,
+          `${ref} is returned unchanged`,
+        );
+      }
+    });
+
     test('leaves a reference unchanged when there is no base', function (assert) {
       assert.strictEqual(
         resolveRRIReference('./person', undefined),
