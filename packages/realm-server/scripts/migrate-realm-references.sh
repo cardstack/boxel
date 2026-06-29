@@ -182,6 +182,7 @@ else
   echo "  --json-only        Only scan card JSON (skip .gts/.ts modules)"
   echo "  --modules-only     Only scan .gts/.ts modules (skip card JSON)"
   echo "  --exclude <dir>    Skip directories matching <dir> (repeatable)"
+  echo "  -j, --jobs <n>     Number of parallel workers (default 16)"
   echo ""
   echo "  Environment URL mappings:"
   echo "    development  -> http://localhost:4201/"
