@@ -36,6 +36,12 @@ mise install
 # Dependencies.
 mise exec -- pnpm install --frozen-lockfile
 
+# Build the boxel-icons + boxel-ui addons (in dependency order). The host app's
+# vite build imports per-icon modules from @cardstack/boxel-icons/dist, which
+# `pnpm install` does not produce — without this the host fails to build with
+# "Cannot find module '@cardstack/boxel-icons/...'" and never serves.
+mise run build:ui
+
 # Local-dev TLS cert: standard dev serves HTTPS on localhost and env-vars.sh
 # treats the cert as mandatory. Provisioning it here also lets Node (via
 # NODE_EXTRA_CA_CERTS, set by env-vars.sh) and the prerender's headless Chrome

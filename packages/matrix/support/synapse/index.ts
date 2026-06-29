@@ -23,6 +23,24 @@ import {
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
 
+// Synapse's listeners bind to "::" (IPv6 dual-stack) by default. Hosts whose
+// kernel lacks IPv6 (some minimal cloud VMs / containers) can't bind it and
+// synapse dies at startup with "Address family not supported by protocol". We
+// detect that here so the generated config can fall back to IPv4-only binding.
+function hostHasIPv6(): boolean {
+  let interfaces = os.networkInterfaces();
+  for (let name of Object.keys(interfaces)) {
+    for (let info of interfaces[name] ?? []) {
+      // Node has reported `family` as both the string 'IPv6' and the number 6
+      // across versions; accept either.
+      if (info.family === 'IPv6' || (info.family as unknown) === 6) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 const registrationSecretFile = path.resolve(
   path.join(__dirname, '..', '..', 'registration_secret.txt'),
 );
@@ -201,6 +219,21 @@ export async function synapseStart(
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
     });
+    // On a host without IPv6, rewrite the generated config's listeners to bind
+    // IPv4 only — synapse is reached via localhost:8008 in dev regardless, so
+    // dropping the dual-stack "::" bind is transparent there but lets synapse
+    // start at all. Hosts with IPv6 keep the template's "::" untouched.
+    if (!hostHasIPv6()) {
+      let hsYaml = path.join(synCfg.configDir, 'homeserver.yaml');
+      let contents = await fse.readFile(hsYaml, 'utf8');
+      let patched = contents.replace(
+        /bind_addresses:\s*\[\s*"::"\s*\]/g,
+        'bind_addresses: ["0.0.0.0"]',
+      );
+      if (patched !== contents) {
+        await fse.writeFile(hsYaml, patched);
+      }
+    }
     containerName =
       opts?.containerName ||
       (isEnvironmentMode()
@@ -217,6 +250,13 @@ export async function synapseStart(
       '-v',
       `${path.join(__dirname, 'templates')}:/custom/templates/`,
     ];
+    // When the host runs as root (e.g. the Claude-web cloud VM), the synapse
+    // image would otherwise drop privileges to its default uid 991, which
+    // cannot write the root-owned config dir mounted at /data. Telling the
+    // image to stay as root (UID/GID=0) keeps it able to create media_store.
+    if (process.getuid?.() === 0) {
+      dockerParams.push('-e', 'UID=0', '-e', 'GID=0');
+    }
     if (useDynamicHostPort) {
       // In dynamic-host-port mode multiple harnesses may run concurrently, so
       // we must not claim the shared fixed Synapse container IP.
