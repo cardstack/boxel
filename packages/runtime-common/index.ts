@@ -754,6 +754,7 @@ export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './definitions.ts';
+export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';

@@ -1,6 +1,12 @@
 import { rawArrayValues } from './watched-array';
 import { isSavedInstance } from './-private';
-import { isCardError, primitive, relativeTo } from '@cardstack/runtime-common';
+import {
+  isCardError,
+  matchSearchableRoutes,
+  primitive,
+  relativeTo,
+  routesForField,
+} from '@cardstack/runtime-common';
 import {
   getDataBucket,
   getFields,
@@ -63,62 +69,16 @@ export async function searchDocFromFields(
 
 // Build the route set rooted at the indexed card's own link fields. This is
 // the ONLY place `field.searchable` is read — deeper recursion follows the
-// inherited routes, never a pulled-in target's own annotations.
+// inherited routes (via `matchSearchableRoutes`), never a pulled-in target's
+// own annotations.
 function seedSearchableRoutes(cardClass: typeof BaseDef): string[] {
   let routes: string[] = [];
   for (let [fieldName, field] of Object.entries(
     getFields(cardClass, { includeComputeds: true }),
   )) {
-    let searchable = field?.searchable;
-    if (searchable == null) {
-      continue;
-    }
-    if (searchable === true) {
-      routes.push(fieldName); // self link, no deeper
-      continue;
-    }
-    // Tolerate a malformed annotation (a non-string array entry, a non-array
-    // non-string value) rather than emitting a junk route or throwing: a route
-    // can only ever be a dotted field path. An empty array contributes nothing.
-    let paths =
-      typeof searchable === 'string'
-        ? [searchable]
-        : Array.isArray(searchable)
-          ? searchable
-          : [];
-    for (let path of paths) {
-      if (typeof path !== 'string') {
-        continue;
-      }
-      routes.push(path === '' ? fieldName : `${fieldName}.${path}`);
-    }
+    routes.push(...routesForField(fieldName, field?.searchable));
   }
   return routes;
-}
-
-// For `routes` rooted at the current card, find those whose head segment is
-// `fieldName`. `matched` = the field is named by at least one route (so a link
-// is expanded); `tails` = the non-empty remainders, which become the target's
-// routes. An empty tail (head-only route, e.g. from `searchable: true`) marks
-// the link as expanded-but-no-deeper and contributes no tail.
-function matchSearchableRoutes(
-  routes: string[],
-  fieldName: string,
-): { matched: boolean; tails: string[] } {
-  let matched = false;
-  let tails: string[] = [];
-  for (let route of routes) {
-    let dot = route.indexOf('.');
-    let head = dot === -1 ? route : route.slice(0, dot);
-    if (head !== fieldName) {
-      continue;
-    }
-    matched = true;
-    if (dot !== -1) {
-      tails.push(route.slice(dot + 1));
-    }
-  }
-  return { matched, tails };
 }
 
 // Targeted load of a link target by reference: reuse a fully-deserialized
