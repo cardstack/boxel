@@ -1,4 +1,3 @@
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import RouteTemplate from 'ember-route-template';
@@ -6,19 +5,23 @@ import window from 'ember-window-mock';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
-
 class Loading extends Component {
-  @service declare private matrixService: MatrixService;
-
   // Use the dark auth palette when this boot leads to the auth pages: either an
   // SSO redirect is being consumed (`?loginToken`) or there is no persisted
   // session, so the user will land on the (dark) login page. A returning user
   // keeps the purple background, which blends into the operator-mode workspace.
+  //
+  // Read the persisted-session signal straight from localStorage rather than
+  // through MatrixService: instantiating that service runs its `cardAPIModule`
+  // import-resource field, which pulls `card-api` into the loader. The loading
+  // route also renders during the prerender `/render` route, so that import
+  // would be captured in the render's runtime-dependency snapshot and displace
+  // the fallback deps a failed render relies on. The key (`auth`) and source
+  // (localStorage) match MatrixService's own `getAuth`.
   private get isAuthBoot() {
     return (
       new URLSearchParams(window.location.search).has('loginToken') ||
-      !this.matrixService.hasPersistedSession
+      !window.localStorage.getItem('auth')
     );
   }
 
