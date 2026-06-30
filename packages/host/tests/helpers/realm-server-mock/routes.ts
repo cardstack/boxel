@@ -450,9 +450,14 @@ function registerArchiveRoutes() {
           },
         });
       }
-      // Deterministic order (mirrors fetchArchivedRealmsForOwner's secondary
-      // sort on url).
-      data.sort((a, b) => a.id.localeCompare(b.id));
+      // Order most-recently-archived first, breaking ties by url, matching
+      // fetchArchivedRealmsForOwner's `archived_at DESC, url ASC`.
+      data.sort((a, b) => {
+        if (a.attributes.archivedAt !== b.attributes.archivedAt) {
+          return a.attributes.archivedAt < b.attributes.archivedAt ? 1 : -1;
+        }
+        return a.id.localeCompare(b.id);
+      });
       return new Response(JSON.stringify({ data }), {
         status: 200,
         headers: { 'content-type': SupportedMimeType.JSONAPI },

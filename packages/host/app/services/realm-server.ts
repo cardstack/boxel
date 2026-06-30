@@ -137,7 +137,10 @@ export default class RealmServerService extends Service {
       { type: 'base', url: baseRealm.url },
       ...catalogRealms,
     ]);
-    this.archivedRealmsList = new TrackedArray<ArchivedRealmInfo>([]);
+    // Clear in place rather than reassigning: the `archivedRealms` @cached
+    // getter tracks this array's tag, so mutating it (not swapping the
+    // reference) is what makes the getter recompute to the empty list.
+    this.archivedRealmsList.splice(0, this.archivedRealmsList.length);
     this.archivedRealmsFetched = false;
     this.eventSubscribers = new Map();
     this._ready = new Deferred<void>();

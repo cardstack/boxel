@@ -289,6 +289,7 @@ export default class Workspace extends Component<Signature> {
           @size='medium'
           @cardContainerClass='workspace-chooser-archive-modal'
           class='workspace-chooser-archive-modal-container'
+          aria-label='Archive Workspace'
           data-test-archive-modal={{@realmIdentifier}}
         >
           <:content>
