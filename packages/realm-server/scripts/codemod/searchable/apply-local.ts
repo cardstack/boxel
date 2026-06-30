@@ -75,10 +75,23 @@ function parseArgs(argv: string[]): Args {
     else if (a === '--derivation') derivations.push(argv[++i]);
     else throw new Error(`unknown arg: ${a}`);
   }
-  if (!realmRoot || realmUrls.length === 0 || derivations.length === 0) {
+  if (!realmRoot) {
     throw new Error(
-      'usage: --realm-root <dir> --realm-url <url>… --derivation <json>… [--write] [--strip-isused]',
+      'usage: --realm-root <dir> [--realm-url <url>… --derivation <json>…] [--write] [--strip-isused]',
     );
+  }
+  // Strip-only mode: `--strip-isused` with no derivation removes every `isUsed`
+  // option and adds no `searchable` (so a realm that already carries its
+  // `searchable` annotations is edited only to drop the now-inert `isUsed` —
+  // provably behavior-neutral). A derivation, when given, adds `searchable` and
+  // needs the realm URL(s) it maps to so defs match by prefix.
+  if (derivations.length === 0 && !stripIsUsed) {
+    throw new Error(
+      'nothing to do: pass --derivation <json>… (add searchable) and/or --strip-isused (remove isUsed)',
+    );
+  }
+  if (derivations.length > 0 && realmUrls.length === 0) {
+    throw new Error('--derivation requires at least one --realm-url');
   }
   return { realmRoot, realmUrls, derivations, write, stripIsUsed };
 }
@@ -174,73 +187,23 @@ async function main(): Promise<void> {
   let args = parseArgs(process.argv.slice(2));
   let root = resolve(args.realmRoot);
 
-  // 1) Parse the realm's source into a class graph.
+  // 1) Read the realm's source files.
   let files = collectSourceFiles(root);
   let modules: SourceModule[] = files.map((file) => ({
     filename: file,
     modPath: relModulePath(root, file),
     source: readFileSync(file, 'utf8'),
   }));
-  let graph = buildClassGraph(modules);
 
-  // 2) Raw observed routes per leaf def, then HOIST to the declaring class.
-  let { routesByRelKey: raw, instanceRelKeys } = buildRawRoutes(
-    args.derivations,
-    args.realmUrls,
-  );
-  let finalRoutes = new Map<string, Set<string>>();
+  // `searchable` planning. EMPTY in strip-only mode (no --derivation): there is
+  // nothing to plan, and we skip parsing the whole realm into a class graph
+  // just to strip `isUsed`. Populated below only when a derivation is given.
+  let graph: ReturnType<typeof buildClassGraph> | undefined;
+  let prunedRoutes = new Map<string, Set<string>>();
+  let instanceRelKeys = new Set<string>();
   let noLocalClass: { relKey: string; fields: Record<string, unknown> }[] = [];
   let platformInherited: { leaf: string; route: string; base: string }[] = [];
   let unresolved: { leaf: string; route: string }[] = [];
-
-  for (let [leafRelKey, routes] of raw) {
-    if (!graph.has(leafRelKey)) {
-      // No local source file — a hosted-only card (handled by the deployed
-      // crawl) or a moved/renamed def. Don't apply here.
-      noLocalClass.push({
-        relKey: leafRelKey,
-        fields: routesToFieldSearchable(routes),
-      });
-      continue;
-    }
-    for (let route of routes) {
-      let head = route.includes('.')
-        ? route.slice(0, route.indexOf('.'))
-        : route;
-      let decl = findDeclaringClass(graph, leafRelKey, head);
-      if (
-        decl.kind === 'local' &&
-        PLATFORM_ROOT_CLASSES.has(graph.get(decl.relKey)!.className)
-      ) {
-        // The head field is declared by a platform-root type (CardDef's
-        // `cardInfo`, etc.). Annotating it deepens EVERY card's search doc — a
-        // platform-wide blast radius we deliberately leave shallow (deepen later
-        // via a base edit + reindex if ever wanted). Holds even when processing
-        // base itself, where CardDef is a local class.
-        platformInherited.push({
-          leaf: leafRelKey,
-          route,
-          base: graph.get(decl.relKey)!.className,
-        });
-      } else if (decl.kind === 'local') {
-        let set = finalRoutes.get(decl.relKey);
-        if (!set) finalRoutes.set(decl.relKey, (set = new Set()));
-        set.add(route);
-      } else if (decl.kind === 'external') {
-        platformInherited.push({
-          leaf: leafRelKey,
-          route,
-          base: decl.externalName,
-        });
-      } else {
-        unresolved.push({ leaf: leafRelKey, route });
-      }
-    }
-  }
-
-  // 2b) PRUNE each hoisted route against declared types: drop segments that
-  //     cross a polymorphic field (unsearchable cruft) or aren't declared.
-  let prunedRoutes = new Map<string, Set<string>>();
   let droppedPolymorphic: {
     relKey: string;
     route: string;
@@ -253,19 +216,78 @@ async function main(): Promise<void> {
   }[] = [];
   let unvalidated: { relKey: string; route: string; kept: string | null }[] =
     [];
-  for (let [relKey, routes] of finalRoutes) {
-    for (let route of routes) {
-      let { kept, reason } = pruneRoute(graph, relKey, route);
-      if (reason === 'polymorphic')
-        droppedPolymorphic.push({ relKey, route, kept });
-      else if (reason === 'unresolved')
-        droppedUnresolved.push({ relKey, route, kept });
-      else if (reason === 'unvalidated')
-        unvalidated.push({ relKey, route, kept });
-      if (kept) {
-        let set = prunedRoutes.get(relKey);
-        if (!set) prunedRoutes.set(relKey, (set = new Set()));
-        set.add(kept);
+
+  if (args.derivations.length > 0) {
+    // Parse the realm's source into a class graph.
+    graph = buildClassGraph(modules);
+
+    // 2) Raw observed routes per leaf def, then HOIST to the declaring class.
+    let built = buildRawRoutes(args.derivations, args.realmUrls);
+    instanceRelKeys = built.instanceRelKeys;
+    let raw = built.routesByRelKey;
+    let finalRoutes = new Map<string, Set<string>>();
+
+    for (let [leafRelKey, routes] of raw) {
+      if (!graph.has(leafRelKey)) {
+        // No local source file — a hosted-only card (handled by the deployed
+        // crawl) or a moved/renamed def. Don't apply here.
+        noLocalClass.push({
+          relKey: leafRelKey,
+          fields: routesToFieldSearchable(routes),
+        });
+        continue;
+      }
+      for (let route of routes) {
+        let head = route.includes('.')
+          ? route.slice(0, route.indexOf('.'))
+          : route;
+        let decl = findDeclaringClass(graph, leafRelKey, head);
+        if (
+          decl.kind === 'local' &&
+          PLATFORM_ROOT_CLASSES.has(graph.get(decl.relKey)!.className)
+        ) {
+          // The head field is declared by a platform-root type (CardDef's
+          // `cardInfo`, etc.). Annotating it deepens EVERY card's search doc — a
+          // platform-wide blast radius we deliberately leave shallow (deepen later
+          // via a base edit + reindex if ever wanted). Holds even when processing
+          // base itself, where CardDef is a local class.
+          platformInherited.push({
+            leaf: leafRelKey,
+            route,
+            base: graph.get(decl.relKey)!.className,
+          });
+        } else if (decl.kind === 'local') {
+          let set = finalRoutes.get(decl.relKey);
+          if (!set) finalRoutes.set(decl.relKey, (set = new Set()));
+          set.add(route);
+        } else if (decl.kind === 'external') {
+          platformInherited.push({
+            leaf: leafRelKey,
+            route,
+            base: decl.externalName,
+          });
+        } else {
+          unresolved.push({ leaf: leafRelKey, route });
+        }
+      }
+    }
+
+    // 2b) PRUNE each hoisted route against declared types: drop segments that
+    //     cross a polymorphic field (unsearchable cruft) or aren't declared.
+    for (let [relKey, routes] of finalRoutes) {
+      for (let route of routes) {
+        let { kept, reason } = pruneRoute(graph, relKey, route);
+        if (reason === 'polymorphic')
+          droppedPolymorphic.push({ relKey, route, kept });
+        else if (reason === 'unresolved')
+          droppedUnresolved.push({ relKey, route, kept });
+        else if (reason === 'unvalidated')
+          unvalidated.push({ relKey, route, kept });
+        if (kept) {
+          let set = prunedRoutes.get(relKey);
+          if (!set) prunedRoutes.set(relKey, (set = new Set()));
+          set.add(kept);
+        }
       }
     }
   }
@@ -280,6 +302,10 @@ async function main(): Promise<void> {
     let policyForClass = (
       exportName: string | null,
     ): ClassPolicy | undefined => {
+      // Strip-only mode (no derivation): never apply a `searchable` policy —
+      // not the observed routes and not the zero-instance depth-1 default — so
+      // the only edit is the `isUsed` strip below.
+      if (args.derivations.length === 0) return undefined;
       if (!exportName) return undefined;
       let relKey = `${mod.modPath}/${exportName}`;
       let routes = prunedRoutes.get(relKey);
@@ -291,7 +317,7 @@ async function main(): Promise<void> {
       // were genuinely shallow — leave them. If it had ZERO instances (absent
       // from the derivation) and is an instantiable card def, default its
       // relationships to depth-1 (`searchable: true`) for resilience.
-      if (!instanceRelKeys.has(relKey) && isCardDef(graph, relKey)) {
+      if (!instanceRelKeys.has(relKey) && isCardDef(graph!, relKey)) {
         appliedRelKeys.add(relKey);
         return { defaultRelationshipsToTrue: true };
       }
