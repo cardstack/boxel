@@ -724,7 +724,6 @@ export class RoomResource extends Resource<Args> {
     event: CommandResultEvent;
     index: number;
   }) {
-    let effectiveEventId = this.getEffectiveEventId(event);
     // CS-11736: locate the owning bot message by commandRequestId rather than
     // by event_id. The commandResult's m.relates_to.event_id is the latest
     // m.replace id Y, but after a reload the m.replace edits are stripped and
@@ -738,18 +737,19 @@ export class RoomResource extends Resource<Args> {
         e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.some(
           (cr: any) => cr.id === event.content.commandRequestId,
         ),
-    )! as CardMessageEvent | undefined;
+    ) as CardMessageEvent | undefined;
+    if (!messageEventWithCommand) {
+      return;
+    }
     // CS-11045: _messageCache is keyed by the bot message's effective/parent
     // event_id — getEffectiveEventId resolves an m.replace event back to its
     // parent, so when an m.replace Y of original X arrives loadRoomMessage
     // keys the cache by X. Derive the cache key from the bot-message event we
     // just located (messageEventWithCommand): for the m.replace event Y,
     // getEffectiveEventId returns parent X — which is what the cache holds.
-    let messageCacheKey = messageEventWithCommand
-      ? this.getEffectiveEventId(messageEventWithCommand)
-      : effectiveEventId;
+    let messageCacheKey = this.getEffectiveEventId(messageEventWithCommand);
     let message = this._messageCache.get(messageCacheKey);
-    if (!message || !messageEventWithCommand) {
+    if (!message) {
       return;
     }
 

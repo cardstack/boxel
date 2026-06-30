@@ -1721,6 +1721,102 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       );
   });
 
+  // Regression coverage for CS-11736 (host side): commandRequestId correlation
+  // must resolve the *specific* owning bot message, not just the first one that
+  // happens to carry a command request. With two streamed bot messages, an
+  // applied result for one must flip only that message; the other stays ready.
+  test('CS-11736: an applied commandResult flips only its own bot message, not a sibling message that also carries a command', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    let firstCommandRequestId = 'cs-11736-first-cmd-request-id';
+    let secondCommandRequestId = 'cs-11736-second-cmd-request-id';
+    let strippedEditEventId = 'cs-11736-uniqueness-stripped-edit-event-id';
+
+    // First bot message (idx 0): carries a command but is never applied.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: firstCommandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Evie' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    // Second bot message (idx 1): the one whose command was applied pre-reload.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Mango',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: secondCommandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Mango' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    // Applied result for the second message only, linked to a stripped edit id
+    // so correlation has to fall through to commandRequestId.
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId: secondCommandRequestId,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: strippedEditEventId,
+        },
+        data: {},
+      },
+      { type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE },
+    );
+
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="1"]');
+
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists(
+        'the bot message whose commandRequestId owns the applied result renders applied',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .exists(
+        'the sibling bot message, which has no result of its own, stays ready — the applied status did not bleed across messages',
+      );
+  });
+
   test('Accept All bar does not flash for an always-auto-executed command (checkCorrectness)', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
