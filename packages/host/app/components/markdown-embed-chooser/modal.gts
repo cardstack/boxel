@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
@@ -17,7 +17,10 @@ import type {
   MarkdownEmbedRefType,
 } from '@cardstack/host/services/markdown-embed-chooser';
 
-import EmbedFormatSelection, { deriveFormatSeeds } from './format-selection';
+import {
+  deriveFormatSeeds,
+  type FormatSelectionSeeds,
+} from './format-selection';
 import TabPanel from './tab-panel';
 import Tabs from './tabs';
 
@@ -62,17 +65,15 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
     return this.markdownEmbedChooser.currentRequest;
   }
 
-  // One format/placement/size selection shared by both tabs so the choice
-  // sticks across a tab switch. `@cached` keyed on the tracked `request`
-  // rebuilds it once per chooser invocation (seeded from the edited directive
-  // in edit mode) while returning the same instance across tab switches within
-  // the same open session.
-  @cached
-  get selection(): EmbedFormatSelection {
+  // Seeds for the shared format selection. `Tabs` owns the actual
+  // `EmbedFormatSelection` instance — it lives inside the `{{#if this.request}}`
+  // block, so it's created once per chooser invocation (seeded here from the
+  // edited directive in edit mode) and torn down on close. Owning it there,
+  // rather than in a getter on this persistent component, keeps the instance
+  // stable across re-renders so the user's choice actually sticks.
+  get formatSeeds(): FormatSelectionSeeds {
     let it = this.request?.initialTarget;
-    return new EmbedFormatSelection(
-      it ? deriveFormatSeeds(it.sizeSpec, it.kind) : {},
-    );
+    return it ? deriveFormatSeeds(it.sizeSpec, it.kind) : {};
   }
 
   get activeTab(): MarkdownEmbedRefType {
@@ -148,25 +149,25 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
         data-test-markdown-embed-chooser-modal
       >
         <:content>
-          <Tabs @activeTab={{this.activeTab}}>
-            <:cards>
+          <Tabs @activeTab={{this.activeTab}} @seeds={{this.formatSeeds}}>
+            <:cards as |selection|>
               <TabPanel
                 @refType='card'
                 @activeTab={{this.activeTab}}
                 @onTabChange={{this.setActiveTab}}
                 @onInsert={{this.handleInsertCard}}
-                @selection={{this.selection}}
+                @selection={{selection}}
                 @initialTarget={{this.cardInitialTarget}}
                 @onRemove={{this.handleRemove}}
               />
             </:cards>
-            <:files>
+            <:files as |selection|>
               <TabPanel
                 @refType='file'
                 @activeTab={{this.activeTab}}
                 @onTabChange={{this.setActiveTab}}
                 @onInsert={{this.handleInsertFile}}
-                @selection={{this.selection}}
+                @selection={{selection}}
                 @initialTarget={{this.fileInitialTarget}}
                 @onRemove={{this.handleRemove}}
               />

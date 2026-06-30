@@ -30,6 +30,7 @@ import cmContext from '@cardstack/host/lib/codemirror-context';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MarkdownEmbedChooserService from '@cardstack/host/services/markdown-embed-chooser';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -397,18 +398,27 @@ module('Integration | codemirror embed toolbar', function (hooks) {
     view?.dispatch({ changes: { from: oPos, to: oPos + 1, insert: 'a' } });
     await settled();
 
-    await click('[data-test-toolbar="edit-embed"]');
-    await waitFor('[data-test-markdown-embed-chooser-current-label]', {
-      timeout: 5000,
-    });
-    assert
-      .dom('[data-test-markdown-embed-chooser-current-label]')
-      .hasText(
-        'Manga',
-        'the pencil edits the freshly-typed URL, not the stale one',
-      );
-
     // (sanity) the edited document holds the new URL.
     assert.strictEqual(harness.content, `:card[${manga}]`);
+
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]', {
+      timeout: 5000,
+    });
+
+    // The pencil opens the chooser against the URL currently under the cursor.
+    // Asserting on the request (rather than the rendered title, which is the
+    // same placeholder for both fixture cards) isolates the toolbar-state
+    // refresh: before the fix it would still target the stale `mango`.
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    assert.strictEqual(
+      svc.currentRequest?.initialTarget?.url,
+      manga,
+      'the pencil edits the freshly-typed URL, not the stale one',
+    );
+    svc.resolve(undefined);
+    await settled();
   });
 });
