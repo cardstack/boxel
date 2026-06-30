@@ -167,11 +167,18 @@ module(basename(import.meta.filename), function () {
       await archiveRealm(dbAdapter, new URL(archivedOwned));
       await archiveRealm(dbAdapter, new URL(archivedPublic));
 
+      // Seed migrations grant '*: read' to system realms (boxel-homepage,
+      // catalog, openrouter, …), which the public-read arm of
+      // fetchUserPermissions surfaces for every user. Filter to the URLs
+      // this test seeded so the assertion isn't coupled to that fixture.
+      const testRealms = (urls: string[]) =>
+        urls.filter((u) => u.startsWith('http://example.com/')).sort();
+
       let active = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
       });
       assert.deepEqual(
-        Object.keys(active).sort(),
+        testRealms(Object.keys(active)),
         [activeOwned, activePublic].sort(),
         'default enumeration excludes archived realms in both UNION arms',
       );
@@ -181,7 +188,7 @@ module(basename(import.meta.filename), function () {
         includeArchived: true,
       });
       assert.deepEqual(
-        Object.keys(withArchived).sort(),
+        testRealms(Object.keys(withArchived)),
         [activeOwned, activePublic, archivedOwned, archivedPublic].sort(),
         'includeArchived re-includes archived realms in both arms',
       );
@@ -191,7 +198,7 @@ module(basename(import.meta.filename), function () {
         onlyOwnRealms: true,
       });
       assert.deepEqual(
-        Object.keys(activeOwnersOnly).sort(),
+        testRealms(Object.keys(activeOwnersOnly)),
         [activeOwned].sort(),
         'onlyOwnRealms also excludes archived realms by default',
       );
@@ -202,7 +209,7 @@ module(basename(import.meta.filename), function () {
         includeArchived: true,
       });
       assert.deepEqual(
-        Object.keys(ownersWithArchived).sort(),
+        testRealms(Object.keys(ownersWithArchived)),
         [activeOwned, archivedOwned].sort(),
         'onlyOwnRealms + includeArchived returns the owner archived realm too',
       );
