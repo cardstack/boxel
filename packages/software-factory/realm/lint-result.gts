@@ -1,18 +1,15 @@
 import {
-  CardDef,
   FieldDef,
   Component,
   field,
   contains,
   containsMany,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
 import enumField from 'https://cardstack.com/base/enum';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { Project, Issue } from './darkfactory.gts';
+import { ValidationResult } from './validation-result.gts';
 import {
   ResultFittedCard,
   resultDisplayStatus,
@@ -26,15 +23,6 @@ import ListChecks from '@cardstack/boxel-icons/list-checks';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
 import CircleX from '@cardstack/boxel-icons/circle-x';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
-
-export const LintResultStatusField = enumField(StringField, {
-  options: [
-    { value: 'running', label: 'Running' },
-    { value: 'passed', label: 'Passed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'error', label: 'Error' },
-  ],
-});
 
 export const LintViolationSeverityField = enumField(StringField, {
   options: [
@@ -202,18 +190,10 @@ export class LintFileResult extends FieldDef {
   };
 }
 
-export class LintResult extends CardDef {
+export class LintResult extends ValidationResult {
   static displayName = 'Lint Result';
 
-  @field sequenceNumber = contains(NumberField);
-  @field runAt = contains(DateTimeField);
-  @field completedAt = contains(DateTimeField);
-  @field project = linksTo(() => Project);
-  @field issue = linksTo(() => Issue);
-  @field status = contains(LintResultStatusField);
-  @field durationMs = contains(NumberField);
   @field fileResults = containsMany(LintFileResult);
-  @field errorMessage = contains(StringField);
 
   @field totalErrors = contains(NumberField, {
     computeVia: function (this: LintResult) {
@@ -239,13 +219,9 @@ export class LintResult extends CardDef {
     },
   });
 
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: LintResult) {
-      let seq = this.sequenceNumber ?? '?';
-      let status = this.status ?? 'unknown';
-      return `LintResult #${seq} \u2014 ${status}`;
-    },
-  });
+  get resultLabel() {
+    return 'LintResult';
+  }
 
   get filesWithErrors() {
     return (this.fileResults ?? []).filter((fr) => !fr.passed).length;

@@ -1,17 +1,13 @@
 import {
-  CardDef,
   FieldDef,
   Component,
   field,
   contains,
   containsMany,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import enumField from 'https://cardstack.com/base/enum';
-import { Project, Issue } from './darkfactory.gts';
+import { ValidationResult } from './validation-result.gts';
 import {
   ResultFittedCard,
   resultDisplayStatus,
@@ -24,15 +20,6 @@ import { ResultDetailsSection } from './result-details-section.gts';
 import FileCode from '@cardstack/boxel-icons/file-code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
 import CircleX from '@cardstack/boxel-icons/circle-x';
-
-export const ParseResultStatusField = enumField(StringField, {
-  options: [
-    { value: 'running', label: 'Running' },
-    { value: 'passed', label: 'Passed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'error', label: 'Error' },
-  ],
-});
 
 export class ParseError extends FieldDef {
   static displayName = 'Parse Error';
@@ -158,18 +145,10 @@ export class ParseFileResult extends FieldDef {
   };
 }
 
-export class ParseResult extends CardDef {
+export class ParseResult extends ValidationResult {
   static displayName = 'Parse Result';
 
-  @field sequenceNumber = contains(NumberField);
-  @field runAt = contains(DateTimeField);
-  @field completedAt = contains(DateTimeField);
-  @field project = linksTo(() => Project);
-  @field issue = linksTo(() => Issue);
-  @field status = contains(ParseResultStatusField);
-  @field durationMs = contains(NumberField);
   @field fileResults = containsMany(ParseFileResult);
-  @field errorMessage = contains(StringField);
 
   @field totalErrors = contains(NumberField, {
     computeVia: function (this: ParseResult) {
@@ -186,13 +165,9 @@ export class ParseResult extends CardDef {
     },
   });
 
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: ParseResult) {
-      let seq = this.sequenceNumber ?? '?';
-      let status = this.status ?? 'unknown';
-      return `ParseResult #${seq} \u2014 ${status}`;
-    },
-  });
+  get resultLabel() {
+    return 'ParseResult';
+  }
 
   get filesWithErrors() {
     return (this.fileResults ?? []).filter((fr) => !fr.passed).length;

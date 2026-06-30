@@ -1,17 +1,13 @@
 import {
-  CardDef,
   FieldDef,
   Component,
   field,
   contains,
   containsMany,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import enumField from 'https://cardstack.com/base/enum';
-import { Project, Issue } from './darkfactory.gts';
+import { ValidationResult } from './validation-result.gts';
 import {
   ResultFittedCard,
   resultDisplayStatus,
@@ -24,15 +20,6 @@ import { ResultDetailsSection } from './result-details-section.gts';
 import Code from '@cardstack/boxel-icons/code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
 import CircleX from '@cardstack/boxel-icons/circle-x';
-
-export const EvalResultStatusField = enumField(StringField, {
-  options: [
-    { value: 'running', label: 'Running' },
-    { value: 'passed', label: 'Passed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'error', label: 'Error' },
-  ],
-});
 
 export class EvalModuleResult extends FieldDef {
   static displayName = 'Eval Module Result';
@@ -93,18 +80,10 @@ export class EvalModuleResult extends FieldDef {
   };
 }
 
-export class EvalResult extends CardDef {
+export class EvalResult extends ValidationResult {
   static displayName = 'Eval Result';
 
-  @field sequenceNumber = contains(NumberField);
-  @field runAt = contains(DateTimeField);
-  @field completedAt = contains(DateTimeField);
-  @field project = linksTo(() => Project);
-  @field issue = linksTo(() => Issue);
-  @field status = contains(EvalResultStatusField);
-  @field durationMs = contains(NumberField);
   @field moduleResults = containsMany(EvalModuleResult);
-  @field errorMessage = contains(StringField);
 
   @field modulesChecked = contains(NumberField, {
     computeVia: function (this: EvalResult) {
@@ -118,13 +97,9 @@ export class EvalResult extends CardDef {
     },
   });
 
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: EvalResult) {
-      let seq = this.sequenceNumber ?? '?';
-      let status = this.status ?? 'unknown';
-      return `EvalResult #${seq} \u2014 ${status}`;
-    },
-  });
+  get resultLabel() {
+    return 'EvalResult';
+  }
 
   get modulesPassed() {
     return (this.modulesChecked ?? 0) - (this.modulesWithErrors ?? 0);

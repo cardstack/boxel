@@ -1,20 +1,16 @@
 import {
-  CardDef,
   FieldDef,
   Component,
   field,
   contains,
   containsMany,
-  linksTo,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
-import enumField from 'https://cardstack.com/base/enum';
 import { RealmPaths } from '@cardstack/runtime-common';
-import { Project, Issue } from './darkfactory.gts';
+import { ValidationResult } from './validation-result.gts';
 import {
   ResultFittedCard,
   resultDisplayStatus,
@@ -27,15 +23,6 @@ import { ResultDetailsSection } from './result-details-section.gts';
 import Box from '@cardstack/boxel-icons/box';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
 import CircleX from '@cardstack/boxel-icons/circle-x';
-
-export const InstantiateResultStatusField = enumField(StringField, {
-  options: [
-    { value: 'running', label: 'Running' },
-    { value: 'passed', label: 'Passed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'error', label: 'Error' },
-  ],
-});
 
 export class InstantiateCardEntry extends FieldDef {
   static displayName = 'Instantiate Card Entry';
@@ -116,18 +103,10 @@ export class InstantiateCardEntry extends FieldDef {
   };
 }
 
-export class InstantiateResult extends CardDef {
+export class InstantiateResult extends ValidationResult {
   static displayName = 'Instantiate Result';
 
-  @field sequenceNumber = contains(NumberField);
-  @field runAt = contains(DateTimeField);
-  @field completedAt = contains(DateTimeField);
-  @field project = linksTo(() => Project);
-  @field issue = linksTo(() => Issue);
-  @field status = contains(InstantiateResultStatusField);
-  @field durationMs = contains(NumberField);
   @field cardResults = containsMany(InstantiateCardEntry);
-  @field errorMessage = contains(StringField);
 
   @field cardsChecked = contains(NumberField, {
     computeVia: function (this: InstantiateResult) {
@@ -141,13 +120,9 @@ export class InstantiateResult extends CardDef {
     },
   });
 
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: InstantiateResult) {
-      let seq = this.sequenceNumber ?? '?';
-      let status = this.status ?? 'unknown';
-      return `InstantiateResult #${seq} \u2014 ${status}`;
-    },
-  });
+  get resultLabel() {
+    return 'InstantiateResult';
+  }
 
   get cardsPassed() {
     return (this.cardsChecked ?? 0) - (this.cardsWithErrors ?? 0);

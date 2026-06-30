@@ -1,19 +1,16 @@
 import {
-  CardDef,
   FieldDef,
   Component,
   field,
   contains,
   containsMany,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { Project, Issue } from './darkfactory.gts';
+import { ValidationResult } from './validation-result.gts';
 import {
   ResultFittedCard,
   resultDisplayStatus,
@@ -29,15 +26,6 @@ import CircleX from '@cardstack/boxel-icons/circle-x';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import CircleMinus from '@cardstack/boxel-icons/circle-minus';
 import CircleDashed from '@cardstack/boxel-icons/circle-dashed';
-
-export const TestRunStatusField = enumField(StringField, {
-  options: [
-    { value: 'running', label: 'Running' },
-    { value: 'passed', label: 'Passed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'error', label: 'Error' },
-  ],
-});
 
 export const TestResultStatusField = enumField(StringField, {
   options: [
@@ -221,18 +209,10 @@ export class TestModuleResult extends FieldDef {
   };
 }
 
-export class TestRun extends CardDef {
+export class TestRun extends ValidationResult {
   static displayName = 'Test Run';
 
-  @field sequenceNumber = contains(NumberField);
-  @field runAt = contains(DateTimeField);
-  @field completedAt = contains(DateTimeField);
-  @field project = linksTo(() => Project);
-  @field issue = linksTo(() => Issue);
-  @field status = contains(TestRunStatusField);
-  @field durationMs = contains(NumberField);
   @field moduleResults = containsMany(TestModuleResult);
-  @field errorMessage = contains(StringField);
 
   @field passedCount = contains(NumberField, {
     computeVia: function (this: TestRun) {
@@ -261,13 +241,9 @@ export class TestRun extends CardDef {
     },
   });
 
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: TestRun) {
-      let seq = this.sequenceNumber ?? '?';
-      let status = this.status ?? 'unknown';
-      return `TestRun #${seq} \u2014 ${status}`;
-    },
-  });
+  get resultLabel() {
+    return 'TestRun';
+  }
 
   static fitted = class Fitted extends Component<typeof TestRun> {
     get total() {
