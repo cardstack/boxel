@@ -63,8 +63,12 @@ export default class NoDataTestSelector extends Rule {
 }
 
 // Gather the static (statically-known) text of a list of template nodes,
-// descending into ConcatStatement parts. Dynamic nodes (MustacheStatement,
-// etc.) contribute nothing since their value isn't known at lint time.
+// descending into ConcatStatement parts. Comments contribute nothing but are
+// transparent, so a selector split across them by adjacent TextNodes is still
+// recombined and caught. Every other dynamic node (MustacheStatement, etc.)
+// gets a space delimiter in its place: its runtime value isn't known at lint
+// time, so stitching the surrounding TextNodes together would invent a
+// selector that never exists (e.g. `[data-` {{kind}} `test-` → `[data-test-`).
 function collectStaticText(nodes) {
   let text = '';
   for (let child of nodes) {
@@ -72,6 +76,13 @@ function collectStaticText(nodes) {
       text += child.chars;
     } else if (child.type === 'ConcatStatement') {
       text += collectStaticText(child.parts);
+    } else if (
+      child.type === 'CommentStatement' ||
+      child.type === 'MustacheCommentStatement'
+    ) {
+      // Transparent: contributes no text, but doesn't break a split selector.
+    } else {
+      text += ' ';
     }
   }
   return text;
