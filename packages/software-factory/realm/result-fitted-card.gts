@@ -34,6 +34,24 @@ export function resultStatusLabel(status?: string, emptyLabel?: string) {
   }
 }
 
+// Resolve the display status for a result view, collapsing a passed-but-empty
+// run (nothing checked) to the synthetic 'empty' status the status helpers
+// understand. Shared by every result card's fitted and isolated views.
+export function resultDisplayStatus(
+  itemCount: number | undefined,
+  status: string | undefined,
+) {
+  if ((itemCount ?? 0) === 0 && status === 'passed') {
+    return 'empty';
+  }
+  return status;
+}
+
+// Title for a result card's isolated view, e.g. "Lint Run #3".
+export function resultRunTitle(label: string, sequenceNumber?: number) {
+  return `${label} Run #${sequenceNumber ?? '?'}`;
+}
+
 export function resultStatusColor(status?: string) {
   switch (status) {
     case 'passed':

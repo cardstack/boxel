@@ -1,6 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { StatusPill } from './status-pill.gts';
 import { resultStatusColor, resultStatusLabel } from './result-fitted-card.gts';
+import CalendarTime from '@cardstack/boxel-icons/calendar-time';
 import Clock from '@cardstack/boxel-icons/clock';
 
 interface Signature {
@@ -11,6 +13,9 @@ interface Signature {
     // Label shown for the 'empty' status (e.g. "No Files").
     emptyLabel?: string;
     durationMs?: number;
+    // When the run started / finished; the later of the two is surfaced.
+    runAt?: Date;
+    completedAt?: Date;
     // Gate the optional sections; the matching block supplies the content.
     hasProject?: unknown;
     hasIssue?: unknown;
@@ -35,6 +40,12 @@ export class ResultIsolatedCard extends GlimmerComponent<Signature> {
     return resultStatusColor(this.args.status);
   }
 
+  // Prefer the completion time; fall back to the start time for runs still
+  // in flight (or older results that only recorded when they began).
+  get timestamp() {
+    return this.args.completedAt ?? this.args.runAt;
+  }
+
   <template>
     <article class='result-surface' ...attributes>
       <header class='result-header'>
@@ -53,6 +64,16 @@ export class ResultIsolatedCard extends GlimmerComponent<Signature> {
                 height='13'
                 aria-hidden='true'
               />{{@durationMs}}ms
+            </span>
+          {{/if}}
+          {{#if this.timestamp}}
+            <span class='result-timestamp'>
+              <CalendarTime width='13' height='13' aria-hidden='true' />
+              {{formatDateTime
+                this.timestamp
+                dateStyle='medium'
+                timeStyle='short'
+              }}
             </span>
           {{/if}}
         </div>
@@ -116,7 +137,8 @@ export class ResultIsolatedCard extends GlimmerComponent<Signature> {
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground, var(--boxel-500));
       }
-      .result-duration {
+      .result-duration,
+      .result-timestamp {
         display: inline-flex;
         align-items: center;
         gap: 0.3em;

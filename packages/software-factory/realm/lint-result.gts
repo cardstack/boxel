@@ -15,9 +15,12 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { Project, Issue } from './darkfactory.gts';
 import {
   ResultFittedCard,
+  resultDisplayStatus,
+  resultRunTitle,
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailsSection } from './result-details-section.gts';
 
 import ListChecks from '@cardstack/boxel-icons/list-checks';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -254,13 +257,10 @@ export class LintResult extends CardDef {
 
   static fitted = class Fitted extends Component<typeof LintResult> {
     get displayStatus() {
-      if (
-        (this.args.model.filesChecked ?? 0) === 0 &&
-        this.args.model.status === 'passed'
-      ) {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(
+        this.args.model.filesChecked,
+        this.args.model.status,
+      );
     }
 
     get titleText() {
@@ -315,18 +315,17 @@ export class LintResult extends CardDef {
 
   static isolated = class Isolated extends Component<typeof LintResult> {
     get displayStatus() {
-      if (
-        (this.args.model.filesChecked ?? 0) === 0 &&
-        this.args.model.status === 'passed'
-      ) {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(
+        this.args.model.filesChecked,
+        this.args.model.status,
+      );
     }
 
     get titleText() {
-      return `Lint Run #${this.args.model.sequenceNumber ?? '?'}`;
+      return resultRunTitle('Lint', this.args.model.sequenceNumber);
     }
+
+    fileHasErrors = (file: LintFileResult) => !file.passed;
 
     <template>
       <ResultIsolatedCard
@@ -334,6 +333,8 @@ export class LintResult extends CardDef {
         @status={{this.displayStatus}}
         @emptyLabel='No Files'
         @durationMs={{@model.durationMs}}
+        @runAt={{@model.runAt}}
+        @completedAt={{@model.completedAt}}
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
@@ -350,119 +351,65 @@ export class LintResult extends CardDef {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          {{#if @model.fileResults.length}}
-            <section class='detail-section'>
-              <h2>File Results</h2>
-              <div class='detail-groups'>
-                {{#each @model.fileResults as |fileResult|}}
-                  <div
-                    class='detail-group
-                      {{unless fileResult.passed "has-errors"}}'
-                  >
-                    <div class='detail-group-header'>
-                      <span class='detail-group-name'>{{fileResult.file}}</span>
-                      {{#if fileResult.passed}}
-                        <span class='group-status clean'>clean</span>
+          <ResultDetailsSection
+            @sectionTitle='File Results'
+            @items={{@model.fileResults}}
+            @hasErrors={{this.fileHasErrors}}
+          >
+            <:header as |fileResult|>
+              <span class='detail-group-name'>{{fileResult.file}}</span>
+              {{#if fileResult.passed}}
+                <span class='group-status clean'>clean</span>
+              {{else}}
+                <span class='group-status errors'>
+                  {{fileResult.errorCount}}
+                  error(s)
+                  {{#if fileResult.warningCount}}
+                    ,
+                    {{fileResult.warningCount}}
+                    warning(s)
+                  {{/if}}
+                </span>
+              {{/if}}
+            </:header>
+            <:body as |fileResult|>
+              {{#if fileResult.totalCount}}
+                <div class='violation-rows'>
+                  {{#each fileResult.violations as |violation|}}
+                    <div class='violation-row'>
+                      {{#if (eq violation.severity 'error')}}
+                        <CircleX
+                          class='sev-icon sev-error'
+                          width='14'
+                          height='14'
+                          aria-label='error'
+                        />
                       {{else}}
-                        <span class='group-status errors'>
-                          {{fileResult.errorCount}}
-                          error(s)
-                          {{#if fileResult.warningCount}}
-                            ,
-                            {{fileResult.warningCount}}
-                            warning(s)
-                          {{/if}}
-                        </span>
+                        <CircleAlert
+                          class='sev-icon sev-warning'
+                          width='14'
+                          height='14'
+                          aria-label='warning'
+                        />
+                      {{/if}}
+                      <span
+                        class='violation-location'
+                      >{{violation.line}}:{{violation.column}}</span>
+                      <span
+                        class='violation-message'
+                      >{{violation.message}}</span>
+                      {{#if violation.rule}}
+                        <span class='violation-rule'>[{{violation.rule}}]</span>
                       {{/if}}
                     </div>
-                    {{#if fileResult.totalCount}}
-                      <div class='violation-rows'>
-                        {{#each fileResult.violations as |violation|}}
-                          <div class='violation-row'>
-                            {{#if (eq violation.severity 'error')}}
-                              <CircleX
-                                class='sev-icon sev-error'
-                                width='14'
-                                height='14'
-                                aria-label='error'
-                              />
-                            {{else}}
-                              <CircleAlert
-                                class='sev-icon sev-warning'
-                                width='14'
-                                height='14'
-                                aria-label='warning'
-                              />
-                            {{/if}}
-                            <span
-                              class='violation-location'
-                            >{{violation.line}}:{{violation.column}}</span>
-                            <span
-                              class='violation-message'
-                            >{{violation.message}}</span>
-                            {{#if violation.rule}}
-                              <span
-                                class='violation-rule'
-                              >[{{violation.rule}}]</span>
-                            {{/if}}
-                          </div>
-                        {{/each}}
-                      </div>
-                    {{/if}}
-                  </div>
-                {{/each}}
-              </div>
-            </section>
-          {{/if}}
+                  {{/each}}
+                </div>
+              {{/if}}
+            </:body>
+          </ResultDetailsSection>
         </:details>
       </ResultIsolatedCard>
       <style scoped>
-        .detail-section {
-          display: grid;
-          gap: var(--boxel-sp-xs);
-        }
-        .detail-section > h2 {
-          margin: 0;
-          font: 600 var(--boxel-font-sm);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .detail-groups {
-          display: grid;
-          gap: var(--boxel-sp-sm);
-        }
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
         .detail-group-name {
           font-weight: 600;
           font-size: var(--boxel-font-size-sm);
@@ -474,6 +421,7 @@ export class LintResult extends CardDef {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
         .group-status.clean {
           color: oklch(60% 0.17 150);

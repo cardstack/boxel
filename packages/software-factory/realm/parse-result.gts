@@ -14,9 +14,12 @@ import enumField from 'https://cardstack.com/base/enum';
 import { Project, Issue } from './darkfactory.gts';
 import {
   ResultFittedCard,
+  resultDisplayStatus,
+  resultRunTitle,
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailsSection } from './result-details-section.gts';
 
 import FileCode from '@cardstack/boxel-icons/file-code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -201,13 +204,10 @@ export class ParseResult extends CardDef {
 
   static fitted = class Fitted extends Component<typeof ParseResult> {
     get displayStatus() {
-      if (
-        (this.args.model.filesChecked ?? 0) === 0 &&
-        this.args.model.status === 'passed'
-      ) {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(
+        this.args.model.filesChecked,
+        this.args.model.status,
+      );
     }
 
     get titleText() {
@@ -255,18 +255,17 @@ export class ParseResult extends CardDef {
 
   static isolated = class Isolated extends Component<typeof ParseResult> {
     get displayStatus() {
-      if (
-        (this.args.model.filesChecked ?? 0) === 0 &&
-        this.args.model.status === 'passed'
-      ) {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(
+        this.args.model.filesChecked,
+        this.args.model.status,
+      );
     }
 
     get titleText() {
-      return `Parse Run #${this.args.model.sequenceNumber ?? '?'}`;
+      return resultRunTitle('Parse', this.args.model.sequenceNumber);
     }
+
+    fileHasErrors = (file: ParseFileResult) => !file.passed;
 
     <template>
       <ResultIsolatedCard
@@ -274,6 +273,8 @@ export class ParseResult extends CardDef {
         @status={{this.displayStatus}}
         @emptyLabel='No Files'
         @durationMs={{@model.durationMs}}
+        @runAt={{@model.runAt}}
+        @completedAt={{@model.completedAt}}
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
@@ -288,104 +289,48 @@ export class ParseResult extends CardDef {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          {{#if @model.fileResults.length}}
-            <section class='detail-section'>
-              <h2>File Results</h2>
-              <div class='detail-groups'>
-                {{#each @model.fileResults as |fileResult|}}
-                  <div
-                    class='detail-group
-                      {{unless fileResult.passed "has-errors"}}'
-                  >
-                    <div class='detail-group-header'>
-                      <span
-                        class='detail-group-name'
-                      >{{fileResult.displayFile}}</span>
-                      {{#if fileResult.passed}}
-                        <span class='group-status clean'>valid</span>
-                      {{else}}
-                        <span class='group-status errors'>
-                          {{fileResult.errorCount}}
-                          error(s)
-                        </span>
+          <ResultDetailsSection
+            @sectionTitle='File Results'
+            @items={{@model.fileResults}}
+            @hasErrors={{this.fileHasErrors}}
+          >
+            <:header as |fileResult|>
+              <span class='detail-group-name'>{{fileResult.displayFile}}</span>
+              {{#if fileResult.passed}}
+                <span class='group-status clean'>valid</span>
+              {{else}}
+                <span class='group-status errors'>
+                  {{fileResult.errorCount}}
+                  error(s)
+                </span>
+              {{/if}}
+            </:header>
+            <:body as |fileResult|>
+              {{#if fileResult.errorCount}}
+                <div class='error-rows'>
+                  {{#each fileResult.errors as |error|}}
+                    <div class='error-row'>
+                      <CircleX
+                        class='sev-icon sev-error'
+                        width='14'
+                        height='14'
+                        aria-label='error'
+                      />
+                      {{#if error.line}}
+                        <span
+                          class='error-location'
+                        >{{error.line}}:{{error.column}}</span>
                       {{/if}}
+                      <span class='error-message-text'>{{error.message}}</span>
                     </div>
-                    {{#if fileResult.errorCount}}
-                      <div class='error-rows'>
-                        {{#each fileResult.errors as |error|}}
-                          <div class='error-row'>
-                            <CircleX
-                              class='sev-icon sev-error'
-                              width='14'
-                              height='14'
-                              aria-label='error'
-                            />
-                            {{#if error.line}}
-                              <span
-                                class='error-location'
-                              >{{error.line}}:{{error.column}}</span>
-                            {{/if}}
-                            <span
-                              class='error-message-text'
-                            >{{error.message}}</span>
-                          </div>
-                        {{/each}}
-                      </div>
-                    {{/if}}
-                  </div>
-                {{/each}}
-              </div>
-            </section>
-          {{/if}}
+                  {{/each}}
+                </div>
+              {{/if}}
+            </:body>
+          </ResultDetailsSection>
         </:details>
       </ResultIsolatedCard>
       <style scoped>
-        .detail-section {
-          display: grid;
-          gap: var(--boxel-sp-xs);
-        }
-        .detail-section > h2 {
-          margin: 0;
-          font: 600 var(--boxel-font-sm);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .detail-groups {
-          display: grid;
-          gap: var(--boxel-sp-sm);
-        }
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
         .detail-group-name {
           font-weight: 600;
           font-size: var(--boxel-font-size-sm);
@@ -397,6 +342,7 @@ export class ParseResult extends CardDef {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
         .group-status.clean {
           color: oklch(60% 0.17 150);

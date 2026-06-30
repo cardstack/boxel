@@ -17,9 +17,12 @@ import { RealmPaths } from '@cardstack/runtime-common';
 import { Project, Issue } from './darkfactory.gts';
 import {
   ResultFittedCard,
+  resultDisplayStatus,
+  resultRunTitle,
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailsSection } from './result-details-section.gts';
 
 import Box from '@cardstack/boxel-icons/box';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -152,13 +155,10 @@ export class InstantiateResult extends CardDef {
 
   static fitted = class Fitted extends Component<typeof InstantiateResult> {
     get displayStatus() {
-      if (
-        (this.args.model.cardsChecked ?? 0) === 0 &&
-        this.args.model.status === 'passed'
-      ) {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(
+        this.args.model.cardsChecked,
+        this.args.model.status,
+      );
     }
 
     get titleText() {
@@ -206,18 +206,17 @@ export class InstantiateResult extends CardDef {
 
   static isolated = class Isolated extends Component<typeof InstantiateResult> {
     get displayStatus() {
-      if (
-        (this.args.model.cardsChecked ?? 0) === 0 &&
-        this.args.model.status === 'passed'
-      ) {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(
+        this.args.model.cardsChecked,
+        this.args.model.status,
+      );
     }
 
     get titleText() {
-      return `Instantiate Run #${this.args.model.sequenceNumber ?? '?'}`;
+      return resultRunTitle('Instantiate', this.args.model.sequenceNumber);
     }
+
+    cardHasError = (card: InstantiateCardEntry) => card.hasError;
 
     <template>
       <ResultIsolatedCard
@@ -225,6 +224,8 @@ export class InstantiateResult extends CardDef {
         @status={{this.displayStatus}}
         @emptyLabel='No Cards'
         @durationMs={{@model.durationMs}}
+        @runAt={{@model.runAt}}
+        @completedAt={{@model.completedAt}}
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
@@ -239,81 +240,28 @@ export class InstantiateResult extends CardDef {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          {{#if @model.cardResults.length}}
-            <section class='detail-section'>
-              <h2>Card Results</h2>
-              <div class='detail-groups'>
-                {{#each @model.cardResults as |cardResult|}}
-                  <div
-                    class='detail-group {{if cardResult.hasError "has-errors"}}'
-                  >
-                    <div class='detail-group-header'>
-                      <span
-                        class='detail-group-name'
-                      >{{cardResult.instancePath}}</span>
-                      {{#if cardResult.hasError}}
-                        <span class='group-status errors'>error</span>
-                      {{else}}
-                        <span class='group-status clean'>passed</span>
-                      {{/if}}
-                    </div>
-                    {{#if cardResult.error}}
-                      <pre class='error-code-block'>{{cardResult.error}}</pre>
-                    {{/if}}
-                  </div>
-                {{/each}}
-              </div>
-            </section>
-          {{/if}}
+          <ResultDetailsSection
+            @sectionTitle='Card Results'
+            @items={{@model.cardResults}}
+            @hasErrors={{this.cardHasError}}
+          >
+            <:header as |cardResult|>
+              <span class='detail-group-name'>{{cardResult.instancePath}}</span>
+              {{#if cardResult.hasError}}
+                <span class='group-status errors'>error</span>
+              {{else}}
+                <span class='group-status clean'>passed</span>
+              {{/if}}
+            </:header>
+            <:body as |cardResult|>
+              {{#if cardResult.error}}
+                <pre class='error-code-block'>{{cardResult.error}}</pre>
+              {{/if}}
+            </:body>
+          </ResultDetailsSection>
         </:details>
       </ResultIsolatedCard>
       <style scoped>
-        .detail-section {
-          display: grid;
-          gap: var(--boxel-sp-xs);
-        }
-        .detail-section > h2 {
-          margin: 0;
-          font: 600 var(--boxel-font-sm);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .detail-groups {
-          display: grid;
-          gap: var(--boxel-sp-sm);
-        }
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
         .detail-group-name {
           font-weight: 600;
           font-size: var(--boxel-font-size-sm);
@@ -325,6 +273,7 @@ export class InstantiateResult extends CardDef {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
         .group-status.clean {
           color: oklch(60% 0.17 150);

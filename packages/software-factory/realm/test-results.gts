@@ -16,9 +16,12 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { Project, Issue } from './darkfactory.gts';
 import {
   ResultFittedCard,
+  resultDisplayStatus,
+  resultRunTitle,
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailsSection } from './result-details-section.gts';
 
 import FlaskConical from '@cardstack/boxel-icons/flask-conical';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -276,10 +279,7 @@ export class TestRun extends CardDef {
     }
 
     get displayStatus() {
-      if (this.total === 0 && this.args.model.status === 'passed') {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(this.total, this.args.model.status);
     }
 
     get titleText() {
@@ -342,15 +342,14 @@ export class TestRun extends CardDef {
     }
 
     get displayStatus() {
-      if (this.total === 0 && this.args.model.status === 'passed') {
-        return 'empty';
-      }
-      return this.args.model.status;
+      return resultDisplayStatus(this.total, this.args.model.status);
     }
 
     get titleText() {
-      return `Test Run #${this.args.model.sequenceNumber ?? '?'}`;
+      return resultRunTitle('Test', this.args.model.sequenceNumber);
     }
+
+    moduleHasFailures = (module: TestModuleResult) => module.failedCount;
 
     <template>
       <ResultIsolatedCard
@@ -358,6 +357,8 @@ export class TestRun extends CardDef {
         @status={{this.displayStatus}}
         @emptyLabel='No Tests'
         @durationMs={{@model.durationMs}}
+        @runAt={{@model.runAt}}
+        @completedAt={{@model.completedAt}}
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
@@ -372,162 +373,104 @@ export class TestRun extends CardDef {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          {{#if @model.moduleResults.length}}
-            <section class='detail-section'>
-              <h2>Test Results</h2>
-              <div class='detail-groups'>
-                {{#each @model.moduleResults as |moduleResult|}}
-                  <div
-                    class='detail-group
-                      {{if moduleResult.failedCount "has-errors"}}'
-                  >
-                    <div class='detail-group-header'>
-                      <span
-                        class='detail-group-name'
-                      >{{moduleResult.moduleName}}</span>
-                      {{#if moduleResult.isComplete}}
-                        <span
-                          class='group-status
-                            {{if
-                              moduleResult.failedCount
-                              "errors"
-                              (if moduleResult.passedCount "clean" "muted")
-                            }}'
-                        >
-                          {{#if moduleResult.failedCount}}
-                            {{moduleResult.passedCount}}
-                            passed,
-                            {{moduleResult.failedCount}}
-                            failed
-                          {{else}}
-                            {{moduleResult.passedCount}}/{{moduleResult.totalCount}}
-                            passed
-                          {{/if}}
-                          {{#if moduleResult.skippedCount}}
-                            ({{moduleResult.skippedCount}}
-                            skipped)
-                          {{/if}}
-                        </span>
+          <ResultDetailsSection
+            @sectionTitle='Test Results'
+            @items={{@model.moduleResults}}
+            @hasErrors={{this.moduleHasFailures}}
+          >
+            <:header as |moduleResult|>
+              <span class='detail-group-name'>{{moduleResult.moduleName}}</span>
+              {{#if moduleResult.isComplete}}
+                <span
+                  class='group-status
+                    {{if
+                      moduleResult.failedCount
+                      "errors"
+                      (if moduleResult.passedCount "clean" "muted")
+                    }}'
+                >
+                  {{#if moduleResult.failedCount}}
+                    {{moduleResult.passedCount}}
+                    passed,
+                    {{moduleResult.failedCount}}
+                    failed
+                  {{else}}
+                    {{moduleResult.passedCount}}/{{moduleResult.totalCount}}
+                    passed
+                  {{/if}}
+                  {{#if moduleResult.skippedCount}}
+                    ({{moduleResult.skippedCount}}
+                    skipped)
+                  {{/if}}
+                </span>
+              {{else}}
+                <span class='group-status running'>running…</span>
+              {{/if}}
+            </:header>
+            <:body as |moduleResult|>
+              <div class='test-rows'>
+                {{#each moduleResult.results as |result|}}
+                  <div class='test-row'>
+                    <div class='test-row-main'>
+                      {{#if (eq result.status 'passed')}}
+                        <CircleCheck
+                          class='test-icon icon-passed'
+                          width='14'
+                          height='14'
+                          aria-label='passed'
+                        />
+                      {{else if (eq result.status 'failed')}}
+                        <CircleX
+                          class='test-icon icon-failed'
+                          width='14'
+                          height='14'
+                          aria-label='failed'
+                        />
+                      {{else if (eq result.status 'error')}}
+                        <CircleAlert
+                          class='test-icon icon-error'
+                          width='14'
+                          height='14'
+                          aria-label='error'
+                        />
+                      {{else if (eq result.status 'skipped')}}
+                        <CircleMinus
+                          class='test-icon icon-skipped'
+                          width='14'
+                          height='14'
+                          aria-label='skipped'
+                        />
                       {{else}}
-                        <span class='group-status running'>running…</span>
+                        <CircleDashed
+                          class='test-icon icon-pending'
+                          width='14'
+                          height='14'
+                          aria-label='pending'
+                        />
+                      {{/if}}
+                      <span class='test-name'>{{result.testName}}</span>
+                      {{#if result.durationMs}}
+                        <span
+                          class='test-duration'
+                        >{{result.durationMs}}ms</span>
                       {{/if}}
                     </div>
-                    <div class='test-rows'>
-                      {{#each moduleResult.results as |result|}}
-                        <div class='test-row'>
-                          <div class='test-row-main'>
-                            {{#if (eq result.status 'passed')}}
-                              <CircleCheck
-                                class='test-icon icon-passed'
-                                width='14'
-                                height='14'
-                                aria-label='passed'
-                              />
-                            {{else if (eq result.status 'failed')}}
-                              <CircleX
-                                class='test-icon icon-failed'
-                                width='14'
-                                height='14'
-                                aria-label='failed'
-                              />
-                            {{else if (eq result.status 'error')}}
-                              <CircleAlert
-                                class='test-icon icon-error'
-                                width='14'
-                                height='14'
-                                aria-label='error'
-                              />
-                            {{else if (eq result.status 'skipped')}}
-                              <CircleMinus
-                                class='test-icon icon-skipped'
-                                width='14'
-                                height='14'
-                                aria-label='skipped'
-                              />
-                            {{else}}
-                              <CircleDashed
-                                class='test-icon icon-pending'
-                                width='14'
-                                height='14'
-                                aria-label='pending'
-                              />
-                            {{/if}}
-                            <span class='test-name'>{{result.testName}}</span>
-                            {{#if result.durationMs}}
-                              <span
-                                class='test-duration'
-                              >{{result.durationMs}}ms</span>
-                            {{/if}}
-                          </div>
-                          {{#if result.message}}
-                            <pre
-                              class='failure-message'
-                            >{{result.message}}</pre>
-                          {{/if}}
-                          {{#if result.stackTrace}}
-                            <pre
-                              class='failure-stack'
-                            >{{result.stackTrace}}</pre>
-                          {{/if}}
-                        </div>
-                      {{/each}}
-                    </div>
+                    {{#if result.message}}
+                      <pre class='failure-message'>{{result.message}}</pre>
+                    {{/if}}
+                    {{#if result.stackTrace}}
+                      <pre class='failure-stack'>{{result.stackTrace}}</pre>
+                    {{/if}}
                   </div>
                 {{/each}}
               </div>
-            </section>
-          {{/if}}
+            </:body>
+          </ResultDetailsSection>
         </:details>
       </ResultIsolatedCard>
       <style scoped>
         .skipped {
           font-style: italic;
-        }
-        .detail-section {
-          display: grid;
-          gap: var(--boxel-sp-xs);
-        }
-        .detail-section > h2 {
-          margin: 0;
-          font: 600 var(--boxel-font-sm);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .detail-groups {
-          display: grid;
-          gap: var(--boxel-sp-sm);
-        }
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
         }
         .detail-group-name {
           font-weight: 600;
@@ -539,6 +482,7 @@ export class TestRun extends CardDef {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
         .group-status.clean {
           color: oklch(60% 0.17 150);
