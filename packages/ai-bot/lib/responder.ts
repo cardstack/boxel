@@ -67,23 +67,24 @@ export class Responder {
 
   needsMessageSend = false;
 
-  // Hand the current event off as a marker for tool calls the bot ran itself
-  // (e.g. readRealmFile) and rotate to a fresh event for what streams next. The
-  // marker keeps its slot, so it precedes the answer. Returns the marker's
-  // event id so the caller can post its result (done/failed).
-  async beginServerCommandMarker(
+  // Hand the current event off as a command-result indicator for tool calls the
+  // bot ran itself (e.g. readRealmFile) and rotate to a fresh event for what
+  // streams next. The indicator keeps its slot, so it precedes the answer.
+  // Returns the indicator's event id so the caller can post its result
+  // (done/failed).
+  async beginCommandResultIndicator(
     commandRequests: Partial<CommandRequest>[],
   ): Promise<string | undefined> {
     // Drop any pending streamed update for this event — we're replacing it
-    // wholesale with the marker.
+    // wholesale with the indicator.
     this.needsMessageSend = false;
     (
       this.sendMessageEventWithThrottlingInternal as unknown as {
         cancel: () => void;
       }
     ).cancel();
-    let markerEventId =
-      await this.matrixResponsePublisher.sendServerCommandMarker(
+    let indicatorEventId =
+      await this.matrixResponsePublisher.sendCommandResultIndicator(
         commandRequests,
       );
     // Start the next message clean and let it send fresh.
@@ -92,7 +93,7 @@ export class Responder {
     this._lastSentContentLen = 0;
     this._lastSentReasoningLen = 0;
     this._lastSentToolCallsJson = undefined;
-    return markerEventId;
+    return indicatorEventId;
   }
 
   async ensureThinkingMessageSent() {

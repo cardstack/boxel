@@ -337,7 +337,7 @@ export default class MessageBuilder {
     // ai-bot ran this one itself (e.g. readRealmFile), so the host never
     // resolves a command class or runs it. Skip the skill lookup below — it's
     // pure async churn here (an `await store.get` per enabled skill) that would
-    // leave the marker pill blank for a beat while it runs. Build the command
+    // leave the indicator blank for a beat while it runs. Build the command
     // synchronously: 'applying' (loading) until the result event lands, then
     // applied (success) or invalid + reason (failure).
     if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
@@ -347,7 +347,7 @@ export default class MessageBuilder {
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
         false, // requiresApproval — never prompts or runs
-        'Apply', // actionVerb — unused; the pill shows status, not a Run button
+        'Apply', // actionVerb — unused; the indicator shows status, not a Run button
         (commandResultEvent
           ? commandResultEvent.content['m.relates_to']?.key || 'applied'
           : 'applying') as CommandStatus,

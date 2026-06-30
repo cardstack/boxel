@@ -624,12 +624,12 @@ Common issues are:
 
                     if (hostToolCalls.length === 0) {
                       // Bot-only round: turn the current "thinking" bubble into
-                      // a loading marker (tagged executedBy: 'ai-bot'; the host
-                      // shows it but never runs it) and rotate so the answer
-                      // streams into a new message after it — the read shows
-                      // applying → done, then the answer.
-                      let markerEventId =
-                        await responder.beginServerCommandMarker(
+                      // a loading command-result indicator (tagged executedBy:
+                      // 'ai-bot'; the host shows it but never runs it) and rotate
+                      // so the answer streams into a new message after it — the
+                      // read shows applying → done, then the answer.
+                      let indicatorEventId =
+                        await responder.beginCommandResultIndicator(
                           fileReadRequests,
                         );
 
@@ -643,10 +643,10 @@ Common issues are:
                         },
                       );
 
-                      // Resolve each pill — applied on success, invalid +
+                      // Resolve each indicator — applied on success, invalid +
                       // reason on failure, so a failed read reads as failed
                       // rather than as a clean read.
-                      if (markerEventId) {
+                      if (indicatorEventId) {
                         for (let outcome of followup.outcomes) {
                           await sendMatrixEvent(
                             client,
@@ -654,7 +654,7 @@ Common issues are:
                             APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
                             fileReadResultContent({
                               commandRequestId: outcome.commandRequestId,
-                              markerEventId,
+                              indicatorEventId,
                               ok: outcome.ok,
                               failureReason: outcome.error,
                               agentId,
@@ -678,9 +678,9 @@ Common issues are:
 
                     // Mixed round: bot tools are same-turn only and host
                     // commands are next-turn only, so we can't honor both. Don't
-                    // loop; reject the reads explicitly (a visible failed marker,
-                    // never a silent drop) and let the host commands proceed on
-                    // the normal path below.
+                    // loop; reject the reads explicitly (a visible failed
+                    // indicator, never a silent drop) and let the host commands
+                    // proceed on the normal path below.
                     let rejectionEventId = (
                       await sendMessageEvent(
                         client,
@@ -709,7 +709,7 @@ Common issues are:
                           APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
                           fileReadResultContent({
                             commandRequestId: request.id!,
-                            markerEventId: rejectionEventId,
+                            indicatorEventId: rejectionEventId,
                             ok: false,
                             failureReason:
                               'readRealmFile cannot be mixed with host-dispatched commands in the same round; call it on its own.',

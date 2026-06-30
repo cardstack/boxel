@@ -219,32 +219,32 @@ export default class MatrixResponsePublisher {
 
   // When the bot is mid-turn there's already a "Thinking…" message on screen.
   // If the model then asks for a tool that ai-bot runs itself (readRealmFile),
-  // rather than one it hands to the host, we want to show that work as a marker
-  // right where the Thinking message is — and before the answer — so the turn
-  // reads as "did this, then answered".
+  // rather than one it hands to the host, we want to show that work as a
+  // command-result indicator right where the Thinking message is — and before
+  // the answer — so the turn reads as "did this, then answered".
   //
   // To get that ordering we reuse the Thinking event: replace it in place with
   // the command requests, then rotate to a fresh event for whatever streams
   // next (the answer). Reusing it is what matters — that event already holds
-  // this turn's earliest timeline slot, so the marker inherits the slot and the
-  // answer in the fresh event sorts after it. Posting a brand-new marker
+  // this turn's earliest timeline slot, so the indicator inherits the slot and
+  // the answer in the fresh event sorts after it. Posting a brand-new indicator
   // message instead would land it after the answer's event and render below it.
   //
-  // The marker is sent finished with an empty body + the command requests. The
-  // caller posts a result event against the returned event id to flip it from
-  // in-progress to done/failed, and resets ResponseState so the next event
+  // The indicator is sent finished with an empty body + the command requests.
+  // The caller posts a result event against the returned event id to flip it
+  // from in-progress to done/failed, and resets ResponseState so the next event
   // streams clean.
-  async sendServerCommandMarker(
+  async sendCommandResultIndicator(
     commandRequests: Partial<CommandRequest>[],
   ): Promise<string | undefined> {
     await this.ensureThinkingMessageSent();
-    let markerEventId = this.currentResponseEventId;
+    let indicatorEventId = this.currentResponseEventId;
     let sendOperation = this.sendingMessage.then(async () => {
       await sendMessageEvent(
         this.client,
         this.roomId,
         '',
-        markerEventId,
+        indicatorEventId,
         {
           isStreamingFinished: true,
           data: { context: { agentId: this.agentId } },
@@ -252,13 +252,13 @@ export default class MatrixResponsePublisher {
         commandRequests,
       );
       // Fresh event (no id yet) → the next send creates a new message that
-      // sorts after this marker.
+      // sorts after this indicator.
       this.responseEvents = [
         new ResponseEventData(undefined, this.eventSizeMax),
       ];
     });
     this.sendingMessage = sendOperation.catch(() => {});
     await sendOperation;
-    return markerEventId;
+    return indicatorEventId;
   }
 }

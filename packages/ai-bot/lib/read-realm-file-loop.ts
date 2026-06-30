@@ -27,8 +27,9 @@ export interface ReadRealmFileLoopDeps {
   fetch?: typeof globalThis.fetch;
 }
 
-// Per-file result of a round, so the caller can resolve each timeline marker to
-// done or failed — a read that 404s or is denied must not read as success.
+// Per-file result of a round, so the caller can resolve each command-result
+// indicator to done or failed — a read that 404s or is denied must not read as
+// success.
 export interface ReadRealmFileOutcome {
   commandRequestId: string;
   ok: boolean;
@@ -132,8 +133,8 @@ export async function buildReadRealmFileFollowup(
 
 // A short human label for a file being read, derived from its URL:
 // `…/skills/<name>/SKILL.md` → `<name>/SKILL.md`, otherwise the file name.
-// Shown in the timeline marker so the user sees which file was read, not a
-// blank pill.
+// Shown in the command-result indicator so the user sees which file was read,
+// not a blank one.
 function fileLabelFromUrl(url: string | undefined): string | undefined {
   if (!url) {
     return undefined;
@@ -154,7 +155,8 @@ function fileLabelFromUrl(url: string | undefined): string | undefined {
 // `executedBy: 'ai-bot'`. The bot runs these in-process, so the host must not
 // execute them — it surfaces them in the timeline as a record of what was read
 // (and as a debugging aid when an answer looks under-informed). Used for both
-// the success markers (bot-only round) and the rejection markers (mixed round).
+// the success indicators (bot-only round) and the rejection indicators (mixed
+// round).
 export function readRealmFileCommandRequests(
   botToolCalls: ChatCompletionMessageToolCall[],
 ): Partial<CommandRequest>[] {
@@ -172,7 +174,7 @@ export function readRealmFileCommandRequests(
       id: call.id,
       name: READ_REALM_FILE_TOOL_NAME,
       // `description` is what the timeline command header renders; without it
-      // the marker is a blank pill. The host reads it off the arguments.
+      // the indicator is blank. The host reads it off the arguments.
       arguments: {
         ...args,
         description: label ? `Read file: ${label}` : 'Read file',
@@ -182,21 +184,21 @@ export function readRealmFileCommandRequests(
   });
 }
 
-// Content for the command-result event that resolves a file-read marker from
+// Content for the command-result event that resolves a file-read indicator from
 // its in-progress (loading) state to a terminal one. ai-bot posts one per file
-// once the fetch completes; the host renders the marker as a spinner until it
-// lands, then as applied (success) or invalid + the reason (failure) — the same
+// once the fetch completes; the host renders the indicator as a spinner until
+// it lands, then as applied (success) or invalid + the reason (failure) — same
 // applying→applied/invalid path host-run commands follow. A failed read must
 // surface as failed, not as a successful read.
 export function fileReadResultContent({
   commandRequestId,
-  markerEventId,
+  indicatorEventId,
   ok,
   failureReason,
   agentId,
 }: {
   commandRequestId: string;
-  markerEventId: string;
+  indicatorEventId: string;
   ok: boolean;
   failureReason?: string;
   agentId: string | undefined;
@@ -206,7 +208,7 @@ export function fileReadResultContent({
     commandRequestId,
     failureReason: ok ? undefined : failureReason,
     'm.relates_to': {
-      event_id: markerEventId,
+      event_id: indicatorEventId,
       key: ok ? 'applied' : 'invalid',
       rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
     },

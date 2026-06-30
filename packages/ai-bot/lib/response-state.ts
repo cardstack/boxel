@@ -13,7 +13,8 @@ export default class ResponseState {
   isCanceled = false;
 
   // Clear the accumulated stream so the next message event starts fresh. Used
-  // when the readRealmFile loop hands the current event off as a marker and
+  // when the readRealmFile loop hands the current event off as a command-result
+  // indicator and
   // rotates to a new event for what follows.
   resetForNextEvent() {
     this.latestReasoning = '';

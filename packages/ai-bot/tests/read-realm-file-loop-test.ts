@@ -214,16 +214,16 @@ module('readRealmFileCommandRequests', () => {
     assert.strictEqual(
       requests[0].arguments!.description,
       'Read file: trip-planner/SKILL.md',
-      'the marker carries a human label derived from the url',
+      'the indicator carries a human label derived from the url',
     );
   });
 });
 
 module('fileReadResultContent', () => {
-  test('a successful read resolves its marker to applied', () => {
+  test('a successful read resolves its indicator to applied', () => {
     let content = fileReadResultContent({
       commandRequestId: 'c1',
-      markerEventId: '$marker:localhost',
+      indicatorEventId: '$indicator:localhost',
       ok: true,
       agentId: 'agent-1',
     });
@@ -234,16 +234,16 @@ module('fileReadResultContent', () => {
     assert.strictEqual(content.commandRequestId, 'c1');
     assert.strictEqual(content.failureReason, undefined);
     assert.deepEqual(content['m.relates_to'], {
-      event_id: '$marker:localhost',
+      event_id: '$indicator:localhost',
       key: 'applied',
       rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
     });
   });
 
-  test('a failed read resolves its marker to invalid with the reason', () => {
+  test('a failed read resolves its indicator to invalid with the reason', () => {
     let content = fileReadResultContent({
       commandRequestId: 'c1',
-      markerEventId: '$marker:localhost',
+      indicatorEventId: '$indicator:localhost',
       ok: false,
       failureReason: 'could not load SKILL.md (HTTP 404)',
       agentId: 'agent-1',
