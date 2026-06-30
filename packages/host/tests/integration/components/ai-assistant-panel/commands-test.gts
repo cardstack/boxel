@@ -13,6 +13,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1640,6 +1641,84 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       streamingEventId,
       'commandResult should not reference the original/streaming event_id once a later event in room.events owns the commandRequest',
     );
+  });
+
+  // Regression coverage for CS-11736 (host side).
+  // After a command is applied on a streamed bot message, its commandResult is
+  // linked to the latest m.replace edit id Y (CS-11045 wire format). On reload
+  // the timeline filter strips all m.replace edits, so only the original event
+  // X is loaded (with aggregated content) and Y no longer exists as a distinct
+  // event. The host's reload-side matchers used to key off event_id, so the
+  // dangling Y link broke and the command fell back to 'ready'. The fix keys
+  // both matchers off the stable commandRequestId instead.
+  test('CS-11736: an applied command on a streamed bot message still renders applied after reload (m.replace edits stripped)', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    let commandRequestId = 'cs-11736-cmd-request-id';
+    // The edit event Y that owned the live commandResult link. On reload it has
+    // been stripped by the m.replace timeline filter, so no loaded event has
+    // this id — the result's m.relates_to.event_id dangles.
+    let strippedEditEventId = 'cs-11736-stripped-edit-event-id';
+
+    // The only bot message that survives reload: the original event X with the
+    // final edit's content aggregated in, so it carries the command request.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Evie' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    // The persisted commandResult, linked to the stripped edit id Y rather than
+    // the surviving original X — exactly what reload loads from the server.
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: strippedEditEventId,
+        },
+        data: {},
+      },
+      { type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE },
+    );
+
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="0"]');
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(
+        'a command applied before reload still renders applied even though its commandResult links to a stripped m.replace edit id; correlation is by commandRequestId, not the dangling event_id',
+      );
   });
 
   test('Accept All bar does not flash for an always-auto-executed command (checkCorrectness)', async function (assert) {

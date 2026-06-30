@@ -725,22 +725,25 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
+    // CS-11736: locate the owning bot message by commandRequestId rather than
+    // by event_id. The commandResult's m.relates_to.event_id is the latest
+    // m.replace id Y, but after a reload the m.replace edits are stripped and
+    // only the original event X is loaded — so matching on event_id misses and
+    // the status flip is silently lost. commandRequestId is the globally-unique
+    // LLM tool-call id, stable across edits and present on every edit, so it
+    // resolves the same bot message on both the live and reload paths.
     let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
-        (e.event_id === effectiveEventId ||
-          e.content['m.relates_to']?.event_id === effectiveEventId),
+        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.some(
+          (cr: any) => cr.id === event.content.commandRequestId,
+        ),
     )! as CardMessageEvent | undefined;
     // CS-11045: _messageCache is keyed by the bot message's effective/parent
     // event_id — getEffectiveEventId resolves an m.replace event back to its
     // parent, so when an m.replace Y of original X arrives loadRoomMessage
-    // keys the cache by X. The commandResult event's own effectiveEventId is
-    // its m.relates_to.event_id verbatim, which under the CS-11045 host fix
-    // is the latest m.replace id Y rather than the parent X. Looking up the
-    // cache by Y would miss and silently fail to flip MessageCommand status
-    // to 'applied'. Instead, derive the cache key from the bot-message event
-    // we just located (messageEventWithCommand): for the m.replace event Y,
+    // keys the cache by X. Derive the cache key from the bot-message event we
+    // just located (messageEventWithCommand): for the m.replace event Y,
     // getEffectiveEventId returns parent X — which is what the cache holds.
     let messageCacheKey = messageEventWithCommand
       ? this.getEffectiveEventId(messageEventWithCommand)
