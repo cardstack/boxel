@@ -881,7 +881,11 @@ export default class RealmService extends Service {
     }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
-      this.identifyRealm.perform(url);
+      this.identifyRealm
+        .perform(url)
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'identify', error),
+        );
 
       this.identifyRealmTracker;
 
@@ -899,7 +903,11 @@ export default class RealmService extends Service {
     }
 
     if (!resource.info) {
-      resource.fetchInfo();
+      resource
+        .fetchInfo()
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'fetchInfo', error),
+        );
       return {
         name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
@@ -915,6 +923,36 @@ export default class RealmService extends Service {
       return resource.info;
     }
   };
+
+  // `info()` returns a placeholder synchronously and kicks off a background
+  // load — a realm-identifying HEAD, or an `_info` fetch — to fill in the real
+  // values on a later render. Those loads are best-effort: they can reject when
+  // the realm isn't reachable (a transient network failure, or — in tests — an
+  // in-process realm whose VirtualNetwork handler isn't mounted yet, so the
+  // request escapes to the network and rejects with `TypeError: Failed to
+  // fetch`). Since nothing awaits them, an unhandled rejection would surface as
+  // a global error and fail whatever happens to be running, so it is swallowed
+  // here; the placeholder stays and a later render retries. Cancellations
+  // (component unmount / teardown) are expected and stay silent.
+  private swallowBackgroundInfoError(
+    url: string,
+    op: 'identify' | 'fetchInfo',
+    error: unknown,
+  ) {
+    if (didCancel(error)) {
+      return;
+    }
+    log.warn(`background realm-info ${op} failed for ${url}: ${error}`);
+    if (isTesting()) {
+      console.warn(
+        `[realm-service] background realm-info load failed ${JSON.stringify({
+          realmURL: url,
+          op,
+          error: String(error),
+        })}`,
+      );
+    }
+  }
 
   async allUsersPermissions(url: string) {
     if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
