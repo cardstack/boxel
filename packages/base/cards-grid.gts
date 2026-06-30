@@ -43,7 +43,6 @@ import {
   CardDef,
   realmInfo,
   realmURL,
-  virtualNetworkFor,
   type BaseDef,
   type BoxComponent,
 } from './card-api';
@@ -307,13 +306,9 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      let vn = virtualNetworkFor(spec);
-      if (!vn) {
-        throw new Error(
-          `cards-grid createCard requires a VirtualNetwork on the spec's store`,
-        );
-      }
-      await this.args.createCard?.(spec.ref, vn.toURL(spec.id!), {
+      // Resolve `spec.ref` relative to the spec's (canonical) id in RRI space —
+      // no VirtualNetwork. `createCard` resolves the ref against this base.
+      await this.args.createCard?.(spec.ref, spec.id, {
         realmURL: this.args.model[realmURL],
       });
     } else if (activeFilterRef) {

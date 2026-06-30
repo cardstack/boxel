@@ -8,7 +8,6 @@ import {
   FieldDef,
   containsMany,
   getCardMeta,
-  virtualNetworkFor,
   type CardOrFieldTypeIcon,
   BaseDef,
   type CardContext,
@@ -36,6 +35,7 @@ import {
   loadCardDef,
   Loader,
   realmURL,
+  resolveRRIReference,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -81,15 +81,10 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
-    let vn = virtualNetworkFor(card);
-    if (!vn) {
-      return [];
-    }
     codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      vn.toURL(card.id!),
+      card.id,
       undefined,
-      vn,
     )! as ResolvedCodeRef;
     let cardOrFieldModuleURL = codeRef.module
       ? ensureExtension(codeRef.module, { default: '.gts' })
@@ -659,15 +654,10 @@ class Isolated extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let vn = virtualNetworkFor(this.args.model);
-    if (!vn) {
-      return undefined;
-    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      vn.toURL(this.args.model.id),
+      this.args.model.id,
       undefined,
-      vn,
     );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
@@ -783,15 +773,10 @@ class Edit extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let vn = virtualNetworkFor(this.args.model);
-    if (!vn) {
-      return undefined;
-    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      vn.toURL(this.args.model.id),
+      this.args.model.id,
       undefined,
-      vn,
     );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
@@ -946,11 +931,10 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      let vn = virtualNetworkFor(this);
-      if (!vn) {
-        return undefined;
-      }
-      return vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href;
+      // Resolve the module in RRI space (no VirtualNetwork): a relative module
+      // joins against the spec's id/relative-to base; an absolute or prefix-form
+      // module is returned canonical.
+      return resolveRRIReference(this.ref.module, this.id ?? this[relativeTo]);
     },
   });
   @field linkedExamples = linksToMany(CardDef);
@@ -992,18 +976,11 @@ export class Spec extends CardDef {
               params.commandContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
-              codeRef: (() => {
-                let vn = virtualNetworkFor(this);
-                if (!vn) {
-                  throw new Error('No VirtualNetwork available');
-                }
-                return codeRefWithAbsoluteIdentifier(
-                  this.ref,
-                  vn.toURL(this.id),
-                  undefined,
-                  vn,
-                ) as ResolvedCodeRef;
-              })(),
+              codeRef: codeRefWithAbsoluteIdentifier(
+                this.ref,
+                this.id,
+                undefined,
+              ) as ResolvedCodeRef,
               realm: this[realmURL]?.href,
               exampleCard: this,
             });
