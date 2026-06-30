@@ -685,10 +685,11 @@ module('Integration | searchable search doc', function (hooks) {
     return await searchDocFromFields(instance);
   }
 
-  // The store-driven search doc the indexer produced, minus `_cardType` (which
-  // the prerender meta route appends, not the generator) — the differential
-  // parity baseline.
-  async function storeDrivenSearchDoc(id: string) {
+  // The search doc the indexer persisted, minus `_cardType` (which the prerender
+  // meta route appends, not the generator). The prerender meta route generates
+  // it via `searchDocFromFields`; the parity check below confirms it matches a
+  // direct `searchDocFromFields` call.
+  async function indexedSearchDoc(id: string) {
     let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
     if (!entry || entry.type === 'instance-error') {
       return undefined;
@@ -1168,29 +1169,50 @@ module('Integration | searchable search doc', function (hooks) {
   });
 
   // ===========================================================================
-  // differential parity with the store-driven doc
+  // the indexer is authoritatively searchable-driven
   // ===========================================================================
 
-  // Byte-for-byte equality of the whole doc is NOT asserted: the
-  // searchable-driven spec keeps `{ id }`/`null` for every relationship while
-  // the store-driven path omits unused links via `usedLinksToFieldsOnly`, and
-  // the two enumerate link targets at different type granularity. This proves
-  // the expansion matches; whole-doc equality is the concern of the realm-scale
-  // parity diff, once realms carry `searchable` annotations.
-  test('searchable expansion pulls in the same target+data as the store-driven load', async function (assert) {
-    let generated = await loadAndGenerate(`${testRealmURL}ParityArticle/pa1`);
-    let storeDriven = await storeDrivenSearchDoc(
-      `${testRealmURL}ParityArticle/pa1`,
-    );
+  // The prerender meta route generates the search doc via `searchDocFromFields`,
+  // so the doc the indexer persists is the searchable-driven output for a card
+  // carrying a `searchable` annotation: the `authors` link is expanded (not an
+  // `{ id }`), and every card carries its base-card links (`cardTheme`,
+  // `cardInfo.cardThumbnail`). Unset contained scalars are absent: the rendered
+  // instance the indexer serializes yields `undefined` for them, which JSON
+  // serialization into the index drops.
+  test('the indexer persists the searchable-driven search doc', async function (assert) {
+    let id = `${testRealmURL}ParityArticle/pa1`;
+    let indexed = await indexedSearchDoc(id);
     assert.deepEqual(
-      (generated.authors ?? []).map((a: any) => a.id),
-      (storeDriven?.authors ?? []).map((a: any) => a.id),
-      'follows the searchable link to the same target the store loaded',
+      indexed,
+      {
+        authors: [
+          {
+            cardInfo: { cardThumbnail: null, theme: null },
+            cardTheme: null,
+            cardTitle: 'Untitled SimpleAuthor',
+            id: `${testRealmURL}SimpleAuthor/sa1`,
+            name: 'Plain',
+          },
+        ],
+        cardInfo: { cardThumbnail: null, theme: null },
+        cardTheme: null,
+        cardTitle: 'Untitled ParityArticle',
+        id: `${testRealmURL}ParityArticle/pa1`,
+        title: 'Parity',
+      },
+      'the indexer persists the searchable-driven doc',
     );
-    assert.deepEqual(
-      (generated.authors ?? []).map((a: any) => a.name),
-      (storeDriven?.authors ?? []).map((a: any) => a.name),
-      'pulls the same contained data from the expanded target',
+
+    // The expanded target's data is in the doc, so it must be recorded as a
+    // dependency — otherwise editing the target would not reindex the owner.
+    let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
+    let deps =
+      entry && entry.type !== 'instance-error'
+        ? ((entry as IndexedInstance).deps ?? [])
+        : [];
+    assert.ok(
+      deps.some((d) => d.includes('SimpleAuthor/sa1')),
+      'the searchable-expanded target is recorded as a dependency',
     );
   });
 });

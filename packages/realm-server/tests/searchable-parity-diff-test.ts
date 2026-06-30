@@ -1,16 +1,14 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
-import {
-  diffDoc,
-  isShallowLink,
-  shallowIds,
-} from '../scripts/searchable-parity-diff.ts';
+import { diffDoc, isShallowLink, shallowIds } from '@cardstack/runtime-common';
 
-// Unit coverage for the realm-scale parity validator's pure comparison logic.
+// Unit coverage for the parity comparison logic shared by the realm-scale
+// validator (`scripts/searchable-parity-diff.ts`) and the generation tests.
 // The differ ignores `_cardType`, normalizes object key order, and (under
 // --ignore-shallow-links) treats the store-driven omit-vs-keep-`{id}` difference
-// as equivalent while still catching a CHANGED reference.
+// as equivalent — at any nesting depth — while still catching a CHANGED
+// reference or any real contained-data delta.
 module('Unit | searchable-parity-diff', function () {
   module('isShallowLink', function () {
     test('null / a bare { id } / an array of bare { id } are shallow', function (assert) {
@@ -123,6 +121,64 @@ module('Unit | searchable-parity-diff', function () {
           true,
         );
         assert.strictEqual(diffs.length, 1, 'expanded vs shallow diverges');
+      });
+
+      test('a shallow link nested inside a contained value is ignored', function (assert) {
+        // A pulled-in card carries the same base-card relationships (e.g. a
+        // contained `cardInfo`'s thumbnail link) that the store-driven path
+        // omitted and the searchable-driven path keeps as `null`.
+        assert.deepEqual(
+          diffDoc(
+            { cardInfo: { theme: null } },
+            { cardInfo: { theme: null, cardThumbnail: null } },
+            true,
+          ),
+          [],
+          'nested omit-vs-keep is the intended difference, ignored',
+        );
+      });
+
+      test('a real data delta inside a contained value is still reported', function (assert) {
+        let diffs = diffDoc(
+          { cardInfo: { theme: null, name: 'X' } },
+          { cardInfo: { theme: null, cardThumbnail: null } },
+          true,
+        );
+        assert.strictEqual(
+          diffs.length,
+          1,
+          'a changed contained scalar diverges',
+        );
+        assert.ok(diffs[0].includes('cardInfo.name'), 'names the nested path');
+      });
+
+      test('nested shallow additions inside an expanded plural are ignored', function (assert) {
+        assert.deepEqual(
+          diffDoc(
+            { posts: [{ id: 'p1', title: 'T', cardInfo: { theme: null } }] },
+            {
+              posts: [
+                {
+                  id: 'p1',
+                  title: 'T',
+                  cardInfo: { theme: null, cardThumbnail: null },
+                },
+              ],
+            },
+            true,
+          ),
+          [],
+          'an expanded element with only shallow-link additions is equivalent',
+        );
+      });
+
+      test('an expanded plural element that lost data is reported', function (assert) {
+        let diffs = diffDoc(
+          { posts: [{ id: 'p1', title: 'T' }] },
+          { posts: [{ id: 'p1' }] },
+          true,
+        );
+        assert.strictEqual(diffs.length, 1, 'lost expansion diverges');
       });
     });
   });

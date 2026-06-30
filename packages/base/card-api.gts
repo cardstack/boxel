@@ -4520,15 +4520,6 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
   instance[isSavedInstance] = true;
 }
 
-export function searchDoc<CardT extends BaseDefConstructor>(
-  instance: InstanceType<CardT>,
-): Record<string, any> {
-  return getQueryableValue(instance.constructor, instance) as Record<
-    string,
-    any
-  >;
-}
-
 function makeDescriptor<
   CardT extends BaseDefConstructor,
   FieldT extends BaseDefConstructor,
