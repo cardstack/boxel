@@ -1,4 +1,4 @@
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -2678,6 +2678,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     this.uncategorizedCollapsed = false;
   };
 
+  @cached
   get columns(): KanbanColumnConfig[] {
     let options =
       this.activeGroupBy === 'priority'
@@ -2748,10 +2749,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     );
   }
 
+  @cached
   get configurableColumns(): KanbanColumnConfig[] {
     return this.columns.filter((c) => c.key !== 'uncategorized');
   }
 
+  @cached
   get firstColumn(): KanbanColumnConfig | undefined {
     return [...this.columns].sort((a, b) => a.sortOrder - b.sortOrder)[0];
   }
@@ -2760,19 +2763,24 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     return this.args.model?.cards?.length ?? 0;
   }
 
-  get columnCardCounts(): number[] {
-    return this.columns.map(
-      (col: KanbanColumnConfig) =>
-        this.placements.filter((p) => p.columnId === col.key).length,
-    );
-  }
-
+  @cached
   get columnCardCountsByKey(): Record<string, number> {
     let result: Record<string, number> = {};
-    this.columns.forEach((col, i) => {
-      result[col.key] = this.columnCardCounts[i] ?? 0;
-    });
+    for (let col of this.columns) {
+      result[col.key] = 0;
+    }
+    for (let p of this.placements) {
+      if (p.columnId in result) {
+        result[p.columnId] += 1;
+      }
+    }
     return result;
+  }
+
+  @cached
+  get columnCardCounts(): number[] {
+    let counts = this.columnCardCountsByKey;
+    return this.columns.map((col: KanbanColumnConfig) => counts[col.key] ?? 0);
   }
 
   get hideEmpty(): boolean {
@@ -2989,29 +2997,34 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     }
   };
 
+  @cached
   get placements(): KanbanPlacement[] {
     let stored = this.args.model?.placements;
     let cards = this.args.model?.cards ?? [];
     let fieldName = this.groupByFieldName;
+    let columnKeys = new Set(this.columns.map((c) => c.key));
+    let firstColumnKey = this.firstColumn?.key ?? '';
     let resolveColumn = (fieldValue: string | null | undefined): string => {
       return (
-        (fieldValue
-          ? this.columns.find((c) => c.key === fieldValue)?.key
+        (fieldValue && columnKeys.has(fieldValue) ? fieldValue : undefined) ??
+        (this.activeGroupBy === 'status' && columnKeys.has('backlog')
+          ? 'backlog'
           : undefined) ??
-        (this.activeGroupBy === 'status'
-          ? this.columns.find((c) => c.key === 'backlog')?.key
-          : undefined) ??
-        this.columns.find((c) => c.key === 'uncategorized')?.key ??
-        this.firstColumn?.key ??
-        ''
+        (columnKeys.has('uncategorized') ? 'uncategorized' : undefined) ??
+        firstColumnKey
       );
     };
 
     if (stored?.length) {
+      let cardIdxById = new Map<string, number>();
+      cards.forEach((c, idx) => {
+        let id = (c as any).id;
+        if (id != null && !cardIdxById.has(id)) cardIdxById.set(id, idx);
+      });
       let placedCardIds = new Set(stored.map((p) => p.itemId));
       let resolved = stored
         .map((p) => {
-          let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
+          let cardIdx = cardIdxById.get(p.itemId) ?? -1;
           if (cardIdx === -1) return null;
           let card = cards[cardIdx] as any;
           let colKey = resolveColumn(card[fieldName] ?? p.columnKey);

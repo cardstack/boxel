@@ -11,6 +11,7 @@
 import type { BoxelCLIClient, SearchResult } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { delay } from '@cardstack/runtime-common/utils';
 
 import type { Logger } from './logger.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
@@ -40,10 +41,6 @@ export function toRealmRelativePath(id: string, realmUrl: string): string {
 
 /** Default delay between empty-result retries in {@link searchUntilNonEmpty}. */
 export const SEARCH_RETRY_DELAY_MS = 1000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Run a realm-index search, retrying while the result set is empty.
@@ -123,12 +120,6 @@ export interface LinkRelationshipToCardOptions {
   search: () => Promise<SearchResult>;
   /** Build the relationship `self` link from the found card's id. */
   buildLink: (targetId: string, realmUrl: string) => string;
-  /**
-   * Choose which result's id to link when the search returns more than one.
-   * Receives the truthy ids in result order; defaults to the first (let the
-   * search's own `sort` decide). Pure id ordering — return a member of `ids`.
-   */
-  selectId?: (ids: string[]) => string;
   /** Logger for the calling module. */
   log: Logger;
   /** Retry an empty search this many times. See {@link searchUntilNonEmpty}. */
@@ -159,7 +150,6 @@ export async function linkRelationshipToCard(
     targetLabel,
     search,
     buildLink,
-    selectId,
     log,
   } = options;
 
@@ -188,7 +178,7 @@ export async function linkRelationshipToCard(
     );
     return false;
   }
-  let targetId = selectId ? selectId(ids) : ids[0];
+  let targetId = ids[0];
   if (ids.length > 1) {
     log.warn(`Found ${ids.length} ${targetLabel}(s); linking ${targetId}`);
   }
