@@ -110,6 +110,7 @@ export class LintFileResult extends FieldDef {
 
 export class LintResult extends ValidationResult {
   static displayName = 'Lint Result';
+  static icon = ListChecks;
 
   @field fileResults = containsMany(LintFileResult);
 
@@ -190,7 +191,7 @@ export class LintResult extends ValidationResult {
 
     <template>
       <ResultFittedCard
-        @icon={{ListChecks}}
+        @icon={{@model.constructor.icon}}
         @label='Lint'
         @sequenceNumber={{@model.sequenceNumber}}
         @status={{this.displayStatus}}

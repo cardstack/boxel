@@ -71,6 +71,7 @@ export class InstantiateCardEntry extends FieldDef {
 
 export class InstantiateResult extends ValidationResult {
   static displayName = 'Instantiate Result';
+  static icon = Box;
 
   @field cardResults = containsMany(InstantiateCardEntry);
 
@@ -128,7 +129,7 @@ export class InstantiateResult extends ValidationResult {
 
     <template>
       <ResultFittedCard
-        @icon={{Box}}
+        @icon={{@model.constructor.icon}}
         @label='Instantiate'
         @sequenceNumber={{@model.sequenceNumber}}
         @status={{this.displayStatus}}

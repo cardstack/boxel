@@ -90,6 +90,7 @@ export class ParseFileResult extends FieldDef {
 
 export class ParseResult extends ValidationResult {
   static displayName = 'Parse Result';
+  static icon = FileCode;
 
   @field fileResults = containsMany(ParseFileResult);
 
@@ -154,7 +155,7 @@ export class ParseResult extends ValidationResult {
 
     <template>
       <ResultFittedCard
-        @icon={{FileCode}}
+        @icon={{@model.constructor.icon}}
         @label='Parse'
         @sequenceNumber={{@model.sequenceNumber}}
         @status={{this.displayStatus}}

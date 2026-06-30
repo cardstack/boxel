@@ -48,6 +48,7 @@ export class EvalModuleResult extends FieldDef {
 
 export class EvalResult extends ValidationResult {
   static displayName = 'Eval Result';
+  static icon = Code;
 
   @field moduleResults = containsMany(EvalModuleResult);
 
@@ -105,7 +106,7 @@ export class EvalResult extends ValidationResult {
 
     <template>
       <ResultFittedCard
-        @icon={{Code}}
+        @icon={{@model.constructor.icon}}
         @label='Eval'
         @sequenceNumber={{@model.sequenceNumber}}
         @status={{this.displayStatus}}
