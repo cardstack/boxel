@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   archiveRealm,
+  cancelAllJobsInConcurrencyGroup,
   createResponse,
   logger,
   SupportedMimeType,
@@ -32,6 +33,16 @@ export default function handleArchiveRealm({
 
     try {
       await archiveRealm(dbAdapter, new URL(realmURL));
+      // Stop the realm's indexer: cancel any in-flight from-scratch /
+      // incremental-index job and drop the pending queue for this realm's
+      // concurrency group. Mirrors the realm-level cancel-jobs endpoint
+      // (Realm.handleCancelJobsRequest). `cancelAllJobsInConcurrencyGroup`
+      // marks jobs rejected and emits NOTIFY jobs_finished so peer
+      // replicas evict job-scoped search-cache rows. The unarchive flow
+      // rebuilds boxel_index from disk via the full-reindex enqueue, so
+      // any partial work left behind by an in-flight cancellation is
+      // discarded on restore.
+      await cancelAllJobsInConcurrencyGroup(dbAdapter, `indexing:${realmURL}`);
 
       let response = createResponse({
         body: JSON.stringify(

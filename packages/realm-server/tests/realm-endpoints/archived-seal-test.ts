@@ -79,6 +79,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .set('Authorization', ownerJWT());
       assert.strictEqual(active.status, 200, 'active realm serves /_info');
 
+      // Baseline for the header-less readiness probe on an active realm, so we
+      // can assert below that archiving doesn't change how it's handled.
+      let activeReadinessNoAccept = await request.get('/_readiness-check');
+
       await archiveRealm(dbAdapter, new URL(testRealmHref));
 
       // Reads are sealed for the owner, an authenticated non-owner, and the
@@ -131,6 +135,24 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         readiness.status,
         200,
         '_readiness-check stays reachable while archived',
+      );
+
+      // The exemption is path-based, not header-based: a bare health probe
+      // that sends no `Accept` header is never sealed — it's handled exactly
+      // as on an active realm, with no archived marker. (The router itself
+      // gates `_readiness-check` on the `Accept` header, so a header-less probe
+      // doesn't reach the handler on either an active or archived realm; the
+      // point here is that the seal doesn't single it out.)
+      let readinessNoAccept = await request.get('/_readiness-check');
+      assert.strictEqual(
+        readinessNoAccept.status,
+        activeReadinessNoAccept.status,
+        '_readiness-check with no Accept header is handled the same whether archived or active',
+      );
+      assert.strictEqual(
+        readinessNoAccept.get('X-Boxel-Realm-Archived'),
+        undefined,
+        '_readiness-check with no Accept header is not given the archived seal',
       );
 
       // Unarchiving lifts the seal; the active realm is unaffected.

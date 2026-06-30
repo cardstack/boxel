@@ -144,9 +144,7 @@ export class CardStoreWithErrors implements CardStore {
     let key = id.replace(/\.json$/, '');
     // Local IDs pass through; remote IDs canonicalize to URL form via the
     // VN so prefix-form and URL-form lookups share a cache key.
-    return isLocalId(key, this.#virtualNetwork)
-      ? id
-      : this.#virtualNetwork.toURL(id).href;
+    return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
   }
 
   trackLoad(load: Promise<unknown>) {

@@ -16,9 +16,10 @@ import moment from 'moment';
 
 import {
   Button,
-  FieldContainer,
   BoxelInput,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import {
   isMatrixError,
@@ -26,6 +27,9 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import AuthButton from './auth-button';
+import AuthFormField from './auth-form-field';
 
 import type { AuthMode } from './auth';
 import type { LoginResponse } from 'matrix-js-sdk';
@@ -41,80 +45,87 @@ interface Signature {
 export default class Login extends Component<Signature> {
   <template>
     {{#if this.exchangingSsoToken}}
-      <span class='title' data-test-sso-exchanging>Signing you in with Google…</span>
-      {{#if this.error}}
-        <div class='error' data-test-login-error>{{this.error}}</div>
-      {{/if}}
+      <div class='centered-loading' data-test-sso-exchanging>
+        <span class='loading-title'>Signing you in with Google</span>
+        <LoadingIndicator class='loading-spinner' />
+        {{#if this.error}}
+          <div class='error' data-test-login-error>{{this.error}}</div>
+        {{/if}}
+      </div>
     {{else}}
       <span class='title'>Sign in to your Boxel Account</span>
+      {{#if this.showGoogleButton}}
+        <p class='subtitle'>Use Google to get started in one tap - we'll create
+          your Boxel account if you don't have one yet.</p>
+      {{/if}}
       <form data-test-login-form {{on 'submit' this.login}}>
-        <FieldContainer
-          @label='Email Address or Username'
-          @tag='label'
-          @vertical={{true}}
-          class='field'
-        >
+        {{#if this.showGoogleButton}}
+          <AuthButton
+            class='google-button'
+            data-test-google-login-btn
+            @variant='google'
+            @loading={{this.doGoogleSso.isRunning}}
+            {{on 'click' this.startGoogleSso}}
+          >
+            <GoogleColor class='google-g' />
+            Continue with Google
+          </AuthButton>
+          <div class='divider' aria-hidden='true'>
+            <span class='divider-label'>OR USE YOUR EMAIL</span>
+          </div>
+        {{/if}}
+        <AuthFormField @label='Email Address or Username'>
           <BoxelInput
             data-test-username-field
             type='text'
             id='boxel-login-username'
             name='username'
             autocomplete='username'
+            @placeholder='Your email address'
             @value={{this.username}}
             @onInput={{this.setUsername}}
             @onKeyPress={{this.handleEnter}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Password'
-          @tag='label'
-          @vertical={{true}}
-          class='field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Password'>
           <BoxelInput
             data-test-password-field
             type='password'
             id='boxel-login-password'
             name='password'
             autocomplete='current-password'
+            @placeholder='Your password'
             @value={{this.password}}
             @onInput={{this.setPassword}}
             @onKeyPress={{this.handleEnter}}
           />
-        </FieldContainer>
+        </AuthFormField>
         <Button
           @kind='text-only'
           class='forgot-password'
           data-test-forgot-password
           {{on 'click' (fn @setMode 'forgot-password')}}
         >Forgot password?</Button>
-        <Button
-          class='button'
+        <AuthButton
           data-test-login-btn
-          @kind='primary'
+          @variant='primary'
           @disabled={{this.isLoginButtonDisabled}}
           @loading={{this.doLogin.isRunning}}
           {{on 'click' this.login}}
         >
-          Sign in</Button>
+          Sign In</AuthButton>
         {{#if this.error}}
           <div class='error' data-test-login-error>{{this.error}}</div>
         {{/if}}
-        <span class='or'>or</span>
-        {{#if this.showGoogleButton}}
-          <Button
-            class='button google-button'
-            data-test-google-login-btn
-            @kind='secondary'
-            @loading={{this.doGoogleSso.isRunning}}
-            {{on 'click' this.startGoogleSso}}
-          >Sign in with Google</Button>
-        {{/if}}
-        <Button
-          class='button'
-          data-test-register-user
-          {{on 'click' (fn @setMode 'register')}}
-        >Create a new Boxel account</Button>
+        <p class='register-prompt'>
+          <span class='register-prompt-text'>Don't have an account?</span>
+          <button
+            type='button'
+            class='register-link'
+            data-test-register-user
+            {{on 'click' (fn @setMode 'register')}}
+          >Create a new Boxel account</button>
+        </p>
       </form>
     {{/if}}
 
@@ -125,50 +136,97 @@ export default class Login extends Component<Signature> {
       }
       .title {
         font: 600 var(--boxel-font-md);
+        color: var(--foreground);
         margin-bottom: var(--boxel-sp-sm);
         padding: 0;
       }
-      .field {
-        margin-top: var(--boxel-sp);
-      }
-      .field :deep(input:autofill) {
-        transition:
-          background-color 0s 600000s,
-          color 0s 600000s;
+      .subtitle {
+        margin: 0 0 var(--boxel-sp-lg);
+        color: var(--foreground);
+        font: var(--boxel-font-sm);
+        line-height: 1.4;
       }
       .forgot-password {
         border: none;
         padding: 0;
         margin-bottom: var(--boxel-sp-lg);
         margin-left: auto;
-        color: var(--boxel-dark);
+        color: var(--muted-foreground);
         font: 500 var(--boxel-font-xs);
       }
       .forgot-password:hover {
         color: var(--boxel-highlight);
         background-color: transparent;
       }
-      .button {
-        --boxel-button-padding: var(--boxel-sp-sm);
-        width: 100%;
-      }
-      .button :deep(.boxel-loading-indicator) {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
       .google-button {
-        margin-bottom: var(--boxel-sp-sm);
+        margin-top: var(--boxel-sp-sm);
       }
-      .or {
-        margin: var(--boxel-sp-sm) auto;
+      .google-g {
+        width: 1.125rem;
+        height: 1.125rem;
+        flex-shrink: 0;
+      }
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
+      }
+      .divider::before,
+      .divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background-color: rgba(255, 255, 255, 0.18);
+      }
+      .divider-label {
+        color: var(--muted-foreground);
+        font: 600 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-lg);
+      }
+      .register-prompt {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--boxel-sp-3xs);
+        margin: var(--boxel-sp) 0 0;
         font: 500 var(--boxel-font-sm);
+      }
+      .register-prompt-text {
+        color: var(--muted-foreground);
+      }
+      .register-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: var(--boxel-highlight);
+        cursor: pointer;
+      }
+      .register-link:hover {
+        text-decoration: underline;
+      }
+      .centered-loading {
+        align-self: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp);
+        text-align: center;
+      }
+      .loading-title {
+        font: 600 var(--boxel-font-md);
+        color: var(--foreground);
+      }
+      .loading-spinner {
+        --boxel-loading-indicator-size: var(--boxel-icon-md);
+        --loading-indicator-color: var(--boxel-highlight);
       }
       .error {
         color: var(--boxel-error-100);
         padding: 0;
         font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-xxs) auto 0 auto;
+        margin: var(--boxel-sp-2xs) auto 0 auto;
       }
     </style>
   </template>
@@ -211,8 +269,8 @@ export default class Login extends Component<Signature> {
   }
 
   private get isLoginButtonDisabled() {
-    return (
-      !this.username || !this.password || this.error || this.doLogin.isRunning
+    return Boolean(
+      !this.username || !this.password || this.error || this.doLogin.isRunning,
     );
   }
 

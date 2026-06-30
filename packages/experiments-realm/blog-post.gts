@@ -629,7 +629,7 @@ export class BlogPost extends CardDef {
   });
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
-  @field authors = linksToMany(Author);
+  @field authors = linksToMany(Author, { searchable: 'blog' });
   @field publishDate = contains(DateTimeField);
   @field status = contains(Status, {
     computeVia: function (this: BlogPost) {
@@ -642,9 +642,12 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
-  @field blog = linksTo(BlogAppCard, { isUsed: true });
+  @field blog = linksTo(BlogAppCard, {
+    isUsed: true,
+    searchable: true,
+  });
   @field featuredImage = contains(FeaturedImageField);
-  @field categories = linksToMany(BlogCategory);
+  @field categories = linksToMany(BlogCategory, { searchable: 'blog' });
   @field lastUpdated = contains(DateTimeField, {
     computeVia: function (this: BlogPost) {
       let lastModified = getCardMeta(this, 'lastModified');
