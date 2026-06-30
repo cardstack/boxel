@@ -1,12 +1,12 @@
 // Republish each (source -> published) pair so the published snapshot picks up
-// the searchable annotations now in its source realm, then ASSERT the annotation
-// landed: `realm publish` waits for the published realm to be ready (fully
-// indexed), after which we read a known-changed module back from the published
-// realm and confirm it carries `searchable`.
+// the now-stripped source realm, then ASSERT the strip landed: `realm publish`
+// waits for the published realm to be ready (fully indexed), after which we read
+// a known-changed module back from the published realm and confirm the `isUsed`
+// option is gone.
 //
 //   node republish.mjs <pairs.json> <staging|prod> <out.jsonl> [--limit N]
-// You do not need to source the seed before running: each boxel-cli call sources
-// ~/.boxel-secrets/<env>.env itself, so the seed never enters this process.
+// The secret seed is read from ~/.config/boxel/realm-secret-seed-<staging|production>
+// and handed to boxel-cli via BOXEL_REALM_SECRET_SEED, so it never enters argv.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
