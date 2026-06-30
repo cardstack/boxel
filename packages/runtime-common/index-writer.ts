@@ -359,8 +359,13 @@ export class Batch {
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
+    // A scoped RRI (@scope/realm/...) is an absolute cross-realm identifier —
+    // preserve it verbatim whether or not this writer's VirtualNetwork has the
+    // prefix registered. Only source-realm URLs get rewritten to the
+    // destination realm; `new URL()` throws on a bare scoped prefix, so the
+    // guard must cover unregistered prefixes too.
     let copyURL = (value: string) =>
-      this.isRegisteredPrefix(value)
+      value.startsWith('@') || this.isRegisteredPrefix(value)
         ? value
         : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
     let values = sources.map((entry) => {
@@ -1433,7 +1438,12 @@ export class Batch {
   ): Record<string, any> {
     let result: Record<string, any> = {};
     for (let [key, value] of Object.entries(obj)) {
-      result[this.copiedRealmURL(fromRealm, new URL(key)).href] = value;
+      // Scoped RRI keys are cross-realm — preserve verbatim (see copyFrom).
+      let newKey =
+        key.startsWith('@') || this.isRegisteredPrefix(key)
+          ? key
+          : this.copiedRealmURL(fromRealm, new URL(key)).href;
+      result[newKey] = value;
     }
     return result;
   }
@@ -1489,9 +1499,10 @@ export class Batch {
           obj.id &&
           typeof obj.id === 'string'
         ) {
-          obj.id = this.isRegisteredPrefix(obj.id)
-            ? obj.id
-            : this.copiedRealmURL(fromRealm, new URL(obj.id));
+          obj.id =
+            obj.id.startsWith('@') || this.isRegisteredPrefix(obj.id)
+              ? obj.id
+              : this.copiedRealmURL(fromRealm, new URL(obj.id));
         } else {
           this.updateIds(obj[key], fromRealm);
         }
