@@ -484,6 +484,14 @@ export default class MatrixService extends Service {
     return this._client?.isLoggedIn() === true && this.postLoginCompleted;
   }
 
+  // Synchronous "this boot will resolve to a logged-in session" signal. Unlike
+  // `isLoggedIn` (gated on `postLoginCompleted`, which only flips after
+  // `start()` finishes), this reflects persisted credentials and is readable
+  // during the initial loading paint, before `start()` has completed.
+  get hasPersistedSession(): boolean {
+    return Boolean(this.getAuth());
+  }
+
   // Test-only diagnostic for the intermittent "operator-mode renders the login
   // form" flake: names which precondition of `isLoggedIn` is unmet when a route
   // decides to render <Auth/>. No production caller.
