@@ -217,11 +217,23 @@ export default class MatrixResponsePublisher {
     ];
   }
 
-  // Turn the current response event into a server-command marker: replace it
-  // in place with the given command requests (so it keeps its timeline slot and
-  // precedes whatever streams next), then rotate to a fresh event so the next
-  // content lands in a new message after the marker. Returns the marker's
-  // event id (for linking its result event). Caller resets ResponseState.
+  // When the bot is mid-turn there's already a "Thinking…" message on screen.
+  // If the model then asks for a tool that ai-bot runs itself (readRealmFile),
+  // rather than one it hands to the host, we want to show that work as a marker
+  // right where the Thinking message is — and before the answer — so the turn
+  // reads as "did this, then answered".
+  //
+  // To get that ordering we reuse the Thinking event: replace it in place with
+  // the command requests, then rotate to a fresh event for whatever streams
+  // next (the answer). Reusing it is what matters — that event already holds
+  // this turn's earliest timeline slot, so the marker inherits the slot and the
+  // answer in the fresh event sorts after it. Posting a brand-new marker
+  // message instead would land it after the answer's event and render below it.
+  //
+  // The marker is sent finished with an empty body + the command requests. The
+  // caller posts a result event against the returned event id to flip it from
+  // in-progress to done/failed, and resets ResponseState so the next event
+  // streams clean.
   async sendServerCommandMarker(
     commandRequests: Partial<CommandRequest>[],
   ): Promise<string | undefined> {
