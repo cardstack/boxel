@@ -37,7 +37,7 @@ try {
   process.exit(0);
 }
 
-const SOFT_RELATIVE = baseline.threshold?.relative ?? 0.10;
+const SOFT_RELATIVE = baseline.threshold?.relative ?? 0.1;
 const SOFT_ABSOLUTE_MB = baseline.threshold?.absolute_mb ?? 5;
 const HARD_RELATIVE = 1.0; // 2x = 100% increase
 const HARD_ABSOLUTE_MB = 50;
@@ -111,10 +111,17 @@ for (const [mod, data] of Object.entries(current)) {
   const ceiling = Math.max(baselineCeiling(base) ?? baseDelta, 0);
   const hardDiff = data.delta_mb - ceiling;
 
-  const softThreshold = Math.max(SOFT_ABSOLUTE_MB, effectiveBase * SOFT_RELATIVE);
-  const hardThreshold = Math.max(HARD_ABSOLUTE_MB, effectiveBase * HARD_RELATIVE);
+  const softThreshold = Math.max(
+    SOFT_ABSOLUTE_MB,
+    effectiveBase * SOFT_RELATIVE,
+  );
+  const hardThreshold = Math.max(
+    HARD_ABSOLUTE_MB,
+    effectiveBase * HARD_RELATIVE,
+  );
 
-  const pct = effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
+  const pct =
+    effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
   const samples = fmtSamples(base);
 
   if (hardDiff >= hardThreshold) {
@@ -142,7 +149,9 @@ for (const [mod, data] of Object.entries(current)) {
 const lines = [];
 lines.push('## Memory Baseline Check\n');
 
-const totalModules = Object.keys(current).filter((m) => m !== '__shard_warmup__').length;
+const totalModules = Object.keys(current).filter(
+  (m) => m !== '__shard_warmup__',
+).length;
 const baselineModules = Object.keys(baseline.modules || {}).length;
 lines.push(
   `Checked **${totalModules}** modules against baseline (${baselineModules} baselined).\n`,
@@ -157,8 +166,12 @@ const baselineHeader =
   samplesWindow > 1 ? `Baseline (mean of last ${samplesWindow})` : 'Baseline';
 
 if (failures.length > 0) {
-  lines.push(`### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`);
-  lines.push(`| Module | ${baselineHeader} | Current | Change | Recent samples |`);
+  lines.push(
+    `### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`,
+  );
+  lines.push(
+    `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
+  );
   lines.push('|--------|----------|---------|--------|----------------|');
   for (const f of failures.sort((a, b) => b.diff - a.diff)) {
     const pctStr = f.pct != null ? ` (+${f.pct}%)` : '';
@@ -170,8 +183,12 @@ if (failures.length > 0) {
 }
 
 if (warnings.length > 0) {
-  lines.push(`### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase)\n`);
-  lines.push(`| Module | ${baselineHeader} | Current | Change | Recent samples |`);
+  lines.push(
+    `### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase)\n`,
+  );
+  lines.push(
+    `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
+  );
   lines.push('|--------|----------|---------|--------|----------------|');
   for (const w of warnings.sort((a, b) => b.diff - a.diff)) {
     const pctStr = w.pct != null ? ` (+${w.pct}%)` : '';

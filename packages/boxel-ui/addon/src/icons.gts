@@ -36,6 +36,7 @@ import Fitted from './icons/fitted.gts';
 import Folder from './icons/folder.gts';
 import Form from './icons/form.gts';
 import FourLines from './icons/four-lines.gts';
+import GoogleColor from './icons/google-color.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
 import Head from './icons/head.gts';
@@ -116,6 +117,7 @@ export const ALL_ICON_COMPONENTS = [
   Folder,
   Form,
   FourLines,
+  GoogleColor,
   Grid3x3,
   Group,
   Head,
@@ -198,6 +200,7 @@ export {
   Folder,
   Form,
   FourLines,
+  GoogleColor,
   Grid3x3,
   Group,
   Head,

@@ -12,13 +12,10 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-
 import {
   BoxelInput,
   BoxelInputGroup,
-  Button,
-  FieldContainer,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
@@ -32,6 +29,9 @@ import {
   type InteractiveAuth,
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import AuthButton from './auth-button';
+import AuthFormField from './auth-form-field';
 
 import type { AuthMode } from './auth';
 import type {
@@ -60,93 +60,76 @@ export default class RegisterUser extends Component<Signature> {
   <template>
     {{#if (eq this.currentPage 'awaiting-validation')}}
       <span class='title' data-test-email-validation>Please check your email to
-        complete registration.</span>
+        complete registration</span>
       <ul class='email-validation-instruction'>
         <li>Leave this window open while we verify your email</li>
         <li>This screen will update once your email is verified</li>
       </ul>
-      <Button
+      <AuthButton
         data-test-resend-validation
         {{on 'click' this.resendValidation}}
         class='resend-email'
-        @kind='primary'
+        @variant='primary'
         @disabled={{this.validateEmail.isRunning}}
         @loading={{this.validateEmail.isRunning}}
-      >Resend Email</Button>
+      >Resend Email</AuthButton>
     {{else if (eq this.currentPage 'account-creation')}}
-      <span class='title' data-test-email-validation-complete>
-        Email validation complete
-      </span>
-      <p>
-        Please wait as we set up your account.
-      </p>
-      <LoadingIndicator />
+      <div class='centered-loading'>
+        <span class='loading-title' data-test-email-validation-complete>Email
+          validation complete</span>
+        <p class='loading-message'>Please wait as we set up your account.</p>
+        <LoadingIndicator class='loading-spinner' />
+      </div>
     {{else if (eq this.currentPage 'token-form')}}
-      <FieldContainer
-        @label='This site is currently invite-only. Enter your invite code here.'
-        @tag='label'
-        class='registration-field'
-        @vertical={{true}}
-      >
+      <span class='title'>Boxel is currently invite-only.<br />Enter your invite
+        code here.</span>
+      <AuthFormField @label='Your invite code'>
         <BoxelInput
           data-test-token-field
           @state={{this.tokenInputState}}
           @value={{this.token}}
+          @placeholder='Enter invite code'
           @errorMessage={{this.tokenError}}
           @onInput={{this.setToken}}
         />
-      </FieldContainer>
+      </AuthFormField>
       <div class='button-wrapper'>
-        <Button
+        <AuthButton
           data-test-next-btn
-          class='button'
-          @kind='primary'
+          @variant='primary'
           @disabled={{this.isNextButtonDisabled}}
           @loading={{this.doRegistrationFlow.isRunning}}
           {{on 'click' this.sendToken}}
-        >Next</Button>
+        >Next</AuthButton>
       </div>
     {{else if (eq this.currentPage 'registration-form')}}
       <span class='title'>Create a Boxel Account</span>
       <form data-test-register-form {{on 'submit' this.register}}>
-        <FieldContainer
-          @label='Your Name'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        <AuthFormField @label='Your Name'>
           <BoxelInput
             data-test-name-field
             @state={{this.nameInputState}}
             @value={{this.name}}
+            @placeholder='Enter your name'
             @errorMessage={{this.nameError}}
             @onInput={{this.setName}}
             @onBlur={{this.checkName}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Email'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Email'>
           <BoxelInput
             data-test-email-field
             name='email'
             autocomplete='email'
             @state={{this.emailInputState}}
             @value={{this.email}}
+            @placeholder='Enter your email'
             @errorMessage={{this.emailError}}
             @onInput={{this.setEmail}}
             @onBlur={{this.checkEmail}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Username'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+        </AuthFormField>
+        <AuthFormField @label='Username'>
           <BoxelInputGroup
             data-test-username-field
             id='boxel-register-username'
@@ -154,6 +137,7 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='username'
             @state={{this.usernameInputState}}
             @value={{this.username}}
+            @placeholder='Your username'
             @errorMessage={{this.usernameError}}
             @onInput={{this.setUsername}}
             @onBlur={{this.checkUsername}}
@@ -166,13 +150,13 @@ export default class RegisterUser extends Component<Signature> {
               <Accessories.Text>{{matrixServerName}}</Accessories.Text>
             </:after>
           </BoxelInputGroup>
-        </FieldContainer>
-        <FieldContainer
-          @label='Password'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+          {{#if this.isUsernameValidAndAvailable}}
+            <p class='validation-hint' data-test-username-available><CheckMark
+                class='validation-hint-icon'
+              />name available</p>
+          {{/if}}
+        </AuthFormField>
+        <AuthFormField @label='Password'>
           <BoxelInput
             data-test-password-field
             id='boxel-register-password'
@@ -180,18 +164,19 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='new-password'
             @type='password'
             @value={{this.password}}
+            @placeholder='Your password'
             @state={{this.passwordInputState}}
             @errorMessage={{this.passwordError}}
             @onInput={{this.setPassword}}
             @onBlur={{this.checkPassword}}
           />
-        </FieldContainer>
-        <FieldContainer
-          @label='Confirm Password'
-          @tag='label'
-          @vertical={{true}}
-          class='registration-field'
-        >
+          {{#if this.isPasswordValid}}
+            <p class='validation-hint' data-test-password-valid><CheckMark
+                class='validation-hint-icon'
+              />password is valid</p>
+          {{/if}}
+        </AuthFormField>
+        <AuthFormField @label='Confirm Password'>
           <BoxelInput
             data-test-confirm-password-field
             id='boxel-register-confirm-password'
@@ -199,12 +184,18 @@ export default class RegisterUser extends Component<Signature> {
             autocomplete='new-password'
             @type='password'
             @value={{this.confirmPassword}}
+            @placeholder='Re-enter your password'
             @state={{this.confirmPasswordInputState}}
             @errorMessage={{this.confirmPasswordError}}
             @onInput={{this.setConfirmPassword}}
             @onBlur={{this.checkConfirmPassword}}
           />
-        </FieldContainer>
+          {{#if this.isConfirmPasswordValid}}
+            <p class='validation-hint' data-test-passwords-match><CheckMark
+                class='validation-hint-icon'
+              />passwords match</p>
+          {{/if}}
+        </AuthFormField>
         {{#if this.formError}}
           <div
             class='error-message'
@@ -212,27 +203,65 @@ export default class RegisterUser extends Component<Signature> {
           >{{this.formError}}</div>
         {{/if}}
         <div class='button-wrapper'>
-          <Button
+          <AuthButton
             data-test-register-btn
-            class='button'
-            @kind='primary'
+            @variant='primary'
             @disabled={{this.isRegisterButtonDisabled}}
             @loading={{this.doRegistrationFlow.isRunning}}
             {{on 'click' this.register}}
-          >Create Account</Button>
-          <span class='or'>or</span>
-          <Button
+          >Create Account</AuthButton>
+          <AuthButton
             data-test-cancel-btn
-            class='button'
+            @variant='secondary'
             {{on 'click' (fn @setMode 'login')}}
-          >Login with an existing account</Button>
+          >Login with an existing account</AuthButton>
         </div>
       </form>
     {{/if}}
     <style scoped>
       .title {
         font: 600 var(--boxel-font-md);
+        color: var(--foreground);
         margin-bottom: var(--boxel-sp-sm);
+      }
+      p {
+        color: var(--foreground);
+      }
+      .centered-loading {
+        align-self: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        text-align: center;
+      }
+      .loading-title {
+        font: 600 var(--boxel-font-md);
+        color: var(--foreground);
+      }
+      .loading-message {
+        margin: 0;
+        color: var(--foreground);
+        font: 500 var(--boxel-font-sm);
+      }
+      .loading-spinner {
+        --boxel-loading-indicator-size: var(--boxel-icon-md);
+        --loading-indicator-color: var(--boxel-highlight);
+        margin-top: var(--boxel-sp-xs);
+      }
+      .validation-hint {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-3xs);
+        margin: var(--boxel-sp-2xs) 0 0;
+        color: var(--muted-foreground);
+        font: 500 var(--boxel-font-xs);
+      }
+      .validation-hint-icon {
+        --icon-color: var(--boxel-highlight);
+        width: 0.875rem;
+        height: 0.875rem;
+        flex-shrink: 0;
       }
       .button-wrapper {
         width: 100%;
@@ -241,49 +270,7 @@ export default class RegisterUser extends Component<Signature> {
         flex-direction: column;
         justify-content: center;
         align-items: center;
-      }
-      .button {
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-        --boxel-button-font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-        width: 100%;
-      }
-      .or {
-        margin: var(--boxel-sp-sm);
-        font: 500 var(--boxel-font-sm);
-      }
-      .registration-field {
-        margin-top: var(--boxel-sp);
-      }
-      .registration-field :deep(.text-accessory) {
-        color: var(--boxel-450);
-      }
-      .registration-field :deep(.validation-icon-container.invalid) {
-        display: none;
-      }
-      .registration-field :deep(.validation-icon-container.valid svg) {
-        height: var(--boxel-sp-xs);
-      }
-      .registration-field
-        :deep(.boxel-input-group--invalid > :nth-last-child(2)) {
-        border-top-right-radius: var(--boxel-input-group-border-radius);
-        border-bottom-right-radius: var(--boxel-input-group-border-radius);
-        border-right-width: var(--boxel-input-group-interior-border-width);
-      }
-      .registration-field
-        :deep(
-          .boxel-input-group:not(.boxel-input-group--invalid)
-            > :nth-last-child(2)
-        ) {
-        padding-right: 0;
-      }
-      .registration-field :deep(input:autofill) {
-        transition:
-          background-color 0s 600000s,
-          color 0s 600000s;
-      }
-      .registration-field :deep(.error-message) {
-        margin-left: 0;
+        gap: var(--boxel-sp-sm);
       }
       .username-prefix {
         padding-right: 0;
@@ -293,16 +280,13 @@ export default class RegisterUser extends Component<Signature> {
         list-style-position: inside;
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
+        color: var(--foreground);
       }
       .email-validation-instruction li {
         margin-bottom: var(--boxel-sp-sm);
       }
       .resend-email {
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-        --boxel-button-font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-        width: fit-content;
-        min-width: 148px;
+        margin-top: var(--boxel-sp);
       }
       .error-message {
         color: var(--boxel-error-100);
@@ -406,10 +390,10 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   private get isRegisterButtonDisabled() {
-    return (
+    return Boolean(
       this.hasRegistrationMissingField ||
       this.hasRegistrationError ||
-      this.doRegistrationFlow.isRunning
+      this.doRegistrationFlow.isRunning,
     );
   }
 
@@ -435,6 +419,31 @@ export default class RegisterUser extends Component<Signature> {
 
   private get isNextButtonDisabled() {
     return !this.token || this.doRegistrationFlow.isRunning;
+  }
+
+  private get isUsernameValidAndAvailable() {
+    return (
+      Boolean(this.username) &&
+      !this.usernameError &&
+      !this.checkUsernameAvailability.isRunning &&
+      this.isUsernameAvailable
+    );
+  }
+
+  private get isPasswordValid() {
+    return (
+      Boolean(this.password) &&
+      !this.passwordError &&
+      isValidPassword(this.password)
+    );
+  }
+
+  private get isConfirmPasswordValid() {
+    return (
+      Boolean(this.confirmPassword) &&
+      !this.confirmPasswordError &&
+      this.confirmPassword === this.password
+    );
   }
 
   private get nameInputState() {

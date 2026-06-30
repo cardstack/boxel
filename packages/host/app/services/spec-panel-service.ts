@@ -44,7 +44,7 @@ export default class SpecPanelService extends Service {
 
   setSelection = (id: string | null) => {
     this.specSelection = id;
-    if (id && isLocalId(id, this.network.virtualNetwork)) {
+    if (id && isLocalId(id)) {
       this.storeWhenIdAssignedTask.perform(id);
     } else {
       this.clearPendingCardIdSubscriptions();

@@ -18,7 +18,7 @@ export class Booking extends CardDef {
   @field venue = contains(StringField);
   @field startTime = contains(DateTimeField);
   @field endTime = contains(DateTimeField);
-  @field hosts = linksToMany(Person);
+  @field hosts = linksToMany(Person, { searchable: ['pet', 'trips.countriesVisited'] });
   @field sponsors = containsMany(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {

@@ -85,7 +85,7 @@ export default class RecentCardsService extends Service {
   }
 
   add(newId: string) {
-    if (isLocalId(newId, this.network.virtualNetwork)) {
+    if (isLocalId(newId)) {
       let instance = this.store.peek(newId);
       if (isCardInstance(instance)) {
         this.addNewCard(instance);

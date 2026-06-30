@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 
 import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
 import {
-  VirtualNetwork,
   baseRealm,
   loadCardDef,
   rri,
@@ -195,12 +194,44 @@ module('code-ref', function (hooks) {
     let doc = { data: { id: base.href } };
     let serialized = CodeRefSerializer.serialize(ref, doc, undefined, {
       relativeTo: base,
-      virtualNetwork: new VirtualNetwork(),
     }) as any;
     assert.strictEqual(
       serialized.module,
       `${testRealmURL}Listing/person`,
       'module is absolutized using provided base URL',
+    );
+  });
+
+  test('resolves relative CodeRef modules against a prefix-form RRI base', async function (assert) {
+    // A card whose own id is canonical prefix-form (a realm with a prefix
+    // mapping) with a relative CodeRef module: resolution must happen in RRI
+    // space and stay prefix-form, not require an http(s) base.
+    let ref = { module: './person', name: 'Person' };
+    let baseRRI = rri('@cardstack/catalog/Listing/author');
+    let doc = { data: { id: baseRRI } };
+    let serialized = CodeRefSerializer.serialize(ref, doc, undefined, {
+      relativeTo: baseRRI,
+    }) as any;
+    assert.strictEqual(
+      serialized.module,
+      '@cardstack/catalog/Listing/person',
+      'module resolves against the prefix-form base, preserving prefix form',
+    );
+
+    // The same resolution on the deserialize-absolute path (the field
+    // deserialize protocol), which passes the base through directly. Before
+    // the RRI-space fix this reached `new URL('./person', undefined)`.
+    let result = await CodeRefSerializer.deserializeAbsolute.call(
+      class {} as any,
+      ref,
+      baseRRI,
+      undefined,
+      {} as any,
+    );
+    assert.strictEqual(
+      (result as any).module,
+      '@cardstack/catalog/Listing/person',
+      'deserializeAbsolute resolves the relative module against the prefix base',
     );
   });
 });

@@ -7,6 +7,8 @@ import './factory-entrypoint.test.ts';
 import './factory-entrypoint.integration.test.ts';
 import './factory-skill-loader.test.ts';
 import './factory-target-realm.test.ts';
+import './factory-realm-index.test.ts';
+import './factory-seed.test.ts';
 import './factory-test-realm.test.ts';
 import './factory-tool-executor.test.ts';
 import './factory-tool-executor.integration.test.ts';

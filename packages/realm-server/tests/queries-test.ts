@@ -167,40 +167,71 @@ module(basename(import.meta.filename), function () {
       await archiveRealm(dbAdapter, new URL(archivedOwned));
       await archiveRealm(dbAdapter, new URL(archivedPublic));
 
-      // Seed migrations grant '*: read' to system realms (boxel-homepage,
-      // catalog, openrouter, …), which the public-read arm of
-      // fetchUserPermissions surfaces for every user. Filter to the URLs
-      // this test seeded so the assertion isn't coupled to that fixture.
-      const testRealms = (urls: string[]) =>
-        urls.filter((u) => u.startsWith('http://example.com/')).sort();
-
+      // fetchUserPermissions' public arm returns every public realm in the
+      // database, which includes the bootstrap realms carried by the seed
+      // template. Assert on the four realms this test seeds rather than the
+      // full key set so the result stays stable regardless of what else the
+      // seed template carries.
       let active = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
       });
-      assert.deepEqual(
-        testRealms(Object.keys(active)),
-        [activeOwned, activePublic].sort(),
-        'default enumeration excludes archived realms in both UNION arms',
+      assert.true(
+        activeOwned in active,
+        'default: active owned realm is enumerated',
+      );
+      assert.true(
+        activePublic in active,
+        'default: active public realm is enumerated',
+      );
+      assert.false(
+        archivedOwned in active,
+        'default: archived owned realm is excluded (owner arm)',
+      );
+      assert.false(
+        archivedPublic in active,
+        'default: archived public realm is excluded (public arm)',
       );
 
       let withArchived = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
         includeArchived: true,
       });
-      assert.deepEqual(
-        testRealms(Object.keys(withArchived)),
-        [activeOwned, activePublic, archivedOwned, archivedPublic].sort(),
-        'includeArchived re-includes archived realms in both arms',
+      assert.true(
+        activeOwned in withArchived,
+        'includeArchived: active owned realm is enumerated',
+      );
+      assert.true(
+        activePublic in withArchived,
+        'includeArchived: active public realm is enumerated',
+      );
+      assert.true(
+        archivedOwned in withArchived,
+        'includeArchived: archived owned realm is re-included (owner arm)',
+      );
+      assert.true(
+        archivedPublic in withArchived,
+        'includeArchived: archived public realm is re-included (public arm)',
       );
 
       let activeOwnersOnly = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
         onlyOwnRealms: true,
       });
-      assert.deepEqual(
-        testRealms(Object.keys(activeOwnersOnly)),
-        [activeOwned].sort(),
-        'onlyOwnRealms also excludes archived realms by default',
+      assert.true(
+        activeOwned in activeOwnersOnly,
+        'onlyOwnRealms: active owned realm is enumerated',
+      );
+      assert.false(
+        archivedOwned in activeOwnersOnly,
+        'onlyOwnRealms: archived owned realm is excluded by default',
+      );
+      assert.false(
+        activePublic in activeOwnersOnly,
+        'onlyOwnRealms: public realm is not an owned realm',
+      );
+      assert.false(
+        archivedPublic in activeOwnersOnly,
+        'onlyOwnRealms: archived public realm is excluded',
       );
 
       let ownersWithArchived = await fetchUserPermissions(dbAdapter, {
@@ -208,10 +239,21 @@ module(basename(import.meta.filename), function () {
         onlyOwnRealms: true,
         includeArchived: true,
       });
-      assert.deepEqual(
-        testRealms(Object.keys(ownersWithArchived)),
-        [activeOwned, archivedOwned].sort(),
-        'onlyOwnRealms + includeArchived returns the owner archived realm too',
+      assert.true(
+        activeOwned in ownersWithArchived,
+        'onlyOwnRealms + includeArchived: active owned realm is enumerated',
+      );
+      assert.true(
+        archivedOwned in ownersWithArchived,
+        'onlyOwnRealms + includeArchived: archived owned realm is included',
+      );
+      assert.false(
+        activePublic in ownersWithArchived,
+        'onlyOwnRealms + includeArchived: public realm is not an owned realm',
+      );
+      assert.false(
+        archivedPublic in ownersWithArchived,
+        'onlyOwnRealms + includeArchived: archived public realm is excluded',
       );
     });
 
@@ -410,9 +452,13 @@ module(basename(import.meta.filename), function () {
       let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
 
       assert.deepEqual(
-        archived,
+        archived.map((r) => r.url),
         [archivedOwned],
         'returns only realms that are both archived and owned by the user',
+      );
+      assert.ok(
+        archived[0]?.archivedAt,
+        'each archived realm carries its archived_at timestamp',
       );
     });
 
@@ -443,7 +489,7 @@ module(basename(import.meta.filename), function () {
       let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
 
       assert.deepEqual(
-        archived,
+        archived.map((r) => r.url),
         [sourceRealmURL],
         'published snapshots are omitted even when archived and owned',
       );

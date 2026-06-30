@@ -166,10 +166,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   @action private async viewSpecInstance() {
-    if (
-      !this.selectedId ||
-      isLocalId(this.selectedId, this.network.virtualNetwork)
-    ) {
+    if (!this.selectedId || isLocalId(this.selectedId)) {
       return;
     }
 
