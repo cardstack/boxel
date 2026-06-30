@@ -97,8 +97,8 @@ module('Integration | operator-mode | basics', function (hooks) {
 
   test('navigating to an archived realm shows the sealed state, not card chrome or a generic error', async function (assert) {
     // A realm sealed by the archive flag answers content requests with 403 and
-    // the X-Boxel-Realm-Archived marker (CS-11664). Intercept the card fetch to
-    // reproduce that response and assert the host renders the sealed state.
+    // the X-Boxel-Realm-Archived marker. Intercept the card fetch to reproduce
+    // that response and assert the host renders the sealed state.
     let networkService = getService('network');
     networkService.virtualNetwork.mount(
       async (req: Request) => {

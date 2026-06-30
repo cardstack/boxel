@@ -2778,9 +2778,10 @@ export class Realm {
         // content see the sealed response. A public realm's readers are
         // authorized by checkPermission, so they do see the seal (the realm's
         // existence is already public). The seal is method-agnostic, so reads
-        // and writes are blocked by this one check. The operational
-        // `_readiness-check` (the realm's only public endpoint) is exempt so
-        // health probes don't read an archived realm as down. The
+        // and writes are blocked by this one check. The realm's public
+        // endpoints (`POST /_session`, `GET /_readiness-check`) are exempt so
+        // the auth handshake and health probes still respond; an archived
+        // realm's content requests still hit the seal. The
         // archive-management endpoints live on the realm SERVER router and
         // never reach this boundary, so they stay reachable. Read fresh (no
         // memoization) for the same reason createRequestContext does: a peer
