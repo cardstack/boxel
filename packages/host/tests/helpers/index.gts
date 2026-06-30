@@ -1480,13 +1480,7 @@ export async function saveCard(
   realmURL?: RealmIdentifier,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  let vn = loader.getVirtualNetwork();
-  if (!vn) {
-    throw new Error(
-      `setCardAsSavedWithId test helper needs the loader to have a VirtualNetwork`,
-    );
-  }
-  let doc = api.serializeCard(instance, { virtualNetwork: vn });
+  let doc = api.serializeCard(instance, {});
   doc.data.id = id;
   if (realmURL) {
     doc.data.meta = {

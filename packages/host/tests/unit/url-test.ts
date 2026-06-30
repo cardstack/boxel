@@ -5,6 +5,7 @@ import {
   type RealmResourceIdentifier,
   maybeRelativeReference,
   relativeReference,
+  resolveRRIReference,
   ri,
   rri,
   visitInstanceURLs,
@@ -163,6 +164,72 @@ module('Unit | url', function () {
       );
 
       assert.strictEqual(result, '@cardstack/base/foo');
+    });
+  });
+
+  module('resolveRRIReference', function () {
+    test('returns absolute references (URL- and prefix-form) unchanged', function (assert) {
+      assert.strictEqual(
+        resolveRRIReference('https://a.com/foo', rri('@cardstack/base/bar')),
+        'https://a.com/foo',
+      );
+      assert.strictEqual(
+        resolveRRIReference('@cardstack/base/foo', rri('@cardstack/base/bar')),
+        '@cardstack/base/foo',
+      );
+    });
+
+    test('joins a relative reference against a URL-form base', function (assert) {
+      assert.strictEqual(
+        resolveRRIReference(
+          './person',
+          new URL('https://my-realm.com/Listing/author'),
+        ),
+        'https://my-realm.com/Listing/person',
+      );
+    });
+
+    test('joins a relative reference against a prefix-form base', function (assert) {
+      assert.strictEqual(
+        resolveRRIReference(
+          './person',
+          rri('@cardstack/catalog/Listing/author'),
+        ),
+        '@cardstack/catalog/Listing/person',
+      );
+    });
+
+    test('resolves a `$REALM/` reference against the realm root of a prefix-form base', function (assert) {
+      assert.strictEqual(
+        resolveRRIReference(
+          '$REALM/string',
+          rri('@cardstack/base/fields/number'),
+        ),
+        '@cardstack/base/string',
+      );
+    });
+
+    test('returns other absolute-URL schemes unchanged (not rewritten into prefix form)', function (assert) {
+      // Any `<scheme>:` URL is absolute; against a prefix-form base it must be
+      // returned as-is, not joined into the `@scope/name` namespace.
+      for (let ref of [
+        'data:image/png;base64,AAAA',
+        'blob:https://a.com/abc-123',
+        'mailto:someone@example.com',
+      ]) {
+        assert.strictEqual(
+          resolveRRIReference(ref, rri('@cardstack/base/fields/number')),
+          ref,
+          `${ref} is returned unchanged`,
+        );
+      }
+    });
+
+    test('leaves a reference unchanged when there is no base', function (assert) {
+      assert.strictEqual(
+        resolveRRIReference('./person', undefined),
+        './person',
+      );
     });
   });
 

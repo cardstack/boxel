@@ -102,7 +102,6 @@ export default class RenderMetaRoute extends Route<Model> {
         // relationships, so omit query fields here (the relationship data is
         // stripped below regardless).
         omitQueryFields: true,
-        virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
             vn.toURL(reference),

@@ -190,9 +190,7 @@ async function searchableQueryableValue(
     return { id: valueId };
   }
   let makeAbsoluteURL = (reference: string) =>
-    value[relativeTo]
-      ? resolveRef(store.virtualNetwork, reference, value[relativeTo])
-      : reference;
+    value[relativeTo] ? resolveRef(reference, value[relativeTo]) : reference;
   let nextStack = [value, ...stack];
   let entries: [string, any][] = [];
   for (let [fieldName, field] of Object.entries(

@@ -93,7 +93,7 @@ export default class PlaygroundPanelService extends Service {
       fieldIndex,
       url,
     };
-    if (isLocalId(cardId, this.network.virtualNetwork)) {
+    if (isLocalId(cardId)) {
       this.storeWhenIdAssignedTask.perform(
         moduleId,
         cardId,
@@ -108,7 +108,7 @@ export default class PlaygroundPanelService extends Service {
   private get resolvedSelections(): Record<string, PlaygroundSelection> {
     return Object.fromEntries(
       Object.entries(this.playgroundSelections).flatMap(([id, selections]) => {
-        if (!isLocalId(id, this.network.virtualNetwork)) {
+        if (!isLocalId(id)) {
           return [[id, selections]];
         }
         let instance = this.store.peek(id);
