@@ -24,6 +24,7 @@ import {
   type PatchData,
 } from '@cardstack/runtime-common';
 
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
@@ -379,11 +380,11 @@ export default class CommandService extends Service {
         // Collect all ready commands for this message
         let readyCommands: any[] = [];
         for (let messageCommand of message.commands) {
-          // Already executed by a server-side actor (e.g. ai-bot's readRealmFile).
-          // The host neither validates nor runs it — it has no command class to
-          // resolve, and the actor posts its own result. Must come before
-          // validate(), which would otherwise mark it "No command found".
-          if (messageCommand.executedBy) {
+          // ai-bot ran this one itself (e.g. readRealmFile). The host neither
+          // validates nor runs it — it has no command class to resolve, and the
+          // bot posts its own result. Must come before validate(), which would
+          // otherwise mark it "No command found".
+          if (messageCommand.executedBy === AI_BOT_EXECUTOR) {
             continue;
           }
           if (
@@ -463,9 +464,9 @@ export default class CommandService extends Service {
       message.eventId,
     );
     for (let messageCommand of message.commands) {
-      // Server-executed (e.g. ai-bot's readRealmFile): not the host's to run, so
-      // not the host's to invalidate when processing wedges.
-      if (messageCommand.executedBy) {
+      // ai-bot ran this one itself (e.g. readRealmFile): not the host's to run,
+      // so not the host's to invalidate when processing wedges.
+      if (messageCommand.executedBy === AI_BOT_EXECUTOR) {
         continue;
       }
       let commandRequestId = messageCommand.commandRequest.id;
@@ -672,9 +673,9 @@ export default class CommandService extends Service {
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
-    // Server-executed (e.g. ai-bot's readRealmFile): nothing for the host to run.
-    // Guards the manual "Try Anyway" path as well as any auto-execution.
-    if (command.executedBy) {
+    // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
+    // run. Guards the manual "Try Anyway" path as well as any auto-execution.
+    if (command.executedBy === AI_BOT_EXECUTOR) {
       return;
     }
     let { arguments: payload, id: commandRequestId } = command;
@@ -790,9 +791,9 @@ export default class CommandService extends Service {
 
   async validate(command: MessageCommand): Promise<boolean> {
     let error: string | undefined;
-    // Server-executed (e.g. ai-bot's readRealmFile): the host has no command class
-    // to resolve, and never runs it, so there is nothing to validate.
-    if (command.executedBy) {
+    // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
+    // class to resolve, and never runs it, so there is nothing to validate.
+    if (command.executedBy === AI_BOT_EXECUTOR) {
       return false;
     }
     if (!command.name) {

@@ -12,19 +12,19 @@ import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
 import type { EncodedCommandRequest } from '../base/matrix-event.gts';
 
-// Identifies a server-side actor that executed a tool call itself, so the host
-// records it but does not re-execute it. A value (rather than a boolean) lets a
-// multi-bot / multi-user room tell which agent ran it.
+// `executedBy` value for tool calls ai-bot runs itself in-process (e.g.
+// readRealmFile).
 export const AI_BOT_EXECUTOR = 'ai-bot';
 
 export interface CommandRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
-  // When set, this tool call was already executed by the named actor (e.g.
-  // 'ai-bot' for readRealmFile, which the bot runs in-process against the realm).
-  // The host surfaces such a request in the timeline as a record of what ran,
-  // but must not execute it.
+  // Names the actor that ran (or will run) this tool call — e.g. AI_BOT_EXECUTOR
+  // for tools ai-bot executes itself. It's a value (not a boolean) so it can
+  // identify *which* actor in a multi-bot / multi-user room, and so the field
+  // can later carry e.g. 'host' too. The host therefore matches its own
+  // executor explicitly rather than treating any value as "not mine to run".
   executedBy?: string;
 }
 

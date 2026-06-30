@@ -13,7 +13,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import { decodeCommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  AI_BOT_EXECUTOR,
+  decodeCommandRequest,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -331,13 +334,13 @@ export default class MessageBuilder {
         );
       }) as CommandResultEvent | undefined);
 
-    // ai-bot ran this one itself (executedBy, e.g. readRealmFile), so the host
-    // never resolves a command class or runs it. Skip the skill lookup below —
-    // it's pure async churn here (an `await store.get` per enabled skill) that
-    // would leave the marker pill blank for a beat while it runs. Build the
-    // command synchronously: 'applying' (loading) until the result event lands,
-    // then applied (success) or invalid + reason (failure).
-    if (commandRequest.executedBy) {
+    // ai-bot ran this one itself (e.g. readRealmFile), so the host never
+    // resolves a command class or runs it. Skip the skill lookup below — it's
+    // pure async churn here (an `await store.get` per enabled skill) that would
+    // leave the marker pill blank for a beat while it runs. Build the command
+    // synchronously: 'applying' (loading) until the result event lands, then
+    // applied (success) or invalid + reason (failure).
+    if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
       return new MessageCommand(
         message,
         commandRequest,

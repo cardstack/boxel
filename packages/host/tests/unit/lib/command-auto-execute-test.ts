@@ -82,6 +82,19 @@ module('Unit | Lib | command-auto-execute', function () {
     );
   });
 
+  test('a non-ai-bot executor is not treated as bot-executed', function (assert) {
+    // The guard matches ai-bot's own executor explicitly, not any value — a
+    // command executed by the host (or any other actor) is evaluated normally.
+    assert.true(
+      isAutoExecutableCommand(
+        cmd('patchCardInstance', true, 'host'),
+        'act',
+        true,
+      ),
+      "executedBy: 'host' does not short-circuit; act mode still auto-executes",
+    );
+  });
+
   test('commands owned by another agent never auto-execute', function (assert) {
     // Mirrors the agentId gate in command-service.drainCommandProcessingQueue:
     // a command whose message came from a different agent must not auto-run
