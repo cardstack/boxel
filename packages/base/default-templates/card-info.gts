@@ -167,6 +167,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
                   (getFieldIcon @model item.key)
                 }}
                 data-test-edit-preview={{item.key}}
+                data-edit-preview-field={{item.key}}
               >
                 {{#if item.value}}
                   <Field @format='atom' />
@@ -200,7 +201,8 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               {{on 'click' this.toggleThumbnailEditor}}
               data-test-toggle-thumbnail-editor
             >
-              Change Thumbnail
+              Change
+              {{#unless @hideThemeChooser}}Theme & {{/unless}}Thumbnail
             </Button>
           </div>
         </:label>
@@ -240,10 +242,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             @icon={{ImageIcon}}
             data-test-field='cardInfo-thumbnailURL'
           >
-            <div
-              class='thumbnail-picker'
-              data-thumbnail-picker-controls
-            >
+            <div class='thumbnail-picker' data-thumbnail-picker-controls>
               <div class='thumbnail-picker-inputs'>
                 <span
                   class='thumbnail-picker-input-slot'
@@ -406,7 +405,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .null-preview {
         color: var(--muted-foreground, var(--boxel-450));
       }
-      .default-preview :deep([data-test-edit-preview='cardThumbnailURL']) {
+      .default-preview :deep([data-edit-preview-field='cardThumbnailURL']) {
         overflow-wrap: anywhere;
         min-width: 0;
       }

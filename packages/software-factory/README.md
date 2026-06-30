@@ -24,16 +24,18 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 
 ### Target Realm Artifact Structure
 
-| Path                  | What it is                                                           |
-| --------------------- | -------------------------------------------------------------------- |
-| `Projects/`           | Project card with objective, scope, success criteria                 |
-| `Issues/`             | Issue cards — bootstrap seed + implementation issues                 |
-| `Knowledge Articles/` | Context articles derived from the brief                              |
-| `*.gts`               | Card definition files                                                |
-| `*.test.gts`          | Co-located QUnit test files                                          |
-| `CardName/`           | Sample card instances with realistic data                            |
-| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances  |
-| `Validations/`        | Validation artifacts — TestRun cards (test results) and lint results |
+| Path                  | What it is                                                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `index.json`          | `RealmDashboard` dashboard the realm opens to — Overview / Board / Artifacts tabs (only for realms the factory created) |
+| `cards-grid.json`     | `CardsGrid` instance the Artifacts tab renders                                                                          |
+| `Projects/`           | Project card with objective, scope, success criteria                                                                    |
+| `Issues/`             | Issue cards — bootstrap seed + implementation issues                                                                    |
+| `Knowledge Articles/` | Context articles derived from the brief                                                                                 |
+| `*.gts`               | Card definition files                                                                                                   |
+| `*.test.gts`          | Co-located QUnit test files                                                                                             |
+| `CardName/`           | Sample card instances with realistic data                                                                               |
+| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances                                                     |
+| `Validations/`        | Validation artifacts — TestRun cards (test results) and lint results                                                    |
 
 ## Prerequisites
 
@@ -115,18 +117,24 @@ pnpm factory:go \
 
 ### What to expect in the Boxel host app (target realm)
 
-| Folder / File                | What it is                                                               |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| `Projects/`                  | A Project card with the brief's objective and success criteria           |
-| `Issues/bootstrap-seed`      | Bootstrap issue — status `done`, issueType `bootstrap`                   |
-| `Issues/<slug>-define-card`  | Implementation issue #1 — card definition + tests                        |
-| `Issues/<slug>-catalog-spec` | Implementation issue #2 — catalog spec + examples                        |
-| `Knowledge Articles/`        | Brief context and agent onboarding articles                              |
-| `*.gts`                      | Card definition file(s) for the implemented card                         |
-| `*.test.gts`                 | Co-located QUnit test file(s)                                            |
-| `CardName/`                  | Sample card instance(s) with realistic data                              |
-| `Spec/`                      | Catalog Spec card(s) linking to the card definition and sample instances |
-| `Validations/`               | Validation artifacts — TestRun cards and lint results (pass/fail)        |
+A realm the factory created opens to the **Overview dashboard** (`index.json`, a
+`RealmDashboard` card) rather than a bare card grid. It has three tabs:
+Overview (project status, setup roadmap, issue KPIs, validation runs), Board
+(the kanban IssueTracker), and Artifacts (the CardsGrid of everything created).
+
+| Folder / File                | What it is                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `index.json`                 | The Overview dashboard the realm opens to (Overview / Board / Artifacts tabs) |
+| `Projects/`                  | A Project card with the brief's objective and success criteria                |
+| `Issues/bootstrap-seed`      | Bootstrap issue — status `done`, issueType `bootstrap`                        |
+| `Issues/<slug>-define-card`  | Implementation issue #1 — card definition + tests                             |
+| `Issues/<slug>-catalog-spec` | Implementation issue #2 — catalog spec + examples                             |
+| `Knowledge Articles/`        | Brief context and agent onboarding articles                                   |
+| `*.gts`                      | Card definition file(s) for the implemented card                              |
+| `*.test.gts`                 | Co-located QUnit test file(s)                                                 |
+| `CardName/`                  | Sample card instance(s) with realistic data                                   |
+| `Spec/`                      | Catalog Spec card(s) linking to the card definition and sample instances      |
+| `Validations/`               | Validation artifacts — TestRun cards and lint results (pass/fail)             |
 
 ## Architecture
 
@@ -141,7 +149,8 @@ factory:go → createSeedIssue() → runIssueLoop()
 Key modules:
 
 - `src/factory-entrypoint.ts` — CLI entrypoint, creates seed issue + runs issue loop
-- `src/factory-seed.ts` — creates the bootstrap seed issue in the realm
+- `src/factory-seed.ts` — creates the bootstrap seed issue in the realm; links its `project` once the bootstrap issue creates one
+- `src/factory-realm-index.ts` — writes the `RealmDashboard` dashboard for a freshly-created realm and links its `board` to the bootstrap IssueTracker
 - `src/factory-issue-loop-wiring.ts` — constructs all loop infrastructure (auth, tools, agent, validator)
 - `src/issue-loop.ts` — the two-level issue-driven loop (outer: issues, inner: iterations with validation)
 - `src/issue-scheduler.ts` — issue selection with priority/dependency ordering
