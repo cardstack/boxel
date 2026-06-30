@@ -1,7 +1,7 @@
 import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { cleanContent } from '@cardstack/runtime-common/ai';
-import { LOAD_SKILL_TOOL_NAME } from './load-skill.ts';
+import { READ_REALM_FILE_TOOL_NAME } from './read-realm-file.ts';
 
 export default class ResponseState {
   latestReasoning: string = '';
@@ -11,6 +11,17 @@ export default class ResponseState {
   private allowedToolNames: Set<string> | undefined;
   isStreamingFinished = false;
   isCanceled = false;
+
+  // Clear the accumulated stream so the next message event starts fresh. Used
+  // when the readRealmFile loop hands the current event off as a marker and
+  // rotates to a new event for what follows.
+  resetForNextEvent() {
+    this.latestReasoning = '';
+    this.latestContent = '';
+    this.toolCalls = [];
+    this.toolCallsJson = undefined;
+    this.isStreamingFinished = false;
+  }
 
   setAllowedToolNames(names: Iterable<string> | undefined) {
     this.allowedToolNames = names ? new Set(names) : undefined;
@@ -53,9 +64,9 @@ export default class ResponseState {
         if (name === 'checkCorrectness') {
           return false;
         }
-        // loadSkill runs inside the bot, not on the host — never surface it as
-        // a command request for the user to execute.
-        if (name === LOAD_SKILL_TOOL_NAME) {
+        // readRealmFile runs inside the bot, not on the host — never surface
+        // it as a command request for the user to execute.
+        if (name === READ_REALM_FILE_TOOL_NAME) {
           return false;
         }
         if (this.allowedToolNames && !this.allowedToolNames.has(name)) {

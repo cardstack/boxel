@@ -12,10 +12,20 @@ import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
 import type { EncodedCommandRequest } from '../base/matrix-event.gts';
 
+// Identifies a server-side actor that executed a tool call itself, so the host
+// records it but does not re-execute it. A value (rather than a boolean) lets a
+// multi-bot / multi-user room tell which agent ran it.
+export const AI_BOT_EXECUTOR = 'ai-bot';
+
 export interface CommandRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
+  // When set, this tool call was already executed by the named actor (e.g.
+  // 'ai-bot' for readRealmFile, which the bot runs in-process against the realm).
+  // The host surfaces such a request in the timeline as a record of what ran,
+  // but must not execute it.
+  executedBy?: string;
 }
 
 export const CommandContextStamp = Symbol.for('CommandContext');
@@ -170,6 +180,9 @@ export function decodeCommandRequest(
       // ignore malformed nested json; validation will report a clearer error later
     }
   }
+  if (commandRequest.executedBy != null) {
+    decodedCommandRequest.executedBy = commandRequest.executedBy;
+  }
   return decodedCommandRequest;
 }
 
@@ -189,6 +202,9 @@ export function encodeCommandRequest(
   }
   if (commandRequest.arguments) {
     encodedCommandRequest.arguments = JSON.stringify(commandRequest.arguments);
+  }
+  if (commandRequest.executedBy != null) {
+    encodedCommandRequest.executedBy = commandRequest.executedBy;
   }
   return encodedCommandRequest;
 }

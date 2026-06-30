@@ -8,6 +8,7 @@ import { throttle } from 'lodash-es';
 import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
@@ -65,6 +66,34 @@ export class Responder {
   responseState = new ResponseState();
 
   needsMessageSend = false;
+
+  // Hand the current event off as a marker for tool calls the bot ran itself
+  // (e.g. readRealmFile) and rotate to a fresh event for what streams next. The
+  // marker keeps its slot, so it precedes the answer. Returns the marker's
+  // event id so the caller can post its result (done/failed).
+  async beginServerCommandMarker(
+    commandRequests: Partial<CommandRequest>[],
+  ): Promise<string | undefined> {
+    // Drop any pending streamed update for this event — we're replacing it
+    // wholesale with the marker.
+    this.needsMessageSend = false;
+    (
+      this.sendMessageEventWithThrottlingInternal as unknown as {
+        cancel: () => void;
+      }
+    ).cancel();
+    let markerEventId =
+      await this.matrixResponsePublisher.sendServerCommandMarker(
+        commandRequests,
+      );
+    // Start the next message clean and let it send fresh.
+    this.responseState.resetForNextEvent();
+    this._lastSentTotal = 0;
+    this._lastSentContentLen = 0;
+    this._lastSentReasoningLen = 0;
+    this._lastSentToolCallsJson = undefined;
+    return markerEventId;
+  }
 
   async ensureThinkingMessageSent() {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();

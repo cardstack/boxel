@@ -4,38 +4,39 @@ import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-d
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 
-let log = logger('ai-bot:load-skill');
+let log = logger('ai-bot:read-realm-file');
 
-export const LOAD_SKILL_TOOL_NAME = 'loadSkill';
+export const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
 
-// On-demand skill loading. The model calls `loadSkill` to pull a skill's full
-// instructions only when it needs them, instead of having every skill body
-// pushed into the prompt up front. ai-bot executes it in-process: it mints a
-// delegated, user-scoped realm token and fetches the file over HTTP, so the bot
-// can only read what the requesting human can already read, and the content is
-// always live (no Matrix snapshots, no host round-trip).
-export const loadSkillTool: Tool = {
+// On-demand file reading. The model calls `readRealmFile` to pull a file's
+// contents only when it needs them — most often a skill's SKILL.md or a file it
+// references, but it works for any file in the realm. ai-bot executes it
+// in-process: it mints a delegated, user-scoped realm token and fetches the
+// file over HTTP, so the bot can only read what the requesting human can
+// already read, and the content is always live (no Matrix snapshots, no host
+// round-trip).
+export const readRealmFileTool: Tool = {
   type: 'function',
   function: {
-    name: LOAD_SKILL_TOOL_NAME,
+    name: READ_REALM_FILE_TOOL_NAME,
     description:
-      "Read a skill file on demand: a skill's SKILL.md, or a file it " +
-      "references. Use this to get a skill's full instructions, or a reference " +
-      'it cites, when you only have it listed.',
+      "Read a file from a realm on demand — e.g. a skill's SKILL.md, or a " +
+      "file it references. Use this to get a skill's full instructions, or a " +
+      'reference it cites, when you only have it listed.',
     parameters: {
       type: 'object',
       properties: {
         realm: {
           type: 'string',
           description:
-            'Realm URL the skill lives in, e.g. https://app.boxel.ai/user/jane/. ' +
+            'Realm URL the file lives in, e.g. https://app.boxel.ai/user/jane/. ' +
             'Scopes the read to that realm; the file must be inside it.',
         },
         url: {
           type: 'string',
           description:
-            "Full URL of the file to read — the skill's SKILL.md, or a file it " +
-            'references. The realm and these URLs are given to you together.',
+            'Full URL of the file to read. The realm and these URLs are given ' +
+            'to you together.',
         },
       },
       required: ['realm', 'url'],
@@ -43,24 +44,24 @@ export const loadSkillTool: Tool = {
   },
 };
 
-export interface LoadSkillArgs {
+export interface ReadRealmFileArgs {
   // Realm root the read is scoped to (what the delegated token is minted for).
   realm: string;
   // Full URL of the file to read; must be inside `realm`.
   url: string;
 }
 
-export type LoadSkillResult =
+export type ReadRealmFileResult =
   | { ok: true; url: string; content: string }
   | { ok: false; error: string };
 
-// Executes a loadSkill tool call inside the bot process: mints a delegated,
-// read-only token for `onBehalfOf` scoped to `realm`, then GETs the skill file
-// as raw source. Never throws — returns a result the caller hands back to the
-// model as the tool result, so a missing skill or a permission failure becomes
+// Executes a readRealmFile tool call inside the bot process: mints a delegated,
+// read-only token for `onBehalfOf` scoped to `realm`, then GETs the file as raw
+// source. Never throws — returns a result the caller hands back to the model as
+// the tool result, so a missing file or a permission failure becomes
 // information the model can act on rather than a crashed turn.
-export async function executeLoadSkill(
-  args: LoadSkillArgs,
+export async function executeReadRealmFile(
+  args: ReadRealmFileArgs,
   {
     onBehalfOf,
     delegatedUserRealmSessions,
@@ -73,7 +74,7 @@ export async function executeLoadSkill(
     >;
     fetch?: typeof globalThis.fetch;
   },
-): Promise<LoadSkillResult> {
+): Promise<ReadRealmFileResult> {
   let url = args.url;
 
   // The delegated token is scoped to `realm`; a file outside it would be
@@ -96,7 +97,7 @@ export async function executeLoadSkill(
         if (e.kind === 'disabled') {
           return {
             error:
-              'skill loading is unavailable (delegation is not configured)',
+              'reading realm files is unavailable (delegation is not configured)',
           };
         }
         if (e.kind === 'forbidden') {
@@ -104,7 +105,7 @@ export async function executeLoadSkill(
         }
       }
       log.error(
-        `loadSkill: could not obtain a delegated token for ${args.realm}: ${
+        `readRealmFile: could not obtain a delegated token for ${args.realm}: ${
           e?.message ?? e
         }`,
       );
@@ -121,7 +122,7 @@ export async function executeLoadSkill(
         }),
       };
     } catch (e: any) {
-      log.error(`loadSkill: fetch failed for ${url}: ${e?.message ?? e}`);
+      log.error(`readRealmFile: fetch failed for ${url}: ${e?.message ?? e}`);
       return { error: `could not fetch ${url}` };
     }
   };

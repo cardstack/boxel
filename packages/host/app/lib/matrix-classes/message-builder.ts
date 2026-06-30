@@ -361,6 +361,19 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
+    // Already executed by a server-side actor (e.g. ai-bot runs readRealmFile
+    // itself), so the host never runs it. It shows as 'applying' (a loading
+    // indicator) until the actor posts its result event, then as applied
+    // (success) or invalid + reason (failure) — never as a pending, runnable
+    // command.
+    let commandStatus: CommandStatus = commandRequest.executedBy
+      ? commandResultEvent
+        ? ((commandResultEvent.content['m.relates_to']?.key ||
+            'applied') as CommandStatus)
+        : 'applying'
+      : ((commandResultEvent?.content['m.relates_to']?.key ||
+          'ready') as CommandStatus);
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
@@ -368,8 +381,7 @@ export default class MessageBuilder {
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
-      (commandResultEvent?.content['m.relates_to']?.key ||
-        'ready') as CommandStatus,
+      commandStatus,
       commandResultEvent?.content.msgtype ===
         APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
         ? commandResultEvent.content.data.card

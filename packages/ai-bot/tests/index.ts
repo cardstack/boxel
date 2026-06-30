@@ -13,7 +13,7 @@ import './locking-test.ts';
 import './interrupt-test.ts';
 import './credit-tracking-test.ts';
 import './user-delegated-realm-server-session-test.ts';
-import './load-skill-test.ts';
-import './load-skill-loop-test.ts';
+import './read-realm-file-test.ts';
+import './read-realm-file-loop-test.ts';
 
 QUnit.start();

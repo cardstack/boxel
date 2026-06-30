@@ -4,14 +4,14 @@ const { module, test, assert } = QUnit;
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import {
-  executeLoadSkill,
-  loadSkillTool,
-  LOAD_SKILL_TOOL_NAME,
-} from '../lib/load-skill.ts';
+  executeReadRealmFile,
+  readRealmFileTool,
+  READ_REALM_FILE_TOOL_NAME,
+} from '../lib/read-realm-file.ts';
 
 const ON_BEHALF_OF = '@user:localhost';
 const REALM = 'https://localhost:4201/user/jane/';
-const SKILL_URL =
+const FILE_URL =
   'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md';
 
 // A fake fetch that records each call and returns a scripted Response.
@@ -56,33 +56,36 @@ function stubSessions(result: { token: string } | { throws: unknown }): {
   };
 }
 
-module('loadSkill tool definition', () => {
+module('readRealmFile tool definition', () => {
   test('advertises name + required args', () => {
-    assert.strictEqual(loadSkillTool.function.name, LOAD_SKILL_TOOL_NAME);
-    assert.strictEqual(loadSkillTool.type, 'function');
-    let required = (loadSkillTool.function.parameters as any)
+    assert.strictEqual(
+      readRealmFileTool.function.name,
+      READ_REALM_FILE_TOOL_NAME,
+    );
+    assert.strictEqual(readRealmFileTool.type, 'function');
+    let required = (readRealmFileTool.function.parameters as any)
       .required as string[];
     assert.true(required.includes('realm'), 'realm is required');
     assert.true(required.includes('url'), 'url is required');
   });
 });
 
-module('executeLoadSkill', () => {
+module('executeReadRealmFile', () => {
   test('mints a token for the realm and returns the file source', async () => {
     let sessions = stubSessions({ token: 'tok-123' });
     let { fetch, calls } = recordingFetch(
       () => new Response('# Trip Planner\n\ninstructions', { status: 200 }),
     );
 
-    let result = await executeLoadSkill(
-      { realm: REALM, url: SKILL_URL },
+    let result = await executeReadRealmFile(
+      { realm: REALM, url: FILE_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
 
     assert.deepEqual(sessions.calls, [
       { onBehalfOf: ON_BEHALF_OF, realm: REALM },
     ]);
-    assert.strictEqual(calls[0].url, SKILL_URL, 'fetches the given url');
+    assert.strictEqual(calls[0].url, FILE_URL, 'fetches the given url');
     let headers = calls[0].init.headers as Record<string, string>;
     assert.strictEqual(headers['Authorization'], 'Bearer tok-123');
     assert.strictEqual(headers['Accept'], SupportedMimeType.CardSource);
@@ -98,7 +101,7 @@ module('executeLoadSkill', () => {
     let { fetch, calls } = recordingFetch(
       () => new Response('x', { status: 200 }),
     );
-    let result = await executeLoadSkill(
+    let result = await executeReadRealmFile(
       {
         realm: REALM,
         url: 'https://localhost:4201/user/someone-else/skills/x/SKILL.md',
@@ -120,8 +123,8 @@ module('executeLoadSkill', () => {
     let { fetch } = recordingFetch(
       () => new Response('not found', { status: 404 }),
     );
-    let result = await executeLoadSkill(
-      { realm: REALM, url: SKILL_URL },
+    let result = await executeReadRealmFile(
+      { realm: REALM, url: FILE_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok, 'result not ok');
@@ -138,8 +141,8 @@ module('executeLoadSkill', () => {
     let { fetch, calls } = recordingFetch(
       () => new Response('', { status: 200 }),
     );
-    let result = await executeLoadSkill(
-      { realm: REALM, url: SKILL_URL },
+    let result = await executeReadRealmFile(
+      { realm: REALM, url: FILE_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok);
@@ -155,8 +158,8 @@ module('executeLoadSkill', () => {
       throws: new DelegatedUserRealmSessionError('forbidden', 'nope', 403),
     });
     let { fetch } = recordingFetch(() => new Response('', { status: 200 }));
-    let result = await executeLoadSkill(
-      { realm: REALM, url: SKILL_URL },
+    let result = await executeReadRealmFile(
+      { realm: REALM, url: FILE_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
     assert.false(result.ok);
@@ -176,8 +179,8 @@ module('executeLoadSkill', () => {
         : new Response('# Fresh', { status: 200 });
     });
 
-    let result = await executeLoadSkill(
-      { realm: REALM, url: SKILL_URL },
+    let result = await executeReadRealmFile(
+      { realm: REALM, url: FILE_URL },
       { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
     );
 

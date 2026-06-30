@@ -216,4 +216,37 @@ export default class MatrixResponsePublisher {
       new ResponseEventData(initialMessage.event_id, this.eventSizeMax),
     ];
   }
+
+  // Turn the current response event into a server-command marker: replace it
+  // in place with the given command requests (so it keeps its timeline slot and
+  // precedes whatever streams next), then rotate to a fresh event so the next
+  // content lands in a new message after the marker. Returns the marker's
+  // event id (for linking its result event). Caller resets ResponseState.
+  async sendServerCommandMarker(
+    commandRequests: Partial<CommandRequest>[],
+  ): Promise<string | undefined> {
+    await this.ensureThinkingMessageSent();
+    let markerEventId = this.currentResponseEventId;
+    let sendOperation = this.sendingMessage.then(async () => {
+      await sendMessageEvent(
+        this.client,
+        this.roomId,
+        '',
+        markerEventId,
+        {
+          isStreamingFinished: true,
+          data: { context: { agentId: this.agentId } },
+        },
+        commandRequests,
+      );
+      // Fresh event (no id yet) → the next send creates a new message that
+      // sorts after this marker.
+      this.responseEvents = [
+        new ResponseEventData(undefined, this.eventSizeMax),
+      ];
+    });
+    this.sendingMessage = sendOperation.catch(() => {});
+    await sendOperation;
+    return markerEventId;
+  }
 }

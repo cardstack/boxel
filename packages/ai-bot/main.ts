@@ -24,6 +24,7 @@ import {
   getRoomEvents,
   sendPromptAsDebugMessage,
   constructHistory,
+  sendMatrixEvent,
 } from '@cardstack/runtime-common/ai';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
@@ -31,12 +32,17 @@ import {
   INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
-import { loadSkillTool } from './lib/load-skill.ts';
-import { buildLoadSkillFollowup } from './lib/load-skill-loop.ts';
+import { readRealmFileTool } from './lib/read-realm-file.ts';
+import {
+  buildReadRealmFileFollowup,
+  readRealmFileCommandRequests,
+  fileReadResultContent,
+} from './lib/read-realm-file-loop.ts';
 import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
@@ -88,7 +94,7 @@ class Assistant {
   id: string;
   aiBotInstanceId: string;
   // Mints user-scoped, read-only realm tokens on demand. Inert unless
-  // AI_BOT_DELEGATION_SECRET is configured; the pull-model skill loader is its
+  // AI_BOT_DELEGATION_SECRET is configured; the readRealmFile tool is its
   // consumer.
   delegatedUserRealmSessions: DelegatedUserRealmSessionManager;
 
@@ -109,13 +115,13 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    // Lets the loadSkill loop re-run a turn with tool results appended without
-    // rebuilding the rest of the prompt.
+    // Lets the readRealmFile loop re-run a turn with tool results appended
+    // without rebuilding the rest of the prompt.
     messagesOverride?: ChatCompletionMessageParam[],
-    // Whether to offer the bot-executed loadSkill tool. The caller decides
+    // Whether to offer the bot-executed readRealmFile tool. The caller decides
     // (delegation configured + a single-human room); the bot never advertises
     // a tool it won't run.
-    offerLoadSkill = false,
+    offerRealmFileRead = false,
   ) {
     if (!prompt.model) {
       throw new Error('Model is required');
@@ -140,10 +146,10 @@ class Assistant {
       request.tool_choice = prompt.toolChoice;
     }
 
-    // Offer the bot-executed loadSkill tool when the caller allows it, even in
-    // rooms that carry no other tools.
-    if (prompt.toolsSupported === true && offerLoadSkill) {
-      request.tools = [...(request.tools ?? []), loadSkillTool];
+    // Offer the bot-executed readRealmFile tool when the caller allows it, even
+    // in rooms that carry no other tools.
+    if (prompt.toolsSupported === true && offerRealmFileRead) {
+      request.tools = [...(request.tools ?? []), readRealmFileTool];
     }
 
     if (senderMatrixUserId) {
@@ -276,11 +282,11 @@ Common issues are:
         // Pull-model skills are read on behalf of the single human in the room
         // (the message sender). In a room with more than one human, "the user"
         // is ambiguous, so the bot must not read any realm on someone's behalf:
-        // disable skill loading entirely there.
+        // disable realm file reading entirely there.
         let humanRoomMemberCount = room
           .getJoinedMembers()
           .filter((member) => member.userId !== aiBotUserId).length;
-        let skillLoadingAllowed =
+        let realmFileReadingAllowed =
           assistant.delegatedUserRealmSessions.enabled &&
           humanRoomMemberCount === 1;
 
@@ -532,7 +538,7 @@ Common issues are:
                       promptParts,
                       senderMatrixUserId,
                       workingMessages,
-                      skillLoadingAllowed,
+                      realmFileReadingAllowed,
                     )
                     .on('chunk', async (chunk, snapshot) => {
                       log.info(`[${eventId}] Received chunk %s`, chunk.id);
@@ -598,14 +604,61 @@ Common issues are:
                   }
 
                   let message = completion.choices?.[0]?.message;
-                  if (message && senderMatrixUserId && skillLoadingAllowed) {
-                    let followup = await buildLoadSkillFollowup(message, {
-                      onBehalfOf: senderMatrixUserId,
-                      delegatedUserRealmSessions:
-                        assistant.delegatedUserRealmSessions,
-                    });
-                    if (followup.length > 0) {
-                      workingMessages = [...workingMessages, ...followup];
+                  if (
+                    message &&
+                    senderMatrixUserId &&
+                    realmFileReadingAllowed
+                  ) {
+                    let fileReadRequests =
+                      readRealmFileCommandRequests(message);
+                    if (fileReadRequests.length > 0) {
+                      // Phase 1: turn the current "thinking" bubble into a
+                      // loading marker for these reads (tagged executedBy:
+                      // 'ai-bot'; the host shows it but never runs it) and
+                      // rotate so the answer streams into a new message after
+                      // it — the read shows applying → done, then the answer.
+                      let markerEventId =
+                        await responder.beginServerCommandMarker(
+                          fileReadRequests,
+                        );
+
+                      // The fetch itself.
+                      let followup = await buildReadRealmFileFollowup(message, {
+                        onBehalfOf: senderMatrixUserId,
+                        delegatedUserRealmSessions:
+                          assistant.delegatedUserRealmSessions,
+                      });
+
+                      // Phase 2: resolve each pill — applied on success,
+                      // invalid + reason on failure, so a failed read reads as
+                      // failed rather than as a clean read.
+                      if (markerEventId) {
+                        for (let outcome of followup.outcomes) {
+                          await sendMatrixEvent(
+                            client,
+                            room.roomId,
+                            APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+                            fileReadResultContent({
+                              commandRequestId: outcome.commandRequestId,
+                              markerEventId,
+                              ok: outcome.ok,
+                              failureReason: outcome.error,
+                              agentId,
+                            }),
+                            undefined,
+                          ).catch((e) =>
+                            log.error(
+                              `[${eventId}] Failed to mark file read: ${
+                                e?.message ?? e
+                              }`,
+                            ),
+                          );
+                        }
+                      }
+                      workingMessages = [
+                        ...workingMessages,
+                        ...followup.messages,
+                      ];
                       continue;
                     }
                   }

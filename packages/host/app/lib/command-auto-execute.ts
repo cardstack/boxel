@@ -18,11 +18,16 @@ export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 // agents (e.g. unit tests) can pass `true` to focus on the other
 // conditions.
 export function isAutoExecutableCommand(
-  command: Pick<MessageCommand, 'name' | 'requiresApproval'>,
+  command: Pick<MessageCommand, 'name' | 'requiresApproval' | 'executedBy'>,
   activeLLMMode: LLMMode | undefined,
   isOwnedByCurrentAgent: boolean,
 ): boolean {
   if (!isOwnedByCurrentAgent) {
+    return false;
+  }
+  // Already executed by a server-side actor (e.g. ai-bot ran readRealmFile);
+  // the host only records it in the timeline and never executes it.
+  if (command.executedBy) {
     return false;
   }
   if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {

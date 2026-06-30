@@ -379,6 +379,13 @@ export default class CommandService extends Service {
         // Collect all ready commands for this message
         let readyCommands: any[] = [];
         for (let messageCommand of message.commands) {
+          // Already executed by a server-side actor (e.g. ai-bot's readRealmFile).
+          // The host neither validates nor runs it — it has no command class to
+          // resolve, and the actor posts its own result. Must come before
+          // validate(), which would otherwise mark it "No command found".
+          if (messageCommand.executedBy) {
+            continue;
+          }
           if (
             this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)
           ) {
@@ -456,6 +463,11 @@ export default class CommandService extends Service {
       message.eventId,
     );
     for (let messageCommand of message.commands) {
+      // Server-executed (e.g. ai-bot's readRealmFile): not the host's to run, so
+      // not the host's to invalidate when processing wedges.
+      if (messageCommand.executedBy) {
+        continue;
+      }
       let commandRequestId = messageCommand.commandRequest.id;
       // Without a tool call id we can't address a command result event, so
       // there's nothing to invalidate.
@@ -660,6 +672,11 @@ export default class CommandService extends Service {
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
+    // Server-executed (e.g. ai-bot's readRealmFile): nothing for the host to run.
+    // Guards the manual "Try Anyway" path as well as any auto-execution.
+    if (command.executedBy) {
+      return;
+    }
     let { arguments: payload, id: commandRequestId } = command;
     // CS-11045: Source the bot-message event_id from current room state at
     // execute time rather than the snapshot taken when the MessageCommand was
@@ -773,6 +790,11 @@ export default class CommandService extends Service {
 
   async validate(command: MessageCommand): Promise<boolean> {
     let error: string | undefined;
+    // Server-executed (e.g. ai-bot's readRealmFile): the host has no command class
+    // to resolve, and never runs it, so there is nothing to validate.
+    if (command.executedBy) {
+      return false;
+    }
     if (!command.name) {
       console.warn(
         `Command with id ${command.id} has no name, skipping validation`,
