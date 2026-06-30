@@ -2749,7 +2749,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
   });
 
-  test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
+  test(`search doc includes a 'linksTo' field the render never loaded when it is searchable`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -2879,7 +2879,7 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTheme: null,
         cardInfo: { cardThumbnail: null, theme: null },
       },
-      `publication search doc includes featuredPosts relationship via isUsed=true`,
+      `publication search doc includes featuredPosts relationship via its searchable annotation`,
     );
   });
 

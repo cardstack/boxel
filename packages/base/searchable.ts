@@ -23,13 +23,12 @@ import {
 } from './card-api';
 
 // ============================================================================
-// Searchable-driven search-doc generation — NON-AUTHORITATIVE.
+// Searchable-driven search-doc generation.
 //
-// Parallel to `searchDoc` (in card-api), which stays in charge of production
-// indexing. This path derives link depth from the explicit `field.searchable`
-// annotation instead of from what the render happened to load into the store,
-// and loads the named link targets itself (targeted loading) rather than
-// relying on render-driven store residency.
+// The authoritative search-doc generator: it derives link depth from the
+// explicit `field.searchable` annotation rather than from what the render
+// happened to load into the store, and loads the named link targets itself
+// (targeted loading) rather than relying on render-driven store residency.
 //
 // Routes are dotted paths rooted at the CURRENT card's link fields. Depth is
 // governed ENTIRELY by the `searchable` annotations on the card being indexed
@@ -37,10 +36,9 @@ import {
 // re-consult its own `searchable` — only the explicit route continues into it.
 // `true` => the immediate ("self") link; `'a.b'` => the n+1 route a→b; an array
 // combines routes. Cycle clipping, `{ id }` for unfollowed / broken / not-found
-// links, and `linksToMany` id normalization are preserved from
-// `BaseDef[queryableValue]`. The declared field type is enumerated for both
-// links and contained values (not the runtime subtype), which drops the
-// non-queryable polymorphic-subtype bloat.
+// links, and `linksToMany` id normalization match `BaseDef[queryableValue]`. The
+// declared field type is enumerated for both links and contained values (not the
+// runtime subtype), which drops non-queryable polymorphic-subtype bloat.
 export async function searchDocFromFields(
   instance: CardDef,
   // Collects the URLs of the link targets pulled into the doc. The indexer
@@ -125,8 +123,9 @@ function matchSearchableRoutes(
 
 // Targeted load of a link target by reference: reuse a fully-deserialized
 // resident instance when present, else load + deserialize the document (the
-// same load path the lazy link getter uses, sans dependency tracking — this
-// generator is non-authoritative). Returns undefined if the target errors.
+// same load path the lazy link getter uses). The store load is not itself
+// dependency-tracked; callers record each expanded target in the `dependencies`
+// set instead. Returns undefined if the target errors.
 async function loadSearchableTarget(
   store: CardStore,
   reference: string,
@@ -200,8 +199,8 @@ async function searchableQueryableValue(
   for (let [fieldName, field] of Object.entries(
     getFields(fieldCard, { includeComputeds: true }),
   )) {
-    // Query-backed relationships can't be invalidated, so they're never in the
-    // doc — same skip as the store-driven path.
+    // Query-backed relationships can't be invalidated, so their value would
+    // always be stale; they are omitted from the doc, matching `queryableValue`.
     if (field?.queryDefinition) {
       continue;
     }
@@ -358,8 +357,8 @@ async function searchableLink(
   );
 }
 
-// A `linksToMany` value: per-slot `{ id }` / expansion, with the same
-// absolute-URL id normalization the store-driven path applies.
+// A `linksToMany` value: per-slot `{ id }` / expansion, with the absolute-URL
+// id normalization `LinksToMany.queryableValue` applies.
 async function searchableLinksToMany(
   field: Field<BaseDefConstructor>,
   rawValue: any,
