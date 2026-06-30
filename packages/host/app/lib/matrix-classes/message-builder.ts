@@ -331,6 +331,29 @@ export default class MessageBuilder {
         );
       }) as CommandResultEvent | undefined);
 
+    // ai-bot ran this one itself (executedBy, e.g. readRealmFile), so the host
+    // never resolves a command class or runs it. Skip the skill lookup below —
+    // it's pure async churn here (an `await store.get` per enabled skill) that
+    // would leave the marker pill blank for a beat while it runs. Build the
+    // command synchronously: 'applying' (loading) until the result event lands,
+    // then applied (success) or invalid + reason (failure).
+    if (commandRequest.executedBy) {
+      return new MessageCommand(
+        message,
+        commandRequest,
+        undefined, // no codeRef — never run on the host
+        this.builderContext.effectiveEventId,
+        false, // requiresApproval — never prompts or runs
+        'Apply', // actionVerb — unused; the pill shows status, not a Run button
+        (commandResultEvent
+          ? commandResultEvent.content['m.relates_to']?.key || 'applied'
+          : 'applying') as CommandStatus,
+        undefined, // no result card (server-handled results carry no output)
+        getOwner(this)!,
+        commandResultEvent?.content.failureReason,
+      );
+    }
+
     // Find command in skills
     let skillCommand:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
@@ -361,18 +384,9 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
-    // Already executed by a server-side actor (e.g. ai-bot runs readRealmFile
-    // itself), so the host never runs it. It shows as 'applying' (a loading
-    // indicator) until the actor posts its result event, then as applied
-    // (success) or invalid + reason (failure) — never as a pending, runnable
-    // command.
-    let commandStatus: CommandStatus = commandRequest.executedBy
-      ? commandResultEvent
-        ? ((commandResultEvent.content['m.relates_to']?.key ||
-            'applied') as CommandStatus)
-        : 'applying'
-      : ((commandResultEvent?.content['m.relates_to']?.key ||
-          'ready') as CommandStatus);
+    let commandStatus: CommandStatus = (commandResultEvent?.content[
+      'm.relates_to'
+    ]?.key || 'ready') as CommandStatus;
 
     let messageCommand = new MessageCommand(
       message,
