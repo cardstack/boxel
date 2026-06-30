@@ -18,6 +18,7 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailGroup } from './result-detail-group.gts';
 
 import Box from '@cardstack/boxel-icons/box';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -56,85 +57,14 @@ export class InstantiateCardEntry extends FieldDef {
     typeof InstantiateCardEntry
   > {
     <template>
-      <div class='detail-group {{if @model.hasError "has-errors"}}'>
-        <div class='detail-group-header'>
-          <span class='detail-group-name'>{{@model.instancePath}}</span>
-          {{#if @model.hasError}}
-            <span class='group-status errors'>error</span>
-          {{else}}
-            <span class='group-status clean'>passed</span>
-          {{/if}}
-        </div>
-        {{#if @model.error}}
-          <pre class='error-code-block'>{{@model.error}}</pre>
-        {{/if}}
-      </div>
-      <style scoped>
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .error-code-block {
-          margin: 0;
-          padding: var(--boxel-sp-sm);
-          border-radius: var(--boxel-border-radius);
-          background: color-mix(in oklch, oklch(55% 0.22 25) 8%, transparent);
-          color: oklch(55% 0.22 25);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-          white-space: pre-wrap;
-          word-break: break-word;
-          max-height: 15rem;
-          overflow-y: auto;
-          line-height: 1.4;
-        }
-      </style>
+      <ResultDetailGroup
+        @name={{@model.instancePath}}
+        @monospaceName={{true}}
+        @hasErrors={{@model.hasError}}
+        @statusLabel={{if @model.hasError 'error' 'passed'}}
+        @statusTone={{if @model.hasError 'errors' 'clean'}}
+        @error={{@model.error}}
+      />
     </template>
   };
 }

@@ -15,6 +15,8 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailGroup } from './result-detail-group.gts';
+import { ResultDetailRow } from './result-detail-row.gts';
 
 import FileCode from '@cardstack/boxel-icons/file-code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -30,42 +32,12 @@ export class ParseError extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof ParseError> {
     <template>
-      <div class='error-row'>
-        <CircleX
-          class='sev-icon sev-error'
-          width='14'
-          height='14'
-          aria-label='error'
-        />
-        {{#if @model.line}}
-          <span class='error-location'>{{@model.line}}:{{@model.column}}</span>
-        {{/if}}
-        <span class='error-message-text'>{{@model.message}}</span>
-      </div>
-      <style scoped>
-        .error-row {
-          display: flex;
-          align-items: baseline;
-          gap: var(--boxel-sp-xs);
-          font-size: var(--boxel-font-size-sm);
-        }
-        .sev-icon {
-          flex-shrink: 0;
-          align-self: center;
-        }
-        .sev-error {
-          color: oklch(55% 0.22 25);
-        }
-        .error-location {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-        }
-        .error-message-text {
-          flex: 1;
-        }
-      </style>
+      <ResultDetailRow
+        @tone='error'
+        @line={{@model.line}}
+        @column={{@model.column}}
+        @message={{@model.message}}
+      />
     </template>
   };
 }
@@ -95,78 +67,23 @@ export class ParseFileResult extends FieldDef {
   }
 
   static embedded = class Embedded extends Component<typeof ParseFileResult> {
+    get statusLabel() {
+      let m = this.args.model;
+      return m.passed ? 'valid' : `${m.errorCount} error(s)`;
+    }
+
     <template>
-      <div class='detail-group {{unless @model.passed "has-errors"}}'>
-        <div class='detail-group-header'>
-          <span class='detail-group-name'>{{@model.displayFile}}</span>
-          {{#if @model.passed}}
-            <span class='group-status clean'>valid</span>
-          {{else}}
-            <span class='group-status errors'>{{@model.errorCount}}
-              error(s)</span>
-          {{/if}}
-        </div>
+      <ResultDetailGroup
+        @name={{@model.displayFile}}
+        @monospaceName={{true}}
+        @hasErrors={{unless @model.passed true}}
+        @statusLabel={{this.statusLabel}}
+        @statusTone={{if @model.passed 'clean' 'errors'}}
+      >
         {{#if @model.errorCount}}
-          <div class='error-rows'>
-            <@fields.errors @format='embedded' />
-          </div>
+          <@fields.errors @format='embedded' />
         {{/if}}
-      </div>
-      <style scoped>
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .error-rows :deep(.containsMany-field.embedded-format) {
-          gap: var(--boxel-sp-4xs);
-        }
-      </style>
+      </ResultDetailGroup>
     </template>
   };
 }

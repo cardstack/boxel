@@ -18,6 +18,7 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailGroup } from './result-detail-group.gts';
 
 import FlaskConical from '@cardstack/boxel-icons/flask-conical';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -185,104 +186,39 @@ export class TestModuleResult extends FieldDef {
   }
 
   static embedded = class Embedded extends Component<typeof TestModuleResult> {
+    get statusTone() {
+      let m = this.args.model;
+      if (!m.isComplete) return 'running';
+      if (m.failedCount) return 'errors';
+      return m.passedCount ? 'clean' : 'muted';
+    }
+
+    get statusLabel() {
+      let m = this.args.model;
+      if (!m.isComplete) return 'running…';
+      let label = m.failedCount
+        ? `${m.passedCount} passed, ${m.failedCount} failed`
+        : `${m.passedCount}/${m.totalCount} passed`;
+      if (m.skippedCount) label += ` (${m.skippedCount} skipped)`;
+      return label;
+    }
+
     <template>
-      <div class='detail-group {{if @model.failedCount "has-errors"}}'>
-        <div class='detail-group-header'>
-          <span class='detail-group-name'>{{@model.moduleName}}</span>
-          {{#if @model.isComplete}}
-            <span
-              class='group-status
-                {{if
-                  @model.failedCount
-                  "errors"
-                  (if @model.passedCount "clean" "muted")
-                }}'
-            >
-              {{#if @model.failedCount}}
-                {{@model.passedCount}}
-                passed,
-                {{@model.failedCount}}
-                failed
-              {{else}}
-                {{@model.passedCount}}/{{@model.totalCount}}
-                passed
-              {{/if}}
-              {{#if @model.skippedCount}}
-                ({{@model.skippedCount}}
-                skipped)
-              {{/if}}
-            </span>
-          {{else}}
-            <span class='group-status running'>running…</span>
-          {{/if}}
-        </div>
-        <div class='test-rows'>
-          <@fields.results @format='embedded' />
-        </div>
-      </div>
-      <style scoped>
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .group-status.running {
-          color: oklch(60% 0.16 250);
-        }
-        .test-rows :deep(.containsMany-field.embedded-format) {
-          gap: var(--boxel-sp-4xs);
-        }
-      </style>
+      <ResultDetailGroup
+        @name={{@model.moduleName}}
+        @hasErrors={{@model.failedCount}}
+        @statusLabel={{this.statusLabel}}
+        @statusTone={{this.statusTone}}
+      >
+        <@fields.results @format='embedded' />
+      </ResultDetailGroup>
     </template>
   };
 }
 
 export class TestRun extends ValidationResult {
   static displayName = 'Test Run';
+  static icon = FlaskConical;
 
   @field moduleResults = containsMany(TestModuleResult);
 
@@ -363,7 +299,7 @@ export class TestRun extends ValidationResult {
 
     <template>
       <ResultFittedCard
-        @icon={{FlaskConical}}
+        @icon={{@model.constructor.icon}}
         @label='Tests'
         @sequenceNumber={{@model.sequenceNumber}}
         @status={{this.displayStatus}}

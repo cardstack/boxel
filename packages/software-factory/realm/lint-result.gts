@@ -17,6 +17,8 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
+import { ResultDetailGroup } from './result-detail-group.gts';
+import { ResultDetailRow } from './result-detail-row.gts';
 
 import ListChecks from '@cardstack/boxel-icons/list-checks';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -42,62 +44,13 @@ export class LintViolation extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof LintViolation> {
     <template>
-      <div class='violation-row'>
-        {{#if (eq @model.severity 'error')}}
-          <CircleX
-            class='sev-icon sev-error'
-            width='14'
-            height='14'
-            aria-label='error'
-          />
-        {{else}}
-          <CircleAlert
-            class='sev-icon sev-warning'
-            width='14'
-            height='14'
-            aria-label='warning'
-          />
-        {{/if}}
-        <span
-          class='violation-location'
-        >{{@model.line}}:{{@model.column}}</span>
-        <span class='violation-message'>{{@model.message}}</span>
-        {{#if @model.rule}}
-          <span class='violation-rule'>[{{@model.rule}}]</span>
-        {{/if}}
-      </div>
-      <style scoped>
-        .violation-row {
-          display: flex;
-          align-items: baseline;
-          gap: var(--boxel-sp-xs);
-          font-size: var(--boxel-font-size-sm);
-        }
-        .sev-icon {
-          flex-shrink: 0;
-          align-self: center;
-        }
-        .sev-error {
-          color: oklch(55% 0.22 25);
-        }
-        .sev-warning {
-          color: oklch(68% 0.17 55);
-        }
-        .violation-location {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-        }
-        .violation-message {
-          flex: 1;
-        }
-        .violation-rule {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-size: var(--boxel-font-size-xs);
-        }
-      </style>
+      <ResultDetailRow
+        @tone={{if (eq @model.severity 'error') 'error' 'warning'}}
+        @line={{@model.line}}
+        @column={{@model.column}}
+        @message={{@model.message}}
+        @trailing={{@model.rule}}
+      />
     </template>
   };
 }
@@ -131,80 +84,26 @@ export class LintFileResult extends FieldDef {
   }
 
   static embedded = class Embedded extends Component<typeof LintFileResult> {
+    get statusLabel() {
+      let m = this.args.model;
+      if (m.passed) return 'clean';
+      let label = `${m.errorCount} error(s)`;
+      if (m.warningCount) label += `, ${m.warningCount} warning(s)`;
+      return label;
+    }
+
     <template>
-      <div class='detail-group {{unless @model.passed "has-errors"}}'>
-        <div class='detail-group-header'>
-          <span class='detail-group-name'>{{@model.file}}</span>
-          {{#if @model.passed}}
-            <span class='group-status clean'>clean</span>
-          {{else}}
-            <span class='group-status errors'>{{@model.errorCount}}
-              error(s){{#if @model.warningCount}},
-                {{@model.warningCount}}
-                warning(s){{/if}}</span>
-          {{/if}}
-        </div>
+      <ResultDetailGroup
+        @name={{@model.file}}
+        @monospaceName={{true}}
+        @hasErrors={{unless @model.passed true}}
+        @statusLabel={{this.statusLabel}}
+        @statusTone={{if @model.passed 'clean' 'errors'}}
+      >
         {{#if @model.totalCount}}
-          <div class='violation-rows'>
-            <@fields.violations @format='embedded' />
-          </div>
+          <@fields.violations @format='embedded' />
         {{/if}}
-      </div>
-      <style scoped>
-        .detail-group {
-          border: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 60%,
-              transparent
-            );
-          border-radius: var(--boxel-border-radius);
-          padding: var(--boxel-sp-sm);
-        }
-        .detail-group.has-errors {
-          border-color: color-mix(
-            in oklch,
-            oklch(55% 0.22 25) 50%,
-            transparent
-          );
-        }
-        .detail-group-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-xs);
-          border-bottom: 1px solid
-            color-mix(
-              in oklch,
-              var(--border, var(--boxel-border-color)) 50%,
-              transparent
-            );
-          margin-bottom: var(--boxel-sp-xs);
-        }
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .violation-rows :deep(.containsMany-field.embedded-format) {
-          gap: var(--boxel-sp-4xs);
-        }
-      </style>
+      </ResultDetailGroup>
     </template>
   };
 }
