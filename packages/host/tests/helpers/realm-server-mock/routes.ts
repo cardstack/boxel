@@ -69,6 +69,7 @@ export function registerDefaultRoutes() {
   registerTypesRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
+  registerArchiveRoutes();
 }
 
 function registerSearchRoutes() {
@@ -303,6 +304,10 @@ function registerAuthRoutes() {
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
+        // Archived realms are omitted from enumeration (mirrors CS-11665).
+        if (state.archivedRealms.has(realmURL)) {
+          continue;
+        }
         if (state.ensureSessionRoom) {
           await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
         }
@@ -401,6 +406,101 @@ function registerAuthRoutes() {
       });
     },
   });
+}
+
+function registerArchiveRoutes() {
+  registerRealmServerRoute({
+    path: '/_archive-realm',
+    handler: (req, _url, state) => handleArchiveToggle(req, state, true),
+  });
+  registerRealmServerRoute({
+    path: '/_unarchive-realm',
+    handler: (req, _url, state) => handleArchiveToggle(req, state, false),
+  });
+  registerRealmServerRoute({
+    path: '/_archived-realms',
+    handler: async (_req, _url, state: RealmServerMockState) => {
+      let data: {
+        type: 'realm';
+        id: string;
+        attributes: {
+          archivedAt: string;
+          name: string;
+          iconURL: string | null;
+          backgroundURL: string | null;
+        };
+      }[] = [];
+      for (let [realmURL, { archivedAt }] of state.archivedRealms.entries()) {
+        // The endpoint is owner-scoped server-side; mirror that by surfacing
+        // only realms the caller owns.
+        let permissions = state.realmPermissions.get(realmURL);
+        if (!permissions?.includes('realm-owner')) {
+          continue;
+        }
+        let info = await getRealmInfoForURL(realmURL);
+        data.push({
+          type: 'realm',
+          id: realmURL,
+          attributes: {
+            archivedAt,
+            name: info?.name ?? realmURL,
+            iconURL: info?.iconURL ?? null,
+            backgroundURL: info?.backgroundURL ?? null,
+          },
+        });
+      }
+      // Deterministic order (mirrors fetchArchivedRealmsForOwner's secondary
+      // sort on url).
+      data.sort((a, b) => a.id.localeCompare(b.id));
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      });
+    },
+  });
+}
+
+async function handleArchiveToggle(
+  req: Request,
+  state: RealmServerMockState,
+  archive: boolean,
+): Promise<Response> {
+  let body = (await req.json()) as { data?: { id?: string; type?: string } };
+  let realmURL = body.data?.id;
+  if (!realmURL || body.data?.type !== 'realm') {
+    return new Response(
+      JSON.stringify({ errors: ['Request body must include a realm id'] }),
+      { status: 400, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+    );
+  }
+
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  let permissions = state.realmPermissions.get(normalizedRealmURL);
+  if (!permissions?.includes('realm-owner')) {
+    return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
+      status: 403,
+      headers: { 'content-type': SupportedMimeType.JSONAPI },
+    });
+  }
+
+  if (archive) {
+    state.archivedRealms.set(normalizedRealmURL, {
+      archivedAt: new Date().toISOString(),
+    });
+  } else {
+    state.archivedRealms.delete(normalizedRealmURL);
+  }
+
+  return new Response(
+    JSON.stringify({
+      data: {
+        type: 'realm',
+        id: normalizedRealmURL,
+        attributes: { archived: archive },
+      },
+    }),
+    { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+  );
 }
 
 // The search-entry searchable-realm resolver. In-process registry

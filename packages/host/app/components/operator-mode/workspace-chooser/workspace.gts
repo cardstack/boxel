@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
@@ -276,6 +277,83 @@ export default class Workspace extends Component<Signature> {
               </div>
               <span class='delete-modal__disclaimer'>
                 This action is not reversible
+              </span>
+            </div>
+          </:footer>
+        </ModalContainer>
+      {{/if}}
+      {{#if this.showArchiveModal}}
+        <ModalContainer
+          @title=''
+          @onClose={{this.closeArchiveModal}}
+          @size='medium'
+          @cardContainerClass='workspace-chooser-archive-modal'
+          class='workspace-chooser-archive-modal-container'
+          data-test-archive-modal={{@realmIdentifier}}
+        >
+          <:content>
+            <div class='archive-modal__header'>
+              <ArchiveIcon class='archive-modal__icon' />
+              <h2 class='archive-modal__title'>Archive Workspace</h2>
+            </div>
+
+            <div class='archive-modal__workspace-card'>
+              <div class='archive-modal__realm-icon-wrapper'>
+                <RealmIcon
+                  class='archive-modal__realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+              </div>
+              <div class='archive-modal__workspace-info'>
+                <span class='archive-modal__workspace-name'>{{this.name}}</span>
+              </div>
+            </div>
+
+            <div class='archive-modal__info-box'>
+              <p class='archive-modal__info-text'>
+                Archiving hides this workspace from your realm list and stops
+                its indexer. While archived, it
+                <strong>
+                  will not be available for viewing or editing — to you or any
+                  other user
+                </strong>
+                — until you restore it.
+              </p>
+              <p class='archive-modal__info-text'>
+                You can restore it at any time from the Archived section of the
+                workspace chooser.
+              </p>
+            </div>
+
+            {{#if this.archiveError}}
+              <p class='archive-modal__error'>{{this.archiveError}}</p>
+            {{/if}}
+          </:content>
+          <:footer>
+            <div class='archive-modal__footer'>
+              <div class='archive-modal__actions'>
+                {{#if this.archiveWorkspaceTask.isRunning}}
+                  <LoadingIndicator class='archive-modal__spinner' />
+                {{else}}
+                  <Button
+                    {{on 'click' this.closeArchiveModal}}
+                    class='archive-modal__cancel'
+                    data-test-cancel-archive-button
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    type='button'
+                    class='archive-modal__confirm'
+                    data-test-confirm-archive-button
+                    {{on 'click' (perform this.archiveWorkspaceTask)}}
+                  >
+                    Archive this workspace
+                  </button>
+                {{/if}}
+              </div>
+              <span class='archive-modal__disclaimer'>
+                You can restore this workspace later
               </span>
             </div>
           </:footer>
@@ -789,6 +867,171 @@ export default class Workspace extends Component<Signature> {
       .delete-modal__spinner {
         --boxel-loading-indicator-size: 2rem;
       }
+      .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.workspace-chooser-archive-modal) {
+        border-radius: var(--boxel-border-radius-xxl);
+        max-width: var(--boxel-md-container);
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__header) {
+        display: none;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__content) {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+        overflow: visible;
+        height: auto;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__content > * + *) {
+        margin-top: 0;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__footer) {
+        height: auto;
+        flex: none;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        border-top: none;
+      }
+      .archive-modal__header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .archive-modal__icon {
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        min-width: var(--boxel-icon-lg);
+        color: var(--boxel-dark);
+        flex-shrink: 0;
+      }
+      .archive-modal__title {
+        font-size: 1.625rem;
+        font-weight: 700;
+        color: var(--boxel-dark);
+        margin: 0;
+      }
+      .archive-modal__workspace-card {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp);
+        min-height: 5.125rem;
+      }
+      .archive-modal__realm-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
+        display: flex;
+      }
+      .archive-modal__realm-icon-wrapper::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .archive-modal__realm-icon {
+        --boxel-realm-icon-size: 2.625rem;
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+      }
+      .archive-modal__workspace-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+      .archive-modal__workspace-name {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+      }
+      .archive-modal__info-box {
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .archive-modal__info-text {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--boxel-dark);
+      }
+      .archive-modal__error {
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        margin: 0;
+      }
+      .archive-modal__footer {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+      }
+      .archive-modal__actions {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        align-items: center;
+      }
+      .archive-modal__cancel {
+        background: none;
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 var(--boxel-sp-lg);
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+      .archive-modal__cancel:hover {
+        border-color: var(--boxel-550);
+        background: var(--boxel-light-100);
+      }
+      .archive-modal__confirm {
+        background: var(--boxel-dark);
+        border: none;
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 1.5rem;
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-light);
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .archive-modal__confirm:hover {
+        background: var(--boxel-700);
+      }
+      .archive-modal__disclaimer {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        color: var(--boxel-500);
+      }
+      .archive-modal__spinner {
+        --boxel-loading-indicator-size: 2rem;
+      }
     </style>
   </template>
 
@@ -808,6 +1051,8 @@ export default class Workspace extends Component<Signature> {
   @tracked private showDeleteModal = false;
   @tracked private deleteError: string | undefined;
   @tracked private deleteSummary: WorkspaceDeleteSummary | undefined;
+  @tracked private showArchiveModal = false;
+  @tracked private archiveError: string | undefined;
   @tracked private isHostDropdownOpen = false;
 
   constructor(...args: [any, any]) {
@@ -830,7 +1075,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   get tileMenuItems() {
-    return [
+    let items = [
       new MenuItem({
         label: this.isFavorited ? 'Unfavorite' : 'Favorite',
         icon: this.isFavorited ? StarFilled : Star,
@@ -841,6 +1086,18 @@ export default class Workspace extends Component<Signature> {
         icon: FileSettingsIcon,
         action: this.openRealmConfig,
       }),
+    ];
+    // Archive is owner-only and appears only on tiles the user owns.
+    if (this.canArchiveWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Archive Workspace',
+          icon: ArchiveIcon,
+          action: this.openArchiveModal,
+        }),
+      );
+    }
+    items.push(
       new MenuItem({
         label: 'Delete Workspace',
         icon: IconTrash,
@@ -848,7 +1105,8 @@ export default class Workspace extends Component<Signature> {
         dangerous: true,
         disabled: !this.canDeleteWorkspace,
       }),
-    ];
+    );
+    return items;
   }
 
   @action openRealmConfig() {
@@ -943,6 +1201,10 @@ export default class Workspace extends Component<Signature> {
     return this.realm.isRealmOwner(this.args.realmIdentifier);
   }
 
+  private get canArchiveWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
   private get deleteSummaryText() {
     if (!this.deleteSummary) {
       return null;
@@ -995,6 +1257,53 @@ export default class Workspace extends Component<Signature> {
     this.showDeleteModal = false;
     this.deleteError = undefined;
   }
+
+  @action openArchiveModal() {
+    if (!this.canArchiveWorkspace) {
+      return;
+    }
+    this.archiveError = undefined;
+    this.showArchiveModal = true;
+  }
+
+  @action closeArchiveModal() {
+    if (this.archiveWorkspaceTask.isRunning) {
+      return;
+    }
+    this.showArchiveModal = false;
+    this.archiveError = undefined;
+  }
+
+  private archiveWorkspaceTask = dropTask(async () => {
+    this.archiveError = undefined;
+
+    try {
+      let realmPath = new RealmPaths(this.args.realmIdentifier);
+      let isActiveWorkspace =
+        this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
+        this.operatorModeStateService
+          .getOpenCardIds()
+          .some((cardId) => realmPath.inRealm(cardId)) ||
+        this.operatorModeStateService.codePathString?.startsWith(
+          this.args.realmIdentifier,
+        );
+
+      await this.realmServer.archiveRealm(this.args.realmIdentifier);
+      // The realm is now sealed; drop its local session so background
+      // requests don't loop on 403. Restoring re-creates the session.
+      this.realm.removeRealm(this.args.realmIdentifier);
+
+      if (isActiveWorkspace) {
+        this.operatorModeStateService.clearStacks();
+        await this.operatorModeStateService.updateCodePath(null);
+        this.operatorModeStateService.openWorkspaceChooser();
+      }
+
+      this.showArchiveModal = false;
+    } catch (error: any) {
+      this.archiveError = error.message;
+    }
+  });
 
   private loadDeleteSummaryTask = dropTask(async () => {
     try {

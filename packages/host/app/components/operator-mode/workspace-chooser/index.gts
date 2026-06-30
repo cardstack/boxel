@@ -4,6 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
 
@@ -20,6 +21,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
+import ArchivedWorkspace from './archived-workspace';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -40,6 +42,23 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+
+  constructor(...args: [any, any]) {
+    super(...args);
+    // Populate the Archived section. The endpoint is owner-scoped, so
+    // non-owners get an empty list and the section stays hidden.
+    this.realmServer
+      .fetchArchivedRealms()
+      .catch((e) => console.error('Failed to fetch archived realms', e));
+  }
+
+  private get archivedRealms() {
+    return this.realmServer.archivedRealms;
+  }
+
+  private get hasArchivedRealms() {
+    return this.archivedRealms.length > 0;
+  }
 
   private sortOptions: SortOption[] = [
     { label: 'View All', icon: Shapes, value: 'default' },
@@ -389,6 +408,23 @@ export default class WorkspaceChooser extends Component<Signature> {
               </div>
             {{/if}}
           </div>
+          {{#if this.hasArchivedRealms}}
+            <div class='workspace-section' data-test-archived-section>
+              <div class='section-header'>
+                <ArchiveIcon
+                  width='20'
+                  height='20'
+                  class='section-header-icon'
+                />
+                <span class='workspace-chooser__title'>Archived</span>
+              </div>
+              <div class='workspace-list' data-test-archived-list>
+                {{#each this.archivedRealms as |archivedRealm|}}
+                  <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
+                {{/each}}
+              </div>
+            </div>
+          {{/if}}
           {{#if this.displayCatalogWorkspaces}}
             <div class='workspace-section'>
               <div class='section-header'>
