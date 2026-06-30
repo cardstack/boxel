@@ -90,6 +90,9 @@ test.describe('User Registration w/ Token', () => {
       .locator('[data-test-confirm-password-field]')
       .fill(firstUser.password);
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
+    await expect(page.locator('[data-test-username-available]')).toHaveCount(1);
+    await expect(page.locator('[data-test-password-valid]')).toHaveCount(1);
+    await expect(page.locator('[data-test-passwords-match]')).toHaveCount(1);
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
