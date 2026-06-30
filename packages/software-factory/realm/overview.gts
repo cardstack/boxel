@@ -39,14 +39,36 @@ import type { RealmDashboard } from './realm-dashboard.gts';
 // @ts-expect-error this is not a CJS file, import.meta is allowed
 const importMetaUrl: string = import.meta.url;
 
-// `Validations/` after every agent turn. A `type` filter matches each
-// card and its subclasses, so the tab surfaces the whole pipeline.
-const VALIDATION_TYPES = [
-  codeRef(importMetaUrl, './parse-result', 'ParseResult'),
-  codeRef(importMetaUrl, './lint-result', 'LintResult'),
-  codeRef(importMetaUrl, './eval-result', 'EvalResult'),
-  codeRef(importMetaUrl, './instantiate-result', 'InstantiateResult'),
-  codeRef(importMetaUrl, './test-results', 'TestRun'),
+// The five validation-result card types the factory writes under
+// `Validations/` after every agent turn, in pipeline order. A `type` filter
+// matches each card and its subclasses, so the tab surfaces the whole
+// pipeline; the Validation Runs widget renders one group per type.
+const VALIDATION_TYPE_GROUPS = [
+  {
+    key: 'parse',
+    label: 'Parse',
+    ref: codeRef(importMetaUrl, './parse-result', 'ParseResult'),
+  },
+  {
+    key: 'lint',
+    label: 'Lint',
+    ref: codeRef(importMetaUrl, './lint-result', 'LintResult'),
+  },
+  {
+    key: 'eval',
+    label: 'Eval',
+    ref: codeRef(importMetaUrl, './eval-result', 'EvalResult'),
+  },
+  {
+    key: 'instantiate',
+    label: 'Instantiate',
+    ref: codeRef(importMetaUrl, './instantiate-result', 'InstantiateResult'),
+  },
+  {
+    key: 'test',
+    label: 'Tests',
+    ref: codeRef(importMetaUrl, './test-results', 'TestRun'),
+  },
 ];
 
 const KNOWLEDGE_TYPE = codeRef(
@@ -170,25 +192,23 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
     return url ? [url.href] : [];
   }
 
-  // Validation results link *to* an issue, so to group them we run one
-  // query per issue. Each of the five result types has its own `issue`
-  // field, so the `issue.id` constraint is scoped per type via `on`. Sort by
-  // `createdAt`, a general (type-agnostic) field: a per-type field like `runAt`
-  // would need an `on`, which can't span the five types in this `any` filter,
-  // and each result card is created when its run completes, so newest-created
-  // is newest-run.
-  validationQueryForIssue = (
-    issueId: string | undefined,
+  get validationTypeGroups() {
+    return VALIDATION_TYPE_GROUPS;
+  }
+
+  // One query per validation type, newest run first. Grouping by type keeps
+  // the whole pipeline (parse → lint → eval → instantiate → test) legible at a
+  // glance; each result card already names its issue, so issue context isn't
+  // lost by dropping the per-issue grouping. Sort by `runAt` (a global
+  // timestamp): `sequenceNumber` restarts at 1 per issue slug, so it would rank
+  // an older issue's run #5 ahead of a newer issue's run #1.
+  validationQueryForType = (
+    ref: (typeof VALIDATION_TYPE_GROUPS)[number]['ref'],
   ): SearchEntryWireQuery => {
     return {
       ...searchEntryWireQueryFromQuery({
-        filter: {
-          any: VALIDATION_TYPES.map((ref) => ({
-            on: ref,
-            eq: { 'issue.id': issueId ?? '' },
-          })),
-        },
-        sort: [{ by: 'createdAt', direction: 'desc' }],
+        filter: { type: ref },
+        sort: [{ by: 'runAt', on: ref, direction: 'desc' }],
       }),
       realms: this.validationRealms,
     };
@@ -592,18 +612,20 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
           <section class='widget'>
             <h3 class='widget-title'>Validation Runs</h3>
             {{#if this.validationRealms.length}}
-              {{#each this.issues key='id' as |issue|}}
+              {{#each this.validationTypeGroups key='key' as |group|}}
                 <div class='validation-group'>
                   <div class='validation-group-head'>
-                    <span class='issue-id'>{{issue.issueId}}</span>
-                    <span class='issue-title'>{{issue.cardTitle}}</span>
+                    <span
+                      class='validation-type'
+                      data-test-validation-type={{group.key}}
+                    >{{group.label}}</span>
                   </div>
                   {{#let
                     (component @context.searchResultsComponent)
                     as |SearchResults|
                   }}
                     <SearchResults
-                      @query={{this.validationQueryForIssue issue.id}}
+                      @query={{this.validationQueryForType group.ref}}
                       @mode='none'
                       as |results|
                     >
@@ -623,8 +645,6 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
                     </SearchResults>
                   {{/let}}
                 </div>
-              {{else}}
-                <p class='empty-state'>No issues yet.</p>
               {{/each}}
             {{else}}
               <p class='empty-state'>Realm not resolved — open this card from
@@ -791,6 +811,13 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp-xs);
+      }
+      .validation-type {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground, var(--boxel-500));
       }
       .validation-list {
         display: flex;
