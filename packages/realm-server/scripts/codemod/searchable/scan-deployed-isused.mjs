@@ -22,6 +22,14 @@ if (!efsBase || !root || !out) {
     'usage: node scan-deployed-isused.mjs <efs-base> <root> <out.json> [--concurrency N]',
   );
 }
+if (!Number.isFinite(CONCURRENCY) || CONCURRENCY < 1) {
+  throw new Error('--concurrency must be a positive number');
+}
+
+// Matches the `isUsed:` field OPTION (an object-literal property), so a field
+// or getter named `isUsed` (`@field isUsed = …`, `get isUsed()`) or a
+// `this.isUsed` / `@model.isUsed` reference doesn't count as a hit.
+const ISUSED_OPTION = /(?<![.\w])isUsed\s*:/g;
 
 async function get(path, asJson) {
   let last;
@@ -79,9 +87,9 @@ async function worker() {
     let path = files[i++];
     try {
       let body = await get(path, false);
-      if (body.includes('isUsed')) {
-        let count = body.split('isUsed').length - 1;
-        hits.push({ path, count });
+      let m = body.match(ISUSED_OPTION);
+      if (m) {
+        hits.push({ path, count: m.length });
       }
     } catch {
       // leave unrecorded; a transient miss is re-found on a re-run

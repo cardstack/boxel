@@ -20,8 +20,9 @@
 // `/realms/_published/`) are skipped here — they pick up the strip when their
 // source realm is republished, not by a direct write.
 //
-// The seed is read from ~/.config/boxel/realm-secret-seed-<staging|production>
-// and handed to boxel-cli via BOXEL_REALM_SECRET_SEED in the child's env, so it
+// The seed is read from ~/.config/boxel/realm-secret-seed-staging (for --env
+// staging) or ~/.config/boxel/realm-secret-seed-production (for --env prod) and
+// handed to boxel-cli via BOXEL_REALM_SECRET_SEED in the child's env, so it
 // never lands in this process's argv or the logs.
 
 import {
@@ -49,6 +50,12 @@ const ORIGIN: Record<string, string> = {
   staging: 'https://realms-staging.stack.cards',
   prod: 'https://app.boxel.ai',
 };
+
+// Matches the `isUsed:` field OPTION (an object-literal property) — not a field
+// or getter named `isUsed` (`@field isUsed = …`, `get isUsed()`), nor a
+// `this.isUsed` / `@model.isUsed` reference. Used to tell a real leftover
+// annotation from a coincidental identifier when deciding clean vs. not.
+const ISUSED_OPTION = /(?<![.\w])isUsed\s*:/;
 const SEED_FILE: Record<string, string> = {
   staging: 'realm-secret-seed-staging',
   prod: 'realm-secret-seed-production',
@@ -89,6 +96,12 @@ function parseArgs(argv: string[]): Args {
       'usage: --env <staging|prod> --efs-base <url> --hits <scan.json> --out <report.jsonl> [--write] [--concurrency N] [--limit N] [--realm url]',
     );
   }
+  if (!Number.isFinite(a.concurrency) || a.concurrency < 1) {
+    throw new Error('--concurrency must be a positive number');
+  }
+  if (a.limit !== undefined && (!Number.isFinite(a.limit) || a.limit < 1)) {
+    throw new Error('--limit must be a positive number');
+  }
   return a;
 }
 
@@ -102,12 +115,7 @@ function readSeed(env: string): string {
 
 // Run a boxel-cli subcommand with the seed supplied via the child's env only —
 // never on argv, never logged.
-function boxel(
-  env: string,
-  seed: string,
-  args: string[],
-  timeoutMs = 240000,
-): string {
+function boxel(seed: string, args: string[], timeoutMs = 240000): string {
   return execFileSync('node', [BOXEL, ...args], {
     encoding: 'utf8',
     timeout: timeoutMs,
@@ -118,7 +126,6 @@ function boxel(
 
 // Write one module via boxel-cli `file write` (content through a temp file).
 function writeRealmFile(
-  env: string,
   seed: string,
   realmUrl: string,
   relPath: string,
@@ -128,7 +135,7 @@ function writeRealmFile(
   let tmp = join(dir, 'content');
   try {
     writeFileSync(tmp, content);
-    boxel(env, seed, [
+    boxel(seed, [
       'file',
       'write',
       relPath,
@@ -146,12 +153,11 @@ function writeRealmFile(
 // Read one module back via boxel-cli `file read --json`. Returns the content,
 // or null if the file isn't there.
 function readRealmFile(
-  env: string,
   seed: string,
   realmUrl: string,
   relPath: string,
 ): string | null {
-  let out = boxel(env, seed, [
+  let out = boxel(seed, [
     'file',
     'read',
     relPath,
@@ -231,6 +237,7 @@ async function main(): Promise<void> {
   let changedRealms = 0;
   let strippedModules = 0;
   let noopModules = 0;
+  let unstrippedModules = 0;
   let failed = 0;
   let done = 0;
 
@@ -240,6 +247,12 @@ async function main(): Promise<void> {
       let targets = byRealm.get(realmUrl) ?? [];
       let stripped: string[] = [];
       let noop: string[] = [];
+      // `isUsed` survived the transform: it sits in non-literal field options
+      // (`const o = { isUsed: true }; linksTo(X, o)`) or another form the codemod
+      // can't statically rewrite (these land in `result.skipped`). This is NOT a
+      // no-op — the annotation is still there, so it's surfaced for manual
+      // handling and the file is left untouched rather than half-written.
+      let unstripped: string[] = [];
       let errors: string[] = [];
       for (let { efsPath, relPath } of targets) {
         try {
@@ -249,16 +262,27 @@ async function main(): Promise<void> {
             policyForClass: () => undefined, // strip-only: never add searchable
             stripIsUsed: true,
           });
-          if (result.status !== 'transformed' || result.output === before) {
-            // Stale hit or nothing to strip (e.g. already stripped) — no write.
+          let changed =
+            result.status === 'transformed' && result.output !== before;
+          let after = changed ? result.output : before;
+          if (ISUSED_OPTION.test(after)) {
+            let where = result.skipped.length
+              ? ` (${result.skipped.map((s) => `${s.className ?? '?'}.${s.fieldName}`).join(', ')})`
+              : '';
+            unstripped.push(relPath + where);
+            unstrippedModules++;
+            continue;
+          }
+          if (!changed) {
+            // No `isUsed` present — genuinely clean (already stripped / stale hit).
             noop.push(relPath);
             noopModules++;
             continue;
           }
           if (args.write) {
-            writeRealmFile(args.env, seed, realmUrl, relPath, result.output);
-            let after = readRealmFile(args.env, seed, realmUrl, relPath);
-            if (after !== result.output) {
+            writeRealmFile(seed, realmUrl, relPath, result.output);
+            let readBack = readRealmFile(seed, realmUrl, relPath);
+            if (readBack !== result.output) {
               throw new Error(`verify ${relPath}: write did not round-trip`);
             }
           }
@@ -274,12 +298,13 @@ async function main(): Promise<void> {
         realm: realmUrl,
         stripped,
         noop,
+        unstripped: unstripped.length ? unstripped : undefined,
         errors: errors.length ? errors : undefined,
         written: args.write ? stripped : undefined,
       });
-      if (stripped.length > 0 || errors.length > 0) {
+      if (stripped.length > 0 || errors.length > 0 || unstripped.length > 0) {
         process.stderr.write(
-          `  ${errors.length ? '✗' : '✓'} ${realmUrl} — ${stripped.length} module(s)${args.write ? ' WRITTEN' : ' would strip'}${errors.length ? `, ${errors.length} error(s)` : ''}\n`,
+          `  ${errors.length || unstripped.length ? '✗' : '✓'} ${realmUrl} — ${stripped.length} module(s)${args.write ? ' WRITTEN' : ' would strip'}${unstripped.length ? `, ${unstripped.length} STILL has isUsed` : ''}${errors.length ? `, ${errors.length} error(s)` : ''}\n`,
         );
       }
       done++;
@@ -292,9 +317,11 @@ async function main(): Promise<void> {
   );
 
   process.stderr.write(
-    `\nDone. ${realms.length} realms, ${changedRealms} ${args.write ? 'changed' : 'would change'}, ${strippedModules} module(s) ${args.write ? 'stripped' : 'to strip'}, ${noopModules} no-op, ${failed} failed. Report: ${args.out}\n`,
+    `\nDone. ${realms.length} realms, ${changedRealms} ${args.write ? 'changed' : 'would change'}, ${strippedModules} module(s) ${args.write ? 'stripped' : 'to strip'}, ${noopModules} no-op, ${unstrippedModules} still-has-isUsed, ${failed} failed. Report: ${args.out}\n`,
   );
-  if (failed > 0) process.exitCode = 1;
+  // A leftover `isUsed` (unstripped) means the realm isn't clean yet, so it
+  // fails the run just like a hard error.
+  if (failed > 0 || unstrippedModules > 0) process.exitCode = 1;
 }
 
 main().catch((err) => {
