@@ -1289,7 +1289,7 @@ export default class Workspace extends Component<Signature> {
         );
 
       await this.realmServer.archiveRealm(this.args.realmIdentifier);
-      // The realm is now sealed; drop its local session so background
+      // Archiving seals the realm; drop its local session so background
       // requests don't loop on 403. Restoring re-creates the session.
       this.realm.removeRealm(this.args.realmIdentifier);
 

@@ -304,7 +304,8 @@ function registerAuthRoutes() {
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
-        // Archived realms are omitted from enumeration (mirrors CS-11665).
+        // Archived realms are omitted from enumeration, matching the real
+        // `_realm-auth` so the active workspace list excludes them.
         if (state.archivedRealms.has(realmURL)) {
           continue;
         }

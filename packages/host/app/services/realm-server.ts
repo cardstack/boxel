@@ -596,9 +596,9 @@ export default class RealmServerService extends Service {
 
   // Fetch the caller's archived realms from the owner-only
   // `GET /_archived-realms` endpoint. The endpoint is scoped server-side to
-  // realms the caller owns, so non-owners receive an empty list and the
-  // chooser's Archived section stays hidden. Cached after the first fetch;
-  // pass `{ force: true }` to refresh after an archive/restore.
+  // realms the caller owns, so non-owners receive an empty list. Cached after
+  // the first fetch; pass `{ force: true }` to refresh after an
+  // archive/restore.
   async fetchArchivedRealms(opts?: { force?: boolean }) {
     if (this.archivedRealmsFetched && !opts?.force) {
       return;
