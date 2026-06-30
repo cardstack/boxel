@@ -51,7 +51,7 @@ export class Team extends CardDef {
 export class TeamMember extends User {
   static displayName = 'Team Member';
   static icon = UserIcon;
-  @field team = linksTo(Team);
+  @field team = linksTo(Team, { searchable: true });
 
   static atom = class Atom extends Component<typeof this> {
     <template>
@@ -502,9 +502,12 @@ export class SprintTaskStatusField extends TaskStatusField {
 export class SprintTask extends Task {
   static displayName = 'Sprint Task';
   static icon = CheckboxIcon;
-  @field project = linksTo(() => Project);
-  @field team = linksTo(() => Team, { isUsed: true });
-  @field subtasks = linksToMany(() => SprintTask);
+  @field project = linksTo(() => Project, { searchable: true });
+  @field team = linksTo(() => Team, {
+    isUsed: true,
+    searchable: true,
+  });
+  @field subtasks = linksToMany(() => SprintTask, { searchable: ['assignee', 'tags', 'team'] });
   @field status = contains(SprintTaskStatusField);
 
   @field cardTitle = contains(StringField, {
@@ -514,7 +517,7 @@ export class SprintTask extends Task {
   });
 
   //Removing this causes a missing .title error
-  @field assignee = linksTo(() => TeamMember);
+  @field assignee = linksTo(() => TeamMember, { searchable: 'team' });
 
   @field shortId = contains(StringField, {
     computeVia: function (this: SprintTask) {

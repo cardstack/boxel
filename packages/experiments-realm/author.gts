@@ -69,7 +69,10 @@ export class Author extends CardDef {
   @field contactLinks = containsMany(AuthorContactLink);
   @field email = contains(EmailField);
   @field featuredImage = contains(FeaturedImageField);
-  @field blog = linksTo(BlogApp, { isUsed: true });
+  @field blog = linksTo(BlogApp, {
+    isUsed: true,
+    searchable: true,
+  });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

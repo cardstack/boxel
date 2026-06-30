@@ -331,9 +331,9 @@ export class Product extends CardDef {
   // use title field for product title
 
   @field images = containsMany(StringField);
-  @field seller = linksTo(SellerCard);
-  @field unitPrice = contains(MonetaryAmountField);
-  @field shippingCost = contains(MonetaryAmountField);
+  @field seller = linksTo(SellerCard, { searchable: true });
+  @field unitPrice = contains(MonetaryAmountField, { searchable: 'currency' });
+  @field shippingCost = contains(MonetaryAmountField, { searchable: 'currency' });
   @field leadTimeDays = contains(NumberField);
   @field deliveryWindowDays = contains(NumberField);
   @field isReturnable = contains(BooleanField);

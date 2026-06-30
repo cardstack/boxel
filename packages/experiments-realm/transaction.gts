@@ -25,7 +25,7 @@ export class Transaction extends CardDef {
   @field from = contains(EthereumAddressField);
   @field to = contains(EthereumAddressField);
   @field memo = contains(StringField);
-  @field chain = linksTo(Chain);
+  @field chain = linksTo(Chain, { searchable: true });
   @field gasUsed = contains(BigIntegerField);
   @field effectiveGasPrice = contains(BigIntegerField);
   @field blockExplorerLink = contains(StringField, {

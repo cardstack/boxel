@@ -220,6 +220,6 @@ export class ShoppingCart extends CardDef {
   static isolated = ShoppingCartIsolated;
 
   @field lineItems = containsMany(LineItem);
-  @field preferredCurrency = linksTo(Currency);
-  @field exchangeRates = linksToMany(ExchangeRate);
+  @field preferredCurrency = linksTo(Currency, { searchable: true });
+  @field exchangeRates = linksToMany(ExchangeRate, { searchable: true });
 }
