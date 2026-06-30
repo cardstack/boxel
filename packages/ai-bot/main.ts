@@ -24,8 +24,6 @@ import {
   getRoomEvents,
   sendPromptAsDebugMessage,
   constructHistory,
-  sendMatrixEvent,
-  sendMessageEvent,
 } from '@cardstack/runtime-common/ai';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
@@ -38,13 +36,12 @@ import {
 
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
-import { readRealmFileTool } from './lib/read-realm-file.ts';
 import {
-  buildReadRealmFileFollowup,
+  readRealmFileTool,
   classifyToolCalls,
-  readRealmFileCommandRequests,
-  fileReadResultContent,
-} from './lib/read-realm-file-loop.ts';
+  READ_REALM_FILE_TOOL_NAME,
+} from './lib/read-realm-file.ts';
+import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
 import { Responder } from './lib/responder.ts';
 import {
   shouldSetRoomTitle,
@@ -117,10 +114,7 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    // Lets the readRealmFile loop re-run a turn with tool results appended
-    // without rebuilding the rest of the prompt.
-    messagesOverride?: ChatCompletionMessageParam[],
-    // Whether to offer the bot-executed readRealmFile tool. The caller decides
+    // Whether to offer the bot-fulfilled readRealmFile tool. The caller decides
     // (delegation configured + a single-human room); the bot never advertises
     // a tool it won't run.
     offerRealmFileRead = false,
@@ -131,8 +125,7 @@ class Assistant {
 
     let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
       model: this.getModel(prompt),
-      messages:
-        messagesOverride ?? (prompt.messages as ChatCompletionMessageParam[]),
+      messages: prompt.messages as ChatCompletionMessageParam[],
     };
 
     if (prompt.reasoningEffort !== undefined) {
@@ -285,9 +278,10 @@ Common issues are:
         // (the message sender). In a room with more than one human, "the user"
         // is ambiguous, so the bot must not read any realm on someone's behalf:
         // disable realm file reading entirely there.
-        let humanRoomMemberCount = room
+        let humanRoomMembers = room
           .getJoinedMembers()
-          .filter((member) => member.userId !== aiBotUserId).length;
+          .filter((member) => member.userId !== aiBotUserId);
+        let humanRoomMemberCount = humanRoomMembers.length;
         let realmFileReadingAllowed =
           assistant.delegatedUserRealmSessions.enabled &&
           humanRoomMemberCount === 1;
@@ -297,6 +291,23 @@ Common issues are:
         }
         if (toStartOfTimeline) {
           return; // don't print paginated results
+        }
+
+        // A continuation the bot triggered with its own readRealmFile result
+        // event arrives with sender = the bot. Re-attribute it to the single
+        // human in the room so the guard below lets it through and all per-user
+        // logic (billing, the delegated read's onBehalfOf, request.user) acts on
+        // the user's behalf rather than the bot's. Only single-human rooms
+        // fulfill reads, so the human is unambiguous; every other bot-sent event
+        // keeps sender = bot and is ignored by the guard. getShouldRespond still
+        // decides whether we actually generate, so this can't loop on its own
+        // answer.
+        if (
+          senderMatrixUserId === aiBotUserId &&
+          event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          humanRoomMemberCount === 1
+        ) {
+          senderMatrixUserId = humanRoomMembers[0].userId;
         }
 
         if (senderMatrixUserId === aiBotUserId) {
@@ -428,9 +439,13 @@ Common issues are:
               'history:constructPromptParts',
               async () => getPromptParts(eventList, aiBotUserId, client),
             );
-            responder.responseState.setAllowedToolNames(
-              promptParts.tools?.map((tool) => tool.function.name),
-            );
+            responder.responseState.setAllowedToolNames([
+              ...(promptParts.tools?.map((tool) => tool.function.name) ?? []),
+              // readRealmFile is offered separately (in getResponse), not via
+              // promptParts.tools, so allow it explicitly when this room may use
+              // it — otherwise the surfaced tool call would be filtered out.
+              ...(realmFileReadingAllowed ? [READ_REALM_FILE_TOOL_NAME] : []),
+            ]);
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -523,217 +538,107 @@ Common issues are:
                   model: promptParts.model,
                 });
               }
-              // Messages for the current round. The loadSkill loop appends the
-              // assistant's tool call and the fetched skill content here, then
-              // generates again.
-              let workingMessages: ChatCompletionMessageParam[] =
-                promptParts.messages as ChatCompletionMessageParam[];
-
               try {
-                // Usually one pass. When the model calls only the bot-executed
-                // loadSkill tool, run those calls and generate again with the
-                // results in context, repeating until it stops asking.
-                for (;;) {
-                  let roundCostInUsd: number | undefined;
-                  const runner = assistant
-                    .getResponse(
-                      promptParts,
-                      senderMatrixUserId,
-                      workingMessages,
-                      realmFileReadingAllowed,
-                    )
-                    .on('chunk', async (chunk, snapshot) => {
-                      log.info(`[${eventId}] Received chunk %s`, chunk.id);
-                      if (profEnabled() && firstChunkAt == null) {
-                        firstChunkAt = Date.now();
-                        profNote(eventId, 'llm:ttft', {
-                          ms: firstChunkAt - requestStart,
-                          model: promptParts.model,
-                        });
-                      }
-                      generationId = chunk.id;
-                      if (chunk.usage && (chunk.usage as any).cost != null) {
-                        roundCostInUsd = (chunk.usage as any).cost;
-                      }
-                      let activeGeneration = activeGenerations.get(room.roomId);
-                      if (activeGeneration) {
-                        activeGeneration.lastGeneratedChunkId = generationId;
-                      }
+                let roundCostInUsd: number | undefined;
+                const runner = assistant
+                  .getResponse(
+                    promptParts,
+                    senderMatrixUserId,
+                    realmFileReadingAllowed,
+                  )
+                  .on('chunk', async (chunk, snapshot) => {
+                    log.info(`[${eventId}] Received chunk %s`, chunk.id);
+                    if (profEnabled() && firstChunkAt == null) {
+                      firstChunkAt = Date.now();
+                      profNote(eventId, 'llm:ttft', {
+                        ms: firstChunkAt - requestStart,
+                        model: promptParts.model,
+                      });
+                    }
+                    generationId = chunk.id;
+                    if (chunk.usage && (chunk.usage as any).cost != null) {
+                      roundCostInUsd = (chunk.usage as any).cost;
+                    }
+                    let activeGeneration = activeGenerations.get(room.roomId);
+                    if (activeGeneration) {
+                      activeGeneration.lastGeneratedChunkId = generationId;
+                    }
 
-                      let chunkProcessingResult = await profTime(
-                        eventId,
-                        'llm:chunk:onChunk',
-                        async () => responder.onChunk(chunk, snapshot),
-                      );
-                      let chunkProcessingResultError =
-                        chunkProcessingResult.find(
-                          (promiseResult) =>
-                            promiseResult &&
-                            'errorMessage' in promiseResult &&
-                            promiseResult.errorMessage != null,
-                        ) as { errorMessage: string } | undefined;
+                    let chunkProcessingResult = await profTime(
+                      eventId,
+                      'llm:chunk:onChunk',
+                      async () => responder.onChunk(chunk, snapshot),
+                    );
+                    let chunkProcessingResultError = chunkProcessingResult.find(
+                      (promiseResult) =>
+                        promiseResult &&
+                        'errorMessage' in promiseResult &&
+                        promiseResult.errorMessage != null,
+                    ) as { errorMessage: string } | undefined;
 
-                      if (chunkProcessingResultError) {
-                        chunkHandlingError =
-                          chunkProcessingResultError.errorMessage;
+                    if (chunkProcessingResultError) {
+                      chunkHandlingError =
+                        chunkProcessingResultError.errorMessage;
 
-                        // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-                        // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-                        // where the await responder.finalize() is called (the catch block below will handle this)
-                        runner.abort();
-                      }
-                    })
-                    .on('error', async (error) => {
-                      await responder.onError(error);
-                    });
-
-                  activeGenerations.set(room.roomId, {
-                    responder,
-                    runner,
-                    lastGeneratedChunkId: generationId,
-                    completionPromise: generationCompletionPromise,
+                      // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                      // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                      // where the await responder.finalize() is called (the catch block below will handle this)
+                      runner.abort();
+                    }
+                  })
+                  .on('error', async (error) => {
+                    await responder.onError(error);
                   });
 
-                  let completion = await profTime(
-                    eventId,
-                    'llm:finalChatCompletion',
-                    async () => runner.finalChatCompletion(),
-                  );
-                  // Each round's chunk usage reports that round's running total;
-                  // sum them so billing sees the whole turn.
-                  if (typeof roundCostInUsd === 'number') {
-                    costInUsd = (costInUsd ?? 0) + roundCostInUsd;
-                  }
+                activeGenerations.set(room.roomId, {
+                  responder,
+                  runner,
+                  lastGeneratedChunkId: generationId,
+                  completionPromise: generationCompletionPromise,
+                });
 
-                  let message = completion.choices?.[0]?.message;
-                  // Bot tools (readRealmFile) run in-process this turn; host
-                  // commands run on a later turn. Those time models don't mix,
-                  // so classify and handle each set explicitly — never silently
-                  // drop a bot call.
-                  let { botToolCalls, hostToolCalls } = message
-                    ? classifyToolCalls(message)
-                    : { botToolCalls: [], hostToolCalls: [] };
-                  if (
-                    message &&
-                    senderMatrixUserId &&
-                    realmFileReadingAllowed &&
-                    botToolCalls.length > 0
-                  ) {
-                    let fileReadRequests =
-                      readRealmFileCommandRequests(botToolCalls);
+                let completion = await profTime(
+                  eventId,
+                  'llm:finalChatCompletion',
+                  async () => runner.finalChatCompletion(),
+                );
+                if (typeof roundCostInUsd === 'number') {
+                  costInUsd = (costInUsd ?? 0) + roundCostInUsd;
+                }
 
-                    if (hostToolCalls.length === 0) {
-                      // Bot-only round: turn the current "thinking" bubble into
-                      // a loading command-result indicator (tagged executedBy:
-                      // 'ai-bot'; the host shows it but never runs it) and rotate
-                      // so the answer streams into a new message after it — the
-                      // read shows applying → done, then the answer.
-                      let indicatorEventId =
-                        await responder.beginCommandResultIndicator(
-                          fileReadRequests,
-                        );
+                log.info(`[${eventId}] Generation complete`);
+                await profTime(eventId, 'response:finalize', async () =>
+                  responder.finalize(),
+                );
+                log.info(`[${eventId}] Response finalized`);
 
-                      let followup = await buildReadRealmFileFollowup(
-                        message,
-                        botToolCalls,
-                        {
-                          onBehalfOf: senderMatrixUserId,
-                          delegatedUserRealmSessions:
-                            assistant.delegatedUserRealmSessions,
-                        },
-                      );
-
-                      // Resolve each indicator — applied on success, invalid +
-                      // reason on failure, so a failed read reads as failed
-                      // rather than as a clean read.
-                      if (indicatorEventId) {
-                        for (let outcome of followup.outcomes) {
-                          await sendMatrixEvent(
-                            client,
-                            room.roomId,
-                            APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-                            fileReadResultContent({
-                              commandRequestId: outcome.commandRequestId,
-                              indicatorEventId,
-                              ok: outcome.ok,
-                              failureReason: outcome.error,
-                              agentId,
-                            }),
-                            undefined,
-                          ).catch((e) =>
-                            log.error(
-                              `[${eventId}] Failed to mark file read: ${
-                                e?.message ?? e
-                              }`,
-                            ),
-                          );
-                        }
-                      }
-                      workingMessages = [
-                        ...workingMessages,
-                        ...followup.messages,
-                      ];
-                      continue;
-                    }
-
-                    // Mixed round: bot tools are same-turn only and host
-                    // commands are next-turn only, so we can't honor both. Don't
-                    // loop; reject the reads explicitly (a visible failed
-                    // indicator, never a silent drop) and let the host commands
-                    // proceed on the normal path below.
-                    let rejectionEventId = (
-                      await sendMessageEvent(
-                        client,
-                        room.roomId,
-                        '',
-                        undefined,
-                        {
-                          isStreamingFinished: true,
-                          data: { context: { agentId } },
-                        },
-                        fileReadRequests,
-                      ).catch((e) => {
-                        log.error(
-                          `[${eventId}] Failed to record rejected reads: ${
-                            e?.message ?? e
-                          }`,
-                        );
-                        return undefined;
-                      })
-                    )?.event_id;
-                    if (rejectionEventId) {
-                      for (let request of fileReadRequests) {
-                        await sendMatrixEvent(
-                          client,
-                          room.roomId,
-                          APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-                          fileReadResultContent({
-                            commandRequestId: request.id!,
-                            indicatorEventId: rejectionEventId,
-                            ok: false,
-                            failureReason:
-                              'readRealmFile cannot be mixed with host-dispatched commands in the same round; call it on its own.',
-                            agentId,
-                          }),
-                          undefined,
-                        ).catch((e) =>
-                          log.error(
-                            `[${eventId}] Failed to mark read rejected: ${
-                              e?.message ?? e
-                            }`,
-                          ),
-                        );
-                      }
-                    }
-                    // Fall through to finalize so the host commands proceed.
-                  }
-
-                  log.info(`[${eventId}] Generation complete`);
-                  await profTime(eventId, 'response:finalize', async () =>
-                    responder.finalize(),
-                  );
-                  log.info(`[${eventId}] Response finalized`);
-                  break;
+                // readRealmFile is a tool ai-bot fulfills itself. The answer has
+                // already streamed (with the reads surfaced as executedBy:
+                // 'ai-bot' command requests); now fetch each file, attach it to
+                // a command-result event, and let the normal command-result path
+                // drive the continuation on a later turn — exactly as a host
+                // command result would. Because reads now resolve next-turn like
+                // host commands, an answer may freely mix the two; the host
+                // fulfills its commands, we fulfill ours, and getShouldRespond
+                // waits for all of them before generating again.
+                let message = completion.choices?.[0]?.message;
+                let { botToolCalls } = message
+                  ? classifyToolCalls(message)
+                  : { botToolCalls: [] };
+                if (
+                  realmFileReadingAllowed &&
+                  botToolCalls.length > 0 &&
+                  responder.responseEventId
+                ) {
+                  await fulfillReadRealmFileCalls(botToolCalls, {
+                    client,
+                    roomId: room.roomId,
+                    requestEventId: responder.responseEventId,
+                    agentId,
+                    onBehalfOf: senderMatrixUserId,
+                    delegatedUserRealmSessions:
+                      assistant.delegatedUserRealmSessions,
+                  });
                 }
               } catch (error) {
                 // When the cancel handler aborts the runner,

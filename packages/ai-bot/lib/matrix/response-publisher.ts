@@ -1,5 +1,10 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  fileLabelFromUrl,
+} from '../read-realm-file.ts';
 import { thinkingMessage } from '../../constants.ts';
 import type ResponseState from '../response-state.ts';
 import {
@@ -34,6 +39,18 @@ function toCommandRequest(
       // and the arguments are not yet available
       result['arguments'] = {};
     }
+  }
+  // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
+  // it in the timeline but never runs it, and give it a human label the
+  // timeline indicator can show ("Read file: <name>") since the raw arguments
+  // carry no description of their own.
+  if (result.name === READ_REALM_FILE_TOOL_NAME) {
+    result.executedBy = AI_BOT_EXECUTOR;
+    let label = fileLabelFromUrl(result.arguments?.url);
+    result.arguments = {
+      ...(result.arguments ?? {}),
+      description: label ? `Read file: ${label}` : 'Read file',
+    };
   }
   return result;
 }
@@ -215,50 +232,5 @@ export default class MatrixResponsePublisher {
     this.responseEvents = [
       new ResponseEventData(initialMessage.event_id, this.eventSizeMax),
     ];
-  }
-
-  // When the bot is mid-turn there's already a "Thinking…" message on screen.
-  // If the model then asks for a tool that ai-bot runs itself (readRealmFile),
-  // rather than one it hands to the host, we want to show that work as a
-  // command-result indicator right where the Thinking message is — and before
-  // the answer — so the turn reads as "did this, then answered".
-  //
-  // To get that ordering we reuse the Thinking event: replace it in place with
-  // the command requests, then rotate to a fresh event for whatever streams
-  // next (the answer). Reusing it is what matters — that event already holds
-  // this turn's earliest timeline slot, so the indicator inherits the slot and
-  // the answer in the fresh event sorts after it. Posting a brand-new indicator
-  // message instead would land it after the answer's event and render below it.
-  //
-  // The indicator is sent finished with an empty body + the command requests.
-  // The caller posts a result event against the returned event id to flip it
-  // from in-progress to done/failed, and resets ResponseState so the next event
-  // streams clean.
-  async sendCommandResultIndicator(
-    commandRequests: Partial<CommandRequest>[],
-  ): Promise<string | undefined> {
-    await this.ensureThinkingMessageSent();
-    let indicatorEventId = this.currentResponseEventId;
-    let sendOperation = this.sendingMessage.then(async () => {
-      await sendMessageEvent(
-        this.client,
-        this.roomId,
-        '',
-        indicatorEventId,
-        {
-          isStreamingFinished: true,
-          data: { context: { agentId: this.agentId } },
-        },
-        commandRequests,
-      );
-      // Fresh event (no id yet) → the next send creates a new message that
-      // sorts after this indicator.
-      this.responseEvents = [
-        new ResponseEventData(undefined, this.eventSizeMax),
-      ];
-    });
-    this.sendingMessage = sendOperation.catch(() => {});
-    await sendOperation;
-    return indicatorEventId;
   }
 }

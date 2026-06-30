@@ -2,6 +2,10 @@ import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
+import type {
+  ChatCompletion,
+  ChatCompletionMessageToolCall,
+} from 'openai/resources';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 
 let log = logger('ai-bot:read-realm-file');
@@ -149,4 +153,53 @@ export async function executeReadRealmFile(
   }
 
   return { ok: true, url, content: await response.text() };
+}
+
+export interface ClassifiedToolCalls {
+  // Tool calls ai-bot runs itself (readRealmFile).
+  botToolCalls: ChatCompletionMessageToolCall[];
+  // Tool calls the host runs (everything else).
+  hostToolCalls: ChatCompletionMessageToolCall[];
+}
+
+// Split a completion's tool calls into the ones ai-bot fulfills itself
+// (readRealmFile) and the ones the host fulfills. Both kinds now resolve the
+// same way — as command requests answered by a command-result event on a later
+// turn — so a single response may freely contain both; the caller fulfills the
+// bot ones and leaves the rest to the host.
+export function classifyToolCalls(
+  assistantMessage: ChatCompletion.Choice['message'],
+): ClassifiedToolCalls {
+  let botToolCalls: ChatCompletionMessageToolCall[] = [];
+  let hostToolCalls: ChatCompletionMessageToolCall[] = [];
+  for (let call of assistantMessage.tool_calls ?? []) {
+    if (
+      call.type === 'function' &&
+      call.function.name === READ_REALM_FILE_TOOL_NAME
+    ) {
+      botToolCalls.push(call);
+    } else {
+      hostToolCalls.push(call);
+    }
+  }
+  return { botToolCalls, hostToolCalls };
+}
+
+// A short human label for a file being read, derived from its URL:
+// `…/skills/<name>/SKILL.md` → `<name>/SKILL.md`, otherwise the file name.
+// Shown in the command-result indicator so the user sees which file was read.
+export function fileLabelFromUrl(url: string | undefined): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    let segments = new URL(url).pathname.split('/').filter(Boolean);
+    let last = segments[segments.length - 1];
+    if (last === 'SKILL.md' && segments.length >= 2) {
+      return `${segments[segments.length - 2]}/SKILL.md`;
+    }
+    return last ?? url;
+  } catch {
+    return url;
+  }
 }

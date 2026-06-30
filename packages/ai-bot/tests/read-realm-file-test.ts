@@ -6,6 +6,8 @@ import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-d
 import {
   executeReadRealmFile,
   readRealmFileTool,
+  classifyToolCalls,
+  fileLabelFromUrl,
   READ_REALM_FILE_TOOL_NAME,
 } from '../lib/read-realm-file.ts';
 
@@ -192,5 +194,69 @@ module('executeReadRealmFile', () => {
       'dropped the stale token once',
     );
     assert.strictEqual(sessions.calls.length, 2, 're-minted a fresh token');
+  });
+});
+
+function assistantMessage(toolCalls: any[]): any {
+  return { role: 'assistant', content: null, tool_calls: toolCalls };
+}
+
+function fnCall(id: string, name: string, args: object = {}) {
+  return {
+    id,
+    type: 'function',
+    function: { name, arguments: JSON.stringify(args) },
+  };
+}
+
+module('classifyToolCalls', () => {
+  test('splits readRealmFile (bot) from everything else (host)', () => {
+    let { botToolCalls, hostToolCalls } = classifyToolCalls(
+      assistantMessage([
+        fnCall('c1', READ_REALM_FILE_TOOL_NAME, {
+          realm: REALM,
+          url: FILE_URL,
+        }),
+        fnCall('c2', 'SomeHostCommand'),
+      ]),
+    );
+    assert.deepEqual(
+      botToolCalls.map((c) => c.id),
+      ['c1'],
+    );
+    assert.deepEqual(
+      hostToolCalls.map((c) => c.id),
+      ['c2'],
+      'a host command and a read coexist — neither is dropped',
+    );
+  });
+
+  test('no tool calls → both sets empty', () => {
+    let { botToolCalls, hostToolCalls } = classifyToolCalls(
+      assistantMessage([]),
+    );
+    assert.deepEqual(botToolCalls, []);
+    assert.deepEqual(hostToolCalls, []);
+  });
+});
+
+module('fileLabelFromUrl', () => {
+  test('keeps the skill folder for a SKILL.md', () => {
+    assert.strictEqual(
+      fileLabelFromUrl(FILE_URL),
+      'trip-planner/SKILL.md',
+      'a skill reads as <name>/SKILL.md',
+    );
+  });
+
+  test('falls back to the file name otherwise', () => {
+    assert.strictEqual(
+      fileLabelFromUrl('https://localhost:4201/user/jane/notes.md'),
+      'notes.md',
+    );
+  });
+
+  test('undefined url → undefined label', () => {
+    assert.strictEqual(fileLabelFromUrl(undefined), undefined);
   });
 });
