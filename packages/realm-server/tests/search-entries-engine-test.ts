@@ -15,7 +15,10 @@ import {
   type SearchEntryResource,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  searchCardsForTest,
+} from './helpers/index.ts';
 
 function htmlIn(
   doc: SearchEntryCollectionDocument,
@@ -132,6 +135,32 @@ module(basename(import.meta.filename), function () {
             },
           },
         },
+        'webpage.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class WebPage extends CardDef {
+            @field url = contains(StringField);
+          }
+        `,
+        'home.json': {
+          data: {
+            attributes: { url: 'https://example.com' },
+            meta: {
+              adoptsFrom: { module: rri('./webpage'), name: 'WebPage' },
+            },
+          },
+        },
+        // Over-match guard: stores the trailing-slash (toURL-normalized) form of
+        // home's url, so a `url` filter for the no-slash value must NOT match it.
+        'home-slash.json': {
+          data: {
+            attributes: { url: 'https://example.com/' },
+            meta: {
+              adoptsFrom: { module: rri('./webpage'), name: 'WebPage' },
+            },
+          },
+        },
         'hello.md': '# Hello from FileDef content',
       },
       onRealmSetup,
@@ -174,6 +203,65 @@ module(basename(import.meta.filename), function () {
       });
       assert.true(normalizedHtml(html).includes('Fitted Card Person: John'));
       assert.strictEqual(html.attributes.cardType, 'Person');
+    });
+
+    test('an id filter in canonical-RRI (prefix) form matches the card indexed under its URL-form id', async function (assert) {
+      // The realm has no registered prefix by default; register one so a
+      // canonical-RRI value resolves, and remove it afterward so the cached
+      // realm is left as we found it.
+      testRealm.virtualNetwork.addRealmMapping('@test-prefix/', realmHref);
+      try {
+        let prefixJohnId = `@test-prefix/${johnId.slice(realmHref.length)}`;
+
+        let { data: byPrefix } = await searchCardsForTest(
+          testRealm.realmIndexQueryEngine,
+          {
+            // Match rich-markdown's `linkedCards` query shape: a bare id filter
+            // with no type anchor (the primary `id` is not a definition field).
+            filter: { in: { id: [rri(prefixJohnId)] } },
+          },
+        );
+        assert.deepEqual(
+          byPrefix.map((r) => r.id),
+          [rri(johnId)],
+          'prefix-form id value matches the card indexed under its URL-form id',
+        );
+
+        // The URL-form value still matches (it is one of its own equivalent
+        // forms) — existing callers are unaffected.
+        let { data: byUrl } = await searchCardsForTest(
+          testRealm.realmIndexQueryEngine,
+          {
+            filter: { in: { id: [rri(johnId)] } },
+          },
+        );
+        assert.deepEqual(
+          byUrl.map((r) => r.id),
+          [rri(johnId)],
+          'URL-form id value still matches',
+        );
+      } finally {
+        testRealm.virtualNetwork.removeRealmMapping('@test-prefix/');
+      }
+    });
+
+    test('an exact `in` filter on an ordinary `url` field matches exactly and does not over-match', async function (assert) {
+      // `url` here is an ordinary StringField, not a reference, and a URL-form
+      // value is not a registered prefix — so it is matched exactly as given,
+      // neither dropped (no normalized substitution) nor broadened. The `home`
+      // and `home-slash` fixtures differ only by a trailing slash, so a filter
+      // for the no-slash value must match `home` only.
+      let { data } = await searchCardsForTest(testRealm.realmIndexQueryEngine, {
+        filter: {
+          on: { module: rri(`${realmHref}webpage`), name: 'WebPage' },
+          in: { url: ['https://example.com'] },
+        },
+      });
+      assert.deepEqual(
+        data.map((r) => r.id),
+        [rri(`${realmHref}home`)],
+        'matches only the exact raw value; the trailing-slash card is not over-matched',
+      );
     });
 
     test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
