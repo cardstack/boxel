@@ -378,6 +378,17 @@ Common issues are:
           resolveGenerationCompletion = resolve;
         });
 
+        // readRealmFile reads are fulfilled after the room lock is released
+        // (see the finally below). Fulfilling posts a command-result event that
+        // re-triggers the bot for the continuation turn, and that re-trigger
+        // has to acquire the room lock this handler holds — so fulfillment must
+        // wait until the lock is free.
+        let pendingFulfillBotToolCalls: ReturnType<
+          typeof classifyToolCalls
+        >['botToolCalls'] = [];
+        let pendingFulfillRequestEventId: string | undefined;
+        let pendingFulfillAgentId: string | undefined;
+
         try {
           if (!Responder.eventMayTriggerResponse(event)) {
             return; // early exit for events that will not trigger a response
@@ -411,6 +422,35 @@ Common issues are:
               },
             });
             return;
+          }
+
+          // The bot drives its own continuation by posting a readRealmFile
+          // result event, and the handler runs on that event's *local echo* —
+          // before the homeserver has indexed it into /messages. getRoomEvents
+          // is a server fetch, so it misses the just-posted result, which would
+          // leave the read looking unresolved (shouldRespond=false) and stall
+          // the continuation. Splice the in-hand event into the history when the
+          // fetch didn't include it. Host command results arrive via sync
+          // (already server-side), so they're never missing and this is inert.
+          let triggerCommandRequestId = (event.getContent() as any)
+            ?.commandRequestId;
+          if (
+            event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            triggerCommandRequestId &&
+            !eventList.some(
+              (e: any) =>
+                e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+                e.content?.commandRequestId === triggerCommandRequestId,
+            )
+          ) {
+            eventList.push({
+              type: event.getType(),
+              sender: event.getSender()!,
+              content: event.getContent(),
+              event_id: event.getId()!,
+              origin_server_ts: event.event.origin_server_ts!,
+              room_id: room.roomId,
+            } as unknown as DiscreteMatrixEvent);
           }
 
           // Return early here if it's a debug event
@@ -630,15 +670,13 @@ Common issues are:
                   botToolCalls.length > 0 &&
                   responder.responseEventId
                 ) {
-                  await fulfillReadRealmFileCalls(botToolCalls, {
-                    client,
-                    roomId: room.roomId,
-                    requestEventId: responder.responseEventId,
-                    agentId,
-                    onBehalfOf: senderMatrixUserId,
-                    delegatedUserRealmSessions:
-                      assistant.delegatedUserRealmSessions,
-                  });
+                  // Defer fulfillment until after the room lock is released
+                  // (see the finally below): fulfilling posts a result event
+                  // that re-triggers the bot, and that re-trigger needs the
+                  // room lock this handler still holds here.
+                  pendingFulfillBotToolCalls = botToolCalls;
+                  pendingFulfillRequestEventId = responder.responseEventId;
+                  pendingFulfillAgentId = agentId;
                 }
               } catch (error) {
                 // When the cancel handler aborts the runner,
@@ -750,6 +788,25 @@ Common issues are:
           // lock as released before attempting to acquire it.
           await releaseRoomLock(assistant.pgAdapter, room.roomId);
           resolveGenerationCompletion();
+
+          // Now that the lock is free, fulfill any reads. Each fulfillment
+          // posts a command-result event that re-triggers the bot for the
+          // continuation turn; that re-trigger acquires the room lock this
+          // handler just released. Fulfilling here (rather than inside the
+          // lock) is what lets the continuation proceed.
+          if (
+            pendingFulfillRequestEventId &&
+            pendingFulfillBotToolCalls.length > 0
+          ) {
+            await fulfillReadRealmFileCalls(pendingFulfillBotToolCalls, {
+              client,
+              roomId: room.roomId,
+              requestEventId: pendingFulfillRequestEventId,
+              agentId: pendingFulfillAgentId,
+              onBehalfOf: senderMatrixUserId,
+              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
+            });
+          }
         }
       } catch (e) {
         log.error(e);
