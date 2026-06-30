@@ -43,47 +43,52 @@ export interface ReadRealmFileFollowup {
   outcomes: ReadRealmFileOutcome[];
 }
 
-// The readRealmFile calls in an assistant message, but only when they are the
-// ENTIRE set of tool calls for the round. A mix that includes a host-dispatched
-// command means the turn is doing more than reading files, so the loop bows out
-// and lets the normal command-request path handle it. Returning [] here is what
-// both the loop and the timeline marker key off, so they stay in lockstep.
-function readRealmFileOnlyToolCalls(
-  assistantMessage: ChatCompletion.Choice['message'],
-): ChatCompletionMessageToolCall[] {
-  let toolCalls = assistantMessage.tool_calls ?? [];
-  if (toolCalls.length === 0) {
-    return [];
-  }
-  let readCalls = toolCalls.filter(
-    (call) =>
-      call.type === 'function' &&
-      call.function.name === READ_REALM_FILE_TOOL_NAME,
-  );
-  if (readCalls.length === 0 || readCalls.length !== toolCalls.length) {
-    return [];
-  }
-  return readCalls;
+export interface ClassifiedToolCalls {
+  // Tool calls ai-bot runs itself, in-process, this turn (readRealmFile).
+  botToolCalls: ChatCompletionMessageToolCall[];
+  // Tool calls the host runs on a later turn (everything else).
+  hostToolCalls: ChatCompletionMessageToolCall[];
 }
 
-// Decides what happens after a generation round given the assistant message it
-// produced. When that message's tool calls are exclusively `readRealmFile`,
-// runs them and returns the messages to append before generating again — the
-// assistant turn followed by one tool result per call. Returns empty in every
-// other case (no tool calls, or a mix that includes host-dispatched commands),
-// which tells the caller to stop looping and let the answer stand.
+// Split a completion's tool calls by who executes them. Bot tools and host
+// tools have different time models — bot tools resolve same-turn, host tools
+// next-turn — so the caller handles each set explicitly rather than forcing
+// them through one path.
+export function classifyToolCalls(
+  assistantMessage: ChatCompletion.Choice['message'],
+): ClassifiedToolCalls {
+  let botToolCalls: ChatCompletionMessageToolCall[] = [];
+  let hostToolCalls: ChatCompletionMessageToolCall[] = [];
+  for (let call of assistantMessage.tool_calls ?? []) {
+    if (
+      call.type === 'function' &&
+      call.function.name === READ_REALM_FILE_TOOL_NAME
+    ) {
+      botToolCalls.push(call);
+    } else {
+      hostToolCalls.push(call);
+    }
+  }
+  return { botToolCalls, hostToolCalls };
+}
+
+// Runs the given bot tool calls (the `botToolCalls` from `classifyToolCalls`)
+// in-process and returns the messages to append before generating again — the
+// assistant turn followed by one tool result per call — plus the per-call
+// outcome. The caller invokes this only when the round is bot-only; a mixed
+// round is handled (rejected) by the caller without running anything here.
 export async function buildReadRealmFileFollowup(
   assistantMessage: ChatCompletion.Choice['message'],
+  botToolCalls: ChatCompletionMessageToolCall[],
   deps: ReadRealmFileLoopDeps,
 ): Promise<ReadRealmFileFollowup> {
-  let readCalls = readRealmFileOnlyToolCalls(assistantMessage);
-  if (readCalls.length === 0) {
+  if (botToolCalls.length === 0) {
     return { messages: [], outcomes: [] };
   }
 
   let toolMessages: ChatCompletionMessageParam[] = [];
   let outcomes: ReadRealmFileOutcome[] = [];
-  for (let call of readCalls) {
+  for (let call of botToolCalls) {
     if (call.type !== 'function') {
       continue;
     }
@@ -145,17 +150,15 @@ function fileLabelFromUrl(url: string | undefined): string | undefined {
   }
 }
 
-// The readRealmFile calls the loop will run this round (readRealmFile-only; []
-// when mixed with a host command), expressed as command requests tagged
+// The given bot tool calls expressed as command requests tagged
 // `executedBy: 'ai-bot'`. The bot runs these in-process, so the host must not
 // execute them — it surfaces them in the timeline as a record of what was read
-// (and as a debugging aid when an answer looks under-informed). Gated
-// identically to `buildReadRealmFileFollowup` so the timeline marker is emitted
-// exactly when (and for exactly the calls) the loop reads.
+// (and as a debugging aid when an answer looks under-informed). Used for both
+// the success markers (bot-only round) and the rejection markers (mixed round).
 export function readRealmFileCommandRequests(
-  assistantMessage: ChatCompletion.Choice['message'],
+  botToolCalls: ChatCompletionMessageToolCall[],
 ): Partial<CommandRequest>[] {
-  return readRealmFileOnlyToolCalls(assistantMessage).map((call) => {
+  return botToolCalls.map((call) => {
     let args: Record<string, any> = {};
     if (call.type === 'function') {
       try {

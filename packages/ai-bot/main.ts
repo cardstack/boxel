@@ -25,6 +25,7 @@ import {
   sendPromptAsDebugMessage,
   constructHistory,
   sendMatrixEvent,
+  sendMessageEvent,
 } from '@cardstack/runtime-common/ai';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
@@ -40,6 +41,7 @@ import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-ser
 import { readRealmFileTool } from './lib/read-realm-file.ts';
 import {
   buildReadRealmFileFollowup,
+  classifyToolCalls,
   readRealmFileCommandRequests,
   fileReadResultContent,
 } from './lib/read-realm-file-loop.ts';
@@ -604,34 +606,46 @@ Common issues are:
                   }
 
                   let message = completion.choices?.[0]?.message;
+                  // Bot tools (readRealmFile) run in-process this turn; host
+                  // commands run on a later turn. Those time models don't mix,
+                  // so classify and handle each set explicitly — never silently
+                  // drop a bot call.
+                  let { botToolCalls, hostToolCalls } = message
+                    ? classifyToolCalls(message)
+                    : { botToolCalls: [], hostToolCalls: [] };
                   if (
                     message &&
                     senderMatrixUserId &&
-                    realmFileReadingAllowed
+                    realmFileReadingAllowed &&
+                    botToolCalls.length > 0
                   ) {
                     let fileReadRequests =
-                      readRealmFileCommandRequests(message);
-                    if (fileReadRequests.length > 0) {
-                      // Phase 1: turn the current "thinking" bubble into a
-                      // loading marker for these reads (tagged executedBy:
-                      // 'ai-bot'; the host shows it but never runs it) and
-                      // rotate so the answer streams into a new message after
-                      // it — the read shows applying → done, then the answer.
+                      readRealmFileCommandRequests(botToolCalls);
+
+                    if (hostToolCalls.length === 0) {
+                      // Bot-only round: turn the current "thinking" bubble into
+                      // a loading marker (tagged executedBy: 'ai-bot'; the host
+                      // shows it but never runs it) and rotate so the answer
+                      // streams into a new message after it — the read shows
+                      // applying → done, then the answer.
                       let markerEventId =
                         await responder.beginServerCommandMarker(
                           fileReadRequests,
                         );
 
-                      // The fetch itself.
-                      let followup = await buildReadRealmFileFollowup(message, {
-                        onBehalfOf: senderMatrixUserId,
-                        delegatedUserRealmSessions:
-                          assistant.delegatedUserRealmSessions,
-                      });
+                      let followup = await buildReadRealmFileFollowup(
+                        message,
+                        botToolCalls,
+                        {
+                          onBehalfOf: senderMatrixUserId,
+                          delegatedUserRealmSessions:
+                            assistant.delegatedUserRealmSessions,
+                        },
+                      );
 
-                      // Phase 2: resolve each pill — applied on success,
-                      // invalid + reason on failure, so a failed read reads as
-                      // failed rather than as a clean read.
+                      // Resolve each pill — applied on success, invalid +
+                      // reason on failure, so a failed read reads as failed
+                      // rather than as a clean read.
                       if (markerEventId) {
                         for (let outcome of followup.outcomes) {
                           await sendMatrixEvent(
@@ -661,6 +675,57 @@ Common issues are:
                       ];
                       continue;
                     }
+
+                    // Mixed round: bot tools are same-turn only and host
+                    // commands are next-turn only, so we can't honor both. Don't
+                    // loop; reject the reads explicitly (a visible failed marker,
+                    // never a silent drop) and let the host commands proceed on
+                    // the normal path below.
+                    let rejectionEventId = (
+                      await sendMessageEvent(
+                        client,
+                        room.roomId,
+                        '',
+                        undefined,
+                        {
+                          isStreamingFinished: true,
+                          data: { context: { agentId } },
+                        },
+                        fileReadRequests,
+                      ).catch((e) => {
+                        log.error(
+                          `[${eventId}] Failed to record rejected reads: ${
+                            e?.message ?? e
+                          }`,
+                        );
+                        return undefined;
+                      })
+                    )?.event_id;
+                    if (rejectionEventId) {
+                      for (let request of fileReadRequests) {
+                        await sendMatrixEvent(
+                          client,
+                          room.roomId,
+                          APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+                          fileReadResultContent({
+                            commandRequestId: request.id!,
+                            markerEventId: rejectionEventId,
+                            ok: false,
+                            failureReason:
+                              'readRealmFile cannot be mixed with host-dispatched commands in the same round; call it on its own.',
+                            agentId,
+                          }),
+                          undefined,
+                        ).catch((e) =>
+                          log.error(
+                            `[${eventId}] Failed to mark read rejected: ${
+                              e?.message ?? e
+                            }`,
+                          ),
+                        );
+                      }
+                    }
+                    // Fall through to finalize so the host commands proceed.
                   }
 
                   log.info(`[${eventId}] Generation complete`);
