@@ -398,8 +398,10 @@ module('Integration | codemirror embed toolbar', function (hooks) {
     view?.dispatch({ changes: { from: oPos, to: oPos + 1, insert: 'a' } });
     await settled();
 
-    // (sanity) the edited document holds the new URL.
-    assert.strictEqual(harness.content, `:card[${manga}]`);
+    // (sanity) the editor's live document holds the new URL. Read the view
+    // directly rather than `harness.content`, which only updates on the
+    // debounced onUpdate that hasn't fired yet.
+    assert.strictEqual(view?.state.doc.toString(), `:card[${manga}]`);
 
     await click('[data-test-toolbar="edit-embed"]');
     await waitFor('[data-test-markdown-embed-chooser-modal]', {
