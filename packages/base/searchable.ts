@@ -43,6 +43,12 @@ import {
 // non-queryable polymorphic-subtype bloat.
 export async function searchDocFromFields(
   instance: CardDef,
+  // Collects the URLs of the link targets pulled into the doc. The indexer
+  // unions these into the card's tracked dependencies: an expanded target's
+  // data lives in the search doc, so editing that target must reindex the
+  // owner — whether or not the render happened to load it (a `{ id }`-only link
+  // contributes none, since its target's data is not in the doc).
+  dependencies: Set<string> = new Set(),
 ): Promise<Record<string, any>> {
   let routes = seedSearchableRoutes(
     instance.constructor as unknown as typeof BaseDef,
@@ -53,6 +59,7 @@ export async function searchDocFromFields(
     routes,
     [],
     getStore(instance),
+    dependencies,
   )) as Record<string, any>;
 }
 
@@ -160,6 +167,7 @@ async function searchableQueryableValue(
   // contained FieldDef value may not be store-associated, but its nested links
   // must still load against the owner's store.
   store: CardStore,
+  dependencies: Set<string>,
 ): Promise<any> {
   if (primitive in fieldCard) {
     // Delegate to the field's own queryableValue. The default handles
@@ -223,6 +231,7 @@ async function searchableQueryableValue(
             tails,
             nextStack,
             store,
+            dependencies,
           ),
         ]);
         break;
@@ -246,6 +255,7 @@ async function searchableQueryableValue(
             tails,
             nextStack,
             store,
+            dependencies,
           );
           if (v != null) {
             items.push(v);
@@ -265,6 +275,7 @@ async function searchableQueryableValue(
             nextStack,
             store,
             makeAbsoluteURL,
+            dependencies,
           ),
         ]);
         break;
@@ -280,6 +291,7 @@ async function searchableQueryableValue(
             nextStack,
             store,
             makeAbsoluteURL,
+            dependencies,
           ),
         ]);
         break;
@@ -300,6 +312,7 @@ async function searchableLink(
   stack: BaseDef[],
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
+  dependencies: Set<string>,
 ): Promise<any> {
   if (rawValue == null) {
     return null;
@@ -330,12 +343,18 @@ async function searchableLink(
     }
     target = loaded;
   }
+  // The expanded target's data is now in the doc, so it is a dependency of the
+  // indexed card.
+  if (target.id != null) {
+    dependencies.add(makeAbsoluteURL(target.id));
+  }
   return await searchableQueryableValue(
     field.card,
     target,
     tails,
     stack,
     store,
+    dependencies,
   );
 }
 
@@ -349,6 +368,7 @@ async function searchableLinksToMany(
   stack: BaseDef[],
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
+  dependencies: Set<string>,
 ): Promise<any[] | null> {
   // A whole-field sentinel (errored/unresolved plural) is not iterable; treat
   // as empty, same as `LinksToMany.queryableValue`.
@@ -383,12 +403,18 @@ async function searchableLinksToMany(
       }
       target = loaded;
     }
+    // The expanded target's data is now in the doc, so it is a dependency of
+    // the indexed card.
+    if (target.id != null) {
+      dependencies.add(makeAbsoluteURL(target.id));
+    }
     let expanded = await searchableQueryableValue(
       field.card,
       target,
       tails,
       stack,
       store,
+      dependencies,
     );
     if (expanded != null) {
       out.push(

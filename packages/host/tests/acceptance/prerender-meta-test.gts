@@ -26,20 +26,21 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 // The prerender meta route generates the search doc via the searchable-driven
-// generator. It is at parity with the store-driven baseline each assertion
-// captured, up to the intended omit-vs-keep-`{ id }` difference for unloaded
-// base-card links (e.g. `cardInfo.theme` / `cardInfo.cardThumbnail`);
-// `diffDoc(..., true)` ignores that at any depth while flagging real data deltas.
+// generator: every relationship is present (an unset link is `null`, a set one
+// expands per its `searchable` annotation), and every card carries its base-card
+// fields (`cardTheme`, `cardInfo.cardThumbnail`). The expected doc is the exact
+// generator output; `diffDoc(..., false)` reports any deviation as a readable
+// path-level diff.
 function expectMetaSearchDoc(
   assert: Assert,
   actual: Record<string, any> | null | undefined,
-  storeDrivenBaseline: Record<string, any>,
+  expected: Record<string, any>,
   message?: string,
 ) {
   assert.deepEqual(
-    diffDoc(storeDrivenBaseline, actual ?? {}, true),
+    diffDoc(expected, actual ?? {}, false),
     [],
-    message ?? 'search doc is at parity with store-driven',
+    message ?? 'search doc is correct',
   );
 }
 
@@ -371,7 +372,8 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Pet/mango`,
         _cardType: 'Pet',
-        cardInfo: {},
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Mango',
         cardTitle: 'Mango',
       },
@@ -390,7 +392,8 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Pet/paper`,
         _cardType: 'Cat',
-        cardInfo: {},
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Paper',
         cardTitle: 'Paper',
         aliases: ['Satan', "Satan's Mistress"],
@@ -413,21 +416,20 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Person/jade`,
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Jade',
         cardTitle: 'Jade',
         pets: null,
         numOfPets: '0',
         friend: {
           id: `${testRealmURL}Person/hassan`,
-          cardInfo: {
-            theme: null,
-          },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
           name: 'Hassan',
           cardTitle: 'Hassan',
           numOfPets: '3',
+          friend: null,
           pets: [
             {
               id: `${testRealmURL}Pet/mango`,
@@ -457,9 +459,8 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Person/hassan`,
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Hassan',
         cardTitle: 'Hassan',
         friend: null,
@@ -469,27 +470,22 @@ module('Acceptance | prerender | meta', function (hooks) {
             id: `${testRealmURL}Pet/mango`,
             name: 'Mango',
             cardTitle: 'Mango',
-            cardInfo: {
-              theme: null,
-            },
+            cardTheme: null,
+            cardInfo: { cardThumbnail: null, theme: null },
           },
           {
             id: `${testRealmURL}Pet/vangogh`,
             name: 'Van Gogh',
             cardTitle: 'Van Gogh',
-            cardInfo: {
-              theme: null,
-            },
+            cardTheme: null,
+            cardInfo: { cardThumbnail: null, theme: null },
           },
           {
             id: `${testRealmURL}Pet/paper`,
             name: 'Paper',
             cardTitle: 'Paper',
-            aliases: ['Satan', "Satan's Mistress"],
-            emergencyContacts: null,
-            cardInfo: {
-              theme: null,
-            },
+            cardTheme: null,
+            cardInfo: { cardThumbnail: null, theme: null },
           },
         ],
       },
@@ -509,9 +505,8 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         _cardType: 'Cat',
         aliases: null,
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         emergencyContacts: [
           {
             phone: '01234',
@@ -521,9 +516,8 @@ module('Acceptance | prerender | meta', function (hooks) {
               cardTitle: 'Jade',
               numOfPets: '0',
               pets: null,
-              cardInfo: {
-                theme: null,
-              },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
               friend: {
                 id: `${testRealmURL}Person/hassan`,
               },
@@ -535,10 +529,10 @@ module('Acceptance | prerender | meta', function (hooks) {
               id: `${testRealmURL}Person/hassan`,
               name: 'Hassan',
               cardTitle: 'Hassan',
-              cardInfo: {
-                theme: null,
-              },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
               numOfPets: '3',
+              friend: null,
               pets: [
                 {
                   id: `${testRealmURL}Pet/mango`,

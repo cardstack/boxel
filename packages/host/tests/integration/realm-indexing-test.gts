@@ -85,23 +85,23 @@ function assertInnerHtmlMatches(
   assert.strictEqual(cleanedActual, cleanedExpected, message);
 }
 
-// Asserts the indexed search doc against a store-driven baseline, ignoring the
-// one intended difference between the two generation strategies: the searchable-
-// driven doc keeps a `{ id }` / `null` for every relationship, whereas a
-// store-driven doc omits links it never loaded (e.g. a base-card `cardTheme` /
-// `cardInfo.cardThumbnail`). `diffDoc(..., true)` treats that omit-vs-keep
-// difference as equivalent at any nesting depth while flagging any real data
-// delta — the same parity rule the realm-scale `searchable-parity-diff` applies.
+// Asserts the indexed search doc exactly equals `expected`. Search docs are
+// generated solely by the searchable-driven generator, so `expected` is that
+// generator's output: every relationship is present (a non-`searchable` link is
+// `{ id }` for a set target / `null` for an unset one; a `searchable` link is
+// expanded), and base-card links like `cardTheme` / `cardInfo.cardThumbnail`
+// appear too. `diffDoc(..., false)` is an exact comparison (no tolerance) that
+// reports a readable field-by-field diff on failure.
 function expectSearchDoc(
   assert: Assert,
   actual: Record<string, any> | null | undefined,
-  storeDrivenBaseline: Record<string, any>,
+  expected: Record<string, any>,
   message?: string,
 ) {
   assert.deepEqual(
-    diffDoc(storeDrivenBaseline, actual ?? {}, true),
+    diffDoc(expected, actual ?? {}, false),
     [],
-    message ?? 'searchable-driven search doc is at parity with store-driven',
+    message ?? 'indexed search doc matches the searchable-driven generator',
   );
 }
 
@@ -1134,7 +1134,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1263,7 +1264,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1335,7 +1337,8 @@ module(`Integration | realm indexing`, function (hooks) {
             cardTitle: 'Switch Submode',
           },
         ],
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1879,9 +1882,8 @@ module(`Integration | realm indexing`, function (hooks) {
       searchDoc,
       {
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         firstName: 'Van Gogh',
         id: `${testRealmURL}vangogh`,
         cardTitle: 'Untitled Card',
@@ -2740,7 +2742,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardDescription: 'Person',
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `search doc includes fullName field`,
     );
@@ -2825,7 +2828,8 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Publication/pacific`,
         },
         views: 5,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `post 1 search doc includes publication relationship`,
     );
@@ -2847,6 +2851,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/1`,
             publication: {
@@ -2861,6 +2866,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/2`,
             publication: {
@@ -2870,7 +2876,8 @@ module(`Integration | realm indexing`, function (hooks) {
             views: 24,
           },
         ],
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `publication search doc includes featuredPosts relationship via isUsed=true`,
     );
@@ -2964,7 +2971,8 @@ module(`Integration | realm indexing`, function (hooks) {
       isCard: true,
       isComponent: false,
       isField: false,
-      cardInfo: { theme: null },
+      cardTheme: null,
+      cardInfo: { cardThumbnail: null, theme: null },
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -3183,6 +3191,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             owner: null,
             cardTitle: 'Mango',
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
           },
           {
@@ -3190,6 +3199,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             owner: null,
             cardTitle: 'Van Gogh',
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
           },
         ],
@@ -3197,7 +3207,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTitle: 'Hassan Pet Person',
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3303,7 +3314,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTitle: 'Burcu Pet Person',
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3445,7 +3457,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3610,9 +3623,11 @@ module(`Integration | realm indexing`, function (hooks) {
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
           },
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3811,10 +3826,12 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           cardDescription: 'Dog friend',
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         cardTitle: 'Hassan',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3958,9 +3975,11 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           cardDescription: 'Dog owner',
+          cardTheme: null,
           cardInfo: { cardThumbnail: null, theme: null },
         },
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -4078,7 +4097,8 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Friend/hassan`,
         },
         cardTitle: 'Hassan',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -4314,17 +4334,20 @@ module(`Integration | realm indexing`, function (hooks) {
               firstName: 'Mango',
               cardTitle: 'Mango',
               friends: [{ id: hassanID }],
-              cardInfo: { theme: null },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               cardTitle: 'Van Gogh',
-              cardInfo: { theme: null },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'hassan searchData is correct',
       );
@@ -4500,13 +4523,16 @@ module(`Integration | realm indexing`, function (hooks) {
                       id: hassanID,
                     },
                   ],
-                  cardInfo: { theme: null },
+                  cardTheme: null,
+                  cardInfo: { cardThumbnail: null, theme: null },
                 },
               ],
+              cardTheme: null,
               cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'mango searchData is correct',
       );
@@ -4673,10 +4699,8 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: 'Hassan',
               friends: [
                 {
-                  cardInfo: {
-                    cardThumbnail: null,
-                    theme: null,
-                  },
+                  cardTheme: null,
+                  cardInfo: { cardThumbnail: null, theme: null },
                   firstName: 'Mango',
                   friends: [
                     {
@@ -4688,10 +4712,12 @@ module(`Integration | realm indexing`, function (hooks) {
                 },
                 { id: vanGoghID },
               ],
+              cardTheme: null,
               cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'vanGogh searchData is correct',
       );

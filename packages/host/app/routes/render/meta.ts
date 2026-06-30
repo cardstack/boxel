@@ -127,11 +127,21 @@ export default class RenderMetaRoute extends Route<Model> {
     }
 
     // Run searchable-driven generation after the compute-memo pass closes: it
-    // awaits targeted link loads, and the pass cannot span an await.
+    // awaits targeted link loads, and the pass cannot span an await. The
+    // generator collects the URLs of the link targets it pulls into the doc;
+    // those are dependencies of this card (unioned into `deps` below), so
+    // editing a searchable target reindexes the owner even when the render did
+    // not itself load that target.
     let searchDocStart = performance.now();
-    let searchDoc: Record<string, any> =
-      await searchable.searchDocFromFields(instance);
+    let searchableDeps = new Set<string>();
+    let searchDoc: Record<string, any> = await searchable.searchDocFromFields(
+      instance,
+      searchableDeps,
+    );
     let searchDocMs = performance.now() - searchDocStart;
+    if (searchableDeps.size > 0) {
+      deps = [...new Set([...deps, ...searchableDeps])];
+    }
 
     let Klass = getClass(instance);
 

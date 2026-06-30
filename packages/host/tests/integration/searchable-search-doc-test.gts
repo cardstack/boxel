@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, diffDoc } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import type { Realm, IndexedInstance } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -1173,26 +1173,46 @@ module('Integration | searchable search doc', function (hooks) {
   // ===========================================================================
 
   // The prerender meta route generates the search doc via `searchDocFromFields`,
-  // so the doc the indexer persists is at parity with a direct
-  // `searchDocFromFields` call on the same card — same expansions, same
-  // contained data. The two paths differ only in how an unset value is
-  // represented (a rendered instance yields `undefined`, dropped by JSON
-  // serialization into the index; a freshly-loaded instance yields `null`),
-  // which `diffDoc(..., true)` treats as equivalent — the same rule the
-  // realm-scale gate applies.
-  test('the indexed search doc is at parity with the searchable-driven generator output', async function (assert) {
+  // so the doc the indexer persists is the searchable-driven output for a card
+  // carrying a `searchable` annotation: the `authors` link is expanded (not an
+  // `{ id }`), and every card carries its base-card links (`cardTheme`,
+  // `cardInfo.cardThumbnail`). Unset contained scalars are absent: the rendered
+  // instance the indexer serializes yields `undefined` for them, which JSON
+  // serialization into the index drops.
+  test('the indexer persists the searchable-driven search doc', async function (assert) {
     let id = `${testRealmURL}ParityArticle/pa1`;
-    let generated = await loadAndGenerate(id);
     let indexed = await indexedSearchDoc(id);
     assert.deepEqual(
-      diffDoc(indexed ?? {}, generated, true),
-      [],
-      'the indexer produced the searchable-driven doc',
+      indexed,
+      {
+        authors: [
+          {
+            cardInfo: { cardThumbnail: null, theme: null },
+            cardTheme: null,
+            cardTitle: 'Untitled SimpleAuthor',
+            id: `${testRealmURL}SimpleAuthor/sa1`,
+            name: 'Plain',
+          },
+        ],
+        cardInfo: { cardThumbnail: null, theme: null },
+        cardTheme: null,
+        cardTitle: 'Untitled ParityArticle',
+        id: `${testRealmURL}ParityArticle/pa1`,
+        title: 'Parity',
+      },
+      'the indexer persists the searchable-driven doc',
     );
-    // The card carries a `searchable` annotation, so this also exercises a real
-    // expansion through the indexer (not just an all-`{ id }` doc).
-    let authors = generated.authors;
-    let authorsExpanded = Array.isArray(authors) && authors.length > 0;
-    assert.true(authorsExpanded, 'the searchable link expanded into the doc');
+
+    // The expanded target's data is in the doc, so it must be recorded as a
+    // dependency — otherwise editing the target would not reindex the owner.
+    let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
+    let deps =
+      entry && entry.type !== 'instance-error'
+        ? ((entry as IndexedInstance).deps ?? [])
+        : [];
+    assert.ok(
+      deps.some((d) => d.includes('SimpleAuthor/sa1')),
+      'the searchable-expanded target is recorded as a dependency',
+    );
   });
 });

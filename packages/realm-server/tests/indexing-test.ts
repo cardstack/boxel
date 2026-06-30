@@ -802,10 +802,11 @@ module(basename(import.meta.filename), function () {
 
       let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
       if (hassanEntry) {
-        // The searchable-driven doc is at parity with the store-driven baseline
-        // up to the intended omit-vs-keep-`{ id }` difference for unloaded
-        // base-card links; `diffDoc(..., true)` ignores that at any depth while
-        // flagging real data deltas.
+        // The searchable-driven generator is authoritative: every relationship
+        // is present (an unset link is `null`, a set one expands per its
+        // `searchable` annotation), and every card carries its base-card fields
+        // (`cardTheme`, `cardInfo.cardThumbnail`). The expected doc is the exact
+        // generator output; `diffDoc(..., false)` reports any deviation.
         assert.deepEqual(
           diffDoc(
             {
@@ -814,7 +815,9 @@ module(basename(import.meta.filename), function () {
                 id: `${testRealm}ringo`,
                 cardTitle: 'Untitled Card',
                 firstName: 'Ringo',
+                cardTheme: null,
                 cardInfo: {
+                  cardThumbnail: null,
                   theme: null,
                 },
               },
@@ -822,13 +825,14 @@ module(basename(import.meta.filename), function () {
               _cardType: 'PetPerson',
               firstName: 'Hassan',
               cardTitle: 'Untitled Card',
+              cardTheme: null,
               cardInfo: {
                 cardThumbnail: null,
                 theme: null,
               },
             },
             hassanEntry.searchDoc ?? {},
-            true,
+            false,
           ),
           [],
           'searchData is correct',
