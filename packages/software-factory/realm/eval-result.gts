@@ -15,7 +15,6 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
-import { ResultDetailsSection } from './result-details-section.gts';
 
 import Code from '@cardstack/boxel-icons/code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -34,46 +33,83 @@ export class EvalModuleResult extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof EvalModuleResult> {
     <template>
-      <div class='module-entry'>
-        {{#if @model.hasError}}
-          <span class='status-icon error-icon'>✗</span>
-        {{else}}
-          <span class='status-icon pass-icon'>✓</span>
-        {{/if}}
-        <span class='module-path'>{{@model.path}}</span>
+      <div class='detail-group {{if @model.hasError "has-errors"}}'>
+        <div class='detail-group-header'>
+          <span class='detail-group-name'>{{@model.path}}</span>
+          {{#if @model.hasError}}
+            <span class='group-status errors'>error</span>
+          {{else}}
+            <span class='group-status clean'>passed</span>
+          {{/if}}
+        </div>
         {{#if @model.error}}
-          <span class='module-error'>{{@model.error}}</span>
+          <pre class='error-code-block'>{{@model.error}}</pre>
         {{/if}}
       </div>
       <style scoped>
-        .module-entry {
+        .detail-group {
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 60%,
+              transparent
+            );
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-sm);
+        }
+        .detail-group.has-errors {
+          border-color: color-mix(
+            in oklch,
+            oklch(55% 0.22 25) 50%,
+            transparent
+          );
+        }
+        .detail-group-header {
           display: flex;
-          align-items: baseline;
-          gap: 0.5rem;
-          padding: 0.25rem 0;
-          font-size: 0.85rem;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          margin-bottom: var(--boxel-sp-xs);
         }
-        .status-icon {
-          font-weight: bold;
-          width: 1.25rem;
-          text-align: center;
+        .detail-group-name {
+          font-weight: 600;
+          font-size: var(--boxel-font-size-sm);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          word-break: break-all;
+        }
+        .group-status {
           flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
-        .error-icon {
-          color: var(--boxel-red, #dc2626);
+        .group-status.clean {
+          color: oklch(60% 0.17 150);
         }
-        .pass-icon {
-          color: var(--boxel-green, #16a34a);
+        .group-status.errors {
+          color: oklch(55% 0.22 25);
         }
-        .module-path {
-          color: var(--muted-foreground);
-          font-family: monospace;
-          font-size: 0.8rem;
-          flex-shrink: 0;
-        }
-        .module-error {
-          flex: 1;
-          color: var(--boxel-red, #dc2626);
+        .error-code-block {
+          margin: 0;
+          padding: var(--boxel-sp-sm);
+          border-radius: var(--boxel-border-radius);
+          background: color-mix(in oklch, oklch(55% 0.22 25) 8%, transparent);
+          color: oklch(55% 0.22 25);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: var(--boxel-font-size-xs);
+          white-space: pre-wrap;
+          word-break: break-word;
+          max-height: 15rem;
+          overflow-y: auto;
+          line-height: 1.4;
         }
       </style>
     </template>
@@ -169,8 +205,6 @@ export class EvalResult extends ValidationResult {
       return resultRunTitle('Eval', this.args.model.sequenceNumber);
     }
 
-    moduleHasError = (module: EvalModuleResult) => module.hasError;
-
     <template>
       <ResultIsolatedCard
         @title={{this.titleText}}
@@ -182,6 +216,8 @@ export class EvalResult extends ValidationResult {
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
+        @hasDetails={{@model.moduleResults.length}}
+        @detailsTitle='Module Results'
       >
         <:summary>
           <span>{{@model.modulesPassed}}/{{@model.modulesChecked}}
@@ -193,62 +229,9 @@ export class EvalResult extends ValidationResult {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          <ResultDetailsSection
-            @sectionTitle='Module Results'
-            @items={{@model.moduleResults}}
-            @hasErrors={{this.moduleHasError}}
-          >
-            <:header as |moduleResult|>
-              <span class='detail-group-name'>{{moduleResult.path}}</span>
-              {{#if moduleResult.hasError}}
-                <span class='group-status errors'>error</span>
-              {{else}}
-                <span class='group-status clean'>passed</span>
-              {{/if}}
-            </:header>
-            <:body as |moduleResult|>
-              {{#if moduleResult.error}}
-                <pre class='error-code-block'>{{moduleResult.error}}</pre>
-              {{/if}}
-            </:body>
-          </ResultDetailsSection>
+          <@fields.moduleResults @format='embedded' />
         </:details>
       </ResultIsolatedCard>
-      <style scoped>
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .error-code-block {
-          margin: 0;
-          padding: var(--boxel-sp-sm);
-          border-radius: var(--boxel-border-radius);
-          background: color-mix(in oklch, oklch(55% 0.22 25) 8%, transparent);
-          color: oklch(55% 0.22 25);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-          white-space: pre-wrap;
-          word-break: break-word;
-          max-height: 15rem;
-          overflow-y: auto;
-          line-height: 1.4;
-        }
-      </style>
     </template>
   };
 

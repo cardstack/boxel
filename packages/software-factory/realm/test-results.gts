@@ -18,7 +18,6 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
-import { ResultDetailsSection } from './result-details-section.gts';
 
 import FlaskConical from '@cardstack/boxel-icons/flask-conical';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -46,69 +45,101 @@ export class TestResultEntry extends FieldDef {
   @field stackTrace = contains(StringField);
   @field durationMs = contains(NumberField);
 
-  get statusIcon() {
-    switch (this.status) {
-      case 'passed':
-        return '\u2713';
-      case 'failed':
-        return '\u2717';
-      case 'error':
-        return '!';
-      case 'skipped':
-        return '\u2192';
-      case 'pending':
-        return '\u2013';
-      default:
-        return '?';
-    }
-  }
-
   static embedded = class Embedded extends Component<typeof TestResultEntry> {
     <template>
-      <div class='result-entry'>
-        <span
-          class='status status-{{@model.status}}'
-        >{{@model.statusIcon}}</span>
-        <span class='test-name'>{{@model.testName}}</span>
-        {{#if @model.durationMs}}
-          <span class='duration'>{{@model.durationMs}}ms</span>
+      <div class='test-row'>
+        <div class='test-row-main'>
+          {{#if (eq @model.status 'passed')}}
+            <CircleCheck
+              class='test-icon icon-passed'
+              width='14'
+              height='14'
+              aria-label='passed'
+            />
+          {{else if (eq @model.status 'failed')}}
+            <CircleX
+              class='test-icon icon-failed'
+              width='14'
+              height='14'
+              aria-label='failed'
+            />
+          {{else if (eq @model.status 'error')}}
+            <CircleAlert
+              class='test-icon icon-error'
+              width='14'
+              height='14'
+              aria-label='error'
+            />
+          {{else if (eq @model.status 'skipped')}}
+            <CircleMinus
+              class='test-icon icon-skipped'
+              width='14'
+              height='14'
+              aria-label='skipped'
+            />
+          {{else}}
+            <CircleDashed
+              class='test-icon icon-pending'
+              width='14'
+              height='14'
+              aria-label='pending'
+            />
+          {{/if}}
+          <span class='test-name'>{{@model.testName}}</span>
+          {{#if @model.durationMs}}
+            <span class='test-duration'>{{@model.durationMs}}ms</span>
+          {{/if}}
+        </div>
+        {{#if @model.message}}
+          <pre class='failure-message'>{{@model.message}}</pre>
+        {{/if}}
+        {{#if @model.stackTrace}}
+          <pre class='failure-stack'>{{@model.stackTrace}}</pre>
         {{/if}}
       </div>
       <style scoped>
-        .result-entry {
+        .test-row-main {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          padding: 0.25rem 0;
-          font-size: 0.85rem;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
         }
-        .status {
-          font-weight: bold;
-          width: 1.25rem;
-          text-align: center;
+        .test-icon {
+          flex-shrink: 0;
         }
-        .status-passed {
-          color: var(--boxel-green, #16a34a);
+        .icon-passed {
+          color: oklch(60% 0.17 150);
         }
-        .status-failed {
-          color: var(--boxel-red, #dc2626);
+        .icon-failed {
+          color: oklch(55% 0.22 25);
         }
-        .status-error {
-          color: var(--boxel-orange, #ea580c);
+        .icon-error {
+          color: oklch(68% 0.17 55);
         }
-        .status-pending {
-          color: var(--boxel-400, #9ca3af);
-        }
-        .status-skipped {
-          color: var(--boxel-400, #9ca3af);
-          font-style: italic;
+        .icon-skipped,
+        .icon-pending {
+          color: var(--muted-foreground, var(--boxel-500));
         }
         .test-name {
           flex: 1;
         }
-        .duration {
-          color: var(--boxel-400, #9ca3af);
-          font-size: 0.75rem;
+        .test-duration {
+          flex-shrink: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+          font-size: var(--boxel-font-size-xs);
+        }
+        .failure-message,
+        .failure-stack {
+          margin: var(--boxel-sp-4xs) 0 var(--boxel-sp-4xs) var(--boxel-sp-lg);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: var(--boxel-font-size-xs);
+          white-space: pre-wrap;
+          overflow-x: auto;
+          max-width: 100%;
+          color: var(--muted-foreground, var(--boxel-500));
+        }
+        .failure-stack {
+          opacity: 0.7;
         }
       </style>
     </template>
@@ -155,54 +186,95 @@ export class TestModuleResult extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof TestModuleResult> {
     <template>
-      <div class='module-result'>
-        <div class='module-header'>
-          <span class='module-name'>{{@model.moduleName}}</span>
+      <div class='detail-group {{if @model.failedCount "has-errors"}}'>
+        <div class='detail-group-header'>
+          <span class='detail-group-name'>{{@model.moduleName}}</span>
           {{#if @model.isComplete}}
-            <span class='module-counts'>
-              {{@model.passedCount}}/{{@model.totalCount}}
-              passed
+            <span
+              class='group-status
+                {{if
+                  @model.failedCount
+                  "errors"
+                  (if @model.passedCount "clean" "muted")
+                }}'
+            >
+              {{#if @model.failedCount}}
+                {{@model.passedCount}}
+                passed,
+                {{@model.failedCount}}
+                failed
+              {{else}}
+                {{@model.passedCount}}/{{@model.totalCount}}
+                passed
+              {{/if}}
               {{#if @model.skippedCount}}
-                <span class='skipped-label'>
-                  ({{@model.skippedCount}}
-                  skipped)
-                </span>
+                ({{@model.skippedCount}}
+                skipped)
               {{/if}}
             </span>
           {{else}}
-            <span class='module-counts'>running...</span>
+            <span class='group-status running'>running…</span>
           {{/if}}
         </div>
-        <div class='module-entries'>
-          <@fields.results />
+        <div class='test-rows'>
+          <@fields.results @format='embedded' />
         </div>
       </div>
       <style scoped>
-        .module-result {
-          margin-bottom: 0.75rem;
+        .detail-group {
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 60%,
+              transparent
+            );
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-sm);
         }
-        .module-header {
+        .detail-group.has-errors {
+          border-color: color-mix(
+            in oklch,
+            oklch(55% 0.22 25) 50%,
+            transparent
+          );
+        }
+        .detail-group-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0.25rem 0;
-          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
-          margin-bottom: 0.25rem;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          margin-bottom: var(--boxel-sp-xs);
         }
-        .module-name {
+        .detail-group-name {
           font-weight: 600;
-          font-size: 0.85rem;
+          font-size: var(--boxel-font-size-sm);
+          word-break: break-all;
         }
-        .module-counts {
-          font-size: 0.8rem;
-          color: var(--muted-foreground);
+        .group-status {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
-        .skipped-label {
-          color: var(--boxel-400, #9ca3af);
-          font-style: italic;
+        .group-status.clean {
+          color: oklch(60% 0.17 150);
         }
-        .module-entries {
-          padding-left: 0.5rem;
+        .group-status.errors {
+          color: oklch(55% 0.22 25);
+        }
+        .group-status.running {
+          color: oklch(60% 0.16 250);
+        }
+        .test-rows :deep(.containsMany-field.embedded-format) {
+          gap: var(--boxel-sp-4xs);
         }
       </style>
     </template>
@@ -326,8 +398,6 @@ export class TestRun extends ValidationResult {
       return resultRunTitle('Test', this.args.model.sequenceNumber);
     }
 
-    moduleHasFailures = (module: TestModuleResult) => module.failedCount;
-
     <template>
       <ResultIsolatedCard
         @title={{this.titleText}}
@@ -339,6 +409,8 @@ export class TestRun extends ValidationResult {
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
+        @hasDetails={{@model.moduleResults.length}}
+        @detailsTitle='Test Results'
       >
         <:summary>
           <span>{{@model.passedCount}}/{{this.total}}
@@ -350,172 +422,12 @@ export class TestRun extends ValidationResult {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          <ResultDetailsSection
-            @sectionTitle='Test Results'
-            @items={{@model.moduleResults}}
-            @hasErrors={{this.moduleHasFailures}}
-          >
-            <:header as |moduleResult|>
-              <span class='detail-group-name'>{{moduleResult.moduleName}}</span>
-              {{#if moduleResult.isComplete}}
-                <span
-                  class='group-status
-                    {{if
-                      moduleResult.failedCount
-                      "errors"
-                      (if moduleResult.passedCount "clean" "muted")
-                    }}'
-                >
-                  {{#if moduleResult.failedCount}}
-                    {{moduleResult.passedCount}}
-                    passed,
-                    {{moduleResult.failedCount}}
-                    failed
-                  {{else}}
-                    {{moduleResult.passedCount}}/{{moduleResult.totalCount}}
-                    passed
-                  {{/if}}
-                  {{#if moduleResult.skippedCount}}
-                    ({{moduleResult.skippedCount}}
-                    skipped)
-                  {{/if}}
-                </span>
-              {{else}}
-                <span class='group-status running'>running…</span>
-              {{/if}}
-            </:header>
-            <:body as |moduleResult|>
-              <div class='test-rows'>
-                {{#each moduleResult.results as |result|}}
-                  <div class='test-row'>
-                    <div class='test-row-main'>
-                      {{#if (eq result.status 'passed')}}
-                        <CircleCheck
-                          class='test-icon icon-passed'
-                          width='14'
-                          height='14'
-                          aria-label='passed'
-                        />
-                      {{else if (eq result.status 'failed')}}
-                        <CircleX
-                          class='test-icon icon-failed'
-                          width='14'
-                          height='14'
-                          aria-label='failed'
-                        />
-                      {{else if (eq result.status 'error')}}
-                        <CircleAlert
-                          class='test-icon icon-error'
-                          width='14'
-                          height='14'
-                          aria-label='error'
-                        />
-                      {{else if (eq result.status 'skipped')}}
-                        <CircleMinus
-                          class='test-icon icon-skipped'
-                          width='14'
-                          height='14'
-                          aria-label='skipped'
-                        />
-                      {{else}}
-                        <CircleDashed
-                          class='test-icon icon-pending'
-                          width='14'
-                          height='14'
-                          aria-label='pending'
-                        />
-                      {{/if}}
-                      <span class='test-name'>{{result.testName}}</span>
-                      {{#if result.durationMs}}
-                        <span
-                          class='test-duration'
-                        >{{result.durationMs}}ms</span>
-                      {{/if}}
-                    </div>
-                    {{#if result.message}}
-                      <pre class='failure-message'>{{result.message}}</pre>
-                    {{/if}}
-                    {{#if result.stackTrace}}
-                      <pre class='failure-stack'>{{result.stackTrace}}</pre>
-                    {{/if}}
-                  </div>
-                {{/each}}
-              </div>
-            </:body>
-          </ResultDetailsSection>
+          <@fields.moduleResults @format='embedded' />
         </:details>
       </ResultIsolatedCard>
       <style scoped>
         .skipped {
           font-style: italic;
-        }
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .group-status.running {
-          color: oklch(60% 0.16 250);
-        }
-        .test-rows {
-          display: grid;
-          gap: var(--boxel-sp-4xs);
-        }
-        .test-row-main {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          font-size: var(--boxel-font-size-sm);
-        }
-        .test-icon {
-          flex-shrink: 0;
-        }
-        .icon-passed {
-          color: oklch(60% 0.17 150);
-        }
-        .icon-failed {
-          color: oklch(55% 0.22 25);
-        }
-        .icon-error {
-          color: oklch(68% 0.17 55);
-        }
-        .icon-skipped,
-        .icon-pending {
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .test-name {
-          flex: 1;
-        }
-        .test-duration {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-size: var(--boxel-font-size-xs);
-        }
-        .failure-message,
-        .failure-stack {
-          margin: var(--boxel-sp-4xs) 0 var(--boxel-sp-4xs) var(--boxel-sp-lg);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-          white-space: pre-wrap;
-          overflow-x: auto;
-          max-width: 100%;
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .failure-stack {
-          opacity: 0.7;
         }
       </style>
     </template>

@@ -20,6 +20,9 @@ interface Signature {
     hasProject?: unknown;
     hasIssue?: unknown;
     hasError?: unknown;
+    // Heading for the details section; the section shows only when hasDetails.
+    detailsTitle?: string;
+    hasDetails?: unknown;
   };
   Blocks: {
     summary: [];
@@ -100,7 +103,12 @@ export class ResultIsolatedCard extends GlimmerComponent<Signature> {
         </section>
       {{/if}}
 
-      {{yield to='details'}}
+      {{#if @hasDetails}}
+        <section class='result-section'>
+          {{#if @detailsTitle}}<h2>{{@detailsTitle}}</h2>{{/if}}
+          {{yield to='details'}}
+        </section>
+      {{/if}}
     </article>
     <style scoped>
       .result-surface {

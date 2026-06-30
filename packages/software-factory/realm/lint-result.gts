@@ -17,7 +17,6 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
-import { ResultDetailsSection } from './result-details-section.gts';
 
 import ListChecks from '@cardstack/boxel-icons/list-checks';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -41,62 +40,62 @@ export class LintViolation extends FieldDef {
   @field message = contains(StringField);
   @field severity = contains(LintViolationSeverityField);
 
-  get severityIcon() {
-    switch (this.severity) {
-      case 'error':
-        return '\u2717';
-      case 'warning':
-        return '\u26A0';
-      default:
-        return '?';
-    }
-  }
-
   static embedded = class Embedded extends Component<typeof LintViolation> {
     <template>
-      <div class='violation-entry'>
+      <div class='violation-row'>
+        {{#if (eq @model.severity 'error')}}
+          <CircleX
+            class='sev-icon sev-error'
+            width='14'
+            height='14'
+            aria-label='error'
+          />
+        {{else}}
+          <CircleAlert
+            class='sev-icon sev-warning'
+            width='14'
+            height='14'
+            aria-label='warning'
+          />
+        {{/if}}
         <span
-          class='severity severity-{{@model.severity}}'
-        >{{@model.severityIcon}}</span>
-        <span class='location'>{{@model.file}}:{{@model.line}}</span>
-        <span class='message'>{{@model.message}}</span>
+          class='violation-location'
+        >{{@model.line}}:{{@model.column}}</span>
+        <span class='violation-message'>{{@model.message}}</span>
         {{#if @model.rule}}
-          <span class='rule'>[{{@model.rule}}]</span>
+          <span class='violation-rule'>[{{@model.rule}}]</span>
         {{/if}}
       </div>
       <style scoped>
-        .violation-entry {
+        .violation-row {
           display: flex;
           align-items: baseline;
-          gap: 0.5rem;
-          padding: 0.25rem 0;
-          font-size: 0.85rem;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
         }
-        .severity {
-          font-weight: bold;
-          width: 1.25rem;
-          text-align: center;
+        .sev-icon {
           flex-shrink: 0;
+          align-self: center;
         }
-        .severity-error {
-          color: var(--boxel-red, #dc2626);
+        .sev-error {
+          color: oklch(55% 0.22 25);
         }
-        .severity-warning {
-          color: var(--boxel-orange, #ea580c);
+        .sev-warning {
+          color: oklch(68% 0.17 55);
         }
-        .location {
-          color: var(--muted-foreground);
-          font-family: monospace;
-          font-size: 0.8rem;
+        .violation-location {
           flex-shrink: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: var(--boxel-font-size-xs);
         }
-        .message {
+        .violation-message {
           flex: 1;
         }
-        .rule {
-          color: var(--boxel-400, #9ca3af);
-          font-size: 0.75rem;
+        .violation-rule {
           flex-shrink: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+          font-size: var(--boxel-font-size-xs);
         }
       </style>
     </template>
@@ -133,57 +132,77 @@ export class LintFileResult extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof LintFileResult> {
     <template>
-      <div class='file-result'>
-        <div class='file-header'>
-          <span class='file-name'>{{@model.file}}</span>
+      <div class='detail-group {{unless @model.passed "has-errors"}}'>
+        <div class='detail-group-header'>
+          <span class='detail-group-name'>{{@model.file}}</span>
           {{#if @model.passed}}
-            <span class='file-status passed'>clean</span>
+            <span class='group-status clean'>clean</span>
           {{else}}
-            <span class='file-status failed'>
-              {{@model.errorCount}}
-              error(s)
-              {{#if @model.warningCount}}
-                ,
+            <span class='group-status errors'>{{@model.errorCount}}
+              error(s){{#if @model.warningCount}},
                 {{@model.warningCount}}
-                warning(s)
-              {{/if}}
-            </span>
+                warning(s){{/if}}</span>
           {{/if}}
         </div>
         {{#if @model.totalCount}}
-          <div class='file-violations'>
-            <@fields.violations />
+          <div class='violation-rows'>
+            <@fields.violations @format='embedded' />
           </div>
         {{/if}}
       </div>
       <style scoped>
-        .file-result {
-          margin-bottom: 0.75rem;
+        .detail-group {
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 60%,
+              transparent
+            );
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-sm);
         }
-        .file-header {
+        .detail-group.has-errors {
+          border-color: color-mix(
+            in oklch,
+            oklch(55% 0.22 25) 50%,
+            transparent
+          );
+        }
+        .detail-group-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0.25rem 0;
-          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
-          margin-bottom: 0.25rem;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          margin-bottom: var(--boxel-sp-xs);
         }
-        .file-name {
+        .detail-group-name {
           font-weight: 600;
-          font-size: 0.85rem;
-          font-family: monospace;
+          font-size: var(--boxel-font-size-sm);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          word-break: break-all;
         }
-        .file-status {
-          font-size: 0.8rem;
+        .group-status {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
-        .file-status.passed {
-          color: var(--boxel-green, #16a34a);
+        .group-status.clean {
+          color: oklch(60% 0.17 150);
         }
-        .file-status.failed {
-          color: var(--boxel-red, #dc2626);
+        .group-status.errors {
+          color: oklch(55% 0.22 25);
         }
-        .file-violations {
-          padding-left: 0.5rem;
+        .violation-rows :deep(.containsMany-field.embedded-format) {
+          gap: var(--boxel-sp-4xs);
         }
       </style>
     </template>
@@ -302,8 +321,6 @@ export class LintResult extends ValidationResult {
       return resultRunTitle('Lint', this.args.model.sequenceNumber);
     }
 
-    fileHasErrors = (file: LintFileResult) => !file.passed;
-
     <template>
       <ResultIsolatedCard
         @title={{this.titleText}}
@@ -315,6 +332,8 @@ export class LintResult extends ValidationResult {
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
+        @hasDetails={{@model.fileResults.length}}
+        @detailsTitle='File Results'
       >
         <:summary>
           <span>{{@model.filesClean}}/{{@model.filesChecked}}
@@ -328,119 +347,9 @@ export class LintResult extends ValidationResult {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          <ResultDetailsSection
-            @sectionTitle='File Results'
-            @items={{@model.fileResults}}
-            @hasErrors={{this.fileHasErrors}}
-          >
-            <:header as |fileResult|>
-              <span class='detail-group-name'>{{fileResult.file}}</span>
-              {{#if fileResult.passed}}
-                <span class='group-status clean'>clean</span>
-              {{else}}
-                <span class='group-status errors'>
-                  {{fileResult.errorCount}}
-                  error(s)
-                  {{#if fileResult.warningCount}}
-                    ,
-                    {{fileResult.warningCount}}
-                    warning(s)
-                  {{/if}}
-                </span>
-              {{/if}}
-            </:header>
-            <:body as |fileResult|>
-              {{#if fileResult.totalCount}}
-                <div class='violation-rows'>
-                  {{#each fileResult.violations as |violation|}}
-                    <div class='violation-row'>
-                      {{#if (eq violation.severity 'error')}}
-                        <CircleX
-                          class='sev-icon sev-error'
-                          width='14'
-                          height='14'
-                          aria-label='error'
-                        />
-                      {{else}}
-                        <CircleAlert
-                          class='sev-icon sev-warning'
-                          width='14'
-                          height='14'
-                          aria-label='warning'
-                        />
-                      {{/if}}
-                      <span
-                        class='violation-location'
-                      >{{violation.line}}:{{violation.column}}</span>
-                      <span
-                        class='violation-message'
-                      >{{violation.message}}</span>
-                      {{#if violation.rule}}
-                        <span class='violation-rule'>[{{violation.rule}}]</span>
-                      {{/if}}
-                    </div>
-                  {{/each}}
-                </div>
-              {{/if}}
-            </:body>
-          </ResultDetailsSection>
+          <@fields.fileResults @format='embedded' />
         </:details>
       </ResultIsolatedCard>
-      <style scoped>
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .violation-rows {
-          display: grid;
-          gap: var(--boxel-sp-4xs);
-        }
-        .violation-row {
-          display: flex;
-          align-items: baseline;
-          gap: var(--boxel-sp-xs);
-          font-size: var(--boxel-font-size-sm);
-        }
-        .sev-icon {
-          flex-shrink: 0;
-          align-self: center;
-        }
-        .sev-error {
-          color: oklch(55% 0.22 25);
-        }
-        .sev-warning {
-          color: oklch(68% 0.17 55);
-        }
-        .violation-location {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-        }
-        .violation-message {
-          flex: 1;
-        }
-        .violation-rule {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-size: var(--boxel-font-size-xs);
-        }
-      </style>
     </template>
   };
 

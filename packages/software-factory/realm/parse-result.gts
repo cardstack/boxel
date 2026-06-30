@@ -15,7 +15,6 @@ import {
   type ResultMetaItem,
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
-import { ResultDetailsSection } from './result-details-section.gts';
 
 import FileCode from '@cardstack/boxel-icons/file-code';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -31,35 +30,39 @@ export class ParseError extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof ParseError> {
     <template>
-      <div class='error-entry'>
-        <span class='status-icon'>✗</span>
-        <span class='location'>{{@model.file}}{{#if
-            @model.line
-          }}:{{@model.line}}{{/if}}</span>
-        <span class='message'>{{@model.message}}</span>
+      <div class='error-row'>
+        <CircleX
+          class='sev-icon sev-error'
+          width='14'
+          height='14'
+          aria-label='error'
+        />
+        {{#if @model.line}}
+          <span class='error-location'>{{@model.line}}:{{@model.column}}</span>
+        {{/if}}
+        <span class='error-message-text'>{{@model.message}}</span>
       </div>
       <style scoped>
-        .error-entry {
+        .error-row {
           display: flex;
           align-items: baseline;
-          gap: 0.5rem;
-          padding: 0.25rem 0;
-          font-size: 0.85rem;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
         }
-        .status-icon {
-          font-weight: bold;
-          width: 1.25rem;
-          text-align: center;
+        .sev-icon {
           flex-shrink: 0;
-          color: var(--boxel-red, #dc2626);
+          align-self: center;
         }
-        .location {
-          color: var(--muted-foreground);
-          font-family: monospace;
-          font-size: 0.8rem;
+        .sev-error {
+          color: oklch(55% 0.22 25);
+        }
+        .error-location {
           flex-shrink: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: var(--boxel-font-size-xs);
         }
-        .message {
+        .error-message-text {
           flex: 1;
         }
       </style>
@@ -93,52 +96,75 @@ export class ParseFileResult extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof ParseFileResult> {
     <template>
-      <div class='file-result'>
-        <div class='file-header'>
-          <span class='file-name'>{{@model.displayFile}}</span>
+      <div class='detail-group {{unless @model.passed "has-errors"}}'>
+        <div class='detail-group-header'>
+          <span class='detail-group-name'>{{@model.displayFile}}</span>
           {{#if @model.passed}}
-            <span class='file-status passed'>valid</span>
+            <span class='group-status clean'>valid</span>
           {{else}}
-            <span class='file-status failed'>
-              {{@model.errorCount}}
-              error(s)
-            </span>
+            <span class='group-status errors'>{{@model.errorCount}}
+              error(s)</span>
           {{/if}}
         </div>
         {{#if @model.errorCount}}
-          <div class='file-errors'>
-            <@fields.errors />
+          <div class='error-rows'>
+            <@fields.errors @format='embedded' />
           </div>
         {{/if}}
       </div>
       <style scoped>
-        .file-result {
-          margin-bottom: 0.75rem;
+        .detail-group {
+          border: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 60%,
+              transparent
+            );
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-sm);
         }
-        .file-header {
+        .detail-group.has-errors {
+          border-color: color-mix(
+            in oklch,
+            oklch(55% 0.22 25) 50%,
+            transparent
+          );
+        }
+        .detail-group-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0.25rem 0;
-          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
-          margin-bottom: 0.25rem;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-xs);
+          border-bottom: 1px solid
+            color-mix(
+              in oklch,
+              var(--border, var(--boxel-border-color)) 50%,
+              transparent
+            );
+          margin-bottom: var(--boxel-sp-xs);
         }
-        .file-name {
+        .detail-group-name {
           font-weight: 600;
-          font-size: 0.85rem;
-          font-family: monospace;
+          font-size: var(--boxel-font-size-sm);
+          font-family: var(--boxel-monospace-font-family, monospace);
+          word-break: break-all;
         }
-        .file-status {
-          font-size: 0.8rem;
+        .group-status {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-500));
+          text-transform: uppercase;
         }
-        .file-status.passed {
-          color: var(--boxel-green, #16a34a);
+        .group-status.clean {
+          color: oklch(60% 0.17 150);
         }
-        .file-status.failed {
-          color: var(--boxel-red, #dc2626);
+        .group-status.errors {
+          color: oklch(55% 0.22 25);
         }
-        .file-errors {
-          padding-left: 0.5rem;
+        .error-rows :deep(.containsMany-field.embedded-format) {
+          gap: var(--boxel-sp-4xs);
         }
       </style>
     </template>
@@ -241,8 +267,6 @@ export class ParseResult extends ValidationResult {
       return resultRunTitle('Parse', this.args.model.sequenceNumber);
     }
 
-    fileHasErrors = (file: ParseFileResult) => !file.passed;
-
     <template>
       <ResultIsolatedCard
         @title={{this.titleText}}
@@ -254,6 +278,8 @@ export class ParseResult extends ValidationResult {
         @hasProject={{@model.project}}
         @hasIssue={{@model.issue}}
         @hasError={{@model.errorMessage}}
+        @hasDetails={{@model.fileResults.length}}
+        @detailsTitle='File Results'
       >
         <:summary>
           <span>{{@model.filesClean}}/{{@model.filesChecked}}
@@ -265,94 +291,9 @@ export class ParseResult extends ValidationResult {
         <:issue><@fields.issue @format='embedded' /></:issue>
         <:error>{{@model.errorMessage}}</:error>
         <:details>
-          <ResultDetailsSection
-            @sectionTitle='File Results'
-            @items={{@model.fileResults}}
-            @hasErrors={{this.fileHasErrors}}
-          >
-            <:header as |fileResult|>
-              <span class='detail-group-name'>{{fileResult.displayFile}}</span>
-              {{#if fileResult.passed}}
-                <span class='group-status clean'>valid</span>
-              {{else}}
-                <span class='group-status errors'>
-                  {{fileResult.errorCount}}
-                  error(s)
-                </span>
-              {{/if}}
-            </:header>
-            <:body as |fileResult|>
-              {{#if fileResult.errorCount}}
-                <div class='error-rows'>
-                  {{#each fileResult.errors as |error|}}
-                    <div class='error-row'>
-                      <CircleX
-                        class='sev-icon sev-error'
-                        width='14'
-                        height='14'
-                        aria-label='error'
-                      />
-                      {{#if error.line}}
-                        <span
-                          class='error-location'
-                        >{{error.line}}:{{error.column}}</span>
-                      {{/if}}
-                      <span class='error-message-text'>{{error.message}}</span>
-                    </div>
-                  {{/each}}
-                </div>
-              {{/if}}
-            </:body>
-          </ResultDetailsSection>
+          <@fields.fileResults @format='embedded' />
         </:details>
       </ResultIsolatedCard>
-      <style scoped>
-        .detail-group-name {
-          font-weight: 600;
-          font-size: var(--boxel-font-size-sm);
-          font-family: var(--boxel-monospace-font-family, monospace);
-          word-break: break-all;
-        }
-        .group-status {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground, var(--boxel-500));
-          text-transform: uppercase;
-        }
-        .group-status.clean {
-          color: oklch(60% 0.17 150);
-        }
-        .group-status.errors {
-          color: oklch(55% 0.22 25);
-        }
-        .error-rows {
-          display: grid;
-          gap: var(--boxel-sp-4xs);
-        }
-        .error-row {
-          display: flex;
-          align-items: baseline;
-          gap: var(--boxel-sp-xs);
-          font-size: var(--boxel-font-size-sm);
-        }
-        .sev-icon {
-          flex-shrink: 0;
-          align-self: center;
-        }
-        .sev-error {
-          color: oklch(55% 0.22 25);
-        }
-        .error-location {
-          flex-shrink: 0;
-          color: var(--muted-foreground, var(--boxel-500));
-          font-family: var(--boxel-monospace-font-family, monospace);
-          font-size: var(--boxel-font-size-xs);
-        }
-        .error-message-text {
-          flex: 1;
-        }
-      </style>
     </template>
   };
 
