@@ -97,10 +97,16 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
       .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
       .doesNotExist('the workspace leaves the active list once archived');
     assert
+      .dom('[data-test-archived-list]')
+      .doesNotExist('the Archived section is collapsed by default');
+
+    await click('[data-test-archived-toggle]');
+
+    assert
       .dom(
         '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
       )
-      .exists('the workspace appears in the Archived section');
+      .exists('expanding the disclosure reveals the archived workspace');
   });
 
   test('owner can restore an archived workspace back to active', async function (assert) {
@@ -109,6 +115,8 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
     await click('[data-test-confirm-archive-button]');
+    await waitFor('[data-test-archived-section]');
+    await click('[data-test-archived-toggle]');
     await waitFor(
       '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
     );

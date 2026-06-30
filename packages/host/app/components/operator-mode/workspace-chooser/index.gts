@@ -10,7 +10,12 @@ import Shapes from '@cardstack/boxel-icons/shapes';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { add, eq } from '@cardstack/boxel-ui/helpers';
-import { IconGlobe, Lock, StarFilled } from '@cardstack/boxel-ui/icons';
+import {
+  IconGlobe,
+  Lock,
+  StarFilled,
+  TriangleRight,
+} from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { ri } from '@cardstack/runtime-common';
@@ -52,12 +57,21 @@ export default class WorkspaceChooser extends Component<Signature> {
       .catch((e) => console.error('Failed to fetch archived realms', e));
   }
 
+  // Archived realms are tucked away below the fold and collapsed by default —
+  // they're rarely needed, so the section stays out of the way until the owner
+  // opens the disclosure.
+  @tracked private isArchivedExpanded = false;
+
   private get archivedRealms() {
     return this.realmServer.archivedRealms;
   }
 
   private get hasArchivedRealms() {
     return this.archivedRealms.length > 0;
+  }
+
+  @action private toggleArchived() {
+    this.isArchivedExpanded = !this.isArchivedExpanded;
   }
 
   private sortOptions: SortOption[] = [
@@ -408,23 +422,6 @@ export default class WorkspaceChooser extends Component<Signature> {
               </div>
             {{/if}}
           </div>
-          {{#if this.hasArchivedRealms}}
-            <div class='workspace-section' data-test-archived-section>
-              <div class='section-header'>
-                <ArchiveIcon
-                  width='20'
-                  height='20'
-                  class='section-header-icon'
-                />
-                <span class='workspace-chooser__title'>Archived</span>
-              </div>
-              <div class='workspace-list' data-test-archived-list>
-                {{#each this.archivedRealms as |archivedRealm|}}
-                  <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
-                {{/each}}
-              </div>
-            </div>
-          {{/if}}
           {{#if this.displayCatalogWorkspaces}}
             <div class='workspace-section'>
               <div class='section-header'>
@@ -449,6 +446,40 @@ export default class WorkspaceChooser extends Component<Signature> {
                         @isSelected={{eq this.currentIndex navIndex}}
                       />
                     {{/let}}
+                  {{/each}}
+                </div>
+              {{/if}}
+            </div>
+          {{/if}}
+          {{#if this.hasArchivedRealms}}
+            <div class='workspace-section' data-test-archived-section>
+              <button
+                type='button'
+                class='section-header section-header--toggle
+                  {{if this.isArchivedExpanded "is-expanded"}}'
+                aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
+                data-test-archived-toggle
+                {{on 'click' this.toggleArchived}}
+              >
+                <TriangleRight
+                  width='12'
+                  height='12'
+                  class='section-disclosure-icon'
+                />
+                <ArchiveIcon
+                  width='20'
+                  height='20'
+                  class='section-header-icon'
+                />
+                <span class='workspace-chooser__title'>Archived</span>
+                <span
+                  class='section-count'
+                >{{this.archivedRealms.length}}</span>
+              </button>
+              {{#if this.isArchivedExpanded}}
+                <div class='workspace-list' data-test-archived-list>
+                  {{#each this.archivedRealms as |archivedRealm|}}
+                    <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
                   {{/each}}
                 </div>
               {{/if}}
@@ -516,6 +547,28 @@ export default class WorkspaceChooser extends Component<Signature> {
         --icon-color: var(--boxel-teal);
         color: var(--boxel-teal);
         flex-shrink: 0;
+      }
+      .section-header--toggle {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        width: fit-content;
+        text-align: left;
+      }
+      .section-disclosure-icon {
+        --icon-color: var(--boxel-light);
+        color: var(--boxel-light);
+        flex-shrink: 0;
+        transition: transform 0.15s ease;
+      }
+      .section-header--toggle.is-expanded .section-disclosure-icon {
+        transform: rotate(90deg);
+      }
+      .section-count {
+        color: var(--boxel-400);
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
       }
       .workspace-chooser__title {
         color: var(--boxel-light);
