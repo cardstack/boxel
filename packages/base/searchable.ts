@@ -1,14 +1,8 @@
 import { rawArrayValues } from './watched-array';
 import { isSavedInstance } from './-private';
+import { isCardError, primitive, relativeTo } from '@cardstack/runtime-common';
 import {
-  assertIsSerializerName,
-  fieldSerializer,
-  getSerializer,
-  isCardError,
-  primitive,
-  relativeTo,
-} from '@cardstack/runtime-common';
-import {
+  getDataBucket,
   getFields,
   isLinkError,
   isLinkNotFound,
@@ -19,6 +13,7 @@ import {
 import {
   createFromSerialized,
   getStore,
+  queryableValue,
   resolveRef,
   type BaseDef,
   type BaseDefConstructor,
@@ -167,14 +162,15 @@ async function searchableQueryableValue(
   store: CardStore,
 ): Promise<any> {
   if (primitive in fieldCard) {
-    if (fieldSerializer in fieldCard) {
-      assertIsSerializerName((fieldCard as any)[fieldSerializer]);
-      return getSerializer((fieldCard as any)[fieldSerializer]).queryableValue(
-        value,
-        stack,
-      );
-    }
-    return value;
+    // Delegate to the field's own queryableValue. The default handles
+    // serializer-backed primitives; a primitive FieldDef may override it to
+    // shape its indexed form — e.g. JsonField returns null to stay out of the
+    // search index. Reimplementing only the default here would drop that.
+    return (
+      fieldCard as unknown as {
+        [queryableValue](value: any, stack: BaseDef[]): any;
+      }
+    )[queryableValue](value, stack);
   }
   if (value == null) {
     return null;
@@ -202,7 +198,21 @@ async function searchableQueryableValue(
       continue;
     }
     let { matched, tails } = matchSearchableRoutes(routes, fieldName);
-    let rawValue = peekAtField(value, fieldName);
+    // Search-doc generation is a pure read: reading a declared relationship
+    // through the getter writes `emptyValue` into the data bucket, which marks
+    // an otherwise-unset link "used" and pulls it into the owner card's
+    // serialized relationships. So peek a declared link only when it is already
+    // materialized; an unmaterialized link holds no target and contributes
+    // `null` either way. Contained values and computed fields read normally —
+    // the getter's empty-value write is harmless for the former and absent for
+    // the latter.
+    let isDeclaredLink =
+      (field!.fieldType === 'linksTo' || field!.fieldType === 'linksToMany') &&
+      !field!.computeVia;
+    let rawValue =
+      isDeclaredLink && !getDataBucket(value).has(fieldName)
+        ? null
+        : peekAtField(value, fieldName);
     switch (field!.fieldType) {
       case 'contains': {
         entries.push([

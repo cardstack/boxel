@@ -8,6 +8,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   userInitiatedPriority,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -99,7 +100,7 @@ function makeTestRealmFileSystem(): Record<
 
       export class PetPerson extends CardDef {
         @field firstName = contains(StringField);
-        @field pet = linksTo(() => Pet);
+        @field pet = linksTo(() => Pet, { searchable: true });
         @field nickName = contains(StringField, {
           computeVia: function (this: Person) {
             if (this.pet?.firstName) {
@@ -144,7 +145,7 @@ function makeTestRealmFileSystem(): Record<
 
       export class Post extends CardDef {
         static displayName = 'Post';
-        @field author = linksTo(Person);
+        @field author = linksTo(Person, { searchable: true });
         @field message = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -801,27 +802,35 @@ module(basename(import.meta.filename), function () {
 
       let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
       if (hassanEntry) {
+        // The searchable-driven doc is at parity with the store-driven baseline
+        // up to the intended omit-vs-keep-`{ id }` difference for unloaded
+        // base-card links; `diffDoc(..., true)` ignores that at any depth while
+        // flagging real data deltas.
         assert.deepEqual(
-          hassanEntry.searchDoc,
-          {
-            id: hassanId,
-            pet: {
-              id: `${testRealm}ringo`,
+          diffDoc(
+            {
+              id: hassanId,
+              pet: {
+                id: `${testRealm}ringo`,
+                cardTitle: 'Untitled Card',
+                firstName: 'Ringo',
+                cardInfo: {
+                  theme: null,
+                },
+              },
+              nickName: "Ringo's buddy",
+              _cardType: 'PetPerson',
+              firstName: 'Hassan',
               cardTitle: 'Untitled Card',
-              firstName: 'Ringo',
               cardInfo: {
+                cardThumbnail: null,
                 theme: null,
               },
             },
-            nickName: "Ringo's buddy",
-            _cardType: 'PetPerson',
-            firstName: 'Hassan',
-            cardTitle: 'Untitled Card',
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
-            },
-          },
+            hassanEntry.searchDoc ?? {},
+            true,
+          ),
+          [],
           'searchData is correct',
         );
       } else {

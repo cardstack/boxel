@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, diffDoc } from '@cardstack/runtime-common';
 import type { Realm, IndexedInstance } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -685,10 +685,11 @@ module('Integration | searchable search doc', function (hooks) {
     return await searchDocFromFields(instance);
   }
 
-  // The store-driven search doc the indexer produced, minus `_cardType` (which
-  // the prerender meta route appends, not the generator) — the differential
-  // parity baseline.
-  async function storeDrivenSearchDoc(id: string) {
+  // The search doc the indexer persisted, minus `_cardType` (which the prerender
+  // meta route appends, not the generator). The prerender meta route generates
+  // it via `searchDocFromFields`; the parity check below confirms it matches a
+  // direct `searchDocFromFields` call.
+  async function indexedSearchDoc(id: string) {
     let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
     if (!entry || entry.type === 'instance-error') {
       return undefined;
@@ -1168,29 +1169,30 @@ module('Integration | searchable search doc', function (hooks) {
   });
 
   // ===========================================================================
-  // differential parity with the store-driven doc
+  // the indexer is authoritatively searchable-driven
   // ===========================================================================
 
-  // Byte-for-byte equality of the whole doc is NOT asserted: the
-  // searchable-driven spec keeps `{ id }`/`null` for every relationship while
-  // the store-driven path omits unused links via `usedLinksToFieldsOnly`, and
-  // the two enumerate link targets at different type granularity. This proves
-  // the expansion matches; whole-doc equality is the concern of the realm-scale
-  // parity diff, once realms carry `searchable` annotations.
-  test('searchable expansion pulls in the same target+data as the store-driven load', async function (assert) {
-    let generated = await loadAndGenerate(`${testRealmURL}ParityArticle/pa1`);
-    let storeDriven = await storeDrivenSearchDoc(
-      `${testRealmURL}ParityArticle/pa1`,
-    );
+  // The prerender meta route generates the search doc via `searchDocFromFields`,
+  // so the doc the indexer persists is at parity with a direct
+  // `searchDocFromFields` call on the same card — same expansions, same
+  // contained data. The two paths differ only in how an unset value is
+  // represented (a rendered instance yields `undefined`, dropped by JSON
+  // serialization into the index; a freshly-loaded instance yields `null`),
+  // which `diffDoc(..., true)` treats as equivalent — the same rule the
+  // realm-scale gate applies.
+  test('the indexed search doc is at parity with the searchable-driven generator output', async function (assert) {
+    let id = `${testRealmURL}ParityArticle/pa1`;
+    let generated = await loadAndGenerate(id);
+    let indexed = await indexedSearchDoc(id);
     assert.deepEqual(
-      (generated.authors ?? []).map((a: any) => a.id),
-      (storeDriven?.authors ?? []).map((a: any) => a.id),
-      'follows the searchable link to the same target the store loaded',
+      diffDoc(indexed ?? {}, generated, true),
+      [],
+      'the indexer produced the searchable-driven doc',
     );
-    assert.deepEqual(
-      (generated.authors ?? []).map((a: any) => a.name),
-      (storeDriven?.authors ?? []).map((a: any) => a.name),
-      'pulls the same contained data from the expanded target',
-    );
+    // The card carries a `searchable` annotation, so this also exercises a real
+    // expansion through the indexer (not just an all-`{ id }` doc).
+    let authors = generated.authors;
+    let authorsExpanded = Array.isArray(authors) && authors.length > 0;
+    assert.true(authorsExpanded, 'the searchable link expanded into the doc');
   });
 });

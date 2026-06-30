@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   baseRealmRRI,
+  diffDoc,
   type PrerenderMeta,
   type RenderRouteOptions,
   rri,
@@ -23,6 +24,24 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+// The prerender meta route generates the search doc via the searchable-driven
+// generator. It is at parity with the store-driven baseline each assertion
+// captured, up to the intended omit-vs-keep-`{ id }` difference for unloaded
+// base-card links (e.g. `cardInfo.theme` / `cardInfo.cardThumbnail`);
+// `diffDoc(..., true)` ignores that at any depth while flagging real data deltas.
+function expectMetaSearchDoc(
+  assert: Assert,
+  actual: Record<string, any> | null | undefined,
+  storeDrivenBaseline: Record<string, any>,
+  message?: string,
+) {
+  assert.deepEqual(
+    diffDoc(storeDrivenBaseline, actual ?? {}, true),
+    [],
+    message ?? 'search doc is at parity with store-driven',
+  );
+}
 
 module('Acceptance | prerender | meta', function (hooks) {
   setupApplicationTest(hooks);
@@ -84,14 +103,16 @@ module('Acceptance | prerender | meta', function (hooks) {
     class Cat extends Pet {
       static displayName = 'Cat';
       @field aliases = containsMany(StringField);
-      @field emergencyContacts = containsMany(EmergencyContact);
+      @field emergencyContacts = containsMany(EmergencyContact, {
+        searchable: 'contact',
+      });
     }
 
     class Person extends CardDef {
       static displayName = 'Person';
       @field name = contains(StringField);
-      @field pets = linksToMany(() => Pet);
-      @field friend = linksTo(() => Person);
+      @field pets = linksToMany(() => Pet, { searchable: true });
+      @field friend = linksTo(() => Person, { searchable: true });
       @field cardTitle = contains(StringField, {
         computeVia(this: Person) {
           return this.name;
@@ -344,7 +365,8 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Pet/mango`,
@@ -362,7 +384,8 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Pet/paper`,
@@ -384,7 +407,8 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Person/jade`,
@@ -427,7 +451,8 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Person/hassan`,
@@ -478,7 +503,8 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         _cardType: 'Cat',

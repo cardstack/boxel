@@ -18,6 +18,7 @@ import {
   type LooseSingleCardDocument,
   type IndexedInstance,
   type Realm,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -82,6 +83,26 @@ function assertInnerHtmlMatches(
   );
   let cleanedExpected = cleanWhiteSpace(expected!);
   assert.strictEqual(cleanedActual, cleanedExpected, message);
+}
+
+// Asserts the indexed search doc against a store-driven baseline, ignoring the
+// one intended difference between the two generation strategies: the searchable-
+// driven doc keeps a `{ id }` / `null` for every relationship, whereas a
+// store-driven doc omits links it never loaded (e.g. a base-card `cardTheme` /
+// `cardInfo.cardThumbnail`). `diffDoc(..., true)` treats that omit-vs-keep
+// difference as equivalent at any nesting depth while flagging any real data
+// delta — the same parity rule the realm-scale `searchable-parity-diff` applies.
+function expectSearchDoc(
+  assert: Assert,
+  actual: Record<string, any> | null | undefined,
+  storeDrivenBaseline: Record<string, any>,
+  message?: string,
+) {
+  assert.deepEqual(
+    diffDoc(storeDrivenBaseline, actual ?? {}, true),
+    [],
+    message ?? 'searchable-driven search doc is at parity with store-driven',
+  );
 }
 
 module(`Integration | realm indexing`, function (hooks) {
@@ -1100,7 +1121,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}person-spec`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Spec',
         cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
@@ -1229,7 +1250,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}person-spec`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Spec',
         cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
@@ -1302,7 +1323,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}people-skill`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Skill',
         id: `${testRealmURL}people-skill`,
         instructions: 'How to win friends and influence people',
@@ -1853,7 +1874,8 @@ module(`Integration | realm indexing`, function (hooks) {
     });
     let { searchDoc } =
       (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       searchDoc,
       {
         _cardType: 'Person',
@@ -2705,7 +2727,8 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Person/hassan`),
     );
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry?.searchDoc,
       {
         id: `${testRealmURL}Person/hassan`,
@@ -2786,7 +2809,8 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let entry = await getInstance(realm, new URL(`${testRealmURL}Post/1`));
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry?.searchDoc,
       {
         _cardType: 'Post',
@@ -2809,7 +2833,8 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Publication/pacific`),
     );
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry2?.searchDoc,
       {
         _cardType: 'Publication',
@@ -2926,7 +2951,7 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Spec/booking`),
     );
-    assert.deepEqual(entry?.searchDoc, {
+    expectSearchDoc(assert, entry?.searchDoc, {
       _cardType: 'Spec',
       id: `${testRealmURL}Spec/booking`,
       cardDescription: 'Spec for Booking',
@@ -3148,7 +3173,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/hassan`,
         firstName: 'Hassan',
@@ -3269,7 +3294,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/burcu`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
+      expectSearchDoc(assert, entry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
@@ -3407,7 +3432,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}pet-person-spec`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
+      expectSearchDoc(assert, entry.searchDoc, {
         _cardType: 'Spec',
         id: `${testRealmURL}pet-person-spec`,
         cardTitle: 'PetPerson',
@@ -3571,7 +3596,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -3773,7 +3798,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -3919,7 +3944,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/mango`),
     );
     if (mangoEntry) {
-      assert.deepEqual(mangoEntry.searchDoc, {
+      expectSearchDoc(assert, mangoEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
@@ -4044,7 +4069,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -4275,7 +4300,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let hassanEntry = await getInstance(realm, new URL(hassanID));
     if (hassanEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         hassanEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4450,7 +4476,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let mangoEntry = await getInstance(realm, new URL(mangoID));
     if (mangoEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         mangoEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4631,7 +4658,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let vanGoghEntry = await getInstance(realm, new URL(vanGoghID));
     if (vanGoghEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         vanGoghEntry.searchDoc,
         {
           _cardType: 'Friends',

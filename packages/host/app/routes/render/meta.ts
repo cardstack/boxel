@@ -63,32 +63,36 @@ export default class RenderMetaRoute extends Route<Model> {
       renderModel?.capturedDeps ??
       snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps;
 
-    // Open a synchronous compute-memo pass that spans both
-    // serializeCard and searchDoc. Computed fields invoked through the
-    // descriptor or through peekAtField hit the per-instance memo
-    // instead of re-running `computeVia` — one compute per distinct
-    // (instance, fieldName) for the whole traversal. The pass MUST
-    // close before any await so it doesn't leak across reactive cycles.
+    // The search doc comes from the searchable-driven generator, which lives in
+    // its own base module (off card-api, so it stays out of every card's
+    // dependency closure). It derives link depth from the explicit `searchable`
+    // annotations rather than from what the render happened to load.
+    let searchable = await this.cardService.getSearchable();
+
+    // Open a synchronous compute-memo pass over serializeCard. Computed fields
+    // invoked through the descriptor or through peekAtField hit the per-instance
+    // memo instead of re-running `computeVia` — one compute per distinct
+    // (instance, fieldName). The pass MUST close before any await so it doesn't
+    // leak across reactive cycles; searchable-driven generation does targeted
+    // link loading (async), so it runs after the pass closes — see below.
     //
     // Guarded by typeof checks: during a cold dev boot the host can briefly
     // load a base/card-api build that predates these exports (vite is still
     // bundling, or a stale realm-transpile is in flight). In that window we
     // skip the pass — `getter` falls through its `passComputeMemo === null`
-    // fast path and the render still produces a correct serialized + search
-    // doc, just without the per-row diagnostics fields.
+    // fast path and the render still produces a correct serialized doc, just
+    // without the per-row diagnostics fields.
     //
-    // Pass close is in a `finally` so a throw inside serializeCard /
-    // searchDoc still closes the pass — otherwise the module-global
-    // memo in field-support.ts stays set and later off-pass `getter`
-    // calls would read stale memoized values across reactive cycles.
+    // Pass close is in a `finally` so a throw inside serializeCard still closes
+    // the pass — otherwise the module-global memo in field-support.ts stays set
+    // and later off-pass `getter` calls would read stale memoized values across
+    // reactive cycles.
     let passOpen = typeof api.beginComputePass === 'function';
     if (passOpen) {
       api.beginComputePass();
     }
     let serialized: SingleCardDocument;
     let serializeMs: number;
-    let searchDoc: Record<string, any>;
-    let searchDocMs: number;
     let passSnapshot: ComputePassSnapshot | undefined;
     try {
       let serializeStart = performance.now();
@@ -116,15 +120,18 @@ export default class RenderMetaRoute extends Route<Model> {
         // we want to emulate the file serialization here
         delete relationship.data;
       }
-
-      let searchDocStart = performance.now();
-      searchDoc = api.searchDoc(instance);
-      searchDocMs = performance.now() - searchDocStart;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
       }
     }
+
+    // Run searchable-driven generation after the compute-memo pass closes: it
+    // awaits targeted link loads, and the pass cannot span an await.
+    let searchDocStart = performance.now();
+    let searchDoc: Record<string, any> =
+      await searchable.searchDocFromFields(instance);
+    let searchDocMs = performance.now() - searchDocStart;
 
     let Klass = getClass(instance);
 

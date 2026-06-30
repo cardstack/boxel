@@ -2101,36 +2101,16 @@ module(basename(import.meta.filename), function () {
             `isolated html includes hero mini cards from query and nested query loads: ${isolatedHTML}`,
           );
 
-          let staff = result.response.searchDoc?.staff as
-            | Array<Record<string, any>>
-            | undefined;
-          assert.ok(
-            Array.isArray(staff),
-            'searchDoc includes query field results',
-          );
-
-          let bob = staff?.find((entry) => entry?.name === 'Bob');
-          assert.ok(bob, 'searchDoc includes Bob from query results');
+          // Query-backed relationships are never captured in the search doc:
+          // they can't be invalidated when their matching cards change, so an
+          // indexed copy would go stale. The search doc is generated from the
+          // field definitions, so a card's custom queryableValue does not inject
+          // them either. The query field's results still render (asserted above)
+          // and the host re-resolves them at view time.
           assert.strictEqual(
-            bob?.manager?.name,
-            'Alice',
-            'searchDoc includes loaded manager relationship',
-          );
-
-          let bobReports = bob?.reports as
-            | Array<Record<string, any>>
-            | undefined;
-          assert.ok(
-            Array.isArray(bobReports),
-            'searchDoc includes nested query results',
-          );
-          let hasEveWithManager = bobReports?.some(
-            (report) =>
-              report?.name === 'Eve' && report?.manager?.name === 'Bob',
-          );
-          assert.true(
-            Boolean(hasEveWithManager),
-            'searchDoc includes nested loaded relationships',
+            result.response.searchDoc?.staff,
+            undefined,
+            'query-backed field is not captured in the search doc',
           );
         } finally {
           await realmServerPatch.restore();
@@ -3758,7 +3738,7 @@ module(basename(import.meta.filename), function () {
               import { Person } from '${realmURL1}person';
               export class Cat extends CardDef {
                 @field name = contains(StringField);
-                @field owner = linksTo(Person);
+                @field owner = linksTo(Person, { searchable: true });
                 static displayName = "Cat";
                 static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
@@ -3769,9 +3749,9 @@ module(basename(import.meta.filename), function () {
               export class Dog extends CardDef {
                 static displayName = "Dog";
                 @field name = contains(StringField);
-                @field owner = linksTo(Person, { isUsed: true });
+                @field owner = linksTo(Person, { searchable: true });
                 static isolated = class extends Component<typeof this> {
-                  // owner is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // owner is intentionally not in isolated template; searchable: true pulls it into the search doc anyway
                   <template>{{@model.name}}</template>
                 }
               }
@@ -3782,9 +3762,9 @@ module(basename(import.meta.filename), function () {
               export class DogMany extends CardDef {
                 static displayName = "Dog Many";
                 @field name = contains(StringField);
-                @field owners = linksToMany(Person, { isUsed: true });
+                @field owners = linksToMany(Person, { searchable: true });
                 static isolated = class extends Component<typeof this> {
-                  // owners is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // owners is intentionally not in isolated template; searchable: true pulls them into the search doc anyway
                   <template>{{@model.name}}</template>
                 }
               }
@@ -3794,16 +3774,17 @@ module(basename(import.meta.filename), function () {
               import { Person } from '${realmURL1}person';
 
               class DogProfileField extends FieldDef {
-                @field primaryOwner = linksTo(Person, { isUsed: true });
-                @field caretakers = linksToMany(Person, { isUsed: true });
+                @field primaryOwner = linksTo(Person);
+                @field caretakers = linksToMany(Person);
               }
 
               export class DogProfile extends CardDef {
                 static displayName = "Dog Profile";
                 @field name = contains(StringField);
-                @field profile = contains(DogProfileField);
+                @field profile = contains(DogProfileField, { searchable: ['primaryOwner', 'caretakers'] });
                 static isolated = class extends Component<typeof this> {
-                  // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // profile is intentionally not in isolated template; the contained field's
+                  // searchable routes pull its primaryOwner / caretakers links into the search doc
                   <template>{{@model.name}}</template>
                 }
               }
@@ -3820,9 +3801,9 @@ module(basename(import.meta.filename), function () {
               export class NonIsolatedLinks extends CardDef {
                 static displayName = 'Non Isolated Links';
                 @field name = contains(StringField);
-                @field owner = linksTo(Person);
-                @field owners = linksToMany(Person);
-                @field profile = contains(RelationshipField);
+                @field owner = linksTo(Person, { searchable: true });
+                @field owners = linksToMany(Person, { searchable: true });
+                @field profile = contains(RelationshipField, { searchable: ['lead', 'members'] });
 
                 static isolated = class extends Component<typeof this> {
                   <template><div data-test-isolated-name>{{@model.name}}</div></template>
@@ -4351,7 +4332,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
         });
 
-        test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+        test('searchable field includes a field in search doc that is not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4372,11 +4353,11 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             response.searchDoc?.owner.name,
             'Hassan',
-            'linked field is included in search doc via isUsed=true',
+            'linked field is included in search doc via searchable: true',
           );
         });
 
-        test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+        test('searchable linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used-many`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4397,16 +4378,16 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             response.searchDoc?.owners?.[0]?.name,
             'Hassan',
-            'first linked record is included in search doc via isUsed=true',
+            'first linked record is included in search doc via searchable: true',
           );
           assert.strictEqual(
             response.searchDoc?.owners?.[1]?.name,
             'Mango',
-            'second linked record is included in search doc via isUsed=true',
+            'second linked record is included in search doc via searchable: true',
           );
         });
 
-        test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+        test('searchable compound field includes nested linksTo relationship in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4427,11 +4408,11 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             response.searchDoc?.profile?.primaryOwner?.name,
             'Hassan',
-            'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
+            'nested linksTo relationship is included in search doc via searchable route on the contained field',
           );
         });
 
-        test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+        test('searchable compound field includes nested linksToMany relationships in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4452,12 +4433,12 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             response.searchDoc?.profile?.caretakers?.[0]?.name,
             'Hassan',
-            'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+            'first nested linksToMany relationship is included in search doc via searchable route on the contained field',
           );
           assert.strictEqual(
             response.searchDoc?.profile?.caretakers?.[1]?.name,
             'Mango',
-            'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+            'second nested linksToMany relationship is included in search doc via searchable route on the contained field',
           );
         });
 
