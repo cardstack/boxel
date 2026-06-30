@@ -82,7 +82,8 @@ export class ResultFittedCard extends GlimmerComponent<Signature> {
       <:eyebrow>
         <div class='result-id'>
           <@icon width='14' height='14' aria-hidden='true' />
-          <span>{{@label}} #{{@sequenceNumber}}</span>
+          <span>{{@label}}{{#if @sequenceNumber}}
+              #{{@sequenceNumber}}{{/if}}</span>
         </div>
       </:eyebrow>
       <:badgeRight>
