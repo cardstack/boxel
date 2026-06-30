@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
+import { dropTask } from 'ember-concurrency';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { add, eq } from '@cardstack/boxel-ui/helpers';
@@ -48,30 +49,41 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
 
-  constructor(...args: [any, any]) {
-    super(...args);
-    // Populate the Archived section. The endpoint is owner-scoped, so
-    // non-owners get an empty list and the section stays hidden.
-    this.realmServer
-      .fetchArchivedRealms()
-      .catch((e) => console.error('Failed to fetch archived realms', e));
-  }
-
   // Archived realms are tucked away below the fold and collapsed by default —
-  // they're rarely needed, so the section stays out of the way until the owner
-  // opens the disclosure.
+  // they're rarely needed, so the section stays out of the way and the list
+  // isn't fetched until the owner opens the disclosure.
   @tracked private isArchivedExpanded = false;
 
   private get archivedRealms() {
     return this.realmServer.archivedRealms;
   }
 
-  private get hasArchivedRealms() {
-    return this.archivedRealms.length > 0;
+  // Show the archived count once we've loaded the list (or already have entries
+  // from an archive action this session). Before the first load we don't know
+  // the count, so the row shows just "Archived".
+  private get showArchivedCount() {
+    return (
+      Boolean(this.loadArchivedRealmsTask.lastSuccessful) ||
+      this.archivedRealms.length > 0
+    );
   }
+
+  private loadArchivedRealmsTask = dropTask(async () => {
+    await this.realmServer.fetchArchivedRealms();
+  });
 
   @action private toggleArchived() {
     this.isArchivedExpanded = !this.isArchivedExpanded;
+    // Lazy-load on first expand. Retry if a prior attempt failed (no
+    // lastSuccessful); the service caches a successful fetch so re-expanding
+    // after success is a no-op.
+    if (
+      this.isArchivedExpanded &&
+      !this.loadArchivedRealmsTask.lastSuccessful &&
+      !this.loadArchivedRealmsTask.isRunning
+    ) {
+      this.loadArchivedRealmsTask.perform();
+    }
   }
 
   private sortOptions: SortOption[] = [
@@ -451,40 +463,44 @@ export default class WorkspaceChooser extends Component<Signature> {
               {{/if}}
             </div>
           {{/if}}
-          {{#if this.hasArchivedRealms}}
-            <div class='workspace-section' data-test-archived-section>
-              <button
-                type='button'
-                class='section-header section-header--toggle
-                  {{if this.isArchivedExpanded "is-expanded"}}'
-                aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
-                data-test-archived-toggle
-                {{on 'click' this.toggleArchived}}
-              >
-                <TriangleRight
-                  width='12'
-                  height='12'
-                  class='section-disclosure-icon'
-                />
-                <ArchiveIcon
-                  width='20'
-                  height='20'
-                  class='section-header-icon'
-                />
-                <span class='workspace-chooser__title'>Archived</span>
+          <div class='workspace-section' data-test-archived-section>
+            <button
+              type='button'
+              class='section-header section-header--toggle
+                {{if this.isArchivedExpanded "is-expanded"}}'
+              aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
+              data-test-archived-toggle
+              {{on 'click' this.toggleArchived}}
+            >
+              <TriangleRight
+                width='12'
+                height='12'
+                class='section-disclosure-icon'
+              />
+              <ArchiveIcon width='20' height='20' class='section-header-icon' />
+              <span class='workspace-chooser__title'>Archived</span>
+              {{#if this.showArchivedCount}}
                 <span
                   class='section-count'
                 >{{this.archivedRealms.length}}</span>
-              </button>
-              {{#if this.isArchivedExpanded}}
+              {{/if}}
+            </button>
+            {{#if this.isArchivedExpanded}}
+              {{#if this.loadArchivedRealmsTask.isRunning}}
+                <WorkspaceLoadingIndicator />
+              {{else if this.archivedRealms.length}}
                 <div class='workspace-list' data-test-archived-list>
                   {{#each this.archivedRealms as |archivedRealm|}}
                     <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
                   {{/each}}
                 </div>
+              {{else}}
+                <span class='section-empty' data-test-archived-empty>
+                  No archived workspaces
+                </span>
               {{/if}}
-            </div>
-          {{/if}}
+            {{/if}}
+          </div>
         </div>
       </div>
     </div>

@@ -81,7 +81,10 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
       .exists('the owned workspace starts in the active list');
     assert
       .dom('[data-test-archived-section]')
-      .doesNotExist('no Archived section before anything is archived');
+      .exists('the Archived disclosure is always present');
+    assert
+      .dom('[data-test-archived-list]')
+      .doesNotExist('archived realms are not loaded until the row is expanded');
 
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
@@ -92,16 +95,18 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
 
     await click('[data-test-confirm-archive-button]');
 
-    await waitFor('[data-test-archived-section]');
     assert
       .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
       .doesNotExist('the workspace leaves the active list once archived');
     assert
       .dom('[data-test-archived-list]')
-      .doesNotExist('the Archived section is collapsed by default');
+      .doesNotExist('the Archived section stays collapsed after archiving');
 
     await click('[data-test-archived-toggle]');
 
+    await waitFor(
+      '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
+    );
     assert
       .dom(
         '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
@@ -115,7 +120,6 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
     await click('[data-test-confirm-archive-button]');
-    await waitFor('[data-test-archived-section]');
     await click('[data-test-archived-toggle]');
     await waitFor(
       '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
@@ -130,8 +134,10 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
       .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
       .exists('the restored workspace returns to the active list');
     assert
-      .dom('[data-test-archived-section]')
-      .doesNotExist('the Archived section is empty again and hides');
+      .dom(
+        '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
+      )
+      .doesNotExist('the restored workspace leaves the Archived section');
   });
 
   test('the archive confirmation modal can be cancelled', async function (assert) {
@@ -147,12 +153,36 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
     assert
       .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
       .exists('the workspace remains active when archive is cancelled');
+
+    await click('[data-test-archived-toggle]');
+    await waitFor('[data-test-archived-empty]');
     assert
-      .dom('[data-test-archived-section]')
+      .dom('[data-test-archived-list]')
       .doesNotExist('nothing was archived');
   });
 
-  test('non-owners see no Archive action and no Archived section', async function (assert) {
+  test('the Archived disclosure lazy-loads and shows an empty state', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    assert
+      .dom('[data-test-archived-section]')
+      .exists('the Archived disclosure is shown');
+    assert
+      .dom('[data-test-archived-list]')
+      .doesNotExist('archived realms are not loaded until the row is expanded');
+    assert
+      .dom('[data-test-archived-empty]')
+      .doesNotExist('no empty state is shown until the row is expanded');
+
+    await click('[data-test-archived-toggle]');
+
+    await waitFor('[data-test-archived-empty]');
+    assert
+      .dom('[data-test-archived-empty]')
+      .exists('expanding with nothing archived shows the empty state');
+  });
+
+  test('non-owned workspaces have no Archive action', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
 
     await click(`[data-test-workspace-menu-trigger="${readOnlyRealmURL}"]`);
@@ -163,8 +193,5 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
       .exists('the rest of the tile menu still renders for non-owners');
-    assert
-      .dom('[data-test-archived-section]')
-      .doesNotExist('non-owners have no Archived section');
   });
 });
