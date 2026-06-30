@@ -59,7 +59,6 @@ import {
 } from './index-structure.ts';
 import {
   getFieldDef,
-  getImmediateFieldDef,
   type Definition,
   type FieldDefinition,
 } from './definitions.ts';
@@ -74,7 +73,7 @@ import type { RequestTimings } from './request-timings.ts';
 
 // A filter path resolves in the schema but crosses a `linksTo`/`linksToMany`
 // hop whose target is not in the search doc, so the query would silently match
-// nothing. Raised by the query compiler (see `assertFilterPathSearchable`) and
+// nothing. Raised by the query compiler (see `walkFilterFieldPath`) and
 // kept distinct from the "nonexistent field" error so a forgotten `searchable`
 // annotation surfaces at the point of use as an actionable message rather than
 // as mysteriously-empty results. `reason` distinguishes a link that simply was
@@ -1444,11 +1443,6 @@ export class IndexQueryEngine {
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
     let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
     let definition = await this.getDefinition(type);
-    // Every field-path filter (eq / in / contains / range, including their null
-    // forms) routes through exactly one `fieldArity` node, so this is the single
-    // chokepoint that sees each filter path once. Sort paths use `fieldQuery`
-    // directly and are intentionally not gated here.
-    await this.assertFilterPathSearchable(definition, path);
     let exp: CardExpression = await this.walkFilterFieldPath(
       definition,
       path,
@@ -1479,12 +1473,16 @@ export class IndexQueryEngine {
         }
         return expression;
       },
+      undefined,
+      // This is a filter path: walk it with the card's `searchable` routes so
+      // a hop into a non-searchable relationship is rejected as we cross it.
+      seedSearchableRoutesFromDefinition(definition),
     );
     return await this.makeExpression(exp);
   }
 
   private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
-    let { path, type, useJsonBValue } = fieldQuery;
+    let { path, type, useJsonBValue, errorHint } = fieldQuery;
     let definition = await this.getDefinition(type);
     // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
@@ -1556,6 +1554,11 @@ export class IndexQueryEngine {
           return expression;
         },
       },
+      // `fieldQuery` serves both filters and sorts; only gate filter paths on
+      // searchability (a sort key that isn't in the doc is out of scope here).
+      errorHint === 'filter'
+        ? seedSearchableRoutesFromDefinition(definition)
+        : undefined,
     );
     if (!rootPluralPath) {
       // Numeric fields (NumberField, BigIntegerField) are stored as JSON
@@ -1610,6 +1613,9 @@ export class IndexQueryEngine {
         }
         return [param(queryValue)];
       },
+      undefined,
+      // This is a filter path: validate searchability as the walk crosses it.
+      seedSearchableRoutesFromDefinition(definition),
     );
   }
 
@@ -1649,97 +1655,13 @@ export class IndexQueryEngine {
     ]);
   }
 
-  // Reject a filter path that resolves in the schema but crosses a relationship
-  // hop whose target the search doc does not carry — it would otherwise match
-  // nothing silently. Searchability is reconstructed from the SAME route model
-  // the search-doc generator uses (`base/searchable.ts`): routes are seeded from
-  // the queried card's own `searchable` annotations and threaded down as tails,
-  // and a link is "searchable" exactly when a route reaches it. A non-searchable
-  // link still carries its `{ id }`, so a path stopping at that `id` is allowed;
-  // a query-backed relationship carries nothing and can never be crossed.
-  //
-  // Path resolution is verified first: a hop that doesn't resolve (a typo, a
-  // removed field, the synthetic `_cardType`) is left for the main walk's
-  // `getField` to raise the canonical "nonexistent field" error, so a genuinely
-  // nonexistent path never gets reported as merely non-searchable.
-  private async assertFilterPathSearchable(
-    definition: Definition,
-    path: string,
-  ): Promise<void> {
-    let segments = removeBrackets(path).split('.');
-    let routes = seedSearchableRoutesFromDefinition(definition);
-    let current: Pick<Definition, 'fields' | 'fieldDefs'> = definition;
-    let traveled: string[] = [];
-    // Hold the first (outermost) violation but keep resolving: if a later
-    // segment turns out not to resolve, the path is nonexistent and that error
-    // takes precedence over searchability.
-    let violation: FilterRefersToNonsearchableFieldError | undefined;
-
-    for (let i = 0; i < segments.length; i++) {
-      let segment = segments[i];
-      let fieldDef = getImmediateFieldDef(current, segment);
-      if (!fieldDef) {
-        return; // nonexistent (or `_cardType`) — defer to the main walk
-      }
-      let isLast = i === segments.length - 1;
-      let isLink =
-        fieldDef.type === 'linksTo' || fieldDef.type === 'linksToMany';
-      let { matched, tails } = matchSearchableRoutes(routes, segment);
-
-      if (isLink && !isLast && violation == null) {
-        let relationshipPath = [...traveled, segment].join('.');
-        // A path stopping at the link's `id` reads only the always-present
-        // `{ id }` sentinel, so it needs no expansion.
-        let crossingToIdOnly =
-          i === segments.length - 2 && segments[i + 1] === 'id';
-        if (fieldDef.query) {
-          violation = new FilterRefersToNonsearchableFieldError({
-            type: definition.codeRef,
-            path,
-            relationshipPath,
-            reason: 'query-backed',
-          });
-        } else if (!matched && !crossingToIdOnly) {
-          violation = new FilterRefersToNonsearchableFieldError({
-            type: definition.codeRef,
-            path,
-            relationshipPath,
-            reason: 'not-searchable',
-          });
-        }
-      }
-
-      if (isLast) {
-        break;
-      }
-      // Advance to the next segment's owning definition, mirroring `getFieldDef`:
-      // a path that goes deeper than a primitive or through an unresolved /
-      // unloadable ref is nonexistent — defer to the main walk.
-      if (fieldDef.isPrimitive || !isResolvedCodeRef(fieldDef.fieldOrCard)) {
-        return;
-      }
-      let next = await this.#definitionLookup.lookupDefinition(
-        fieldDef.fieldOrCard,
-      );
-      if (!next) {
-        return;
-      }
-      current = next;
-      routes = tails;
-      traveled.push(segment);
-    }
-
-    if (violation) {
-      throw violation;
-    }
-  }
-
   private async walkFilterFieldPath(
     definition: Definition,
     path: string,
     expression: Expression,
     handleLeafField: FilterFieldHandler<Expression>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
+    searchableRoutes?: string[],
     pathTraveled?: string[],
   ): Promise<Expression>;
   private async walkFilterFieldPath(
@@ -1748,6 +1670,7 @@ export class IndexQueryEngine {
     expression: CardExpression,
     handleLeafField: FilterFieldHandler<CardExpression>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
+    searchableRoutes?: string[],
     pathTraveled?: string[],
   ): Promise<CardExpression>;
   private async walkFilterFieldPath(
@@ -1756,6 +1679,12 @@ export class IndexQueryEngine {
     expression: Expression,
     handleLeafField: FilterFieldHandler<any[]>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<any[]>,
+    // `searchable` routes for this card, supplied (and narrowed to the target's
+    // tails on each hop) only when walking a FILTER path — sort paths pass none,
+    // which disables the searchability check. Seeded by the caller from the
+    // queried card's annotations so the check uses the SAME route model the
+    // search-doc generator uses.
+    searchableRoutes?: string[],
     pathTraveled: string[] = [],
   ): Promise<any> {
     let pathSegments = path.split('.');
@@ -1765,6 +1694,50 @@ export class IndexQueryEngine {
       [...pathTraveled, currentSegment].join('.'),
     );
     let field = await getField(definition, currentPath, this.#definitionLookup);
+
+    // Validate searchability as we cross each relationship hop. A filter that
+    // continues past a `linksTo`/`linksToMany` whose target the search doc does
+    // not carry would match nothing silently, so raise a distinct, actionable
+    // error instead. `getField` above has already resolved this segment, so a
+    // genuinely nonexistent field surfaces as the "nonexistent field" error
+    // before we get here.
+    let interiorRoutes: string[] | undefined;
+    if (searchableRoutes !== undefined) {
+      let { matched, tails } = matchSearchableRoutes(
+        searchableRoutes,
+        currentSegment,
+      );
+      interiorRoutes = tails;
+      if (
+        !isLeaf &&
+        (field.type === 'linksTo' || field.type === 'linksToMany')
+      ) {
+        // A path stopping at the link's `id` reads only the always-present
+        // `{ id }` sentinel, so it needs no expansion.
+        let crossingToIdOnly =
+          pathSegments.length === 1 && pathSegments[0] === 'id';
+        if (field.query) {
+          // Query-backed relationships are never in the search doc at all (not
+          // even `{ id }`) — they can't be invalidated when matching cards
+          // change — so nothing can be filtered through them.
+          throw new FilterRefersToNonsearchableFieldError({
+            type: definition.codeRef,
+            path: [currentPath, ...pathSegments].join('.'),
+            relationshipPath: currentPath,
+            reason: 'query-backed',
+          });
+        }
+        if (!matched && !crossingToIdOnly) {
+          throw new FilterRefersToNonsearchableFieldError({
+            type: definition.codeRef,
+            path: [currentPath, ...pathSegments].join('.'),
+            relationshipPath: currentPath,
+            reason: 'not-searchable',
+          });
+        }
+      }
+    }
+
     // we use '[]' to denote plural fields as that has important ramifications
     // to how we compose our queries in the various handlers and ultimately in
     // SQL construction
@@ -1798,6 +1771,7 @@ export class IndexQueryEngine {
         await entranceHandler(definition, expression, traveled),
         handleLeafField,
         handleInteriorField,
+        interiorRoutes,
         traveled.split('.'),
       );
       expression = await exitHandler(definition, interiorExpression, traveled);

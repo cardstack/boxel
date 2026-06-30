@@ -1573,7 +1573,7 @@ module('Unit | query', function (hooks) {
     );
   });
 
-  test(`a nonexistent field beyond a non-searchable relationship still reports the nonexistent-field error`, async function (assert) {
+  test(`a nonexistent field beyond a searchable relationship still reports the nonexistent-field error`, async function (assert) {
     await setupIndex(dbAdapter, []);
     let orgType = {
       module: `${testRealmURL}org`,
@@ -1584,9 +1584,9 @@ module('Unit | query', function (hooks) {
       await indexQueryEngine.searchCards(new URL(testRealmURL), {
         filter: {
           on: orgType,
-          // `ceo` is non-searchable AND `nope` doesn't exist — the nonexistent
-          // path takes precedence so authors fix the typo first.
-          eq: { 'ceo.nope': 'Robin' },
+          // `headquarters` is searchable, so the hop is fine — but `nope` does
+          // not exist, so resolution (not searchability) is what fails.
+          eq: { 'headquarters.nope': 'Robin' },
         },
       });
       throw new Error('failed to throw expected exception');
@@ -1596,7 +1596,7 @@ module('Unit | query', function (hooks) {
         'does not throw the searchability error',
       );
       assert.true(
-        err.message.includes('nonexistent field "ceo.nope"'),
+        err.message.includes('nonexistent field "headquarters.nope"'),
         `reports the nonexistent-field error: ${err.message}`,
       );
     }
