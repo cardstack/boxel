@@ -504,7 +504,6 @@ export class SprintTask extends Task {
   static icon = CheckboxIcon;
   @field project = linksTo(() => Project, { searchable: true });
   @field team = linksTo(() => Team, {
-    isUsed: true,
     searchable: true,
   });
   @field subtasks = linksToMany(() => SprintTask, { searchable: ['assignee', 'tags', 'team'] });

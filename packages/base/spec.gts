@@ -954,7 +954,7 @@ export class Spec extends CardDef {
     },
   });
   @field linkedExamples = linksToMany(CardDef);
-  @field containedExamples = containsMany(FieldDef, { isUsed: true });
+  @field containedExamples = containsMany(FieldDef);
   @field cardTitle = contains(SpecTitleField);
   @field cardDescription = contains(SpecDescriptionField);
 

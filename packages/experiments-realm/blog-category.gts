@@ -82,7 +82,6 @@ export class BlogCategory extends CardDef {
   @field pillColor = contains(ColorField);
   @field cardDescription = contains(StringField);
   @field blog = linksTo(BlogAppCard, {
-    isUsed: true,
     searchable: true,
   });
 
