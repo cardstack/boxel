@@ -1,12 +1,18 @@
 import type { Searchable } from 'https://cardstack.com/base/card-api';
 
-// Shared route logic for `searchable`-driven search-doc depth. A route is a
-// dotted field path rooted at a card's own link fields: `searchable: true`
-// names the immediate ("self") link (a head-only route), a dotted path names
-// the n+1 link reached through this field's target, and an array combines
-// routes. Depth is governed ENTIRELY by the routes seeded from the card being
-// indexed — a card pulled in as a link target never re-consults its own
-// `searchable`; only the inherited route tails continue into it.
+// Shared route logic for `searchable`-driven search-doc depth. `searchable`
+// only ever governs links (see the `Searchable` docs in `base/card-api.gts`):
+// it decides which linked cards are pulled into the doc rather than left as a
+// bare `{ id }`; contained fields are always included regardless. A route is a
+// dotted field path rooted at a card's own field: on a relationship,
+// `searchable: true` names that immediate ("self") link (a head-only route) and
+// a dotted path names the n+1 link reached through its target; on a
+// `contains`/`containsMany` field, `true` is inert (its value is always
+// present) and only a path is meaningful — to reach a link *through* the
+// contained value, naming the contained field as the head segment. An array
+// combines routes. Depth is governed ENTIRELY by the routes seeded from the
+// card being indexed — a card pulled in as a link target never re-consults its
+// own `searchable`; only the inherited route tails continue into it.
 //
 // Both the search-doc generator (`base/searchable.ts`, which reads the live
 // `field.searchable` descriptor) and the query compiler's searchability check
