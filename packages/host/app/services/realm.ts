@@ -943,7 +943,11 @@ export default class RealmService extends Service {
       return;
     }
     log.warn(`background realm-info ${op} failed for ${url}: ${error}`);
-    if (isTesting()) {
+    // The `fetchInfo` path already surfaces a test-time `[realm-service] realm
+    // info fetch …` warning from fetchInfoFromServer(); only the identify HEAD
+    // has no such diagnostic, so scope the extra test-time warning to it rather
+    // than logging the `fetchInfo` failure twice.
+    if (isTesting() && op === 'identify') {
       console.warn(
         `[realm-service] background realm-info load failed ${JSON.stringify({
           realmURL: url,
