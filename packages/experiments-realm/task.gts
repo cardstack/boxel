@@ -529,10 +529,10 @@ export class TaskPriority extends FieldDef {
 
 export class Task extends Todo {
   static displayName = 'Task';
-  @field tags = linksToMany(() => Tag);
+  @field tags = linksToMany(() => Tag, { searchable: true });
   @field dateRange = contains(DateRangeField);
   @field status = contains(TaskStatusField);
-  @field assignee = linksTo(() => User);
+  @field assignee = linksTo(() => User, { searchable: true });
   @field priority = contains(TaskPriority);
 
   @field cardTitle = contains(StringField, {

@@ -774,6 +774,158 @@ module('issue-loop > NoOpValidator', function () {
 });
 
 // ---------------------------------------------------------------------------
+// 8b. onBootstrapComplete hook
+// ---------------------------------------------------------------------------
+
+module('issue-loop > onBootstrapComplete hook', function () {
+  function bootstrapSeedStore(): MockIssueStore {
+    return new MockIssueStore([
+      makeIssue({
+        id: 'seed',
+        status: 'backlog',
+        priority: 'high',
+        order: 1,
+        issueType: 'bootstrap',
+        summary: 'Process brief and create project artifacts',
+      }),
+    ]);
+  }
+
+  function boardWritingAgent(store: MockIssueStore): MockLoopAgent {
+    return new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            {
+              tool: 'write_file',
+              args: { path: 'Boards/board.json', content: '{}' },
+            },
+          ],
+          updateIssue: { id: 'seed', status: 'done' },
+        },
+      ],
+      store,
+    );
+  }
+
+  test('fires once after the bootstrap issue completes', async function (assert) {
+    let store = bootstrapSeedStore();
+    let agent = boardWritingAgent(store);
+
+    let hookCalls = 0;
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () => new NoOpValidator(),
+        onBootstrapComplete: async () => {
+          hookCalls++;
+        },
+      }),
+    );
+
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+    assert.strictEqual(
+      hookCalls,
+      1,
+      'hook fires exactly once, after the bootstrap issue',
+    );
+  });
+
+  test('does not fire for a non-bootstrap issue', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({
+        id: 'iss-1',
+        status: 'backlog',
+        priority: 'high',
+        order: 1,
+        issueType: 'feature',
+      }),
+    ]);
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let hookCalls = 0;
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        onBootstrapComplete: async () => {
+          hookCalls++;
+        },
+      }),
+    );
+
+    assert.strictEqual(hookCalls, 0, 'hook only fires for the bootstrap issue');
+  });
+
+  test('does not fire when the bootstrap issue ends blocked', async function (assert) {
+    let store = bootstrapSeedStore();
+    // Bootstrap agent gives up before creating the board.
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [{ tool: 'read_file', args: { path: 'brief.md' } }],
+          updateIssue: { id: 'seed', status: 'blocked' },
+        },
+      ],
+      store,
+    );
+
+    let hookCalls = 0;
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () => new NoOpValidator(),
+        onBootstrapComplete: async () => {
+          hookCalls++;
+        },
+      }),
+    );
+
+    assert.strictEqual(result.issueResults[0].exitReason, 'blocked');
+    assert.strictEqual(
+      hookCalls,
+      0,
+      'hook does not fire when the bootstrap issue did not complete',
+    );
+  });
+
+  test('a throwing hook is swallowed and does not abort the loop', async function (assert) {
+    let store = bootstrapSeedStore();
+    let agent = boardWritingAgent(store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () => new NoOpValidator(),
+        onBootstrapComplete: async () => {
+          throw new Error('link failed');
+        },
+      }),
+    );
+
+    assert.strictEqual(
+      result.outcome,
+      'all_issues_done',
+      'loop still completes even though the hook threw',
+    );
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 9. Context threading
 // ---------------------------------------------------------------------------
 

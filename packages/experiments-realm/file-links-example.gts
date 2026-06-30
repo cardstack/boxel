@@ -27,10 +27,10 @@ export class FileLinksExample extends CardDef {
   @field cardDescription = contains(StringField);
 
   // Single file link - e.g., a main document or primary attachment
-  @field primaryDocument = linksTo(FileDef);
+  @field primaryDocument = linksTo(FileDef, { searchable: true });
 
   // Multiple file links - e.g., supporting documents or attachments
-  @field attachments = linksToMany(FileDef);
+  @field attachments = linksToMany(FileDef, { searchable: true });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

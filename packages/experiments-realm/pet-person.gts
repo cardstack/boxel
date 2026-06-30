@@ -14,8 +14,8 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
   @field firstName = contains(StringField);
-  @field pets = linksToMany(Pet);
-  @field friend = linksTo(Person);
+  @field pets = linksToMany(Pet, { searchable: true });
+  @field friend = linksTo(Person, { searchable: true });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;

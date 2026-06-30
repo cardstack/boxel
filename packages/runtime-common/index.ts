@@ -57,6 +57,24 @@ export interface BrokenLinkSummary {
   kind: 'error' | 'not-found';
 }
 
+// A `searchable` annotation path that didn't resolve against the definition
+// graph when the module's definitions were built. Recorded on the module
+// render's `meta.diagnostics` and persisted to `modules.diagnostics` so a typo
+// / removed field / un-routable segment is visible to authors instead of
+// silently making nothing searchable. Definition build is decoupled in time
+// from the edit, so these are logged, never thrown; the path is simply not
+// followed. Omitted entirely when every annotation in the module resolves.
+export interface SearchablePathDiagnostic {
+  // The card/field def whose field carried the annotation, as the
+  // `internalKeyFor` CodeRef string (a module exports several defs, so the
+  // owning def is named to pinpoint the source).
+  codeRef: string;
+  // The immediate field holding the `searchable` annotation.
+  fieldName: string;
+  // The dotted `searchable` path that failed to resolve.
+  path: string;
+}
+
 // A failure to parse a markdown file's leading YAML frontmatter block,
 // recorded as a finding on the (still successful) index entry. The file
 // indexes fine — `extractAttributes` falls back to treating the whole file
@@ -111,6 +129,11 @@ export interface PrerenderMetaDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
+  // Unresolvable `searchable` annotation paths found while building the
+  // module's definitions, persisted to `modules.diagnostics`. Populated by the
+  // module-prerender route's definition-build validation, not a card render.
+  // Omitted entirely when every annotation in the module resolves.
+  searchablePathIssues?: SearchablePathDiagnostic[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -1343,8 +1366,13 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
-  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
+// A local id is a client-minted token for an instance that has not yet been
+// saved to a realm — it is neither a URL nor a prefix-form RRI. Both remote
+// forms are syntactically distinguishable (URLs start with `http`, prefix-form
+// RRIs start with `@`), so this needs no VirtualNetwork: identifiers are
+// canonical RRI by the time they reach here.
+export function isLocalId(id: string) {
+  return !id.startsWith('http') && !id.startsWith('@');
 }
 
 export function isBrowserTestEnv() {

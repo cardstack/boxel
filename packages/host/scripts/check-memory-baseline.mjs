@@ -37,7 +37,7 @@ try {
   process.exit(0);
 }
 
-const SOFT_RELATIVE = baseline.threshold?.relative ?? 0.10;
+const SOFT_RELATIVE = baseline.threshold?.relative ?? 0.1;
 const SOFT_ABSOLUTE_MB = baseline.threshold?.absolute_mb ?? 5;
 const HARD_RELATIVE = 1.0; // 2x = 100% increase
 const HARD_ABSOLUTE_MB = 50;
@@ -52,6 +52,22 @@ const baselineDelta = (entry) => {
   if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
     const sum = entry.samples.reduce((a, b) => a + b, 0);
     return sum / entry.samples.length;
+  }
+  return entry?.delta_mb;
+};
+
+// The largest delta the module has produced in the recent window. The hard
+// (build-blocking) gate measures the regression from this ceiling, not the
+// mean: some modules legitimately swing run-to-run by >100MB because their
+// post-GC boundary delta depends on whether the settle-GC fully drains a large
+// transient before the measurement. Such a module must not hard-fail on a value
+// it has already exhibited — only on one that clears its observed ceiling by the
+// hard threshold. When a module's variance is low (ceiling ≈ mean) this is
+// equivalent to the mean-based gate. Falls back to the pre-rolling-window
+// `delta_mb` shape so older baseline files keep working until main upgrades them.
+const baselineCeiling = (entry) => {
+  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
+    return Math.max(...entry.samples);
   }
   return entry?.delta_mb;
 };
@@ -87,13 +103,28 @@ for (const [mod, data] of Object.entries(current)) {
   // Only flag increases
   if (diff <= 0) continue;
 
-  const softThreshold = Math.max(SOFT_ABSOLUTE_MB, effectiveBase * SOFT_RELATIVE);
-  const hardThreshold = Math.max(HARD_ABSOLUTE_MB, effectiveBase * HARD_RELATIVE);
+  // The soft (warning, non-blocking) gate stays anchored to the mean so a module
+  // trending upward still surfaces early. The hard (build-blocking) gate is
+  // anchored to the recent ceiling: it fires only when the current run clears
+  // the highest recent sample by the hard threshold, so a high-variance module
+  // can't be blocked by a value inside its own observed range.
+  const ceiling = Math.max(baselineCeiling(base) ?? baseDelta, 0);
+  const hardDiff = data.delta_mb - ceiling;
 
-  const pct = effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
+  const softThreshold = Math.max(
+    SOFT_ABSOLUTE_MB,
+    effectiveBase * SOFT_RELATIVE,
+  );
+  const hardThreshold = Math.max(
+    HARD_ABSOLUTE_MB,
+    effectiveBase * HARD_RELATIVE,
+  );
+
+  const pct =
+    effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
   const samples = fmtSamples(base);
 
-  if (diff >= hardThreshold) {
+  if (hardDiff >= hardThreshold) {
     failures.push({
       mod,
       baseline: effectiveBase,
@@ -118,7 +149,9 @@ for (const [mod, data] of Object.entries(current)) {
 const lines = [];
 lines.push('## Memory Baseline Check\n');
 
-const totalModules = Object.keys(current).filter((m) => m !== '__shard_warmup__').length;
+const totalModules = Object.keys(current).filter(
+  (m) => m !== '__shard_warmup__',
+).length;
 const baselineModules = Object.keys(baseline.modules || {}).length;
 lines.push(
   `Checked **${totalModules}** modules against baseline (${baselineModules} baselined).\n`,
@@ -133,8 +166,12 @@ const baselineHeader =
   samplesWindow > 1 ? `Baseline (mean of last ${samplesWindow})` : 'Baseline';
 
 if (failures.length > 0) {
-  lines.push(`### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`);
-  lines.push(`| Module | ${baselineHeader} | Current | Change | Recent samples |`);
+  lines.push(
+    `### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`,
+  );
+  lines.push(
+    `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
+  );
   lines.push('|--------|----------|---------|--------|----------------|');
   for (const f of failures.sort((a, b) => b.diff - a.diff)) {
     const pctStr = f.pct != null ? ` (+${f.pct}%)` : '';
@@ -146,8 +183,12 @@ if (failures.length > 0) {
 }
 
 if (warnings.length > 0) {
-  lines.push(`### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase)\n`);
-  lines.push(`| Module | ${baselineHeader} | Current | Change | Recent samples |`);
+  lines.push(
+    `### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase)\n`,
+  );
+  lines.push(
+    `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
+  );
   lines.push('|--------|----------|---------|--------|----------------|');
   for (const w of warnings.sort((a, b) => b.diff - a.diff)) {
     const pctStr = w.pct != null ? ` (+${w.pct}%)` : '';

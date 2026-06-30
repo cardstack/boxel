@@ -2262,6 +2262,12 @@ module(basename(import.meta.filename), function () {
     let nextPrerenderMeta:
       | import('@cardstack/runtime-common').PrerenderResponseMeta
       | undefined;
+    // Override the field map/defs the mock returns for the Person definition,
+    // so a test can drive a `searchable`-bearing FieldDefinition through the
+    // persistence path and read it back out of `modules.definitions`.
+    let nextPersonDefinitionParts:
+      | { fields: Record<string, string>; fieldDefs: Record<string, any> }
+      | undefined;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
@@ -2287,8 +2293,8 @@ module(basename(import.meta.filename), function () {
                   type: 'card-def',
                   codeRef: { module: rri(moduleURL.href), name: 'Person' },
                   displayName: 'Person',
-                  fields: {},
-                  fieldDefs: {},
+                  fields: nextPersonDefinitionParts?.fields ?? {},
+                  fieldDefs: nextPersonDefinitionParts?.fieldDefs ?? {},
                 },
                 types: [],
               },
@@ -2331,6 +2337,7 @@ module(basename(import.meta.filename), function () {
     hooks.afterEach(async function () {
       await adapter.close();
       nextPrerenderMeta = undefined;
+      nextPersonDefinitionParts = undefined;
     });
 
     test('persists diagnostics from prerender meta on module rows', async function (assert) {
@@ -2382,6 +2389,84 @@ module(basename(import.meta.filename), function () {
         rows[0].diagnostics,
         null,
         'diagnostics is null when meta is absent',
+      );
+    });
+
+    test('persists searchablePathIssues from prerender meta on module rows', async function (assert) {
+      // The module-prerender route's definition-build validation records
+      // unresolvable `searchable` paths on meta.diagnostics; this is the
+      // channel that lands them in `modules.diagnostics` for authors to see.
+      let searchablePathIssues = [
+        {
+          codeRef: `${realmURL}person/Person`,
+          fieldName: 'reviewer',
+          path: 'addresss',
+        },
+      ];
+      nextPrerenderMeta = { diagnostics: { searchablePathIssues } };
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      let rows = (await adapter.execute(
+        `SELECT diagnostics FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { diagnostics: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].diagnostics;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      assert.deepEqual(
+        persisted?.searchablePathIssues,
+        searchablePathIssues,
+        'searchablePathIssues persisted to modules.diagnostics',
+      );
+    });
+
+    test("persists a field's searchable annotation into modules.definitions", async function (assert) {
+      // getFieldDefinitions mirrors `searchable` onto the cached
+      // FieldDefinition; confirm the raw value survives the persistence path
+      // into the `modules.definitions` JSON the loaderless query compiler reads.
+      nextPersonDefinitionParts = {
+        fields: { reviewer: 'f0' },
+        fieldDefs: {
+          f0: {
+            type: 'linksTo',
+            isPrimitive: false,
+            isComputed: false,
+            fieldOrCard: {
+              module: rri(`${realmURL}author.gts`),
+              name: 'Author',
+            },
+            searchable: 'address',
+          },
+        },
+      };
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      let rows = (await adapter.execute(
+        `SELECT definitions FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { definitions: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].definitions;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      let personEntry = persisted[Object.keys(persisted)[0]];
+      let definition = personEntry.definition;
+      let reviewerDefId = definition.fields.reviewer;
+      assert.strictEqual(
+        definition.fieldDefs[reviewerDefId].searchable,
+        'address',
+        'searchable survives into the persisted modules.definitions JSON',
       );
     });
   });

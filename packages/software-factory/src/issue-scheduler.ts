@@ -18,6 +18,7 @@ import type {
 import {
   addCommentToIssue,
   ensureJsonExtension,
+  inferIssueTrackerModuleUrl,
   toRealmRelativePath,
 } from './realm-operations.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
@@ -205,13 +206,9 @@ export class RealmIssueStore implements IssueStore {
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
-    // Tracker types (Issue/Project/IssueTracker) are defined in the
-    // `issue-tracker` module and re-exported by `darkfactory`. Derive the
-    // canonical `issue-tracker` URL from the darkfactory URL by swapping the
-    // final path segment, tolerating a trailing slash.
-    this.issueTrackerModuleUrl = config.darkfactoryModuleUrl
-      .replace(/\/+$/, '')
-      .replace(/[^/]+$/, 'issue-tracker');
+    this.issueTrackerModuleUrl = inferIssueTrackerModuleUrl(
+      config.darkfactoryModuleUrl,
+    );
     this.client = config.client;
     this.workspaceDir = config.workspaceDir;
   }

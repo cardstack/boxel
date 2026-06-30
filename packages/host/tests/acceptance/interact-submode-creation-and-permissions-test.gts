@@ -97,9 +97,7 @@ module(
           `the newly created card's remote id is in recent cards`,
         );
         assert.notOk(
-          recentCards.find((c) =>
-            isLocalId(c.cardId, getService('network').virtualNetwork),
-          ),
+          recentCards.find((c) => isLocalId(c.cardId)),
           `no local ID's are in recent cards`,
         );
       });

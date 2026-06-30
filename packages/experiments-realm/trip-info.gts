@@ -119,7 +119,10 @@ export class TripInfo extends CardDef {
   static displayName = 'Trip Info';
   static icon = MapPinIcon;
   @field destinations = linksToMany(Country);
-  @field traveler = contains(Traveler);
+  @field traveler = contains(
+    Traveler,
+    { searchable: ['countryOfOrigin', 'nextTravelGoal.alternateTrips', 'nextTravelGoal.country'] },
+  );
   @field cardTitle = contains(StringField, {
     computeVia: function (this: TripInfo) {
       return this.traveler?.name
@@ -128,7 +131,7 @@ export class TripInfo extends CardDef {
     },
   });
   @field startLocation = linksTo(Country);
-  @field endLocation = linksTo(Country);
+  @field endLocation = linksTo(Country, { searchable: true });
   /*
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>
