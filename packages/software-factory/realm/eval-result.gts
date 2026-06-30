@@ -275,4 +275,6 @@ export class EvalResult extends CardDef {
       </style>
     </template>
   };
+
+  static edit = this.isolated;
 }

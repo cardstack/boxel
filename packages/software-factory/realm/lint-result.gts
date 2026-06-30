@@ -466,4 +466,6 @@ export class LintResult extends CardDef {
       </style>
     </template>
   };
+
+  static edit = this.isolated;
 }

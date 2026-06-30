@@ -379,4 +379,6 @@ export class ParseResult extends CardDef {
       </style>
     </template>
   };
+
+  static edit = this.isolated;
 }
