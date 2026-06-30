@@ -244,8 +244,16 @@ export function decorateRenderErrorsWithTimings(
     ...(tabReused !== undefined ? { tabReused } : {}),
   };
   let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
+  // Merge onto any diagnostics the response already carries rather than
+  // replacing them: the module-prerender route records definition-build
+  // findings (`searchablePathIssues`) on `meta.diagnostics`, and those must
+  // survive to `flattenPrerenderMeta` / `modules.diagnostics`. Timing fields
+  // are spread last so they win on the (disjoint) keys they own.
   r.meta = {
     ...existingMeta,
-    diagnostics,
+    diagnostics: {
+      ...existingMeta.diagnostics,
+      ...diagnostics,
+    },
   };
 }

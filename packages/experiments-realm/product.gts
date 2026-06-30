@@ -320,9 +320,6 @@ class Isolated extends Component<typeof Product> {
         padding: 7px 24px;
         border: 0;
       }
-      div[data-test-compound-field-format='atom'] {
-        display: inline-block;
-      }
     </style>
   </template>
 }
@@ -348,9 +345,7 @@ export class Product extends CardDef {
   });
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <EmbeddedProductComponent @model={{@model}} />
-    </template>
+    <template><EmbeddedProductComponent @model={{@model}} /></template>
   };
 
   static isolated = Isolated;

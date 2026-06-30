@@ -48,18 +48,24 @@ export async function isRealmArchived(
   return results.length > 0 && results[0].archived_at != null;
 }
 
-// List the URLs of archived realms owned by a user. Joins archived
-// realm_metadata rows to realm_user_permissions where the user holds the
-// realm-owner permission. Published snapshots are excluded: publishing
-// grants the owner realm-owner on the published URL too, so without this
-// filter an archived snapshot would surface as one of the user's
-// workspaces.
+export interface ArchivedRealm {
+  url: string;
+  // The archived_at timestamp as the adapter returns it (ISO-ish string).
+  archivedAt: string;
+}
+
+// List the archived realms owned by a user, most-recently-archived first.
+// Joins archived realm_metadata rows to realm_user_permissions where the
+// user holds the realm-owner permission. Published snapshots are excluded:
+// publishing grants the owner realm-owner on the published URL too, so
+// without this filter an archived snapshot would surface as one of the
+// user's workspaces.
 export async function fetchArchivedRealmsForOwner(
   dbAdapter: DBAdapter,
   username: string,
-): Promise<string[]> {
+): Promise<ArchivedRealm[]> {
   let results = (await query(dbAdapter, [
-    `SELECT rm.url
+    `SELECT rm.url, rm.archived_at
      FROM realm_metadata rm
      INNER JOIN realm_user_permissions rup ON rup.realm_url = rm.url
      WHERE rm.archived_at IS NOT NULL
@@ -67,7 +73,9 @@ export async function fetchArchivedRealmsForOwner(
        AND rm.url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        AND rup.username =`,
     param(username),
-    `ORDER BY rm.archived_at DESC`,
-  ])) as { url: string }[];
-  return results.map((r) => r.url);
+    // Secondary sort on url keeps ordering deterministic when several realms
+    // share an archived_at second (SQLite's CURRENT_TIMESTAMP is 1s-resolution).
+    `ORDER BY rm.archived_at DESC, rm.url ASC`,
+  ])) as { url: string; archived_at: string }[];
+  return results.map((r) => ({ url: r.url, archivedAt: r.archived_at }));
 }

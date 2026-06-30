@@ -150,6 +150,17 @@ export interface IssueLoopConfig {
    * in the debug timing summary. Defaults to a no-op (0) when not wired.
    */
   getSyncElapsedMs?: () => number;
+  /**
+   * Invoked once, right after the `bootstrap` issue's cycle completes — the
+   * earliest point at which the IssueTracker board exists on the realm. The
+   * entrypoint wires this to link the realm index's `board` relationship
+   * here, so the link no longer waits for the whole backlog to drain: a run
+   * that is interrupted, crashes, or whose implementation issues stall would
+   * otherwise leave the board unlinked even though it has existed since the
+   * first outer cycle. Best-effort — a thrown error is logged, not
+   * propagated, so a link failure never aborts the loop.
+   */
+  onBootstrapComplete?: () => Promise<void>;
 }
 
 export type IssueLoopOutcome =
@@ -267,6 +278,7 @@ export async function runIssueLoop(
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
     debug = false,
     getSyncElapsedMs = () => 0,
+    onBootstrapComplete,
   } = config;
 
   let scheduler = new IssueScheduler(issueStore);
@@ -651,6 +663,28 @@ export async function runIssueLoop(
       lastValidation: validationResults,
       timing: issueTiming,
     });
+
+    // The bootstrap issue is what creates (and syncs) the IssueTracker
+    // board. Fire the hook the moment its cycle finishes successfully so the
+    // realm index can be linked to the board now — rather than after the whole
+    // backlog drains, which a stalled or interrupted implementation issue may
+    // never reach. Gated on `exitReason === 'done'`: a bootstrap that ended
+    // blocked or out of iterations may never have created the board, so wiring
+    // it would be premature. There is only ever one bootstrap issue, so this
+    // fires at most once. The link is best-effort and must not abort the loop.
+    if (
+      onBootstrapComplete &&
+      issue.issueType === 'bootstrap' &&
+      exitReason === 'done'
+    ) {
+      try {
+        await onBootstrapComplete();
+      } catch (err) {
+        log.warn(
+          `onBootstrapComplete hook failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
 
     // Reload issues to pick up new issues the agent may have created
     await scheduler.loadIssues();

@@ -1,6 +1,9 @@
 'use strict';
 
 const MISSING_INVOKABLES_CONFIG = require('../../runtime-common/etc/eslint/missing-invokables-config');
+const {
+  DATA_TEST_SELECTORS,
+} = require('../../../eslint/data-test-selectors.cjs');
 
 module.exports = {
   root: true,
@@ -43,6 +46,18 @@ module.exports = {
     ],
   },
   overrides: [
+    {
+      // Disallow `data-test-*` CSS/DOM selectors in app code. ember-test-selectors
+      // strips these attributes in production, so selectors like
+      // `querySelector('[data-test-foo]')` silently break outside of tests.
+      // This package is `root: true`, so it cannot inherit the monorepo-root
+      // config and must re-declare the guard. Scoped to app code only — tests
+      // legitimately select on `data-test-*`.
+      files: ['app/**/*.{js,ts,gts,gjs}'],
+      rules: {
+        'no-restricted-syntax': ['error', ...DATA_TEST_SELECTORS],
+      },
+    },
     {
       files: ['**/*.gts'],
       parser: 'ember-eslint-parser',

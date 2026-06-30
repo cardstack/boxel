@@ -103,6 +103,13 @@ export interface IssueLoopWiringConfig {
    * awareness of boxel-ui components. See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * Invoked once, right after the bootstrap issue completes. The entrypoint
+   * uses this to link the realm index's `board` relationship as soon as the
+   * IssueTracker exists, instead of waiting for the entire loop to return.
+   * Passed straight through to {@link runIssueLoop}.
+   */
+  onBootstrapComplete?: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +283,7 @@ export async function runFactoryIssueLoop(
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,
     getSyncElapsedMs,
+    onBootstrapComplete: config.onBootstrapComplete,
   };
 
   try {
