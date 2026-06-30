@@ -23,8 +23,6 @@ import {
 } from './result-fitted-card.gts';
 import { ResultIsolatedCard } from './result-isolated-card.gts';
 import { ResultDetailsSection } from './result-details-section.gts';
-import { ResultEditCard } from './result-edit-card.gts';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import Box from '@cardstack/boxel-icons/box';
 import CircleCheck from '@cardstack/boxel-icons/circle-check';
@@ -169,13 +167,14 @@ export class InstantiateResult extends CardDef {
 
     get metaItems(): ResultMetaItem[] {
       let m = this.args.model;
-      let items: ResultMetaItem[] = [
-        {
+      let items: ResultMetaItem[] = [];
+      if (m.cardsChecked) {
+        items.push({
           icon: CircleCheck,
           text: `${m.cardsPassed}/${m.cardsChecked} passed`,
           tone: 'clean',
-        },
-      ];
+        });
+      }
       if (m.cardsWithErrors) {
         items.push({
           icon: CircleX,

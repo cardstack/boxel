@@ -216,13 +216,14 @@ export class ParseResult extends CardDef {
 
     get metaItems(): ResultMetaItem[] {
       let m = this.args.model;
-      let items: ResultMetaItem[] = [
-        {
+      let items: ResultMetaItem[] = [];
+      if (m.filesChecked) {
+        items.push({
           icon: CircleCheck,
           text: `${m.filesClean}/${m.filesChecked} valid`,
           tone: 'clean',
-        },
-      ];
+        });
+      }
       if (m.totalErrors) {
         items.push({
           icon: CircleX,

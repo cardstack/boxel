@@ -144,13 +144,14 @@ export class EvalResult extends CardDef {
 
     get metaItems(): ResultMetaItem[] {
       let m = this.args.model;
-      let items: ResultMetaItem[] = [
-        {
+      let items: ResultMetaItem[] = [];
+      if (m.modulesChecked) {
+        items.push({
           icon: CircleCheck,
           text: `${m.modulesPassed}/${m.modulesChecked} passed`,
           tone: 'clean',
-        },
-      ];
+        });
+      }
       if (m.modulesWithErrors) {
         items.push({
           icon: CircleX,

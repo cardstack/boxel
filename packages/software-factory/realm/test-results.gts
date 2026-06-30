@@ -288,13 +288,14 @@ export class TestRun extends CardDef {
 
     get metaItems(): ResultMetaItem[] {
       let m = this.args.model;
-      let items: ResultMetaItem[] = [
-        {
+      let items: ResultMetaItem[] = [];
+      if (this.total) {
+        items.push({
           icon: CircleCheck,
           text: `${m.passedCount}/${this.total} passed`,
           tone: 'clean',
-        },
-      ];
+        });
+      }
       if (m.failedCount) {
         items.push({
           icon: CircleX,
