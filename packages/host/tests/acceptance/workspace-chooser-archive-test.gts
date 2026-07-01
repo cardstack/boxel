@@ -4,7 +4,6 @@ import { module, test } from 'qunit';
 
 import {
   setupAcceptanceTestRealm,
-  setupAuthEndpoints,
   setupLocalIndexing,
   setupRealmCacheTeardown,
   setupUserSubscription,
@@ -46,7 +45,6 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
 
   hooks.beforeEach(async function () {
     setupUserSubscription();
-    setupAuthEndpoints();
 
     await setupAcceptanceTestRealm({
       realmURL: ownedRealmURL,
