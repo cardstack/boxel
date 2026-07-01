@@ -44,6 +44,11 @@ import {
   keymap,
 } from '@codemirror/view';
 
+import {
+  type BfmRefRange,
+  extractBfmRefRanges,
+} from '@cardstack/runtime-common/bfm-card-references';
+
 // ── Card widget target interface ────────────────────────────────────────────
 
 export interface CardWidgetTarget {
@@ -1043,6 +1048,10 @@ export interface SelectionInfo {
     strikethrough: boolean;
     link: boolean;
   };
+  // BFM `:card[…]` / `::file[…]` directive the cursor head is currently
+  // inside. Undefined when the cursor is outside every directive. Drives
+  // the toolbar's Add-vs-Edit-embed swap.
+  currentRef?: BfmRefRange;
 }
 
 function detectFormats(
@@ -1117,33 +1126,54 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       override: [slashSource],
       defaultKeymap: true,
     }),
-    EditorView.updateListener.of((update: ViewUpdate) => {
-      if (update.docChanged) {
-        onDocChange(update.state.doc.toString());
-      }
-      if (
-        onSelectionChange &&
-        (update.selectionSet || update.docChanged || update.focusChanged)
-      ) {
-        let { from, to } = update.state.selection.main;
-        let hasSelection = from !== to;
-        onSelectionChange({
-          hasSelection,
-          hasFocus: update.view.hasFocus,
-          from,
-          to,
-          formats: hasSelection
-            ? detectFormats(update.state, from, to)
-            : {
-                bold: false,
-                italic: false,
-                code: false,
-                strikethrough: false,
-                link: false,
-              },
-        });
-      }
-    }),
+    (() => {
+      // BFM ref ranges cached across selection-only updates — `extractBfmRefRanges`
+      // is a doc-wide string scan, so recompute only when the doc changes.
+      let cachedRanges: BfmRefRange[] = extractBfmRefRanges(content);
+
+      return EditorView.updateListener.of((update: ViewUpdate) => {
+        if (update.docChanged) {
+          let nextDoc = update.state.doc.toString();
+          onDocChange(nextDoc);
+          cachedRanges = extractBfmRefRanges(nextDoc);
+        }
+        if (
+          onSelectionChange &&
+          (update.selectionSet || update.docChanged || update.focusChanged)
+        ) {
+          let { from, to } = update.state.selection.main;
+          let hasSelection = from !== to;
+          let head = update.state.selection.main.head;
+          // Which directive, if any, owns the caret. A block directive is the
+          // only content on its line, so its whole span — end boundary included
+          // (`head == to`, e.g. caret at end-of-line or on the block widget) —
+          // reads as "inside". An inline directive is surrounded by prose, so
+          // its end boundary is exclusive: caret on the closing `]` (== to) is
+          // the seam where post-directive typing continues, not edit-this-embed.
+          let currentRef = cachedRanges.find((r) =>
+            r.kind === 'block'
+              ? head >= r.from && head <= r.to
+              : head >= r.from && head < r.to,
+          );
+          onSelectionChange({
+            hasSelection,
+            hasFocus: update.view.hasFocus,
+            from,
+            to,
+            formats: hasSelection
+              ? detectFormats(update.state, from, to)
+              : {
+                  bold: false,
+                  italic: false,
+                  code: false,
+                  strikethrough: false,
+                  link: false,
+                },
+            currentRef,
+          });
+        }
+      });
+    })(),
     EditorView.lineWrapping,
   ];
 

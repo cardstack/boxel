@@ -16,10 +16,15 @@ import FileChooser, { type FileChooserRealm } from '../panel';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    // Fired with the absolute URL of the file the user picks from the tree or
-    // finishes uploading. The hosting container decides what to do with it
-    // (this primitive never confirms or dismisses on its own).
+    // Fired with the absolute URL of the file the user confirms (Enter on a
+    // tree row) or finishes uploading. The hosting container decides what to do
+    // with it (this primitive never confirms or dismisses on its own).
     onSelect: (url: string) => void;
+    // Fired on a single-click highlight of a tree row, before confirmation.
+    // Lets a host preview the highlighted file without committing to it — the
+    // card chooser previews on a single click, so this keeps the file chooser
+    // symmetric for consumers that want the same.
+    onHighlight?: (url: string) => void;
     // Workspace to open on first render. Read once at mount; later parent
     // updates are ignored. Defaults to the first known realm.
     initialRealmURL?: string;
@@ -72,8 +77,11 @@ export default class MiniFileChooser extends Component<Signature> {
       return;
     }
     this.userSelectedFile = path;
-    // Deliberately does NOT call this.args.onSelect — that only happens on
-    // confirmation (Enter) to avoid double-fire.
+    // Single click highlights the row and previews it via onHighlight, but does
+    // NOT call onSelect — that's reserved for confirmation (Enter) so a host
+    // can distinguish "previewing" from "committing".
+    let url = new RealmPaths(realm.url).fileURL(path);
+    this.args.onHighlight?.(url.href);
   }
 
   @action
@@ -211,7 +219,7 @@ export default class MiniFileChooser extends Component<Signature> {
         padding: var(--boxel-sp-xs);
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
-        font: var(--boxel-font-xs);
+        font: var(--boxel-font-sm);
       }
       .mini-file-chooser__field {
         display: flex;
