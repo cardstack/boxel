@@ -703,6 +703,37 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     let publishedRealmId = publishResponse.body.data.id as string;
     // Phase 3: drive reconcile so the published realm shows up in realms[].
     await context.testRealmServer.testingOnlyReconcile();
+
+    // _publish-realm returns 202 before the published realm's from-scratch
+    // index finishes; the background mount keeps writing its boxel_index /
+    // realm_versions rows. The DELETE below removes those same rows via
+    // removeRealmDatabaseArtifacts, so issuing it while that index is still in
+    // flight races the indexer's writes against the delete's and intermittently
+    // fails the transaction with a 500. Wait for the index to commit —
+    // realm_versions.current_version >= 1 lands atomically with the rest of the
+    // from-scratch pass — and for no indexing job to remain queued, before
+    // tearing the realm down.
+    await waitUntil(
+      async () => {
+        let versionRows = await context.dbAdapter.execute(
+          `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}' AND current_version >= 1 LIMIT 1`,
+        );
+        if (versionRows.length === 0) {
+          return undefined;
+        }
+        let pendingJobs = await context.dbAdapter.execute(
+          `SELECT id FROM jobs WHERE concurrency_group = 'indexing:${publishedRealmURL}' AND status = 'unfulfilled'`,
+        );
+        return pendingJobs.length === 0 ? versionRows : undefined;
+      },
+      {
+        timeout: 30_000,
+        interval: 100,
+        timeoutMessage:
+          'published realm from-scratch index did not settle before delete',
+      },
+    );
+
     let publishedRealmPath = join(
       context.dir.name,
       'realm_server_1',
@@ -755,7 +786,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         }),
       );
 
-    assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    assert.strictEqual(
+      deleteResponse.status,
+      204,
+      `realm deleted${
+        deleteResponse.status === 204
+          ? ''
+          : ` (got ${deleteResponse.status}: ${JSON.stringify(
+              deleteResponse.body,
+            )})`
+      }`,
+    );
     // Phase 3: unmount is reconciler-driven.
     await context.testRealmServer.testingOnlyReconcile();
     assert.false(
