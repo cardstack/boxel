@@ -250,4 +250,43 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
       () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
     );
   });
+
+  test('cursor at the end of a block directive line keeps the Edit pencil', async function (assert) {
+    // A block directive is the only content on its line, so the caret at the
+    // line end (`head == to`, reached via End / clicking the block widget) must
+    // still read as "inside the embed" and surface the Edit pencil rather than
+    // reverting to the Add '+'.
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let view = editorEl ? cmContext.EditorView.findFromDOM(editorEl) : null;
+    assert.ok(view, 'codemirror view is reachable');
+    view!.focus();
+
+    let source = `::card[${mangoId}]`;
+    view!.dispatch({ changes: { from: 0, insert: source } });
+    // Caret at the end of the directive line (== range end).
+    view!.dispatch({
+      selection: { anchor: source.length, head: source.length },
+    });
+
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-toolbar="edit-embed"]')
+      .exists('Edit pencil shows when the caret is at the block line end');
+    assert
+      .dom('[data-test-toolbar="add-embed"]')
+      .doesNotExist(
+        'Add popover trigger is not shown for a block embed line end',
+      );
+  });
 });

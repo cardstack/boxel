@@ -1144,11 +1144,16 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
           let { from, to } = update.state.selection.main;
           let hasSelection = from !== to;
           let head = update.state.selection.main.head;
-          // A directive owns positions in `[from, to)`. Caret on the closing
-          // `]` (== to) reads as "outside" so post-directive typing isn't
-          // surfaced as edit-this-embed.
-          let currentRef = cachedRanges.find(
-            (r) => head >= r.from && head < r.to,
+          // Which directive, if any, owns the caret. A block directive is the
+          // only content on its line, so its whole span — end boundary included
+          // (`head == to`, e.g. caret at end-of-line or on the block widget) —
+          // reads as "inside". An inline directive is surrounded by prose, so
+          // its end boundary is exclusive: caret on the closing `]` (== to) is
+          // the seam where post-directive typing continues, not edit-this-embed.
+          let currentRef = cachedRanges.find((r) =>
+            r.kind === 'block'
+              ? head >= r.from && head <= r.to
+              : head >= r.from && head < r.to,
           );
           onSelectionChange({
             hasSelection,

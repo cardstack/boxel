@@ -447,7 +447,13 @@ export function extractBfmRefRanges(
 
   for (let keyword of keywords) {
     let escaped = escapeRegExp(keyword);
-    let blockRe = new RegExp(`^::${escaped}\\[([^\\]]+)\\]`, 'gm');
+    // Block directive must be alone on its line — mirror the render-side
+    // tokenizer's trailing `\s*(?:\n|$)` and the editor widget's `[ \t]*$` so
+    // detection and rendering stay in lockstep (a directive with trailing text
+    // is not an embed). `[^\]\n]+` keeps a `]`-less directive from spanning
+    // lines. The trailing `[ \t]*` is folded into the range so `to` reaches the
+    // line end, matching the block widget's decorated span.
+    let blockRe = new RegExp(`^::${escaped}\\[([^\\]\\n]+)\\][ \\t]*$`, 'gm');
     let inlineRe = new RegExp(`(?<!:):${escaped}\\[([^\\]]+)\\]`, 'g');
 
     for (let match of markdown.matchAll(blockRe)) {

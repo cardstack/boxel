@@ -1319,5 +1319,31 @@ module('Unit | bfm-card-references', function () {
         ['./first', './second'],
       );
     });
+
+    test('block directive with trailing content is not a block range', function (assert) {
+      // A `::card[...]` followed by non-whitespace on the same line is not
+      // rendered as an embed (the render tokenizer requires trailing
+      // whitespace/newline), so it must not surface a block range either — else
+      // the toolbar shows the Edit pencil for something that is not an embed.
+      let markdown = '::card[./mango] trailing text';
+      let ranges = extractBfmRefRanges(markdown);
+      assert.deepEqual(
+        ranges,
+        [],
+        'no range for a non-alone-on-line directive',
+      );
+    });
+
+    test('block range covers trailing whitespace to the line end', function (assert) {
+      let markdown = '::card[./mango]   ';
+      let [range] = extractBfmRefRanges(markdown);
+      assert.strictEqual(range.kind, 'block');
+      assert.strictEqual(range.url, './mango');
+      assert.strictEqual(
+        range.to,
+        markdown.length,
+        'range end reaches the line end, matching the block widget span',
+      );
+    });
   });
 });
