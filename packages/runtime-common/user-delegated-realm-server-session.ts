@@ -10,8 +10,8 @@ import { ensureTrailingSlash } from './paths.ts';
 //
 // This module is the single source of truth for the signed-payload format.
 // Both sides import from here so they can never drift: ai-bot calls
-// `requestDelegatedRealmSession`/`delegatedRealmSessionSignature` to sign, and the realm
-// server's /_delegate-session handler calls `verifyDelegatedRealmSessionRequest` to
+// `requestDelegatedUserRealmSession`/`delegatedUserRealmSessionSignature` to sign, and the realm
+// server's /_delegate-session handler calls `verifyDelegatedUserRealmSessionRequest` to
 // verify — neither keeps its own copy of the canonical `${timestamp}.${rawBody}`
 // construction. It is imported via the
 // `@cardstack/runtime-common/user-delegated-realm-server-session` subpath by
@@ -21,21 +21,21 @@ import { ensureTrailingSlash } from './paths.ts';
 // Wire header names are kept as the original `x-boxel-delegation-*` that the
 // realm-server endpoint (#5287) already ships, so this change is code-only and
 // never alters the on-the-wire protocol.
-export const DELEGATED_REALM_SESSION_TIMESTAMP_HEADER =
+export const DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER =
   'x-boxel-delegation-timestamp';
-export const DELEGATED_REALM_SESSION_SIGNATURE_HEADER =
+export const DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER =
   'x-boxel-delegation-signature';
 
 // ±60s window on the request timestamp. Cheap and stateless — it bounds the
 // replay window for a captured request without a server-side nonce store.
-export const DELEGATED_REALM_SESSION_TIMESTAMP_WINDOW_MS = 60_000;
+export const DELEGATED_USER_REALM_SESSION_TIMESTAMP_WINDOW_MS = 60_000;
 
 // The canonical string both sides sign: `${timestamp}.${rawBody}`. `timestamp`
 // is epoch milliseconds in base-10; `rawBody` is the exact request body bytes.
 // HMAC-SHA256 with the shared secret, hex digest. Binding the timestamp into
 // the signed payload is what makes the ±60s window enforceable — a captured
 // request cannot have its timestamp rewritten without the secret.
-export function delegatedRealmSessionSignature(
+export function delegatedUserRealmSessionSignature(
   secret: string,
   timestamp: string,
   rawBody: string,
@@ -45,11 +45,11 @@ export function delegatedRealmSessionSignature(
     .digest('hex');
 }
 
-export type DelegatedRealmSessionAuthResult =
+export type DelegatedUserRealmSessionAuthResult =
   | { ok: true }
   | { ok: false; reason: string };
 
-export function verifyDelegatedRealmSessionRequest({
+export function verifyDelegatedUserRealmSessionRequest({
   secret,
   timestamp,
   signature,
@@ -61,7 +61,7 @@ export function verifyDelegatedRealmSessionRequest({
   signature: string | undefined;
   rawBody: string;
   now: number;
-}): DelegatedRealmSessionAuthResult {
+}): DelegatedUserRealmSessionAuthResult {
   if (!timestamp || !signature) {
     return {
       ok: false,
@@ -72,13 +72,13 @@ export function verifyDelegatedRealmSessionRequest({
   if (!Number.isFinite(ts)) {
     return { ok: false, reason: 'malformed delegation timestamp' };
   }
-  if (Math.abs(now - ts) > DELEGATED_REALM_SESSION_TIMESTAMP_WINDOW_MS) {
+  if (Math.abs(now - ts) > DELEGATED_USER_REALM_SESSION_TIMESTAMP_WINDOW_MS) {
     return {
       ok: false,
       reason: 'delegation timestamp is outside the allowed window',
     };
   }
-  let expected = delegatedRealmSessionSignature(secret, timestamp, rawBody);
+  let expected = delegatedUserRealmSessionSignature(secret, timestamp, rawBody);
   let expectedBuf = Buffer.from(expected, 'utf8');
   let providedBuf = Buffer.from(signature, 'utf8');
   // Constant-time compare. timingSafeEqual throws on a length mismatch, so
@@ -95,7 +95,7 @@ export function verifyDelegatedRealmSessionRequest({
 
 // ─── Client ──────────────────────────────────────────────────────────────
 
-export interface DelegatedRealmSession {
+export interface DelegatedUserRealmSession {
   token: string;
   realm: string;
   permissions: string[];
@@ -105,31 +105,31 @@ export interface DelegatedRealmSession {
 // (the realm server has no secret configured, 503) is a "feature is off, carry
 // on" signal, whereas `forbidden` (the user has no read access, 403) and the
 // auth failures are genuine errors worth surfacing.
-export type DelegatedRealmSessionErrorKind =
+export type DelegatedUserRealmSessionErrorKind =
   | 'disabled' // 503: endpoint not configured on the realm server
   | 'forbidden' // 403: onBehalfOf lacks read on the realm
   | 'unauthorized' // 401: signature/timestamp rejected
   | 'bad-request' // 400: malformed request
   | 'unexpected'; // anything else
 
-export class DelegatedRealmSessionError extends Error {
-  readonly kind: DelegatedRealmSessionErrorKind;
+export class DelegatedUserRealmSessionError extends Error {
+  readonly kind: DelegatedUserRealmSessionErrorKind;
   readonly status?: number;
   constructor(
-    kind: DelegatedRealmSessionErrorKind,
+    kind: DelegatedUserRealmSessionErrorKind,
     message: string,
     status?: number,
   ) {
     super(message);
-    this.name = 'DelegatedRealmSessionError';
+    this.name = 'DelegatedUserRealmSessionError';
     this.kind = kind;
     this.status = status;
   }
 }
 
-function delegatedRealmSessionErrorKindForStatus(
+function delegatedUserRealmSessionErrorKindForStatus(
   status: number,
-): DelegatedRealmSessionErrorKind {
+): DelegatedUserRealmSessionErrorKind {
   switch (status) {
     case 503:
       return 'disabled';
@@ -151,7 +151,7 @@ function delegatedRealmSessionErrorKindForStatus(
 // `realmServerURL` is the origin of the realm server that fronts `realm`
 // (ai-bot derives it as `new URL(realm).origin`). `now` and `fetch` are
 // injectable for tests.
-export async function requestDelegatedRealmSession({
+export async function requestDelegatedUserRealmSession({
   realmServerURL,
   secret,
   onBehalfOf,
@@ -165,14 +165,18 @@ export async function requestDelegatedRealmSession({
   realm: string;
   fetch?: typeof globalThis.fetch;
   now?: number;
-}): Promise<DelegatedRealmSession> {
+}): Promise<DelegatedUserRealmSession> {
   let endpoint = new URL(
     '_delegate-session',
     ensureTrailingSlash(realmServerURL),
   );
   let rawBody = JSON.stringify({ onBehalfOf, realm });
   let timestamp = String(now);
-  let signature = delegatedRealmSessionSignature(secret, timestamp, rawBody);
+  let signature = delegatedUserRealmSessionSignature(
+    secret,
+    timestamp,
+    rawBody,
+  );
 
   let response: Response;
   try {
@@ -180,13 +184,13 @@ export async function requestDelegatedRealmSession({
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        [DELEGATED_REALM_SESSION_TIMESTAMP_HEADER]: timestamp,
-        [DELEGATED_REALM_SESSION_SIGNATURE_HEADER]: signature,
+        [DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER]: timestamp,
+        [DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER]: signature,
       },
       body: rawBody,
     });
   } catch (e: any) {
-    throw new DelegatedRealmSessionError(
+    throw new DelegatedUserRealmSessionError(
       'unexpected',
       `delegation request to ${endpoint.href} failed: ${e?.message ?? e}`,
     );
@@ -194,8 +198,8 @@ export async function requestDelegatedRealmSession({
 
   if (!response.ok) {
     let detail = await response.text().catch(() => '');
-    throw new DelegatedRealmSessionError(
-      delegatedRealmSessionErrorKindForStatus(response.status),
+    throw new DelegatedUserRealmSessionError(
+      delegatedUserRealmSessionErrorKindForStatus(response.status),
       `delegation request rejected (${response.status})${
         detail ? `: ${detail}` : ''
       }`,
@@ -203,18 +207,18 @@ export async function requestDelegatedRealmSession({
     );
   }
 
-  let session: DelegatedRealmSession;
+  let session: DelegatedUserRealmSession;
   try {
-    session = (await response.json()) as DelegatedRealmSession;
+    session = (await response.json()) as DelegatedUserRealmSession;
   } catch {
-    throw new DelegatedRealmSessionError(
+    throw new DelegatedUserRealmSessionError(
       'unexpected',
       'delegation response was not valid JSON',
       response.status,
     );
   }
   if (!session?.token) {
-    throw new DelegatedRealmSessionError(
+    throw new DelegatedUserRealmSessionError(
       'unexpected',
       'delegation response did not include a token',
       response.status,

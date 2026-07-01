@@ -1,3 +1,4 @@
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
 
 import type MessageCommand from './matrix-classes/message-command';
@@ -18,11 +19,16 @@ export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 // agents (e.g. unit tests) can pass `true` to focus on the other
 // conditions.
 export function isAutoExecutableCommand(
-  command: Pick<MessageCommand, 'name' | 'requiresApproval'>,
+  command: Pick<MessageCommand, 'name' | 'requiresApproval' | 'executedBy'>,
   activeLLMMode: LLMMode | undefined,
   isOwnedByCurrentAgent: boolean,
 ): boolean {
   if (!isOwnedByCurrentAgent) {
+    return false;
+  }
+  // ai-bot ran this one itself (e.g. readRealmFile); the host only records it
+  // in the timeline and never executes it.
+  if (command.executedBy === AI_BOT_EXECUTOR) {
     return false;
   }
   if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
