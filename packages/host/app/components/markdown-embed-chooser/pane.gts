@@ -183,6 +183,41 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     </section>
     {{! template-lint-disable require-scoped-style }}
     <style>
+      /* Taller dropdown so more of the format options show before scrolling,
+         but never taller than the window. The trigger sits near the top of a
+         centered modal, so `100dvh - 150px` (reserving the trigger's offset
+         from the top plus a margin) leaves room for the dropdown to open below
+         without running off-screen; the `min()` keeps 579px as the ceiling on
+         tall windows. ember-power-select then still renders below and the inner
+         list scrolls for the overflow.
+
+         Two caps must be clamped together: the outer dropdown container clips
+         via --boxel-select-max-height (default 12.5rem) + overflow:hidden, and
+         the inner scrollable options list is capped by ember-power-select's own
+         `.ember-power-select-options[role="listbox"] { max-height: 12.25em }`
+         default, which wins the cascade over boxel's var-driven rule — so the
+         list must be overridden directly (a CSS var does nothing here). The
+         compound dropdown class + descendant options selector out-specifies the
+         ember-power-select default. */
+      .markdown-embed-preview-pane__format-dropdown {
+        --boxel-select-max-height: min(579px, calc(100dvh - 150px));
+      }
+
+      .boxel-select__dropdown.markdown-embed-preview-pane__format-dropdown
+        .ember-power-select-options {
+        max-height: min(579px, calc(100dvh - 150px));
+      }
+
+      /* Denser rows: tighten the boxel-ui per-option padding and drop the
+         default inter-row margin. The compound class (the dropdown element
+         carries both classes) beats boxel-ui's 2-class default rule. Divider
+         rows re-add a small margin below. */
+      .boxel-select__dropdown.markdown-embed-preview-pane__format-dropdown
+        .ember-power-select-option {
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxs);
+        margin-bottom: 0;
+      }
+
       /* The divider sits in the gap *between* options so the row's hover /
          selected background (painted inside the <li>'s border-box) can't
          engulf it. The dropdown is rendered in the basic-dropdown wormhole,
@@ -190,15 +225,15 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
          :global() with this component's unique class names is the correct
          escape hatch. The trigger has no .ember-power-select-option
          ancestor, so the divider is automatically suppressed there. */
-      .markdown-embed-preview-pane__format-dropdown
+      .boxel-select__dropdown.markdown-embed-preview-pane__format-dropdown
         .ember-power-select-option:has(
           .markdown-embed-preview-pane__format-option.has-divider
         ) {
         position: relative;
-        margin-bottom: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xxs);
       }
 
-      .markdown-embed-preview-pane__format-dropdown
+      .boxel-select__dropdown.markdown-embed-preview-pane__format-dropdown
         .ember-power-select-option:has(
           .markdown-embed-preview-pane__format-option.has-divider
         )::after {
@@ -206,7 +241,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         position: absolute;
         left: 0;
         right: 0;
-        bottom: calc(-1 * var(--boxel-sp-xs) / 2 - 0.5px);
+        bottom: calc(-1 * var(--boxel-sp-xxs) / 2 - 0.5px);
         height: 1px;
         background-color: var(--boxel-border-color);
         pointer-events: none;
