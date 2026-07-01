@@ -70,7 +70,6 @@ export class Author extends CardDef {
   @field email = contains(EmailField);
   @field featuredImage = contains(FeaturedImageField);
   @field blog = linksTo(BlogApp, {
-    isUsed: true,
     searchable: true,
   });
 

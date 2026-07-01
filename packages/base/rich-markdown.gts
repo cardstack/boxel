@@ -83,7 +83,6 @@ export class RichMarkdownField extends FieldDef {
 
   /** Cards referenced in the markdown, loaded via query. */
   @field linkedCards = linksToMany(CardDef, {
-    isUsed: true,
     query: {
       filter: {
         in: { id: '$this.cardReferenceUrls' },
@@ -111,7 +110,6 @@ export class RichMarkdownField extends FieldDef {
    * (unlike CardDef instances), so `in: { id }` never matches.
    */
   @field linkedFiles = linksToMany(FileDef, {
-    isUsed: true,
     query: {
       filter: {
         in: { url: '$this.fileReferenceUrls' },

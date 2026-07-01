@@ -1242,11 +1242,9 @@ export class Account extends CardDef {
   static icon = AccountIcon;
   @field crmApp = linksTo(() => CrmApp, { searchable: true });
   @field company = linksTo(() => Company, {
-    isUsed: true,
     searchable: 'crmApp',
   });
   @field primaryContact = linksTo(() => Contact, {
-    isUsed: true,
     searchable: ['company', 'company.crmApp', 'crmApp'],
   });
   @field contacts = linksToMany(() => Contact);
