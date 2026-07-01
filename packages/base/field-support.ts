@@ -463,7 +463,6 @@ function computeFields(
         if (
           opts?.usedLinksToFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
-          !maybeField.isUsed &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
           return [];
