@@ -1534,16 +1534,15 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  // Regression coverage for CS-11045 (host side).
   // The host's MessageCommand.eventId is captured from the bot message's
   // effectiveEventId at construction time and never refreshes. When a tool_call
   // first appears on a later m.replace event, the bot message's "current"
   // event_id (in room.events) is the m.replace's event_id — but
   // MessageCommand.eventId is the parent/original. Emitting a commandResult
   // bound to the parent id can disagree with what ai-bot's `getRoomEvents`
-  // reads via /messages, so the host should source the linkage event_id from
+  // reads via /messages, so the host sources the linkage event_id from
   // current room state at execute time.
-  test('CS-11045: commandResult event_id is sourced from current room state, not a streaming snapshot', async function (assert) {
+  test('commandResult event_id is sourced from current room state, not a streaming snapshot', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1556,7 +1555,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       name: 'test room 1',
     });
 
-    let commandRequestId = 'cs-11045-cmd-request-id';
+    let commandRequestId = 'cmd-request-id';
 
     // Streaming event #1: original bot message, no commandRequests yet.
     let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -1568,13 +1567,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     // Streaming event #2: m.replace adding the tool_call. After this,
     // room.events has both events. The latest event with the matching
-    // commandRequestId is the m.replace event (replacedEventId).
-    // MessageCommand.eventId, however, is streamingEventId because
-    // getEffectiveEventId resolves replace events to their parent and
-    // updateMessage refreshes content but not eventId. Without Phase B the
-    // host emits commandResult.m.relates_to.event_id = streamingEventId; with
-    // Phase B it emits replacedEventId — what room.events currently shows for
-    // the bot message that owns this tool_call.
+    // commandRequestId is the m.replace event (replacedEventId), while
+    // MessageCommand.eventId is streamingEventId because getEffectiveEventId
+    // resolves replace events to their parent and updateMessage refreshes
+    // content but not eventId. The host emits
+    // commandResult.m.relates_to.event_id = replacedEventId — what room.events
+    // currently shows for the bot message that owns this tool_call.
     let replacedEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
@@ -1643,15 +1641,13 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  // Regression coverage for CS-11736 (host side).
-  // After a command is applied on a streamed bot message, its commandResult is
-  // linked to the latest m.replace edit id Y (CS-11045 wire format). On reload
-  // the timeline filter strips all m.replace edits, so only the original event
-  // X is loaded (with aggregated content) and Y no longer exists as a distinct
-  // event. The host's reload-side matchers used to key off event_id, so the
-  // dangling Y link broke and the command fell back to 'ready'. The fix keys
-  // both matchers off the stable commandRequestId instead.
-  test('CS-11736: an applied command on a streamed bot message still renders applied after reload (m.replace edits stripped)', async function (assert) {
+  // When a command is applied on a streamed bot message, its commandResult is
+  // linked to the latest m.replace edit id Y. On reload the timeline filter
+  // strips all m.replace edits, so only the original event X is loaded (with
+  // aggregated content) and Y is absent — the result's event_id link dangles.
+  // Correlating the result to its command by commandRequestId, not by that
+  // event_id, keeps the command rendered as applied.
+  test('an applied command on a streamed bot message still renders applied after reload (m.replace edits stripped)', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1664,11 +1660,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       name: 'test room 1',
     });
 
-    let commandRequestId = 'cs-11736-cmd-request-id';
-    // The edit event Y that owned the live commandResult link. On reload it has
-    // been stripped by the m.replace timeline filter, so no loaded event has
-    // this id — the result's m.relates_to.event_id dangles.
-    let strippedEditEventId = 'cs-11736-stripped-edit-event-id';
+    let commandRequestId = 'cmd-request-id';
+    // The edit event Y that owns the commandResult link; reload strips it via
+    // the m.replace timeline filter, so no loaded event has this id — the
+    // result's m.relates_to.event_id dangles.
+    let strippedEditEventId = 'stripped-edit-event-id';
 
     // The only bot message that survives reload: the original event X with the
     // final edit's content aggregated in, so it carries the command request.
@@ -1721,11 +1717,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       );
   });
 
-  // Regression coverage for CS-11736 (host side): commandRequestId correlation
-  // must resolve the *specific* owning bot message, not just the first one that
-  // happens to carry a command request. With two streamed bot messages, an
-  // applied result for one must flip only that message; the other stays ready.
-  test('CS-11736: an applied commandResult flips only its own bot message, not a sibling message that also carries a command', async function (assert) {
+  // commandRequestId correlation must resolve the *specific* owning bot
+  // message, not just the first one that happens to carry a command request.
+  // With two streamed bot messages, an applied result for one must flip only
+  // that message; the other stays ready.
+  test('an applied commandResult flips only its own bot message, not a sibling message that also carries a command', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1738,9 +1734,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       name: 'test room 1',
     });
 
-    let firstCommandRequestId = 'cs-11736-first-cmd-request-id';
-    let secondCommandRequestId = 'cs-11736-second-cmd-request-id';
-    let strippedEditEventId = 'cs-11736-uniqueness-stripped-edit-event-id';
+    let firstCommandRequestId = 'first-cmd-request-id';
+    let secondCommandRequestId = 'second-cmd-request-id';
+    let strippedEditEventId = 'stripped-edit-event-id';
 
     // First bot message (idx 0): carries a command but is never applied.
     simulateRemoteMessage(roomId, '@aibot:localhost', {

@@ -724,13 +724,13 @@ export class RoomResource extends Resource<Args> {
     event: CommandResultEvent;
     index: number;
   }) {
-    // CS-11736: locate the owning bot message by commandRequestId rather than
-    // by event_id. The commandResult's m.relates_to.event_id is the latest
-    // m.replace id Y, but after a reload the m.replace edits are stripped and
-    // only the original event X is loaded — so matching on event_id misses and
-    // the status flip is silently lost. commandRequestId is the globally-unique
-    // LLM tool-call id, stable across edits and present on every edit, so it
-    // resolves the same bot message on both the live and reload paths.
+    // Locate the owning bot message by commandRequestId. The commandResult's
+    // m.relates_to.event_id points at the latest m.replace edit, but a reload
+    // strips those edits and loads only the original event, so matching on
+    // event_id finds nothing and the status flip is lost. commandRequestId is
+    // the globally-unique LLM tool-call id, stable across edits and present on
+    // every one, so it resolves the same bot message on both the live and
+    // reload paths.
     let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
@@ -741,12 +741,12 @@ export class RoomResource extends Resource<Args> {
     if (!messageEventWithCommand) {
       return;
     }
-    // CS-11045: _messageCache is keyed by the bot message's effective/parent
-    // event_id — getEffectiveEventId resolves an m.replace event back to its
-    // parent, so when an m.replace Y of original X arrives loadRoomMessage
-    // keys the cache by X. Derive the cache key from the bot-message event we
-    // just located (messageEventWithCommand): for the m.replace event Y,
-    // getEffectiveEventId returns parent X — which is what the cache holds.
+    // _messageCache is keyed by the bot message's effective/parent event_id —
+    // getEffectiveEventId resolves an m.replace event back to its parent, so
+    // when an m.replace Y of original X arrives loadRoomMessage keys the cache
+    // by X. Derive the cache key from the bot-message event we just located
+    // (messageEventWithCommand): for the m.replace event Y, getEffectiveEventId
+    // returns parent X — which is what the cache holds.
     let messageCacheKey = this.getEffectiveEventId(messageEventWithCommand);
     let message = this._messageCache.get(messageCacheKey);
     if (!message) {

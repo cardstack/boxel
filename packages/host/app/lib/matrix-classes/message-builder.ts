@@ -322,11 +322,13 @@ export default class MessageBuilder {
       this.builderContext.commandResultEvent ??
       (this.builderContext.events.find((e: any) => {
         let r = e.content['m.relates_to'];
-        // CS-11736: correlate purely by commandRequestId (the globally-unique
-        // LLM tool-call id), not the result's m.relates_to.event_id. After a
-        // reload the m.replace edits are stripped, so the result's link id (the
-        // final edit Y) no longer matches the loaded original event X — but
-        // commandRequestId is stable across edits and survives reload.
+        // Correlate the result to its command by commandRequestId (the
+        // globally unique LLM tool-call id), not by the result's
+        // m.relates_to.event_id. A reload strips the m.replace edits and loads
+        // only the original event, so the result's link id — pointing at the
+        // final edit — matches no loaded event. commandRequestId is stable
+        // across edits and present on every one, so it resolves the command on
+        // both the live and reload paths.
         return (
           e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
           r?.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
