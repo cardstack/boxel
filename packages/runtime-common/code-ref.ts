@@ -331,7 +331,7 @@ export function getField<T extends BaseDef>(
       }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
-        let { computeVia, name, isUsed, queryDefinition } = result;
+        let { computeVia, name, queryDefinition } = result;
         let originalField = result;
         let declaredCardThunk =
           (originalField as any).declaredCardResolver ??
@@ -343,7 +343,6 @@ export function getField<T extends BaseDef>(
           declaredCardThunk,
           computeVia,
           name,
-          isUsed,
           isPolymorphic: true,
           queryDefinition,
         }) as Field;
