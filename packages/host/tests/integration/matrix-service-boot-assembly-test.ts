@@ -372,6 +372,66 @@ module(
   },
 );
 
+// A runtime `app.boxel.realm-servers` account-data refresh (as opposed to the
+// fail-loud boot assembly) must not erase already-loaded workspaces when a
+// trusted server is transiently unreachable. The event-time path merges rather
+// than replaces while any server is unreachable.
+module(
+  'Integration | matrix-service | account-data refresh survives a transient outage',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [baseRealm.url, testRealmURL],
+      activeRealmServers: [testRealmServerURL],
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      // Boot healthy so the trusted-servers path is authoritative and the
+      // user's realm is loaded before the simulated outage.
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('a refresh while the server is unreachable keeps the already-loaded realm', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      let matrixService = getService('matrix-service') as MatrixService;
+
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the realm is loaded after a healthy boot',
+      );
+
+      // The server goes down; a runtime account-data refresh arrives.
+      setRealmAuthFailure(true);
+      await matrixService.applyTrustedRealmServersAccountData([
+        testRealmServerURL,
+      ]);
+
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the transiently-unreachable realm is not wiped from the list',
+      );
+      assert.deepEqual(
+        realmServer.unreachableRealmServers,
+        [testRealmServerURL],
+        'the server is recorded as unreachable so the notice shows',
+      );
+    });
+  },
+);
+
 module(
   'Integration | matrix-service | already-migrated account is untouched',
   function (hooks) {

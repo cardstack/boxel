@@ -461,18 +461,7 @@ export default class MatrixService extends Service {
                 // start(); here we log and leave the available-realms list as
                 // it was.
                 try {
-                  let realmURLs =
-                    await this.realmServer.fetchUserRealmsFromTrustedServers(
-                      realmServers,
-                    );
-                  await this.realmServer.setAvailableRealmIdentifiers(
-                    realmURLs.map(ri),
-                  );
-                  if (this.postLoginCompleted) {
-                    await this.loginToRealms();
-                    await this.loadMoreAuthRooms(realmURLs);
-                  }
-                  this.scheduleUnreachableRealmServerRetry();
+                  await this.applyTrustedRealmServersAccountData(realmServers);
                 } catch (err) {
                   console.error(
                     'Failed to assemble realms from trusted servers in app.boxel.realm-servers account data',
@@ -1055,12 +1044,18 @@ export default class MatrixService extends Service {
           try {
             await this.realmServer.authenticateToAllAccessibleRealms();
           } catch (e) {
-            // A trusted server being unreachable must not fail boot. Boot
-            // assembly already recorded it in `unreachableRealmServers` and a
-            // retry is scheduled below; realms from reachable servers still
-            // authenticate individually via `loginToRealms`.
+            // A trusted server being unreachable must not fail boot: assembly
+            // recorded it in `unreachableRealmServers`, a retry is scheduled
+            // below, and realms from reachable servers still authenticate
+            // individually via `loginToRealms`. But only swallow when there's
+            // actually an unreachable server to blame — otherwise this is an
+            // unrelated auth failure and boot must fail loudly (logout) rather
+            // than proceed to `postLoginCompleted` while unauthenticated.
+            if (this.realmServer.unreachableRealmServers.length === 0) {
+              throw e;
+            }
             console.error(
-              'Failed to authenticate to all accessible realms at boot',
+              'Failed to authenticate to all accessible realms because a trusted server is unreachable',
               e,
             );
           }
@@ -1202,6 +1197,36 @@ export default class MatrixService extends Service {
         }
       }),
     );
+  }
+
+  // Re-assemble the available-realms list from a runtime
+  // `app.boxel.realm-servers` account-data event. Unlike the fail-loud boot
+  // assembly, an event-time refresh must be conservative: because
+  // `fetchUserRealmsFromTrustedServers` now returns a partial list when a
+  // trusted server is unreachable (rather than throwing), replacing the list
+  // with that partial result would erase the realms served by a server that's
+  // only transiently down. So when any server was unreachable this round we
+  // merge (add newly-discovered realms, never remove) and let the retry
+  // reconcile; only a fully reachable assembly is authoritative enough to
+  // remove realms. Called by the AccountData listener and directly by tests.
+  async applyTrustedRealmServersAccountData(realmServers: string[]) {
+    let realmURLs =
+      await this.realmServer.fetchUserRealmsFromTrustedServers(realmServers);
+    if (this.realmServer.unreachableRealmServers.length > 0) {
+      await this.realmServer.setAvailableRealmIdentifiers([
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...realmURLs.map(ri),
+        ]),
+      ]);
+    } else {
+      await this.realmServer.setAvailableRealmIdentifiers(realmURLs.map(ri));
+    }
+    if (this.postLoginCompleted) {
+      await this.loginToRealms();
+      await this.loadMoreAuthRooms(realmURLs);
+    }
+    this.scheduleUnreachableRealmServerRetry();
   }
 
   // Re-attempt the trusted servers that were unreachable during boot
