@@ -13,6 +13,9 @@ export type RealmServerMockState = {
   archivedRealms: Map<string, { archivedAt: string }>;
   mountedVirtualNetwork?: unknown;
   ensureSessionRoom?: EnsureSessionRoom;
+  // When true, `_realm-auth` responds 503 — used to simulate a trusted realm
+  // server that's unreachable during boot assembly.
+  failRealmAuth?: boolean;
 };
 
 export type RealmServerMockRouteHandler = (

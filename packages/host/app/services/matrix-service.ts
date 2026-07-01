@@ -7,7 +7,13 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { dropTask, task, timeout } from 'ember-concurrency';
+import {
+  dropTask,
+  rawTimeout,
+  restartableTask,
+  task,
+  timeout,
+} from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash-es';
 
@@ -156,6 +162,10 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
+// Backoff for retrying trusted servers that were unreachable at boot. Bounded
+// so a persistently-down server doesn't spin forever.
+const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
+const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -462,6 +472,7 @@ export default class MatrixService extends Service {
                     await this.loginToRealms();
                     await this.loadMoreAuthRooms(realmURLs);
                   }
+                  this.scheduleUnreachableRealmServerRetry();
                 } catch (err) {
                   console.error(
                     'Failed to assemble realms from trusted servers in app.boxel.realm-servers account data',
@@ -1041,7 +1052,18 @@ export default class MatrixService extends Service {
 
           if (isTesting())
             console.warn('[start-phase] authenticateToAllAccessibleRealms');
-          await this.realmServer.authenticateToAllAccessibleRealms();
+          try {
+            await this.realmServer.authenticateToAllAccessibleRealms();
+          } catch (e) {
+            // A trusted server being unreachable must not fail boot. Boot
+            // assembly already recorded it in `unreachableRealmServers` and a
+            // retry is scheduled below; realms from reachable servers still
+            // authenticate individually via `loginToRealms`.
+            console.error(
+              'Failed to authenticate to all accessible realms at boot',
+              e,
+            );
+          }
         }
         // Login here triggers other setup code that needs to happen after
         // otherwise we don't have the realm info.
@@ -1051,6 +1073,11 @@ export default class MatrixService extends Service {
 
         this.postLoginCompleted = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
+
+        // If any trusted server was unreachable during boot assembly, keep
+        // the reachable realms and retry the unreachable ones in the
+        // background so they load (and the notice clears) once they recover.
+        this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -1176,6 +1203,66 @@ export default class MatrixService extends Service {
       }),
     );
   }
+
+  // Re-attempt the trusted servers that were unreachable during boot
+  // assembly. On success their realms are merged into the available list and
+  // authenticated so they appear without a reload; the "couldn't reach
+  // <server>" notice clears as `unreachableRealmServers` empties. Returns true
+  // once every previously-unreachable server has recovered. Public so tests
+  // can drive recovery deterministically rather than waiting on the background
+  // timer.
+  async retryUnreachableRealmServers(): Promise<boolean> {
+    let toRetry = [...this.realmServer.unreachableRealmServers];
+    if (toRetry.length === 0) {
+      return true;
+    }
+    let recovered =
+      await this.realmServer.fetchUserRealmsFromTrustedServers(toRetry);
+    if (recovered.length > 0) {
+      let merged = [
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...recovered.map(ri),
+        ]),
+      ];
+      await this.realmServer.setAvailableRealmIdentifiers(merged);
+      await this.loginToRealms();
+      await this.loadMoreAuthRooms(recovered);
+    }
+    return this.realmServer.unreachableRealmServers.length === 0;
+  }
+
+  private scheduleUnreachableRealmServerRetry() {
+    if (isTesting()) {
+      // Tests drive recovery via `retryUnreachableRealmServers()` directly so
+      // the assertions are deterministic; skip the background timer loop, which
+      // would otherwise keep firing while a stubbed server stays down.
+      return;
+    }
+    if (this.realmServer.unreachableRealmServers.length === 0) {
+      return;
+    }
+    this.retryUnreachableRealmServersTask.perform();
+  }
+
+  private retryUnreachableRealmServersTask = restartableTask(async () => {
+    for (
+      let attempt = 0;
+      attempt < MAX_UNREACHABLE_RETRY_ATTEMPTS &&
+      this.realmServer.unreachableRealmServers.length > 0;
+      attempt++
+    ) {
+      await rawTimeout(UNREACHABLE_RETRY_INTERVAL_MS);
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      try {
+        await this.retryUnreachableRealmServers();
+      } catch (err) {
+        console.error('Failed to retry unreachable realm servers', err);
+      }
+    }
+  });
 
   async createRealmSession(realmURL: URL) {
     await this.#clientReadyDeferred.promise;

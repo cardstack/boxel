@@ -13,6 +13,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setRealmAuthFailure,
 } from '../helpers';
 
 import { setupBaseRealm } from '../helpers/base-realm';
@@ -291,6 +292,81 @@ module(
       assert.ok(
         realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
         'testRealmURL from the legacy list survives the re-boot',
+      );
+    });
+  },
+);
+
+// Graceful degradation: a trusted server that's unreachable during boot
+// assembly (its `_realm-auth` fails/times out) must never block boot or hide
+// the realms served by the servers that are reachable. The unreachable server
+// is recorded so a notice can name it, and a retry recovers it — the notice
+// clears on success.
+module(
+  'Integration | matrix-service | graceful degradation when a trusted server is unreachable',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [baseRealm.url, testRealmURL],
+      activeRealmServers: [testRealmServerURL],
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      // Simulate the trusted server being unreachable during boot assembly.
+      setRealmAuthFailure(true);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('boot completes without dropping the reachable base realm', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(baseRealm.url)),
+        'the base realm still loads when a trusted server is unreachable',
+      );
+      assert.notOk(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the unreachable server’s realm is not in the list yet',
+      );
+    });
+
+    test('the unreachable trusted server is recorded so a notice can name it', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      assert.deepEqual(
+        realmServer.unreachableRealmServers,
+        [testRealmServerURL],
+        'the unreachable trusted server is recorded',
+      );
+    });
+
+    test('retry recovers the realm and clears the notice once the server is reachable', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      let matrixService = getService('matrix-service') as MatrixService;
+
+      setRealmAuthFailure(false);
+      let allRecovered = await matrixService.retryUnreachableRealmServers();
+
+      assert.ok(allRecovered, 'retry reports all servers recovered');
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the previously-unreachable realm now appears',
+      );
+      assert.deepEqual(
+        realmServer.unreachableRealmServers,
+        [],
+        'the notice clears once the server is reachable',
       );
     });
   },
