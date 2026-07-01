@@ -13,6 +13,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1533,16 +1534,15 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  // Regression coverage for CS-11045 (host side).
   // The host's MessageCommand.eventId is captured from the bot message's
   // effectiveEventId at construction time and never refreshes. When a tool_call
   // first appears on a later m.replace event, the bot message's "current"
   // event_id (in room.events) is the m.replace's event_id — but
   // MessageCommand.eventId is the parent/original. Emitting a commandResult
   // bound to the parent id can disagree with what ai-bot's `getRoomEvents`
-  // reads via /messages, so the host should source the linkage event_id from
+  // reads via /messages, so the host sources the linkage event_id from
   // current room state at execute time.
-  test('CS-11045: commandResult event_id is sourced from current room state, not a streaming snapshot', async function (assert) {
+  test('commandResult event_id is sourced from current room state, not a streaming snapshot', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1555,7 +1555,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       name: 'test room 1',
     });
 
-    let commandRequestId = 'cs-11045-cmd-request-id';
+    let commandRequestId = 'cmd-request-id';
 
     // Streaming event #1: original bot message, no commandRequests yet.
     let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -1567,13 +1567,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     // Streaming event #2: m.replace adding the tool_call. After this,
     // room.events has both events. The latest event with the matching
-    // commandRequestId is the m.replace event (replacedEventId).
-    // MessageCommand.eventId, however, is streamingEventId because
-    // getEffectiveEventId resolves replace events to their parent and
-    // updateMessage refreshes content but not eventId. Without Phase B the
-    // host emits commandResult.m.relates_to.event_id = streamingEventId; with
-    // Phase B it emits replacedEventId — what room.events currently shows for
-    // the bot message that owns this tool_call.
+    // commandRequestId is the m.replace event (replacedEventId), while
+    // MessageCommand.eventId is streamingEventId because getEffectiveEventId
+    // resolves replace events to their parent and updateMessage refreshes
+    // content but not eventId. The host emits
+    // commandResult.m.relates_to.event_id = replacedEventId — what room.events
+    // currently shows for the bot message that owns this tool_call.
     let replacedEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
@@ -1640,6 +1639,178 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       streamingEventId,
       'commandResult should not reference the original/streaming event_id once a later event in room.events owns the commandRequest',
     );
+  });
+
+  // When a command is applied on a streamed bot message, its commandResult is
+  // linked to the latest m.replace edit id Y. On reload the timeline filter
+  // strips all m.replace edits, so only the original event X is loaded (with
+  // aggregated content) and Y is absent — the result's event_id link dangles.
+  // Correlating the result to its command by commandRequestId, not by that
+  // event_id, keeps the command rendered as applied.
+  test('an applied command on a streamed bot message still renders applied after reload (m.replace edits stripped)', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    let commandRequestId = 'cmd-request-id';
+    // The edit event Y that owns the commandResult link; reload strips it via
+    // the m.replace timeline filter, so no loaded event has this id — the
+    // result's m.relates_to.event_id dangles.
+    let strippedEditEventId = 'stripped-edit-event-id';
+
+    // The only bot message that survives reload: the original event X with the
+    // final edit's content aggregated in, so it carries the command request.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Evie' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    // The persisted commandResult, linked to the stripped edit id Y rather than
+    // the surviving original X — exactly what reload loads from the server.
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: strippedEditEventId,
+        },
+        data: {},
+      },
+      { type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE },
+    );
+
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="0"]');
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(
+        'a command applied before reload still renders applied even though its commandResult links to a stripped m.replace edit id; correlation is by commandRequestId, not the dangling event_id',
+      );
+  });
+
+  // commandRequestId correlation must resolve the *specific* owning bot
+  // message, not just the first one that happens to carry a command request.
+  // With two streamed bot messages, an applied result for one must flip only
+  // that message; the other stays ready.
+  test('an applied commandResult flips only its own bot message, not a sibling message that also carries a command', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    let firstCommandRequestId = 'first-cmd-request-id';
+    let secondCommandRequestId = 'second-cmd-request-id';
+    let strippedEditEventId = 'stripped-edit-event-id';
+
+    // First bot message (idx 0): carries a command but is never applied.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: firstCommandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Evie' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    // Second bot message (idx 1): the one whose command was applied pre-reload.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Mango',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: secondCommandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Mango' } },
+            },
+          }),
+        },
+      ],
+    });
+
+    // Applied result for the second message only, linked to a stripped edit id
+    // so correlation has to fall through to commandRequestId.
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId: secondCommandRequestId,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: strippedEditEventId,
+        },
+        data: {},
+      },
+      { type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE },
+    );
+
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="1"]');
+
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists(
+        'the bot message whose commandRequestId owns the applied result renders applied',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .exists(
+        'the sibling bot message, which has no result of its own, stays ready — the applied status did not bleed across messages',
+      );
   });
 
   test('Accept All bar does not flash for an always-auto-executed command (checkCorrectness)', async function (assert) {

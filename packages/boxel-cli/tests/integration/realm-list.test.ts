@@ -61,9 +61,21 @@ describe('realm list (integration)', () => {
     expect(result.error).toBeUndefined();
     expect(result.realms).toHaveLength(3);
     let byUrl = new Map(result.realms.map((r) => [r.url, r]));
-    expect(byUrl.get(visibleUrl)).toEqual({ url: visibleUrl, hidden: false });
-    expect(byUrl.get(hiddenUrl)).toEqual({ url: hiddenUrl, hidden: true });
-    expect(byUrl.get(pendingUrl)).toEqual({ url: pendingUrl, hidden: true });
+    expect(byUrl.get(visibleUrl)).toEqual({
+      url: visibleUrl,
+      hidden: false,
+      archived: false,
+    });
+    expect(byUrl.get(hiddenUrl)).toEqual({
+      url: hiddenUrl,
+      hidden: true,
+      archived: false,
+    });
+    expect(byUrl.get(pendingUrl)).toEqual({
+      url: pendingUrl,
+      hidden: true,
+      archived: false,
+    });
   });
 
   it('returns an error when --all-accessible and --hidden are both set', async () => {
@@ -79,7 +91,9 @@ describe('realm list (integration)', () => {
   it('default mode lists only the realm in account data', async () => {
     let result = await listRealms({ profileManager });
     expect(result.error).toBeUndefined();
-    expect(result.realms).toEqual([{ url: visibleUrl, hidden: false }]);
+    expect(result.realms).toEqual([
+      { url: visibleUrl, hidden: false, archived: false },
+    ]);
   });
 
   it('--hidden lists only realms missing from account data', async () => {
@@ -102,7 +116,9 @@ describe('realm list (integration)', () => {
 
     let hidden = await listRealms({ hidden: true, profileManager });
     expect(hidden.error).toBeUndefined();
-    expect(hidden.realms).toEqual([{ url: hiddenUrl, hidden: true }]);
+    expect(hidden.realms).toEqual([
+      { url: hiddenUrl, hidden: true, archived: false },
+    ]);
   });
 
   it('returns an error when no active profile', async () => {
